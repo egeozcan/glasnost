@@ -22,9 +22,11 @@
 //! - **Map**: the record's stock map, read from the install
 //!   (`GLASNOST_GAME_DIR`) and checked against the record's sha256; never
 //!   committed. Its rules layer applies (the inputs of a skirmish on that
-//!   map), and its own objects are loaded as in any game on it (the four
-//!   neutral bunkers of M-0017's Setup among them). W is the cell of start
-//!   waypoint [`W_WAYPOINT`].
+//!   map), and its own objects are loaded as in any game on it, the
+//!   neutral house's buildings in play from tick 0. Which of them are the
+//!   records' "four bunkers, owned by a neutral house" is Q-2098: none has
+//!   the tank-bunker flag of S-0606 (`--groups` lists them). W is the cell
+//!   of start waypoint [`W_WAYPOINT`].
 //! - **Houses**: side A plays country [`COUNTRIES`]`[0]` at start 0, side B
 //!   [`COUNTRIES`]`[1]` at start 1; skirmish setup with 0 credits, no
 //!   starting units, no bases, short game, superweapons and crates off,
@@ -42,12 +44,14 @@
 //! - **Groups**: per side one type, round(9000 / cost) units (an exact half
 //!   to the even number), at least 1, infantry at most 60. Unit *i* of side A on
 //!   cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map east, side B on
-//!   (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map west; infantry at
-//!   the cell's centre standing point, with no standing-position draw: A1's
-//!   interim, while Q-1711 question 5 (how the stock harness placed them) is
-//!   open. The facings are those of S-0216 claim 1. Side A's group is
-//!   created first. Every unit starts in the hunt behaviour; no order is
-//!   given. See [`setup`] for a stated cell that does not take its unit.
+//!   (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map west. A unit its
+//!   stated cell does not take stands on a free cell around it
+//!   ([`placed_cell`]; the test and the order are ours, Q-2096). Every
+//!   unit stands at its cell's centre point, infantry with no
+//!   standing-position draw: A1's interim, while Q-1711 question 5 and
+//!   Q-2097 are open. The facings are those of S-0216 claim 1. Side A's
+//!   group is created first. Every unit starts in the hunt behaviour; no
+//!   order is given.
 //! - **Samples**: every [`SAMPLE_PERIOD`] frames (ticks from game start);
 //!   the game is over at the first sample at which only one side owns
 //!   anything (that side wins), or at which neither does (`none`), or at
@@ -78,7 +82,7 @@ use glasnost_map::{CellXY, Map};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::setup::{self, HouseValues, Player, Row, Settings};
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
-use glasnost_sim::world::{HouseId, ObjectId, World};
+use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
 use crate::stats;
 
@@ -124,6 +128,38 @@ pub const STARTS: [u32; 2] = [0, 1];
 /// 49152 map west); side A faces east, side B west (measure: M-0001,
 /// Setup, Groups).
 pub const FACINGS: [u16; 2] = [16384, 49152];
+
+/// The cells of the square ring of Chebyshev radius `r` (at least 1)
+/// around `c` in the scan order of S-0212 claim 25's nearby-cell search: a
+/// unit its stated cell does not take is tried on the rings around that
+/// cell in this order (our design while Q-2096 is open).
+pub fn ring(c: CellXY, r: i32) -> Vec<CellXY> {
+    let mut out = Vec::new();
+    // spec: S-0212 claim 25 (a row cell has |y − cy| = r, a column cell |x − cx| = r otherwise; every row cell comes before every column cell; row cells by x, then y; column cells by y, then x)
+    for x in c.x - r..=c.x + r {
+        for y in [c.y - r, c.y + r] {
+            out.push(CellXY::new(x, y));
+        }
+    }
+    for y in c.y - r + 1..c.y + r {
+        for x in [c.x - r, c.x + r] {
+            out.push(CellXY::new(x, y));
+        }
+    }
+    out
+}
+
+/// The largest ring tried around a stated cell: S-0212 claim 25's largest
+/// radius for the world's map size.
+fn largest_ring(w: &World) -> i32 {
+    let fp = *w.cells.footprint();
+    // spec: S-0212 claim 25 (largest radius 31, or w + h − 1 when w + h < 32)
+    if fp.width + fp.height < 32 {
+        fp.width + fp.height - 1
+    } else {
+        31
+    }
+}
 
 /// The fastest game speed: index 0 (glossary claim G2; measure: M-0001,
 /// Setup, Players: game speed fastest).
@@ -644,6 +680,172 @@ pub struct Arena {
     pub houses: [HouseId; 2],
     /// Each side's units, in creation order.
     pub units: [Vec<ObjectId>; 2],
+    /// The units that stand off their stated cell ([`placed_cell`]), in
+    /// creation order.
+    pub moved: Vec<Moved>,
+}
+
+/// The units off their stated cells, one line each (shown by `--watch` and
+/// `--groups`).
+pub fn moved_text(moved: &[Moved]) -> String {
+    let mut out = String::new();
+    for m in moved {
+        let _ = writeln!(
+            out,
+            "  side {:?} unit {}: stated cell ({}, {}) does not take it ({}); placed on ({}, {})",
+            m.side, m.index, m.stated.x, m.stated.y, m.why, m.placed.x, m.placed.y
+        );
+    }
+    out
+}
+
+/// What stands on the map at tick 0 that neither side owns, by owner
+/// house, kind and type ID, with counts, and the tank bunkers and
+/// garrisonable buildings among them (shown by `--groups`: where the
+/// records' four neutral bunkers of M-0001 and M-0017 Setup are to be
+/// found, Q-2098).
+pub fn others_text(a: &Arena) -> String {
+    let w = &a.world;
+    let names: BTreeMap<(Kind, u32), &str> = w
+        .rules()
+        .names
+        .iter()
+        .map(|((k, name), &i)| ((*k, i), name.as_str()))
+        .collect();
+    let mut seen: BTreeMap<(String, String, String), u32> = BTreeMap::new();
+    for o in w.objects.values() {
+        if !o.on_map || o.owner.is_some_and(|h| a.houses.contains(&h)) {
+            continue;
+        }
+        let owner = o.owner.map_or("none".to_owned(), |h| {
+            w.houses
+                .get(usize::from(h.0))
+                .map_or(format!("house {}", h.0), |x| {
+                    format!("house {} ({})", h.0, x.name)
+                })
+        });
+        let name = names
+            .get(&(o.kind, o.type_index))
+            .map_or(format!("#{}", o.type_index), |n| (*n).to_owned());
+        *seen
+            .entry((owner, format!("{:?}", o.kind), name))
+            .or_default() += 1;
+    }
+    let mut out = String::new();
+    for ((owner, kind, name), n) in seen {
+        let _ = writeln!(out, "  {owner}: {kind} {name} x{n}");
+    }
+    // The tank bunkers among them, by the bunker flag (S-0606 Terms).
+    let bunkers: Vec<String> = w
+        .objects
+        .values()
+        .filter(|o| {
+            o.on_map
+                && !o.owner.is_some_and(|h| a.houses.contains(&h))
+                && glasnost_sim::structures::bunker::is_bunker(w, o.id)
+        })
+        .map(|o| {
+            format!(
+                "owner {:?} at ({}, {}) health {}",
+                o.owner.map(|h| h.0),
+                o.pos.cell().x,
+                o.pos.cell().y,
+                o.health
+            )
+        })
+        .collect();
+    let _ = writeln!(
+        out,
+        "  tank bunkers (S-0606 Terms) among them: {}: {}",
+        bunkers.len(),
+        bunkers.join("; ")
+    );
+    // The garrisonable buildings among them (S-0508 Terms).
+    let garrisons = w
+        .objects
+        .values()
+        .filter(|o| {
+            o.on_map
+                && !o.owner.is_some_and(|h| a.houses.contains(&h))
+                && glasnost_sim::structures::garrison::garrisonable(w, o.id)
+        })
+        .count();
+    let _ = writeln!(
+        out,
+        "  garrisonable buildings (S-0508 Terms) among them: {garrisons}"
+    );
+    out
+}
+
+/// A unit that its stated cell did not take, and the cell it stands on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Moved {
+    /// Its side.
+    pub side: Side,
+    /// Its index *i* in its group.
+    pub index: u32,
+    /// Its stated cell ([`cell_of`]).
+    pub stated: CellXY,
+    /// The cell it stands on.
+    pub placed: CellXY,
+    /// Why its stated cell did not take it ([`refusal`]).
+    pub why: String,
+}
+
+/// Whether `cell` takes the created unit `id` of `kind`, not yet on the map
+/// (our design while Q-2096 is open): the cell is a map cell with no unit
+/// on it, and the unit's entry outcome there is *clear*, asked as a
+/// play-time placement asks it. An aircraft-kind group is not tested: the
+/// entry test is that of infantry and vehicles.
+pub fn takes(w: &World, id: ObjectId, kind: Kind, cell: CellXY) -> bool {
+    refusal(w, id, kind, cell).is_none()
+}
+
+/// Why `cell` does not take the unit ([`takes`]): `None` when it does.
+pub fn refusal(w: &World, id: ObjectId, kind: Kind, cell: CellXY) -> Option<String> {
+    if !matches!(kind, Kind::Infantry | Kind::Vehicle) {
+        return None;
+    }
+    let Some(level) = w.cells.cell(cell).map(|c| i32::from(c.level)) else {
+        return Some("not a map cell".into());
+    };
+    // measure: M-0001, M-0017 (Setup: a unit its stated cell does not take is placed on a free neighbouring cell)
+    let unit_there = w.objects.values().any(|o| {
+        o.on_map
+            && o.id != id
+            && matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+            && o.pos.cell() == cell
+    });
+    if unit_there {
+        return Some("a unit stands there".into());
+    }
+    // spec: S-0216 claim 5 (the unit's entry outcome for the cell, asked without an approach direction or source elevation, against the ground occupants; only clear accepts)
+    let outcome = if kind == Kind::Infantry {
+        glasnost_sim::occupancy::infantry_outcome(w, id, cell, level)
+    } else {
+        glasnost_sim::occupancy::vehicle_outcome(w, id, cell, level)
+    };
+    (outcome != glasnost_sim::occupancy::Outcome::Clear)
+        .then(|| format!("entry outcome {outcome:?}"))
+}
+
+/// The cell the created unit `id` stands on, given its stated cell: the
+/// stated cell when it takes the unit ([`takes`]), else the first cell
+/// that does on the rings around it ([`ring`]), nearest ring first, up to
+/// S-0212 claim 25's largest radius; `None` when none does. The records
+/// say "a unit that its stated cell does not take is placed on a free
+/// neighbouring cell" (measure: M-0001, M-0002, M-0003 and M-0017, Setup)
+/// and "a free cell nearby" (measure: M-0011, M-0015, Setup); the test,
+/// the order and the rings past the first are ours while Q-2096 is open.
+/// A unit takes a cell first come, first served: a later unit whose stated
+/// cell an earlier one took is refused there in turn.
+pub fn placed_cell(w: &World, id: ObjectId, kind: Kind, stated: CellXY) -> Option<CellXY> {
+    if takes(w, id, kind, stated) {
+        return Some(stated);
+    }
+    (1..=largest_ring(w))
+        .flat_map(|r| ring(stated, r))
+        .find(|&c| takes(w, id, kind, c))
 }
 
 /// The cost field of an object's type (S-0403 claim 2).
@@ -721,22 +923,59 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
     }
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let mut units: [Vec<ObjectId>; 2] = [Vec::new(), Vec::new()];
+    let mut moved = Vec::new();
     for side in [Side::A, Side::B] {
         let s = side.index();
         let (kind, n, _) = group(rules, types[s])?;
+        let ti = rules
+            .index_of(kind, types[s])
+            .ok_or_else(|| format!("{}: no type of that ID", types[s]))?;
         for i in 0..n {
-            let cell = cell_of(ground.w, side, i);
-            if ground.map.cells.get(cell).is_none() {
+            let stated = cell_of(ground.w, side, i);
+            if ground.map.cells.get(stated).is_none() {
                 return Err(format!(
                     "{}: cell ({}, {}) is off the map",
-                    types[s], cell.x, cell.y
+                    types[s], stated.x, stated.y
                 ));
             }
-            // Our design (Q-1711 question 5 open): A1's interim, the cell's centre, no draw and
-            // no entry test; S-0216 claims 2, 3 and 5 are not applied (claim 5 would refuse the
-            // infantry on the cliff cells). spec: S-0216 claim 1 (FACINGS are 256 × 64 and 256 × 192)
-            let id =
-                glasnost_sim::testkit::spawn(&mut w, kind, types[s], houses[s].0, cell, FACINGS[s]);
+            // The unit is created first (its creation draws), then its cell is chosen.
+            let id = glasnost_sim::objects::create(&mut w, kind, ti, Some(houses[s]));
+            // measure: M-0001, M-0017 (Setup: a unit that its stated cell does not take is placed on a free neighbouring cell; the test and the order are ours, Q-2096)
+            let cell = placed_cell(&w, id, kind, stated).ok_or_else(|| {
+                let why: Vec<String> = std::iter::once(stated)
+                    .chain(ring(stated, 1))
+                    .map(|c| {
+                        format!(
+                            "({}, {}) {}",
+                            c.x,
+                            c.y,
+                            refusal(&w, id, kind, c).unwrap_or_default()
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{}: unit {i}: no cell around ({}, {}) takes it; the stated cell and ring 1: {}",
+                    types[s],
+                    stated.x,
+                    stated.y,
+                    why.join("; ")
+                )
+            })?;
+            if cell != stated {
+                moved.push(Moved {
+                    side,
+                    index: i,
+                    stated,
+                    placed: cell,
+                    why: refusal(&w, id, kind, stated).unwrap_or_default(),
+                });
+            }
+            // Our design (Q-1711 question 5, Q-2097): A1's interim in the chosen cell, its centre,
+            // no standing-position draw; S-0216 claims 2 and 3 are not applied.
+            // spec: S-0216 claim 1 (FACINGS are 256 × 64 and 256 × 192)
+            let p = Pos::centre(cell, 0);
+            let z = w.surface_at(p.x, p.y);
+            glasnost_sim::objects::place(&mut w, id, Pos::new(p.x, p.y, z), FACINGS[s]);
             let tick = w.tick;
             let o = w
                 .obj_mut(id)
@@ -747,6 +986,8 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
                     types[s], cell.x, cell.y
                 ));
             }
+            // The resting behaviour the testkit's placement gave before, then hunt.
+            o.beh.force(Behaviour::Guard, tick, stale);
             // spec: S-0009 claim 41 (the behaviour a placed object starts with: hunt, measure: M-0001)
             o.beh.force(Behaviour::Hunt, tick, stale);
             units[s].push(id);
@@ -756,6 +997,7 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
         world: w,
         houses,
         units,
+        moved,
     })
 }
 
@@ -796,8 +1038,12 @@ pub fn play(
         world: mut w,
         houses,
         units,
+        moved,
     } = setup(ground, types, seed)?;
     let mut seen = String::new();
+    if watch {
+        seen.push_str(&moved_text(&moved));
+    }
     let mut shots = [0u32; 2];
     let (winner_side, end_frame) = loop {
         glasnost_sim::tick::step(&mut w);
@@ -1313,10 +1559,10 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
                 }
             }
             let _ = writeln!(out, "{} groups (type, kind, units, cost):", r.id);
-            for t in types {
-                match group(&ground.rules, &t) {
+            for t in &types {
+                match group(&ground.rules, t) {
                     Ok((kind, n, cost)) => {
-                        let powered = ground.rules.index_of(kind, &t).is_some_and(|i| {
+                        let powered = ground.rules.index_of(kind, t).is_some_and(|i| {
                             kind == Kind::Vehicle
                                 && ground
                                     .rules
@@ -1341,6 +1587,34 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
                         let _ = writeln!(out, "  {t}: {e}");
                     }
                 }
+            }
+            // The placement on each side, with the type against itself.
+            let mut others = None;
+            for t in &types {
+                match setup(&ground, [t, t], 0) {
+                    Ok(a) => {
+                        let n = |side| a.moved.iter().filter(|m| m.side == side).count();
+                        let _ = writeln!(
+                            out,
+                            "  {t}: units off their stated cells: side A {}, side B {}",
+                            n(Side::A),
+                            n(Side::B)
+                        );
+                        out.push_str(&moved_text(&a.moved));
+                        others.get_or_insert_with(|| others_text(&a));
+                    }
+                    Err(e) => {
+                        let _ = writeln!(out, "  {t}: set-up failed: {e}");
+                    }
+                }
+            }
+            if let Some(o) = others {
+                let _ = writeln!(
+                    out,
+                    "{} map objects at tick 0 that neither side owns:",
+                    r.id
+                );
+                out.push_str(&o);
             }
         }
         return Ok(out);
@@ -1864,6 +2138,60 @@ mod tests {
         assert_eq!(cell_of(w, Side::A, 8), CellXY::new(43, 36));
         assert_eq!(cell_of(w, Side::B, 0), CellXY::new(56, 36));
         assert_eq!(cell_of(w, Side::B, 9), CellXY::new(57, 37));
+    }
+
+    /// The rings around a refused stated cell come in S-0212 claim 25's
+    /// scan order: row cells by x then y, then column cells by y then x.
+    #[test]
+    fn rings_follow_the_nearby_search_scan_order() {
+        let c = CellXY::new(10, 20);
+        let off =
+            |r| -> Vec<(i32, i32)> { ring(c, r).iter().map(|p| (p.x - 10, p.y - 20)).collect() };
+        // spec: S-0212 claim 25 (scan order of a ring)
+        assert_eq!(
+            off(1),
+            [
+                (-1, -1),
+                (-1, 1),
+                (0, -1),
+                (0, 1),
+                (1, -1),
+                (1, 1),
+                (-1, 0),
+                (1, 0)
+            ]
+        );
+        let r2 = off(2);
+        assert_eq!(r2.len(), 16);
+        assert_eq!(&r2[..2], [(-2, -2), (-2, 2)]);
+        assert_eq!(
+            &r2[10..],
+            [(-2, -1), (2, -1), (-2, 0), (2, 0), (-2, 1), (2, 1)]
+        );
+    }
+
+    /// A stated cell with a unit on it does not take another: the unit
+    /// goes to the first cell around it that takes it (synthetic ground).
+    #[test]
+    fn a_unit_on_the_stated_cell_sends_the_next_one_to_a_ring() {
+        let mut w = glasnost_sim::testkit::combat_game(1);
+        let (kind, ti, c) = w
+            .objects
+            .values()
+            .find(|o| o.on_map && o.kind == Kind::Vehicle)
+            .map(|o| (o.kind, o.type_index, o.pos.cell()))
+            .unwrap();
+        let id = glasnost_sim::objects::create(&mut w, kind, ti, None);
+        assert_eq!(
+            refusal(&w, id, kind, c).as_deref(),
+            Some("a unit stands there")
+        );
+        let placed = placed_cell(&w, id, kind, c).unwrap();
+        assert_ne!(placed, c);
+        let first = (1..=largest_ring(&w))
+            .flat_map(|r| ring(c, r))
+            .find(|&p| takes(&w, id, kind, p));
+        assert_eq!(Some(placed), first);
     }
 
     fn record_of(id: &str, games: Vec<Game>) -> OracleRecord {
