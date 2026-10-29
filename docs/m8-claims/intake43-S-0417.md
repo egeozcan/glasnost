@@ -83,7 +83,7 @@ the layer's admission rule (`data/layers/play-fixes.jsonc`) is not met.
 | 17 *No path*, the cycle (one draw per failed fresh search; failures *R* apart) | tested | `claim_17_one_draw_per_failed_search` (a water ring round the barracks, 400 ticks) |
 | 17 *No path*, *R* = 0 (one draw per turn) | tested | `claim_17_no_delay_one_draw_per_turn` |
 | 17 *No path*, the fraidycat exception | as built | unchanged from intake 35 (`scatter::answer`'s third case) |
-| 17, a new destination does not cut *R* short | partly | for claim 17's own destination: the wait in `claim_17_gate_failure_clears_then_accepts`. Orders and other assignments still reset the delay here; that is S-0212 r87's claim 21, intake 44 |
+| 17, a new destination does not cut *R* short | tested | for claim 17's own destination: the wait in `claim_17_gate_failure_clears_then_accepts`. Orders and other assignments: S-0212 r87's claim 21, built at intake 44 (`claim_21_walker_new_destination_waits_for_the_delay`, `state_table_drive_new_destination_waits_for_the_delay`, [intake44-S-0212.md](intake44-S-0212.md)); stale "partly" closed at seams sweep 2. |
 | Backing and confidence text | text | |
 | U10 g | not ours | Oracle scenario; needs input in the release window. |
 | U6, U15 | stale, named | still read "every destination teleports" (S-0207 claim 28 overrides it) |

@@ -54,11 +54,11 @@ flag is not read (row 23 below).
 | Spec | Claim or scenario part | Ledger state | Why left |
 |---|---|---|---|
 | S-0501 | claim 18, the in-flight pad search needs the in-the-air answer, the search after the row needs neither | satisfied | A test needs a grounded aircraft that falls back with a pad present and no contact; no fixture does that yet. |
-| S-0501 | claim 32, the revert at the loss brings back the target put aside | built, no test | Needs an overridden behaviour (S-0215 claim 10) with a put-aside target, and the loss in the same tick. Plan: build the override with `orders` and then `objects::take_inside` the very target. |
+| S-0501 | claim 32, the revert at the loss brings back the target put aside | tested at seams sweep 2 | Closed: `claim_32_the_loss_reverts_an_overridden_aircraft` and `claim_32_the_revert_brings_back_the_object_that_left` ([seams-2.md](seams-2.md)). |
 | S-0501 | T1, *firing* and *refiring* with no target: 1 tick; claim 35's interval | built, no test | The spec rates them `unmeasured` and no scenario places the loss inside *firing*. |
-| S-0306 | claim 23, the late tests (rank 9) and the magnetic-beam *rearming* after the rows | not tested on their own | Needs a firer with a live wave and a grip. |
+| S-0306 | claim 23, the late tests (rank 9) and the magnetic-beam *rearming* after the rows | rank 9 tested at seams sweep 2 | Rank 9: `claim23_rows_outrank_the_late_target_tests` ([seams-2.md](seams-2.md)). The magnetic-beam *rearming* still needs a firer with a live wave and a grip (S-0607, which intake 45 revises). |
 | S-0213 | *Deployed*: sorted at the press, applied later; a transition ending in the tick of the press | satisfied, no test | The observable is the order of two calls in one tick; `press` in `claims_s0213_deploy_rule.rs` applies at once. |
-| S-0503 | claim 11, a naval-yard hover's water spin (S-0314 H4 part i run 6) | not implemented as a test | Belongs to S-0314, which intake 15 revises. |
+| S-0503 | claim 11, a naval-yard hover's water spin (S-0314 H4 part i run 6) | tested later | Closed by intake 18's `claim_21_docked_hover_lost_at_a_naval_yard_by_default` ([intake18-S-0314.md](intake18-S-0314.md)); noted at seams sweep 2. |
 | S-0301 | claim 14, the render-layer row for a lifting jumper | seam | Our engine has no render layer row to test. |
 | S-0316, S-0317, S-0612 | the "partly" rows | interims | Their blockers are open requests (Q-1834 to Q-1836, Q-1762) or our own tuning. Q-1762 was answered by S-0319 r9 and r26, its rest (Q-1846, Q-1847) at r26, built at A3 intakes 15 part 1 and 33 ([intake15a-S-0319.md](intake15a-S-0319.md), [intake33-S-0319.md](intake33-S-0319.md)). |
 
