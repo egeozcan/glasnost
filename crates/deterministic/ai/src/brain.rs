@@ -360,7 +360,19 @@ impl Brain {
                 // design: a lost refinery is not put behind a power plant
                 // (M8 step B8: in the quick lane the plant that replaced it
                 // was cancelled for it at the next think, over and over).
-                let lost = self.script.refinery_lost(w);
+                // design: nor is a refinery by a new field while the house
+                // cannot pay for both (M8 step B10): with no money the plant
+                // would take what the refinery needs for its income.
+                let credits = i64::from(w.houses[usize::from(self.house().0)].credits);
+                let both = |t: TypeRef| {
+                    plant.map_or(0, |p| i64::from(production::price(w, self.house(), p)))
+                        + i64::from(production::price(w, self.house(), t))
+                };
+                let lost = self.script.refinery_lost(w).or_else(|| {
+                    self.script
+                        .field_refinery_type(w)
+                        .filter(|&t| credits < both(t))
+                });
                 let n = crate::power::plant_first(w, self.house(), plant, lost, &mut out);
                 self.special.count_plants_first(n);
             }
@@ -741,6 +753,9 @@ impl Brain {
         if lost.is_some_and(|t| !self.script.in_line(w, t)) {
             return true;
         }
+        if self.field_refinery_short(w) {
+            return true;
+        }
         let short = (!self.script.selling() || lost.is_some())
             && (!self.script.economy_kept(w) || !self.script.has_refinery(w));
         let credits = w.houses[usize::from(h.0)].credits;
@@ -751,6 +766,44 @@ impl Brain {
                         is_economy(w, i.t) && i.hold == Hold::None && !i.done() && credits < i.owed
                     })
             })
+    }
+
+    /// Whether a refinery the house builds while it has one (the refinery
+    /// by a new field, `Script::field_refinery`) runs on its lines owing
+    /// more than the money in hand, the house is safe ([`Self::safe`]),
+    /// not selling out, and not a slave-miner house (S-0402 claim 14).
+    /// The house then pays for its economy first ([`Self::paying`]).
+    fn field_refinery_short(&self, w: &World) -> bool {
+        use glasnost_sim::econ::production::Hold;
+        let s = &self.script;
+        if s.selling() || s.slave_miners(w) || !s.has_refinery(w) {
+            return false;
+        }
+        let h = self.house();
+        let credits = w.houses[usize::from(h.0)].credits;
+        // design: a refinery by a new field that waits for money is paid
+        // first, as a person pauses the superweapon and the army lines to
+        // get his income back (M8 step B10). In the quick lane on main
+        // e375cf6, 116 spells of over 3 000 ticks (669 000 ticks in 60
+        // games) had a house broke with that refinery waiting: in 77 a
+        // superweapon building on another line drew the money first (the
+        // earlier line is paid first, S-0404 claim 1), in the rest the
+        // army lines did. A test of the income over the last window
+        // (`Script::income`) beside the credits was tried and never fired
+        // in those spells: the house earned, and the earlier line took it
+        // first. A house that is not safe keeps training, as the
+        // superweapon saving does.
+        let short = w.econ.lines.lines.iter().any(|l| {
+            l.house == h
+                && l.item.as_ref().is_some_and(|i| {
+                    scripted::role_of(w, i.t) == Some(Role::Refinery)
+                        && !scripted::keeps_slaves(w, i.t)
+                        && i.hold == Hold::None
+                        && !i.done()
+                        && credits < i.owed
+                })
+        });
+        short && self.safe(w)
     }
 
     /// Builds a psychic sensor (S-0610 claim 9) as a person adds one to the
@@ -2427,7 +2480,135 @@ impl ExpansionProbe {
     }
 }
 
+/// The economy item a house waits for ([`BrokeProbe`], M8 step B10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum EconomyWait {
+    /// A lost refinery its harvesters wait for (`Script::refinery_lost`).
+    LostRefinery,
+    /// A refinery by a new field: wanted (`Script::field_refinery`) or on
+    /// its lines while it has a refinery.
+    FieldRefinery,
+    /// A harvester on its lines while it is short of its economy target.
+    Harvester,
+}
+
+/// What a broke house waits behind, one sample (the lane's economy probe,
+/// `GLASNOST_AI_ECOPROBE`, M8 step B10); counts only.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BrokeProbe {
+    /// The economy item it waits for.
+    pub wait: Option<EconomyWait>,
+    /// Whether that item is on its lines.
+    pub lined: bool,
+    /// Whether its credits are below what the item still owes (its whole
+    /// price before it is on a line).
+    pub broke: bool,
+    /// Whether a power plant runs on its lines.
+    pub plant_lined: bool,
+    /// Whether a building that gives a superweapon it fires runs, not
+    /// held, on its lines.
+    pub superweapon_lined: bool,
+    /// Whether it saves for that building (holds its army).
+    pub saving: bool,
+    /// Whether it pays for its economy first (`Brain::paying`).
+    pub paying: bool,
+    /// Whether it sells out.
+    pub selling: bool,
+    /// Its income over the last window (`Script::income`).
+    pub income: Option<i64>,
+    /// Its credits.
+    pub credits: i64,
+    /// Whether it owns a construction yard and no other building.
+    pub yard_only: bool,
+    /// Whether no item of it is on any line.
+    pub idle: bool,
+    /// Its harvesters on the map.
+    pub harvesters: usize,
+    /// Its army units on the map.
+    pub army: usize,
+    /// The cheapest refinery price it could build now (none: 0).
+    pub refinery_price: i64,
+    /// The cheapest power plant price it could build now (none: 0).
+    pub plant_price: i64,
+    /// The role the plan builds next.
+    pub wanted: Option<Role>,
+}
+
 impl Brain {
+    /// What a broke house waits behind now ([`BrokeProbe`], M8 step B10).
+    pub fn broke_probe(&self, w: &World) -> BrokeProbe {
+        let h = self.house();
+        let s = &self.script;
+        let credits = w.houses[usize::from(h.0)].credits;
+        let items: Vec<&production::Item> = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == h)
+            .filter_map(|l| l.item.as_ref())
+            .collect();
+        let refinery_item = items.iter().find(|i| {
+            scripted::role_of(w, i.t) == Some(Role::Refinery) && !scripted::keeps_slaves(w, i.t)
+        });
+        let harvester_item = items
+            .iter()
+            .find(|i| scripted::role_of(w, i.t) == Some(Role::Harvester));
+        let lost = s.refinery_lost(w);
+        let (wait, item) = if lost.is_some() {
+            (Some(EconomyWait::LostRefinery), refinery_item)
+        } else if s.has_refinery(w) && (s.wants_field_refinery(w) || refinery_item.is_some()) {
+            (Some(EconomyWait::FieldRefinery), refinery_item)
+        } else if !s.economy_kept(w) && harvester_item.is_some() {
+            (Some(EconomyWait::Harvester), harvester_item)
+        } else {
+            (None, None)
+        };
+        let price = |role: Role| {
+            s.candidates(w, role)
+                .into_iter()
+                .filter(|&t| !scripted::keeps_slaves(w, t))
+                .map(|t| i64::from(production::price(w, h, t)))
+                .min()
+                .unwrap_or(0)
+        };
+        let refinery_price = price(Role::Refinery);
+        let need = item.map_or_else(
+            || match wait {
+                Some(EconomyWait::Harvester) | None => 0,
+                _ => lost.map_or(refinery_price, |t| i64::from(production::price(w, h, t))),
+            },
+            |i| i64::from(i.owed),
+        );
+        let own = s.own(w);
+        let buildings: Vec<&glasnost_sim::world::Object> = own
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| o.kind == Kind::Building)
+            .collect();
+        BrokeProbe {
+            wait,
+            lined: item.is_some(),
+            broke: wait.is_some() && i64::from(credits) < need,
+            plant_lined: items
+                .iter()
+                .any(|i| scripted::role_of(w, i.t) == Some(Role::Power) && !i.done()),
+            superweapon_lined: self.superweapon_owed(w).is_some(),
+            saving: self.saving(w),
+            paying: self.paying(w),
+            selling: s.selling(),
+            income: s.income(),
+            credits: i64::from(credits),
+            yard_only: !buildings.is_empty() && buildings.iter().all(|o| is_yard(w, o)),
+            idle: items.is_empty(),
+            harvesters: s.of_role(w, Role::Harvester).len(),
+            army: s.of_role(w, Role::Army).len(),
+            refinery_price,
+            plant_price: price(Role::Power),
+            wanted: s.wanted_role(w),
+        }
+    }
+
     /// What the anti-air step sees now ([`crate::antiair::Probe`]).
     pub fn antiair_probe(&self, w: &World) -> crate::antiair::Probe {
         crate::antiair::probe(&self.script, w)

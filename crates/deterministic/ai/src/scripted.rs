@@ -1372,12 +1372,39 @@ impl Script {
     /// sidebar for it (`Brain::economy_first`), and keeps the construction
     /// yard while selling out (M8 step B8: in the quick lane a lost
     /// refinery waited behind a power plant on the building line at
-    /// credits near 0, and the yard was sold).
+    /// credits near 0, and the yard was sold). A house with no harvester
+    /// left that sells out counts too, for a refinery type that comes with
+    /// a free harvester (S-0404 claim 2, S-0402 claim 18): that refinery
+    /// is its way back to an income.
     pub(crate) fn refinery_lost(&self, w: &World) -> Option<TypeRef> {
-        if self.has_refinery(w)
-            || self.slave_miners(w)
-            || self.of_role(w, Role::Harvester).is_empty()
-        {
+        if self.has_refinery(w) || self.slave_miners(w) {
+            return None;
+        }
+        let harvesters = !self.of_role(w, Role::Harvester).is_empty();
+        // design: a house selling out whose refinery and harvesters are
+        // all gone rebuilds the refinery that brings a harvester, and keeps
+        // the yard for it, as a person does (M8 step B10). Selling out
+        // latches until the house earns again (`Script::sell_when_broke`),
+        // and with no harvester that never came: such a house ordered
+        // nothing and sold its yard first. A house that is not selling out
+        // (the opening among them) keeps the plan's order.
+        let brings_harvester = |t: TypeRef| {
+            production::free_unit(w, t.index)
+                .is_some_and(|f| role_of(w, f) == Some(Role::Harvester))
+        };
+        if !harvesters && !self.watch.selling {
+            return None;
+        }
+        self.candidates(w, Role::Refinery).into_iter().find(|&t| {
+            !keeps_slaves(w, t) && (harvesters || brings_harvester(t)) && self.placeable(w, t)
+        })
+    }
+
+    /// The refinery type the plan orders for a new field
+    /// ([`Script::field_refinery`]) when that is what it builds next: the
+    /// cheapest one it can build and place now (`Script::build`'s pick).
+    pub(crate) fn field_refinery_type(&self, w: &World) -> Option<TypeRef> {
+        if !self.wants_field_refinery(w) {
             return None;
         }
         self.candidates(w, Role::Refinery)

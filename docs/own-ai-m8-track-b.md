@@ -922,3 +922,106 @@ The other seven games are identical. Seven of the eight games that differ split 
 - A broke house with no refinery, only its yard, and nothing paid into any item still waits. A person has no order that pays for it.
 - `harvester_reach` takes each harvester's zone from its type and reads reach regions only. A field the house's harvester could reach by a bridge that a person knows to be destroyed reads the same as one it cannot reach.
 - No requests.
+
+## Own AI (M8 step B10: a broke house recovers)
+
+B10 takes up B9's three open points. It changes the own AI (`glasnost_ai::scripted`, `brain`) and the lane's economy probe (`crates/tools/src/skirmish_lane.rs`). Lane outputs are git-ignored under `local-lane/m8/b10/` and hold counts and ticks only. The quick lane is seeds 7 to 10, maps 8, 2 and 0, at most 120 000 ticks, `GLASNOST_AI_QUICK=1`, with reference rules (*f0*) and with `GLASNOST_PLAY_FIXES=1` (*f1*). It plays Allied–Soviet, Allied–Yuri, Soviet–Yuri, Allied–Allied and Soviet–Soviet: 60 games per rule set. *Before* is main 0eb1690 with the two probe commits; *after* is the branch on the same main. Both were built on that tree. The branch was later rebased onto main 962941b, whose crates differ from 0eb1690 only in the arena oracle, so the lane, the goldens and the sweeps carry over; the gate and the final checks ran again there. The lane was first run on main a970624 and again on e375cf6 (intake 45). Intake 45 changed the lane's games (Soviet cross wins 4 → 7, Yuri 19 → 14). 0eb1690, the S-0501 claim 40 fix that lets the AI skirmish end again, changed none of them: e375cf6 and 0eb1690 give the same 120 games to the tick, with and without B10. *e20* is the credits a house earned up to tick 20 000 (`GLASNOST_AI_ECON=5000`).
+
+**The economy probe** (`GLASNOST_AI_ECOPROBE=<ticks>`, `Brain::broke_probe`, `Game::broke_probes`). Every 60 ticks it samples each AI house. At the end it prints three things:
+- the house's *broke spells*: runs of samples in which the house waits for an economy item (a lost refinery, a refinery by a new field, a harvester) with less money in hand than the item owes. For each spell over 3 000 ticks it gives what the house waited behind: a power plant on its lines, a superweapon building running unheld, both or neither. It also gives how many samples the house was saving for the superweapon, paying for its economy first or selling out, and its credits and income;
+- its *yard-only spells*: samples with only a construction yard and nothing on any line;
+- the map's bridge links whenever one changes (tick, links, enabled).
+
+The probe reads and changes nothing: the 60 f0 games with the probe on match the plain lane to the tick.
+
+### What the probe found (before)
+
+Over the 60 f0 games there were 637 broke spells, 1 104 420 ticks in all, and 124 of them lasted over 3 000 ticks:
+
+| Waits for | Behind | Spells | Ticks | Saving samples | Paying samples |
+| --- | --- | --- | --- | --- | --- |
+| refinery by a new field | superweapon building | 75 | 424 020 | 2 463 | 26 |
+| refinery by a new field | neither | 39 | 217 380 | 15 | 190 |
+| refinery by a new field | both | 2 | 27 600 | 112 | 0 |
+| harvester | neither | 6 | 21 840 | 0 | 370 |
+| lost refinery | neither | 2 | 11 460 | 0 | 193 |
+
+- **The power plant was never the main blocker.** In no long spell was a plant on the lines in most samples. The spells come from the refinery by a new field (116 of 124, 669 000 ticks). The house had a refinery, so the B8 rules did not count it as paying for its economy. Its money went first to a superweapon building on the defence line (the earlier line is paid first, S-0404 claim 1; the house was saving for it in 2 463 samples) or to its army lines. The house earned meanwhile, typically 2 000 to 5 000 credits per 3 000 ticks. A few early Soviet spells on map 8 earned 0 to 500.
+- **Yard-only spells: none after the start** in any of the 60 games, before or after.
+- **Bridges**: link changes in 3 of 60 games (map 0), each a destroyed bridge (links 4 → 3, and 3 → 2 in one game).
+
+### What the brain does now (B10)
+
+- **A broke house pays for its far-field refinery first** (`Brain::field_refinery_short`, `// design:`). The rule applies when:
+  - a refinery item of a house that still has a refinery runs unheld on its lines, owing more than the money in hand;
+  - the house is safe (`Brain::safe`), not selling out, and not a slave-miner house.
+
+  The house then pays for its economy first (`Brain::paying`). B8's `economy_first` holds every other running item, the superweapon building included (S-0404 claim 5), and resumes them once the refinery is paid or stands. This is what a person does: pause the sidebar to get the income back. A house that is not safe keeps training, as the superweapon saving does.
+- **Nor does that refinery wait behind a power plant while the house cannot pay for both** (`plant_first`'s `before_power`, `Script::field_refinery_type`). With less than the plant's and the refinery's prices together in hand, the plant would take what the refinery needs for its income. B8 made the same exception for a lost refinery.
+- **A house selling out with no refinery and no harvester left rebuilds the refinery that brings a harvester** (`Script::refinery_lost`). Before, `refinery_lost` needed a harvester waiting. A house whose refinery and harvesters were all gone ordered nothing while selling out, whatever its credits: selling out latches until the house earns again (`Script::sell_when_broke`), and with no harvester it never earns. It also sold its yard first, the costliest building. Now, while it sells out, a refinery type that comes with a free harvester (S-0404 claim 2, S-0402 claim 18) counts as lost. The house keeps the yard (B8's rule), sells the rest and rebuilds that refinery. A house that is not selling out, the opening included, keeps the plan's order. The ever-built count (S-0407 claim 10) was tried first and is not used: with `quirks.placed_buildings_not_ever_built` on, as in the fixture, a placed building raises no count.
+- **Item 2 as briefed did not occur.** No yard-only house with nothing on its lines appeared after the start in any lane game. The fix above is the case the synthetic test found behind it: the selling-out latch with no harvester. A yard-only house with no credits and nothing paid into any item still waits. No order a person has pays for it, except selling the yard, which ends its building.
+- **Item 3 needed no change.** A destroyed bridge already cuts a field off. Naming a bridge cell destroyed (`bridges::high::name_cell`, S-0212 claim 3) disables the links within 3 cells and marks the regions dirty. The rebuild joins two regions only through an enabled link (S-0212 claims 3 and 5). `Script::harvester_reach` reads those regions, which is the pathing query a person's move order learns. The test below pins it. Left open: a harvester standing on a bridge deck reads no region of its own.
+- No new saved state: AI game format 47 and save format 85 stay. No order-issuing path for moves or attacks was touched.
+
+**What was tried and dropped.** An income test beside the credits (pay first only when the credits and the last window's income together fall short) never fired where it was meant to: the spells behind a superweapon building went 75 → 76 and broke ticks 1 104 420 → 1 160 100. The house did earn, and the earlier line took the income first. It was committed and then reverted on the branch.
+
+### Results
+
+Quick lane, before → after. Every game has a winner except Soviet–Yuri on map 0, seed 10 (f0 and f1, before and after alike), which runs to 120 000 ticks. That game first appears on main with intake 45 and is not B10's. Every run exits 0 and there are no panics. f0 and f1 have the same e20 in every game.
+
+| | Before | After |
+| --- | --- | --- |
+| e20, Allied (cross games) | 1 583 745 | 1 605 827 (+1.4 %) |
+| e20, Soviet | 1 562 250 | 1 527 357 (−2.2 %) |
+| e20, Yuri | 1 224 756 | 1 229 766 (+0.4 %) |
+| Wins f0, Allied / Soviet / Yuri (cross games) | 14 / 7 / 14 | 16 / 6 / 13 |
+| Wins f1 | 14 / 7 / 14 | 16 / 7 / 12 |
+| Allied–Soviet (f0) | Allied 9, Soviet 3 | Allied 10, Soviet 2 |
+| Allied–Yuri (f0) | Allied 5, Yuri 7 | Allied 6, Yuri 6 |
+| Soviet–Yuri (f0) | Soviet 4, Yuri 7 | Soviet 4, Yuri 7 |
+| Allied–Allied (f0), house 0 / 1 | 8 / 4 | 7 / 5 |
+| Soviet–Soviet (f0), house 0 / 1 | 4 / 8 | 5 / 7 |
+| Game length, f0 / f1 | 2 604 732 / 2 597 267 | 2 635 832 / 2 658 156 |
+
+The probe, f0, before → after:
+- broke ticks 1 104 420 → 907 020 (−17.9 %);
+- spells over 3 000 ticks 124 → 92;
+- spells behind a superweapon building 75 (424 020 ticks) → 49 (251 640);
+- behind neither 39 (217 380) → 37 (169 440);
+- behind both 2 → 0;
+- harvester spells 6 → 4;
+- lost-refinery spells 2 → 2 (11 460 → 14 760 ticks).
+
+Economy holds over the 120 house-games went 733 → 3 229, at most 122 in one house-game against B2's 442 flicker. The largest count, 276, is the same game before and after.
+
+**Attribution** (f0, each rule off in turn on main e375cf6, which plays as 0eb1690):
+
+| Build | e20 Allied / Soviet / Yuri | Wins A / S / Y | Games differing from after |
+| --- | --- | --- | --- |
+| before | 1 583 745 / 1 562 250 / 1 224 756 | 14 / 7 / 14 | |
+| after | 1 605 827 / 1 527 357 / 1 229 766 | 16 / 6 / 13 | |
+| without the pay-first rule | 1 592 788 / 1 551 258 / 1 233 388 | 16 / 5 / 14 | most |
+| without the plant exemption | 1 607 210 / 1 533 804 / 1 239 483 | 15 / 8 / 12 | most |
+| without the selling refinery rule | 1 605 961 / 1 525 149 / 1 229 766 | 16 / 6 / 13 | 2 |
+| with the income test | 1 577 620 / 1 547 091 / 1 233 388 | 16 / 5 / 14 | most |
+
+A small change moves most games here: once one order differs, the game after it differs. The builds above are resamples of almost the same AI. Across them Soviet cross wins range from 5 to 8 and Soviet e20 lies 0.7 % to 2.4 % under before. Each build is below before, the one without the pay-first rule as well, so the Soviet e20 dip is not that rule's alone. The rule's own share against the build without it is about −1.5 % Soviet e20 and +1 Soviet win. **The Soviet bar is a judgment call for the lead,** like B9's Yuri bar: −1 Soviet win in f0 (7 → 7 in f1) and −2.2 % Soviet e20, inside the spread of the resamples, against a broke time cut by 18 % for every side. Under D14 a change that makes the AI recover as a person does is not held back to keep one count.
+
+**Tests** (synthetic data, through the real tick):
+- `economy.rs`:
+  - `pays_first_for_a_refinery_by_a_new_field`: a brain that has watched two income windows holds its army item while the far-field refinery owes more than the money in hand, earning or not. It holds nothing with the balance in hand or with an enemy near the base. It fails without the rule.
+  - `a_house_with_no_harvester_rebuilds_the_refinery_that_brings_one`: a rules variant whose refinery brings a free harvester, with sellable buildings and a refinery cheaper than the refunds. The house's refinery, harvesters and army go, and it is broke. It must sell out, keep the yard and stand with a refinery and a harvester within 8 000 ticks. Without the rule it sells the yard first.
+  - `a_destroyed_bridge_cuts_a_field_off`: a moated home field joined to open ground by a bridge link. With the link enabled the refinery goes toward the moated field; with the bridge destroyed before the refinery is placed, it goes toward the open one. It passes on main, which is item 3's finding.
+- `expansion.rs`, ignored in debug: `a_broke_house_orders_the_far_field_refinery_before_power`. With power to spare but less than the refinery drains, and one credit short of the plant and the refinery together, the house orders the refinery and no plant. With the money for both it orders the plant first. It fails without the exemption.
+
+**Goldens**: one of nine moved. The straight duel differs from tick 21 220 on: at tick 21 225 house 0 has 42 credits and orders the refinery by a new field, short of power after it, where `plant_first` used to put a power plant in its place. With the plant exemption off, all goldens are byte-identical to main's. The pay-first rule and the selling refinery rule move none.
+
+**Seed sweeps M6c, M7a and M7b, 1 to 16, and the gate seed 17** (f0 and f1; `local-lane/m8/b10/sweeps`): all twelve outputs are identical to before. The smallest minimum stays 0 in M6c and M7a; at seed 17 it stays 4 (M6c) and 2 (M7a).
+
+**Arena**: byte-identical. The arena attaches no brain of ours, and B10 changes no simulation code. On main 0eb1690 the three CSVs of the branch equal those of before (`local-lane/m8/b10/arena-before3`, `arena-after4`). The branch was then rebased onto main 962941b. That main holds the same simulation and AI code as 0eb1690, and intake 47 changes only the oracle's scoring. There too the branch writes the same three CSVs as main (`arena-main962`, `arena-after5`). With intake 47's scoring, the scored pairings failing are M-0001 11 of 84, M-0002 2 of 24 and M-0003 4 of 24. The stock outcomes reproduced are M-0001 139 of 152, M-0002 45 of 47 and M-0003 38 of 42.
+
+**Left open.**
+- 49 spells behind a superweapon building remain. The house paid first in 626 of their 4 243 samples (26 of 7 142 before). In the other samples a condition of the rule did not hold, for example the refinery was wanted but not yet on a line, or the house was not safe. The probe does not tell these apart.
+- A yard-only house with no credits and nothing paid still waits. It did not occur in the lane.
+- A harvester on a bridge deck reads no region for `harvester_reach`.
+- No requests.
