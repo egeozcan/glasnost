@@ -1558,3 +1558,89 @@ fn ac30_k5_the_airborne_scan_acquires_the_leaving_release() {
         describe(&w, a)
     );
 }
+
+/// A JET of house 0 flying on a person's order (`order`, with `target`)
+/// and two TANKs of house 1 for the loss tests of claim 32.
+fn loss_fixture(order: Behaviour, target: bool) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut w = game(&rules());
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, -6, 0),
+        0,
+    );
+    let x = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        1,
+        testkit::mid(SIZE, 4, 0),
+        0,
+    );
+    let y = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        1,
+        testkit::mid(SIZE, 4, 4),
+        0,
+    );
+    open(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: a,
+            behaviour: order,
+            attack_move: false,
+            target: target.then_some(Target::Object(x)),
+            dest: (!target).then_some(Target::Cell(testkit::mid(SIZE, 6, -6))),
+        }
+    ));
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(order));
+    (w, a, x, y)
+}
+
+// spec: S-0501 claim 32, A target that leaves the map (an aircraft whose behaviour has been overridden is reverted at the moment its target boards a transport, right after the loss) and S-0215 claim 10 (the revert restores the suspended behaviour, target and destination)
+#[test]
+fn claim_32_the_loss_reverts_an_overridden_aircraft() {
+    let (mut w, a, _, y) = loss_fixture(Behaviour::Move, false);
+    let before = w.obj(a).unwrap().dest;
+    assert!(before.is_some());
+    glasnost_sim::combat::acquire::override_attack(&mut w, a, y);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Attack));
+    assert_eq!(o.target, Some(Target::Object(y)));
+    glasnost_sim::objects::take_inside(&mut w, y);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Move), "reverted at the loss");
+    assert_eq!(o.beh.suspended, None);
+    assert_eq!(o.target, None, "the target put aside: none");
+    assert_eq!(o.dest, before, "the destination put aside");
+}
+
+// spec: S-0501 claim 32, A target that leaves the map (the revert brings back the target the override put aside, even when it is the very object that left the map; a removed object no longer exists, so it is not held)
+#[test]
+fn claim_32_the_revert_brings_back_the_object_that_left() {
+    for removed in [false, true] {
+        let (mut w, a, x, _) = loss_fixture(Behaviour::Attack, true);
+        assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(x)));
+        glasnost_sim::combat::acquire::override_attack(&mut w, a, x);
+        assert!(w.obj(a).unwrap().beh.suspended.is_some());
+        if removed {
+            glasnost_sim::objects::remove(&mut w, x);
+        } else {
+            glasnost_sim::objects::take_inside(&mut w, x);
+        }
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.beh.suspended, None, "reverted (removed: {removed})");
+        assert_eq!(o.beh.current, Some(Behaviour::Attack));
+        let want = (!removed).then_some(Target::Object(x));
+        assert_eq!(o.target, want, "removed: {removed}");
+    }
+}
