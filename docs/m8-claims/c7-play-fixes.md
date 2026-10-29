@@ -15,7 +15,7 @@ Our own rules patch layer, `data/layers/play-fixes.jsonc` (`glasnost_rules::laye
 
 The two only work together: with retry-off alone both synthetic shapes still fail at the cap, with split-off alone they fail after the second search (`claims_s0212_cap.rs`: `play_fixes_the_vehicle_on_the_docking_cell_finds_its_way`, `play_fixes_the_unit_at_the_factory_exit_finds_its_way`, `play_fixes_needs_both_switches`, and `play_fixes_change_nothing_where_the_first_search_finds_the_way`).
 
-Considered and rejected: `group_spread_no_detour` (S-0213 leaves the off behaviour as a question for the lead, so condition 1 fails); `substitution_distance_flat_destination` (not clearly a bug in play, and it changes approaches broadly); `corridor_free_part_unusable_cells` (jumpjet infantry only, no play note); `path_search_10000_failure` and the other path switches (no play note or request names a bug). Q-1870 question 3, the second harvester circling a taken dock: S-0402 claims 10 and 10a are unchanged and no switch covers them; the layer removes the cause seen in the lead's reports (the first harvester stuck on the dock), not the circling.
+Considered and rejected: `group_spread_no_detour` (S-0213 leaves the off behaviour as a question for the lead, so condition 1 fails; superseded in part 4, [c7-pathing.md](c7-pathing.md), where the lead's decision of 2026-10-29 lets the off position be our design and the layer admits it); `substitution_distance_flat_destination` (not clearly a bug in play, and it changes approaches broadly); `corridor_free_part_unusable_cells` (jumpjet infantry only, no play note); `path_search_10000_failure` and the other path switches (no play note or request names a bug). Q-1870 question 3, the second harvester circling a taken dock: S-0402 claims 10 and 10a are unchanged and no switch covers them; the layer removes the cause seen in the lead's reports (the first harvester stuck on the dock), not the circling.
 
 **Plumbing.**
 - *Setup and room.* `glasnost_ui::setup::Setup::fixes` (`FIXES_BY_DEFAULT` true), a sixth box in the flags grid labelled with `PLAY_FIXES_NAME`, drawn when the setup is game-wide (a room guest sees the host's choice, greyed, and has no box to press). `Setup::lobby` turns it into `Lobby::layers`. In a room it travels in the room's `Setup` (the lobby's `Edit::Game` carries `fixes`; wire version 9, so the relay must be redeployed), not in the S-0412 flags.
@@ -189,6 +189,10 @@ The layer is unchanged in this intake (its comments now say the above), and so i
 `sim-gate/tests/play_fixes.rs`. For the lead: by the rule, drop both corridor
 entries; readmit `corridor_retry_no_fallback` (and `corridor_free_part_ignores_height`) when a
 play note names a strip or ledge give-up.
+
+## Part 4: our own pathing improvements (2026-10-29)
+
+The lead's decision of 2026-10-29 adds an exception to condition (1): our own pathing improvements are admitted with an off position of our design, marked `// design: C7-P4` in the code; conditions (2) and (3) still hold. Part 4 adds three such entries (`path_through_stalled_blockers`, `unreachable_move_dropped`, `group_spread_no_detour`), so the layer holds nine. Ledger: [c7-pathing.md](c7-pathing.md).
 
 ## Part 3: the layer re-judged (2026-10-28)
 

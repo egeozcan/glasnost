@@ -9573,7 +9573,7 @@
           "default": true
         },
         "group_spread_no_detour": {
-          "description": "No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off would search for an open, reachable cell near the end of a spoiled look; that search is not specified, so the switch is not consulted yet.",
+          "description": "No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off (our design, C7 part 4): a member whose look gives no cell of its own gets the nearest open cell round the common cell, in the common cell's reach region and given to no other member.",
           "type": "boolean",
           "default": true
         },
@@ -10054,6 +10054,11 @@
         },
         "path_search_10000_failure": {
           "description": "A search that reaches the destination after exactly 10000 expansions fails.",
+          "type": "boolean",
+          "default": true
+        },
+        "path_through_stalled_blockers": {
+          "description": "A stalled unit's re-path may lead through the cells of other stalled\nunits, at the moving-blocker cost (the original). Off (our design, C7\npart 4): a unit stalled for the blockage delay in a deadlock (stalled\nunits that wait on each other's cells), or waiting on one, first looks\nfor a way that keeps off the cells of the deadlock's other units, and\nthe computation's own searches follow when there is none; a step\nrefused by a unit with a destination starts the blockage timer.",
           "type": "boolean",
           "default": true
         },
@@ -10849,6 +10854,11 @@
         },
         "unload_without_contact_stalls": {
           "description": "A harvester whose refinery breaks off contact while it unloads, with nothing queued, stays in unload until an order gives it a behaviour.",
+          "type": "boolean",
+          "default": true
+        },
+        "unreachable_move_dropped": {
+          "description": "A move whose destination cell fails the gate or the search is dropped\n(the original). Off (our design, C7 part 4): the computation first\ntries once more towards the nearest cell the unit can stand on in its\nown reach region.",
           "type": "boolean",
           "default": true
         },

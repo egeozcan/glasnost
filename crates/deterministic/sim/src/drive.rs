@@ -793,6 +793,18 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 give_up(w, id);
                 return false;
             }
+            // design: C7-P4 stalled blockers (a step blocked by a unit with a destination, the close case of S-0212 claim 27 among them, starts the blockage timer as a moving blocker does, so a deadlock of such steps is seen)
+            if !r.quirks.path_through_stalled_blockers
+                && w.cells.list(first, Layer::Ground).iter().any(|&b| {
+                    b != id
+                        && w.obj(b).is_some_and(|x| {
+                            matches!(x.kind, Kind::Vehicle | Kind::Infantry) && x.dest.is_some()
+                        })
+                })
+                && let Some(ob) = w.obj_mut(id)
+            {
+                ob.path.blocked_since.get_or_insert(t);
+            }
             // spec: S-0207 claim 15 table T4 and S-0212 claim 22 (first check, blocked: clear the stored path, a fresh search in mode 0 on the same tick whatever the retry timer, then the repeated check)
             return search_and_recheck(w, id, u);
         }

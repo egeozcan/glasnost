@@ -392,6 +392,23 @@ pub struct Quirks {
     // spec: S-0212 claim 16
     #[serde(default = "on")]
     pub train_exclusion_search_only: bool,
+    /// A stalled unit's re-path may lead through the cells of other stalled
+    /// units, at the moving-blocker cost (the original). Off (our design, C7
+    /// part 4): a unit stalled for the blockage delay in a deadlock (stalled
+    /// units that wait on each other's cells), or waiting on one, first looks
+    /// for a way that keeps off the cells of the deadlock's other units, and
+    /// the computation's own searches follow when there is none; a step
+    /// refused by a unit with a destination starts the blockage timer.
+    // spec: S-0212 claims 8 and 22 (the mode-2 moving-blocker cost; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub path_through_stalled_blockers: bool,
+    /// A move whose destination cell fails the gate or the search is dropped
+    /// (the original). Off (our design, C7 part 4): the computation first
+    /// tries once more towards the nearest cell the unit can stand on in its
+    /// own reach region.
+    // spec: S-0212 claim 23 (the failed computation; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub unreachable_move_dropped: bool,
     /// The rebuild of a house's threat records counts its own and its allies' objects.
     // spec: S-0212 claim 16a and Edge cases (quirks.threat_rebuild_counts_friends)
     #[serde(default = "on")]
@@ -416,8 +433,8 @@ pub struct Quirks {
     // spec: S-0213 claim 19
     #[serde(default = "on")]
     pub cheer_memory_spans_session: bool,
-    /// No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off would search for an open, reachable cell near the end of a spoiled look; that search is not specified, so the switch is not consulted yet.
-    // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the search is a question for the project lead)
+    /// No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off (our design, C7 part 4): a member whose look gives no cell of its own gets the nearest open cell round the common cell, in the common cell's reach region and given to no other member.
+    // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub group_spread_no_detour: bool,
     /// The harvester-truce exception of row I15 never applies.
@@ -2140,6 +2157,8 @@ impl Default for Quirks {
             opposite_facing_reversal: true,
             coarse_limit_records_cost: true,
             train_exclusion_search_only: true,
+            path_through_stalled_blockers: true,
+            unreachable_move_dropped: true,
             threat_rebuild_counts_friends: true,
             negative_threat_field: true,
             aircraft_threat_stays_put: true,
@@ -2779,6 +2798,11 @@ impl Quirks {
                 "train_exclusion_search_only",
                 self.train_exclusion_search_only,
             ),
+            (
+                "path_through_stalled_blockers",
+                self.path_through_stalled_blockers,
+            ),
+            ("unreachable_move_dropped", self.unreachable_move_dropped),
             (
                 "threat_rebuild_counts_friends",
                 self.threat_rebuild_counts_friends,

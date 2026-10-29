@@ -83,6 +83,7 @@ fn find(w: &World, id: ObjectId, to: CellXY, mode: Mode, marks: &[CellXY]) -> Op
             to,
             mode,
             congested: marks.iter().copied().collect(),
+            avoided: Default::default(),
         },
     )
 }

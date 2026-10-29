@@ -79,6 +79,11 @@ pub struct Request {
     pub mode: Mode,
     /// Cells carrying the congestion mark during this search (claim 19).
     pub congested: BTreeSet<CellXY>,
+    /// Cells this search does not enter: the cells of stalled moving units,
+    /// with `quirks.path_through_stalled_blockers` off (our design, C7 part
+    /// 4, [`stalled_cells`]); empty otherwise. A search with such cells is
+    /// also held to [`DETOUR_EXPANSIONS`].
+    pub avoided: BTreeSet<CellXY>,
 }
 
 /// A pathfinder: finds the steps from one cell to another for a unit. The
@@ -651,6 +656,10 @@ fn counted_search(
             if *expansions >= 65527 {
                 return None;
             }
+            // design: C7-P4 stalled blockers (a search round stalled units looks near: a bounded detour)
+            if !req.avoided.is_empty() && *expansions >= DETOUR_EXPANSIONS {
+                return None;
+            }
             *expansions += 1;
             sc.closed[ni] = stamp;
             let ge = sc.g(ni).unwrap_or(F32::ZERO);
@@ -672,6 +681,10 @@ fn counted_search(
                     continue;
                 }
                 if w.cells.cell(c).is_none() || behind.contains(&(c, cl)) {
+                    continue;
+                }
+                // design: C7-P4 stalled blockers (a stalled unit's cell is not entered, the destination aside)
+                if c != to && req.avoided.contains(&c) {
                     continue;
                 }
                 // A candidate outside the corridor that is not the
@@ -2035,6 +2048,7 @@ pub fn corridor_find(w: &World, id: ObjectId, to: CellXY) -> Option<Vec<u8>> {
         to,
         mode: Mode::Fresh,
         congested: BTreeSet::new(),
+        avoided: BTreeSet::new(),
     };
     // spec: S-0212 claim 13 (a jumpjet infantry type uses zone infantry for the coarse search)
     let coarse_zone = if o.kind == Kind::Infantry && u.jumpjet {
@@ -2181,6 +2195,189 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
 
 /// [`compute`] without the trace.
 fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
+    let res = compute_once(w, id, mode);
+    if res == Search::Found || w.rules().quirks.unreachable_move_dropped {
+        return res;
+    }
+    // design: C7-P4 nearest reachable cell (a failed move tries once more towards the nearest cell the unit can stand on in its own reach region; one try, as the new destination is reachable)
+    let Some(c) = reachable_near(w, id) else {
+        return res;
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        ob.dest = Some(Target::Cell(c));
+    }
+    compute_once(w, id, mode)
+}
+
+/// How far round a move's destination [`reachable_near`] looks, in rings.
+// nocite: design: C7-P4 nearest reachable cell (our choice: two of the group spread's looks)
+pub const NEAR_RADIUS: i32 = 12;
+
+/// The expansions a search that keeps off stalled units' cells may make
+/// (`quirks.path_through_stalled_blockers` off).
+// nocite: design: C7-P4 stalled blockers (our choice: a detour near the stall, a sixteenth of the search limit of S-0212 claim 12)
+pub const DETOUR_EXPANSIONS: u32 = 4096;
+
+/// The nearest cell to a moving unit's destination cell that the unit can
+/// stand on in its own reach region, for a move whose computation failed
+/// (`quirks.unreachable_move_dropped` off; our design, C7 part 4): the
+/// first ring round the destination, out to [`NEAR_RADIUS`], with a cell
+/// in the map and the usable area, in the unit's reach region, whose entry
+/// outcome is clear or a moving blocker and that no other unit of its house
+/// has as its destination; of that ring the cell nearest the destination,
+/// the first in row order on equal distances. None when the unit is not on
+/// a move to a cell, when no ring has such a cell, or when the unit stands
+/// as near the destination as that cell. It takes no draw.
+pub fn reachable_near(w: &World, id: ObjectId) -> Option<CellXY> {
+    let o = w.obj(id)?;
+    if o.beh.current != Some(Behaviour::Move) {
+        return None;
+    }
+    let Some(Target::Cell(goal)) = o.dest else {
+        return None;
+    };
+    let u = w.rules().unit(o.kind, o.type_index)?;
+    let from = o.pos.cell();
+    let own = regions::reach_read(w, from, u.zone, o.layer == Layer::Deck);
+    if matches!(own, Reach::OffMap | Reach::None) {
+        return None;
+    }
+    let d2 = |c: CellXY| {
+        let dx = i64::from(c.x - goal.x);
+        let dy = i64::from(c.y - goal.y);
+        dx * dx + dy * dy
+    };
+    let reference = occupancy::reference_level(w, id);
+    let taken: BTreeSet<CellXY> = w
+        .objects
+        .iter()
+        .filter(|(oid, x)| **oid != id && x.owner == o.owner)
+        .filter_map(|(_, x)| match x.dest {
+            Some(Target::Cell(c)) => Some(c),
+            _ => None,
+        })
+        .collect();
+    for r in 1..=NEAR_RADIUS {
+        let mut best: Option<(i64, CellXY)> = None;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if dx.abs().max(dy.abs()) != r {
+                    continue;
+                }
+                let c = CellXY::new(goal.x + dx, goal.y + dy);
+                if w.cells.cell(c).is_none() || !w.cells.usable(c) || taken.contains(&c) {
+                    continue;
+                }
+                if regions::reach_read(w, c, u.zone, true) != own {
+                    continue;
+                }
+                let out = match o.kind {
+                    Kind::Infantry => occupancy::infantry_outcome(w, id, c, reference),
+                    _ => occupancy::vehicle_outcome(w, id, c, reference),
+                };
+                if !matches!(out, Outcome::Clear | Outcome::MovingBlocker) {
+                    continue;
+                }
+                let d = d2(c);
+                if best.is_none_or(|(b, _)| d < b) {
+                    best = Some((d, c));
+                }
+            }
+        }
+        if let Some((d, c)) = best {
+            return (d < d2(from)).then_some(c);
+        }
+    }
+    None
+}
+
+/// Whether unit `x` is stalled: a vehicle or infantry unit on the map's
+/// ground layer with a destination whose blockage (S-0212 claim 22) has
+/// lasted the blockage delay.
+fn stalled(w: &World, x: &crate::world::Object) -> bool {
+    // design: C7-P4 stalled blockers (stalled: blocked for the blockage delay of S-0212 claim 22, as long as a unit's own wait before mode 2)
+    let delay = w.rules().general.blockage_delay;
+    x.on_map
+        && x.layer == Layer::Ground
+        && matches!(x.kind, Kind::Vehicle | Kind::Infantry)
+        && x.dest.is_some()
+        && x.path
+            .blocked_since
+            .is_some_and(|b| w.tick.wrapping_sub(b) >= delay)
+}
+
+/// The cells a stalled unit `id`'s search keeps off with
+/// `quirks.path_through_stalled_blockers` off (our design, C7 part 4): the
+/// cells of the other stalled units that wait in a ring. Each stalled unit
+/// (`id` among them) waits on the stalled units in the cell it heads for
+/// (S-0212 claim 8's heading cell); one that waits on none, or only on units
+/// that do not wait in a ring themselves, is in a queue whose head still
+/// moves, and is not kept off. What is left after taking such units away
+/// until none is left are the units that wait, directly or through others,
+/// on units that wait on each other: a deadlock. `id` with no stored path
+/// waits on the stalled units round it. Empty unless `id` itself is left,
+/// so a stalled unit elsewhere searches as the original does.
+pub fn stalled_cells(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
+    let units: BTreeMap<ObjectId, CellXY> = w
+        .objects
+        .iter()
+        .filter(|(oid, x)| **oid == id || stalled(w, x))
+        .map(|(oid, x)| (*oid, x.pos.cell()))
+        .collect();
+    let mut by_cell: BTreeMap<CellXY, Vec<ObjectId>> = BTreeMap::new();
+    for (&u, &c) in &units {
+        by_cell.entry(c).or_default().push(u);
+    }
+    let waits: BTreeMap<ObjectId, Vec<ObjectId>> = units
+        .keys()
+        .map(|&u| {
+            // The cells it waits for: the one it heads for; for `id` with no
+            // stored path (a blocked step discards it before the search),
+            // every neighbour of its cell.
+            let cells: Vec<CellXY> = match heading_cell(w, u) {
+                Some(h) => vec![h],
+                None if u == id => STEPS
+                    .iter()
+                    .map(|&(dx, dy)| CellXY::new(units[&u].x + dx, units[&u].y + dy))
+                    .collect(),
+                None => Vec::new(),
+            };
+            let on = cells
+                .iter()
+                .filter_map(|h| by_cell.get(h))
+                .flatten()
+                .copied()
+                .filter(|&x| x != u)
+                .collect();
+            (u, on)
+        })
+        .collect();
+    let mut ring: BTreeSet<ObjectId> = units.keys().copied().collect();
+    loop {
+        let free: Vec<ObjectId> = ring
+            .iter()
+            .copied()
+            .filter(|u| !waits[u].iter().any(|x| ring.contains(x)))
+            .collect();
+        if free.is_empty() {
+            break;
+        }
+        for u in free {
+            ring.remove(&u);
+        }
+    }
+    // design: C7-P4 stalled blockers (only a unit in the deadlock, or waiting on it, keeps off it)
+    if !ring.contains(&id) {
+        return BTreeSet::new();
+    }
+    ring.iter()
+        .filter(|&&u| u != id)
+        .map(|u| units[u])
+        .collect()
+}
+
+/// One path computation of [`compute_untraced`].
+fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     let Some(o) = w.obj(id).cloned() else {
         return Search::SearchFailed;
     };
@@ -2290,6 +2487,24 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         to: goal,
         mode,
         congested: congested.clone(),
+        avoided: BTreeSet::new(),
+    };
+    // design: C7-P4 stalled blockers (a stalled unit's computation first looks for a way that keeps off the cells of stalled units in a deadlock, without a corridor, since the corridor reads terrain only; the computation's own searches follow when it finds none)
+    let avoided = if !r.quirks.path_through_stalled_blockers && stalled(w, &o) {
+        stalled_cells(w, id)
+    } else {
+        BTreeSet::new()
+    };
+    let detour = if avoided.is_empty() {
+        None
+    } else {
+        S0212.find(
+            w,
+            &Request {
+                avoided,
+                ..req.clone()
+            },
+        )
     };
     // spec: S-0212 claim 13b (the coarse end cells: the start's when the unit is on a bridge deck, the destination's when it is a bridge cell)
     let start_end = coarse_end(w, from, on_deck);
@@ -2308,11 +2523,12 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     } else {
         u.zone
     };
-    let found = match w.pathfinder {
-        PathfinderChoice::S0212 if use_corridor => {
+    let found = match (detour, w.pathfinder) {
+        (Some(p), _) => Some(p),
+        (None, PathfinderChoice::S0212) if use_corridor => {
             corridor_search(w, &req, coarse_zone, u.zone, start_end, dest_end)
         }
-        PathfinderChoice::S0212 => S0212.find(w, &req),
+        (None, PathfinderChoice::S0212) => S0212.find(w, &req),
     };
     let Some(steps) = found else {
         return Search::SearchFailed;
