@@ -521,3 +521,21 @@ fn claim23_rows_outrank_a_cloaked_firer() {
         assert_eq!(answer(&w, f, obj(t)), Answer::Cloaked, "{state:?}");
     }
 }
+
+// spec: S-0306 claim 23 (rank of the water and land rows: ahead of the late target tests of rank 9: a seeker type with land-targeting mode 1 is answered illegal against a target the land row refuses; with mode 0 the seeker's out of range, whatever the distance) and S-0301 claim 9 rank 9
+#[test]
+fn claim23_rows_outrank_the_late_target_tests() {
+    for (lm, expected) in [(1, Answer::Illegal), (0, Answer::OutOfRange)] {
+        let mut r = modes("AGV", lm, 0);
+        r.sim.vehicles.get_mut("AGV").unwrap().hunter_seeker = Some(true);
+        let mut w = game(&r);
+        let f = put(&mut w, Kind::Vehicle, "AGV", 0, 0, 0);
+        let t = put(&mut w, Kind::Vehicle, "TGT", 1, 2, 0);
+        assert_eq!(answer(&w, f, obj(t)), expected, "mode {lm}");
+        assert_eq!(
+            check(&w, f, Some(obj(t)), 0, true),
+            expected,
+            "mode {lm}, with the range test"
+        );
+    }
+}

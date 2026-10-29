@@ -1513,3 +1513,70 @@ fn claim_22_net_turns_and_reversal() {
     assert_eq!(p.flight, before.flight, "undone");
     assert_eq!((p.turns, p.reversed), (-1, true));
 }
+
+/// spec: S-0317 claim 1 (a detonation's pieces are taken to have no house: the warhead debris of a projectile's detonation, S-0303 claim 22, and the barrel debris of an exploding overlay, S-0303 claim 19, made by a shot that a house's vehicle fires, carry no house)
+#[test]
+fn claim_1_a_detonations_pieces_have_no_house() {
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::Behaviour;
+    use glasnost_sim::world::{HouseId, Target};
+    let mut r = rules();
+    let he = r.sim.warheads.get_mut("HE").unwrap();
+    he.max_debris = Some(4);
+    he.min_debris = Some(2);
+    he.debris_types = Some(vec!["BARE".into()]);
+    he.debris_maximums = Some(vec![3]);
+    add(&mut r, "STAVE", VoxelAnimationType::default());
+    let keg = u8::try_from(r.registries.get("overlays").map_or(0, Vec::len)).unwrap();
+    register(&mut r, "overlays", "KEG");
+    r.sim.overlays.insert(
+        "KEG".into(),
+        OverlayType {
+            explodes: Some(true),
+            ..Default::default()
+        },
+    );
+    // Many entries, so that some percent draw below 15 picks one.
+    r.sim.general.barrel_debris = Some(vec!["STAVE".into(); 24]);
+    let mut staves = 0;
+    for seed in 1..=4 {
+        let mut w = testkit::game_with(&r, N, seed);
+        let c = mid(2, 0);
+        w.cells.grid.get_mut(c).unwrap().overlay = keg;
+        let victim = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, c, 0);
+        let firer = testkit::spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(-1, 0), 64);
+        w.tick = w.tick.max(w.orders_blocked_through + 1);
+        assert!(orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Behaviour {
+                actor: firer,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(victim)),
+                dest: None,
+            },
+        ));
+        let mut ticks = 0;
+        while w.pieces.is_empty() && ticks < 400 {
+            testkit::run(&mut w, 1);
+            ticks += 1;
+        }
+        assert!(
+            !w.pieces.is_empty(),
+            "seed {seed}: the shot's detonation made pieces"
+        );
+        let (bare, stave) = (ti(&w, "BARE"), ti(&w, "STAVE"));
+        assert!(
+            w.pieces.values().any(|p| p.type_index == bare),
+            "seed {seed}"
+        );
+        assert!(
+            w.pieces.values().all(|p| p.house.is_none()),
+            "seed {seed}: no piece carries a house"
+        );
+        assert_eq!(w.cells.cell(c).unwrap().overlay, glasnost_map::NO_OVERLAY);
+        staves += w.pieces.values().filter(|p| p.type_index == stave).count();
+    }
+    assert!(staves > 0, "some seed's barrel made a piece");
+}

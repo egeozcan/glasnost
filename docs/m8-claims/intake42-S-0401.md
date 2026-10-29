@@ -82,7 +82,7 @@ and seeds, both switch positions). The record's numbers stay local; only the ver
 | the ore mine's new cells are off the spread schedule | yes: mines spread in their own turns | yes | matches (claim 15; `claim_15_f8_ore_mine`) |
 | the ore mine never puts ore on its own cell or on a wall | never | never | matches (`claim_15_ore_mine_next_to_a_tree`) |
 | the ore mine fills its free neighbours | yes | yes | matches |
-| secondary spread out of new cells, on multiples of the spread field | yes: every spread step is in a spread update on the timer | yes | matches (by construction; not separately tested) |
+| secondary spread out of new cells, on multiples of the spread field | yes: every spread step is in a spread update on the timer | yes | matches (tested at seams sweep 2: `m0013_secondary_spread_from_new_cells_on_the_schedule` in `claims_s0401_r17.rs`) |
 | gains next to a civilian standing in the cell | yes | yes | matches (infantry in a cell does not prevent it) |
 | each run is the first game of its session | the first game's timers start unset, so the first updates are in tick 0 | the same | matches (claim 19) |
 
@@ -100,7 +100,7 @@ for the lead.
 | 9 (a tree's cell chosen: the attempt used, nothing made) | tested | `claim_11_tree_cell_chosen_receives_nothing` (E8 part b: the draws of a whole update by a probe, 24 seeds, both positions) |
 | 10 (a tree's cell germinable with the switch on and counted in *c*; not with it off) | tested | the same test; `claim_10_terrain_object_neighbour_switch_off` (S-0319's offer takes no draws there, switch off) |
 | 10 (the kinds of cell M-0013 tested) | tested | `m0013_which_cells_receive_spreading_ore` |
-| 10 (E8 part c: other bridge parts, the usable area, an invisible building, the tileset, slope) | partly | as before: slope, buildable land and a living building in `claim_10_germinable_cells`; the others are in `germinable` without a test |
+| 10 (E8 part c: other bridge parts, the usable area, an invisible building, the tileset, slope) | tested | slope, buildable land and a living building in `claim_10_germinable_cells`; other bridge parts, the usable area, the tileset and a raised cell in `claim_10_e8_part_c_bridge_usable_area_and_tileset`, invisible buildings in `claim_10_e8_part_c_invisible_buildings` (seams sweep 2, `claims_s0401_r17.rs`) |
 | 11 (a cell holding a terrain object: overlay draw, growth-list offer, no overlay, no stage) | tested | `claim_11_tree_cell_chosen_receives_nothing`, `claim_11_crate_stage_at_a_tree_cell` (S-0520 claim 24's path) |
 | 15 (an ore mine's step choosing a tree's cell) | tested | `claim_15_ore_mine_next_to_a_tree` (on: two draws more than off, the growth entry; nothing placed; the mine's own cell and the walls untouched) |
 | `quirks.spread_step_lost_on_terrain_object` | tested | both positions in the four tests above |

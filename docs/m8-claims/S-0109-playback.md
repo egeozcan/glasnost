@@ -27,14 +27,14 @@ S-0522 claim 13). State: `World::anims` (save format 69). Client: `app::mapview:
 |---|---|---|
 | 1 | tested | `claims5_16_first_update_and_lifetime` (frames 0 to 3 through `anims::shown`); the clock's stage rules in the M6b ledger. |
 | 2 | tested | Every fixture's rate 900 gives *d* = 1 (F1); `anim_delay` keeps its M6b tests. |
-| 3 | partly | The creation draw is the scenario stream's (`load::creation_draws`, S-0202 claim 10 tests) and its value reaches the clock (`Spawned::delay`). A follow-up type's random rate draws from the scenario stream in the animation's turn (`AnimEnv::draw`), coded, not tested here. |
-| 4 | partly | `mutation::playback` normalises the delay under `quirks.speed_normalised_delays` (S-0611 tests); no test of an ordinary normalised animation at two speeds. |
+| 3 | tested | The creation draw is the scenario stream's (`load::creation_draws`, S-0202 claim 10 tests) and its value reaches the clock (`Spawned::delay`). A follow-up type's random rate draws from the scenario stream in the animation's turn (`AnimEnv::draw`), tested at seams sweep 2: `claim3_a_follow_up_with_a_descending_random_rate_draws_its_delay_in_its_turn` (`claims_s0109_playback.rs`). |
+| 4 | tested | `mutation::playback` normalises the delay under `quirks.speed_normalised_delays` (S-0611 tests); an ordinary normalised animation at two speeds, the quirk off and a speed change after creation: `claim4_a_normalised_delay_follows_the_speed_at_creation` (seams sweep 2, `claims_s0109_playback.rs`). |
 | 5 | tested | `claims5_16_first_update_and_lifetime` (no advance in tick *c*, first advance in *c* + 1), `claims11_13_29_trailer_loop_delay_defers_the_start_event` (no count-down at the first update). |
 | 6 | tested | `claims11_28_loop_delay_draw_from_the_scenario_stream`, `claim7_repeat_factor_multiplies_the_passes` (each pass ends on its *E*-th advance). |
 | 7 | tested | `claim7_repeat_factor_multiplies_the_passes` (*L* = 1, *m* = 3: three passes); endless through `claim13_parachute_attached_until_landing` (*L* = −1). |
 | 8 | tested | `claim8_15_reverse_request_is_kept_at_a_follow_up` (a creator's reverse request: *k*₀ = λₑ − 1, then down). |
-| 9 | partly | Ping-pong is the shared clock's (M6b tests); no simulated fixture. |
-| 10 | partly | Shadow ends are the shared clock's (M6b tests); no simulated fixture. |
+| 9 | tested | Ping-pong is the shared clock's (M6b tests); a simulated fixture: `claim9_a_ping_pong_animation_turns_and_never_ends` (seams sweep 2). |
+| 10 | tested | Shadow ends are the shared clock's (M6b tests); a simulated fixture: `claim10_a_shadow_types_last_pass_ends_at_the_loop_end` (seams sweep 2). |
 | 11 | tested | `claims11_13_29_trailer_loop_delay_defers_the_start_event` (a creator's delay: start event on update *D* + 1, no advance, the clock not restarted), `claims11_28_loop_delay_draw_from_the_scenario_stream` (between passes: one ranged draw, *D* updates without advance). |
 | 12 | tested | Every fixture starts at frame 0 (`claims5_16_first_update_and_lifetime`). |
 | 13 | tested | `claim13_start_event_at_creation_with_mu_zero`, `claim14_middle_event_on_the_advance_to_mu` (μ ≠ 0: no draw at creation); the start event after a loop delay in `claims11_13_29_trailer_loop_delay_defers_the_start_event`; after a follow-up switch coded (`AnimEnv::switched`). |
@@ -42,7 +42,7 @@ S-0522 claim 13). State: `World::anims` (save format 69). Client: `app::mapview:
 | 15 | tested | `claim15_follow_up_restarts_the_accumulator_at_zero` (the type switch, A = 0.0), `claim8_15_reverse_request_is_kept_at_a_follow_up`. |
 | 16 | tested | `claims5_16_first_update_and_lifetime` (lifetime *E* × *d*, removed in its own turn, out of the update order). Infantry creation at the end stays with S-0611's model (`mutation`). |
 | 17 | tested | `claim17_damage_over_time_pattern` (δ = 0.375: 1, 0, 1, 0, 0, 1, 0, 1), `claim17_damage_accumulator_quirk_off`, `claim15_follow_up_restarts_the_accumulator_at_zero`. The area detonation allows resource reduction with no attacker or house (`area::detonate`, coded). The factor 5 for an animation attached to a terrain object is coded (no creator attaches one yet). The warhead by the current type's name (r41, Q-1717 answered): [intake22-S-0109.md](intake22-S-0109.md). A trigger-played animation: seam (below). |
-| 18 | partly | Follows from claims 4, 11, 14, 15 and 17 as built; no test at two game speeds. |
+| 18 | tested | Follows from claims 4, 11, 14, 15 and 17 as built; the damage timing at two game speeds: `claim18_a_normalised_animations_damage_timing_follows_the_speed` (seams sweep 2). |
 | 19, 20, 21, 24, 26, 27 | not in the simulation | Drawing rules (M6b ledger). |
 | 22 | tested | `claim22_owner_removed_deletes_at_the_next_update` (owner position plus displacement; deleted at the next update with nothing else). Detachment: no creator detaches. The render layer is the drawing's. |
 | 23 | seam | Held animations are building slot animations, which the simulation does not play (section *Map viewer (M2)*: drawn at their first frame). |

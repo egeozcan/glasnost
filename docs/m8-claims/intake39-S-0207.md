@@ -79,7 +79,7 @@ intake also builds the chrono parts of S-0402 r76 that intake 36 left waiting.
 | 28 (a destination with no assignment hook) | tested | `claim_28_a_queued_destination_is_driven` (S-0215 claim 15 row 2). |
 | 28 (D34 c: the cycle) | tested | `claim_28_d34_c_the_cycle_jumps_only_to_the_docking_cell` (3 loads, 3 jumps, each to the docking cell in *enter*; no stray reservation). |
 | 28 (a sale of the refinery: a full unloading miner jumps to the scatter cell) | tested | `claim_28_a_sale_jumps_to_the_scatter_cell` (D34 h runs 2 and 4: the jump in the sale's first processing tick, *harvest* current, driving again). |
-| 28 (a sale: a miner not full, the remembered or ring-search cell; one still in *enter*) | by construction | The same assignment paths; no test of their own. |
+| 28 (a sale: a miner not full, the remembered or ring-search cell; one still in *enter*) | tested in part (seams sweep 2) | Not full: `claim_28_a_sale_with_a_part_load_jumps_to_the_ring_search_cell` (the remembered cell dropped, the ring-search cell jumped to in the tick of the sale's first processing, never the scatter cell), `claim_28_a_sale_with_the_remembered_cell_taken_drives_there` (a ground-layer vehicle in the remembered cell: driving takes it, the scatter jump cancelled), `claim_28_a_sale_with_nothing_found_stays_on_the_docking_cell` (*idle*, driving, no destination). A miner still in *enter*: the same assignment paths, no test of its own. |
 | 28 (nested other temporary replacement) | not reachable | No other temporary replacement exists outside the exclusions. |
 | 21 (install cancels a pending jump) | tested | `claim_21_installing_driving_cancels_a_pending_jump`; `claims_s0207_r34.rs` updated. |
 | 20 (a) (old mark cleared first) | tested | Through the one-jump test. |

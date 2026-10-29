@@ -66,9 +66,9 @@ tethered harvester docked therefore starts its build-down one processing later t
 | 10a (occupied docking cell within the close-enough distance) | tested | `claim_10a_occupant_scattered_and_the_contacting_harvester_docks`. |
 | 10a (raised base; `substitution_distance_flat_destination`) | tested | `claim_10a_raised_base_substitutes_every_offer` (on: 600 ticks with no dock, the occupant stays, contact and reservation kept; off: it docks). |
 | 10a (chrono miner at an occupied cell) | waits | S-0207 r82 claim 28. |
-| 18 (placement fall-back before *harvest*) | by construction | `objects::place_with` already runs the placement fall-back (S-0215 Terms) before `grand_opening` queues *harvest*. Its only visible effect, the chrono miner's driving, waits on S-0207 r82. |
+| 18 (placement fall-back before *harvest*) | tested (later) | `objects::place_with` already runs the placement fall-back (S-0215 Terms) before `grand_opening` queues *harvest*. Its only visible effect, the chrono miner's driving, was built at intake 39 and is tested by `claim_28_placement_installs_driving` ([intake39-S-0207.md](intake39-S-0207.md)); stale "waits" closed at seams sweep 2. |
 | 3a (no docking-cell exception) | by construction | Wording; `claims_s0212_docking.rs` covers it. Chrono exception: claim 17's, unchanged. |
-| Terms, 5a, 9, 10 (repeated dock test), 17 (a) to (f), 18 (chrono), H8 | waits | S-0207 r82 claim 28 intake (driving installed at placement, adoption and the sale). |
+| Terms, 5a, 9, 10 (repeated dock test), 17 (a) to (f), 18 (chrono), H8 | built at intake 39 | S-0207 r82 claim 28 intake (driving installed at placement, adoption and the sale): see [intake39-S-0207.md](intake39-S-0207.md), whose rows carry the tests; stale "waits" closed at seams sweep 2. |
 | 14 (wake-up rule) | unchanged | Note 23: Q-1990. |
 | 22, 26, 27a, State and ordering, scenarios, Open questions | wording | No rule change. |
 

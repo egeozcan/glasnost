@@ -6,15 +6,17 @@
 
 mod harvest_common;
 
-use glasnost_map::terrain::land;
+use std::sync::Arc;
+
+use glasnost_map::terrain::{TileCatalogue, land};
 use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{OverlayType, TerrainObjectType};
 use glasnost_sim::econ::resource;
 use glasnost_sim::rng::Rng;
-use glasnost_sim::rules::Kind;
+use glasnost_sim::rules::{Kind, SimRules};
 use glasnost_sim::testkit;
-use glasnost_sim::world::World;
+use glasnost_sim::world::{Layer, World};
 use harvest_common::*;
 
 /// Overlay list position of WALL, a wall overlay after the 40 resource
@@ -321,5 +323,199 @@ fn m0013_which_cells_receive_spreading_ore() {
                 );
             }
         }
+    }
+}
+
+// ---- Seams sweep 2 (docs/m8-claims/seams-2.md): scenario E8 part c and
+// M-0013's secondary spread, through the spread updates of play.
+
+/// Like [`pens`], on the catalogue `cat` and with a further map change `f`.
+fn pens_on(
+    r: &Ruleset,
+    centres: &[CellXY],
+    open: &[CellXY],
+    seed: u32,
+    cat: Arc<TileCatalogue>,
+    f: impl FnOnce(&mut glasnost_map::Map),
+) -> World {
+    let mut map = testkit::empty_map(SIZE);
+    for &c in centres {
+        let cell = map.cells.get_mut(c).unwrap();
+        cell.overlay = ORE;
+        cell.overlay_data = 11;
+        for n in neighbours(c) {
+            if !open.contains(&n) {
+                map.cells.get_mut(n).unwrap().overlay = WALL;
+            }
+        }
+    }
+    f(&mut map);
+    let rules = Arc::new(SimRules::new(r, "synthetic-test"));
+    glasnost_sim::load::new_game(rules, &map, cat, &testkit::setup(seed))
+        .expect("synthetic test game loads")
+}
+
+/// Runs `n` ticks and gives, for each cell of `watch`, the tick in which it
+/// first held resource (None when it got none).
+fn first_gains(w: &mut World, watch: &[CellXY], n: i32) -> Vec<Option<i32>> {
+    let mut got = vec![None; watch.len()];
+    for _ in 0..n {
+        let t = w.tick;
+        testkit::run(w, 1);
+        for (g, &c) in got.iter_mut().zip(watch) {
+            if g.is_none() && stage(w, c).is_some() {
+                *g = Some(t);
+            }
+        }
+    }
+    got
+}
+
+/// The testkit's catalogue (tiles 0 to 4) plus tile 5: clear and flat, of
+/// a tileset without the allow-tiberium flag.
+fn catalogue_with_closed_tileset() -> Arc<TileCatalogue> {
+    let mut cat = (*testkit::catalogue()).clone();
+    cat.tiles.push(cat.tiles[0].clone());
+    cat.allow_tiberium.resize(cat.tiles.len() - 1, true);
+    cat.allow_tiberium.push(false);
+    Arc::new(cat)
+}
+
+// spec: S-0401 claim 10 (scenario E8 part c: a bridge part other than a high bridge's cell, a cell outside the usable area by the height-aware test and a tile of a tileset without the allow-tiberium flag never receive spreading ore; a tile number outside the theater's tiles, a raised cell inside the usable area and the control cell do)
+// spec: S-0009 claims 4 and 5 (the height-aware usable test: a cell of level h needs W + 2·Ly + h < s)
+#[test]
+fn claim_10_e8_part_c_bridge_usable_area_and_tileset() {
+    let s = 7;
+    let cat = catalogue_with_closed_tileset();
+    let outside = i32::try_from(cat.tiles.len()).unwrap() + 3;
+    for on in [true, false] {
+        for seed in 1..=5 {
+            let r = rules(on, s);
+            // Pens in the middle, and one at the top edge (s = W + 3)
+            // whose open cell has s = W + 2.
+            let mut centres: Vec<CellXY> = (0..5).map(|i| at(-8 + 4 * i, 4)).collect();
+            let edge = CellXY::new(16, 17);
+            assert_eq!(edge.s(), i64::from(SIZE) + 3);
+            centres.push(edge);
+            let mut open: Vec<CellXY> = centres[..5].iter().map(|&c| neighbours(c)[2]).collect();
+            let high = neighbours(edge)
+                .into_iter()
+                .find(|n| n.s() == i64::from(SIZE) + 2)
+                .unwrap();
+            open.push(high);
+            let [_, bridge, closed, foreign, raised, _] =
+                <[CellXY; 6]>::try_from(open.clone()).unwrap();
+            let mut w = pens_on(&r, &centres, &open, seed, cat.clone(), |m| {
+                m.cells.get_mut(closed).unwrap().tile = 5;
+                m.cells.get_mut(foreign).unwrap().tile = outside;
+                // Level 2 inside the usable area, and level 2 at s = W + 2,
+                // where W + 0 + 2 < s fails.
+                m.cells.get_mut(raised).unwrap().level = 2;
+                m.cells.get_mut(high).unwrap().level = 2;
+            });
+            let i = w.cells.idx(bridge).unwrap();
+            w.cells.bridge_body[i] = true;
+            assert!(w.cells.usable(raised) && !w.cells.usable(high));
+            assert!(w.cells.usable(edge), "the edge pen's centre is usable");
+            let germinable: Vec<bool> = open.iter().map(|&c| resource::germinable(&w, c)).collect();
+            assert_eq!(germinable, [true, false, false, true, true, false]);
+            let got = first_gains(&mut w, &open, 20 * s);
+            let ctx = format!("on {on} seed {seed}");
+            assert!(got[0].is_some(), "{ctx}: the control cell");
+            assert!(got[1].is_none(), "{ctx}: a bridge part");
+            assert!(got[2].is_none(), "{ctx}: a tileset without the flag");
+            assert!(
+                got[3].is_some(),
+                "{ctx}: a tile outside the theater's tiles"
+            );
+            assert!(
+                got[4].is_some(),
+                "{ctx}: a raised cell inside the usable area"
+            );
+            assert!(
+                got[5].is_none(),
+                "{ctx}: outside the usable area by its height"
+            );
+            for (&c, t) in open.iter().zip(&got) {
+                if let Some(t) = t {
+                    assert_eq!(resource::resource_at(&w, c).map(|x| x.0), Some(0), "{ctx}");
+                    assert_eq!(t % s, 0, "{ctx}: on the spread schedule");
+                }
+            }
+        }
+    }
+}
+
+// spec: S-0401 claim 10 (scenario E8 part c: a living building of a type that is invisible, or invisible in game, does not prevent new resource; only the first building of the cell's ground layer is looked at)
+#[test]
+fn claim_10_e8_part_c_invisible_buildings() {
+    let s = 7;
+    let mut r = rules(true, s);
+    for (n, invisible, in_game) in [("GHOST", true, false), ("SHADE", false, true)] {
+        r.registries
+            .entry("buildings".into())
+            .or_default()
+            .push(n.into());
+        let mut b = building(1, 1);
+        b.econ.invisible = Some(invisible);
+        b.invisible_in_game = Some(in_game);
+        r.sim.buildings.insert(n.into(), b);
+    }
+    for seed in 1..=5 {
+        let centres: Vec<CellXY> = (0..4).map(|i| at(-8 + 4 * i, 0)).collect();
+        let open: Vec<CellXY> = centres.iter().map(|&c| neighbours(c)[2]).collect();
+        let [ghost, shade, first, hut] = <[CellXY; 4]>::try_from(open.clone()).unwrap();
+        let mut w = pens(&r, &centres, &open, seed);
+        let g = place_building(&mut w, "GHOST", 1, ghost);
+        place_building(&mut w, "SHADE", 1, shade);
+        // An invisible building listed before a visible one: the visible one
+        // is not looked at.
+        let a = place_building(&mut w, "GHOST", 1, first);
+        let b = place_building(&mut w, "HUT", 1, first);
+        let list = w.cells.list(first, Layer::Ground).to_vec();
+        let (pa, pb) = (
+            list.iter().position(|&x| x == a),
+            list.iter().position(|&x| x == b),
+        );
+        assert!(pa.is_some() && pb.is_some() && pa < pb, "listing {list:?}");
+        place_building(&mut w, "HUT", 1, hut);
+        assert!(w.obj(g).is_some_and(|o| o.health > 0));
+        let got = first_gains(&mut w, &open, 20 * s);
+        assert!(got[0].is_some(), "seed {seed}: an invisible building");
+        assert!(got[1].is_some(), "seed {seed}: invisible in game");
+        assert!(
+            got[2].is_some(),
+            "seed {seed}: only the first building is looked at"
+        );
+        assert!(got[3].is_none(), "seed {seed}: a living visible building");
+    }
+}
+
+// measure: M-0013 (secondary spread out of new cells, on multiples of the spread field)
+// spec: S-0401 claims 8, 9 and 11 (a new cell at stage 3 spreads only once it has grown above ⌊i/2⌋; every spread gain falls in a spread update on the timer)
+#[test]
+fn m0013_secondary_spread_from_new_cells_on_the_schedule() {
+    let s = 7;
+    for seed in 1..=5 {
+        let mut r = rules(true, s);
+        fractions(&mut r, "ORE", "1", "1");
+        r.sim.tiberiums.get_mut("ORE").unwrap().growth = Some(2);
+        // A corridor: centre C, then A, then B; walls around C and A
+        // elsewhere, so B can only be reached from A.
+        let c = at(0, 0);
+        let a = neighbours(c)[2];
+        let b = neighbours(a)[2];
+        let mut w = pens_on(&r, &[c], &[a], seed, testkit::catalogue(), |m| {
+            for n in neighbours(a) {
+                if n != c && n != b {
+                    m.cells.get_mut(n).unwrap().overlay = WALL;
+                }
+            }
+        });
+        let got = first_gains(&mut w, &[a, b], 60 * s);
+        let (ta, tb) = (got[0].expect("A gains"), got[1].expect("B gains from A"));
+        assert!(ta < tb, "seed {seed}");
+        assert_eq!(ta % s, 0, "seed {seed}: A on the schedule");
+        assert_eq!(tb % s, 0, "seed {seed}: B on the schedule");
     }
 }

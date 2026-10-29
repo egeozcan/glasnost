@@ -1431,3 +1431,218 @@ fn claim_48_quirk_off_takes_off_toward_a_right_angle_destination() {
         describe(&w, a)
     );
 }
+
+// ---- Seams sweep 2 (docs/m8-claims/seams-2.md): the searches and the
+// airborne scan against a released aircraft (claim 48 (a), AC30 part k (5)).
+
+/// [`rules`] plus the anti-air-only weapon `Sam` (range 8 cells, the
+/// anti-air projectile `Flak`), the defence `SAMS` (1 × 1, primary `Sam`)
+/// and the vehicle `SAMV` (primary `Sam`), as in `claims_s0309_airborne`.
+fn rules_scan() -> Ruleset {
+    use glasnost_rules::sim::{ArmourClass, BuildingType, ProjectileType};
+    let mut r = rules();
+    r.sim.projectiles.insert(
+        "Flak".into(),
+        ProjectileType {
+            aa: Some(true),
+            ag: Some(false),
+            inviso: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "Sam".into(),
+        WeaponType {
+            damage: Some(5),
+            rof: Some(30),
+            range: econ_common::dec("8"),
+            speed: Some(100),
+            projectile: Some("Flak".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
+    let mut sams = BuildingType {
+        strength: Some(500),
+        foundation: Some([1, 1]),
+        primary: Some("Sam".into()),
+        ..Default::default()
+    };
+    sams.combat.armor = Some(ArmourClass::Concrete);
+    push(&mut r, "buildings", "SAMS");
+    r.sim.buildings.insert("SAMS".into(), sams);
+    let mut samv = econ_common::wheel(500);
+    samv.primary = Some("Sam".into());
+    push(&mut r, "vehicles", "SAMV");
+    r.sim.vehicles.insert("SAMV".into(), samv);
+    r
+}
+
+// spec: S-0501 claim 48 (a) (resting above its pad, a released aircraft is in neither cell layer and not a tracked flying object, so a range search passes over it: no cell offers it, S-0309 claim 10, and the airborne scan, S-0309 claim 9, reads only the tracked flying objects); the control: the same searcher acquires an aircraft of the same type in ordinary flight
+#[test]
+fn claim_48_a_a_range_search_passes_over_the_resting_release() {
+    let r = rules_scan();
+    let (mut w, k, a) = built_at(&r, "HIPAD", "SCOUT");
+    // An enemy anti-air unit 3 cells away, well inside its 8-cell range.
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "SAMV",
+        1,
+        testkit::mid(SIZE, 0, 3),
+        0,
+    );
+    for _ in 0..300 {
+        step(&mut w);
+        assert_ne!(
+            w.obj(v).unwrap().target,
+            Some(Target::Object(a)),
+            "{}",
+            describe(&w, a)
+        );
+        assert_resting(&w, k, a, 100);
+    }
+    // The control: an aircraft of the same type taking off beside it.
+    let c = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "SCOUT",
+        0,
+        testkit::mid(SIZE, 2, 3),
+        0,
+    );
+    move_to(&mut w, c, testkit::mid(SIZE, 2, -6));
+    let seen = run_until(&mut w, 300, |w| {
+        w.obj(v).unwrap().target == Some(Target::Object(c))
+    });
+    assert!(seen, "the control is acquired: {}", describe(&w, c));
+    assert_ne!(w.obj(v).unwrap().target, Some(Target::Object(a)));
+}
+
+// spec: S-0501 AC30 part k (5) and claim 48 (c) (airborne scan: a fresh release leaving on a move order stays filed in the ground render layer, is tracked from its second movement update, and the enemy defence beside its path, 11 cells from the pad, acquires it at its first search after it is within range in flight: the scan reads the height's layer, not the filed list) and S-0309 claim 9
+#[test]
+fn ac30_k5_the_airborne_scan_acquires_the_leaving_release() {
+    let r = rules_scan();
+    let (mut w, _, a) = built_at(&r, "HIPAD", "JET");
+    let d = building(&mut w, "SAMS", 1, 11, 2);
+    testkit::run(&mut w, 10);
+    assert_eq!(
+        w.obj(d).unwrap().target,
+        None,
+        "the pad is outside its range"
+    );
+    move_to(&mut w, a, testkit::mid(SIZE, 16, 0));
+    let mut tracked_since = None;
+    let mut acquired = None;
+    for _ in 0..600 {
+        step(&mut w);
+        if tracked_since.is_none() && tracked(&w, a) {
+            tracked_since = Some(w.tick);
+        }
+        if w.obj(d).unwrap().target == Some(Target::Object(a)) {
+            acquired = Some(w.tick);
+            assert!(!air::on_ground(&w, a), "in flight: {}", describe(&w, a));
+            assert!(tracked(&w, a), "{}", describe(&w, a));
+            assert!(
+                air::ground_filed(&w, a),
+                "still filed in the ground render layer: {}",
+                describe(&w, a)
+            );
+            break;
+        }
+    }
+    assert!(tracked_since.is_some(), "{}", describe(&w, a));
+    assert!(
+        acquired.is_some(),
+        "the defence acquires it: {}",
+        describe(&w, a)
+    );
+}
+
+/// A JET of house 0 flying on a person's order (`order`, with `target`)
+/// and two TANKs of house 1 for the loss tests of claim 32.
+fn loss_fixture(order: Behaviour, target: bool) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut w = game(&rules());
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, -6, 0),
+        0,
+    );
+    let x = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        1,
+        testkit::mid(SIZE, 4, 0),
+        0,
+    );
+    let y = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        1,
+        testkit::mid(SIZE, 4, 4),
+        0,
+    );
+    open(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: a,
+            behaviour: order,
+            attack_move: false,
+            target: target.then_some(Target::Object(x)),
+            dest: (!target).then_some(Target::Cell(testkit::mid(SIZE, 6, -6))),
+        }
+    ));
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(order));
+    (w, a, x, y)
+}
+
+// spec: S-0501 claim 32, A target that leaves the map (an aircraft whose behaviour has been overridden is reverted at the moment its target boards a transport, right after the loss) and S-0215 claim 10 (the revert restores the suspended behaviour, target and destination)
+#[test]
+fn claim_32_the_loss_reverts_an_overridden_aircraft() {
+    let (mut w, a, _, y) = loss_fixture(Behaviour::Move, false);
+    let before = w.obj(a).unwrap().dest;
+    assert!(before.is_some());
+    glasnost_sim::combat::acquire::override_attack(&mut w, a, y);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Attack));
+    assert_eq!(o.target, Some(Target::Object(y)));
+    glasnost_sim::objects::take_inside(&mut w, y);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Move), "reverted at the loss");
+    assert_eq!(o.beh.suspended, None);
+    assert_eq!(o.target, None, "the target put aside: none");
+    assert_eq!(o.dest, before, "the destination put aside");
+}
+
+// spec: S-0501 claim 32, A target that leaves the map (the revert brings back the target the override put aside, even when it is the very object that left the map; a removal is a loss and a revert cause too). The target a revert at a removal leaves is not stated by the claim, so it is not asserted here.
+// The override and the loss are invoked directly (`override_attack`, `take_inside`, `remove`): the fixture has no transport type.
+#[test]
+fn claim_32_the_revert_brings_back_the_object_that_left() {
+    for removed in [false, true] {
+        let (mut w, a, x, _) = loss_fixture(Behaviour::Attack, true);
+        assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(x)));
+        glasnost_sim::combat::acquire::override_attack(&mut w, a, x);
+        assert!(w.obj(a).unwrap().beh.suspended.is_some());
+        if removed {
+            glasnost_sim::objects::remove(&mut w, x);
+        } else {
+            glasnost_sim::objects::take_inside(&mut w, x);
+        }
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.beh.suspended, None, "reverted (removed: {removed})");
+        assert_eq!(o.beh.current, Some(Behaviour::Attack));
+        if !removed {
+            assert_eq!(o.target, Some(Target::Object(x)), "the object that left");
+        }
+    }
+}

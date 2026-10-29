@@ -501,3 +501,133 @@ fn claim_28_a_sale_jumps_to_the_scatter_cell() {
     );
     assert!(driving(&w, h), "the jump installs driving again");
 }
+
+/// A chrono miner with `load`, remembering `remembered`, docks by its jump
+/// at a buildup refinery, unloads, and the refinery is sold then. Returns
+/// the world and the miner, right after the sale order.
+fn sold_while_unloading(
+    ore: &[(CellXY, u8, u8)],
+    load: Vec<i32>,
+    remembered: Option<CellXY>,
+) -> (World, ObjectId, ObjectId) {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("REFN").unwrap().econ.buildup = Some(true);
+    let mut w = game_with_ore(&r, ore, 7);
+    while w.tick <= w.orders_blocked_through {
+        testkit::run(&mut w, 1);
+    }
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "CHRONOT", 0, at(6, 0), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load,
+        phase: Phase::Returning,
+        remembered,
+        ..Default::default()
+    });
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    for _ in 0..300 {
+        testkit::run(&mut w, 1);
+        if w.obj(h).unwrap().beh.current == Some(Behaviour::Unload) {
+            break;
+        }
+    }
+    assert_eq!(cell(&w, h), dock_cell(), "docked by its jump");
+    assert_eq!(
+        w.obj(h).unwrap().econ.harvest.as_ref().unwrap().remembered,
+        remembered
+    );
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Sell { actor: refn }
+    ));
+    (w, h, refn)
+}
+
+/// The tick and the cell of the miner's first move off the docking cell,
+/// and whether that move was a jump.
+fn first_move(w: &mut World, h: ObjectId) -> (i32, CellXY, bool) {
+    for _ in 0..200 {
+        let a = cell(w, h);
+        testkit::run(w, 1);
+        let b = cell(w, h);
+        if b != a {
+            return (w.tick, b, jumped(a, b));
+        }
+    }
+    panic!("it never left the docking cell");
+}
+
+// spec: S-0207 claim 28, A sale of the refinery (a chrono miner not full: the adopted remembered cell is dropped and the seeking drop's empty assignment installs driving, which cancels the scatter jump; the ring-search cell is a qualified docking assignment while the contact holds, so teleporting is restored and the miner jumps to that resource cell in the same turn, without reaching the scatter cell; the jump installs driving again) and S-0402 claim 17 case (f)
+#[test]
+fn claim_28_a_sale_with_a_part_load_jumps_to_the_ring_search_cell() {
+    let remembered = at(4, 3);
+    let near = at(0, 2);
+    let (mut w, h, refn) = sold_while_unloading(
+        &[(remembered, ORE, 5), (near, ORE, 5)],
+        vec![2, 0],
+        Some(remembered),
+    );
+    let (t, c, jump) = first_move(&mut w, h);
+    assert_eq!(
+        c, near,
+        "the ring-search cell at tick {t}, not the scatter cell"
+    );
+    assert!(jump, "a jump");
+    let begun = w
+        .obj(refn)
+        .and_then(|b| b.econ.sale.as_ref())
+        .map(|x| x.stage);
+    assert_eq!(
+        begun,
+        Some(Stage::Begun),
+        "in the tick of the sale's first processing, while the contact holds"
+    );
+    assert!(driving(&w, h), "the jump installs driving again");
+    assert_eq!(w.obj(h).unwrap().beh.current, Some(Behaviour::Harvest));
+}
+
+// spec: S-0207 claim 28, A sale of the refinery (a chrono miner not full whose ring search finds no cell stays where it is with driving installed) and S-0402 claim 17 case (f) (when the search finds nothing the miner goes idle with driving installed and no destination)
+#[test]
+fn claim_28_a_sale_with_nothing_found_stays_on_the_docking_cell() {
+    let (mut w, h, _) = sold_while_unloading(&[], vec![2, 0], Some(at(4, 3)));
+    let mut seen_idle = false;
+    for _ in 0..20 {
+        testkit::run(&mut w, 1);
+        assert_eq!(cell(&w, h), dock_cell(), "no jump to the scatter cell");
+        let o = w.obj(h).unwrap();
+        if o.econ.harvest.as_ref().unwrap().phase == Phase::Idle {
+            seen_idle = true;
+            assert_eq!(o.dest, None);
+            assert!(driving(&w, h));
+            assert_eq!(landing(&w, h), None, "the scatter jump is cancelled");
+        }
+    }
+    assert!(seen_idle, "idle");
+}
+
+// spec: S-0207 claim 28, A sale of the refinery (a chrono miner not full whose remembered cell holds a ground-layer vehicle: driving takes the adopted cell, which cancels the scatter jump; nothing is dropped, no ring search follows, and the miner drives to its remembered cell)
+#[test]
+fn claim_28_a_sale_with_the_remembered_cell_taken_drives_there() {
+    let ore_cell = at(4, 3);
+    let (mut w, h, _) = sold_while_unloading(&[(ore_cell, ORE, 5)], vec![2, 0], Some(ore_cell));
+    let blocker = place_vehicle(&mut w, "HARV", 1, ore_cell, 0);
+    assert!(marked(&w, ore_cell));
+    let (t, c, jump) = first_move(&mut w, h);
+    assert!(!jump, "a driven step at tick {t}, to {c:?}");
+    let o = w.obj(h).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(ore_cell)), "its remembered cell");
+    assert_eq!(landing(&w, h), None, "the scatter jump is cancelled");
+    assert!(driving(&w, h));
+    assert_eq!(cell(&w, blocker), ore_cell);
+}

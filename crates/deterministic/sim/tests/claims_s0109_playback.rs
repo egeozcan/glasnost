@@ -453,3 +453,226 @@ fn claim7_repeat_factor_multiplies_the_passes() {
     assert_eq!(got[11], Some(3), "the third pass's last frame");
     assert_eq!(got[12], None, "removed after three passes");
 }
+
+// ---- Seams sweep 2 (docs/m8-claims/seams-2.md): claims 3, 4, 9, 10 and
+// 18 through the animation's own turns.
+
+/// The rules of [`rules`] plus the types `extra`.
+fn rules_with(extra: &[(&str, AnimationType)]) -> Ruleset {
+    let mut r = rules();
+    for (n, t) in extra {
+        anim(&mut r, n, t.clone());
+    }
+    r
+}
+
+/// The number of ticks, from tick c on, for which `id` is still shown.
+fn lifetime(w: &mut World, id: ObjectId, cap: usize) -> usize {
+    frames(w, id, cap)
+        .iter()
+        .take_while(|f| f.is_some())
+        .count()
+}
+
+#[test]
+fn claim3_a_follow_up_with_a_descending_random_rate_draws_its_delay_in_its_turn() {
+    // spec: S-0109 claim 3 (the delay is chosen again at a follow-up switch: a descending pair (ρ₁ > ρ₂) gives [d₁′, d₂′] = [⌊900/ρ₁⌋, ⌊900/ρ₂⌋], one ranged draw from the scenario stream; an ascending pair collapses to d₂ with no draw) and claim 28 (in the animation's own turn)
+    let r = rules_with(&[
+        (
+            "ROLL",
+            AnimationType {
+                next: Some("DICE".into()),
+                ..four()
+            },
+        ),
+        (
+            "DICE",
+            AnimationType {
+                random_rate: Some([900, 150]),
+                ..four()
+            },
+        ),
+        (
+            "ROLLUP",
+            AnimationType {
+                next: Some("FLAT".into()),
+                ..four()
+            },
+        ),
+        (
+            "FLAT",
+            AnimationType {
+                random_rate: Some([150, 450]),
+                ..four()
+            },
+        ),
+    ]);
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 1..=12 {
+        let mut w = testkit::game_with(&r, SIZE, seed);
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let id = make(&mut w, "ROLL", Spawn::default());
+        let before = w.rng.clone();
+        // Ticks c … c + 3: ROLL's update and three advances, no draw.
+        for _ in 0..4 {
+            tick::step(&mut w);
+        }
+        assert_eq!(w.rng, before, "seed {seed}: no draw before the switch");
+        // Tick c + 4: the advance that ends ROLL's pass switches to DICE.
+        let mut expected = before.clone();
+        let d = expected.ranged(1, 6, half);
+        tick::step(&mut w);
+        assert_eq!(w.rng, expected, "seed {seed}: one ranged draw over [1, 6]");
+        assert_eq!(
+            anims::shown(&w, id).map(|s| (s.0.to_vec(), s.1)),
+            Some((b"DICE".to_vec(), 0))
+        );
+        // DICE plays E × d ticks with no further draw, never redrawn.
+        let shown = lifetime(&mut w, id, 40);
+        assert_eq!(shown, 4 * d as usize - 1, "seed {seed}: d = {d}");
+        assert_eq!(w.rng, expected, "seed {seed}: no draw at a new stage");
+        seen.insert(d);
+    }
+    assert!(seen.len() > 1, "the draw varies over the seeds: {seen:?}");
+    // The ascending pair: d₂ = ⌊900 / 450⌋ = 2, no draw.
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let id = make(&mut w, "ROLLUP", Spawn::default());
+    let before = w.rng.clone();
+    for _ in 0..5 {
+        tick::step(&mut w);
+    }
+    assert_eq!(
+        anims::shown(&w, id).map(|s| s.0.to_vec()),
+        Some(b"FLAT".to_vec())
+    );
+    assert_eq!(lifetime(&mut w, id, 40), 4 * 2 - 1);
+    assert_eq!(w.rng, before, "the collapsed range takes no raw value");
+}
+
+/// NORM: four frames at rate 300 (d = ⌊900 / 300⌋ = 3), normalised.
+fn norm() -> AnimationType {
+    AnimationType {
+        rate: Some(300),
+        normalized: Some(true),
+        ..four()
+    }
+}
+
+#[test]
+fn claim4_a_normalised_delay_follows_the_speed_at_creation() {
+    // spec: S-0109 claim 4 (a normalised type's delay is N(d, s) at the speed of the tick it is chosen; a later speed change does not change it; quirks.speed_normalised_delays off: d at every speed)
+    // spec: S-0107 F3 (N(3, 0) = 5, N(3, 6) = 2)
+    for (normalise, speed, expected_d) in
+        [(true, 0u8, 5), (true, 6, 2), (false, 0, 3), (false, 6, 3)]
+    {
+        let mut r = rules_with(&[("NORM", norm())]);
+        r.globals.quirks.speed_normalised_delays = normalise;
+        let mut w = testkit::game_with(&r, SIZE, 3);
+        w.game_speed = speed;
+        let id = make(&mut w, "NORM", Spawn::default());
+        // The speed changes after the delay was chosen.
+        w.game_speed = 6 - speed;
+        let got = frames(&mut w, id, 4 * 6 + 2);
+        let ctx = format!("switch {normalise} speed {speed}");
+        // E × d ticks of life from tick c; the first advance d ticks after c.
+        assert_eq!(
+            got.iter().take_while(|f| f.is_some()).count(),
+            4 * expected_d,
+            "{ctx}"
+        );
+        assert_eq!(got[expected_d - 1], Some(0), "{ctx}");
+        assert_eq!(got[expected_d], Some(1), "{ctx}");
+    }
+}
+
+#[test]
+fn claim18_a_normalised_animations_damage_timing_follows_the_speed() {
+    // spec: S-0109 claim 18 (damage is delivered per advance, so a normalised type's damage ticks follow N(d, s); it runs a different number of ticks at different speeds; quirks.speed_normalised_delays off: the same at every speed)
+    // spec: S-0109 claim 17 (δ = 0.375 delivers on advances 1, 3, 6 and 8) and S-0107 F3 (N(3, 1) = 4, N(3, 7) = 1)
+    let burn = AnimationType {
+        frame_count: Some(8),
+        damage: Some(Decimal("0.375".into())),
+        ..norm()
+    };
+    for (normalise, speed, d) in [
+        (true, 1u8, 4usize),
+        (true, 7, 1),
+        (false, 1, 3),
+        (false, 7, 3),
+    ] {
+        let mut r = rules_with(&[("BURN", burn.clone())]);
+        r.globals.quirks.speed_normalised_delays = normalise;
+        let mut w = testkit::game_with(&r, SIZE, 3);
+        w.game_speed = speed;
+        let at = centre(&w);
+        make(&mut w, "BURN", Spawn::default());
+        let got = deliveries(&mut w, at, 8 * 4 + 2);
+        let ticks: Vec<usize> = got
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| **x > 0)
+            .map(|(i, _)| i)
+            .collect();
+        // Step i is tick c + i; advance j comes in tick c + j·d.
+        let expected: Vec<usize> = [1, 3, 6, 8].iter().map(|j| j * d).collect();
+        assert_eq!(ticks, expected, "switch {normalise} speed {speed}");
+    }
+}
+
+#[test]
+fn claim9_a_ping_pong_animation_turns_and_never_ends() {
+    // spec: S-0109 claim 9 (on the last pass σ turns after an advance to k ≥ E or k = 0; the stage keeps the turning value, so the turning frame a + E shows for one delay; a turning advance never ends the pass, so a ping-pong type that is neither shadow nor reversed never ends on its own)
+    let r = rules_with(&[(
+        "SWING",
+        AnimationType {
+            ping_pong: Some(true),
+            ..four()
+        },
+    )]);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let id = make(&mut w, "SWING", Spawn::default());
+    let got: Vec<i32> = frames(&mut w, id, 18)
+        .into_iter()
+        .map(|f| f.unwrap())
+        .collect();
+    assert_eq!(got, [0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0, 1]);
+    assert_eq!(lifetime(&mut w, id, 400), 400, "it never ends");
+}
+
+#[test]
+fn claim10_a_shadow_types_last_pass_ends_at_the_loop_end() {
+    // spec: S-0109 claim 10 and F3 (a shadow type's sprite end is ⌊N / 2⌋; its last pass also ends when k ≥ λₑ − a: with N = 8, a = 1 and no end fields, E = λₑ = 4 and the pass shows 1, 2, 3; a plain type with N = 4 and a = 1 shows 1 … 4)
+    let r = rules_with(&[
+        (
+            "SHADE",
+            AnimationType {
+                frame_count: Some(8),
+                shadow: Some(true),
+                start: Some(1),
+                ..four()
+            },
+        ),
+        (
+            "LIT",
+            AnimationType {
+                start: Some(1),
+                ..four()
+            },
+        ),
+    ]);
+    // One world each: a removal in its own turn would cost the next
+    // animation of the same world a turn (S-0203 claim 10).
+    let shown = |name: &str| {
+        let mut w = testkit::game_with(&r, SIZE, 3);
+        let id = make(&mut w, name, Spawn::default());
+        frames(&mut w, id, 6)
+    };
+    assert_eq!(
+        shown("SHADE"),
+        [Some(1), Some(2), Some(3), None, None, None]
+    );
+    assert_eq!(
+        shown("LIT"),
+        [Some(1), Some(2), Some(3), Some(4), None, None]
+    );
+}
