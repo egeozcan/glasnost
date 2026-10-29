@@ -905,8 +905,14 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
                 Class::OtherRegion | Class::Obstructed => spoiled = true,
             }
         }
+        // design: C7-P4 group spread (quirks.group_spread_no_detour off: a member whose look gives no cell of its own gets the nearest open cell round the common cell, when there is one)
+        let near = if result.is_none() && !w.rules().quirks.group_spread_no_detour {
+            open_near(w, id, common, zone, common_reach, &given, reference)
+        } else {
+            None
+        };
         // spec: S-0213 claim 7 (a look that is not spoiled and ends open: the end cell; otherwise the fallback cell, with no further search, quirks.group_spread_no_detour)
-        let cell = result.unwrap_or(fallback.unwrap_or(common));
+        let cell = result.or(near).unwrap_or(fallback.unwrap_or(common));
         given.push(cell);
         done[k] = true;
         out.push((n, cell));
@@ -919,6 +925,58 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         }
     }
     out
+}
+
+/// How far round the common cell [`open_near`] looks, in rings.
+// nocite: design: C7-P4 group spread (our choice: the look's length of S-0213 claim 7)
+const SPREAD_RADIUS: i32 = 6;
+
+/// The nearest open cell round the common cell `common` for member `id`
+/// whose look gave no cell of its own (`quirks.group_spread_no_detour` off;
+/// our design, C7 part 4): the first ring round `common`, out to
+/// [`SPREAD_RADIUS`], with a cell that the look would class open (in the
+/// usable area and the common cell's reach region, given to no member yet,
+/// less than 3 levels from the common cell, not obstructed); of that ring
+/// the cell nearest `common`, the first in row order on equal distances.
+/// It takes no draw.
+fn open_near(
+    w: &World,
+    id: ObjectId,
+    common: CellXY,
+    zone: Option<glasnost_rules::sim::MovementZone>,
+    common_reach: Option<Reach>,
+    given: &[CellXY],
+    reference: i32,
+) -> Option<CellXY> {
+    if matches!(common_reach, Some(Reach::OffMap | Reach::None)) {
+        return None;
+    }
+    let common_level = level_of(w, common);
+    for r in 1..=SPREAD_RADIUS {
+        let mut best: Option<(i32, CellXY)> = None;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if dx.abs().max(dy.abs()) != r {
+                    continue;
+                }
+                let c = CellXY::new(common.x + dx, common.y + dy);
+                // spec: S-0213 claim 7 (the open class of a look cell: usable, the common cell's region, not given, less than 3 levels off, not obstructed)
+                let open = w.cells.usable(c)
+                    && zone.is_none_or(|z| Some(regions::reach_in(w, c, z)) == common_reach)
+                    && !given.contains(&c)
+                    && (level_of(w, c) - common_level).abs() < 3
+                    && !obstructed(w, id, c, reference);
+                let d = dx * dx + dy * dy;
+                if open && best.is_none_or(|(b, _)| d < b) {
+                    best = Some((d, c));
+                }
+            }
+        }
+        if let Some((_, c)) = best {
+            return Some(c);
+        }
+    }
+    None
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

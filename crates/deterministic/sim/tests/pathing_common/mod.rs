@@ -18,6 +18,7 @@ use std::time::Instant;
 use glasnost_map::CellXY;
 use glasnost_map::terrain::{TileCell, TileInfo};
 use glasnost_rules::layers::Layers;
+use glasnost_rules::quirks::Quirks;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, Decimal, LandRow, LandType, LocomotionClass, Locomotor, OverlayType, UnitType,
@@ -41,6 +42,28 @@ pub enum Rules {
     Reference,
     /// The reference with the play-fixes layer applied.
     Layer,
+    /// The reference with these switches.
+    Custom(Quirks),
+}
+
+/// The reference switches with the named ones off.
+pub fn off(names: &[&str]) -> Rules {
+    let text = format!(
+        "{{\"globals\": {{\"quirks\": {{{}}}}}}}",
+        names
+            .iter()
+            .map(|n| format!("\"{n}\": false"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let src = glasnost_rules::resolve::Source {
+        layer: "test",
+        file: "switches.jsonc",
+        text: &text,
+    };
+    Rules::Custom(
+        glasnost_rules::layers::quirks_with(Quirks::default(), &src).expect("known switches"),
+    )
 }
 
 fn push(r: &mut Ruleset, reg: &str, n: &str) {
@@ -140,10 +163,14 @@ pub fn ruleset(rules: Rules) -> Ruleset {
     harv.econ.dock = Some(vec!["REFN".into()]);
     push(&mut r, "vehicles", "HARV");
     r.sim.vehicles.insert("HARV".into(), harv);
-    if rules == Rules::Layer {
-        r.globals.quirks = Layers::PLAY_FIXES
-            .apply_quirks(r.globals.quirks)
-            .expect("the layer applies");
+    match rules {
+        Rules::Reference => {}
+        Rules::Layer => {
+            r.globals.quirks = Layers::PLAY_FIXES
+                .apply_quirks(r.globals.quirks)
+                .expect("the layer applies");
+        }
+        Rules::Custom(q) => r.globals.quirks = q,
     }
     r
 }
@@ -938,6 +965,7 @@ pub fn line(name: &str, rules: Rules, m: &Metrics) -> String {
         match rules {
             Rules::Reference => "off",
             Rules::Layer => "on",
+            Rules::Custom(_) => "custom",
         },
         m.units,
         o(m.median()),
