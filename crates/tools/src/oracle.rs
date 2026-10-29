@@ -649,10 +649,12 @@ pub fn group(rules: &SimRules, name: &str) -> Result<(Kind, u32, i64), String> {
 }
 
 /// a / b rounded to the nearest whole number, an exact half to the even
-/// one (a ≥ 0, b > 0). The records say "round"; their CSVs settle the
-/// half: a budget that is an exact half of two group sizes gives the even
-/// one (the shares of such groups are whole multiples of 1/n only for the
-/// even n; measure: M-0001, M-0003, CSV).
+/// one (a ≥ 0, b > 0). The records say "round"; their CSVs before the
+/// revision of 2026-10-29 settled the half: a budget that is an exact half
+/// of two group sizes gave the even one (the shares of such groups were
+/// whole multiples of 1/n only for the even n; measure: M-0001, M-0003,
+/// CSV). The restated CSVs have no shares, so the even one is kept while
+/// Q-2099 is open.
 pub fn round_half_even(a: i64, b: i64) -> i64 {
     let (q, r) = (a / b, a % b);
     match (2 * r).cmp(&b) {
