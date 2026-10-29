@@ -582,6 +582,27 @@ pub fn map_strait() -> Map {
     m
 }
 
+/// The island map: [`map_naval`] with [`map_strait`]'s strait from the
+/// shore to the south edge, so that each start stands on its own island
+/// and no ground unit walks from one base to the other: the sea along
+/// the north side and the strait join, and the ships meet there. Air
+/// units and transports still cross (M8 step B9: the naval game is
+/// played here, so that a land war cannot end it first).
+pub fn map_islands() -> Map {
+    let mut m = map_naval();
+    let mid = at(0, 0).x;
+    let cells: Vec<CellXY> = m.cells.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        if (c.x - mid).abs() <= STRAIT_HALF
+            && let Some(cell) = m.cells.get_mut(c)
+        {
+            cell.tile = WATER_TILE;
+            cell.overlay = glasnost_map::NO_OVERLAY;
+        }
+    }
+    m
+}
+
 /// The lobby setup (S-0412): two AI houses, Alpha and Beta, random start
 /// positions, every other setting at the rules' default.
 pub fn setup(seed: u32) -> GameSetup {
