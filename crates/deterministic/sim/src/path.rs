@@ -2315,7 +2315,8 @@ fn stalled(w: &World, x: &crate::world::Object) -> bool {
 /// moves, and is not kept off. What is left after taking such units away
 /// until none is left are the units that wait, directly or through others,
 /// on units that wait on each other: a deadlock. `id` with no stored path
-/// waits on the stalled units round it.
+/// waits on the stalled units round it. Empty unless `id` itself is left,
+/// so a stalled unit elsewhere searches as the original does.
 pub fn stalled_cells(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
     let units: BTreeMap<ObjectId, CellXY> = w
         .objects
@@ -2364,6 +2365,10 @@ pub fn stalled_cells(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
         for u in free {
             ring.remove(&u);
         }
+    }
+    // design: C7-P4 stalled blockers (only a unit in the deadlock, or waiting on it, keeps off it)
+    if !ring.contains(&id) {
+        return BTreeSet::new();
     }
     ring.iter()
         .filter(|&&u| u != id)

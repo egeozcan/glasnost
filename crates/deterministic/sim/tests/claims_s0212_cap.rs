@@ -239,6 +239,7 @@ fn claim_13_a_search_without_a_corridor_finds_the_way_round() {
             to: at(GOAL, (0, 0)),
             mode: Mode::Fresh,
             congested: Default::default(),
+            avoided: Default::default(),
         },
     );
     assert!(found.is_some(), "a path round the row exists");
@@ -325,6 +326,7 @@ fn claim_13_the_way_west_exists_from_the_docking_cell() {
             to: dock_cell(WEST),
             mode: Mode::Fresh,
             congested: Default::default(),
+            avoided: Default::default(),
         },
     );
     assert!(found.is_some(), "a path round the blocks exists");

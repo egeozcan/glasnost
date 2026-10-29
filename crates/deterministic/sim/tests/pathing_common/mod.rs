@@ -37,6 +37,7 @@ pub const SIZE: i32 = 50;
 
 /// The rules a scenario runs under.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Rules {
     /// Every quirk switch at its default (the original's behaviour).
     Reference,
