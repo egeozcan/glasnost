@@ -9582,6 +9582,11 @@
           "type": "boolean",
           "default": true
         },
+        "harvest_cell_shared": {
+          "description": "A harvester's ring search accepts an ore cell that another unit of\nits house is already heading for (the original). Off (our design, C7\npart 5): such a cell is not acceptable, so harvesters sent to one\nfield each take a cell of their own.",
+          "type": "boolean",
+          "default": true
+        },
         "harvester_failed_step_off_origin": {
           "description": "An idle harvester whose step-off search finds no cell gets the\noff-map destination cell (0, 0); off: its destination is cleared.",
           "type": "boolean",

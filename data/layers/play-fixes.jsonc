@@ -106,6 +106,12 @@
       // heads for the one rally cell, where they crowd and give up after arriving.
       // Answers: the scenario "factory stream" of docs/m8-claims/c7-pathing.md.
       "rally_point_shared": false,
+      // Our design, C7-P5 field cells (quirks.harvest_cell_shared off; S-0402 claim 4): a
+      // harvester's ring search does not accept an ore cell another unit of its house is already
+      // heading for. On (the original), harvesters sent to one field from one place pick the same
+      // cells, block each other one step short of them and give up the move.
+      // Answers: the scenario "harvesters" of docs/m8-claims/c7-pathing.md.
+      "harvest_cell_shared": false,
     },
   },
 }

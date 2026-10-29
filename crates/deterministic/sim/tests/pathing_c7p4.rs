@@ -20,12 +20,13 @@ mod pathing_common;
 use pathing_common::*;
 
 /// Our switches (C7 parts 4 and 5), each defaulting to the original.
-const DESIGN: [&str; 5] = [
+const DESIGN: [&str; 6] = [
     "path_through_stalled_blockers",
     "deadlock_no_yield",
     "unreachable_move_dropped",
     "group_spread_no_detour",
     "rally_point_shared",
+    "harvest_cell_shared",
 ];
 
 /// The seeds the table is measured over.
@@ -157,7 +158,10 @@ fn diag() {
         }
         glasnost_sim::tick::step(&mut s.w);
         for e in trace::take(&s.w) {
-            if matches!(e.what, What::GaveWay { .. } | What::Resumed) {
+            if matches!(
+                e.what,
+                What::GaveWay { .. } | What::Resumed | What::GaveUp | What::Failed { .. }
+            ) {
                 let i = ids.iter().position(|&x| x == e.unit);
                 println!("{} unit {i:?} {:?}", e.tick, e.what);
             }
@@ -279,6 +283,17 @@ fn rally_spread_off_gives_each_released_unit_its_own_cell() {
     assert_eq!(off.shared, 0, "off: a cell each");
     assert_eq!(off.give_ups, 0);
     assert_eq!(off.missing, 0);
+}
+
+// spec: S-0402 claim 4 (the original: the ring search accepts an ore cell another harvester is heading for, so harvesters sent from one place pick the same cells and give up one step short); design: C7-P5 field cells (off: each takes a cell of its own, with fewer give-ups and no fewer credits)
+#[test]
+fn field_cells_off_gives_each_harvester_its_own_cell() {
+    let (on, off) = both("harvest_cell_shared", |r, s| harvesters(r, 4, s));
+    assert!(on.shared > 0, "the original: shared first cells {on:?}");
+    assert!(on.give_ups > 0, "{on:?}");
+    assert_eq!(off.shared, 0, "off: a cell each {off:?}");
+    assert!(off.give_ups < on.give_ups, "{on:?} {off:?}");
+    assert!(off.credits >= on.credits, "{on:?} {off:?}");
 }
 
 // spec: S-0212 claims 8 and 22 (the original, and C7-P4's detour alone: two groups meeting in a passage with no way round stay stuck); design: C7-P5 yield (off: the side heading against the oldest unit gives way, and every unit arrives)

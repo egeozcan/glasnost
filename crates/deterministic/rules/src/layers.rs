@@ -163,13 +163,14 @@ mod tests {
 
     /// The switches the play-fixes layer turns off (M8 step C7). Changing the
     /// layer's list means changing this one, its docs section and its tests.
-    const ADMITTED: [&str; 11] = [
+    const ADMITTED: [&str; 12] = [
         "absorber_stale_contact_kept",
         "corridor_free_part_ignores_height",
         "corridor_retry_no_fallback",
         "deadlock_no_yield",
         "depot_loss_strands_hover",
         "group_spread_no_detour",
+        "harvest_cell_shared",
         "hover_landing_request_stands",
         "path_through_stalled_blockers",
         "rally_point_shared",
@@ -177,7 +178,7 @@ mod tests {
         "unreachable_move_dropped",
     ];
 
-    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off); S-0212 claims 8, 22 and 23 and S-0213 claim 7 (quirks.path_through_stalled_blockers, quirks.unreachable_move_dropped and quirks.group_spread_no_detour off, our design, C7 part 4); S-0417 claims 8 and 10 and S-0212 claims 8 and 22 (quirks.rally_point_shared and quirks.deadlock_no_yield off, our design, C7 part 5): the layer sets exactly these eleven switches, and only switches
+    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off); S-0212 claims 8, 22 and 23 and S-0213 claim 7 (quirks.path_through_stalled_blockers, quirks.unreachable_move_dropped and quirks.group_spread_no_detour off, our design, C7 part 4); S-0417 claims 8 and 10, S-0212 claims 8 and 22 and S-0402 claim 4 (quirks.rally_point_shared, quirks.deadlock_no_yield and quirks.harvest_cell_shared off, our design, C7 part 5): the layer sets exactly these twelve switches, and only switches
     #[test]
     fn play_fixes_sets_only_the_admitted_switches_off() {
         let mut paths = paths(&play_fixes()).unwrap();

@@ -454,6 +454,13 @@ pub struct Quirks {
     // spec: S-0417 claims 8 and 10 and S-0404 claim 13 (the rally point copied at release; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub rally_point_shared: bool,
+    /// A harvester's ring search accepts an ore cell that another unit of
+    /// its house is already heading for (the original). Off (our design, C7
+    /// part 5): such a cell is not acceptable, so harvesters sent to one
+    /// field each take a cell of their own.
+    // spec: S-0402 claim 4 (the ring search's acceptable cell; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub harvest_cell_shared: bool,
     /// The harvester-truce exception of row I15 never applies.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -2185,6 +2192,7 @@ impl Default for Quirks {
             cheer_memory_spans_session: true,
             group_spread_no_detour: true,
             rally_point_shared: true,
+            harvest_cell_shared: true,
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
@@ -2837,6 +2845,7 @@ impl Quirks {
             ),
             ("group_spread_no_detour", self.group_spread_no_detour),
             ("rally_point_shared", self.rally_point_shared),
+            ("harvest_cell_shared", self.harvest_cell_shared),
             (
                 "hijack_truce_harvester_check",
                 self.hijack_truce_harvester_check,
