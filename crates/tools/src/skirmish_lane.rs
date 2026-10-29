@@ -2296,7 +2296,10 @@ impl BrokeSpells {
                 out,
                 "brokespell house {h}: {} spells, {} ticks, longest {}; over {LONG_SPELL} ticks: {} {long:?}",
                 spells.len(),
-                spells.iter().map(|s| s.to - s.from + BROKE_SAMPLE).sum::<i32>(),
+                spells
+                    .iter()
+                    .map(|s| s.to - s.from + BROKE_SAMPLE)
+                    .sum::<i32>(),
                 spells.iter().map(|s| s.to - s.from).max().unwrap_or(0),
                 long.len()
             );
