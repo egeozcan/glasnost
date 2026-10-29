@@ -392,10 +392,13 @@ pub struct Quirks {
     // spec: S-0212 claim 16
     #[serde(default = "on")]
     pub train_exclusion_search_only: bool,
-    /// A mode-2 re-path may lead through the cells of moving units that are
-    /// stalled themselves, at the moving-blocker cost (the original). Off (our
-    /// design, C7 part 4): such cells are not entered by that search; the
-    /// search runs again without them when it then finds no path.
+    /// A stalled unit's re-path may lead through the cells of other stalled
+    /// units, at the moving-blocker cost (the original). Off (our design, C7
+    /// part 4): a unit stalled for the blockage delay in a deadlock (stalled
+    /// units that wait on each other's cells), or waiting on one, first looks
+    /// for a way that keeps off the cells of the deadlock's other units, and
+    /// the computation's own searches follow when there is none; a step
+    /// refused by a unit with a destination starts the blockage timer.
     // spec: S-0212 claims 8 and 22 (the mode-2 moving-blocker cost; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub path_through_stalled_blockers: bool,

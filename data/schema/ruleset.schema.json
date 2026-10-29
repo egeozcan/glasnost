@@ -10058,7 +10058,7 @@
           "default": true
         },
         "path_through_stalled_blockers": {
-          "description": "A mode-2 re-path may lead through the cells of moving units that are\nstalled themselves, at the moving-blocker cost (the original). Off (our\ndesign, C7 part 4): such cells are not entered by that search; the\nsearch runs again without them when it then finds no path.",
+          "description": "A stalled unit's re-path may lead through the cells of other stalled\nunits, at the moving-blocker cost (the original). Off (our design, C7\npart 4): a unit stalled for the blockage delay in a deadlock (stalled\nunits that wait on each other's cells), or waiting on one, first looks\nfor a way that keeps off the cells of the deadlock's other units, and\nthe computation's own searches follow when there is none; a step\nrefused by a unit with a destination starts the blockage timer.",
           "type": "boolean",
           "default": true
         },
