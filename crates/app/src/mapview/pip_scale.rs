@@ -48,7 +48,7 @@ pub fn pip_kind(stored: Option<&[u8]>) -> PipKind {
     let Some(v) = stored else {
         return PipKind::None;
     };
-    // design: a word that matches none of PipScale's vocabulary gives none; S-0111 states no fallback for this field (Q-2071)
+    // spec: S-0111 Import mapping (a word outside the vocabulary, none included, gives the kind none, not the held value)
     match value::named(v, NAMED_LIMIT, &PIP_SCALE_WORDS) {
         Some(1) => PipKind::Ammo,
         Some(2) => PipKind::Resource,
@@ -254,13 +254,16 @@ pub fn passenger_place(gunner: bool, j: i32) -> i32 {
 }
 
 /// A full spawn slot's pip (S-0111 claim 11).
-const SPAWN_FULL: usize = 1; // spec: S-0111 claim 11 (spawned aircraft: image frame 1 for each aircraft docked or ready, 0 for the rest)
+const SPAWN_FULL: usize = 1; // spec: S-0111 claim 11 (spawned aircraft: the first f pips image frame 1, the rest frame 0)
 
-/// The image frames of the spawned-aircraft row (S-0111 claim 11): one per
-/// spawn slot, `full` when its aircraft is docked or ready.
+/// The image frames of the spawned-aircraft row (S-0111 claim 11, Q-2072):
+/// one per spawn slot, the first *f* pips full, where `full` says per slot
+/// whether it is docked or reloading. The full pips are packed from pip 0.
 pub fn spawn_row(full: &[bool]) -> Vec<usize> {
-    full.iter()
-        .map(|&f| if f { SPAWN_FULL } else { EMPTY })
+    // spec: S-0111 claim 11 (f = the slots docked or reloading; pips 0 to f-1 frame 1, the rest frame 0, packed from pip 0 whatever the slot indices)
+    let f = full.iter().filter(|&&x| x).count();
+    (0..full.len())
+        .map(|k| if k < f { SPAWN_FULL } else { EMPTY })
         .collect()
 }
 
@@ -270,7 +273,7 @@ const OCCUPANT_EMPTY: usize = 6; // spec: S-0111 claim 11 and T1 (image frame 6 
 /// The image frames of the occupant row of `slots` slots (S-0111 claim
 /// 11): each occupant's occupant pip image frame, then empty slots.
 pub fn occupant_row(slots: i32, occupants: &[usize]) -> Vec<usize> {
-    // design: occupant k (the first the one inside longest, S-0508 Terms) fills slot k; S-0111 gives no slot order (Q-2072)
+    // spec: S-0111 claim 11 (pip k shows the occupant at list position k in S-0508's list order, frame 6 when none; a dead place is closed up, S-0508 claim 23)
     (0..slots.max(0) as usize)
         .map(|k| occupants.get(k).copied().unwrap_or(OCCUPANT_EMPTY))
         .collect()
@@ -355,7 +358,10 @@ const AMMO_WRAP_FIRST: i32 = 15; // spec: S-0111 F3 (image frame 15 + λ)
 /// for capacity `cap`, current ammunition `a` and pip wrap `w`.
 pub fn ammo_row(cap: i32, a: i32, w: i32) -> Vec<(i32, usize)> {
     if w <= 0 {
-        // spec: S-0111 claim 15 (w = 0: pip j < A drawn in image frame 13 while j < a, not drawn otherwise); design: a negative wrap, which S-0111 does not cover, reads as no wrap (Q-2071)
+        // spec: S-0111 claim 15 (w = 0: pip j < A drawn in image frame 13 while j < a, not drawn otherwise; a negative wrap shows no ammunition pip at all, Q-2071)
+        if w < 0 {
+            return Vec::new();
+        }
         return (0..cap.min(a)).map(|j| (j, AMMO)).collect();
     }
     let layers = cap / w;
@@ -564,7 +570,10 @@ mod tests {
     /// spec: S-0111 claim 11 (spawn row: 1 per docked or ready aircraft, 0 for the rest; occupant row: the occupant pip image frame or 6)
     #[test]
     fn claim_11_spawn_and_occupant_rows() {
-        assert_eq!(spawn_row(&[true, false, true]), [1, 0, 1]);
+        // Q-2072: packed from pip 0, a launched slot leaves no gap.
+        assert_eq!(spawn_row(&[true, false, true]), [1, 1, 0]);
+        assert_eq!(spawn_row(&[false, false]), [0, 0]);
+        assert_eq!(spawn_row(&[true, true]), [1, 1]);
         assert_eq!(occupant_row(4, &[7, 12]), [7, 12, 6, 6]);
         assert!(occupant_row(0, &[7]).is_empty());
     }
@@ -597,6 +606,9 @@ mod tests {
     #[test]
     fn claim_15_ammo_row() {
         assert_eq!(ammo_row(5, 3, 0), [(0, 13), (1, 13), (2, 13)]);
+        // Negative wrap (Q-2071): no pip whatever A and a.
+        assert!(ammo_row(5, 3, -2).is_empty());
+        assert!(ammo_row(5, 0, -1).is_empty());
         assert!(ammo_row(5, 0, 0).is_empty());
         // A = 6, w = 2: λ up to 2. a = 5: pip 0 → λ = 2 (4 < 5), pip 1 → λ = 1 (3 < 5; 5 < 5 fails).
         assert_eq!(ammo_row(6, 5, 2), [(0, 17), (1, 16)]);
