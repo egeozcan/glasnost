@@ -42,6 +42,24 @@ pub struct PathState {
     /// a destination reaches the locomotor or a path is found.
     #[serde(default)]
     pub failed_for: Option<Target>,
+    /// The unit gives way in a deadlock with no way round
+    /// (`quirks.deadlock_no_yield` off; our design, C7 part 5); none
+    /// otherwise.
+    #[serde(default)]
+    pub yielding: Option<Yield>,
+}
+
+/// A unit giving way in a deadlock with no way round (our design, C7 part
+/// 5, yield): it is sent to a free cell off the other side's way, waits
+/// there and then resumes its order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Yield {
+    /// The destination of the order it resumes.
+    pub resume: Target,
+    /// The units it gives way to.
+    pub to: Vec<ObjectId>,
+    /// The tick it began to give way.
+    pub since: i32,
 }
 
 /// Search mode (S-0212 Terms).
@@ -2318,12 +2336,38 @@ fn stalled(w: &World, x: &crate::world::Object) -> bool {
 /// waits on the stalled units round it. Empty unless `id` itself is left,
 /// so a stalled unit elsewhere searches as the original does.
 pub fn stalled_cells(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
+    stalled_ring(w, id)
+        .into_iter()
+        .filter(|&(u, _)| u != id)
+        .map(|(_, c)| c)
+        .collect()
+}
+
+/// The units of the deadlock [`stalled_cells`] finds for `id`, `id` among
+/// them, with their cells; empty unless `id` is in it.
+fn stalled_ring(w: &World, id: ObjectId) -> BTreeMap<ObjectId, CellXY> {
+    let Some(me) = w.obj(id) else {
+        return BTreeMap::new();
+    };
+    let here = me.pos.cell();
+    // The cells `id` waits for, as below.
+    let mine: Vec<CellXY> = match heading_cell(w, id) {
+        Some(h) => vec![h],
+        None => STEPS
+            .iter()
+            .map(|&(dx, dy)| CellXY::new(here.x + dx, here.y + dy))
+            .collect(),
+    };
     let units: BTreeMap<ObjectId, CellXY> = w
         .objects
         .iter()
         .filter(|(oid, x)| **oid == id || stalled(w, x))
         .map(|(oid, x)| (*oid, x.pos.cell()))
         .collect();
+    // design: C7-P5 tick cost (a unit that waits on no stalled unit is in no deadlock: the graph is not built)
+    if !units.iter().any(|(&u, c)| u != id && mine.contains(c)) {
+        return BTreeMap::new();
+    }
     let mut by_cell: BTreeMap<CellXY, Vec<ObjectId>> = BTreeMap::new();
     for (&u, &c) in &units {
         by_cell.entry(c).or_default().push(u);
@@ -2352,28 +2396,379 @@ pub fn stalled_cells(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
             (u, on)
         })
         .collect();
-    let mut ring: BTreeSet<ObjectId> = units.keys().copied().collect();
-    loop {
-        let free: Vec<ObjectId> = ring
-            .iter()
-            .copied()
-            .filter(|u| !waits[u].iter().any(|x| ring.contains(x)))
-            .collect();
-        if free.is_empty() {
-            break;
+    // design: C7-P5 tick cost (the units that wait on none left are taken away one at a time through a count of what each waits on, not by scanning every unit again each round; what is left is the same)
+    let mut left: BTreeMap<ObjectId, usize> = waits.iter().map(|(&u, on)| (u, on.len())).collect();
+    let mut by: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+    for (&u, on) in &waits {
+        for &x in on {
+            by.entry(x).or_default().push(u);
         }
-        for u in free {
-            ring.remove(&u);
+    }
+    let mut free: Vec<ObjectId> = left
+        .iter()
+        .filter(|&(_, &n)| n == 0)
+        .map(|(&u, _)| u)
+        .collect();
+    let mut ring: BTreeSet<ObjectId> = units.keys().copied().collect();
+    while let Some(x) = free.pop() {
+        ring.remove(&x);
+        for &u in by.get(&x).into_iter().flatten() {
+            if let Some(n) = left.get_mut(&u) {
+                *n -= 1;
+                if *n == 0 {
+                    free.push(u);
+                }
+            }
         }
     }
     // design: C7-P4 stalled blockers (only a unit in the deadlock, or waiting on it, keeps off it)
     if !ring.contains(&id) {
-        return BTreeSet::new();
+        return BTreeMap::new();
     }
-    ring.iter()
-        .filter(|&&u| u != id)
-        .map(|u| units[u])
-        .collect()
+    ring.iter().map(|&u| (u, units[&u])).collect()
+}
+
+/// How far a unit giving way looks for a free cell, in steps.
+// nocite: design: C7-P5 yield (our choice: the nearest reachable cell's look of C7-P4)
+pub const YIELD_RADIUS: i32 = NEAR_RADIUS;
+
+/// The longest a unit gives way before it resumes its order, in ticks.
+// nocite: design: C7-P5 yield (our choice: about a minute of game time, long enough for a group to pass a long passage)
+pub const YIELD_WAIT: i32 = 900;
+
+/// The most cells [`shut`] looks at before it gives up.
+// nocite: design: C7-P5 yield (our choice: two rooms and a long passage between them, small against a map's open ground)
+pub const YIELD_FLOOD: usize = 2048;
+
+/// Whether `walls` shut `id` off from `goal` (our design, C7 part 5): a
+/// fill from `id`'s cell and one from `goal`, a step at a time each, in
+/// the eight directions through cells of the usable area in `id`'s reach
+/// region that are not in `walls`. Some(true) when one of them runs out of
+/// cells before they meet, Some(false) when they meet; None when they have
+/// looked at [`YIELD_FLOOD`] cells between them, or when `id` is on a
+/// deck, outside the usable area or the fills meet a bridge cell (a fill
+/// on the ground alone cannot say).
+fn shut(
+    w: &World,
+    id: ObjectId,
+    u: &crate::rules::UnitRules,
+    walls: &BTreeSet<CellXY>,
+    goal: CellXY,
+) -> Option<bool> {
+    let o = w.obj(id)?;
+    let from = o.pos.cell();
+    if o.layer == Layer::Deck || !w.cells.usable(from) {
+        return None;
+    }
+    let own = regions::reach_read(w, from, u.zone, false);
+    if matches!(own, Reach::OffMap | Reach::None) {
+        return None;
+    }
+    let mut seen = [BTreeSet::from([from]), BTreeSet::from([goal])];
+    let mut front = [vec![from], vec![goal]];
+    loop {
+        // nocite: design: C7-P5 yield (the fill's two sides, from the unit and from its goal)
+        for side in 0..2 {
+            let mut next = Vec::new();
+            for &c in &front[side] {
+                for &(dx, dy) in STEPS.iter() {
+                    let n = CellXY::new(c.x + dx, c.y + dy);
+                    if seen[1 - side].contains(&n) {
+                        return Some(false);
+                    }
+                    if w.cells.cell(n).is_none()
+                        || !w.cells.usable(n)
+                        || walls.contains(&n)
+                        || regions::reach_read(w, n, u.zone, true) != own
+                    {
+                        continue;
+                    }
+                    if is_bridge(w, n) {
+                        return None;
+                    }
+                    if seen[side].insert(n) {
+                        next.push(n);
+                    }
+                }
+            }
+            if next.is_empty() {
+                return Some(true);
+            }
+            if seen[0].len() + seen[1].len() > YIELD_FLOOD {
+                return None;
+            }
+            front[side] = next;
+        }
+    }
+}
+
+/// Whether the deadlock `ring` leaves `id` no way round to `goal` (our
+/// design, C7 part 5, yield): whether the cells of the deadlock's units
+/// heading against `id` (a negative dot product of the headings to their
+/// destinations) shut it off from `goal` ([`shut`]).
+fn shut_in(
+    w: &World,
+    id: ObjectId,
+    u: &crate::rules::UnitRules,
+    ring: &BTreeMap<ObjectId, CellXY>,
+    goal: CellXY,
+) -> bool {
+    let Some((hx, hy)) = heading(w, id) else {
+        return false;
+    };
+    // design: C7-P5 yield (no way round: the deadlock's units heading against `id` shut it off from its destination; those going its way move on with it)
+    let walls: BTreeSet<CellXY> = ring
+        .iter()
+        .filter(|&(&x, _)| x != id && heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0))
+        .map(|(_, &c)| c)
+        .collect();
+    shut(w, id, u, &walls, goal) == Some(true)
+}
+
+/// The straight-line heading of a unit to its destination cell, in cells.
+fn heading(w: &World, x: ObjectId) -> Option<(i64, i64)> {
+    let o = w.obj(x)?;
+    let g = goal_cell(w, x)?;
+    let c = o.pos.cell();
+    Some((i64::from(g.x - c.x), i64::from(g.y - c.y)))
+}
+
+/// Settles the deadlock `ring` (from [`stalled_ring`], `id` among its
+/// units) that has no way round, with `quirks.deadlock_no_yield` off (our
+/// design, C7 part 5, yield). The unit of the deadlock with the lowest
+/// object id that is not already giving way has the right of way. The
+/// units in play are the deadlock's and every unit of that unit's house
+/// on a move to a cell within [`YIELD_RADIUS`] of a unit of the deadlock;
+/// of these, every one whose heading to its destination points against
+/// that unit's (a negative dot product) gives way, the others go with it.
+/// A unit that gives way gets the nearest free cell off the way of the
+/// units it gives way to (the cells of their paths by the original's
+/// search, and their own cells) and saves its order to resume
+/// ([`yield_turn`]). None when no unit gives way; otherwise whether `id`
+/// itself gives way. It takes no draw.
+fn give_way(w: &mut World, id: ObjectId, ring: &BTreeMap<ObjectId, CellXY>) -> Option<bool> {
+    let free = |w: &World, x: ObjectId| w.obj(x).is_some_and(|o| o.path.yielding.is_none());
+    // design: C7-P5 yield (the right of way: the lowest object id, the oldest unit, of the deadlock's units not already giving way)
+    let first = ring.keys().copied().find(|&x| free(w, x))?;
+    let (hx, hy) = heading(w, first)?;
+    let house = w.obj(first)?.owner;
+    let moving = |o: &crate::world::Object| {
+        o.on_map
+            && o.beh.current == Some(Behaviour::Move)
+            && matches!(o.dest, Some(Target::Cell(_)))
+    };
+    // design: C7-P5 yield (the units in play: the deadlock's, and the moving units of the house with the right of way near it, so a whole group gives way or goes)
+    let mut play: BTreeSet<ObjectId> = ring.keys().copied().collect();
+    for (&x, o) in &w.objects {
+        let c = o.pos.cell();
+        if o.owner == house
+            && o.path.yielding.is_none()
+            && moving(o)
+            && ring
+                .values()
+                .any(|r| (r.x - c.x).abs().max((r.y - c.y).abs()) <= YIELD_RADIUS)
+        {
+            play.insert(x);
+        }
+    }
+    let mut yielders: Vec<ObjectId> = Vec::new();
+    let mut winners: Vec<ObjectId> = Vec::new();
+    for &x in &play {
+        if !free(w, x) {
+            continue;
+        }
+        let against = x != first
+            && w.obj(x).is_some_and(|o| {
+                o.beh.current == Some(Behaviour::Move) && matches!(o.dest, Some(Target::Cell(_)))
+            })
+            && heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0);
+        // design: C7-P5 yield (the side that gives way: heading against the unit with the right of way)
+        if against {
+            yielders.push(x);
+        } else {
+            winners.push(x);
+        }
+    }
+    if yielders.is_empty() {
+        return None;
+    }
+    // design: C7-P5 yield (the way kept free: the cells of the other side and of their paths by the original's search)
+    let mut lane: BTreeSet<CellXY> = BTreeSet::new();
+    for &x in &winners {
+        let Some(o) = w.obj(x) else { continue };
+        let from = o.pos.cell();
+        lane.insert(from);
+        let Some(to) = goal_cell(w, x) else { continue };
+        let req = Request {
+            unit: x,
+            from,
+            to,
+            mode: Mode::Fresh,
+            congested: BTreeSet::new(),
+            avoided: BTreeSet::new(),
+        };
+        let mut c = from;
+        for d in S0212.find(w, &req).unwrap_or_default() {
+            let (sx, sy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
+            c = CellXY::new(c.x + sx, c.y + sy);
+            lane.insert(c);
+        }
+    }
+    let walls: BTreeSet<CellXY> = winners
+        .iter()
+        .filter_map(|&x| w.obj(x).map(|o| o.pos.cell()))
+        .collect();
+    let mut reserved: BTreeSet<CellXY> = BTreeSet::new();
+    let mut gives = false;
+    let mut any = false;
+    let t = w.tick;
+    for &y in &yielders {
+        let Some(refuge) = refuge(w, y, &lane, &walls, &reserved) else {
+            continue;
+        };
+        reserved.insert(refuge);
+        let Some(o) = w.obj(y) else { continue };
+        let Some(resume) = o.dest else { continue };
+        if let Some(ob) = w.obj_mut(y) {
+            ob.path.yielding = Some(Yield {
+                resume,
+                to: winners.clone(),
+                since: t,
+            });
+            // design: C7-P5 yield (a unit that gives way is no longer stalled and searches for its free cell at once)
+            ob.path.blocked_since = None;
+            ob.path.steps.clear();
+            ob.path.retry_at = t;
+        }
+        crate::econ::assign_destination(w, y, Some(Target::Cell(refuge)));
+        crate::trace::record(w, y, || crate::trace::What::GaveWay {
+            refuge,
+            to: winners.first().copied(),
+        });
+        gives |= y == id;
+        any = true;
+    }
+    any.then_some(gives)
+}
+
+/// The free cell a unit `y` giving way goes to (our design, C7 part 5,
+/// yield): the nearest cell in steps, out to [`YIELD_RADIUS`], reached
+/// through cells of its own reach region that hold nothing it may not pass
+/// (a moving unit aside) and none of `walls`, that is not on `lane`, not
+/// `reserved`, no other unit of its house's destination, and whose entry
+/// is clear; the first found in step order. None when there is none.
+fn refuge(
+    w: &World,
+    y: ObjectId,
+    lane: &BTreeSet<CellXY>,
+    walls: &BTreeSet<CellXY>,
+    reserved: &BTreeSet<CellXY>,
+) -> Option<CellXY> {
+    let o = w.obj(y)?;
+    let u = w.rules().unit(o.kind, o.type_index)?;
+    let from = o.pos.cell();
+    let own = regions::reach_read(w, from, u.zone, o.layer == Layer::Deck);
+    if matches!(own, Reach::OffMap | Reach::None) {
+        return None;
+    }
+    let reference = occupancy::reference_level(w, y);
+    let taken: BTreeSet<CellXY> = w
+        .objects
+        .iter()
+        .filter(|(x, p)| **x != y && p.owner == o.owner)
+        .filter_map(|(_, p)| match p.dest {
+            Some(Target::Cell(c)) => Some(c),
+            _ => None,
+        })
+        .collect();
+    let mut seen: BTreeSet<CellXY> = BTreeSet::from([from]);
+    let mut frontier = vec![from];
+    for _ in 0..YIELD_RADIUS {
+        let mut next = Vec::new();
+        for &c in &frontier {
+            for &(dx, dy) in STEPS.iter() {
+                let n = CellXY::new(c.x + dx, c.y + dy);
+                if !seen.insert(n) {
+                    continue;
+                }
+                if w.cells.cell(n).is_none()
+                    || !w.cells.usable(n)
+                    || walls.contains(&n)
+                    || regions::reach_read(w, n, u.zone, true) != own
+                {
+                    continue;
+                }
+                let out = match o.kind {
+                    Kind::Infantry => occupancy::infantry_outcome(w, y, n, reference),
+                    _ => occupancy::vehicle_outcome(w, y, n, reference),
+                };
+                match out {
+                    Outcome::Clear => {
+                        if !lane.contains(&n) && !reserved.contains(&n) && !taken.contains(&n) {
+                            return Some(n);
+                        }
+                        next.push(n);
+                    }
+                    Outcome::MovingBlocker => next.push(n),
+                    _ => {}
+                }
+            }
+        }
+        frontier = next;
+    }
+    None
+}
+
+/// A unit giving way (C7 part 5, yield) resumes its order once every unit
+/// it gives way to has no destination, has left the map or has passed it
+/// (stands ahead of it on its own heading to its destination), or after
+/// [`YIELD_WAIT`] ticks: the saved destination again, with a move started
+/// as a move order starts it. Called in each unit's own turn before its
+/// movement.
+pub fn yield_turn(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(y) = o.path.yielding.clone() else {
+        return;
+    };
+    if !o.on_map {
+        return;
+    }
+    // design: C7-P5 yield (released when every unit of the other side has arrived, gone or passed it, ahead of it on its own heading, or after the longest wait)
+    let here = o.pos.cell();
+    let passed = y.to.iter().all(|&x| {
+        w.obj(x).is_none_or(|p| {
+            let c = p.pos.cell();
+            !p.on_map
+                || p.dest.is_none()
+                || heading(w, x).is_some_and(|(hx, hy)| {
+                    i64::from(c.x - here.x) * hx + i64::from(c.y - here.y) * hy > 0
+                })
+        })
+    });
+    if !passed && w.tick.wrapping_sub(y.since) < YIELD_WAIT {
+        return;
+    }
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    if let Some(ob) = w.obj_mut(id) {
+        ob.path.yielding = None;
+        // spec: S-0213 table T3 (g) (as a move order: a mobile actor forgets its guard spot and queued destinations)
+        ob.guard_spot = None;
+        ob.queued_dests.clear();
+        ob.path.steps.clear();
+        ob.beh.queue_and_start_at_once(Behaviour::Move, t, stale);
+    }
+    crate::econ::assign_destination(w, id, Some(y.resume));
+    crate::trace::record(w, id, || crate::trace::What::Resumed);
+}
+
+/// An order for `id` ends its giving way (C7 part 5, yield): the order
+/// replaces the one it would have resumed.
+pub fn order_given(w: &mut World, id: ObjectId) {
+    // design: C7-P5 yield (a new order, a stop among them, replaces the order a unit giving way would resume)
+    if let Some(ob) = w.obj_mut(id) {
+        ob.path.yielding = None;
+    }
 }
 
 /// One path computation of [`compute_untraced`].
@@ -2490,11 +2885,16 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         avoided: BTreeSet::new(),
     };
     // design: C7-P4 stalled blockers (a stalled unit's computation first looks for a way that keeps off the cells of stalled units in a deadlock, without a corridor, since the corridor reads terrain only; the computation's own searches follow when it finds none)
-    let avoided = if !r.quirks.path_through_stalled_blockers && stalled(w, &o) {
-        stalled_cells(w, id)
+    let ring = if !r.quirks.path_through_stalled_blockers && stalled(w, &o) {
+        stalled_ring(w, id)
     } else {
-        BTreeSet::new()
+        BTreeMap::new()
     };
+    let avoided: BTreeSet<CellXY> = ring
+        .iter()
+        .filter(|&(&x, _)| x != id)
+        .map(|(_, &c)| c)
+        .collect();
     let detour = if avoided.is_empty() {
         None
     } else {
@@ -2506,6 +2906,15 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             },
         )
     };
+    // design: C7-P5 yield (quirks.deadlock_no_yield off: a deadlock with no way round, no detour found, has one side give way; a unit of the side that gives way searches again for its free cell, one of the other side takes the original's searches)
+    if detour.is_none()
+        && !ring.is_empty()
+        && !r.quirks.deadlock_no_yield
+        && shut_in(w, id, &u, &ring, goal)
+        && give_way(w, id, &ring) == Some(true)
+    {
+        return compute_once(w, id, Mode::Fresh);
+    }
     // spec: S-0212 claim 13b (the coarse end cells: the start's when the unit is on a bridge deck, the destination's when it is a bridge cell)
     let start_end = coarse_end(w, from, on_deck);
     let dest_end = coarse_end(w, goal, true);

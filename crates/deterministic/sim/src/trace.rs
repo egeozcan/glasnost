@@ -143,6 +143,15 @@ pub enum What {
         /// Its destination afterwards.
         dest: Option<CellXY>,
     },
+    /// The unit gives way in a deadlock (our design, C7 part 5, yield).
+    GaveWay {
+        /// The free cell it goes to.
+        refuge: CellXY,
+        /// The unit with the right of way.
+        to: Option<ObjectId>,
+    },
+    /// The unit resumes the order it gave way from.
+    Resumed,
     /// A group order spread the unit's destination (S-0213 claim 7).
     Spread {
         /// The common destination.

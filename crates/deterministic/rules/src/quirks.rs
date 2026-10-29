@@ -409,6 +409,16 @@ pub struct Quirks {
     // spec: S-0212 claim 23 (the failed computation; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub unreachable_move_dropped: bool,
+    /// No unit of a deadlock gives way (the original). Off (our design, C7
+    /// part 5): in a deadlock of stalled units (`path_through_stalled_blockers`
+    /// off) with no way round, the units near it heading against the one
+    /// with the lowest object id give way: each goes to the nearest free cell
+    /// off the other side's way, waits there until the other side has
+    /// arrived or passed it (or for a longest wait) and then resumes its
+    /// order. A deadlock with a way round keeps C7 part 4's detour.
+    // spec: S-0212 claims 8 and 22 (the mode-2 re-path through moving blockers; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub deadlock_no_yield: bool,
     /// The rebuild of a house's threat records counts its own and its allies' objects.
     // spec: S-0212 claim 16a and Edge cases (quirks.threat_rebuild_counts_friends)
     #[serde(default = "on")]
@@ -437,6 +447,20 @@ pub struct Quirks {
     // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub group_spread_no_detour: bool,
+    /// Every unit a factory releases with a cell rally point is sent to the
+    /// rally cell itself (the original). Off (our design, C7 part 5): each
+    /// released unit is sent to a cell of its own round the rally point, the
+    /// rally cell while no other unit of the house has it.
+    // spec: S-0417 claims 8 and 10 and S-0404 claim 13 (the rally point copied at release; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub rally_point_shared: bool,
+    /// A harvester's ring search accepts an ore cell that another unit of
+    /// its house is already heading for (the original). Off (our design, C7
+    /// part 5): such a cell is not acceptable, so harvesters sent to one
+    /// field each take a cell of their own.
+    // spec: S-0402 claim 4 (the ring search's acceptable cell; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub harvest_cell_shared: bool,
     /// The harvester-truce exception of row I15 never applies.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -2159,6 +2183,7 @@ impl Default for Quirks {
             train_exclusion_search_only: true,
             path_through_stalled_blockers: true,
             unreachable_move_dropped: true,
+            deadlock_no_yield: true,
             threat_rebuild_counts_friends: true,
             negative_threat_field: true,
             aircraft_threat_stays_put: true,
@@ -2166,6 +2191,8 @@ impl Default for Quirks {
             detonate_in_planter_name: true,
             cheer_memory_spans_session: true,
             group_spread_no_detour: true,
+            rally_point_shared: true,
+            harvest_cell_shared: true,
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
@@ -2803,6 +2830,7 @@ impl Quirks {
                 self.path_through_stalled_blockers,
             ),
             ("unreachable_move_dropped", self.unreachable_move_dropped),
+            ("deadlock_no_yield", self.deadlock_no_yield),
             (
                 "threat_rebuild_counts_friends",
                 self.threat_rebuild_counts_friends,
@@ -2816,6 +2844,8 @@ impl Quirks {
                 self.cheer_memory_spans_session,
             ),
             ("group_spread_no_detour", self.group_spread_no_detour),
+            ("rally_point_shared", self.rally_point_shared),
+            ("harvest_cell_shared", self.harvest_cell_shared),
             (
                 "hijack_truce_harvester_check",
                 self.hijack_truce_harvester_check,

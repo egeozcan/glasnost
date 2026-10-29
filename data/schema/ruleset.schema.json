@@ -9067,6 +9067,11 @@
           "type": "boolean",
           "default": true
         },
+        "deadlock_no_yield": {
+          "description": "No unit of a deadlock gives way (the original). Off (our design, C7\npart 5): in a deadlock of stalled units (`path_through_stalled_blockers`\noff) with no way round, the units near it heading against the one\nwith the lowest object id give way: each goes to the nearest free cell\noff the other side's way, waits there until the other side has\narrived or passed it (or for a longest wait) and then resumes its\norder. A deadlock with a way round keeps C7 part 4's detour.",
+          "type": "boolean",
+          "default": true
+        },
         "death_weapon_unplaced_projectile": {
           "description": "The death weapon's projectile tests use its unplaced default position.",
           "type": "boolean",
@@ -9574,6 +9579,11 @@
         },
         "group_spread_no_detour": {
           "description": "No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off (our design, C7 part 4): a member whose look gives no cell of its own gets the nearest open cell round the common cell, in the common cell's reach region and given to no other member.",
+          "type": "boolean",
+          "default": true
+        },
+        "harvest_cell_shared": {
+          "description": "A harvester's ring search accepts an ore cell that another unit of\nits house is already heading for (the original). Off (our design, C7\npart 5): such a cell is not acceptable, so harvesters sent to one\nfield each take a cell of their own.",
           "type": "boolean",
           "default": true
         },
@@ -10204,6 +10214,11 @@
         },
         "raised_missile_rail_time_from_set_b": {
           "description": "A set-C missile's rail time uses set B's pause and tilt times; off: set C's own times.",
+          "type": "boolean",
+          "default": true
+        },
+        "rally_point_shared": {
+          "description": "Every unit a factory releases with a cell rally point is sent to the\nrally cell itself (the original). Off (our design, C7 part 5): each\nreleased unit is sent to a cell of its own round the rally point, the\nrally cell while no other unit of the house has it.",
           "type": "boolean",
           "default": true
         },

@@ -22,6 +22,8 @@
 //! claims 19 to 25 are `crate::econ::slaves`; the wake-up rule is
 //! [`wake_rule`].
 
+use std::collections::BTreeSet;
+
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_num::geom::root_floor;
@@ -710,9 +712,29 @@ fn connected(w: &mut World, id: ObjectId, refinery: ObjectId) -> bool {
 /// The ring search with range `range` from cell `from` (S-0402 claim 4).
 pub fn ring_search(w: &mut World, id: ObjectId, from: CellXY, range: i32) -> Option<CellXY> {
     let reference = crate::occupancy::reference_level(w, id);
+    // design: C7-P5 field cells (quirks.harvest_cell_shared off: the cells other units of the harvester's house are heading for)
+    let taken: BTreeSet<CellXY> = if w.rules().quirks.harvest_cell_shared {
+        BTreeSet::new()
+    } else {
+        heading_for(w, id)
+    };
     ring_search_with(w, from, range, &mut |w, c| {
-        acceptable(w, id, from, c, reference)
+        acceptable(w, id, from, c, reference) && !taken.contains(&c)
     })
+}
+
+/// The cells the other units of `id`'s house on the map are heading for
+/// (their cell destinations; our design, C7 part 5, field cells).
+fn heading_for(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
+    let owner = w.obj(id).and_then(|o| o.owner);
+    w.objects
+        .iter()
+        .filter(|(x, o)| **x != id && o.on_map && o.owner == owner)
+        .filter_map(|(_, o)| match o.dest {
+            Some(Target::Cell(c)) => Some(c),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The ring search of S-0402 claim 4 from cell `from` with range `range`,

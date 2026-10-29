@@ -19,23 +19,77 @@ mod pathing_common;
 
 use pathing_common::*;
 
-/// Our switches (C7 part 4), each defaulting to the original.
-const DESIGN: [&str; 3] = [
+/// Our switches (C7 parts 4 and 5), each defaulting to the original.
+const DESIGN: [&str; 6] = [
     "path_through_stalled_blockers",
+    "deadlock_no_yield",
     "unreachable_move_dropped",
     "group_spread_no_detour",
+    "rally_point_shared",
+    "harvest_cell_shared",
 ];
 
 /// The seeds the table is measured over.
 const SEEDS: [u32; 3] = [7, 8, 9];
 
+// design: C7-P5 tick cost (the wall time of a tick with the layer against the reference's, the fastest of ROUNDS plays each, taken in turn)
+#[test]
+#[ignore = "measurement: prints the tick cost of the layer against the reference"]
+fn cost() {
+    let rounds: usize = std::env::var("ROUNDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let sets = [
+        ("reference", Rules::Reference),
+        ("layer", Rules::Layer),
+        ("layer, no yield", layer_without(&["deadlock_no_yield"])),
+        (
+            "layer, stalled blockers on",
+            layer_without(&["path_through_stalled_blockers", "deadlock_no_yield"]),
+        ),
+    ];
+    println!(
+        "| Scenario | {} ns/tick |",
+        sets.map(|(l, _)| l).join(" ns/tick | ")
+    );
+    let names: Vec<&str> = all(Rules::Reference, 7).iter().map(|s| s.name).collect();
+    for (i, name) in names.iter().enumerate() {
+        let mut best = [u128::MAX; 4];
+        for _ in 0..rounds {
+            for (k, (_, r)) in sets.iter().enumerate() {
+                let s = all(*r, 7).swap_remove(i);
+                let bound = s.bound.max(1) as u128;
+                let t0 = std::time::Instant::now();
+                play(s);
+                best[k] = best[k].min(t0.elapsed().as_nanos() / bound);
+            }
+        }
+        println!(
+            "| {name} | {} | {} | {} | {} |",
+            best[0], best[1], best[2], best[3]
+        );
+    }
+}
+
 #[test]
 #[ignore = "measurement: prints the scenario table"]
 fn measure() {
-    // The reference, the layer, and each switch of ours alone off.
-    let mut sets = vec![("reference", Rules::Reference), ("layer", Rules::Layer)];
+    // The reference, the layer, each switch of ours alone off, and the
+    // layer less each of ours (SETS=a,b picks sets by label).
+    let mut sets: Vec<(String, Rules)> = vec![
+        ("reference".into(), Rules::Reference),
+        ("layer".into(), Rules::Layer),
+    ];
     for n in DESIGN {
-        sets.push((n, off(&[n])));
+        sets.push((n.into(), off(&[n])));
+    }
+    for n in DESIGN {
+        sets.push((format!("layer less {n}"), layer_without(&[n])));
+    }
+    if let Ok(pick) = std::env::var("SETS") {
+        let pick: Vec<&str> = pick.split(',').collect();
+        sets.retain(|(l, _)| pick.contains(&l.as_str()));
     }
     for (label, rules) in sets {
         println!("\n{label}\n\n{HEADER}");
@@ -104,6 +158,13 @@ fn diag() {
         }
         glasnost_sim::tick::step(&mut s.w);
         for e in trace::take(&s.w) {
+            if matches!(
+                e.what,
+                What::GaveWay { .. } | What::Resumed | What::GaveUp | What::Failed { .. }
+            ) {
+                let i = ids.iter().position(|&x| x == e.unit);
+                println!("{} unit {i:?} {:?}", e.tick, e.what);
+            }
             if e.unit == watch && t < 1200 {
                 match &e.what {
                     What::Step { .. } | What::Blocked { .. } if quiet => {}
@@ -213,7 +274,108 @@ fn group_spread_off_gives_each_member_its_own_cell() {
     assert_eq!(off.missing, 0);
 }
 
-// design: C7-P4 (the play-fixes layer turns each of our switches off)
+// spec: S-0417 claims 8 and 10 and S-0404 claim 13 (the original: every released unit is sent to the rally cell, so a stream crowds it and gives up after arriving); design: C7-P5 rally spread (off: each released unit gets a cell of its own round the rally point)
+#[test]
+fn rally_spread_off_gives_each_released_unit_its_own_cell() {
+    let (on, off) = both("rally_point_shared", |r, s| factory(r, 8, 5, s));
+    assert_eq!(on.shared, 8, "the original: one rally cell for all");
+    assert!(on.late_give_ups > 0, "{on:?}");
+    assert_eq!(off.shared, 0, "off: a cell each");
+    assert_eq!(off.give_ups, 0);
+    assert_eq!(off.missing, 0);
+}
+
+// spec: S-0402 claim 4 (the original: the ring search accepts an ore cell another harvester is heading for, so harvesters sent from one place pick the same cells and give up one step short); design: C7-P5 field cells (off: each takes a cell of its own, with fewer give-ups and no fewer credits)
+#[test]
+fn field_cells_off_gives_each_harvester_its_own_cell() {
+    let (on, off) = both("harvest_cell_shared", |r, s| harvesters(r, 4, s));
+    assert!(on.shared > 0, "the original: shared first cells {on:?}");
+    assert!(on.give_ups > 0, "{on:?}");
+    assert_eq!(off.shared, 0, "off: a cell each {off:?}");
+    assert!(off.give_ups < on.give_ups, "{on:?} {off:?}");
+    assert!(off.credits >= on.credits, "{on:?} {off:?}");
+}
+
+// spec: S-0212 claims 8 and 22 (the original, and C7-P4's detour alone: two groups meeting in a passage with no way round stay stuck); design: C7-P5 yield (off: the side heading against the oldest unit gives way, and every unit arrives)
+#[test]
+fn yield_off_clears_a_deadlock_with_no_way_round() {
+    let detour = off(&["path_through_stalled_blockers"]);
+    let both_off = off(&["path_through_stalled_blockers", "deadlock_no_yield"]);
+    let on = play(rooms(detour, 6, 7));
+    let off = play(rooms(both_off, 6, 7));
+    assert!(on.missing > 0, "{on:?}");
+    assert_eq!(off.missing, 0, "{off:?}");
+    assert_eq!(off.give_ups, 0);
+    assert_eq!(off.unsettled, 0);
+}
+
+// design: C7-P5 yield (the yield acts only on a deadlock that C7-P4's stalled-blocker graph finds and that has no way round: alone it changes nothing, and with the graph it leaves queues, and a deadlock with a way round, alone)
+#[test]
+fn yield_off_leaves_queues_and_the_reference_alone() {
+    let (a, b) = both("deadlock_no_yield", |r, s| rooms(r, 6, s));
+    assert_eq!(
+        moves(&a),
+        moves(&b),
+        "without the graph no deadlock is found"
+    );
+    let detour = off(&["path_through_stalled_blockers"]);
+    let both_off = off(&["path_through_stalled_blockers", "deadlock_no_yield"]);
+    for scene in [
+        |r, s| infantry_gap(r, 16, s),
+        |r, s| gap(r, 1, 20, s),
+        |r, s| corridor(r, 2, 3, s),
+        |r, s| corridor(r, 2, 6, s),
+    ] as [fn(Rules, u32) -> Scene; 4]
+    {
+        assert_eq!(
+            moves(&play(scene(detour, 7))),
+            moves(&play(scene(both_off, 7)))
+        );
+    }
+}
+
+// design: C7-P5 yield (the giving-way state is game state: saved, loaded and hashed)
+#[test]
+fn a_unit_giving_way_survives_save_and_load() {
+    use glasnost_sim::save;
+    let mut s = rooms(Rules::Layer, 6, 7);
+    let mut t = 0;
+    while !s.w.objects.values().any(|o| o.path.yielding.is_some()) {
+        glasnost_sim::tick::step(&mut s.w);
+        t += 1;
+        assert!(t < s.bound, "a unit gives way");
+    }
+    let bytes = save::save(&s.w);
+    let mut b = save::load(&bytes, s.w.rules_arc(), s.w.catalogue.clone().unwrap()).unwrap();
+    assert_eq!(save::state_hash(&s.w), save::state_hash(&b));
+    for _ in 0..1500 {
+        glasnost_sim::tick::step(&mut s.w);
+        glasnost_sim::tick::step(&mut b);
+    }
+    assert_eq!(save::state_hash(&s.w), save::state_hash(&b));
+    assert!(
+        s.w.objects.values().all(|o| o.path.yielding.is_none()),
+        "every unit resumed"
+    );
+}
+
+// design: C7-P5 yield (the giving-way state is hashed)
+#[test]
+fn the_giving_way_state_is_hashed() {
+    use glasnost_sim::path::Yield;
+    use glasnost_sim::save::state_hash;
+    use glasnost_sim::world::Target;
+    let s = rooms(Rules::Layer, 3, 7);
+    let mut b = s.w.clone();
+    b.obj_mut(s.goals[0].id).unwrap().path.yielding = Some(Yield {
+        resume: Target::Cell(at(0, 0)),
+        to: vec![s.goals[1].id],
+        since: 0,
+    });
+    assert_ne!(state_hash(&s.w), state_hash(&b));
+}
+
+// design: C7-P4 and C7-P5 (the play-fixes layer turns each of our switches off)
 #[test]
 fn the_layer_turns_our_switches_off() {
     let q = pathing_common::ruleset(Rules::Layer).globals.quirks;

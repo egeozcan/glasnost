@@ -363,6 +363,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     if on {
         p.mark(Phase::Movement);
     }
+    // design: C7-P5 yield (a unit giving way resumes its order before its movement, once the other side has passed)
+    crate::path::yield_turn(w, id);
     if kind == Kind::Vehicle {
         // spec: S-0203 claim 12 (a vehicle master's due group update comes after that turn's behaviour start and processing, whose destination and group-state changes it sees, and before its movement; a destination it assigns is available to that movement)
         crate::econ::slaves::group_turn(w, id);
