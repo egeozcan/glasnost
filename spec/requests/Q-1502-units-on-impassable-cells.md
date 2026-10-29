@@ -11,8 +11,7 @@ The arena of M-0001 to M-0003 places infantry groups of up to 60 units in column
 cell W. On `Arena.mmx`, five of side A's cells, (W.x − 11, W.y − 4), (W.x − 11, W.y − 3),
 (W.x − 10, W.y − 4), (W.x − 10, W.y − 3) and (W.x − 10, W.y + 3), have land type *rock* after
 the terrain recalculation (S-0211 claim 5). They are cliff cells between two height levels and
-belong to no reach region of the infantry movement zone (S-0212 claim 4). M-0001 states that in
-every game every unit stood on its stated cell.
+belong to no reach region of the infantry movement zone (S-0212 claim 4).
 
 In our engine an infantry unit placed there never moves and is never found:
 - its own map-wide hunt search (S-0309 claim 7) finds nothing, because the zone test compares a
@@ -22,10 +21,6 @@ In our engine an infantry unit placed there never moves and is never found:
   owning a small part of their army.
 
 Large side-A infantry groups reach these five rock cells.
-
-The lead's note on M-0001 and M-0002 (main f81fc29, *Notes*, "Cliff cells in large groups")
-confirms the setup side: the stock harness placed units on these cells like anywhere else. Our
-placement already matches, so the difference is in the simulation, which this request asks about.
 
 Code: `crates/deterministic/sim/src/regions.rs` (`same_region`) and
 `crates/deterministic/sim/src/combat/acquire.rs` (`candidate`, zone row).
