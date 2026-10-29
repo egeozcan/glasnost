@@ -63,5 +63,5 @@ Seams of this step:
 - **A warp source marker's end on leaving aiming** is a sidebar action the simulation does not see; the marker ends at a new pick or at launch.
 - **Rocket trailers** (`rocket.rs`) are made as ordinary animations without the trailer's loop delay: a rocket is not a projectile of S-0306.
 - **Resource glints** have no position in any spec, so they deliver no damage and take only their particle draws at a middle event (S-0202 claim 14).
-- **Quirk switches of the clock.** The simulation plays with `AnimQuirks::default()` (every switch on), as `mutation` did; the switches are not read from the rules' quirks.
+- **Quirk switches of the clock.** Built at seams sweep 3 ([seams-3.md](seams-3.md)): the six switches are `quirks.anim_*` fields of the rules' quirks and the simulation's clock reads them (`AnimQuirks::from(&Quirks)`), tested in both positions (`claims_s0109_quirks.rs`). Only the importer's reach warning in `domination` still reads the defaults.
 - **The drawing.** Drain and warp-marker pictures in the client are still its own cosmetic animations; tile animations and glints are not drawn by the client.

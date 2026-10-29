@@ -107,6 +107,45 @@ fn claim_20_reaches_the_seven_by_seven_cells() {
     }
 }
 
+// spec: S-0303 claim 20 and claim 4 (rocking reaches the objects in the same cell layer: a detonation on a high bridge's deck, more than 208 above the terrain, rocks the deck's objects and not those on the ground below, and a detonation on the ground the reverse)
+#[test]
+fn claim_20_rocks_the_detonations_cell_layer() {
+    use glasnost_sim::world::Layer;
+    let mut w = world("1");
+    let c = testkit::mid(SIZE, 0, 0);
+    w.cells.mark_high_bridge(c, 237);
+    assert!(w.high_bridge(c));
+    let below = put(&mut w, 1, 0);
+    let above = put(&mut w, 1, 1);
+    let p = w.obj(above).unwrap().pos;
+    w.cells.leave(p.cell(), Layer::Ground, above);
+    w.obj_mut(above).unwrap().layer = Layer::Deck;
+    glasnost_sim::objects::place(&mut w, above, Pos::new(p.x, p.y, p.z + 416), 0);
+    assert!(w.cells.list(p.cell(), Layer::Deck).contains(&above));
+    let (x, y) = (c.x * 256 + 128, c.y * 256 + 128);
+    let ground = w.surface_at(x, y);
+    // On the deck.
+    w.effects.clear();
+    let rock = warhead(&w, "ROCK");
+    area::detonate(
+        &mut w,
+        Detonation {
+            point: Pos::new(x, y, ground + 416),
+            damage: 100,
+            warhead: rock,
+            source: None,
+            house: None,
+            resources: false,
+        },
+    );
+    let pushed: Vec<ObjectId> = rocks(&w)[0].1.iter().map(|p| p.0).collect();
+    assert_eq!(pushed, [above], "the deck's object only");
+    // On the ground (at the surface: not more than 208 above it).
+    boom(&mut w, 100, None, "ROCK");
+    let pushed: Vec<ObjectId> = rocks(&w)[0].1.iter().map(|p| p.0).collect();
+    assert_eq!(pushed, [below], "the ground's object only");
+}
+
 // spec: S-0303 claim 20 (the centre cell's objects away from the source object when there is one, the others away from P); design: Q-2081 question 5 (without a source, away from P)
 #[test]
 fn claim_20_pushes_the_centre_from_the_source_and_the_rest_from_p() {

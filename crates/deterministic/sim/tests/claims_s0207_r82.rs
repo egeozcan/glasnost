@@ -631,3 +631,59 @@ fn claim_28_a_sale_with_the_remembered_cell_taken_drives_there() {
     assert!(driving(&w, h));
     assert_eq!(cell(&w, blocker), ore_cell);
 }
+
+// ---- Seams sweep 3 (docs/m8-claims/seams-3.md): the exclusions of claim 28 on a real destination.
+
+/// A teleporting CHRONOT holding a destination, then given another one
+/// that is no docking assignment; the state is changed by `exclude`.
+fn exclusion_case(exclude: impl Fn(&mut World, ObjectId)) -> (World, ObjectId) {
+    let (mut w, _) = game(&[]);
+    let h = teleporting(&mut w, "CHRONOT", at(2, 6));
+    exclude(&mut w, h);
+    w.obj_mut(h).unwrap().dest = Some(Target::Cell(at(12, 6)));
+    assign_destination(&mut w, h, Some(Target::Cell(at(12, 8))));
+    (w, h)
+}
+
+// spec: S-0207 claim 28 (a vehicle with a warp pending is excluded: the rule installs nothing, and the destination goes to the current locomotor)
+#[test]
+fn claim_28_a_warp_pending_vehicle_has_nothing_installed() {
+    use glasnost_sim::superweapons::warp::{Member, Stage};
+    for stage in [Stage::Pending, Stage::Leaving(3), Stage::Expired] {
+        let (w, h) = exclusion_case(|w, h| {
+            let pos = w.obj(h).unwrap().pos;
+            w.obj_mut(h).unwrap().sw.warp = Some(Member {
+                stage,
+                house: HouseId(0),
+                landing: pos,
+                redirected: false,
+                fell_back: false,
+                refused: false,
+                entry_ok: false,
+            });
+        });
+        assert!(!driving(&w, h), "{stage:?}");
+        assert!(teleport::is_teleporter(&w, h), "{stage:?}");
+    }
+}
+
+// spec: S-0207 claim 28 (a gripped vehicle, glossary, is excluded: the rule installs nothing)
+#[test]
+fn claim_28_a_gripped_vehicle_has_nothing_installed() {
+    let (w, h) = exclusion_case(|w, h| {
+        let lifter = place_vehicle(w, "TELEQ", 0, at(6, 6), 0);
+        w.obj_mut(h).unwrap().lift.lifter = Some(lifter);
+    });
+    assert!(!driving(&w, h));
+    assert!(teleport::is_teleporter(&w, h));
+}
+
+// spec: S-0207 claim 28 (a seized vehicle is excluded; the control: with no exclusion the same assignment installs driving and fixes no landing point)
+#[test]
+fn claim_28_the_exclusions_against_a_control() {
+    let (w, h) = exclusion_case(|_, _| {});
+    assert!(driving(&w, h), "control");
+    assert_eq!(landing(&w, h), None, "control");
+    let (w, h) = exclusion_case(|w, h| w.obj_mut(h).unwrap().lift.seized = true);
+    assert!(!driving(&w, h));
+}
