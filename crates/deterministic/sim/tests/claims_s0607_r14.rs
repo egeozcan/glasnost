@@ -104,10 +104,17 @@ fn claim_20_restored_at_the_end_of_the_touchdown_turn() {
         seen[..t].iter().all(|s| s.seized),
         "seized through the fall"
     );
-    assert!(!seen[t].seized, "restored in the touchdown tick: {:?}", seen[t]);
+    assert!(
+        !seen[t].seized,
+        "restored in the touchdown tick: {:?}",
+        seen[t]
+    );
     assert!(seen[t..].iter().all(|s| !s.seized), "and stays restored");
     assert_eq!(health(&w, v), 100, "claim 17: unhurt");
-    assert!(w.obj(v).unwrap().jump.is_none(), "its own locomotor is back");
+    assert!(
+        w.obj(v).unwrap().jump.is_none(),
+        "its own locomotor is back"
+    );
 
     // L11 part a: the first move order after touchdown moves it.
     let (mut w, v) = dropped_over_land(false, |_| {});
@@ -164,7 +171,10 @@ fn claim_20_a_restored_hunter_takes_a_target_and_fires() {
         .expect("a restored hunter fires");
     assert!(seen[first_shot].hunt, "hunt is current at the first shot");
     assert!(seen[t..].iter().all(|s| !s.seized));
-    assert!(w.obj(enemy).is_none_or(|o| o.health < 100), "it hit the enemy");
+    assert!(
+        w.obj(enemy).is_none_or(|o| o.health < 100),
+        "it hit the enemy"
+    );
 }
 
 // spec: S-0607 claim 20 (revision 14, after restoration the unit can be seized again, claim 3) and claim 3 (a seize succeeds only on a unit that is not already seized); scenario L11 part e run 1b: a second lifter that fires at the unit k = 1, 5 and 30 ticks after its touchdown seizes it every time

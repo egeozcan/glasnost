@@ -328,11 +328,7 @@ fn claim_20_hovering_set_down_retries_the_search() {
     );
     run(&mut w, 5);
     assert!(lift::seized(&w, v));
-    assert_eq!(
-        jump::phase(&w, v),
-        Some(Phase::Hovering),
-        "no cell yet"
-    );
+    assert_eq!(jump::phase(&w, v), Some(Phase::Hovering), "no cell yet");
     dry(&mut w, &[c]);
     run(&mut w, 1);
     assert!(
@@ -355,7 +351,10 @@ fn claim_20_hovering_set_down_retries_the_search() {
     let p = w.obj(v).unwrap().pos;
     assert_eq!((p.x, p.y), (d.x, d.y), "landed at the point");
     assert_eq!(health(&w, v), 100);
-    assert!(!lift::seized(&w, v), "restored at the end of its landing turn");
+    assert!(
+        !lift::seized(&w, v),
+        "restored at the end of its landing turn"
+    );
 }
 
 // spec: S-0607 claim 9 (revision 8, design: on the ground, height 0 or less, the unit still moving because it was released before its first jumpjet update) and S-0502 Edge cases (revision 16): with no cell and the switch off it stays grounded where it is with no movement point and no commitment, and claim 20 restores it as any set-down unit, revision 14: at the end of the same turn, so the grounded state is not seen between ticks; with the switch on it is destroyed
@@ -449,7 +448,10 @@ fn claim_20_hovering_exclusion_for_a_committed_set_down() {
     let d = point(&w, v).expect("the found point");
     assert_eq!((d.x, d.y), (c.x * 256 + 128, c.y * 256 + 128), "its centre");
     assert!(run_until(&mut w, 400, |w| height(w, v) == 0 && !jump::moving(w, v)));
-    assert!(!lift::seized(&w, v), "restored at the end of its landing turn");
+    assert!(
+        !lift::seized(&w, v),
+        "restored at the end of its landing turn"
+    );
 }
 
 // spec: S-0607 claim 9 (revision 9, design: on the ground, height above the surface 0 or less, it stays where it is and its flight state becomes grounded, even if it was ascending at height 0; answers Q-1344) and S-0502 Edge cases (revision 17): a seized unit given no destination in the tick after its take-off update, still at height 0 and ascending, with no cell and the switch off, stays put grounded with no point and no commitment, and claim 20 restores it as any grounded set-down unit (revision 14: at the end of that same turn)

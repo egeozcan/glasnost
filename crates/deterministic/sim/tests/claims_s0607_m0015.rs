@@ -72,7 +72,10 @@ fn m0015_a_set_down_computer_unit_in_hunt_is_restored_and_fires() {
     let shots = shots_by(&mut w, v, 600);
     assert!(shots > 0, "S-0215 claim 27: a restored hunter fires");
     assert!(!lift::seized(&w, v));
-    assert!(w.obj(enemy).is_none_or(|o| o.health < 100), "it hit the enemy");
+    assert!(
+        w.obj(enemy).is_none_or(|o| o.health < 100),
+        "it hit the enemy"
+    );
 
     // Control: the same unit, never seized, hunting from the same cell.
     let mut w = world(armed_victim);
