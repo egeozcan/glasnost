@@ -900,6 +900,47 @@ fn rebuilds_a_lost_refinery_before_power() {
     assert!(!orders.contains(&Order::Build { what: powr }), "{orders:?}");
 }
 
+// S-0404 claim 5 (the hold order), claim 6 (the cancel-all order; the refund P′ − B) and PLAN §4.7 (M8 step B9): a house whose harvesters wait for a lost refinery, with less money in hand than the refinery still owes, cancels the held item that has paid the most for its refund, as a person clears the sidebar to finish the refinery; with the refinery's balance in hand it cancels nothing.
+#[test]
+fn cancels_a_held_item_to_pay_for_a_lost_refinery() {
+    let map = fixture::map();
+    let mut w = settled(&map, 0);
+    w.econ.lines.lines.retain(|l| l.house != H);
+    let refinery = first(&w, Role::Refinery, Kind::Building);
+    let soldier = first(&w, Role::Army, Kind::Infantry);
+    let price = glasnost_sim::econ::production::price(&w, H, soldier);
+    w.houses[0].credits = price;
+    assert!(orders::issue(&mut w, H, Order::Build { what: soldier }));
+    testkit::run(&mut w, 1);
+    let from = w.tick;
+    while item_of(&w, soldier).progress < 20 && w.tick < from + 3000 {
+        testkit::run(&mut w, 1);
+    }
+    assert!(
+        item_of(&w, soldier).owed < price,
+        "the soldier has paid steps"
+    );
+    assert!(orders::issue(&mut w, H, Order::Hold { what: soldier }));
+    lose_the_refineries(&mut w);
+    w.houses[0].credits = 0;
+    assert!(orders::issue(&mut w, H, Order::Build { what: refinery }));
+    to_think(&mut w);
+    assert_eq!(item_of(&w, soldier).hold, Hold::Player);
+    let owed = item_of(&w, refinery).owed;
+    assert!(owed > 0);
+    let orders = think(&mut w.clone(), &map, plan(2));
+    assert!(
+        orders.contains(&Order::CancelAll { what: soldier }),
+        "{orders:?}"
+    );
+    w.houses[0].credits = owed;
+    let orders = think(&mut w, &map, plan(2));
+    assert!(
+        !orders.contains(&Order::CancelAll { what: soldier }),
+        "{orders:?}"
+    );
+}
+
 // S-0408 claim 3 (a building with a build-up sprite is sellable), S-0402 claim 13 and PLAN §4.7 (M8 step B8): a broke house whose harvesters wait for a lost refinery sells its other buildings, not the construction yard that would build the refinery, though the yard is the costliest.
 #[test]
 fn keeps_the_yard_while_selling_for_a_lost_refinery() {

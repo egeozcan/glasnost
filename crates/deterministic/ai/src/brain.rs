@@ -501,6 +501,7 @@ impl Brain {
         // while the building is short.
         let has_yard = self.has_yard(w);
         let lost = self.script.refinery_lost(w);
+        let refund_for = self.refund_for_refinery(w, lost, paying);
         let army = |t: TypeRef| army_item(w, t, has_yard);
         let short = !paying && !self.script.selling() && self.superweapon_short(w);
         let saving = short && self.safe(w);
@@ -514,6 +515,9 @@ impl Brain {
                 // cancelled, not held: a held item keeps its line (S-0404
                 // claim 5), and the refinery could not start (M8 step B8).
                 // spec: S-0404 claim 6 (the cancel-all order; at an unchanged price the refund is everything paid)
+                out.push(Order::CancelAll { what: i.t });
+            } else if refund_for == Some(i.object) {
+                // spec: S-0404 claim 6 (the cancel-all order; the refund P′ − B)
                 out.push(Order::CancelAll { what: i.t });
             } else if paying {
                 let power = scripted::role_of(w, i.t) == Some(Role::Power);
@@ -543,6 +547,62 @@ impl Brain {
             }
         }
         (paying, short)
+    }
+
+    /// The item the house cancels at this think to pay for a lost
+    /// refinery (M8 step B9): while it pays for its economy first
+    /// ([`Self::paying`]) because its harvesters wait for a lost refinery
+    /// (`Script::refinery_lost`), and the money in hand is less than the
+    /// refinery still owes (its whole price before it is on a line), the
+    /// item not of the economy, not done and not on the refinery's line
+    /// whose cancel refunds the most (S-0404 claim 6: *P*′ − *B*, or the
+    /// price at the start with `quirks.refund_at_current_price` off), when
+    /// that refund is above 0; the earliest line on a tie. One a think, so
+    /// that no more is cancelled than the refinery needs. A house with no
+    /// refinery has no income: held, those items kept what was paid into
+    /// them while the refinery waited for money (M8 step B9: in the quick
+    /// lane a broke house held a defence building with about 840 credits
+    /// paid and an infantry item while its refinery stood at 11 to 21 of 54
+    /// for more than 5 000 ticks), and a person cancels them to finish the
+    /// refinery.
+    fn refund_for_refinery(
+        &self,
+        w: &World,
+        lost: Option<TypeRef>,
+        paying: bool,
+    ) -> Option<ObjectId> {
+        let t = lost.filter(|_| paying)?;
+        let h = self.house();
+        let mine = || w.econ.lines.lines.iter().filter(|l| l.house == h);
+        let need = mine()
+            .filter_map(|l| l.item.as_ref())
+            .find(|i| i.t == t)
+            .map_or_else(|| production::price(w, h, t), |i| i.owed);
+        if w.houses[usize::from(h.0)].credits >= need {
+            return None;
+        }
+        let refund = |i: &production::Item| {
+            // spec: S-0404 claim 6 and F4 (refund = P′ − B; quirks.refund_at_current_price off: P − B)
+            let p = if w.rules().quirks.refund_at_current_price {
+                production::price(w, h, i.t)
+            } else {
+                i.start_price
+            };
+            p - i.owed
+        };
+        let refinery_line = production::line_kind(w, t);
+        let mut best: Option<(i32, ObjectId)> = None;
+        for l in mine().filter(|l| Some(l.kind) != refinery_line) {
+            let Some(i) = &l.item else { continue };
+            if i.done() || is_economy(w, i.t) {
+                continue;
+            }
+            let r = refund(i);
+            if r > 0 && best.is_none_or(|(b, _)| r > b) {
+                best = Some((r, i.object));
+            }
+        }
+        best.map(|(_, id)| id)
     }
 
     /// Whether the house owns a construction yard.
