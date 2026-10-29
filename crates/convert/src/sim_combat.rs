@@ -3827,9 +3827,9 @@ impl Builder<'_> {
         });
         for k in ["SelfHealInfantryFrames", "SelfHealUnitFrames"] {
             let state = self.global(GENERAL, k);
-            // spec: S-0314 Edge cases (an interval of 0 is treated as 1 tick; a negative one is reproduced; the importer warns)
+            // spec: S-0314 Edge cases (an interval of 0 is treated as 1 tick; a negative one is reproduced; the importer warns), S-0111 claim 16 (the marker blinks with |T|, never at T = 0; the importer warns for both)
             self.each_int(state.as_ref(), |n| n <= 0, |v| {
-                format!("[General] {k} {v} is not above 0: 0 is taken as 1 tick, a negative interval acts as its magnitude (S-0314 Edge cases)")
+                format!("[General] {k} {v} is not above 0: 0 is taken as 1 tick, a negative interval acts as its magnitude (S-0314 Edge cases); the self-heal marker blinks with that magnitude, and never at 0 (S-0111 claim 16)")
             });
         }
         for k in ["SelfHealInfantryAmount", "SelfHealUnitAmount"] {
@@ -4059,7 +4059,144 @@ impl Builder<'_> {
         }
     }
 
+    /// The pip scale's import warnings (S-0111 claims 12 to 14, F2, Edge
+    /// cases and Import mapping): bad data whose pip rows the original
+    /// leaves unspecified or fails on, and our engine draws safely.
+    fn pip_scale_checks(&mut self) {
+        let outcome = self.i.outcome;
+        let empty = Vec::new();
+        // spec: S-0111 Import mapping (PipScale vocabulary; Pip and OccupyPip vocabulary)
+        const KINDS: [&str; 6] = [
+            "none",
+            "ammo",
+            "tiberium",
+            "passengers",
+            "power",
+            "mindcontrol",
+        ];
+        const PIPS: [&str; 11] = [
+            "green",
+            "yellow",
+            "white",
+            "red",
+            "blue",
+            "persongreen",
+            "personyellow",
+            "personwhite",
+            "personred",
+            "personblue",
+            "personpurple",
+        ];
+        // spec: S-0003 claim 16 (named values read as text cut to the field's limit, 31 or 127 bytes; every word here is shorter than 31)
+        const LIMIT: usize = 31;
+        let mut out: Vec<(Option<KeyState>, String)> = Vec::new();
+        for kind in [
+            Kind::Infantry,
+            Kind::Vehicles,
+            Kind::Aircraft,
+            Kind::Buildings,
+        ] {
+            for t in outcome.registries.get(&kind).unwrap_or(&empty) {
+                let name = show(&t.name);
+                let word = text_of(key(t, "PipScale"));
+                let pip_kind = word.as_deref().map(|w| value::named(w, LIMIT, &KINDS));
+                if let Some(None) = pip_kind {
+                    // design: an unknown PipScale word reads as none; S-0111 states no fallback for this field (Q-2071)
+                    out.push((
+                        key(t, "PipScale").cloned(),
+                        format!("{name} has a PipScale that matches no pip-scale kind: our engine reads it as none (S-0111 Import mapping)"),
+                    ));
+                }
+                let pip_kind = pip_kind.flatten().unwrap_or(0);
+                // spec: S-0111 Import mapping (Passengers absent 0, S-0507 and S-0605)
+                let capacity = int_of(key(t, "Passengers")).unwrap_or(0);
+                // spec: S-0111 Edge cases (the importer warns about a type with a passenger capacity whose pip-scale kind is not passengers)
+                if capacity > 0 && pip_kind != 3 {
+                    out.push((
+                        key(t, "Passengers").cloned(),
+                        format!("{name} carries passengers but its pip-scale kind is not passengers: its passenger row takes that kind's row length (S-0111 claim 12 and Edge cases)"),
+                    ));
+                }
+                let primary = text_of(key(t, "Primary"))
+                    .filter(|n| !n.is_empty() && !value::is_no_type(n))
+                    .and_then(|n| find_in(outcome, Kind::Weapons, &n));
+                // spec: S-0111 claim 13 (the mind-control kind and no primary weapon: M = 0; the importer warns)
+                if pip_kind == 5 && primary.is_none() {
+                    out.push((
+                        key(t, "PipScale").cloned(),
+                        format!("{name} has the mind-control pip-scale kind and no primary weapon: the original fails drawing its pips; our engine draws a row of 0 pips (S-0111 claim 13, a departure)"),
+                    ));
+                }
+                // spec: S-0111 F2 (a resource pip scale and no storage capacity, Storage absent 0: no resource pips; the importer warns)
+                if pip_kind == 2 && int_of(key(t, "Storage")).unwrap_or(0) == 0 {
+                    out.push((
+                        key(t, "PipScale").cloned(),
+                        format!("{name} has a resource pip scale and no storage capacity: our engine draws no resource pips (S-0111 F2, a departure)"),
+                    ));
+                }
+                // spec: S-0111 T2 (row length by kind: none 0, ammo the ammunition capacity (absent −1, S-0301 Import mapping), resource 3 or 5, passengers the capacity, power 10, mind control the primary's damage or 0)
+                let row = match pip_kind {
+                    1 => int_of(key(t, "Ammo")).unwrap_or(-1),
+                    2 => {
+                        if kind == Kind::Infantry {
+                            3
+                        } else {
+                            5
+                        }
+                    }
+                    3 => capacity,
+                    4 => 10,
+                    5 => primary.map_or(0, |w| int_of(key(w, "Damage")).unwrap_or(0)),
+                    _ => 0,
+                };
+                // spec: S-0111 claim 12 (a gunner transport whose row length is 0: the original's pip 0 is unspecified; our engine draws none; the importer warns)
+                if capacity > 0 && bool_of(key(t, "Gunner")) == Some(true) && row <= 0 {
+                    out.push((
+                        key(t, "Gunner").cloned(),
+                        format!("{name} is a gunner transport whose passenger row length is {row}: our engine draws no passenger pips (S-0111 claim 12, a departure)"),
+                    ));
+                }
+                let absorbing = kind == Kind::Buildings
+                    && (bool_of(key(t, "InfantryAbsorb")) == Some(true)
+                        || bool_of(key(t, "UnitAbsorb")) == Some(true));
+                // spec: S-0111 claim 12 (more passengers in an absorbing building than its row length: our engine shows the R most recent; checked at import as a capacity above the row length)
+                if absorbing && capacity > row.max(0) {
+                    out.push((
+                        key(t, "Passengers").cloned(),
+                        format!("{name} absorbs up to {capacity} passengers but its passenger row has {} pips: our engine shows only the most recent ones (S-0111 claim 12)", row.max(0)),
+                    ));
+                }
+                if matches!(kind, Kind::Infantry | Kind::Vehicles) {
+                    // spec: S-0111 claim 12 (the importer warns about a passenger-capable type with a size below 1)
+                    if dec_of(key(t, "Size")).is_some_and(|z| z.lt(1)) {
+                        out.push((
+                            key(t, "Size").cloned(),
+                            format!("{name} has a passenger size below 1: as a passenger its pips can reach below pip 0, which our engine does not draw (S-0111 claim 12)"),
+                        ));
+                    }
+                }
+                if kind == Kind::Infantry {
+                    for k in ["Pip", "OccupyPip"] {
+                        // spec: S-0111 Import mapping (a Pip or OccupyPip word that matches none gives image frame 1, with an importer warning)
+                        if text_of(key(t, k))
+                            .is_some_and(|w| value::named(&w, LIMIT, &PIPS).is_none())
+                        {
+                            out.push((
+                                key(t, k).cloned(),
+                                format!("{name} has a {k} that matches no pip colour: image frame 1 is shown (S-0111 Import mapping)"),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        for (at, text) in out {
+            self.warn_at(at.as_ref(), text);
+        }
+    }
+
     pub(super) fn cross_checks(&mut self) {
+        self.pip_scale_checks();
         let outcome = self.i.outcome;
         let empty = Vec::new();
         let weapons = outcome.registries.get(&Kind::Weapons).unwrap_or(&empty);

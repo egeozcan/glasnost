@@ -897,6 +897,7 @@ pub fn wanted_files(
     // spec: S-0111 Import mapping (the overlay sprites and palette of the status extras)
     for f in [
         super::combat::PIP_SPRITE,
+        super::combat::PIP2_SPRITE,
         super::combat::BRACKET_SPRITE,
         super::combat::OVERLAY_PALETTE,
         // spec: S-0519 claim 24 and S-0111 Import mapping (the bomb icon and its cursor palette)

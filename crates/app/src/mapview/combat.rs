@@ -14,11 +14,11 @@
 //! What S-0111 asks that is not drawn yet: the culling of claim 1 (the
 //! scene has no on-screen culling, S-0101 claim 6), the shading of claim 2
 //! (no shroud or fog), the corner brackets of selected buildings (claim 8:
-//! which corners are drawn is not established), the pip scale's rows
-//! (claims 11 to 15) and the self-heal marker (claim 16). Of the pip scale
-//! only its origin (claim 10, [`pip_origin`]), who sees it (claim 9) and the
+//! which corners are drawn is not established). The pip scale is drawn
+//! whole: its origin (claim 10, [`pip_origin`]), who sees it (claim 9), its
+//! rows and self-heal marker (claims 10 to 16, [`super::pip_scale`]) and the
 //! control-group number (claim 17, [`group_number_at`],
-//! [`Cache::group_number_item`]) are drawn. The bomb icon of S-0519 claim 24
+//! [`Cache::group_number_item`]). The bomb icon of S-0519 claim 24
 //! is drawn: the first status extra of its carrier, through the cursor
 //! palette ([`Cache::bomb_item`], [`CURSOR_PALETTE`]; S-0111 claim 19a),
 //! and so is the repair wrench of claim 19 ([`Cache::wrench_item`]).
@@ -39,6 +39,8 @@ use super::build::Assets;
 
 /// The pip sprite (S-0111 Import mapping).
 pub const PIP_SPRITE: &[u8] = b"PIPS.SHP"; // spec: S-0111 Import mapping (overlay sprites)
+/// The second pip sprite (S-0111 Import mapping).
+pub const PIP2_SPRITE: &[u8] = b"PIPS2.SHP"; // spec: S-0111 Import mapping (overlay sprites: PIPS2.SHP, the second pip sprite)
 /// The bracket sprite (S-0111 Import mapping).
 pub const BRACKET_SPRITE: &[u8] = b"PIPBRD.SHP"; // spec: S-0111 Import mapping (overlay sprites)
 /// The overlay palette the pips and brackets use (S-0111 Import mapping).
@@ -176,6 +178,8 @@ pub fn health_colour(health: i32, strength: i32, building: bool, r: &Ratios) -> 
 pub enum Sprite {
     /// The pip sprite.
     Pips,
+    /// The second pip sprite (S-0111 claim 10).
+    Pips2,
     /// The bracket sprite.
     Bracket,
     /// The bomb icon sprite (S-0519 claim 24).
@@ -189,6 +193,7 @@ impl Sprite {
     pub fn file(self) -> &'static [u8] {
         match self {
             Sprite::Pips => PIP_SPRITE,
+            Sprite::Pips2 => PIP2_SPRITE,
             Sprite::Bracket => BRACKET_SPRITE,
             Sprite::Bomb => BOMB_SPRITE,
             Sprite::Wrench => WRENCH_SPRITE,
@@ -197,7 +202,8 @@ impl Sprite {
 }
 
 /// One overlay image: a sprite's image frame drawn as a centred image at a
-/// displacement from the status anchor (S-0111 Terms).
+/// displacement from the status anchor (S-0111 Terms), or as a shadow
+/// (darkening) of that image's shape (the self-heal blink, claim 16).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pip {
     /// Sprite.
@@ -206,6 +212,20 @@ pub struct Pip {
     pub frame: usize,
     /// Displacement from the status anchor, screen pixels.
     pub at: (i32, i32),
+    /// Drawn as a shadow instead of as an image.
+    pub shadow: bool,
+}
+
+impl Pip {
+    /// An image `frame` of `sprite` at `at`.
+    pub fn image(sprite: Sprite, frame: usize, at: (i32, i32)) -> Pip {
+        Pip {
+            sprite,
+            frame,
+            at,
+            shadow: false,
+        }
+    }
 }
 
 /// The health bar of a vehicle, aircraft or infantry unit (S-0111 claim 6),
@@ -228,11 +248,7 @@ pub fn unit_bar(
     let mut out = Vec::new();
     if selected {
         // spec: S-0111 claim 6 (the bracket image when selected only; it shows through as the empty part)
-        out.push(Pip {
-            sprite: Sprite::Bracket,
-            frame: bracket_frame,
-            at: bracket_at,
-        });
+        out.push(Pip::image(Sprite::Bracket, bracket_frame, bracket_at));
     }
     // spec: S-0111 claim 6 (pip sprite image frames 16 green, 17 yellow, 18 red)
     let frame = match health_colour(health, strength, false, r) {
@@ -242,11 +258,7 @@ pub fn unit_bar(
     };
     let f = filled_segments(health, strength, n, r.mode);
     // spec: S-0111 claim 6 (segment i at x0 + 2i; only the filled segments are drawn)
-    out.extend((0..f).map(|i| Pip {
-        sprite: Sprite::Pips,
-        frame,
-        at: (x0 + 2 * i, y),
-    }));
+    out.extend((0..f).map(|i| Pip::image(Sprite::Pips, frame, (x0 + 2 * i, y))));
     out
 }
 
@@ -287,11 +299,13 @@ pub fn building_bar(
         HealthColour::Red => 4,
     };
     (0..n)
-        .map(|i| Pip {
-            sprite: Sprite::Pips,
-            frame: if i < f { frame } else { 0 },
-            // spec: S-0111 claim 7 (pip i centred at Q + (4(n − i) + 3, 2(i − n) + 4), top right first)
-            at: (q.0 + 4 * (n - i) + 3, q.1 + 2 * (i - n) + 4),
+        .map(|i| {
+            Pip::image(
+                Sprite::Pips,
+                if i < f { frame } else { 0 },
+                // spec: S-0111 claim 7 (pip i centred at Q + (4(n − i) + 3, 2(i − n) + 4), top right first)
+                (q.0 + 4 * (n - i) + 3, q.1 + 2 * (i - n) + 4),
+            )
         })
         .collect()
 }
@@ -311,12 +325,12 @@ pub fn insignia(v: F32, infantry: bool) -> Option<Pip> {
     } else {
         return None;
     };
-    Some(Pip {
-        sprite: Sprite::Pips,
+    Some(Pip::image(
+        Sprite::Pips,
         frame,
         // spec: S-0111 claim 18 (at (5, 2) for infantry, (10, 6) for everything else)
-        at: if infantry { (5, 2) } else { (10, 6) },
-    })
+        if infantry { (5, 2) } else { (10, 6) },
+    ))
 }
 
 /// The pip-scale origin *o* from the status anchor (S-0111 claim 10):
@@ -772,6 +786,10 @@ pub struct Counts {
 /// A decoded overlay sprite frame: image, frame offset, canvas size.
 type Frame = (u32, (i32, i32), (i32, i32));
 
+/// A control-group digit's scene image and its offset from the placement
+/// point (S-0111 F6).
+type GroupImage = (u32, (i32, i32));
+
 /// The images and palette rows the combat drawing added to a scene, kept so
 /// that each is added once (a scene's images only grow).
 #[derive(Clone, Debug, Default)]
@@ -782,7 +800,7 @@ pub struct Cache {
     markers: BTreeMap<Marker, u32>,
     frames: BTreeMap<(Sprite, usize), Option<Frame>>,
     group_rows: BTreeMap<[u8; 3], usize>,
-    group_digits: BTreeMap<u8, Option<(u32, (i32, i32))>>,
+    group_digits: BTreeMap<u8, Option<GroupImage>>,
 }
 
 impl Cache {
@@ -1004,7 +1022,12 @@ impl Cache {
                     y: cy - ch / 2 + fy,
                     test: DepthTest::Ignore,
                     depth: flat(),
-                    paint: Paint::Row(row),
+                    // spec: S-0111 claim 16 (the self-heal blink: drawn as a shadow, darkening, instead of as an image)
+                    paint: if p.shadow {
+                        Paint::Shadow
+                    } else {
+                        Paint::Row(row)
+                    },
                     group: Group::Status,
                     provisional: false,
                     object,
@@ -1116,27 +1139,13 @@ mod tests {
         let r = ratios("0.5", "0.25");
         let v = unit_bar(false, 3, 100, 100, true, &r);
         assert_eq!(v.len(), 18);
-        assert_eq!(
-            v[0],
-            Pip {
-                sprite: Sprite::Bracket,
-                frame: 0,
-                at: (1, -23)
-            }
-        );
+        assert_eq!(v[0], Pip::image(Sprite::Bracket, 0, (1, -23)));
         assert_eq!(v[1].at, (-15, -22));
         assert_eq!(v[17].at, (17, -22));
         assert!(v[1..].iter().all(|p| p.frame == 16));
         let i = unit_bar(true, 0, 10, 100, false, &r);
         // Hovered: no bracket; 8 × 0.1 → 0, at least 1, red.
-        assert_eq!(
-            i,
-            [Pip {
-                sprite: Sprite::Pips,
-                frame: 18,
-                at: (-5, -24)
-            }]
-        );
+        assert_eq!(i, [Pip::image(Sprite::Pips, 18, (-5, -24))]);
         let sel = unit_bar(true, 0, 60, 100, true, &r);
         assert_eq!(sel[0].frame, 1);
         assert_eq!(sel[0].at, (11, -25));

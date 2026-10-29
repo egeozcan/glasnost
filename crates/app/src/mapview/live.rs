@@ -38,6 +38,7 @@ use super::build::{
     Painter, ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
+use super::pip_scale;
 use super::slot_play;
 use super::unload::{self, Unloading};
 
@@ -1181,6 +1182,15 @@ impl Live {
         // spec: S-0111 Import mapping (a missing wrench sprite draws nothing, and the importer warns)
         if inputs.assets.get(combat::WRENCH_SPRITE).is_none() {
             live.notes.insert(WRENCH_MISSING.to_owned());
+        }
+        // spec: S-0111 Import mapping (a missing overlay sprite draws nothing, with an importer warning)
+        for (file, note) in [
+            (combat::PIP_SPRITE, PIPS_MISSING),
+            (combat::PIP2_SPRITE, PIPS2_MISSING),
+        ] {
+            if inputs.assets.get(file).is_none() {
+                live.notes.insert(note.to_owned());
+            }
         }
         live.note_cursor_palette(inputs.assets);
         live.redraw(inputs, &mut built.scene);
@@ -3704,7 +3714,7 @@ impl Live {
         // spec: S-0111 claim 11 and Edge cases (quirks.building_resource_pips_hidden: a building whose pip-scale kind is resource shows no pip scale at all, no group number included; Import mapping PipScale, absent none)
         if building
             && self.view_quirks.building_resource_pips_hidden
-            && key(b"PipScale").is_some_and(|v| v.trim_ascii().eq_ignore_ascii_case(b"tiberium"))
+            && pip_scale::pip_kind(key(b"PipScale")) == pip_scale::PipKind::Resource
         {
             return false;
         }
@@ -3717,6 +3727,228 @@ impl Live {
         }
         // spec: S-0111 claim 9 and Import mapping (a building only: PipsDrawForAll or CanBeOccupied, both absent no)
         building && (flag(b"PipsDrawForAll") == Some(true) || flag(b"CanBeOccupied") == Some(true))
+    }
+
+    /// The rows of an object's pip scale and its self-heal marker (S-0111
+    /// claims 10 to 16), in drawing order: the rows in the order of claim
+    /// 11's table, each covering the rows above it, then the marker.
+    fn pip_rows(&self, inputs: &Inputs, o: &Object) -> Vec<combat::Pip> {
+        use pip_scale::{Body, Heal, Passenger, PipKind};
+        let w = &self.world;
+        let r = w.rules();
+        let mode = r.mode;
+        let import_of = |kind: SimKind, index: u32| {
+            let i = self.types.get(&(kind, index)).copied().flatten()?;
+            Some((import_kind(kind)?, i))
+        };
+        let key_of = |kind: SimKind, index: u32, k: &[u8]| -> Option<&[u8]> {
+            let (ik, i) = import_of(kind, index)?;
+            super::build::rule(inputs.import, ik, i, k)
+        };
+        let key = |k: &[u8]| key_of(o.kind, o.type_index, k);
+        let body = match o.kind {
+            SimKind::Building => Body::Building,
+            SimKind::Infantry => Body::Infantry,
+            _ => Body::Vehicle,
+        };
+        let infantry = body == Body::Infantry;
+        let building = (body == Body::Building).then_some(o.foundation);
+        let origin = combat::pip_origin(building);
+        let tc = glasnost_sim::combat::veterancy::type_combat(w, o.id);
+        let unit = r.unit(o.kind, o.type_index);
+        let bt = building.and_then(|_| r.buildings.get(o.type_index as usize));
+        let kind = pip_scale::pip_kind(key(b"PipScale"));
+        // spec: S-0111 Import mapping (Passengers: the passenger capacity, as the transport specs give; a building's is its absorbing capacity, S-0605)
+        let capacity = match bt {
+            Some(b) => b.absorb.capacity,
+            None => unit.map_or(0, |u| u.passengers),
+        };
+        // spec: S-0111 claim 13 and Import mapping (M: the damage of the type's primary weapon; none without one)
+        let primary = tc
+            .and_then(|t| t.slots[0])
+            .map(|wp| r.combat.weapon(wp).damage);
+        let ammo_cap = tc.map_or(0, |t| t.ammo);
+        let len = pip_scale::row_length(kind, infantry, ammo_cap, capacity, primary);
+        let mut out = Vec::new();
+        // spec: S-0111 claim 11 (spawned aircraft: a type that spawns aircraft, whatever else applies)
+        if let Some(spawn) = o.spawn.as_ref() {
+            use glasnost_sim::spawn::SlotState;
+            // design: docked or ready reads as the docked state and the reloading state, the two in which the slot aircraft is inside its spawner (S-0506 claim 4), each at its own slot index (Q-2072)
+            let full: Vec<bool> = spawn
+                .slots
+                .iter()
+                .map(|sl| matches!(sl.state, SlotState::Docked | SlotState::Reloading))
+                .collect();
+            out.extend(pip_scale::places(
+                body,
+                origin,
+                &pip_scale::spawn_row(&full),
+            ));
+        }
+        // spec: S-0111 claim 11 and Import mapping (occupants: a building type that shows its occupant pips, ShowOccupantPips absent yes, with at least one occupant slot)
+        let slots = bt.map_or(0, |b| b.building.max_occupants);
+        if body == Body::Building
+            && key(b"ShowOccupantPips")
+                .and_then(glasnost_ini::value::boolean)
+                .unwrap_or(true)
+            && slots >= 1
+        {
+            let frames: Vec<usize> = o
+                .structure
+                .occupants
+                .iter()
+                .filter_map(|&id| w.obj(id))
+                .map(|p| {
+                    // spec: S-0111 claim 12 and Import mapping (the occupying infantry type's OccupyPip, the held value, initially 7)
+                    pip_scale::pip_frame(
+                        key_of(p.kind, p.type_index, b"OccupyPip"),
+                        pip_scale::OCCUPY_PIP_INITIAL,
+                    )
+                })
+                .collect();
+            out.extend(pip_scale::places(
+                body,
+                origin,
+                &pip_scale::occupant_row(slots, &frames),
+            ));
+        }
+        let passenger = |id: ObjectId| -> Option<(Passenger, glasnost_num::F64)> {
+            let p = w.obj(id)?;
+            let size = r.unit(p.kind, p.type_index).map(|u| u.size);
+            let as_pip = match p.kind {
+                // spec: S-0111 claim 12 and Import mapping (an infantry passenger's colour: its type's Pip, the held value, initially 1)
+                SimKind::Infantry => Passenger::Infantry(pip_scale::pip_frame(
+                    key_of(p.kind, p.type_index, b"Pip"),
+                    pip_scale::PIP_INITIAL,
+                )),
+                SimKind::Vehicle => Passenger::Vehicle,
+                _ => Passenger::Other,
+            };
+            Some((as_pip, size.unwrap_or(glasnost_num::F64::ZERO)))
+        };
+        if capacity > 0 {
+            // spec: S-0111 claim 11 (passengers: a type with a passenger capacity above 0, whatever its pip-scale kind)
+            let frames = if bt.is_some_and(|b| b.absorb.absorbing()) {
+                // spec: S-0111 claim 12 (absorbing buildings, the front the most recent, S-0605 Terms)
+                let recent: Vec<Passenger> = o
+                    .structure
+                    .absorbed
+                    .iter()
+                    .filter_map(|&id| passenger(id).map(|(p, _)| p))
+                    .collect();
+                pip_scale::absorbed_row(len, &recent)
+            } else {
+                // spec: S-0111 claim 12 and S-0507 claim 3 (the order of entry: position 1 is the most recent, so the passenger order reversed)
+                let entered: Vec<(Passenger, glasnost_num::F64)> = o
+                    .transport
+                    .passengers
+                    .iter()
+                    .rev()
+                    .filter_map(|&id| passenger(id))
+                    .collect();
+                pip_scale::passenger_row(len, &entered, mode)
+            };
+            let gunner = tc.is_some_and(|t| t.gunner);
+            out.extend(frames.iter().zip(0..).map(|(&f, j)| {
+                pip_scale::place(
+                    body,
+                    origin,
+                    pip_scale::passenger_place(gunner, j),
+                    f,
+                    false,
+                )
+            }));
+        } else {
+            // spec: S-0111 claim 11 (by pip-scale kind, for a passenger capacity of 0 or below: mind control claim 13, resource claim 14, ammunition claim 15, none and power no row)
+            match kind {
+                PipKind::MindControl => {
+                    let c = glasnost_sim::mind::controller(w, o.id);
+                    let count = c.map_or(0, |c| c.victims.len());
+                    // spec: S-0111 claim 13 (a type that may control without limit and controls more than M shows one more pip; highlighted while the controller's pip highlight runs, S-0601 claim 16)
+                    let overload = c
+                        .filter(|c| {
+                            c.unlimited && i64::try_from(count).unwrap_or(i64::MAX) > i64::from(len)
+                        })
+                        .map(|_| glasnost_sim::mind::highlight(w, o.id) > 0);
+                    out.extend(
+                        pip_scale::mind_row(len, count, overload)
+                            .into_iter()
+                            .map(|(j, f)| pip_scale::place(body, origin, j, f, false)),
+                    );
+                }
+                PipKind::Resource => {
+                    let load = o
+                        .econ
+                        .harvest
+                        .as_ref()
+                        .map(|h| h.load.as_slice())
+                        .or_else(|| o.econ.slave.as_ref().map(|s| s.load.as_slice()))
+                        .unwrap_or(&[]);
+                    let h = &r.econ.harvest;
+                    // spec: S-0111 claim 14 and Import mapping (C: the type's Storage, as the economy specs give: absent 0, S-0402 and S-0309 Import mapping)
+                    let storage = match o.kind {
+                        SimKind::Vehicle => {
+                            h.vehicles.get(o.type_index as usize).map(|u| u.capacity)
+                        }
+                        SimKind::Infantry => {
+                            h.infantry.get(o.type_index as usize).map(|u| u.capacity)
+                        }
+                        _ => None,
+                    }
+                    .unwrap_or_else(|| {
+                        key(b"Storage")
+                            .and_then(glasnost_ini::value::integer)
+                            .unwrap_or(0)
+                    });
+                    out.extend(pip_scale::places(
+                        body,
+                        origin,
+                        &pip_scale::resource_row(len, load, storage, mode),
+                    ));
+                }
+                PipKind::Ammo => {
+                    let wrap = tc.map_or(0, |t| t.pip_wrap);
+                    out.extend(
+                        pip_scale::ammo_row(ammo_cap, o.combat.ammo, wrap)
+                            .into_iter()
+                            .map(|(j, f)| pip_scale::place(body, origin, j, f, true)),
+                    );
+                }
+                PipKind::None | PipKind::Passengers | PipKind::Power => {}
+            }
+        }
+        // spec: S-0111 claim 16 (vehicles and infantry only; infantry and organic vehicles the infantry healing ability, other vehicles unit repair; aircraft and buildings never)
+        let heal = match o.kind {
+            SimKind::Infantry => Some(Heal::Infantry),
+            SimKind::Vehicle if tc.is_some_and(|t| t.organic) => Some(Heal::Infantry),
+            SimKind::Vehicle => Some(Heal::Unit),
+            _ => None,
+        };
+        if let Some(heal) = heal {
+            let i = match heal {
+                Heal::Infantry => 0,
+                Heal::Unit => 1,
+            };
+            // spec: S-0111 claim 16 and S-0314 claim 10 (the owner has the ability: its running self-heal total of that kind is above 0)
+            let has = o
+                .owner
+                .and_then(|h| w.houses.get(usize::from(h.0)))
+                .is_some_and(|h| h.combat.self_heal[i] > 0);
+            if has {
+                let strength = unit.map_or(0, |u| u.strength);
+                // spec: S-0111 claim 16 (T: the game-wide self-heal interval of the ability, Import mapping SelfHealInfantryFrames and SelfHealUnitFrames)
+                let period = r.combat.general.self_heal_frames[i];
+                out.push(pip_scale::self_heal(
+                    infantry,
+                    heal,
+                    origin,
+                    o.health < strength,
+                    self.shown_tick(),
+                    period,
+                ));
+            }
+        }
+        out
     }
 
     /// Redraws only the status extras (after [`Live::set_marks`]).
@@ -3881,6 +4113,11 @@ impl Live {
                     ));
                 }
             }
+            // spec: S-0111 claims 9 and 11 and State and ordering (the pip scale is drawn with the health bar when claim 9 lets the viewer see it, after the bar, covering it)
+            let pip_scale = bar.is_some() && self.pip_scale_shown(inputs, o);
+            if pip_scale {
+                pips.extend(self.pip_rows(inputs, o));
+            }
             items.extend(self.cache.pip_items(
                 scene,
                 inputs.assets,
@@ -3889,10 +4126,9 @@ impl Live {
                 Some(sim_code(o.id)),
             ));
             // spec: S-0111 claim 17 and State and ordering (the group number is drawn with the pip scale, so with the health bar, when claim 9 lets the viewer see the pip scale; drawn last among the object's own status extras, covering them)
-            if bar.is_some()
+            if pip_scale
                 && let Some(&digit) = self.group_digits.get(&o.id)
                 && let Some(font) = self.group_font.as_ref()
-                && self.pip_scale_shown(inputs, o)
                 // spec: S-0111 claim 17 (the owner's house display RGB of S-0103 claim 15; every object has an owning house in skirmish, so no ownerless case arises)
                 && let Some(&colour) = o.owner.and_then(|h| self.house_colours.get(usize::from(h.0)))
             {
@@ -4121,6 +4357,12 @@ pub fn mobile_key(o: &glasnost_sim::world::Object) -> i64 {
 /// The note for a bomb icon whose image cannot be drawn (S-0519 Import
 /// mapping).
 pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP or its image frame is missing: no bomb icon is drawn (S-0519 claim 24, Import mapping)";
+
+/// The note for a missing pip sprite (S-0111 Import mapping).
+pub const PIPS_MISSING: &str = "the pip sprite PIPS.SHP is missing: no health pips, insignia, building pip rows or self-heal marker are drawn (S-0111 Import mapping)";
+
+/// The note for a missing second pip sprite (S-0111 Import mapping).
+pub const PIPS2_MISSING: &str = "the second pip sprite PIPS2.SHP is missing: no unit pip rows or ammunition pips are drawn (S-0111 claim 10, Import mapping)";
 
 /// The note for a wrench that cannot be drawn (S-0111 Import mapping).
 pub const WRENCH_MISSING: &str = "the wrench sprite WRENCH.SHP or its image frame is missing: no repair wrench is drawn (S-0111 claim 19, Import mapping)";

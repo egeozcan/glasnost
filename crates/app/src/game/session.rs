@@ -396,7 +396,7 @@ impl Session {
         }
         let house_colours = loaded.house_radar_colours(&game.world);
         if let Some(l) = loaded.live.as_mut() {
-            // spec: S-0111 claim 17 (the group number in the owner's house colour); design: the house display RGB of S-0103 claim 15 (Q-2040)
+            // spec: S-0111 claim 17 (the digit and its border in the owner's house display RGB of S-0103 claim 15, at display precision)
             l.set_house_colours(house_colours.clone());
         }
         let radar = Radar::new(
