@@ -1307,6 +1307,44 @@ pub fn spread(ground: &Ground, row: &str, col: &str, row_side: Side) -> Result<S
     Ok(out)
 }
 
+/// Plays one pairing's side over `seeds` and reports each game and the
+/// winner counts (`--seed-range`). The records give only seeds 0 to 5, so this is
+/// a check of how often our games give an outcome, not a comparison.
+pub fn seed_range(
+    ground: &Ground,
+    row: &str,
+    col: &str,
+    side: Side,
+    seeds: std::ops::RangeInclusive<u32>,
+    threads: usize,
+) -> String {
+    let jobs: Vec<Job> = seeds
+        .map(|s| (row.to_owned(), col.to_owned(), side, s))
+        .collect();
+    let games = run_jobs(ground, &jobs, threads);
+    let mut out = format!("{row} against {col}, row on side {}:", side.text());
+    let mut counts = [0u32; 3];
+    let mut failed = 0;
+    for (j, g) in jobs.iter().zip(&games) {
+        match g {
+            Ok(g) => {
+                counts[g.winner as usize] += 1;
+                let _ = write!(out, " {}:{}@{}", j.3, g.winner.text(), g.end_frame);
+            }
+            Err(_) => failed += 1,
+        }
+    }
+    let _ = writeln!(
+        out,
+        "\n  row {} col {} none {} of {} (not played: {failed})",
+        counts[0],
+        counts[1],
+        counts[2],
+        jobs.len()
+    );
+    out
+}
+
 /// One game to play: row, column, the row's side, the seed.
 pub type Job = (String, String, Side, u32);
 
@@ -1383,7 +1421,7 @@ pub fn merge(stored: &[Game], fresh: &[Game], order: &[(String, String)]) -> Vec
 // Command line
 
 /// The usage of `arena --record`.
-pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--ai-houses] [--watch ROW,COL,A|B,SEED] [--trace|--trace-summary ROW,COL,A|B,SEED] [--spread ROW,COL,A|B]";
+pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--ai-houses] [--watch ROW,COL,A|B,SEED] [--trace|--trace-summary ROW,COL,A|B,SEED] [--spread ROW,COL,A|B] [--seed-range ROW,COL,A|B,FIRST-LAST]";
 
 /// The `arena --record` command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1413,6 +1451,10 @@ pub struct Cli {
     /// Play the houses as AI houses of our engine (human-controlled rules)
     /// instead of computer-controlled ones.
     pub ai_houses: bool,
+    /// Play one pairing's side over a range of seeds beyond the records'
+    /// 0 to 5 and count the winners ([`seed_range`]; a noise check of ours,
+    /// the records have no games for those seeds).
+    pub seed_range: Option<(String, String, Side, std::ops::RangeInclusive<u32>)>,
 }
 
 /// Default worker threads (our tool's choice).
@@ -1432,6 +1474,7 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
         groups: false,
         spread: None,
         ai_houses: false,
+        seed_range: None,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -1469,6 +1512,23 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
                     _ => return Err("--spread needs ROW,COL,A|B".into()),
                 };
                 cli.spread = Some((f[0].to_owned(), f[1].to_owned(), side));
+            }
+            "--seed-range" => {
+                let v = value(a)?;
+                let f: Vec<&str> = v.split(',').map(str::trim).collect();
+                let bad = || "--seed-range needs ROW,COL,A|B,FIRST-LAST".to_owned();
+                let side = match f.get(2).copied() {
+                    Some("A" | "a") => Side::A,
+                    Some("B" | "b") => Side::B,
+                    _ => return Err(bad()),
+                };
+                let (lo, hi) = f.get(3).and_then(|r| r.split_once('-')).ok_or_else(bad)?;
+                let lo: u32 = lo.trim().parse().map_err(|_| bad())?;
+                let hi: u32 = hi.trim().parse().map_err(|_| bad())?;
+                if lo > hi {
+                    return Err(bad());
+                }
+                cli.seed_range = Some((f[0].to_owned(), f[1].to_owned(), side, lo..=hi));
             }
             "--watch" => {
                 let v = value(a)?;
@@ -1639,6 +1699,19 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
         out.push_str(&crate::oracle_trace::trace(
             &ground, row, col, *side, *seed, *detail,
         )?);
+        return Ok(out);
+    }
+    if let Some((row, col, side, range)) = &cli.seed_range {
+        let r = chosen[0];
+        let ground = ground_of(r)?;
+        out.push_str(&seed_range(
+            &ground,
+            row,
+            col,
+            *side,
+            range.clone(),
+            cli.threads,
+        ));
         return Ok(out);
     }
     if let Some((row, col, side, seed)) = &cli.watch {
@@ -2419,5 +2492,24 @@ mod tests {
             Some((("CAOS".into(), "BFRT".into(), Side::B, 0), false))
         );
         assert!(parse_cli(&args(&["--record", "M-0001", "--trace", "CAOS,BFRT,A"])).is_err());
+    }
+
+    #[test]
+    fn seed_range_option_names_one_side_and_a_seed_range() {
+        let args = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let c = parse_cli(&args(&[
+            "--record",
+            "M-0001",
+            "--seed-range",
+            "DISK,FV,b,0-63",
+        ]))
+        .unwrap();
+        assert_eq!(
+            c.seed_range,
+            Some(("DISK".into(), "FV".into(), Side::B, 0..=63))
+        );
+        for bad in ["DISK,FV,B", "DISK,FV,C,0-5", "DISK,FV,A,5-0", "DISK,FV,A,0"] {
+            assert!(parse_cli(&args(&["--record", "M-0001", "--seed-range", bad])).is_err());
+        }
     }
 }
