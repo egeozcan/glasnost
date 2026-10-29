@@ -1,9 +1,9 @@
 ---
 id: Q-2035
 title: How a seized vehicle of a computer-controlled house in hunt gets its own movement back after a drop
-status: open
+status: answered
 related: [S-0607, S-0215, S-0309, S-0210, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
