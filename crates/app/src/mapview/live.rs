@@ -3827,7 +3827,7 @@ impl Live {
         // spec: S-0111 claim 11 (spawned aircraft: a type that spawns aircraft, whatever else applies)
         if let Some(spawn) = o.spawn.as_ref() {
             use glasnost_sim::spawn::SlotState;
-            // design: docked or ready reads as the docked state and the reloading state, the two in which the slot aircraft is inside its spawner (S-0506 claim 4), each at its own slot index (Q-2072)
+            // spec: S-0111 claim 11 (a slot counts as full while docked or reloading, S-0506 claim 4's slot states; on the rail, preparing, attacking, returning and empty do not)
             let full: Vec<bool> = spawn
                 .slots
                 .iter()

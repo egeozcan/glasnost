@@ -47,11 +47,11 @@ built here too, so the whole status-extras stack of claims 9 to 17 is now drawn.
 | 8 (corner brackets) | built (seams commit); which corners is our design (see below) | `claim_8_corner_brackets`, `claim_8_a_selected_building_in_the_live_view` |
 | 9 (who sees the pip scale) | built (r19 text; the gate now also gates the rows and the number) | `pip_rows_and_the_self_heal_marker` |
 | 10 (placement) | built | `claim_10_places`, `pip_rows_and_the_self_heal_marker` |
-| 11 (rows, order, covering) | built; spawn states and occupant order are design (Q-2072) | `claim_11_spawn_and_occupant_rows`, `a_building_occupant_row` |
+| 11 (rows, order, covering) | built; spawn packing and occupant order now spec (r25, see [intake 48](intake48-S-0111.md)) | `claim_11_spawn_and_occupant_rows`, `a_building_occupant_row` |
 | 12 (passenger pips: blocks, total size, clipping, gunner gap, absorbing buildings) | built | `claim_12_blocks_read_in_order_of_entry`, `claim_12_total_size_with_a_negative_size`, `claim_12_clipping_and_other_passengers`, `claim_12_gunner_gap_and_absorbing_buildings`, `pip_rows_and_the_self_heal_marker` |
 | 13 (mind-control pips, overload pip) | built | `claim_13_mind_control_row` |
 | 14 (resource pips) and F2 | built | `claim_14_resource_row` |
-| 15 (ammunition pips) and F3 | built; a negative wrap reads as no wrap (Q-2071) | `claim_15_ammo_row`, `pip_rows_and_the_self_heal_marker` |
+| 15 (ammunition pips) and F3 | built; a negative wrap shows no ammunition pip since r25 ([intake 48](intake48-S-0111.md)) | `claim_15_ammo_row`, `pip_rows_and_the_self_heal_marker` |
 | 16 (self-heal marker, blink, T = 0) | built | `claim_16_self_heal_marker`, `pip_rows_and_the_self_heal_marker` |
 | 17 glyph, rows past the pitch, missing glyph, box, colour | built (ac3455a) | `claim_17_glyph_and_box_follow_f6`, `claim_17_rows_past_the_pitch_paint`, `claim_17_no_box_at_a_small_pitch`, `claim_17_a_missing_digit_takes_the_fallback` |
 | 17 placement and the pip-scale gate | built (ac3455a) | `the_group_number_follows_the_pip_scale`, `a_building_group_number_and_the_resource_switch` |
@@ -67,9 +67,9 @@ built here too, so the whole status-extras stack of claims 9 to 17 is now drawn.
 
 ## Requests
 
-- **Q-2071** (new): an unknown `PipScale` word, and a negative pip wrap. Interim: an unknown word
+- **Q-2071** (answered by r25, intake 48; interim below retired) (new): an unknown `PipScale` word, and a negative pip wrap. Interim: an unknown word
   gives no pip scale (the importer warns); a negative wrap reads as no wrap.
-- **Q-2072** (new): which spawn slot states show a full pip, and in which order occupant pips
+- **Q-2072** (answered by r25, intake 48; interim below retired) (new): which spawn slot states show a full pip, and in which order occupant pips
   fill. Interim: the docked and the reloading states show frame 1 at the slot's own index;
   occupant *k* fills pip *k* in S-0508's occupant order.
 - **Q-2040**: answered by r21. Its interim is retired: our 3 × 5 digits, the white fallback for

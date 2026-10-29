@@ -4101,13 +4101,20 @@ impl Builder<'_> {
                 let word = text_of(key(t, "PipScale"));
                 let pip_kind = word.as_deref().map(|w| value::named(w, LIMIT, &KINDS));
                 if let Some(None) = pip_kind {
-                    // design: an unknown PipScale word reads as none; S-0111 states no fallback for this field (Q-2071)
+                    // spec: S-0111 Import mapping (an unknown PipScale word gives the kind none, with a warning)
                     out.push((
                         key(t, "PipScale").cloned(),
                         format!("{name} has a PipScale that matches no pip-scale kind: our engine reads it as none (S-0111 Import mapping)"),
                     ));
                 }
                 let pip_kind = pip_kind.flatten().unwrap_or(0);
+                // spec: S-0111 claim 15 (a negative pip wrap is kept as read and shows no ammunition pip; the importer warns)
+                if int_of(key(t, "PipWrap")).is_some_and(|w| w < 0) {
+                    out.push((
+                        key(t, "PipWrap").cloned(),
+                        format!("{name} has a negative PipWrap: it shows no ammunition pips (S-0111 claim 15)"),
+                    ));
+                }
                 // spec: S-0111 Import mapping (Passengers absent 0, S-0507 and S-0605)
                 let capacity = int_of(key(t, "Passengers")).unwrap_or(0);
                 // spec: S-0111 Edge cases (the importer warns about a type with a passenger capacity whose pip-scale kind is not passengers)

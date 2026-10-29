@@ -1752,7 +1752,7 @@ fn gattling_spin_settings() {
     assert_eq!(tower.combat.is_gattling, Some(true));
 }
 
-/// spec: S-0111 claims 12 and 13, F2, Edge cases and Import mapping (the pip scale's bad-data warnings: an unknown pip-scale word, passengers without the passengers kind, the mind-control kind without a primary, a resource kind without storage, a gunner transport of row length 0 or below, an absorbing building whose capacity exceeds its row, a size below 1, an unknown pip colour)
+/// spec: S-0111 claim 15 (negative PipWrap warning) and Import mapping (unknown PipScale word, Q-2071); S-0111 claims 12 and 13, F2, Edge cases and Import mapping (the pip scale's bad-data warnings: an unknown pip-scale word, passengers without the passengers kind, the mind-control kind without a primary, a resource kind without storage, a gunner transport of row length 0 or below, an absorbing building whose capacity exceeds its row, a size below 1, an unknown pip colour)
 #[test]
 fn pip_scale_warnings() {
     let base = "[InfantryTypes]\n1=Tiny\n2=Fine\n[VehicleTypes]\n1=Bus\n2=Brain\n3=Truck\n4=Cart\n5=Van\n\
@@ -1762,13 +1762,14 @@ fn pip_scale_warnings() {
                 [Bus]\nPassengers=3\nPipScale=Ammo\nGunner=yes\n\
                 [Brain]\nPipScale=MindControl\n\
                 [Truck]\nPipScale=tiberium\n\
-                [Cart]\nPipScale=sideways\n\
+                [Cart]\nPipScale=sideways\nPipWrap=-2\n\
                 [Van]\nPassengers=2\nPipScale=passengers\nGunner=yes\n\
                 [Vat]\nInfantryAbsorb=yes\nPassengers=12\nPipScale=Power\n\
                 [Tub]\nInfantryAbsorb=yes\nPassengers=6\nPipScale=Passengers\n";
     let (_, w) = sim(base, "", "");
     for text in [
         "Cart has a PipScale that matches no pip-scale kind",
+        "Cart has a negative PipWrap",
         "Bus carries passengers but its pip-scale kind is not passengers",
         "Brain has the mind-control pip-scale kind and no primary weapon",
         "Truck has a resource pip scale and no storage capacity",
@@ -1787,6 +1788,7 @@ fn pip_scale_warnings() {
         "Tub carries",
         "Tiny has a OccupyPip",
         "Cart carries",
+        "Fine has a negative",
     ] {
         assert!(!warned(&w, quiet), "{quiet}: {w:#?}");
     }
