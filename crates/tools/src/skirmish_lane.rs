@@ -675,6 +675,7 @@ fn play_ai(
         .unwrap_or(0);
     let mut cycles = CycleTrace::default();
     let mut field_spells = FieldSpells::default();
+    let mut broke_spells = BrokeSpells::default();
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -839,6 +840,9 @@ fn play_ai(
             if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
                 field_spells.observe(w.tick, game.brains(), w);
             }
+            if w.tick % BROKE_SAMPLE == 0 {
+                broke_spells.observe(w, &game.broke_probes());
+            }
             if w.tick % eco_probe == 0 {
                 for line in game.economy_probes() {
                     println!("{line}");
@@ -908,6 +912,7 @@ fn play_ai(
     if eco_probe > 0 {
         print!("{}", cycles.report());
         print!("{}", field_spells.report(game.world.tick));
+        print!("{}", broke_spells.report());
     }
     g.loads = tally.loads;
     g.hover_loads = tally.hover_loads;
@@ -2134,6 +2139,193 @@ impl FieldSpells {
                 long.len()
             );
         }
+        out
+    }
+}
+
+/// How often the broke probe samples (M8 step B10), in ticks.
+const BROKE_SAMPLE: i32 = 60;
+
+/// The spells of `GLASNOST_AI_ECOPROBE` (M8 step B10) in which a house
+/// waits broke for an economy item (`glasnost_ai::brain::BrokeProbe`:
+/// a lost refinery, a refinery by a new field or a harvester, with less
+/// money in hand than it still owes), with what runs beside it on the
+/// lines; the spells in which a house owns only its construction yard
+/// with nothing on its lines; and the game's bridge links (S-0212 claim
+/// 3) as they are enabled and disabled.
+#[derive(Default)]
+struct BrokeSpells {
+    /// Per house: the open broke spell.
+    open: BTreeMap<u8, BrokeSpell>,
+    /// Per house: the closed broke spells.
+    done: BTreeMap<u8, Vec<BrokeSpell>>,
+    /// Per house: the open yard-only spell.
+    yard_open: BTreeMap<u8, YardSpell>,
+    /// Per house: the closed yard-only spells.
+    yard_done: BTreeMap<u8, Vec<YardSpell>>,
+    /// The enabled links at the first sample and each change after it.
+    links: Vec<(i32, usize, usize)>,
+}
+
+#[derive(Clone, Debug)]
+struct BrokeSpell {
+    from: i32,
+    to: i32,
+    wait: glasnost_ai::brain::EconomyWait,
+    /// Samples by what runs beside the wait: plant, superweapon, both, neither.
+    behind: [u32; 4],
+    paying: u32,
+    saving: u32,
+    selling: u32,
+    samples: u32,
+    credits: i64,
+    income: Option<i64>,
+}
+
+#[derive(Clone, Debug)]
+struct YardSpell {
+    from: i32,
+    to: i32,
+    credits: i64,
+    most: i64,
+    selling: bool,
+    harvesters: usize,
+    army: usize,
+    refinery: i64,
+    plant: i64,
+    wanted: Option<Role>,
+}
+
+impl BrokeSpells {
+    fn observe(&mut self, w: &World, probes: &[(HouseId, glasnost_ai::brain::BrokeProbe)]) {
+        let tick = w.tick;
+        for (h, p) in probes {
+            let h = h.0;
+            match p.wait.filter(|_| p.broke) {
+                Some(wait) => {
+                    if self.open.get(&h).is_some_and(|s| s.wait != wait)
+                        && let Some(s) = self.open.remove(&h)
+                    {
+                        self.done.entry(h).or_default().push(s);
+                    }
+                    let s = self.open.entry(h).or_insert(BrokeSpell {
+                        from: tick,
+                        to: tick,
+                        wait,
+                        behind: [0; 4],
+                        paying: 0,
+                        saving: 0,
+                        selling: 0,
+                        samples: 0,
+                        credits: p.credits,
+                        income: p.income,
+                    });
+                    s.to = tick;
+                    s.samples += 1;
+                    let plant = p.plant_lined && !p.lined;
+                    s.behind[match (plant, p.superweapon_lined) {
+                        (true, false) => 0,
+                        (false, true) => 1,
+                        (true, true) => 2,
+                        (false, false) => 3,
+                    }] += 1;
+                    s.paying += u32::from(p.paying);
+                    s.saving += u32::from(p.saving);
+                    s.selling += u32::from(p.selling);
+                }
+                None => {
+                    if let Some(s) = self.open.remove(&h) {
+                        self.done.entry(h).or_default().push(s);
+                    }
+                }
+            }
+            if p.yard_only && p.idle {
+                let s = self.yard_open.entry(h).or_insert(YardSpell {
+                    from: tick,
+                    to: tick,
+                    credits: p.credits,
+                    most: p.credits,
+                    selling: p.selling,
+                    harvesters: p.harvesters,
+                    army: p.army,
+                    refinery: p.refinery_price,
+                    plant: p.plant_price,
+                    wanted: p.wanted,
+                });
+                s.to = tick;
+                s.most = s.most.max(p.credits);
+            } else if let Some(s) = self.yard_open.remove(&h) {
+                self.yard_done.entry(h).or_default().push(s);
+            }
+        }
+        let enabled = w.cells.links.iter().filter(|l| l.enabled).count();
+        if self.links.last().is_none_or(|&(_, _, e)| e != enabled) {
+            self.links.push((tick, w.cells.links.len(), enabled));
+        }
+    }
+
+    fn report(&mut self) -> String {
+        for (h, s) in std::mem::take(&mut self.open) {
+            self.done.entry(h).or_default().push(s);
+        }
+        for (h, s) in std::mem::take(&mut self.yard_open) {
+            self.yard_done.entry(h).or_default().push(s);
+        }
+        let mut out = String::new();
+        for (h, spells) in &self.done {
+            let long: Vec<String> = spells
+                .iter()
+                .filter(|s| s.to - s.from > LONG_SPELL)
+                .map(|s| {
+                    format!(
+                        "{}-{} {:?} plant/sw/both/neither {:?} paying {} saving {} selling {} of {} credits {} income {:?}",
+                        s.from,
+                        s.to,
+                        s.wait,
+                        s.behind,
+                        s.paying,
+                        s.saving,
+                        s.selling,
+                        s.samples,
+                        s.credits,
+                        s.income
+                    )
+                })
+                .collect();
+            let _ = writeln!(
+                out,
+                "brokespell house {h}: {} spells, {} ticks, longest {}; over {LONG_SPELL} ticks: {} {long:?}",
+                spells.len(),
+                spells.iter().map(|s| s.to - s.from + BROKE_SAMPLE).sum::<i32>(),
+                spells.iter().map(|s| s.to - s.from).max().unwrap_or(0),
+                long.len()
+            );
+        }
+        for (h, spells) in &self.yard_done {
+            let _ = writeln!(
+                out,
+                "yardonly house {h}: {} spells, {} ticks; {:?}",
+                spells.len(),
+                spells.iter().map(|s| s.to - s.from + BROKE_SAMPLE).sum::<i32>(),
+                spells
+                    .iter()
+                    .map(|s| format!(
+                        "{}-{} credits {} most {} selling {} harvesters {} army {} refinery {} plant {} wants {:?}",
+                        s.from,
+                        s.to,
+                        s.credits,
+                        s.most,
+                        s.selling,
+                        s.harvesters,
+                        s.army,
+                        s.refinery,
+                        s.plant,
+                        s.wanted
+                    ))
+                    .collect::<Vec<_>>()
+            );
+        }
+        let _ = writeln!(out, "bridgelinks (tick, links, enabled): {:?}", self.links);
         out
     }
 }

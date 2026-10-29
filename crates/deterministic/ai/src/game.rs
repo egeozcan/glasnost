@@ -175,6 +175,16 @@ impl Game {
             .collect()
     }
 
+    /// What each brain's broke house waits behind now
+    /// (`Brain::broke_probe`, M8 step B10), in the order of the brains
+    /// (local-lane reports).
+    pub fn broke_probes(&self) -> Vec<(HouseId, crate::brain::BrokeProbe)> {
+        self.brains
+            .iter()
+            .map(|b| (b.house(), b.broke_probe(&self.world)))
+            .collect()
+    }
+
     /// The AI houses.
     pub fn ai_houses(&self) -> Vec<HouseId> {
         self.brains.iter().map(Brain::house).collect()
