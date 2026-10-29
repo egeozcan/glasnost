@@ -629,14 +629,19 @@ fn overlays_changed_in_play_are_redrawn() {
 // ---------------------------------------------------------------------------
 
 /// The test context's assets plus invented overlay sprites and palette:
-/// a pip sprite of 20 frames on a canvas of 8 × 6 (frame i a 2 × 2 block of
-/// value i + 1 at (3, 2)), a bracket sprite of 2 frames on 36 × 10, and an
-/// overlay palette.
+/// a pip sprite of 21 frames on a canvas of 8 × 6 (frame i a 2 × 2 block of
+/// value i + 1 at (3, 2)), a second pip sprite of 21 frames on the same
+/// canvas (frame i a 4 × 1 strip of value i + 1 at (2, 2)), a bracket
+/// sprite of 2 frames on 36 × 10, and an overlay palette.
 fn overlay_assets() -> super::build::Assets {
     let (_, _, mut assets) = context();
     assets.insert(
         super::combat::PIP_SPRITE,
-        super::tests::shp((8, 6), 20, (2, 2), (3, 2)),
+        super::tests::shp((8, 6), 21, (2, 2), (3, 2)),
+    );
+    assets.insert(
+        super::combat::PIP2_SPRITE,
+        super::tests::shp((8, 6), 21, (4, 1), (2, 2)),
     );
     assets.insert(
         super::combat::BRACKET_SPRITE,
@@ -5290,9 +5295,19 @@ fn cursor_palette_component_wrap() {
     assert!(cursor_palette(b"short", &PaletteQuirks::default()).is_none());
 }
 
-/// The control-group number items (our 7 × 9 image) of object `id` in
-/// `scene`, with their place and the colour their row gives index 1.
-fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
+/// The game font of the control-group number tests: `combat::digit_font`
+/// with bitmap height 7 and line pitch 10, so a number's image spans its
+/// box from 3 pixels left of the placement point and its glyph's top row
+/// at the point.
+fn number_font() -> Option<super::combat::GroupFont> {
+    super::combat::GroupFont::new(&super::combat::digit_font(7, 10))
+}
+
+/// The control-group number items of object `id` in `scene` (the images
+/// holding the box's black fill, index 2), with their placement point (the
+/// image's left edge plus 3) and the colours their row gives the house
+/// colour (index 1) and the fill.
+fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16, u16)> {
     use glasnost_render::scene::Group;
     scene
         .items
@@ -5300,14 +5315,14 @@ fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
         .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
         .filter(|i| {
             let img = &scene.images[i.image as usize];
-            (img.width(), img.height()) == super::combat::GROUP_NUMBER_SIZE
+            img.height() == 8 && img.pixels().contains(&super::combat::GROUP_FILL)
         })
         .map(|i| {
             let row = match i.paint {
-                Paint::Row(r) => scene.rows[r][1],
+                Paint::Row(r) => &scene.rows[r],
                 _ => panic!("the group number is drawn through a row"),
             };
-            ((i.x, i.y), row)
+            ((i.x + 3, i.y), row[1], row[2])
         })
         .collect()
 }
@@ -5316,9 +5331,9 @@ fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
 /// from a vehicle's anchor and (−14, −29) from an infantry unit's, in the
 /// owner's house colour), claims 3 and 9 and State and ordering (drawn with
 /// the pip scale: only with the health bar, only for an owner the viewer
-/// may inspect, after the object's other status extras). The image's
-/// top-left corner at the point and the house display RGB are our design
-/// (Q-2040).
+/// may inspect, after the object's other status extras); the glyph's top
+/// row and left column at the point, the box 3 pixels to its left, in the
+/// house display RGB of S-0103 claim 15 with a black fill (OV12 a and b).
 #[test]
 fn the_group_number_follows_the_pip_scale() {
     use glasnost_render::compose::pack565;
@@ -5348,6 +5363,7 @@ fn the_group_number_follows_the_pip_scale() {
         })
     };
     live.set_house_colours(vec![red, blue]);
+    live.set_group_font(number_font());
     live.set_viewer(Some(HouseId(0)));
     // spec: S-0111 claim 17 (keyboard groups 5 and 10: index 5 shows 5, index 0 shows 0)
     let digits: std::collections::BTreeMap<_, _> = [
@@ -5371,14 +5387,18 @@ fn the_group_number_follows_the_pip_scale() {
     let (ax, ay) = anchor(&live, cart);
     assert_eq!(
         group_numbers(&scene, cart),
-        vec![((ax - 14, ay - 26), px(red))]
+        vec![((ax - 14, ay - 26), px(red), 0)]
     );
     let last = scene
         .items
         .iter()
         .rfind(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
         .unwrap();
-    assert_eq!((last.x, last.y), (ax - 14, ay - 26), "it covers the bar");
+    assert_eq!(
+        (last.x, last.y),
+        (ax - 14 - 3, ay - 26),
+        "it covers the bar"
+    );
     // The enemy walker hovered: a health bar but no pip scale (claim 9), so no number.
     live.set_marks(&[cart], Some(walker));
     live.redraw_status(&inputs, &mut scene);
@@ -5389,7 +5409,7 @@ fn the_group_number_follows_the_pip_scale() {
     let (wx, wy) = anchor(&live, walker);
     assert_eq!(
         group_numbers(&scene, walker),
-        vec![((wx - 14, wy - 29), px(blue))]
+        vec![((wx - 14, wy - 29), px(blue), 0)]
     );
     assert!(
         group_numbers(&scene, cart).is_empty(),
@@ -5460,8 +5480,9 @@ fn a_building_group_number_and_the_resource_switch() {
     );
     let mut scene = built.scene;
     live.set_house_colours(vec![[200, 40, 40], [40, 40, 200]]);
+    live.set_group_font(number_font());
     live.set_viewer(Some(HouseId(0)));
-    live.set_group_digits([(own, 1), (theirs, 2)].into());
+    live.set_group_digits([(own, 1), (theirs, 5)].into());
     live.set_marks(&[own], Some(theirs));
     // Switch on (the original): a resource-kind building shows no number.
     live.redraw_status(&inputs, &mut scene);
@@ -5482,5 +5503,466 @@ fn a_building_group_number_and_the_resource_switch() {
         let at = group_numbers(&scene, id);
         assert_eq!(at.len(), 1, "one number for {id:?}");
         assert_eq!(at[0].0, (ax + o.0 - 4, ay + o.1 - 36));
+    }
+}
+
+/// Two grouped carts of house 0 one cell apart along the map's *y* axis,
+/// the first created at the larger sort key, in a live game of the
+/// synthetic combat ruleset. Returns the game, scene, map, import,
+/// catalogue and the two carts (lower key first).
+#[allow(clippy::type_complexity)]
+fn two_carts(
+    assets: &super::build::Assets,
+) -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    ObjectId,
+    ObjectId,
+) {
+    use glasnost_sim::rules::Kind as SimKind;
+    let (import, catalogue, _) = context();
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut world = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let later = testkit::spawn(
+        &mut world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 1),
+        0,
+    );
+    let earlier = testkit::spawn(
+        &mut world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 0),
+        0,
+    );
+    assert!(
+        later < earlier,
+        "object ID order is the reverse of the key order"
+    );
+    let rules = world.rules_arc();
+    let live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    (live, built.scene, map, import, catalogue, earlier, later)
+}
+
+/// spec: S-0111 claim 17, State and ordering and scenario OV12 e (each object's status extras,
+/// its number last, are complete before the next object's begin, in the object order of S-0102
+/// claims 1 and 6: the ground layer by increasing sort key, not object ID order, so a later
+/// object's bar covers an earlier object's number); Import mapping (without a usable game font,
+/// S-0014 claim 6, no number and no box)
+#[test]
+fn group_numbers_follow_the_object_order() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, earlier, later) = two_carts(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_house_colours(vec![[200, 40, 40], [40, 40, 200]]);
+    live.set_group_font(number_font());
+    live.set_viewer(Some(HouseId(0)));
+    live.set_group_digits([(earlier, 1), (later, 1)].into());
+    live.set_marks(&[later, earlier], None);
+    live.redraw(&inputs, &mut scene);
+    let owner =
+        |i: &glasnost_render::scene::Item| (i.group == Group::Status).then_some(i.object).flatten();
+    let codes: Vec<u32> = scene.items.iter().filter_map(owner).collect();
+    let (e, l) = (sim_code(earlier), sim_code(later));
+    let last_of_earlier = codes.iter().rposition(|&c| c == e).unwrap();
+    let first_of_later = codes.iter().position(|&c| c == l).unwrap();
+    assert!(
+        last_of_earlier < first_of_later,
+        "the earlier object's extras are complete before the later one's begin"
+    );
+    // The earlier cart's number is the last of its own extras.
+    let earlier_items: Vec<_> = scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(e))
+        .collect();
+    let last = earlier_items.last().unwrap();
+    assert!(
+        scene.images[last.image as usize]
+            .pixels()
+            .contains(&super::combat::GROUP_FILL)
+    );
+    assert_eq!(group_numbers(&scene, earlier).len(), 1);
+    assert_eq!(group_numbers(&scene, later).len(), 1);
+    // Without a font: neither digit nor box.
+    live.set_group_font(None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(group_numbers(&scene, earlier).is_empty());
+    assert!(
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(e))
+            .all(|i| !scene.images[i.image as usize]
+                .pixels()
+                .contains(&super::combat::GROUP_FILL)),
+        "no box"
+    );
+}
+
+/// The status items of `id` drawn from the pip sprites, in draw order:
+/// for each its pip centre (the pip sprite's test frames sit at (3, 2) and
+/// the second's at (2, 2) on an 8 × 6 canvas), whether it is from the
+/// second pip sprite, its image frame and whether it is a shadow.
+fn pip_scale_items(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), bool, usize, bool)> {
+    use glasnost_render::scene::Group;
+    scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+        .filter_map(|i| {
+            let img = &scene.images[i.image as usize];
+            let frame = usize::from(img.pixels()[0]) - 1;
+            let shadow = i.paint == Paint::Shadow;
+            match (img.width(), img.height()) {
+                (2, 2) => Some(((i.x + 1, i.y + 1), false, frame, shadow)),
+                (4, 1) => Some(((i.x + 2, i.y + 1), true, frame, shadow)),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// A live game of the synthetic combat ruleset with a cart of house 0 able
+/// to carry 3 passengers (pip-scale kind passengers in the import) and a
+/// walker of house 0 with 4 rounds of ammunition (pip-scale kind ammo,
+/// passenger pip colour yellow). Returns the live game, the scene, the map,
+/// import and catalogue, and the two units.
+#[allow(clippy::type_complexity)]
+fn pip_scale_live(
+    assets: &super::build::Assets,
+) -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    ObjectId,
+    ObjectId,
+) {
+    use glasnost_sim::rules::Kind as SimKind;
+    let rules = format!(
+        "{}[CART]\nPipScale=Passengers\n[WALKER]\nPipScale=ammo\nPip=Yellow\n",
+        RULES
+            .replace(
+                "[InfantryTypes]\n1=MANX\n",
+                "[InfantryTypes]\n1=MANX\n2=WALKER\n"
+            )
+            .replace(
+                "[VehicleTypes]\n1=CARX\n",
+                "[VehicleTypes]\n1=CARX\n2=CART\n"
+            )
+    );
+    assert!(rules.contains("2=WALKER") && rules.contains("2=CART"));
+    let (import, catalogue, _) = context_with(&rules);
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut ruleset = testkit::combat_ruleset();
+    let cart_type = ruleset.sim.vehicles.get_mut("CART").unwrap();
+    cart_type.passengers = Some(3);
+    let walker_type = ruleset.sim.infantry.get_mut("WALKER").unwrap();
+    walker_type.combat.ammo = Some(4);
+    let mut world = testkit::game_with(&ruleset, 24, 3);
+    let cart = testkit::spawn(
+        &mut world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, -3, 0),
+        16384,
+    );
+    let walker = testkit::spawn(
+        &mut world,
+        SimKind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(24, 3, 0),
+        16384,
+    );
+    let rules = world.rules_arc();
+    let live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    (live, built.scene, map, import, catalogue, cart, walker)
+}
+
+/// spec: S-0111 claims 10, 11 and 12 (a transport's passenger row from the
+/// second pip sprite at o + (−5 + 4j, 0), the infantry passenger's pip
+/// colour, the empty pips 0), claim 15 (ammunition pips 3 pixels higher,
+/// image frame 13 while j < a), claim 16 (the unit-repair marker at
+/// (33, −32) from o, from the pip sprite; a shadow while damaged in the
+/// first 6 ticks of the period), State and ordering (the pip scale after
+/// the health bar)
+#[test]
+fn pip_rows_and_the_self_heal_marker() {
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let anchor = |l: &Live, id: ObjectId| {
+        let p = l.world.reference_point(id);
+        project_lifted(p.x, p.y, p.z)
+    };
+    live.set_viewer(Some(HouseId(0)));
+    live.world.obj_mut(cart).unwrap().transport.passengers = vec![walker];
+    live.world.obj_mut(walker).unwrap().combat.ammo = 2;
+    live.set_marks(&[cart, walker], None);
+    live.redraw_status(&inputs, &mut scene);
+    let (ax, ay) = anchor(&live, cart);
+    // o = (−10, 10): pip j at (−15 + 4j, 10); the walker's yellow pip (2) first.
+    assert_eq!(
+        pip_scale_items(&scene, cart)
+            .into_iter()
+            .filter(|p| p.1)
+            .collect::<Vec<_>>(),
+        vec![
+            ((ax - 15, ay + 10), true, 2, false),
+            ((ax - 11, ay + 10), true, 0, false),
+            ((ax - 7, ay + 10), true, 0, false),
+        ]
+    );
+    // The infantry row at o + (6 + 4j, 0), the ammunition 3 pixels higher.
+    let (bx, by) = anchor(&live, walker);
+    assert_eq!(
+        pip_scale_items(&scene, walker)
+            .into_iter()
+            .filter(|p| p.1)
+            .collect::<Vec<_>>(),
+        vec![
+            ((bx - 4, by + 7), true, 13, false),
+            ((bx, by + 7), true, 13, false),
+        ]
+    );
+    // No self-heal ability yet: no marker. The owner gains unit repair.
+    assert!(!pip_scale_items(&scene, cart).iter().any(|p| p.2 == 20));
+    live.world.houses[0].combat.self_heal[1] = 1;
+    live.redraw_status(&inputs, &mut scene);
+    let items = pip_scale_items(&scene, cart);
+    let marker = *items.last().unwrap();
+    assert_eq!(marker, ((ax + 23, ay - 22), false, 20, false));
+    // Drawn after the health bar's segments.
+    let first_segment = items.iter().position(|p| p.2 == 16).unwrap();
+    let first_row = items.iter().position(|p| p.1).unwrap();
+    assert!(first_segment < first_row);
+    // The walker (infantry) has no infantry healing: no marker.
+    assert!(
+        !pip_scale_items(&scene, walker)
+            .iter()
+            .any(|p| p.2 == 13 && !p.1)
+    );
+    // Damaged at a tick whose remainder by 1000 is at most 5: a shadow.
+    let strength = live.world.obj(cart).unwrap().health;
+    live.world.obj_mut(cart).unwrap().health = strength - 1;
+    live.redraw_status(&inputs, &mut scene);
+    let marker = *pip_scale_items(&scene, cart).last().unwrap();
+    assert_eq!(marker, ((ax + 23, ay - 22), false, 20, true));
+    // An enemy's pip scale is not shown: no rows, no marker.
+    live.set_viewer(Some(HouseId(1)));
+    live.redraw_status(&inputs, &mut scene);
+    assert!(
+        !pip_scale_items(&scene, cart)
+            .iter()
+            .any(|p| p.1 || p.2 == 20)
+    );
+}
+
+/// spec: S-0111 Import mapping (a missing pip sprite: the rows drawn from it
+/// are left out, the other sprite's items stay, and a note is given)
+#[test]
+fn a_missing_pip_sprite_leaves_its_rows_out() {
+    for missing in [super::combat::PIP2_SPRITE, super::combat::PIP_SPRITE] {
+        let mut assets = overlay_assets();
+        assets.set(missing, None);
+        let (mut live, mut scene, map, import, catalogue, cart, walker) = pip_scale_live(&assets);
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        live.set_viewer(Some(HouseId(0)));
+        live.world.obj_mut(cart).unwrap().transport.passengers = vec![walker];
+        live.world.obj_mut(walker).unwrap().combat.ammo = 2;
+        live.world.houses[0].combat.self_heal[1] = 1;
+        live.set_marks(&[cart, walker], None);
+        live.redraw_status(&inputs, &mut scene);
+        let items: Vec<_> = [cart, walker]
+            .into_iter()
+            .flat_map(|id| pip_scale_items(&scene, id))
+            .collect();
+        if missing == super::combat::PIP2_SPRITE {
+            assert!(live.notes.contains(super::live::PIPS2_MISSING));
+            assert!(!live.notes.contains(super::live::PIPS_MISSING));
+            assert!(!items.iter().any(|p| p.1), "no PIPS2.SHP rows");
+            assert!(items.iter().any(|p| p.2 == 20), "the marker stays");
+        } else {
+            assert!(live.notes.contains(super::live::PIPS_MISSING));
+            assert!(!live.notes.contains(super::live::PIPS2_MISSING));
+            assert!(items.iter().all(|p| p.1), "nothing from PIPS.SHP");
+            assert!(items.iter().any(|p| p.1), "the PIPS2.SHP rows stay");
+        }
+    }
+}
+
+/// spec: S-0111 claims 10 and 11 (a building's occupant row from the pip
+/// sprite at o + (6 + 4j, −1 + 2j): the occupant's occupant pip image
+/// frame, 6 for an empty slot; ShowOccupantPips off hides the row)
+#[test]
+fn a_building_occupant_row() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    for show in [true, false] {
+        let rules = format!(
+            "{}[WALKER]\nOccupyPip=PersonRed\n[TOWER]\nShowOccupantPips={}\n",
+            RULES
+                .replace(
+                    "[InfantryTypes]\n1=MANX\n",
+                    "[InfantryTypes]\n1=MANX\n2=WALKER\n"
+                )
+                .replace(
+                    "[BuildingTypes]\n1=HUTX\n",
+                    "[BuildingTypes]\n1=HUTX\n2=TOWER\n"
+                ),
+            if show { "yes" } else { "no" }
+        );
+        let (import, catalogue, _) = context_with(&rules);
+        let map = testkit::empty_map(24);
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (mut built, painter) = build_parts(&inputs, true);
+        let mut ruleset = testkit::combat_ruleset();
+        ruleset
+            .sim
+            .buildings
+            .get_mut("TOWER")
+            .unwrap()
+            .max_number_occupants = Some(2);
+        let mut world = testkit::game_with(&ruleset, 24, 3);
+        let tower = testkit::spawn(
+            &mut world,
+            SimKind::Building,
+            "TOWER",
+            0,
+            testkit::mid(24, -3, 0),
+            0,
+        );
+        let walker = testkit::spawn(
+            &mut world,
+            SimKind::Infantry,
+            "WALKER",
+            0,
+            testkit::mid(24, 3, 0),
+            0,
+        );
+        world.obj_mut(tower).unwrap().structure.occupants = vec![walker];
+        let rules = world.rules_arc();
+        let mut live = Live::new(
+            &inputs,
+            &mut built,
+            painter,
+            (world, rules, testkit::setup(3), Vec::new()),
+        );
+        let mut scene = built.scene;
+        live.set_viewer(Some(HouseId(0)));
+        live.set_marks(&[tower], None);
+        live.redraw_status(&inputs, &mut scene);
+        let p = live.world.reference_point(tower);
+        let (ax, ay) = project_lifted(p.x, p.y, p.z);
+        let (w, d) = live.world.obj(tower).unwrap().foundation;
+        // spec: S-0111 claim 10 (whole-cell foundations: o = (−15(W + D), trunc(15(D − W) / 2)))
+        let o = (ax - 15 * (w + d), ay + 15 * (d - w) / 2);
+        let row: Vec<_> = pip_scale_items(&scene, tower)
+            .into_iter()
+            .filter(|p| p.2 == 10 || p.2 == 6)
+            .collect();
+        if show {
+            assert_eq!(
+                row,
+                vec![
+                    ((o.0 + 6, o.1 - 1), false, 10, false),
+                    ((o.0 + 10, o.1 + 1), false, 6, false),
+                ]
+            );
+        } else {
+            assert!(row.is_empty());
+        }
     }
 }

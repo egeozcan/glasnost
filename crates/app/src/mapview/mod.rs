@@ -22,6 +22,7 @@ pub mod particles;
 pub mod piece_pool;
 #[cfg(test)]
 mod piece_tests;
+pub mod pip_scale;
 pub mod png;
 #[cfg(test)]
 mod projectile_tests;

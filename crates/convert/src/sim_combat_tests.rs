@@ -1751,3 +1751,43 @@ fn gattling_spin_settings() {
     assert_eq!(tower.combat.stage_thresholds, Some(vec![4, 8, 0, 0, 0, 0]));
     assert_eq!(tower.combat.is_gattling, Some(true));
 }
+
+/// spec: S-0111 claims 12 and 13, F2, Edge cases and Import mapping (the pip scale's bad-data warnings: an unknown pip-scale word, passengers without the passengers kind, the mind-control kind without a primary, a resource kind without storage, a gunner transport of row length 0 or below, an absorbing building whose capacity exceeds its row, a size below 1, an unknown pip colour)
+#[test]
+fn pip_scale_warnings() {
+    let base = "[InfantryTypes]\n1=Tiny\n2=Fine\n[VehicleTypes]\n1=Bus\n2=Brain\n3=Truck\n4=Cart\n5=Van\n\
+                [BuildingTypes]\n1=Vat\n2=Tub\n\
+                [Tiny]\nSize=0.5\nPip=plaid\nOccupyPip=PersonRed\n\
+                [Fine]\nSize=1\nPip=Yellow\n\
+                [Bus]\nPassengers=3\nPipScale=Ammo\nGunner=yes\n\
+                [Brain]\nPipScale=MindControl\n\
+                [Truck]\nPipScale=tiberium\n\
+                [Cart]\nPipScale=sideways\n\
+                [Van]\nPassengers=2\nPipScale=passengers\nGunner=yes\n\
+                [Vat]\nInfantryAbsorb=yes\nPassengers=12\nPipScale=Power\n\
+                [Tub]\nInfantryAbsorb=yes\nPassengers=6\nPipScale=Passengers\n";
+    let (_, w) = sim(base, "", "");
+    for text in [
+        "Cart has a PipScale that matches no pip-scale kind",
+        "Bus carries passengers but its pip-scale kind is not passengers",
+        "Brain has the mind-control pip-scale kind and no primary weapon",
+        "Truck has a resource pip scale and no storage capacity",
+        "Bus is a gunner transport whose passenger row length is -1",
+        "Vat absorbs up to 12 passengers but its passenger row has 10 pips",
+        "Tiny has a passenger size below 1",
+        "Tiny has a Pip that matches no pip colour",
+    ] {
+        assert!(warned(&w, text), "{text}: {w:#?}");
+    }
+    for quiet in [
+        "Fine has a",
+        "Van is a gunner",
+        "Van carries",
+        "Tub absorbs",
+        "Tub carries",
+        "Tiny has a OccupyPip",
+        "Cart carries",
+    ] {
+        assert!(!warned(&w, quiet), "{quiet}: {w:#?}");
+    }
+}
