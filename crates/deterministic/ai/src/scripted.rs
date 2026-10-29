@@ -1391,8 +1391,9 @@ impl Script {
     /// its refineries would not keep one harvester at work (fewer than
     /// [`CELLS_PER_HARVESTER`] cells), the field of [`Script::ore_goal`]
     /// lies beyond that reach of every refinery, no refinery is on its
-    /// lines, and a refinery fits with its foundation within that reach of
-    /// the field. A person builds a refinery at the field his harvesters
+    /// lines, and a refinery type it can build both has a cell in the
+    /// build spiral (`Script::placeable`) and fits with its foundation
+    /// within that reach of the field. A person builds a refinery at the field his harvesters
     /// drive to once the one by his refinery runs dry (M8 step B8: in the
     /// quick lane on maps 2 and 8, with the refinery beside the home field,
     /// the Allied miners loaded a median of 15 to 34 cells from their only
@@ -1437,11 +1438,18 @@ impl Script {
             .into_iter()
             .filter(|&t| !keeps_slaves(w, t))
             .collect();
+        // design: the want holds only while the refinery could be ordered
+        // and placed now (M8 step B9): `Script::build` orders a type only
+        // when `Script::placeable` finds it a cell, so a refinery that fits
+        // by the field but not in the build spiral was wanted with nothing
+        // ever ordered, and the tech climb behind it waited. Read afresh at
+        // every think, the want comes back when a cell opens, a new field
+        // is explored or a harvester reaches one (`Script::ore_goal`).
         !refineries.iter().any(|&r| dist2(r, goal) <= reach)
             && !types.iter().any(|&t| self.in_line(w, t))
-            && types
-                .iter()
-                .any(|&t| self.refinery_site(w, t, goal, Some(reach)).is_some())
+            && types.iter().any(|&t| {
+                self.placeable(w, t) && self.refinery_site(w, t, goal, Some(reach)).is_some()
+            })
     }
 
     /// The power plant the plan builds next: the cheapest power plant type

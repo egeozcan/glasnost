@@ -217,6 +217,52 @@ fn builds_a_refinery_by_the_far_field_once_the_home_field_runs_dry() {
     );
 }
 
+// Tuning of our own opponent (M8 step B9): a house whose home field has run dry wants no refinery by the far field while no cell of its build spiral takes one, since it would never order it and the rest of its plan would wait; the want is read afresh, so it comes back when a cell opens.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn wants_no_far_field_refinery_it_could_not_order() {
+    let map = far_field_map();
+    let mut g = built_up(&map);
+    scout(&mut g.world);
+    let w = &mut g.world;
+    let ore: Vec<CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            glasnost_sim::econ::resource::resource_at(w, c).is_some() && dist2(c, far()) > 8
+        })
+        .collect();
+    for c in ore {
+        glasnost_sim::crush::remove_overlay(w, c);
+    }
+    let brain = Brain::with_plan(w, &map, H, fixture::plan());
+    assert!(
+        brain.wants_field_refinery(w),
+        "the far field's refinery is wanted"
+    );
+    // A power plant beyond the build spiral (12 rings around the yard)
+    // toward the far field, so that a refinery may stand beside it there,
+    // and a soldier on every free cell of the spiral, none beyond it.
+    let home = w.obj(of(w, "YARD")[0]).expect("the yard").pos.cell();
+    let plant = CellXY::new(home.x + 9, home.y - 14);
+    testkit::spawn(w, Kind::Building, "POWR", 0, plant, 0);
+    for dy in -12..=12 {
+        for dx in -12..=12 {
+            let c = CellXY::new(home.x + dx, home.y + dy);
+            if free(w, c) && w.cells.usable(c) {
+                testkit::spawn(w, Kind::Infantry, "WALKER", 0, c, 0);
+            }
+        }
+    }
+    let brain = Brain::with_plan(w, &map, H, fixture::plan());
+    assert!(
+        !brain.wants_field_refinery(w),
+        "no cell of the build spiral takes it"
+    );
+}
+
 /// The yard vehicle type.
 fn mcv(w: &World) -> glasnost_sim::econ::TypeRef {
     glasnost_sim::econ::TypeRef {
