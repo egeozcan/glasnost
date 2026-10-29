@@ -252,6 +252,10 @@ pub fn apply_pending(w: &mut World) {
     for hi in 0..w.houses.len() {
         let orders = std::mem::take(&mut w.houses[hi].pending);
         // spec: S-0213 claim 3 (non-behaviour orders first, in issue order)
+        // design: C7-P5 yield (any order for a unit ends its giving way)
+        for a in orders.iter().filter_map(Order::actor) {
+            crate::path::order_given(w, a);
+        }
         for o in orders
             .iter()
             .filter(|o| !matches!(o, Order::Behaviour { .. }))

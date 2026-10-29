@@ -67,6 +67,26 @@ pub fn off(names: &[&str]) -> Rules {
     )
 }
 
+/// The play-fixes layer with the named switches back on (the original's
+/// position): the layer less those fixes.
+pub fn layer_without(names: &[&str]) -> Rules {
+    let text = format!(
+        "{{\"globals\": {{\"quirks\": {{{}}}}}}}",
+        names
+            .iter()
+            .map(|n| format!("\"{n}\": true"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let src = glasnost_rules::resolve::Source {
+        layer: "test",
+        file: "switches.jsonc",
+        text: &text,
+    };
+    let base = ruleset(Rules::Layer).globals.quirks;
+    Rules::Custom(glasnost_rules::layers::quirks_with(base, &src).expect("known switches"))
+}
+
 fn push(r: &mut Ruleset, reg: &str, n: &str) {
     r.registries.entry(reg.into()).or_default().push(n.into());
 }

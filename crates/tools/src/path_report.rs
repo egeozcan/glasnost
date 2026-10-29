@@ -1154,6 +1154,12 @@ fn event_text(n: &Noted, _samples: &[Sample]) -> String {
             dest.map(|c| format!(", destination {}", cell_text(c)))
                 .unwrap_or_default()
         ),
+        What::GaveWay { refuge, to } => format!(
+            "gives way in a deadlock{}: goes to {}",
+            to.map(|x| format!(" to unit {}", x.0)).unwrap_or_default(),
+            cell_text(*refuge)
+        ),
+        What::Resumed => "resumes the order it gave way from".into(),
         What::Spread { common, cell } => format!(
             "group order: its destination {} spread to {}",
             cell_text(*common),

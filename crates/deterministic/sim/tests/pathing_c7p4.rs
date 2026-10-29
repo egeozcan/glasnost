@@ -20,8 +20,9 @@ mod pathing_common;
 use pathing_common::*;
 
 /// Our switches (C7 parts 4 and 5), each defaulting to the original.
-const DESIGN: [&str; 4] = [
+const DESIGN: [&str; 5] = [
     "path_through_stalled_blockers",
+    "deadlock_no_yield",
     "unreachable_move_dropped",
     "group_spread_no_detour",
     "rally_point_shared",
@@ -33,10 +34,21 @@ const SEEDS: [u32; 3] = [7, 8, 9];
 #[test]
 #[ignore = "measurement: prints the scenario table"]
 fn measure() {
-    // The reference, the layer, and each switch of ours alone off.
-    let mut sets = vec![("reference", Rules::Reference), ("layer", Rules::Layer)];
+    // The reference, the layer, each switch of ours alone off, and the
+    // layer less each of ours (SETS=a,b picks sets by label).
+    let mut sets: Vec<(String, Rules)> = vec![
+        ("reference".into(), Rules::Reference),
+        ("layer".into(), Rules::Layer),
+    ];
     for n in DESIGN {
-        sets.push((n, off(&[n])));
+        sets.push((n.into(), off(&[n])));
+    }
+    for n in DESIGN {
+        sets.push((format!("layer less {n}"), layer_without(&[n])));
+    }
+    if let Ok(pick) = std::env::var("SETS") {
+        let pick: Vec<&str> = pick.split(',').collect();
+        sets.retain(|(l, _)| pick.contains(&l.as_str()));
     }
     for (label, rules) in sets {
         println!("\n{label}\n\n{HEADER}");
@@ -105,6 +117,10 @@ fn diag() {
         }
         glasnost_sim::tick::step(&mut s.w);
         for e in trace::take(&s.w) {
+            if matches!(e.what, What::GaveWay { .. } | What::Resumed) {
+                let i = ids.iter().position(|&x| x == e.unit);
+                println!("{} unit {i:?} {:?}", e.tick, e.what);
+            }
             if e.unit == watch && t < 1200 {
                 match &e.what {
                     What::Step { .. } | What::Blocked { .. } if quiet => {}
@@ -225,6 +241,85 @@ fn rally_spread_off_gives_each_released_unit_its_own_cell() {
     assert_eq!(off.missing, 0);
 }
 
+// spec: S-0212 claims 8 and 22 (the original, and C7-P4's detour alone: two groups meeting in a passage with no way round stay stuck); design: C7-P5 yield (off: the side heading against the oldest unit gives way, and every unit arrives)
+#[test]
+fn yield_off_clears_a_deadlock_with_no_way_round() {
+    let detour = off(&["path_through_stalled_blockers"]);
+    let both_off = off(&["path_through_stalled_blockers", "deadlock_no_yield"]);
+    let on = play(rooms(detour, 6, 7));
+    let off = play(rooms(both_off, 6, 7));
+    assert!(on.missing > 0, "{on:?}");
+    assert_eq!(off.missing, 0, "{off:?}");
+    assert_eq!(off.give_ups, 0);
+    assert_eq!(off.unsettled, 0);
+}
+
+// design: C7-P5 yield (the yield acts only on a deadlock that C7-P4's stalled-blocker graph finds and that has no way round: alone it changes nothing, and with the graph it leaves queues, and a deadlock with a way round, alone)
+#[test]
+fn yield_off_leaves_queues_and_the_reference_alone() {
+    let (a, b) = both("deadlock_no_yield", |r, s| rooms(r, 6, s));
+    assert_eq!(
+        moves(&a),
+        moves(&b),
+        "without the graph no deadlock is found"
+    );
+    let detour = off(&["path_through_stalled_blockers"]);
+    let both_off = off(&["path_through_stalled_blockers", "deadlock_no_yield"]);
+    for scene in [
+        |r, s| infantry_gap(r, 16, s),
+        |r, s| gap(r, 1, 20, s),
+        |r, s| corridor(r, 2, 3, s),
+        |r, s| corridor(r, 2, 6, s),
+    ] as [fn(Rules, u32) -> Scene; 4]
+    {
+        assert_eq!(
+            moves(&play(scene(detour, 7))),
+            moves(&play(scene(both_off, 7)))
+        );
+    }
+}
+
+// design: C7-P5 yield (the giving-way state is game state: saved, loaded and hashed)
+#[test]
+fn a_unit_giving_way_survives_save_and_load() {
+    use glasnost_sim::save;
+    let mut s = rooms(Rules::Layer, 6, 7);
+    let mut t = 0;
+    while !s.w.objects.values().any(|o| o.path.yielding.is_some()) {
+        glasnost_sim::tick::step(&mut s.w);
+        t += 1;
+        assert!(t < s.bound, "a unit gives way");
+    }
+    let bytes = save::save(&s.w);
+    let mut b = save::load(&bytes, s.w.rules_arc(), s.w.catalogue.clone().unwrap()).unwrap();
+    assert_eq!(save::state_hash(&s.w), save::state_hash(&b));
+    for _ in 0..1500 {
+        glasnost_sim::tick::step(&mut s.w);
+        glasnost_sim::tick::step(&mut b);
+    }
+    assert_eq!(save::state_hash(&s.w), save::state_hash(&b));
+    assert!(
+        s.w.objects.values().all(|o| o.path.yielding.is_none()),
+        "every unit resumed"
+    );
+}
+
+// design: C7-P5 yield (the giving-way state is hashed)
+#[test]
+fn the_giving_way_state_is_hashed() {
+    use glasnost_sim::path::Yield;
+    use glasnost_sim::save::state_hash;
+    use glasnost_sim::world::Target;
+    let s = rooms(Rules::Layer, 3, 7);
+    let mut b = s.w.clone();
+    b.obj_mut(s.goals[0].id).unwrap().path.yielding = Some(Yield {
+        resume: Target::Cell(at(0, 0)),
+        to: vec![s.goals[1].id],
+        since: 0,
+    });
+    assert_ne!(state_hash(&s.w), state_hash(&b));
+}
+
 // design: C7-P4 and C7-P5 (the play-fixes layer turns each of our switches off)
 #[test]
 fn the_layer_turns_our_switches_off() {
@@ -239,4 +334,3 @@ fn the_layer_turns_our_switches_off() {
         DESIGN.len()
     );
 }
-

@@ -409,6 +409,16 @@ pub struct Quirks {
     // spec: S-0212 claim 23 (the failed computation; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub unreachable_move_dropped: bool,
+    /// No unit of a deadlock gives way (the original). Off (our design, C7
+    /// part 5): in a deadlock of stalled units (`path_through_stalled_blockers`
+    /// off) with no way round, the units near it heading against the one
+    /// with the lowest object id give way: each goes to the nearest free cell
+    /// off the other side's way, waits there until the other side has
+    /// arrived or passed it (or for a longest wait) and then resumes its
+    /// order. A deadlock with a way round keeps C7 part 4's detour.
+    // spec: S-0212 claims 8 and 22 (the mode-2 re-path through moving blockers; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub deadlock_no_yield: bool,
     /// The rebuild of a house's threat records counts its own and its allies' objects.
     // spec: S-0212 claim 16a and Edge cases (quirks.threat_rebuild_counts_friends)
     #[serde(default = "on")]
@@ -2166,6 +2176,7 @@ impl Default for Quirks {
             train_exclusion_search_only: true,
             path_through_stalled_blockers: true,
             unreachable_move_dropped: true,
+            deadlock_no_yield: true,
             threat_rebuild_counts_friends: true,
             negative_threat_field: true,
             aircraft_threat_stays_put: true,
@@ -2811,6 +2822,7 @@ impl Quirks {
                 self.path_through_stalled_blockers,
             ),
             ("unreachable_move_dropped", self.unreachable_move_dropped),
+            ("deadlock_no_yield", self.deadlock_no_yield),
             (
                 "threat_rebuild_counts_friends",
                 self.threat_rebuild_counts_friends,

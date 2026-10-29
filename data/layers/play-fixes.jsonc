@@ -76,6 +76,16 @@
       // ever and none arrives.
       // Answers: the scenario "corridor 2, 6 each way" of docs/m8-claims/c7-pathing.md.
       "path_through_stalled_blockers": false,
+      // Our design, C7-P5 yield (quirks.deadlock_no_yield off; S-0212 claims 8 and 22): in a
+      // deadlock of stalled units with no way round (no detour found, and a fill round the
+      // deadlock from the unit or from its destination is shut in), the units near it heading
+      // against the one with the lowest object id give way: each goes to the nearest free cell
+      // off the other side's way, waits until the other side has arrived or passed it (at most
+      // 900 ticks) and resumes its order. A deadlock with a way round keeps C7-P4's detour. It
+      // needs path_through_stalled_blockers off, which finds the deadlock. On (the original),
+      // two groups that meet in a passage with no way round stay stuck. Answers: the scenario
+      // "two rooms, 6 each way" of docs/m8-claims/c7-pathing.md.
+      "deadlock_no_yield": false,
       // Our design, C7-P4 nearest reachable cell (quirks.unreachable_move_dropped off; S-0212
       // claim 23): a move whose computation fails tries once more towards the nearest cell
       // the unit can stand on in its own reach region. On (the original), units sent to a cell
