@@ -3065,6 +3065,46 @@ fn lost_target_every_place_reserved_lands_at_a_landing_spot() {
     assert_eq!(o.combat.ammo, 2);
 }
 
+// spec: S-0501 claim 40 (the selection runs at the first processing of every ordinary move, also one started inside another behaviour's processing: here claim 17's run end, whose fall-back, table T2's no-pad row, gives the F8 landing spot and starts move in the attack's processing; a landing spot that F7 refuses by then, here one holding a vehicle, is replaced at that first processing, one tick later) and claim 6 (the replacement point, given without a target, is not raised). The target is lost on the approach while every place of the pad is held.
+#[test]
+fn claim_40_a_run_end_move_takes_the_selection() {
+    let r = one_dock(|_| {});
+    let (mut w, k, a) = built_with(&r, "JET1");
+    lose_target_on_approach(&mut w, a, Loss::Kill, |w| {
+        let other = put(w, Kind::Aircraft, "SCOUT", 0, -3, 3);
+        assert!(
+            air::request_contact(w, other, k),
+            "another aircraft holds the place"
+        );
+    });
+    let moves = run_until(&mut w, 300, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Move)
+    });
+    assert!(moves, "move: {}", describe(&w, a));
+    let Some(Target::Cell(spot)) = w.obj(a).unwrap().dest else {
+        panic!("a landing spot: {}", describe(&w, a));
+    };
+    let blocker = testkit::spawn(&mut w, Kind::Vehicle, "VICTIM", 0, spot, 0);
+    let bc = w.obj(blocker).unwrap().pos.cell();
+    assert_eq!(bc, spot, "the vehicle stands on the landing spot");
+    step(&mut w);
+    let Some(Target::Cell(c)) = w.obj(a).unwrap().dest else {
+        panic!("a substituted cell: {}", describe(&w, a));
+    };
+    assert_ne!(
+        c,
+        spot,
+        "replaced at the first processing: {}",
+        describe(&w, a)
+    );
+    assert_eq!(
+        st(&w, a).flying_to,
+        Some(Target::Cell(c)),
+        "given to the flight"
+    );
+    assert!(!st(&w, a).raised, "given without a target, not raised");
+}
+
 // spec: S-0501 claim 6 (the replacement is made when the movement point is accepted with a target and ammunition; the held point keeps it after the target goes; a destination that is not the held one reads the state now)
 #[test]
 fn claim_6_held_point_height_fixed_at_acceptance() {
