@@ -1238,7 +1238,7 @@ fn a_destroyed_bridge_cuts_a_field_off() {
     );
 }
 
-// S-0404 claims 1 and 5 (the earlier line is paid first; the hold order) and PLAN §4.7 (M8 step B10): a house that still has a refinery and builds another (the refinery by a new field) with less money in hand than it owes, and an income over the last window that would not make up the rest, pays for it first, holding its army, as a person pauses the rest of the sidebar to get his income back; with the balance in hand or coming in within a window, or with an enemy near its base, it holds nothing.
+// S-0404 claims 1 and 5 (the earlier line is paid first; the hold order) and PLAN §4.7 (M8 step B10): a house that still has a refinery and builds another (the refinery by a new field) with less money in hand than it owes, pays for it first, holding its army, as a person pauses the rest of the sidebar to get his income back, earning or not; with the balance in hand, or with an enemy near its base, it holds nothing.
 #[test]
 fn pays_first_for_a_refinery_by_a_new_field() {
     let map = fixture::map();
@@ -1262,8 +1262,9 @@ fn pays_first_for_a_refinery_by_a_new_field() {
     };
     // (Earning nothing at all, the house would sell out, `Script::sell_when_broke`.)
     assert!(holds(&w, 1, 0));
-    assert!(holds(&w, owed / 2, owed / 2 - 1));
-    assert!(!holds(&w, owed / 2, owed - owed / 2));
+    // Earning, but short of the balance in hand: the earlier line may
+    // take the income first.
+    assert!(holds(&w, owed, owed - 1));
     assert!(!holds(&w, 1, owed + 1000));
     let near = w
         .objects

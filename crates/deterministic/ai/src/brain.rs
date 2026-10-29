@@ -770,8 +770,7 @@ impl Brain {
 
     /// Whether a refinery the house builds while it has one (the refinery
     /// by a new field, `Script::field_refinery`) runs on its lines owing
-    /// more than the money in hand and its income over the last window
-    /// together, the house is safe ([`Self::safe`]),
+    /// more than the money in hand, the house is safe ([`Self::safe`]),
     /// not selling out, and not a slave-miner house (S-0402 claim 14).
     /// The house then pays for its economy first ([`Self::paying`]).
     fn field_refinery_short(&self, w: &World) -> bool {
@@ -789,14 +788,11 @@ impl Brain {
         // games) had a house broke with that refinery waiting: in 77 a
         // superweapon building on another line drew the money first (the
         // earlier line is paid first, S-0404 claim 1), in the rest the
-        // army lines did. Only a house that its income would not bring to
-        // the balance within one more income window (`Script::income`)
-        // pays first: one that earns it in time keeps its army lines
-        // running, as a person does while the money comes in. A house that
-        // is not safe keeps training, as the superweapon saving does.
-        let Some(income) = s.income() else {
-            return false;
-        };
+        // army lines did. A test of the income over the last window
+        // (`Script::income`) beside the credits was tried and never fired
+        // in those spells: the house earned, and the earlier line took it
+        // first. A house that is not safe keeps training, as the
+        // superweapon saving does.
         let short = w.econ.lines.lines.iter().any(|l| {
             l.house == h
                 && l.item.as_ref().is_some_and(|i| {
@@ -804,7 +800,7 @@ impl Brain {
                         && !scripted::keeps_slaves(w, i.t)
                         && i.hold == Hold::None
                         && !i.done()
-                        && i64::from(credits) + income < i64::from(i.owed)
+                        && credits < i.owed
                 })
         });
         short && self.safe(w)
