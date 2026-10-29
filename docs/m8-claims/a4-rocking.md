@@ -19,8 +19,8 @@ Ours, marked `design: Q-2081` in `rocking.rs`:
   facing relative to the body's;
 - each tick an angle adds its rate, stops at its limit with the rate level, and a damped spring
   (period 18 ticks, ζ 0.2) pulls the rate back;
-- the weight is a vehicle type's imported weight (1.0 when absent or not positive), and 1.0 for
-  other kinds;
+- only vehicles rock (an aircraft is drawn by its flight attitude), weighted by the type's
+  imported weight (1.0 when absent or not positive);
 - the sideways limit is π/4;
 - a centre-cell object with no source is pushed from *P*;
 - the drone's +*s* side is the host's right;
