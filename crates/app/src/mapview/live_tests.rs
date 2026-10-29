@@ -5039,8 +5039,9 @@ fn bomb_icon_claim24() {
     assert_eq!(icon.test, DepthTest::Ignore);
     assert!(status.len() > 1, "the bar and bracket follow the icon");
     match (icon.paint, status[1].paint) {
-        (Paint::Row(a), Paint::Row(b)) => {
-            assert_ne!(a, b, "the cursor palette, not the overlay one")
+        // spec: S-0111 claim 2 (the bomb icon and the bracket are both shaded, each through its own palette's table)
+        (Paint::Lit(a), Paint::Lit(b)) => {
+            assert_ne!(a.base, b.base, "the cursor palette, not the overlay one")
         }
         other => panic!("unexpected paints {other:?}"),
     }
@@ -5237,7 +5238,7 @@ fn repair_wrench_claim19() {
     assert_eq!(pixels[0], frame as u8 + 1);
     assert_eq!((w.x, w.y), (ax - 5 + 4, ay - 5 + 4));
     assert_eq!(w.test, DepthTest::Ignore);
-    assert!(matches!(w.paint, Paint::Row(_)));
+    assert!(matches!(w.paint, Paint::Lit(_)), "shaded: S-0111 claim 2");
     assert!(!notes.contains(super::live::WRENCH_MISSING));
     // Not under repair: nothing.
     let (none, ..) = wrench_run(&wrench_assets(), false, None, false);
@@ -5649,7 +5650,7 @@ fn pip_scale_items(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), bool, usize,
         .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
         .filter_map(|i| {
             let img = &scene.images[i.image as usize];
-            let frame = usize::from(img.pixels()[0]) - 1;
+            let frame = usize::from(img.pixels()[0]).saturating_sub(1);
             let shadow = i.paint == Paint::Shadow;
             match (img.width(), img.height()) {
                 (2, 2) => Some(((i.x + 1, i.y + 1), false, frame, shadow)),
@@ -5965,4 +5966,271 @@ fn a_building_occupant_row() {
             assert!(row.is_empty());
         }
     }
+}
+
+/// Draws one scene item's first pixel into a 1 x 1 frame at light-alpha `alpha` and returns the
+/// 5-6-5 colour that results.
+fn shroud_pixel(scene: &Scene, item: &glasnost_render::scene::Item, alpha: u8) -> u16 {
+    use glasnost_render::compose::{ComposeQuirks, DepthSource, Drawing, Frame};
+    let ItemDepth::Profile {
+        profile,
+        bias,
+        companion: _,
+    } = item.depth
+    else {
+        panic!("a flat profile");
+    };
+    let img = &scene.images[item.image as usize];
+    let first = img.pixels().iter().copied().find(|&p| p != 0).unwrap();
+    let one = glasnost_fmt::image::IndexedImage::new(1, 1, vec![first]).unwrap();
+    let mut f = Frame::new(1, 1, 0, 1000);
+    f.set_light_alpha(vec![alpha]);
+    f.draw(
+        &Drawing {
+            image: &one,
+            x: 0,
+            y: 0,
+            test: item.test,
+            depth: DepthSource::Profile {
+                profile,
+                bias,
+                companion: None,
+            },
+            paint: item.paint,
+        },
+        &scene.rows,
+        &ComposeQuirks::default(),
+    );
+    f.color[0]
+}
+
+/// spec: S-0111 claim 1 and scenario OV1's shape (status extras are drawn while the status anchor
+/// lies within the battlefield view widened by 360 pixels left and right and 180 above and below,
+/// equality included, and vanish one pixel beyond; at each of the four edges; no view known: all)
+#[test]
+fn claim_1_culling_margins() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, _walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let p = live.world.reference_point(cart);
+    let (ax, ay) = project_lifted(p.x, p.y, p.z);
+    let (vw, vh) = (200u32, 100u32);
+    live.set_marks(&[cart], None);
+    let count = |live: &mut Live, scene: &mut Scene, origin: (i32, i32)| {
+        live.battlefield = Some((origin, (vw, vh)));
+        live.redraw_status(&inputs, scene);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
+            .count()
+    };
+    live.battlefield = None;
+    live.redraw_status(&inputs, &mut scene);
+    let all = scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
+        .count();
+    assert!(all > 1, "the bracket and the segments");
+    // Left: the anchor 360 left of the view (origin 360 to its right), then 361.
+    assert_eq!(count(&mut live, &mut scene, (ax + 360, ay)), all);
+    assert_eq!(count(&mut live, &mut scene, (ax + 361, ay)), 0);
+    // Right: the view's right edge is at origin + 200; the anchor 360 beyond it.
+    assert_eq!(count(&mut live, &mut scene, (ax - 200 - 360, ay)), all);
+    assert_eq!(count(&mut live, &mut scene, (ax - 200 - 361, ay)), 0);
+    // Above and below: 180.
+    assert_eq!(count(&mut live, &mut scene, (ax, ay + 180)), all);
+    assert_eq!(count(&mut live, &mut scene, (ax, ay + 181)), 0);
+    assert_eq!(count(&mut live, &mut scene, (ax, ay - 100 - 180)), all);
+    assert_eq!(count(&mut live, &mut scene, (ax, ay - 100 - 181)), 0);
+    // The cull is on the anchor alone: the view origin moving back draws them again.
+    assert_eq!(count(&mut live, &mut scene, (ax, ay)), all);
+}
+
+/// spec: S-0111 claim 2 and scenario OV2's shape (the bracket image and the insignia take the
+/// light-alpha shade at neutral brightness, so a shroud piece darkens them; health segments are
+/// not shaded and keep their palette colour under it)
+#[test]
+fn claim_2_shading_of_the_bracket_and_the_insignia() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, _walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let two = glasnost_num::F64::from_i64(2, glasnost_num::Rounding::TowardZero)
+        .to_f32(glasnost_num::Rounding::TowardZero);
+    live.world.obj_mut(cart).unwrap().combat.experience = two;
+    live.set_marks(&[cart], None);
+    live.redraw_status(&inputs, &mut scene);
+    let items: Vec<_> = scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
+        .copied()
+        .collect();
+    // The elite insignia is frame 15 (pixel 16), the bracket frame 0 (pixel 1).
+    let find = |v: u8| {
+        items
+            .iter()
+            .find(|i| scene.images[i.image as usize].pixels()[0] == v)
+            .copied()
+            .unwrap()
+    };
+    let (insignia, bracket) = (find(16), find(1));
+    let segment = items
+        .iter()
+        .find(|i| matches!(i.paint, Paint::Row(_)))
+        .copied()
+        .unwrap();
+    for shaded in [insignia, bracket] {
+        let Paint::Lit(s) = shaded.paint else {
+            panic!("shaded by the light-alpha values");
+        };
+        // Neutral brightness: rho for 1000 per mille, whatever the map's lighting.
+        assert_eq!(s.rho, glasnost_render::light::brightness_rho(1000) as u16);
+        let lit = shroud_pixel(&scene, &shaded, 127);
+        let dark = shroud_pixel(&scene, &shaded, 0);
+        assert_ne!(lit, 0, "visible outside the shroud");
+        assert_eq!(dark, 0, "fully shrouded: black");
+    }
+    let open = shroud_pixel(&scene, &segment, 127);
+    let covered = shroud_pixel(&scene, &segment, 0);
+    assert_ne!(open, 0);
+    assert_eq!(
+        open, covered,
+        "segments keep their palette colour under shroud"
+    );
+}
+
+/// spec: S-0111 claim 8 (a selected building gets corner brackets instead of a bracket image: thin
+/// lines of overlay-palette index 15, the box's corners, a line along each edge for a quarter of
+/// its length rounded toward zero in leptons, projected as displacements)
+#[test]
+fn claim_8_corner_brackets() {
+    use super::combat::{corner_image, corner_segments, displacement};
+    // A 2 x 3 foundation, box 208 leptons high: alpha = 256, beta = 384; quarters 128, 192, 52.
+    let segs = corner_segments(2, 3, 208);
+    // The top face's left corner (-256, 384, 208) runs along x toward +x ...
+    let from = displacement(-256, 384, 208);
+    assert!(segs.contains(&(from, displacement(-256 + 128, 384, 208))));
+    // ... along y toward -y, and down the vertical edge by 208 / 4 = 52 leptons.
+    assert!(segs.contains(&(from, displacement(-256, 384 - 192, 208))));
+    assert!(segs.contains(&(from, displacement(-256, 384, 208 - 52))));
+    // A base corner's vertical line runs up.
+    let base_front = displacement(256, 384, 0);
+    assert!(segs.contains(&(base_front, displacement(256, 384, 52))));
+    // The quarter rounds toward zero: 105 / 4 = 26.
+    let odd = corner_segments(1, 1, 105);
+    let top = displacement(-128, -128, 105);
+    assert!(odd.contains(&(top, displacement(-128, -128, 105 - 26))));
+    // The image holds only the requested index, and its pixels include the segments' ends.
+    let (img, (ox, oy)) = corner_image(2, 3, 208, 15).unwrap();
+    assert!(img.pixels().iter().all(|&p| p == 0 || p == 15));
+    for &(a, b) in &segs {
+        for (x, y) in [a, b] {
+            assert_eq!(img.get((x - ox) as u32, (y - oy) as u32), Some(15));
+        }
+    }
+}
+
+/// spec: S-0111 claims 8 and 2 in the live view: a selected tower shows its corner brackets
+/// (index 15, shaded) and no bracket image; a hovered one shows none; units keep their bracket image
+#[test]
+fn claim_8_a_selected_building_in_the_live_view() {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, _walker) =
+        combat_live_with(3, assets.clone());
+    let tower = testkit::spawn(
+        &mut live.world,
+        SimKind::Building,
+        "TOWER",
+        0,
+        testkit::mid(24, 4, 4),
+        0,
+    );
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    assert!(live.bracket_drawn(&assets, tower));
+    assert!(live.bracket_drawn(&assets, cart));
+    let mut bare = assets.clone();
+    bare.set(super::combat::OVERLAY_PALETTE, None);
+    assert!(!live.bracket_drawn(&bare, tower));
+    let mine = |scene: &Scene| -> Vec<_> {
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(tower)))
+            .copied()
+            .collect()
+    };
+    live.set_marks(&[], Some(tower));
+    live.redraw_status(&inputs, &mut scene);
+    assert!(
+        mine(&scene)
+            .iter()
+            .all(|i| !scene.images[i.image as usize].pixels().contains(&15)),
+        "hovered: no corner brackets"
+    );
+    live.set_marks(&[tower], None);
+    live.redraw_status(&inputs, &mut scene);
+    let corners: Vec<_> = mine(&scene)
+        .into_iter()
+        .filter(|i| scene.images[i.image as usize].pixels().contains(&15))
+        .collect();
+    assert_eq!(corners.len(), 1);
+    assert!(matches!(corners[0].paint, Paint::Lit(_)), "shaded");
+    assert_ne!(shroud_pixel(&scene, &corners[0], 127), 0);
+    assert_eq!(shroud_pixel(&scene, &corners[0], 0), 0, "shroud darkens it");
+    // The corners lie around the status anchor: the image spans it.
+    let p = live.world.reference_point(tower);
+    let (ax, _) = project_lifted(p.x, p.y, p.z);
+    let w = scene.images[corners[0].image as usize].width() as i32;
+    assert!(corners[0].x < ax && ax < corners[0].x + w);
+    // The unit keeps its bracket image (frame 34 wide).
+    live.set_marks(&[cart], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(
+        scene
+            .items
+            .iter()
+            .any(|i| i.object == Some(sim_code(cart))
+                && scene.images[i.image as usize].width() == 34)
+    );
 }

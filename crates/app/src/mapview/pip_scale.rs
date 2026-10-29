@@ -425,6 +425,8 @@ pub fn self_heal(
         frame,
         at,
         shadow,
+        // spec: S-0111 claim 2 (pips are not shaded)
+        shaded: false,
     }
 }
 
