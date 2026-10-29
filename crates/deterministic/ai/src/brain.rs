@@ -770,7 +770,8 @@ impl Brain {
 
     /// Whether a refinery the house builds while it has one (the refinery
     /// by a new field, `Script::field_refinery`) runs on its lines owing
-    /// more than the money in hand, the house is safe ([`Self::safe`]),
+    /// more than the money in hand and its income over the last window
+    /// together, the house is safe ([`Self::safe`]),
     /// not selling out, and not a slave-miner house (S-0402 claim 14).
     /// The house then pays for its economy first ([`Self::paying`]).
     fn field_refinery_short(&self, w: &World) -> bool {
@@ -783,12 +784,19 @@ impl Brain {
         let credits = w.houses[usize::from(h.0)].credits;
         // design: a refinery by a new field that waits for money is paid
         // first, as a person pauses the superweapon and the army lines to
-        // get his income back (M8 step B10). In the quick lane 118 spells of
-        // over 3 000 ticks (689 340 ticks in 60 games) had a house broke
-        // with that refinery waiting: in 77 a superweapon building on
-        // another line drew the money first (the earlier line is paid
-        // first, S-0404 claim 1), in the rest the army lines did. A house
-        // that is not safe keeps training, as the superweapon saving does.
+        // get his income back (M8 step B10). In the quick lane on main
+        // e375cf6, 116 spells of over 3 000 ticks (669 000 ticks in 60
+        // games) had a house broke with that refinery waiting: in 77 a
+        // superweapon building on another line drew the money first (the
+        // earlier line is paid first, S-0404 claim 1), in the rest the
+        // army lines did. Only a house that its income would not bring to
+        // the balance within one more income window (`Script::income`)
+        // pays first: one that earns it in time keeps its army lines
+        // running, as a person does while the money comes in. A house that
+        // is not safe keeps training, as the superweapon saving does.
+        let Some(income) = s.income() else {
+            return false;
+        };
         let short = w.econ.lines.lines.iter().any(|l| {
             l.house == h
                 && l.item.as_ref().is_some_and(|i| {
@@ -796,7 +804,7 @@ impl Brain {
                         && !scripted::keeps_slaves(w, i.t)
                         && i.hold == Hold::None
                         && !i.done()
-                        && credits < i.owed
+                        && i64::from(credits) + income < i64::from(i.owed)
                 })
         });
         short && self.safe(w)

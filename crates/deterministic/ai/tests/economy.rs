@@ -1238,7 +1238,7 @@ fn a_destroyed_bridge_cuts_a_field_off() {
     );
 }
 
-// S-0404 claims 1 and 5 (the earlier line is paid first; the hold order) and PLAN §4.7 (M8 step B10): a house that still has a refinery and builds another (the refinery by a new field) with less money in hand than it owes pays for it first, holding its army, as a person pauses the rest of the sidebar to get his income back; with the balance in hand, or with an enemy near its base, it holds nothing.
+// S-0404 claims 1 and 5 (the earlier line is paid first; the hold order) and PLAN §4.7 (M8 step B10): a house that still has a refinery and builds another (the refinery by a new field) with less money in hand than it owes, and an income over the last window that would not make up the rest, pays for it first, holding its army, as a person pauses the rest of the sidebar to get his income back; with the balance in hand or coming in within a window, or with an enemy near its base, it holds nothing.
 #[test]
 fn pays_first_for_a_refinery_by_a_new_field() {
     let map = fixture::map();
@@ -1251,20 +1251,20 @@ fn pays_first_for_a_refinery_by_a_new_field() {
     to_think(&mut w);
     assert!(has_role(&w, Role::Refinery), "the house keeps its refinery");
     let owed = item_of(&w, refinery).owed;
-    assert!(owed > w.houses[0].credits);
-    let orders = think(&mut w.clone(), &map, plan(2));
-    assert!(
-        orders.contains(&Order::Hold { what: soldier }),
-        "{orders:?}"
-    );
-    assert!(!orders.contains(&Order::Hold { what: refinery }));
-    let mut rich = w.clone();
-    rich.houses[0].credits = owed + 1000;
-    let orders = think(&mut rich, &map, plan(2));
-    assert!(
-        !orders.contains(&Order::Hold { what: soldier }),
-        "{orders:?}"
-    );
+    assert!(owed > 0);
+    let holds = |w: &World, per_window: i32, credits: i32| {
+        let mut w = w.clone();
+        let mut brain = earning(&mut w, &map, per_window);
+        w.houses[0].credits = credits;
+        let orders = brain.think(&w);
+        assert!(!orders.contains(&Order::Hold { what: refinery }));
+        orders.contains(&Order::Hold { what: soldier })
+    };
+    // (Earning nothing at all, the house would sell out, `Script::sell_when_broke`.)
+    assert!(holds(&w, 1, 0));
+    assert!(holds(&w, owed / 2, owed / 2 - 1));
+    assert!(!holds(&w, owed / 2, owed - owed / 2));
+    assert!(!holds(&w, 1, owed + 1000));
     let near = w
         .objects
         .values()
@@ -1279,14 +1279,10 @@ fn pays_first_for_a_refinery_by_a_new_field() {
         glasnost_map::CellXY::new(near.x + 3, near.y - 3),
         0,
     );
-    let orders = think(&mut w, &map, plan(2));
-    assert!(
-        !orders.contains(&Order::Hold { what: soldier }),
-        "{orders:?}"
-    );
+    assert!(!holds(&w, 1, 0));
 }
 
-// S-0404 claim 2 and S-0402 claim 18 (a refinery's free harvester), S-0407 claim 10 (the ever-built count), S-0408 (selling) and PLAN §4.7 (M8 step B10): a house whose refinery and harvesters are all gone, broke, keeps its construction yard, sells its other buildings and rebuilds the refinery that brings a harvester with their refunds; selling out (which lasts until it earns again) does not leave it standing idle with credits in hand.
+// S-0404 claim 2 and S-0402 claim 18 (a refinery's free harvester), S-0408 claim 3 (a building with a build-up sprite is sellable) and PLAN §4.7 (M8 step B10): a house whose refinery and harvesters are all gone, broke, keeps its construction yard, sells its other buildings and rebuilds the refinery that brings a harvester with their refunds; selling out (which lasts until it earns again) does not leave it ordering nothing.
 #[test]
 fn a_house_with_no_harvester_rebuilds_the_refinery_that_brings_one() {
     let mut r = fixture::ruleset();
