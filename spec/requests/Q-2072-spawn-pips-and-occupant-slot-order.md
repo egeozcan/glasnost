@@ -1,9 +1,9 @@
 ---
 id: Q-2072
 title: Which spawn slots show a full pip, and in which order occupant pips fill
-status: open
+status: answered
 related: [S-0111, S-0506, S-0508]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
