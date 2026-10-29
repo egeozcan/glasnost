@@ -1624,7 +1624,8 @@ fn claim_32_the_loss_reverts_an_overridden_aircraft() {
     assert_eq!(o.dest, before, "the destination put aside");
 }
 
-// spec: S-0501 claim 32, A target that leaves the map (the revert brings back the target the override put aside, even when it is the very object that left the map; a removed object no longer exists, so it is not held)
+// spec: S-0501 claim 32, A target that leaves the map (the revert brings back the target the override put aside, even when it is the very object that left the map; a removal is a loss and a revert cause too). The target a revert at a removal leaves is not stated by the claim, so it is not asserted here.
+// The override and the loss are invoked directly (`override_attack`, `take_inside`, `remove`): the fixture has no transport type.
 #[test]
 fn claim_32_the_revert_brings_back_the_object_that_left() {
     for removed in [false, true] {
@@ -1640,7 +1641,8 @@ fn claim_32_the_revert_brings_back_the_object_that_left() {
         let o = w.obj(a).unwrap();
         assert_eq!(o.beh.suspended, None, "reverted (removed: {removed})");
         assert_eq!(o.beh.current, Some(Behaviour::Attack));
-        let want = (!removed).then_some(Target::Object(x));
-        assert_eq!(o.target, want, "removed: {removed}");
+        if !removed {
+            assert_eq!(o.target, Some(Target::Object(x)), "the object that left");
+        }
     }
 }

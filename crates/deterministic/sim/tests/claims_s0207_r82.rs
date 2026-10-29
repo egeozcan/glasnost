@@ -509,7 +509,7 @@ fn sold_while_unloading(
     ore: &[(CellXY, u8, u8)],
     load: Vec<i32>,
     remembered: Option<CellXY>,
-) -> (World, ObjectId) {
+) -> (World, ObjectId, ObjectId) {
     let mut r = ruleset();
     r.sim.buildings.get_mut("REFN").unwrap().econ.buildup = Some(true);
     let mut w = game_with_ore(&r, ore, 7);
@@ -551,7 +551,7 @@ fn sold_while_unloading(
         HouseId(0),
         Order::Sell { actor: refn }
     ));
-    (w, h)
+    (w, h, refn)
 }
 
 /// The tick and the cell of the miner's first move off the docking cell,
@@ -573,7 +573,7 @@ fn first_move(w: &mut World, h: ObjectId) -> (i32, CellXY, bool) {
 fn claim_28_a_sale_with_a_part_load_jumps_to_the_ring_search_cell() {
     let remembered = at(4, 3);
     let near = at(0, 2);
-    let (mut w, h) = sold_while_unloading(
+    let (mut w, h, refn) = sold_while_unloading(
         &[(remembered, ORE, 5), (near, ORE, 5)],
         vec![2, 0],
         Some(remembered),
@@ -584,6 +584,15 @@ fn claim_28_a_sale_with_a_part_load_jumps_to_the_ring_search_cell() {
         "the ring-search cell at tick {t}, not the scatter cell"
     );
     assert!(jump, "a jump");
+    let begun = w
+        .obj(refn)
+        .and_then(|b| b.econ.sale.as_ref())
+        .map(|x| x.stage);
+    assert_eq!(
+        begun,
+        Some(Stage::Begun),
+        "in the tick of the sale's first processing, while the contact holds"
+    );
     assert!(driving(&w, h), "the jump installs driving again");
     assert_eq!(w.obj(h).unwrap().beh.current, Some(Behaviour::Harvest));
 }
@@ -591,7 +600,7 @@ fn claim_28_a_sale_with_a_part_load_jumps_to_the_ring_search_cell() {
 // spec: S-0207 claim 28, A sale of the refinery (a chrono miner not full whose ring search finds no cell stays where it is with driving installed) and S-0402 claim 17 case (f) (when the search finds nothing the miner goes idle with driving installed and no destination)
 #[test]
 fn claim_28_a_sale_with_nothing_found_stays_on_the_docking_cell() {
-    let (mut w, h) = sold_while_unloading(&[], vec![2, 0], Some(at(4, 3)));
+    let (mut w, h, _) = sold_while_unloading(&[], vec![2, 0], Some(at(4, 3)));
     let mut seen_idle = false;
     for _ in 0..20 {
         testkit::run(&mut w, 1);
@@ -611,7 +620,7 @@ fn claim_28_a_sale_with_nothing_found_stays_on_the_docking_cell() {
 #[test]
 fn claim_28_a_sale_with_the_remembered_cell_taken_drives_there() {
     let ore_cell = at(4, 3);
-    let (mut w, h) = sold_while_unloading(&[(ore_cell, ORE, 5)], vec![2, 0], Some(ore_cell));
+    let (mut w, h, _) = sold_while_unloading(&[(ore_cell, ORE, 5)], vec![2, 0], Some(ore_cell));
     let blocker = place_vehicle(&mut w, "HARV", 1, ore_cell, 0);
     assert!(marked(&w, ore_cell));
     let (t, c, jump) = first_move(&mut w, h);
