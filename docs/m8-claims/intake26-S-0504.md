@@ -56,28 +56,28 @@ before and after.
 |---|---|---|
 | Front matter (revision 26, Q-1871 in requests) | no change | Metadata. |
 | Q-1871 summary block | tested | Summarises claims 15 and 16; see their rows. |
-| Terms, *Pitch and roll* (single precision; a positive pitch lowers the bow under *Ry*; the roll about *x*; the rates belong to S-0210, S-0303 claim 20, S-0614) | partly | The pitch is held as `F32` bits and drawn about the model's *y* axis with S-0105's convention (`f5_lift_and_shifts`: at +*L* the bow end goes down and keeps its edge). Rocking rates are not modelled (seam, below), so the roll stays 0. |
+| Terms, *Pitch and roll* (single precision; a positive pitch lowers the bow under *Ry*; the roll about *x*; the rates belong to S-0210, S-0303 claim 20, S-0614) | tested | The pitch is held as `F32` bits and drawn about the model's *y* axis with S-0105's convention (`f5_lift_and_shifts`: at +*L* the bow end goes down and keeps its edge). Since M8 A4 rocking the view keeps the rocking rates and the roll (`a_blast_lifts_the_side_it_comes_from`) ([a4-rocking.md](a4-rocking.md)). |
 | Claim 10, pointer to claim 15 (the lean is a fore-and-aft pitch set at the first update; a continuing turn does not change it; no sideways list) | tested | `claim_15_a_continuing_turn_keeps_the_lean`. The interim's sideways list is gone. |
 | Claim 15, a step per own update towards ±π/4, stopping at it and holding | tested | `f4_the_lean_reaches_the_full_lean_at_the_79th_step`, `claim_15_the_lean_grows_with_each_descent_and_takes_no_draw`. |
 | Claim 15, *Direction* (8-directions 1 to 5 bow down, 0, 6, 7 stern down; kept; no draw) | tested | `claim_15_the_end_that_goes_down_by_eight_direction` (boundaries 4095/4096, 45055/45056, 61439/61440), `claim_15_the_lean_grows_with_each_descent_and_takes_no_draw` (facing 0 stern, 16384 bow; the random state equals claim 4's wake draws alone). |
 | Claim 15, *Which facing* (the body facing's value for the tick of the first step, also mid-turn) | tested | `claim_15_a_continuing_turn_keeps_the_lean` (facing 40960 turning to 0). |
 | Claim 15, *Course of the lean* and F4 (exact single values; 79 steps) | tested | `f4_the_lean_reaches_the_full_lean_at_the_79th_step` (RZ and RN 78th values, the 79th at *L*). |
 | Claim 15, *Timing* (same update as the descent; complete at the 79th, held at the 80th, removed at the 81st) | tested | `claim_15_the_lean_grows_with_each_descent_and_takes_no_draw` (80 recorded pitches, [77] short of *L*, [78] and [79] at *L*, then out of play). Starts below or above height 0 follow from the same step per descent. |
-| Claim 15, *Starting value* (from the pitch at the start; the opposite sense passes through level) | partly | `claim_15_a_pitch_in_the_opposite_sense_passes_through_level` (F4 recurrence). In play the start is always level: rocking is not modelled, so no pitch is left over (seam). |
-| Claim 15, *The pitch belongs to the lean; the roll is left free* | partly | No forward rate is added and the pitch never returns to level (only `pitch_step` writes it). A rocking hit during descent cannot roll the hull: S-0303 claim 20's rocking is not built (seam; N16 parts b, c and h cannot be reproduced). |
+| Claim 15, *Starting value* (from the pitch at the start; the opposite sense passes through level) | tested | `claim_15_a_pitch_in_the_opposite_sense_passes_through_level` (F4 recurrence). Since M8 A4 rocking the view seeds its lean from a rocked pitch (`a_sinking_vessel_leans_from_its_rocked_pitch_and_rolls_freely`) ([a4-rocking.md](a4-rocking.md)). |
+| Claim 15, *The pitch belongs to the lean; the roll is left free* | tested | No forward rate is added and the pitch never returns to level (only `pitch_step` writes it). Since M8 A4 rocking a rocking hit during descent rolls the hull and leaves the lean (`a_sinking_vessel_leans_from_its_rocked_pitch_and_rolls_freely`) ([a4-rocking.md](a4-rocking.md)). |
 | Claim 15, *Turning* (a continuing turn into the other group keeps the lean) | tested | `claim_15_a_continuing_turn_keeps_the_lean`. |
-| Claim 15, *The original's drawing* (three oddities not copied, no switch) | tested | The fixed rule is built: clamp at *L* (`f4_…`), kept direction (`claim_15_a_continuing_turn_keeps_the_lean`); the held roll is moot with no rocking. No switch added. |
+| Claim 15, *The original's drawing* (three oddities not copied, no switch) | tested | The fixed rule is built: clamp at *L* (`f4_…`), kept direction (`claim_15_a_continuing_turn_keeps_the_lean`); the roll is left free since M8 A4 rocking. No switch added. |
 | Claim 15, *Causes and types* (the sinking state alone; underwater types too; no steps for a non-voxel body) | partly | Keyed on the sinking state in `sinking_turn`; `claim_15_a_second_start_keeps_the_lean` (claim 13 restart), lane (an underwater type set sinking leans the same). Design: every sinking vehicle steps, voxel or not (unobservable, above). |
 | Claim 15, afloat | tested | `claim_15_a_vessel_afloat_is_level`. |
 | Claim 15 with claims 4 and 5, save and load | tested | `sinking_save_load_round_trip` (the naval state, pitch included, survives; the hash matches). |
-| Claim 16, *Drawn transform* (F5 for driving and ship; turret and barrel on *D*) | tested | `f5_lift_and_shifts`, `rocking_parts_ride_the_body` (render); `a_leaning_vessel_has_images_of_its_own_and_no_shadow` (app). Slope tilt *T* is not in our F5: a sinking vessel is on water, and the land rocking that would combine with a slope is not modelled (seam). |
+| Claim 16, *Drawn transform* (F5 for driving and ship; turret and barrel on *D*) | tested | `f5_lift_and_shifts`, `rocking_parts_ride_the_body` (render); `a_leaning_vessel_has_images_of_its_own_and_no_shadow` (app). Slope tilt *T* is not in our F5: a sinking vessel is on water; land rocking is drawn since M8 A4 rocking, but without the slope (seam). |
 | Claim 16, hovering and jumpjet drawn as rocking | partly | Drawn with F5 (design, above). |
 | Claim 16, *Image cache* (S-0105 claim 26 and S-0106 claim 13: rocking drawn fresh) | tested | `a_leaning_vessel_has_images_of_its_own_and_no_shadow` (a leaning image depends on its angles alone, apart from the settled ones; below 0.005 the settled image). The `rocked` cache is a memory bound with the pixels of a fresh draw, as for a rocket's pitches. |
 | Claim 16, *Which locomotors show it* (driving, ship, hovering, jumpjet; others step but are not drawn) | tested | `only_the_rocking_locomotors_draw_the_lean`, `a_body_that_draws_no_rocking_is_drawn_settled_without_a_shadow`. |
 | Claim 16, *Shadow* (none from the first drawn frame after sinking begins) | tested | `a_leaning_vessel_has_images_of_its_own_and_no_shadow` (at pitch 0 too), `a_body_that_draws_no_rocking_is_drawn_settled_without_a_shadow`. |
 | Claim 16, *What reads it* (drawing only; the vessel cannot fire) | tested | Only `live::attitude` reads `naval::pitch`; `the_view_reads_the_pitch_the_simulation_steps` (reading changes nothing). |
 | Claim 16, *Passengers* (an open-topped transport's passengers fire during descent from the fire point on the leaned body, F5's lift and shifts as leptons) | seam | The firing check's sinking test is the firer's own (`combat::check`), so passengers are not stopped. S-0313 claim 5's fire point is built from the heading alone (`claim1_point`, Rz only), so their launch positions do not take the lean (seam; N16 part g). |
-| Claim 16, the angles may be presentation state | no change | We hold them in simulation state (hashed and saved), which the claim also allows; they advance once per own update. |
+| Claim 16, the angles may be presentation state | no change | We hold the lean in simulation state (hashed and saved), which the claim also allows; it advances once per own update. The rocking angles are the view's (M8 A4 rocking). |
 | F4 | tested | As claim 15, *Course of the lean*. |
 | F5 (lift, *s*ₓ, *s*ᵧ; *W*, *H* from the first section of the main body model; table sin and cos; RZ double arithmetic) | tested | `f5_lift_and_shifts` (grid 20 × 12 × 9: *W* 6.5, *H* 10; at ±*L* (7, ±3, 0); roll ±0.5 (3, 0, ∓1)). The size comes from the main body also while the alternative body is drawn. |
 | Constants rows (step, limit, size factors, 79 steps, bow-down 8-directions) | tested | Cited at their use (`naval.rs`, `voxel.rs`); tests as above. |
@@ -85,14 +85,15 @@ before and after.
 | Original-versus-fixed note (no switch; the 5/3 split is the original's) | no change | No switch added; `every_spec_quirk_has_a_switch` and `every_rendering_spec_quirk_has_a_switch` green. |
 | Import mapping (no imported key) | no change | The step, limit and groups are engine constants with spec citations. |
 | N5 wording ("Record" for "Confirm") | no change | Wording. |
-| N16 and its parts a to h | partly | Main run, part a, part e (cull: `start_sinking` path) and the absence of a shadow are covered by the tests and the lane. Parts b, c and h need rocking (not built); part f needs a magnetic-lift drop drawn with the type's locomotor (design); part g needs claim 5's fire point (seam); part d is unmeasured. |
+| N16 and its parts a to h | partly | Main run, part a, part e (cull: `start_sinking` path) and the absence of a shadow are covered by the tests and the lane. Parts b, c and h need rocking, drawn since M8 A4 rocking with Q-2081's interim (unmeasured); part f needs a magnetic-lift drop drawn with the type's locomotor (design); part g needs claim 5's fire point (seam); part d is unmeasured. |
 | Changes for other specs, S-0210's drawn sense of the body tilt | no change | Spec-side. We draw no crush tilt, so nothing of ours depends on the words. |
 | Changes for other specs, a pointer to F5 from S-0106 claim 9 and S-0210 | no change | Spec-side. |
-| Open questions (a rocked body's return to level; hovering and jumpjet composition; lift and teleport carriers; clipping) | no change | Our choices are the design rules above; no request filed. |
+| Open questions (a rocked body's return to level; hovering and jumpjet composition; lift and teleport carriers; clipping) | no change | Our choices are the design rules above; no request filed here. The return to level is asked in Q-2081 (M8 A4 rocking). |
 
-**Seams named here.** Rocking (S-0303 claim 20, S-0614 claim 10, S-0210's rates) is not
-modelled, so the roll is always level and a sinking vessel always starts from level; slope tilt
-*T* is not in F5; S-0313 claim 5's passenger fire point does not take the body transform.
+**Seams named here.** Rocking (S-0303 claim 20, S-0614 claim 10, S-0210's rates) was not
+modelled, so the roll was always level and a sinking vessel always started from level; built by
+M8 A4 rocking ([a4-rocking.md](a4-rocking.md)). Slope tilt *T* is not in F5; S-0313 claim 5's
+passenger fire point does not take the body transform.
 
 **Requests.** None filed (block Q-1930 to Q-1934 unused): the open details are S-0504's own Open
 questions, and each has a design choice above.
