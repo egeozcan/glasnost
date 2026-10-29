@@ -1549,3 +1549,46 @@ fn save_round_trip() {
     assert_eq!(l.mind.victims, w.mind.victims);
     assert_eq!(l.mind.permanent, w.mind.permanent);
 }
+
+// spec: S-0601 claim 16 and F4 (a damaging pulse at level i > 0 on a surviving controller sets its sideways rocking rate from one draw r in [0, 100]; the rate is a presentation input, reported to the drawing)
+#[test]
+fn claim_16_each_damaging_pulse_reports_its_rocking_draw() {
+    let mut w = game();
+    let m = veh(&mut w, "MASTER", BETA, 0, 0);
+    let a = veh(&mut w, "BOX", ALPHA, 3, 0);
+    let b = veh(&mut w, "BOX", ALPHA, 3, 3);
+    assert!(mind::take(&mut w, m, a));
+    assert!(mind::take(&mut w, m, b));
+    let rocks = |w: &World| -> Vec<(ObjectId, i32, i32)> {
+        w.effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::OverloadRock {
+                    controller,
+                    level,
+                    draw,
+                } => Some((*controller, *level, *draw)),
+                _ => None,
+            })
+            .collect()
+    };
+    let level = mind::overload_level(&w.rules().combat.general.mind.overload_count, 2).unwrap();
+    assert!(level > 0);
+    let half = w.rules().quirks.ranged_draw_half_span;
+    for pulse in 0..3 {
+        w.mind.controllers.get_mut(&m).unwrap().countdown = 0;
+        w.effects.clear();
+        let mut expect = w.rng.clone();
+        for _ in 0..10 {
+            expect.ranged(-200, 200, half);
+        }
+        let r = expect.ranged(0, 100, half);
+        mind::overload_turn(&mut w, m);
+        assert_eq!(w.rng, expect, "pulse {pulse}: no further draw");
+        assert_eq!(rocks(&w), [(m, level as i32, r)], "pulse {pulse}");
+    }
+    // Between checks: no rocking update.
+    w.effects.clear();
+    mind::overload_turn(&mut w, m);
+    assert!(rocks(&w).is_empty());
+}

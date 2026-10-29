@@ -33,8 +33,8 @@
 //!   *hunt* and leaving a team is nothing (claim 6).
 //! - Particle systems: the overload sparks take their ten placement draws
 //!   (F3); the systems themselves are not created. The rocking rate (F4) is
-//!   a presentation input of S-0106 claim 9, which our view does not draw:
-//!   its draw is taken and its value dropped.
+//!   a presentation input of S-0106 claim 9: its draw is taken here and
+//!   reported (`Effect::OverloadRock`), and the view sets the rate.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -968,7 +968,13 @@ pub fn overload_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0601 claim 16 and F4 (when i > 0 and the controller survives, one rocking draw r in [0, 100]; the rate is a presentation input)
     if i > 0 && w.obj(id).is_some_and(|o| o.health > 0) {
-        let _r = w.rng.ranged(ROCK_DRAW.0, ROCK_DRAW.1, half);
+        let r = w.rng.ranged(ROCK_DRAW.0, ROCK_DRAW.1, half);
+        // spec: S-0601 F4 (the rate is a presentation input to S-0106 claim 9: reported to the drawing, which keeps it)
+        w.effects.push(Effect::OverloadRock {
+            controller: id,
+            level: i as i32,
+            draw: r,
+        });
     }
 }
 

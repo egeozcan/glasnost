@@ -83,8 +83,9 @@ pub struct NavalState {
     pub sinking: bool,
     /// The body's pitch *p*, radians, single precision, positive lowering
     /// the bow (S-0504 Terms, *Pitch and roll*; claim 15, F4). It starts
-    /// level: no rocking is modelled (S-0303 claim 20, S-0106 claim 9), so
-    /// nothing pitches a body before it sinks.
+    /// level: rocking (S-0303 claim 20, S-0106 claim 9) is presentation the
+    /// view keeps, so the view steps its own lean from a rocked pitch
+    /// (claim 15, *Starting value*; `app::mapview::rocking`).
     #[serde(default)]
     pub pitch: F32,
     /// The lean's direction, set at the first pitch step and kept for the

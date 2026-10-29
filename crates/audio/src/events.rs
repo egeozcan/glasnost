@@ -1064,6 +1064,11 @@ impl Audio {
             Effect::Cloak { .. } => {}
             // A gas hit's own sound is not in S-0613; the hit's damage effects make theirs.
             Effect::GasHit { .. } => {}
+            // Rocking is drawn, not heard (S-0303 claim 20, S-0614 claims 9 and 10, S-0601 F4).
+            Effect::Rock { .. }
+            | Effect::DroneRock { .. }
+            | Effect::GrapplePush { .. }
+            | Effect::OverloadRock { .. } => {}
             // The bunker's special animations and the bunkered notice are
             // drawing and selection only; the walls sounds come through
             // Effect::Sound (S-0606 claims 7, 12 and 14).

@@ -474,15 +474,18 @@ enum Tilt {
     },
     /// A flying-locomotor body (claim 42).
     Flying(voxel::FlightAttitude),
-    /// A sinking vehicle (S-0504 claims 15 and 16): its pitch and roll,
-    /// and whether its locomotor draws rocking.
-    Sinking {
+    /// A sinking or rocking vehicle (S-0504 claims 15 and 16; S-0303 claim
+    /// 20): its pitch and roll, whether its locomotor draws rocking, and
+    /// whether it sinks (then it draws no shadow).
+    Rocked {
         /// The pitch, radians (positive lowers the bow).
         pitch: f32,
         /// The roll, radians.
         roll: f32,
         /// The locomotor draws rocking (S-0106 claims 5 and 9).
         drawn: bool,
+        /// The vehicle sinks (S-0504 Terms).
+        sinking: bool,
     },
 }
 
@@ -4861,10 +4864,17 @@ impl<'a> Builder<'a> {
     fn tilt(&self, m: &Mobile, q: &VoxelQuirks) -> Tilt {
         match m.attitude {
             Attitude::None => Tilt::Plain,
-            Attitude::Sinking { pitch, roll, drawn } => Tilt::Sinking {
+            Attitude::Sinking { pitch, roll, drawn } => Tilt::Rocked {
                 pitch: f32::from_bits(pitch),
                 roll: f32::from_bits(roll),
                 drawn,
+                sinking: true,
+            },
+            Attitude::Rocking { pitch, roll, drawn } => Tilt::Rocked {
+                pitch: f32::from_bits(pitch),
+                roll: f32::from_bits(roll),
+                drawn,
+                sinking: false,
             },
             Attitude::Rocket {
                 pitch,
@@ -4962,12 +4972,13 @@ impl<'a> Builder<'a> {
         } else {
             body_raw
         };
-        // spec: S-0504 claim 16 and F5 (a sinking body whose locomotor draws rocking is drawn with its pitch and roll; F5's size values from the first section of the body's main model, also while the alternative body is drawn)
+        // spec: S-0504 claim 16 and F5 (a sinking or rocking body whose locomotor draws rocking is drawn with its pitch and roll; F5's size values from the first section of the body's main model, also while the alternative body is drawn); S-0106 claim 9
         let rocking = match tilt {
-            Tilt::Sinking {
+            Tilt::Rocked {
                 pitch,
                 roll,
                 drawn: true,
+                ..
             } => self
                 .voxel_model(&main_file)
                 .and_then(|b| b.sections.first().map(|s| s.size))
@@ -4976,12 +4987,12 @@ impl<'a> Builder<'a> {
             _ => None,
         };
         // spec: S-0504 claim 16 (a sinking vehicle drawn as a voxel model draws no shadow, from the first drawn frame after sinking begins)
-        let sinking = matches!(tilt, Tilt::Sinking { .. });
+        let sinking = matches!(tilt, Tilt::Rocked { sinking: true, .. });
         let pose = move || match tilt {
             Tilt::Plain => voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q),
             // spec: S-0504 claim 16 and F5 (D for any rocking; T and B are built on it, S-0105 claim 8, so the turret and barrel lean with the body); a body that does not rock is drawn settled
-            // design: F5 for the hovering and jumpjet locomotors too (S-0504 Open questions leave their order and lift open; with the roll level, as ours always is, the order is moot); no clipping below a fixed row (also open)
-            Tilt::Sinking { .. } => match rocking {
+            // design: F5 for the hovering and jumpjet locomotors too (S-0504 Open questions leave their order and lift open; theirs is drawn in the driving order, which matters now that rocking rolls a body); no clipping below a fixed row (also open)
+            Tilt::Rocked { .. } => match rocking {
                 Some(r) => {
                     voxel::vehicle_parts_rocking(body_raw, turret_raw, offset, elevation, &r, &q)
                 }
@@ -5059,7 +5070,7 @@ impl<'a> Builder<'a> {
         // claim 12's alternative body while no spawned aircraft is docked)
         // spec: S-0105 claims 26, 41, 42 (a rocket body's key: heading, frame and pitch class; a flying body's: flight drawing heading, frame, pitch presence and bank state; neither has a ramp state)
         let key = match tilt {
-            Tilt::Plain | Tilt::Sinking { .. } => {
+            Tilt::Plain | Tilt::Rocked { .. } => {
                 voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame)
             }
             Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
@@ -5598,6 +5609,19 @@ pub enum Attitude {
         turn: i32,
         /// Crashing (S-0312): drawn level here, the crash attitude is not built.
         crashing: bool,
+    },
+    /// A vehicle that rocks (S-0303 claim 20, S-0614 claims 9 and 10) and
+    /// does not sink: where its locomotor draws rocking its body is drawn
+    /// with its pitch and roll (S-0106 claim 9; S-0504 claim 16 and F5).
+    /// The view holds the angles (`super::rocking`); the game holds none.
+    Rocking {
+        /// The pitch, radians, single-precision bits.
+        pitch: u32,
+        /// The roll, radians, single-precision bits.
+        roll: u32,
+        /// Its locomotor draws rocking: driving, ship, hovering or jumpjet
+        /// (S-0504 claim 16; S-0106 claims 5 and 9).
+        drawn: bool,
     },
     /// A vehicle the simulation marks sinking (S-0504 Terms): it draws no
     /// shadow (claim 16), and where its locomotor draws rocking its body is
