@@ -163,16 +163,19 @@ mod tests {
 
     /// The switches the play-fixes layer turns off (M8 step C7). Changing the
     /// layer's list means changing this one, its docs section and its tests.
-    const ADMITTED: [&str; 6] = [
+    const ADMITTED: [&str; 9] = [
         "absorber_stale_contact_kept",
         "corridor_free_part_ignores_height",
         "corridor_retry_no_fallback",
         "depot_loss_strands_hover",
+        "group_spread_no_detour",
         "hover_landing_request_stands",
+        "path_through_stalled_blockers",
         "unload_without_contact_stalls",
+        "unreachable_move_dropped",
     ];
 
-    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off): the layer sets exactly these six switches, and only switches
+    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off); S-0212 claims 8, 22 and 23 and S-0213 claim 7 (quirks.path_through_stalled_blockers, quirks.unreachable_move_dropped and quirks.group_spread_no_detour off, our design, C7 part 4): the layer sets exactly these nine switches, and only switches
     #[test]
     fn play_fixes_sets_only_the_admitted_switches_off() {
         let mut paths = paths(&play_fixes()).unwrap();

@@ -12,6 +12,12 @@
 // stuck, giving up although an open way exists, never moving again, or a visible glitch, and
 // (3) it is not a balance change (D14). Each entry cites its claim and what it answers. The list
 // is kept short; docs/m8-claims/c7-play-fixes.md gives the entries considered and rejected.
+//
+// Our own pathing improvements (the lead's decision of 2026-10-29, M8 step C7 part 4) are
+// admitted without condition (1): their off position is our design, marked
+// `// design: C7-P4 <name>` in the code and described in docs/m8-claims/c7-pathing.md, which
+// also gives the synthetic scenario that shows the bug in the on position. Conditions (2) and
+// (3) still hold.
 {
   "globals": {
     "quirks": {
@@ -61,6 +67,26 @@
       // its next deploy step deploys it. On (the original), it never deploys; unload stays
       // current with a deploy step each tick.
       "hover_landing_request_stands": false,
+      // Our design, C7-P4 stalled blockers (quirks.path_through_stalled_blockers off; S-0212
+      // claims 8 and 22): a mode-2 re-path first looks for a way that keeps off the cells of
+      // moving units stalled themselves for the blockage delay, and takes the original's path
+      // only when there is none. On (the original), two groups that meet head-on in a passage
+      // two cells wide re-path through each other for ever and none arrives.
+      // Answers: the scenario "corridor 2, 6 each way" of docs/m8-claims/c7-pathing.md.
+      "path_through_stalled_blockers": false,
+      // Our design, C7-P4 nearest reachable cell (quirks.unreachable_move_dropped off; S-0212
+      // claim 23): a move whose computation fails tries once more towards the nearest cell
+      // the unit can stand on in its own reach region. On (the original), units sent to a cell
+      // they cannot reach (inside rock, or walled in by buildings) do not move at all.
+      // Answers: the scenarios "unreachable cell" and "inside buildings" of the same ledger.
+      "unreachable_move_dropped": false,
+      // Our design, C7-P4 group spread (quirks.group_spread_no_detour off; S-0213 claim 7 and
+      // Edge cases): a group member whose look gives no cell of its own gets the nearest open
+      // cell round the common cell instead of a cell already given. On (the original), groups
+      // moved next to water or buildings send several members to one cell, where they jostle
+      // and give up (the spec's own Edge case).
+      // Answers: the scenarios "by buildings" and "shore" of the same ledger.
+      "group_spread_no_detour": false,
     },
   },
 }
