@@ -463,4 +463,6 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         // spec: S-0417 claim 17 (a resting unit on a cell that holds a building is sent a scatter request after the rest of its turn: after its late start, its behaviour processing with that processing's draw and its movement, design; turns that end early above make none: being erased, S-0514 claim 17, a warp's leaving stage and earlier update boundaries, S-0513 claim 51; no tunnel is built)
         crate::scatter::resting_turn(w, id);
     }
+    // spec: S-0607 claim 20 (revision 14: the restoration test at the end of each of the unit's turns, after its movement and after the point at which it may process its behaviour, whether or not it did, whatever its behaviour and house; the turns that end early above have none: lost, dead, being erased, and the warp-only updates, design for the phase-in that the spec leaves open)
+    crate::lift::end_of_turn(w, id);
 }

@@ -1100,14 +1100,15 @@ pub fn lift_release_stop(w: &mut World, id: ObjectId, lifter_ended: bool) {
 /// commitment: for a seized set-down unit with the no-cell switch off, the
 /// switch-off outcome of S-0502 claim 17 with no cell, whatever route
 /// brought it there (S-0607 claims 9 and 20, revision 9). Restoration is not
-/// tested for it; [`lift_retry_stop`] runs instead.
+/// tested for it; [`lift_retry_stop`] runs instead at the end of each of its
+/// turns (revision 14).
 pub fn hovering_uncommitted(w: &World, id: ObjectId) -> bool {
     // spec: S-0607 claim 20 (revision 9: hovering with no movement point and no movement commitment)
     st(w, id).is_some_and(|j| j.phase == Phase::Hovering && !j.moving && j.dest.is_none())
 }
 
-/// The repeated stop's search of a hovering set-down unit at a fall-back to
-/// rest (S-0607 claim 20, design): S-0502 claim 17's nearby-cell search
+/// The repeated stop's search of a hovering set-down unit at the end of
+/// each of its turns (S-0607 claim 20, revision 14, design): S-0502 claim 17's nearby-cell search
 /// around its current cell. Found: it re-orders itself to that cell's
 /// centre through S-0502 claim 16, as claim 13's stop does (a movement
 /// point; the order-level destination stays none). Not found: nothing

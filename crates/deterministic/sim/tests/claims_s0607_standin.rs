@@ -270,14 +270,17 @@ fn quirk_lift_standin_stays_seized_on_drop_pod() {
     );
 }
 
-// spec: S-0607 claim 24 and quirks.lift_standin_stays_seized (off): claim 20 applies to every stand-in with its own moving test; restoration clears seized and the unit then moves on orders
+// spec: S-0607 claim 24 and quirks.lift_standin_stays_seized (off): claim 20 applies to every stand-in with its own moving test, at any restoration test (revision 14: the end of each of its turns, with no order given); restoration clears seized and the unit then moves on orders
 #[test]
 fn quirk_lift_standin_stays_seized_off() {
     for loco in ["drive", "walk", "ship", "teleport"] {
         let (mut w, l, v) = let_go_scene(loco, false);
         // The lifter leaves, so it cannot seize the unit again once restored.
         glasnost_sim::objects::remove(&mut w, l);
-        assert!(ever_restored(&mut w, v, 200), "{loco}: restored");
+        assert!(
+            run_until(&mut w, 200, |w| !lift::seized(w, v)),
+            "{loco}: restored with no order"
+        );
         assert_eq!(lift::stand_in(&w, v), None);
         assert_eq!(
             lift::current_locomotor(&w, v),

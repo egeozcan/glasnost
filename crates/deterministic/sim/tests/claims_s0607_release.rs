@@ -127,7 +127,7 @@ fn claim_13_point_in_own_cell_falls_by_the_direct_reference() {
     );
 }
 
-// spec: S-0607 claims 13 and 20 (revision 6) and S-0502 claims 5 and 24 (revision 14; scenario L3 run b, J27 a): a unit set down before its first jumpjet update keeps the found point and its commitment; its next eligible update takes off, it flies to the point and lands there, and it is not restored while the commitment lasts, only at a fall-back to rest after it
+// spec: S-0607 claims 13 and 20 (revision 6) and S-0502 claims 5 and 24 (revision 14; scenario L3 run b, J27 a): a unit set down before its first jumpjet update keeps the found point and its commitment; its next eligible update takes off, it flies to the point and lands there, and it is not restored while the commitment lasts, and is restored at the end of the turn in which the commitment ends (revision 14, with no order)
 #[test]
 fn claim_13_committed_set_down_takes_off_then_restores() {
     let (mut w, l, v) = seized(|_| {});
@@ -164,7 +164,10 @@ fn claim_13_committed_set_down_takes_off_then_restores() {
     let p = w.obj(v).unwrap().pos;
     assert_eq!(p.cell(), d.cell(), "it landed at the point");
     assert_eq!(height(&w, v), 0);
-    assert!(restored(&mut w, v), "restored after the commitment ended");
+    assert!(
+        !lift::seized(&w, v),
+        "restored at the end of the turn in which the commitment ended"
+    );
 }
 
 // spec: S-0607 claim 9 (revision 5): a gripped unit given no destination is set down where it is; claim 13's jumpjet stop applies, so it flies to the stop's found point, the centre of its own free cell, before it descends and lands
@@ -246,7 +249,7 @@ fn claim_13_no_cell_lifter_set_down_stops() {
     }
 }
 
-// spec: S-0607 claim 9 (revisions 5 and 8) and S-0502 claim 17 and Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct; scenario J27 c): a grip ended by the no-destination exception keeps S-0502 claim 17's ordinary no-cell outcome: on, the unit destroys itself with no credit; off, in the air, it hovers over its current cell with no movement point and no commitment, neither descends nor flies anywhere, and stays set down and seized; claim 20 does not restore it while it hovers, and a failed retry at each fall-back to rest changes nothing
+// spec: S-0607 claim 9 (revisions 5 and 8) and S-0502 claim 17 and Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct; scenario J27 c): a grip ended by the no-destination exception keeps S-0502 claim 17's ordinary no-cell outcome: on, the unit destroys itself with no credit; off, in the air, it hovers over its current cell with no movement point and no commitment, neither descends nor flies anywhere, and stays set down and seized; claim 20 does not restore it while it hovers, and a failed retry at the end of each of its turns (revision 14) changes nothing, nor do its fall-backs to rest
 #[test]
 fn claim_9_no_cell_keeps_the_ordinary_outcome() {
     for on in [true, false] {
@@ -275,8 +278,9 @@ fn claim_9_no_cell_keeps_the_ordinary_outcome() {
             "set down and seized"
         );
         let (p, z) = (o.pos, height(&w, v));
-        // Refused move orders make it fall back to rest (claim 20): each one
-        // retries the search, which finds nothing, and it is not restored.
+        // Refused move orders make it fall back to rest, which neither tests
+        // restoration nor retries (claim 20, revision 14); the retry at the
+        // end of each turn finds nothing.
         for _ in 0..5 {
             order_move(
                 &mut w,
@@ -306,7 +310,7 @@ fn dry(w: &mut World, cells: &[CellXY]) {
     glasnost_sim::load::recalc_cells(w, cells);
 }
 
-// spec: S-0607 claim 20 (revision 8, the hovering set-down unit, design) and S-0502 Edge cases (revision 16; scenario J27 c, a successful retry): once a cell is free again, the next fall-back to rest repeats the stop's search, which finds it: the unit re-orders itself to that cell's centre (a movement point, no order-level destination), releases its hover slot, flies there, descends and lands, and is restored at a later fall-back to rest once its commitment has ended
+// spec: S-0607 claim 20 (revision 8, the hovering set-down unit, design) and S-0502 Edge cases (revision 16; scenario J27 c, a successful retry): once a cell is free again, the end of its next turn (revision 14) repeats the stop's search, which finds it, with no order given: the unit re-orders itself to that cell's centre (a movement point, no order-level destination), releases its hover slot, flies there, descends and lands, and is restored at the end of the turn in which it lands
 #[test]
 fn claim_20_hovering_set_down_retries_the_search() {
     let (mut w, l, v) = seized(quirk(false));
@@ -324,16 +328,12 @@ fn claim_20_hovering_set_down_retries_the_search() {
     );
     run(&mut w, 5);
     assert!(lift::seized(&w, v));
-    assert_eq!(
-        jump::phase(&w, v),
-        Some(Phase::Hovering),
-        "no fall-back yet"
-    );
+    assert_eq!(jump::phase(&w, v), Some(Phase::Hovering), "no cell yet");
     dry(&mut w, &[c]);
-    order_move(&mut w, v, CellXY { x: c.x + 2, y: c.y });
+    run(&mut w, 1);
     assert!(
-        run_until(&mut w, 20, |w| jump::moving(w, v)),
-        "the fall-back to rest retried the search"
+        jump::moving(&w, v),
+        "the end of its next turn retried the search"
     );
     assert!(lift::seized(&w, v), "not restored by the retry");
     let d = point(&w, v).expect("the found point");
@@ -351,10 +351,13 @@ fn claim_20_hovering_set_down_retries_the_search() {
     let p = w.obj(v).unwrap().pos;
     assert_eq!((p.x, p.y), (d.x, d.y), "landed at the point");
     assert_eq!(health(&w, v), 100);
-    assert!(restored(&mut w, v), "restored after the commitment ended");
+    assert!(
+        !lift::seized(&w, v),
+        "restored at the end of its landing turn"
+    );
 }
 
-// spec: S-0607 claim 9 (revision 8, design: on the ground, height 0 or less, the unit still moving because it was released before its first jumpjet update) and S-0502 Edge cases (revision 16): with no cell and the switch off it stays grounded where it is with no movement point and no commitment, and claim 20 restores it as any set-down unit; with the switch on it is destroyed
+// spec: S-0607 claim 9 (revision 8, design: on the ground, height 0 or less, the unit still moving because it was released before its first jumpjet update) and S-0502 Edge cases (revision 16): with no cell and the switch off it stays grounded where it is with no movement point and no commitment, and claim 20 restores it as any set-down unit, revision 14: at the end of the same turn, so the grounded state is not seen between ticks; with the switch on it is destroyed
 #[test]
 fn claim_9_no_cell_on_the_ground_stays_grounded() {
     for on in [true, false] {
@@ -373,21 +376,25 @@ fn claim_9_no_cell_on_the_ground_stays_grounded() {
             );
             continue;
         }
+        // The lifter keeps its target (claim 12): out of play, it cannot seize the unit again.
+        glasnost_sim::objects::remove(&mut w, l);
         assert_eq!(health(&w, v), 100);
-        assert_eq!(jump::phase(&w, v), Some(Phase::Grounded), "stays grounded");
-        assert!(!jump::moving(&w, v), "no movement commitment");
-        assert_eq!(point(&w, v), None, "no movement point");
-        assert!(w.obj(v).unwrap().lift.set_down);
+        assert!(
+            !lift::seized(&w, v),
+            "restored at the end of the turn in which it stopped grounded"
+        );
+        assert!(
+            w.obj(v).unwrap().jump.is_none(),
+            "its own locomotor: the jumpjet movement is gone"
+        );
+        assert_eq!(w.obj(v).unwrap().pos, p, "it stays where it is");
         run(&mut w, 5);
         assert_eq!(w.obj(v).unwrap().pos, p, "it stays where it is");
         assert_eq!(height(&w, v), 0);
-        // The lifter keeps its target (claim 12): out of play, it cannot seize the unit again.
-        glasnost_sim::objects::remove(&mut w, l);
-        assert!(restored(&mut w, v), "restored as any set-down unit");
     }
 }
 
-// spec: S-0607 claim 20 (revision 9, the hovering exclusion for every route, design; scenario L14; answers Q-1344) and S-0502 Edge cases (revision 17; scenario J27 c): a set-down unit that kept its movement commitment flies towards its point; a stop there with no cell and the switch off leaves it hovering in the air with no movement point and no commitment; it is not restored at its fall-backs to rest, whose retries find nothing and change nothing; once a cell is free again a retry finds it, it flies there and lands, and is restored only at a later fall-back to rest
+// spec: S-0607 claim 20 (revision 9, the hovering exclusion for every route, design; scenario L14; answers Q-1344) and S-0502 Edge cases (revision 17; scenario J27 c): a set-down unit that kept its movement commitment flies towards its point; a stop there with no cell and the switch off leaves it hovering in the air with no movement point and no commitment; it is not restored at its fall-backs to rest or at the end of its turns, whose retries find nothing and change nothing (revision 14); once a cell is free again the retry at the end of its next turn finds it, it flies there and lands, and is restored at the end of its landing turn
 #[test]
 fn claim_20_hovering_exclusion_for_a_committed_set_down() {
     let (mut w, l, v) = seized(quirk(false));
@@ -432,20 +439,22 @@ fn claim_20_hovering_exclusion_for_a_committed_set_down() {
     };
     w.cells.grid.get_mut(c).unwrap().tile = land_tile;
     glasnost_sim::load::recalc_cells(&mut w, &[c]);
-    order_move(&mut w, v, CellXY { x: c.x + 2, y: c.y });
+    run(&mut w, 1);
     assert!(
-        run_until(&mut w, 40, |w| jump::moving(w, v)),
-        "the next fall-back to rest retried the search"
+        jump::moving(&w, v),
+        "the end of its next turn retried the search"
     );
     assert!(lift::seized(&w, v), "not restored by the retry");
     let d = point(&w, v).expect("the found point");
     assert_eq!((d.x, d.y), (c.x * 256 + 128, c.y * 256 + 128), "its centre");
     assert!(run_until(&mut w, 400, |w| height(w, v) == 0 && !jump::moving(w, v)));
-    assert!(lift::seized(&w, v), "landed, not yet at rest");
-    assert!(restored(&mut w, v), "restored at a later fall-back to rest");
+    assert!(
+        !lift::seized(&w, v),
+        "restored at the end of its landing turn"
+    );
 }
 
-// spec: S-0607 claim 9 (revision 9, design: on the ground, height above the surface 0 or less, it stays where it is and its flight state becomes grounded, even if it was ascending at height 0; answers Q-1344) and S-0502 Edge cases (revision 17): a seized unit given no destination in the tick after its take-off update, still at height 0 and ascending, with no cell and the switch off, stays put grounded with no point and no commitment, and claim 20 restores it as any grounded set-down unit
+// spec: S-0607 claim 9 (revision 9, design: on the ground, height above the surface 0 or less, it stays where it is and its flight state becomes grounded, even if it was ascending at height 0; answers Q-1344) and S-0502 Edge cases (revision 17): a seized unit given no destination in the tick after its take-off update, still at height 0 and ascending, with no cell and the switch off, stays put grounded with no point and no commitment, and claim 20 restores it as any grounded set-down unit (revision 14: at the end of that same turn)
 #[test]
 fn claim_9_no_cell_ascending_at_height_zero_becomes_grounded() {
     let (mut w, l, v) = seized(quirk(false));
@@ -458,22 +467,20 @@ fn claim_9_no_cell_ascending_at_height_zero_becomes_grounded() {
     glasnost_sim::econ::assign_destination(&mut w, v, None);
     run(&mut w, 1);
     assert!(!lift::grips(&w, l, v), "the grip ends");
+    glasnost_sim::objects::remove(&mut w, l);
     assert_eq!(health(&w, v), 100);
-    assert_eq!(
-        jump::phase(&w, v),
-        Some(Phase::Grounded),
-        "becomes grounded"
+    // spec: S-0607 claim 20 (revision 14: the restoration test at the end of the same turn restores it, grounded and not moving)
+    assert!(
+        !lift::seized(&w, v),
+        "restored as any grounded set-down unit, at the end of that turn"
     );
-    assert!(!jump::moving(&w, v), "no movement commitment");
-    assert_eq!(point(&w, v), None, "no movement point");
-    assert!(w.obj(v).unwrap().lift.set_down);
+    assert!(
+        w.obj(v).unwrap().jump.is_none(),
+        "its own locomotor: the jumpjet movement is gone"
+    );
+    assert_eq!(height(&w, v), 0);
     run(&mut w, 5);
     assert_eq!(w.obj(v).unwrap().pos, p, "it stays where it is");
-    glasnost_sim::objects::remove(&mut w, l);
-    assert!(
-        restored(&mut w, v),
-        "restored as any grounded set-down unit"
-    );
 }
 
 // spec: S-0607 claim 13 (revision 8, design; answers Q-1342) and S-0502 claims 9 and 17 (revision 16; scenario J27 c): a unit dropped over its cell centre by its lifter with no cell for the stop loses the point fixed at the seize and its commitment, and falls with no movement point by the direct ground reference, even with a vehicle listed in its own cell; it takes its jumpjet update every tick of its fall

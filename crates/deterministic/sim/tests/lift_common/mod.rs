@@ -207,9 +207,10 @@ pub fn order_move(w: &mut World, actor: ObjectId, c: CellXY) -> bool {
     glasnost_sim::orders::issue(w, house, order)
 }
 
-/// Waits for a set-down seized unit to touch down, then gives it move
-/// orders (S-0607 scenario L11 part a) until a fall-back to rest restores
-/// its own locomotor (S-0607 claim 20); whether it did.
+/// Waits for a set-down seized unit to touch down: S-0607 claim 20
+/// (revision 14) restores it at the end of its touchdown turn, or at the end
+/// of its next turn when it was set down outside its own turn, with no order
+/// given; whether it was restored.
 pub fn restored(w: &mut World, id: ObjectId) -> bool {
     if !run_until(w, 400, |w| {
         !glasnost_sim::lift::dropped(w, id)
@@ -218,14 +219,5 @@ pub fn restored(w: &mut World, id: ObjectId) -> bool {
     }) {
         return false;
     }
-    for _ in 0..10 {
-        let c = w.obj(id).map(|o| o.pos.cell());
-        if let Some(c) = c {
-            order_move(w, id, CellXY { x: c.x + 2, y: c.y });
-        }
-        if run_until(w, 20, |w| !glasnost_sim::lift::seized(w, id)) {
-            return true;
-        }
-    }
-    false
+    run_until(w, 1, |w| !glasnost_sim::lift::seized(w, id))
 }
