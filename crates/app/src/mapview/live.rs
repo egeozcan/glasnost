@@ -474,14 +474,9 @@ impl slot_play::Make<SlotAnim> for SlotMaker<'_, '_> {
         // spec: S-0108 Terms (a name that names no animation type starts nothing)
         let (entry, play) = self.env.lookup(name);
         let entry = entry?;
-        let mut player = Player::new(
-            name,
-            play,
-            self.now,
-            None,
-            &mut *self.env,
-            &AnimQuirks::default(),
-        );
+        // spec: S-0109 Edge cases (the clock's switches are the ruleset's quirks)
+        let aq = AnimQuirks::from(&self.env.rules.quirks);
+        let mut player = Player::new(name, play, self.now, None, &mut *self.env, &aq);
         if let Some(old) = from {
             // spec: S-0108 claim 25 (the new animation keeps the replaced one's stage, not its image frame, and takes its passes afresh)
             player.keep_stage(old.player.stage());
@@ -573,7 +568,7 @@ impl AnimEnv<'_> {
             .rules
             .animation(&glasnost_convert::names::encode(name))
             .map_or((0, 0), |a| a.random_delay);
-        let play = anims::playback_of(&e.t, e.n, delay, random, &AnimQuirks::default());
+        let play = anims::playback_of(&e.t, e.n, delay, random, &AnimQuirks::from(q));
         (Some(e.clone()), play)
     }
 }
@@ -1525,7 +1520,7 @@ impl Live {
             rng: &mut self.cosmetic,
             speed: self.world.game_speed,
         };
-        let q = AnimQuirks::default();
+        let q = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         for (id, idx, kind, st, erased) in present {
             let Some(defs) = self.slot_defs.get(&idx) else {
                 continue;
@@ -1862,14 +1857,8 @@ impl Live {
             // spec: S-0517 claim 6 (the deploying presentation of an undeploy plays in reverse, S-0109 claim 8)
             play.reverse = true;
         }
-        let player = Player::new(
-            name,
-            play,
-            first_update,
-            drawn,
-            &mut env,
-            &AnimQuirks::default(),
-        );
+        let aq = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
+        let player = Player::new(name, play, first_update, drawn, &mut env, &aq);
         let sprite = entry.as_ref().is_some_and(|e| e.sprite);
         // spec: S-0102 claim 3 (an unattached animation is in its type's layer, default air)
         let layer = entry
@@ -2197,7 +2186,7 @@ impl Live {
             rng: &mut self.cosmetic,
             speed,
         };
-        let q = AnimQuirks::default();
+        let q = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         self.anims.retain_mut(|a| {
             // spec: S-0615 claim 4 (a burning walker replaces S-0109's playback)
             if now < a.first_update

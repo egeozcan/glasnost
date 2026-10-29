@@ -141,6 +141,7 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
     }
     // A creator's loop delay defers the start event to the delay's end (claim 11).
     let play = crate::mutation::playback(w, a);
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let mut env = AnimEnv {
         w: &mut *w,
@@ -149,15 +150,7 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
         acc: F64::ZERO,
         factor: 1,
     };
-    let player = Player::create(
-        a.name.as_bytes(),
-        play,
-        t,
-        drawn,
-        s.creation,
-        &mut env,
-        &AnimQuirks::default(),
-    );
+    let player = Player::create(a.name.as_bytes(), play, t, drawn, s.creation, &mut env, &aq);
     let mode = rules.mode;
     // spec: S-0109 claim 17 and F5 (A₀ = 1.0; quirks.anim_damage_starts_at_one off: 0.0)
     let acc = if rules.quirks.anim_damage_starts_at_one {
@@ -472,6 +465,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         crate::combat::effects::trailer(w, &name, p);
     }
     w.anims.current = Some((id, a.role, false));
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let mut env = AnimEnv {
         w: &mut *w,
@@ -480,7 +474,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         acc: a.acc,
         factor,
     };
-    let playing = a.player.update(t, &mut env, &AnimQuirks::default());
+    let playing = a.player.update(t, &mut env, &aq);
     a.anim = env.anim;
     a.acc = env.acc;
     let gone = w.anims.current.take().is_some_and(|(_, _, g)| g);

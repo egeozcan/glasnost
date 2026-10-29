@@ -53,6 +53,21 @@ impl Default for AnimQuirks {
     }
 }
 
+impl From<&glasnost_rules::quirks::Quirks> for AnimQuirks {
+    /// The clock's switches as the ruleset sets them (`quirks.anim_*`).
+    fn from(q: &glasnost_rules::quirks::Quirks) -> Self {
+        // spec: S-0109 Edge cases and quirks (the six clock switches, read from the rules' quirks)
+        Self {
+            anim_loop_count_wrap: q.anim_loop_count_wrap,
+            anim_reverse_raw_loop_end: q.anim_reverse_raw_loop_end,
+            anim_pingpong_lower_turn: q.anim_pingpong_lower_turn,
+            anim_loop_end_from_sprite: q.anim_loop_end_from_sprite,
+            anim_followup_start_doubled: q.anim_followup_start_doubled,
+            anim_followup_keeps_step: q.anim_followup_keeps_step,
+        }
+    }
+}
+
 /// The number of animation quirk switches.
 pub const ANIM_SWITCHES: usize = 6; // spec: S-0109 Edge cases and quirks (six switches)
 

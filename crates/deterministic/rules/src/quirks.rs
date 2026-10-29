@@ -1963,6 +1963,30 @@ pub struct Quirks {
     // spec: S-0109 claim 17, F5 and Edge cases
     #[serde(default = "on")]
     pub anim_damage_starts_at_one: bool,
+    /// The remaining-pass count of an animation is taken modulo 256 and 255 means endless; off: an unbounded count, endless for a negative loop count.
+    // spec: S-0109 claim 7 and Edge cases
+    #[serde(default = "on")]
+    pub anim_loop_count_wrap: bool,
+    /// A reversed animation starts at the loop end less one, restarts at the loop end and ends its pass at k <= 0; off: it starts and restarts at the loop end less the start field less one and ends its pass at k < 0.
+    // spec: S-0109 claim 8 and Edge cases
+    #[serde(default = "on")]
+    pub anim_reverse_raw_loop_end: bool,
+    /// While r >= 2 a ping-pong animation's lower turn compares k with the start field; off: k <= loop start less the start field.
+    // spec: S-0109 claim 9 and Edge cases
+    #[serde(default = "on")]
+    pub anim_pingpong_lower_turn: bool,
+    /// An absent loop end takes the sprite end; off: it takes the end field.
+    // spec: S-0109 claims 6 and 25 and Edge cases
+    #[serde(default = "on")]
+    pub anim_loop_end_from_sprite: bool,
+    /// A follow-up type starts at k = a'; off: at its own k0 of F3.
+    // spec: S-0109 claim 15 and Edge cases
+    #[serde(default = "on")]
+    pub anim_followup_start_doubled: bool,
+    /// The step keeps its sign at a follow-up switch; off: it is set afresh from the reversed test.
+    // spec: S-0109 claim 15 and Edge cases
+    #[serde(default = "on")]
+    pub anim_followup_keeps_step: bool,
     /// A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house.
     // spec: S-0612 claim 9 and Edge cases; S-0302 claim 1
     #[serde(default = "on")]
@@ -2562,6 +2586,12 @@ impl Default for Quirks {
             flying_listed_double_hit: true,
             jumpjet_falling_touchdown_tracked: true,
             anim_damage_starts_at_one: true,
+            anim_loop_count_wrap: true,
+            anim_reverse_raw_loop_end: true,
+            anim_pingpong_lower_turn: true,
+            anim_loop_end_from_sprite: true,
+            anim_followup_start_doubled: true,
+            anim_followup_keeps_step: true,
             dominator_damage_storm_house: true,
             dominator_marks_own_objects: true,
             dominator_ground_layer_only: true,
@@ -3842,6 +3872,15 @@ impl Quirks {
                 self.jumpjet_falling_touchdown_tracked,
             ),
             ("anim_damage_starts_at_one", self.anim_damage_starts_at_one),
+            ("anim_loop_count_wrap", self.anim_loop_count_wrap),
+            ("anim_reverse_raw_loop_end", self.anim_reverse_raw_loop_end),
+            ("anim_pingpong_lower_turn", self.anim_pingpong_lower_turn),
+            ("anim_loop_end_from_sprite", self.anim_loop_end_from_sprite),
+            (
+                "anim_followup_start_doubled",
+                self.anim_followup_start_doubled,
+            ),
+            ("anim_followup_keeps_step", self.anim_followup_keeps_step),
             (
                 "dominator_damage_storm_house",
                 self.dominator_damage_storm_house,
