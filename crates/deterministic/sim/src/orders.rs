@@ -714,7 +714,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         // spec: S-0207 claim 11 (revision 39: a cancelled destination need not erase the old path steps, which are inert without a locomotor destination; ours are dropped with it, so no stored path keeps S-0206's in-progress test true)
         let Some(m) = w.obj_mut(actor) else { return };
         m.path.steps.clear();
-        m.path.retry_at = 0;
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
     }
     // spec: S-0501 claim 48 (c) (an aircraft that a factory release has left above its pad ends its pad contact at the order)
     let taken = w.obj(actor).and_then(|m| m.dest);

@@ -647,7 +647,7 @@ fn drive_to(w: &mut World, id: ObjectId, dest: Target) {
     if let Some(o) = w.obj_mut(id) {
         // A new destination starts a new path search (S-0212 claim 20).
         o.path.steps.clear();
-        o.path.retry_at = 0;
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
     }
     // spec: S-0207 claim 20 (a) (a teleporting harvester's landing point and mark move at once)
     super::assign_destination(w, id, Some(dest));
@@ -657,7 +657,7 @@ fn drive_to(w: &mut World, id: ObjectId, dest: Target) {
 fn drive_to_none(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
         o.path.steps.clear();
-        o.path.retry_at = 0;
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
     }
     super::assign_destination(w, id, None);
 }
