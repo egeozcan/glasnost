@@ -2373,6 +2373,13 @@ impl Brain {
         crate::antiair::probe(&self.script, w)
     }
 
+    /// Whether the plan builds the refinery by a new field next
+    /// (`Script::field_refinery`; the lane's economy probe counts these
+    /// spells, M8 step B9).
+    pub fn wants_field_refinery(&self, w: &World) -> bool {
+        self.script.wants_field_refinery(w)
+    }
+
     /// What the plan's economy sees now, one line, counts and cells only
     /// (the lane's economy probe, `GLASNOST_AI_ECOPROBE`, M8 step B8): the
     /// house's refineries with the explored resource cells within

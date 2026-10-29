@@ -674,6 +674,7 @@ fn play_ai(
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
     let mut cycles = CycleTrace::default();
+    let mut field_spells = FieldSpells::default();
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -835,6 +836,9 @@ fn play_ai(
         }
         if eco_probe > 0 {
             cycles.observe(w);
+            if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
+                field_spells.observe(w.tick, game.brains(), w);
+            }
             if w.tick % eco_probe == 0 {
                 for line in game.economy_probes() {
                     println!("{line}");
@@ -903,6 +907,7 @@ fn play_ai(
     g.run_ms = t.elapsed().as_millis();
     if eco_probe > 0 {
         print!("{}", cycles.report());
+        print!("{}", field_spells.report(game.world.tick));
     }
     g.loads = tally.loads;
     g.hover_loads = tally.hover_loads;
@@ -2057,6 +2062,53 @@ pub(crate) fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
         "armed"
     } else {
         "unarmed"
+    }
+}
+
+/// The spells of `GLASNOST_AI_ECOPROBE` (M8 step B9) in which a house's
+/// plan wants the refinery by a new field next
+/// (`glasnost_ai::brain::Brain::wants_field_refinery`), sampled every
+/// think period: per house, the first and last tick of each spell.
+#[derive(Default)]
+struct FieldSpells {
+    /// Per house: the open spell's first and last tick.
+    open: BTreeMap<u8, (i32, i32)>,
+    /// Per house: the closed spells.
+    done: BTreeMap<u8, Vec<(i32, i32)>>,
+}
+
+/// A spell longer than this many ticks is listed (M8 step B9's count).
+const LONG_SPELL: i32 = 3000;
+
+impl FieldSpells {
+    fn observe(&mut self, tick: i32, brains: &[glasnost_ai::brain::Brain], w: &World) {
+        for b in brains {
+            let h = b.house().0;
+            if b.wants_field_refinery(w) {
+                self.open.entry(h).or_insert((tick, tick)).1 = tick;
+            } else if let Some(s) = self.open.remove(&h) {
+                self.done.entry(h).or_default().push(s);
+            }
+        }
+    }
+
+    fn report(&mut self, end: i32) -> String {
+        for (h, s) in std::mem::take(&mut self.open) {
+            self.done.entry(h).or_default().push((s.0, s.1.max(end)));
+        }
+        let mut out = String::new();
+        for (h, spells) in &self.done {
+            let long: Vec<&(i32, i32)> = spells.iter().filter(|s| s.1 - s.0 > LONG_SPELL).collect();
+            let _ = writeln!(
+                out,
+                "fieldspell house {h}: {} spells, {} ticks wanted, longest {}; over {LONG_SPELL} ticks: {} {long:?}",
+                spells.len(),
+                spells.iter().map(|s| s.1 - s.0 + 1).sum::<i32>(),
+                spells.iter().map(|s| s.1 - s.0).max().unwrap_or(0),
+                long.len()
+            );
+        }
+        out
     }
 }
 

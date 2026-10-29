@@ -1323,6 +1323,19 @@ impl Script {
     /// Power is read off the plants without a blackout (`power::short`): a
     /// blackout is not answered with power plants.
     pub(crate) fn wanted_role(&self, w: &World) -> Option<Role> {
+        self.base_role(w)
+            .or_else(|| self.field_refinery(w).then_some(Role::Refinery))
+    }
+
+    /// Whether the role the plan builds next is the refinery by a new field
+    /// ([`Script::field_refinery`]): no other base role is wanted (the
+    /// lane's economy probe counts these spells, M8 step B9).
+    pub(crate) fn wants_field_refinery(&self, w: &World) -> bool {
+        self.base_role(w).is_none() && self.field_refinery(w)
+    }
+
+    /// [`Script::wanted_role`] without the refinery by a new field.
+    fn base_role(&self, w: &World) -> Option<Role> {
         // design: a lost refinery its harvesters wait for comes before
         // power (M8 step B8): with no refinery the house has no income.
         if self.refinery_lost(w).is_some() {
@@ -1341,7 +1354,6 @@ impl Script {
                     .filter(|&f| self.of_role(w, f).is_empty()),
             )
             .find(|&r| !self.candidates(w, r).is_empty())
-            .or_else(|| self.field_refinery(w).then_some(Role::Refinery))
     }
 
     /// The refinery type the house rebuilds before anything else, when it
