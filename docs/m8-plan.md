@@ -87,6 +87,12 @@ revision. The intake that takes in each revision checks it against this list.
   the client's new games get it by default while the oracle arena, the seed sweeps, the gates and
   the fidelity suite stay on the reference rules (as for C7, `GLASNOST_PLAY_FIXES=1` measures with
   it). The layer is in the rules hash, so replays, saves and network starts carry it.
+- **Pathing part 5 kept whole although the layer's quick-lane median grew** (main session): with
+  the part 5 layer, the median AI-against-AI game is 4.3 % longer than the reference (96 games,
+  45 197 against 43 334 ticks). Every game still ends with a winner, nothing is stuck, harvest
+  income per tick rises, and dropping either the rally spread or the harvesters' field cells alone
+  brings the median back to the reference, so neither is the cause on its own. Units that no longer
+  give up matter more in play than a slightly longer AI game, so both switches stay in the layer.
 
 ## Track A: fidelity
 
