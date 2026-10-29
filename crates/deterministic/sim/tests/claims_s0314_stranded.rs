@@ -76,6 +76,11 @@ fn rules(layers: Layers, build: Depot) -> Ruleset {
     r.sim.buildings.insert("DEPOT".into(), d);
     r.sim.general.repair_step = Some(10);
     r.sim.general.repair_percent = Some(glasnost_rules::sim::Decimal("25%".into()));
+    // No path-retry delay: a move order given while the hover's delay runs
+    // waits out the rest of it (S-0212 claim 21 and its state table, row
+    // "destination changes"; S-0503 H14, a retarget while a positive retry
+    // delay runs), and these tests are about S-0314's settling.
+    r.sim.general.path_delay = Some(glasnost_rules::sim::Decimal("0".into()));
     r.globals.quirks = layers
         .apply_quirks(r.globals.quirks)
         .expect("the layer reads");

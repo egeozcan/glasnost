@@ -556,7 +556,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
             crate::econ::assign_destination(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
-                ob.path.retry_at = 0;
+                // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
             }
         }
         return crate::process::standard_delay(w, id);
@@ -938,7 +938,7 @@ fn send_away(w: &mut World, k: ObjectId, v: ObjectId) -> bool {
     crate::econ::assign_destination(w, v, Some(dest));
     if let Some(ob) = w.obj_mut(v) {
         ob.path.steps.clear();
-        ob.path.retry_at = 0;
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
         // spec: S-0314 claim 6 (a selected destination queues move without immediate start)
         ob.beh.queue(Some(Behaviour::Move));
     }
@@ -1102,7 +1102,7 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         crate::econ::assign_destination(w, id, Some(Target::Object(k)));
         if let Some(ob) = w.obj_mut(id) {
             ob.path.steps.clear();
-            ob.path.retry_at = 0;
+            // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
         }
     } else {
         // spec: S-0314 claims 20 and 23 (refused: contact, queued entry and destination cleared; it falls back to rest)

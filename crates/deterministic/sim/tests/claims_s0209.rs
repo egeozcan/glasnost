@@ -15,7 +15,7 @@ use glasnost_sim::cells::position;
 use glasnost_sim::occupancy::{self, Outcome};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, Target, World};
-use glasnost_sim::{crush, objects, path, scatter, tick};
+use glasnost_sim::{crush, objects, path, scatter, tick, trace};
 
 // ---------------------------------------------------------------------------
 // Scene helpers (invented types and values).
@@ -629,6 +629,27 @@ fn friends_ahead(dest_x: i32) -> (World, ObjectId, Vec<ObjectId>) {
     (w, m, friends)
 }
 
+/// Whether every one of `ids` accepted a scatter request in the trace.
+/// A friend's destination may be gone by the end of the tick: one whose
+/// cell lies on the corridor's raised side fails the reachability gate in
+/// the friend's own turn, which clears a walker's destination (S-0417
+/// claim 17, No path; S-0212 claim 23).
+fn all_accepted(w: &World, ids: &[ObjectId]) -> bool {
+    let ev = trace::take(w);
+    ids.iter().all(|&f| {
+        ev.iter().any(|e| {
+            e.unit == f
+                && matches!(
+                    e.what,
+                    trace::What::Asked {
+                        accepted: true,
+                        dest: Some(_)
+                    }
+                )
+        })
+    })
+}
+
 // spec: S-0209 claim 8 (far from the destination: a scatter request to every occupant on the asking tick)
 // spec: S-0209 claim 11 (a move-anywhere request reaches every listed occupant on one tick)
 // spec: S-0209 claim 12 (the walker sends move-anywhere, forced requests)
@@ -639,8 +660,9 @@ fn stationary_friendly_far_asks_them_to_move() {
     // move-anywhere lets the request through; forced makes idle units obey.
     assert!(!w.rules().general.player_scatter);
     assert!(friends.iter().all(|&f| dest(&w, f).is_none()));
+    trace::switch_on(&mut w);
     tick::step(&mut w);
-    assert!(friends.iter().all(|&f| dest(&w, f).is_some()));
+    assert!(all_accepted(&w, &friends));
     assert!(dest(&w, m).is_some(), "the walker keeps its move");
     assert_eq!(walk_target_cell(&w, m), None, "and waits for the tick");
 }
@@ -660,9 +682,10 @@ fn stationary_friendly_close_gives_up() {
 fn stationary_friendly_contact_asks() {
     let (mut w, m, friends) = friends_ahead(3);
     w.obj_mut(m).unwrap().contact = Some(friends[0]);
+    trace::switch_on(&mut w);
     tick::step(&mut w);
     assert!(dest(&w, m).is_some());
-    assert!(friends.iter().all(|&f| dest(&w, f).is_some()));
+    assert!(all_accepted(&w, &friends));
 }
 
 /// Two idle infantry of house 1 in one cell; returns the world and them.

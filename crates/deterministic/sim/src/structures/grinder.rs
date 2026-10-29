@@ -350,7 +350,7 @@ pub fn grinder_fate(w: &mut World, u: ObjectId) -> bool {
         // spec: S-0603 claim 14 (it queues eaten, without an immediate start)
         ob.beh.queue(Some(Behaviour::Eaten));
         ob.path.steps.clear();
-        ob.path.retry_at = 0;
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
     }
     // spec: S-0603 claim 14 (it takes that building as its destination)
     crate::econ::assign_destination(w, u, Some(Target::Object(b)));

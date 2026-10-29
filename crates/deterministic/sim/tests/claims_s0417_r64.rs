@@ -131,7 +131,7 @@ fn claim_17_one_draw_then_refusals() {
     assert_eq!(probe.obj(g).unwrap().dest, first, "the destination is kept");
 }
 
-// design: S-0417 claim 17 (whether a walking unit holding a destination with no path reports movement in progress is not established; for claim 17's request it does, so each later request is refused with no draw and the destination kept, Q-1980)
+// spec: S-0417 claim 17 (No path, revision 68: a walking unit holding a destination while its retry delay runs has movement in progress, so each later request is refused with no draw and the destination kept, Q-1980)
 #[test]
 fn claim_17_destination_without_a_path_is_kept() {
     let (mut w, k, g) = released(&ruleset());
@@ -143,7 +143,7 @@ fn claim_17_destination_without_a_path_is_kept() {
     assert!(d.is_some(), "the first request gives a destination");
     for _ in 0..20 {
         step(&mut w);
-        assert!(!glasnost_sim::occupancy::in_progress(&w, g));
+        assert!(glasnost_sim::occupancy::in_progress(&w, g));
     }
     // A refused request takes no draw.
     let req = ScatterRequest {

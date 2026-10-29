@@ -277,6 +277,10 @@ pub(crate) fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 /// or the same object). A first or different destination and a cleared one
 /// make no request. The request is not saved when refused.
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0417 claim 17 (No path: a destination accepted after a failed search reaches the walk locomotor, which then has movement in progress while it waits for the rest of the retry delay, even when it is the destination that failed)
+        ob.path.failed_for = None;
+    }
     // spec: S-0207 claim 27 (an assignment takes effect when it changes the order-level destination or a destination-refresh state is present)
     let effective = w.obj(id).is_some_and(|o| o.dest != before) || crate::refresh::pending(w, id);
     // spec: S-0207 claim 27 (a vehicle's effective assignment runs the dock test before the locomotors take the destination)

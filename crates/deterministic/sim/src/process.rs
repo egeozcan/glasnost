@@ -50,7 +50,8 @@ fn moving(w: &World, id: ObjectId) -> bool {
         return crate::hover::moving_now(w, id);
     }
     // spec: S-0215 claim 11 (other locomotors: the actor is moving on this tick while its locomotor moves it; the driving predicate is the driving locomotor's only)
-    occupancy::in_progress(w, id)
+    // spec: S-0107 Terms (*is moving now*, true while the unit is physically moving on this tick, differs from *has movement in progress*, which S-0417 claim 17 gives a walker waiting for its search; readiness reads the first, occupancy::moving_on_tick)
+    occupancy::moving_on_tick(w, id)
 }
 
 /// Whether `id` is a vehicle with the driving locomotor, by type or

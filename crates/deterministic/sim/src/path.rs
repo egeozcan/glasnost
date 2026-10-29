@@ -36,6 +36,12 @@ pub struct PathState {
     pub blocked_since: Option<i32>,
     /// The destination the stored path was computed for.
     pub for_goal: Option<CellXY>,
+    /// A walker's destination at the failed search that ended its movement
+    /// in progress while it kept that destination (S-0212 claim 23, the
+    /// sentence after its table; S-0417 claim 17, *No path*). Cleared when
+    /// a destination reaches the locomotor or a path is found.
+    #[serde(default)]
+    pub failed_for: Option<Target>,
 }
 
 /// Search mode (S-0212 Terms).
@@ -2421,6 +2427,8 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps = steps.into_iter().take(STORED).collect();
         ob.path.for_goal = Some(goal);
+        // spec: S-0417 claim 17 (No path: a found path gives the walker movement in progress again)
+        ob.path.failed_for = None;
     }
     Search::Found
 }
@@ -2462,10 +2470,11 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
     match res {
         Search::Found => {}
         Search::GateFailed => {
-            // spec: S-0212 claim 23 (gate fails: no path; a driving unit's destination is cleared)
+            // spec: S-0212 claim 23 (gate row: a unit with the driving, ship or walk locomotor has its destination cleared; for the walk locomotor after a fresh search and after a re-path for a moving blocker, and its movement in progress ends in the same movement update)
+            // spec: S-0417 claim 17 (No path: a walking unit whose fresh search fails at the gate has its destination cleared in the same movement update)
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
-                if drive {
+                if drive || walker {
                     ob.dest = None;
                 }
                 // spec: S-0212 claim 21 (the delay runs after a fresh search, and after a walker's re-path)
@@ -2502,6 +2511,10 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     // spec: S-0212 claim 23 row 2 and claim 23a (it gives up: its destination is cleared and it queues guard or area guard only, neither move nor a forced start)
                     ob.dest = None;
                     ob.beh.queue(Some(give_up));
+                }
+                if walker {
+                    // spec: S-0417 claim 17 (No path: a failed search that passes the gate ends the walking unit's movement in progress in that update, whether or not it keeps its destination; S-0212 claim 23, the sentence after its table)
+                    ob.path.failed_for = ob.dest;
                 }
             }
             if gives_up && !human {
