@@ -63,8 +63,8 @@ a lighter type. A drone delivery and a squid's push on a vessel, recorded the sa
 
 ## Current workaround
 
-The view's interim rules, marked `design: Q-2081` in `crates/app/src/mapview/rocking.rs` and stated
-in the M8 step ledger under the decision of 2026-10-25:
+The view's interim rules, marked `design: Q-2081` in `crates/app/src/mapview/rocking.rs` and listed
+in `docs/m8-claims/a4-rocking.md`:
 
 - A push sets both rates, replacing what they were: rate = 0.05 radians per tick × *s* ÷ weight,
   times cos *φ* for the pitch and sin *φ* for the roll, where *φ* is the push's facing relative to
@@ -74,8 +74,9 @@ in the M8 step ledger under the decision of 2026-10-25:
   and then the rate is pulled towards level by a damped spring: rate −= ω² × angle + 2ζω × rate,
   with ω = 2π / 18 per tick and ζ = 0.2. The cap's push swings an unweighted body to about 0.45
   radians and settles below 0.005 radians in about 60 ticks.
-- The weight is a vehicle type's imported weight (S-0504 claim 11: 1.0 when absent), 1.0 for any
-  other kind, and 1.0 when it is not a positive number. The drone's 1.5 is scaled the same way.
+- Only vehicles rock in the view; aircraft (drawn by their flight attitude), infantry and buildings
+  are left out. The weight is the vehicle type's imported weight (S-0504 claim 11: 1.0 when
+  absent), and 1.0 when it is not a positive number. The drone's 1.5 is scaled the same way.
 - The sideways limit is π/4.
 - A centre-cell object with no source object is pushed away from *P*; an object exactly on its
   push point does not rock.
