@@ -1,9 +1,9 @@
 ---
 id: Q-2071
 title: Pip scale with an unknown pip-scale word or a negative pip wrap
-status: open
+status: answered
 related: [S-0111, S-0003]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
