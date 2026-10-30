@@ -2458,16 +2458,19 @@ pub struct CombatFields {
     /// Art `SecondaryFireFLH` (S-0313).
     #[serde(default)]
     pub secondary_fire_flh: Option<Flh>,
-    /// Art `ElitePrimaryFireFLH` (S-0313).
+    /// Art `ElitePrimaryFireFLH` (S-0313); absent, the primary slot's
+    /// muzzle position (claim 1a).
     #[serde(default)]
     pub elite_primary_fire_flh: Option<Flh>,
-    /// Art `EliteSecondaryFireFLH` (S-0313).
+    /// Art `EliteSecondaryFireFLH` (S-0313); absent, the secondary slot's
+    /// muzzle position (claim 1a).
     #[serde(default)]
     pub elite_secondary_fire_flh: Option<Flh>,
     /// Art `Weapon`n`FLH`, by slot (S-0313).
     #[serde(default)]
     pub weapon_flh: Option<Vec<Flh>>,
-    /// Art `EliteWeapon`n`FLH`, by slot (S-0313).
+    /// Art `EliteWeapon`n`FLH`, by slot (S-0313); an absent entry holds
+    /// weapon n's muzzle position as imported (claim 1a).
     #[serde(default)]
     pub elite_weapon_flh: Option<Vec<Flh>>,
     /// Art `TurretOffset` δ (S-0313).

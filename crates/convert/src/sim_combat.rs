@@ -1686,7 +1686,7 @@ const FLH_KEYS: [(&str, &str); 4] = [
 ];
 
 /// A muzzle position no layer gives (S-0313 Import mapping: 0, 0, 0).
-const FLH_ABSENT: [i32; 3] = [0, 0, 0]; // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
+const FLH_ABSENT: [i32; 3] = [0, 0, 0]; // spec: S-0313 Import mapping and claim 1a (non-elite muzzle positions absent: 0, 0, 0)
 
 /// The alternate link anchors read (S-0601 Import mapping, F5).
 const ALTERNATE_FLH: usize = 5; // spec: S-0601 Import mapping (AlternateFLH0 through AlternateFLH4)
@@ -2333,6 +2333,18 @@ impl Builder<'_> {
         );
     }
 
+    /// Writes a list of muzzle positions (three integers each).
+    fn put_flh_list(rec: &mut Rec, field: &str, list: &[[i32; 3]]) {
+        rec.put(
+            field,
+            jsonc::array(
+                list.iter()
+                    .map(|f| jsonc::array(f.iter().map(|&x| int_node(x)).collect()))
+                    .collect(),
+            ),
+        );
+    }
+
     /// The combat fields every object type with weapons shares (S-0301 to
     /// S-0315), written into `combat`.
     fn shared_combat(&mut self, combat: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
@@ -2357,28 +2369,24 @@ impl Builder<'_> {
                 Self::put_tuple(combat, field, v);
             }
         }
-        for (field, prefix) in [
-            ("weapon_flh", "Weapon"),
-            ("elite_weapon_flh", "EliteWeapon"),
-        ] {
-            let mut by_slot = Vec::new();
-            for n in 1..=SLOTS {
-                by_slot.push(self.art_tuple::<3>(kind, index, t, &format!("{prefix}{n}FLH")));
-            }
-            if let Some(last) = by_slot.iter().rposition(Option::is_some) {
-                combat.put(
-                    field,
-                    jsonc::array(
-                        by_slot[..=last]
-                            .iter()
-                            .map(|f| {
-                                let f = f.unwrap_or(FLH_ABSENT);
-                                jsonc::array(f.iter().map(|&x| int_node(x)).collect())
-                            })
-                            .collect(),
-                    ),
-                );
-            }
+        // spec: S-0313 Import mapping and claim 1a (revision 37: an absent `Weapon`n`FLH` is 0, 0, 0; an absent elite form takes weapon n − 1's muzzle position as imported)
+        let numbered: Vec<Option<[i32; 3]>> = (1..=SLOTS)
+            .map(|n| self.art_tuple::<3>(kind, index, t, &format!("Weapon{n}FLH")))
+            .collect();
+        let elite: Vec<Option<[i32; 3]>> = (1..=SLOTS)
+            .map(|n| self.art_tuple::<3>(kind, index, t, &format!("EliteWeapon{n}FLH")))
+            .collect();
+        let plain: Vec<[i32; 3]> = numbered.iter().map(|f| f.unwrap_or(FLH_ABSENT)).collect();
+        if let Some(last) = numbered.iter().rposition(Option::is_some) {
+            Self::put_flh_list(combat, "weapon_flh", &plain[..=last]);
+        }
+        if let Some(last) = elite.iter().rposition(Option::is_some) {
+            let list: Vec<[i32; 3]> = elite[..=last]
+                .iter()
+                .zip(&plain)
+                .map(|(e, p)| e.unwrap_or(*p))
+                .collect();
+            Self::put_flh_list(combat, "elite_weapon_flh", &list);
         }
         // spec: S-0601 Import mapping (AlternateFLH0 to AlternateFLH4: integer triples of the type's art section; absent: the zero triple)
         let alt: Vec<Option<[i32; 3]>> = (0..ALTERNATE_FLH)

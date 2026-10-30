@@ -622,3 +622,183 @@ fn edge_spray_long_bursts_do_not_step() {
     let (cells, s1, p) = spray_cells(9, 4);
     assert!(cells.iter().all(|c| *c == spray_cell(p, s1)));
 }
+
+// ---------------------------------------------------------------------------
+// Claim 1a (revision 37): absent muzzle positions.
+
+/// Elite (experience 2.0, S-0311 claim 1).
+fn make_elite(w: &mut World, a: ObjectId) {
+    w.obj_mut(a).unwrap().combat.experience = glasnost_num::F32(0x4000_0000);
+    assert_eq!(
+        glasnost_sim::combat::veterancy::rank(w, a),
+        glasnost_sim::combat::veterancy::Rank::Elite
+    );
+}
+
+/// The fire point and the weapon of the shot `fire::shot` makes with
+/// `slot` at the firer's target.
+fn shot_from(w: &mut World, a: ObjectId, slot: usize) -> (Pos, u32) {
+    let t = w.obj(a).unwrap().target.unwrap();
+    let before: Vec<ObjectId> = w.projectiles.keys().copied().collect();
+    assert!(fire::shot(w, a, slot, t));
+    let from = w
+        .effects
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            Effect::Shot { firer, from, .. } if *firer == a => Some(*from),
+            _ => None,
+        })
+        .expect("a shot");
+    let weapon = w
+        .projectiles
+        .values()
+        .find(|x| !before.contains(&x.id))
+        .expect("a projectile")
+        .weapon;
+    w.tick = w.obj(a).unwrap().combat.rearm_until;
+    (from, weapon)
+}
+
+/// Rules with ZAP, ZAP2 and ZAP3 (distinct weapons) and a turretless CART
+/// without turret displacement.
+fn elite_rules() -> Ruleset {
+    let mut r = base([0, 0, 0], 0);
+    for name in ["ZAP2", "ZAP3", "ZAP4"] {
+        r.sim.weapons.insert(name.into(), zap());
+    }
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.turret = Some(false);
+    cart.combat.turret_offset = None;
+    r
+}
+
+// spec: S-0313 claim 1a and scenario P1 part d (an elite primary or secondary slot whose art gives no elite muzzle position fires from F1 of the same slot's non-elite muzzle position, not the other slot's; the elite weapons are fired, S-0308 claim 2)
+#[test]
+fn claim_1a_absent_elite_muzzle_takes_the_same_slots() {
+    let (pf, sf) = ([100, 40, 50], [60, -30, 45]);
+    let mut r = elite_rules();
+    {
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.secondary = Some("ZAP".into());
+        cart.elite_primary = Some("ZAP2".into());
+        cart.elite_secondary = Some("ZAP3".into());
+        cart.combat.primary_fire_flh = Some(pf);
+        cart.combat.secondary_fire_flh = Some(sf);
+        cart.combat.elite_primary_fire_flh = None;
+        cart.combat.elite_secondary_fire_flh = None;
+    }
+    for body in [0u16, 16384] {
+        let (mut w, a, _) = scene(&r, Kind::Vehicle, "CART", true);
+        make_elite(&mut w, a);
+        pose(&mut w, a, body, body);
+        let m = mode(&w);
+        let p = w.obj(a).unwrap().pos;
+        let tb = angle(body, m);
+        let zap2 = w.rules().combat.weapon_index["ZAP2"];
+        let zap3 = w.rules().combat.weapon_index["ZAP3"];
+        let (from0, w0) = shot_from(&mut w, a, 0);
+        assert_eq!(w0, zap2, "the elite primary is fired");
+        near(from0, p, shift(m, tb, tb, 0, pf, 1), "elite primary");
+        let (from1, w1) = shot_from(&mut w, a, 1);
+        assert_eq!(w1, zap3, "the elite secondary is fired");
+        // The first shot of a new burst: +L.
+        near(from1, p, shift(m, tb, tb, 0, sf, 1), "elite secondary");
+        assert_ne!(from0, from1);
+    }
+    // A given elite muzzle position is used as it is.
+    r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .elite_primary_fire_flh = Some([20, 10, 90]);
+    let (mut w, a, _) = scene(&r, Kind::Vehicle, "CART", true);
+    make_elite(&mut w, a);
+    pose(&mut w, a, 16384, 16384);
+    let p = w.obj(a).unwrap().pos;
+    assert_eq!(
+        shot_from(&mut w, a, 0).0,
+        Pos::new(p.x + 20, p.y - 10, p.z + 90)
+    );
+}
+
+// spec: S-0313 claim 1a and scenario P1 part d (numbered weapons: the elite version of weapon n with no elite muzzle position takes weapon n's, not weapon 0's; an elite muzzle position given for weapon 0 only leaves weapon 1 on its own)
+#[test]
+fn claim_1a_absent_elite_numbered_muzzle_takes_weapon_ns() {
+    let (f0, f1, f2, e0) = ([100, 40, 50], [70, -20, 60], [30, 15, 75], [10, 5, 80]);
+    for elite_given in [None, Some(vec![e0])] {
+        let mut r = elite_rules();
+        {
+            let cart = r.sim.vehicles.get_mut("CART").unwrap();
+            cart.turret_count = Some(3);
+            cart.weapon_count = Some(3);
+            cart.combat.weapon_slots = Some(vec!["ZAP".into(), "ZAP".into(), "ZAP".into()]);
+            cart.combat.elite_weapon_slots =
+                Some(vec!["ZAP2".into(), "ZAP3".into(), "ZAP4".into()]);
+            cart.combat.weapon_flh = Some(vec![f0, f1, f2]);
+            cart.combat.elite_weapon_flh = elite_given.clone();
+        }
+        let (mut w, a, _) = scene(&r, Kind::Vehicle, "CART", true);
+        make_elite(&mut w, a);
+        pose(&mut w, a, 16384, 16384);
+        let p = w.obj(a).unwrap().pos;
+        let zap3 = w.rules().combat.weapon_index["ZAP3"];
+        let (from1, w1) = shot_from(&mut w, a, 1);
+        assert_eq!(w1, zap3, "the elite second weapon is fired");
+        assert_eq!(
+            from1,
+            Pos::new(p.x + f1[0], p.y - f1[1], p.z + f1[2]),
+            "weapon 1's muzzle position ({elite_given:?})"
+        );
+        let (from2, _) = shot_from(&mut w, a, 2);
+        assert_eq!(
+            from2,
+            Pos::new(p.x + f2[0], p.y - f2[1], p.z + f2[2]),
+            "weapon 2's muzzle position ({elite_given:?})"
+        );
+        let want0 = if elite_given.is_some() { e0 } else { f0 };
+        let (from0, _) = shot_from(&mut w, a, 0);
+        assert_eq!(
+            from0,
+            Pos::new(p.x + want0[0], p.y - want0[1], p.z + want0[2]),
+            "weapon 0 ({elite_given:?})"
+        );
+    }
+}
+
+// spec: S-0313 claim 1a and scenario P1 part e (an absent numbered muzzle position is 0, 0, 0: the second weapon fires from the vehicle's own x and y, not from weapon 0's or an alternate muzzle position) and S-0306 claim 8 (its start 1 lepton above the surface)
+#[test]
+fn claim_1a_absent_numbered_muzzle_is_the_zero_triple() {
+    let mut r = elite_rules();
+    {
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.turret_count = Some(2);
+        cart.weapon_count = Some(2);
+        cart.combat.weapon_slots = Some(vec!["ZAP".into(), "ZAP2".into()]);
+        cart.combat.weapon_flh = Some(vec![[100, 40, 50]]);
+        cart.combat.alternate_flh = Some(vec![
+            [10, 20, 30],
+            [11, 21, 31],
+            [12, 22, 32],
+            [13, 23, 33],
+            [14, 24, 34],
+        ]);
+    }
+    for body in [0u16, 16384] {
+        let (mut w, a, _) = scene(&r, Kind::Vehicle, "CART", true);
+        pose(&mut w, a, body, body);
+        let p = w.obj(a).unwrap().pos;
+        let before: Vec<ObjectId> = w.projectiles.keys().copied().collect();
+        let (from, _) = shot_from(&mut w, a, 1);
+        assert_eq!(from, p, "body {body}");
+        let pr = w
+            .projectiles
+            .values()
+            .find(|x| !before.contains(&x.id))
+            .unwrap();
+        // An invisible projectile is moved to K at once (S-0306 claim 9);
+        // its placement is shown by the stored fire point.
+        assert_eq!(pr.fire_point, p);
+    }
+}
