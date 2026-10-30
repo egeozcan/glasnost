@@ -2,12 +2,12 @@
 id: S-0216
 title: Units placed after the game has started
 topic: simulation
-revision: 20
-sources-class: [decomp]
+revision: 31
+sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
-measurements: [M-0001, M-0002]
+approved-on: 2026-10-30
+measurements: [M-0001, M-0002, M-0003, M-0006]
 requests: [Q-1711, Q-1713]
 supersedes: []
 ---
@@ -17,18 +17,19 @@ supersedes: []
 ## Summary
 
 What placing a newly created vehicle or infantry unit on the map does once the game's set-up has
-ended: the facings it starts with, where an infantry unit stands in its cell, which random draws
-the placement takes and in which order, the entry test that can refuse it, and which behaviour is
+ended: the facings it starts with, where an infantry unit stands in its cell, which random draws the
+placement takes and in which order, the entry test that can refuse it, and which behaviour is
 current before the unit's first update. It answers Q-1711 questions 2 and 3 for units placed by a
-play-time placement. Question 5, which placement the measurement records' units had and so
-whether those answers hold for them, stays open (Open questions); claims 1 to 5 give only what
-the game does for each kind of placement. So for the units of the measurement records the
-answers to questions 2 and 3 wait on question 5. Questions 1 and 4 need an oracle run (Open
-questions). It also answers Q-1713 questions 2 and 3 (claim 6) for the records' units, which
-stood on their stated cells and whose houses were the original's computer players. Q-1713
-question 1, how those units were destroyed or destroyed their enemy, stays open. Placement by
-the map during the game's set-up is S-0009's and S-0208's (claim 5), and is restated here only as
-a contrast. Skirmish only: campaigns and network games are out of scope.
+play-time placement. Question 5, how the measurement records' units were placed, is open: M-0006
+shows that they were in play from tick 0 and where the archived logs place them, not how they
+came there (claim 7). Questions 1, 4 and 5 need an oracle run (Open questions). It answers
+Q-1713 in part (claim 6). For question 1, in the records' games no unit was placed on the cliff
+cells, since every unit stated on one was placed on a neighbouring cell (M-0006), so the
+request's premise does not hold for them. What ends those games stays open (Open questions).
+Questions 2 and 3 are answered for an infantry unit that stands on such a cell and whose house
+is one of the original's computer players, a placement that did not occur in the records' games.
+Placement by the map during the game's set-up is S-0009's and S-0208's (claim 5), and is restated
+here only as a contrast. Skirmish only: campaigns and network games are out of scope.
 
 ## Terms
 
@@ -210,9 +211,8 @@ S-0208 claim 3 reads it. In addition:
    applies to every play-time placement, of a vehicle or an infantry unit, inside or outside the
    usable area. During set-up it is skipped (S-0009 claim 46).
    - On a cell whose land type is *rock*, an ordinary play-time placement's test refuses an
-     infantry type whose movement class cannot enter *rock* (S-0211 claim 10). The records M-0001
-     and M-0002 do not show that their harness used an ordinary placement (Open questions, *Q-1711
-     question 5*); the refusal is rated low below.
+     infantry type whose movement class cannot enter *rock* (S-0211 claim 10). Whether the
+     measurement records' units were placed this way is open (claim 7).
    - For an infantry unit, the standing-position choice of claim 2 comes first. When that choice
      takes its draw and finds a free position, the draw is kept even if the entry test then
      refuses, as S-0614 claim 20 says for a returning parasite.
@@ -230,9 +230,10 @@ S-0208 claim 3 reads it. In addition:
      that PT5 tests, until PT5 runs: S-0614 claim 20 states the test only for a returning
      parasite, and S-0209 rates the wall and tree rows medium. Medium for the visceroid draw's
      coming after the test, as claim 3 rates it. Low for the refusal on a *rock* cell of an
-     infantry type whose movement class cannot enter *rock* (S-0211 claim 10), until PT5 part d
-     runs and the measurement records' placement method is settled (Open questions, *Q-1711
-     question 5*).
+     infantry type whose movement class cannot enter *rock*, until PT5 part d runs: it rests on
+     S-0211 claim 10's movement class alone. M-0006 does not raise it: no unit of the records was
+     placed on one of Q-1502's *rock* cells (claims 6 and 7), but units stated on other nearby
+     cells were moved too, and M-0006 does not record why.
      Medium for the standing-position draw kept after a refusal, as claim 2 rates failed
      placements. Other outcomes as S-0209 rates each of them, and medium for the entry-table
      application to uncommon building and crushing exceptions, as in S-0614 claim 20.
@@ -241,22 +242,26 @@ S-0208 claim 3 reads it. In addition:
    measurement records M-0001 and M-0002 in which infantry units were meant to stand on cliff
    cells of no reach region whose land type is *rock* (Q-1502). In those games both houses were
    the original's computer players (M-0001), so every rule the original gives only to
-   computer-controlled owners applied to the records' units, retaliation included.
-   - Question 1. The records state that every unit stood on its stated cell, so the units meant for
-     those cells stood on them, and the answers to questions 2 and 3 below describe them. How they
-     were placed there is open (Open questions, *Q-1711 question 5*): an ordinary play-time
-     placement would have refused them (claim 5). How they were destroyed, or destroyed their
-     enemy, is open too (Open questions, *Q-1713 question 1*). S-0309 claim 7 (a hunter on open
-     ground rejects such units in its map-wide search) and S-0215 claim 27 (a hunter that finds
-     nothing stays put), which stay as they are, explain why such units' hunt searches give no
-     advance; they do not by themselves establish how the recorded games ended.
+   computer-controlled owners would apply to a unit of theirs, retaliation included.
+   - Question 1. No unit was placed on any of the five cliff cells in any of the records' games
+     (M-0006). In every game that states a unit on one of them, that unit was placed on a
+     neighbouring cell, and none of the placed cells is among the cells Q-1502 lists. So the
+     request's premise, that units of those games were placed on the cliff cells, does not hold, and
+     question 1 is answered only in that part. What ends those games, which the request's need
+     asks about, is not answered here (Open questions, *Q-1713 question 1, for the records*). Why
+     each unit's placed cell differs from its stated cell is not recorded (claim 7). The finding
+     is about the archived logs' placed cells only: M-0006 does not compare the 32 replays' tick-0
+     cells with them.
+   - Questions 2 and 3 below are about a unit that stands on such a cell. No unit of the records'
+     games was placed on one, so they describe a placement that did not occur in those games and are not
+     findings about those games' units.
    - Question 2. A hunting infantry unit on such a cell fires at an enemy on open ground only once
      that enemy is its target, and the enemy coming within its weapon's range does not by itself
      make it one. Its hunt search does not consider that enemy (S-0309 claim 7), and the
      limited-scan mark that turns a map-wide search into a range search is given only to vehicles
-     (S-0309 claim 22). Retaliation has no reach-region test (S-0309 claim 18). For the records'
-     units, whose houses were computer-controlled (M-0001), the original's behaviour list of
-     S-0215 claim 18 does not hold back the unit (S-0215 claim 18, original only). So after the
+     (S-0309 claim 22). Retaliation has no reach-region test (S-0309 claim 18). For a unit of a
+     computer-controlled house, as the records' houses were (M-0001), the original's behaviour list
+     of S-0215 claim 18 does not hold back the unit (S-0215 claim 18, original only). So after the
      enemy hits it, such a hunter with no target makes that enemy its target when the *hunt*
      behaviour has the retaliate property (which a behaviour has unless the user's behaviour data
      turns it off: S-0215 Constants, absent-key default yes), and S-0309 claim 18's other
@@ -270,24 +275,54 @@ S-0208 claim 3 reads it. In addition:
      on the same conditions as in question 2, or, for a vehicle with the limited-scan mark
      (S-0309 claim 22), by the range search that replaces its hunt search, which has no
      reach-region test (S-0309 claims 7 and 11).
-   - Backing: `measured` (M-0001, M-0002) for where the records' units stood and (M-0001) for
-     their houses' being the original's computer players. `measurable` for the rest: scenario PT5
-     part d tests question 1's refusal of claim 5. For questions 2 and 3 the
-     backing rests only on other specs' scenarios, as this spec has none of its own for them:
-     S-0309 scenario A11, parts a and j, for the hunt search and for retaliation against
-     cells of no reach region, and part c for the limited-scan mark; S-0215 scenario B7 for
-     the behaviour list and the player return-fire setting. Retaliation from such cells is
-     `unmeasured` here: it rests on S-0309 claim 18's conditions, which have no reach-region
-     test.
-   - Confidence: high for where the records' units stood and for their houses' control, as the
-     records state. Low for question 1's refusal, as claim 5 rates it, until PT5 part d runs and the
-     records' placement method is settled. High for the hunt search's rejection, as S-0309 claim 7
-     rates cells of no reach region, and for the retaliation behaviour list, as S-0215 claim 18
-     rates it; medium for retaliation against such cells, as S-0309 claim 18 rates its conditions,
-     and for retaliation from them (unmeasured, as above); low for the switch of a
+   - Backing: `measured` (M-0006) for question 1's finding that no unit was placed on the cliff
+     cells, and for the records' units' being in play at tick 0 in the 32 replayed games, and
+     (M-0001) for their houses' being the original's computer players. How the records' units
+     were placed is open (claim 7). For questions 2 and 3 the backing rests only on other specs'
+     scenarios, as this spec has none of its own for them: S-0309 scenario A11, parts a and j, for
+     the hunt search and for retaliation against cells of no reach region, and part c for the
+     limited-scan mark; S-0215 scenario B7 for the behaviour list and the player return-fire
+     setting. Retaliation from such cells is `unmeasured` here: it rests on S-0309 claim 18's
+     conditions, which have no reach-region test.
+   - Confidence: high for their houses' control (M-0001) and for question 1's finding, which
+     M-0006 reads from every archived game's log. High for the hunt search's rejection, as S-0309
+     claim 7 rates cells of no reach region, and for the retaliation behaviour list, as
+     S-0215 claim 18 rates it; medium for retaliation against such cells, as S-0309 claim 18 rates
+     its conditions, and for retaliation from them (unmeasured, as above); low for the switch of a
      computer-controlled hunter that already has a target, as S-0309 claim 25 part h rates the
-     threat comparison that S-0215 claim 18 uses; low for the limited-scan route, as S-0309 claim
-     22 rates when the mark is given.
+     threat comparison that S-0215 claim 18 uses; low for the limited-scan route, as S-0309 claim 22
+     rates when the mark is given.
+
+7. **Units of the measurement records.** The units of M-0001, M-0002 and M-0003 were in play in the
+   tick-0 state of the 32 replayed games of M-0006 (the replays' per-tick records hold them from
+   tick 0). How they came to be there is not observed, so whether the game placed them by a
+   play-time placement, and so whether claims 1 to 5 hold for them, is open (Open questions, *Q-1711
+   question 5*).
+   - Moved units. M-0006 reads every unit's placed cell from the archived logs of all 1860 games. In
+     some games some side-A units were placed on a cell next to their stated cell. No side-B unit
+     was moved, and every unit was placed. M-0001's Setup says that a unit that its stated cell does
+     not take stands on a free neighbouring cell, and that infantry take one cell each. The logs
+     place more than one unit on some cells (M-0006), so the one-cell-each statement does not hold
+     for those cells, and a "free" neighbouring cell there is one that accepts the unit, not an
+     empty one. Several infantry units in one cell are consistent with claim 2: a placement into a
+     cell that already holds infantry takes a free standing position of its row. Which nearby cell each moved unit was placed on is a fact of the records' Setup,
+     not a rule of the game.
+   - Why those stated cells were taken M-0006 does not record. For the five *rock* cells of
+     Q-1502 (124,79, 124,80, 125,79, 125,80 and 125,86), a refusal by the entry test of claim 5
+     would fit: an infantry type whose movement class cannot enter *rock* is refused there. For
+     the other moved units, the records are silent on what their stated cells held at placement,
+     so this claim does not explain their moves. The neutral bunkers stand at 126,78 and 126,87,
+     next to some of those cells, and which cells they cover beyond their own is not recorded
+     (M-0006).
+   - Backing: `measured` (M-0006) for the units' being in play at tick 0 in the 32 replayed games,
+     from the replays' records, and for the stated and placed cells of the moved units that M-0006
+     lists, from the logs. `unmeasured` for the method by which the game placed the records'
+     units: no run observes how the archived games placed them, and M-0006 does not record why
+     units moved. PT5 part d tests claim 5's refusal rule itself, not that method.
+   - Confidence: high for the units' being in play at tick 0 in the 32 replayed games and for the
+     moves from the five *rock* cells that M-0006 lists, as it reads them from the logs. Low that
+     the moves from the five *rock* cells are entry test refusals: that is inferred, and it does not
+     explain the other moves.
 
 ## Formulas
 
@@ -402,10 +437,10 @@ with neither visceroid flag, an infantry unit, a second vehicle without the flag
 infantry unit, all on empty usable cells. Repeat with a vehicle type that has a visceroid flag
 placed in the third slot instead (test type data). Run 3 seeds each. Record with the recorder
 every scenario-stream draw from just before the first creation to just before the first update
-of any placed unit. Draws taken by that update (such as an idle action's) are outside the window. The cells used hold
-no tile that the land recompute of a unit entering its cell could start an animation on (S-0010
-claim 19), so no tile animation's creation draws fall in the window; the result is a property of
-such a map.
+of any placed unit. Draws taken by that update (such as an idle action's) are outside the window.
+The cells used hold no tile that the land recompute of a unit entering its cell could start an
+animation on (S-0010 claim 19), so no tile animation's creation draws fall in the window; the
+result is a property of such a map.
 - *Expected:* for the first run, in order: creation draw, creation draw, R(0, 3), creation draw,
   creation draw, R(0, 3). For the second run, R(0, 29) right after the visceroid vehicle's
   creation draw. No other draw in the window. A draw there that another system of S-0202 claim 10
@@ -420,8 +455,8 @@ updates, the tick of its first *hunt* processing, and whether
 the unit was ready to change (S-0215 claim 11) at its placement and at its first update's first
 per-tick start.
 - *Expected:* for a unit ready to change at placement, its resting behaviour current and nothing
-  queued before the *hunt* order, and *hunt* queued after it. For a unit ready at its first update's first per-tick start, *hunt*
-  current and processed in that same update.
+  queued before the *hunt* order, and *hunt* queued after it. For a unit ready at its first
+  update's first per-tick start, *hunt* current and processed in that same update.
 - *Falsified if:* *hunt* is current before the first update, is first processed at a later
   update although the unit was ready at that update's first per-tick start, or the resting behaviour
   is still queued in the record taken before the *hunt* order although the unit was ready to
@@ -453,7 +488,7 @@ placement, and whether each unit is on the map in its cell right after its place
   refused unit in another cell, that retry and its draws are reported separately and are not a
   falsifier.
 - *Void if:* the harness places without the entry test, as its operator states its placement
-  method (Open questions, *Q-1711 question 5*). Units of (a) to (d) standing on their refused
+  method. Units of (a) to (d) standing on their refused
   cells then say nothing about claim 5.
 
 ## Changes for other specs
@@ -481,40 +516,17 @@ placement, and whether each unit is on the map in its cell right after its place
   below). An oracle run is needed for the rest (backlog).
 - **Q-1711 question 4.** Whether the units of a group take the same paths and move off in the
   same order in every game. Needs the same oracle run.
-- **Q-1711 question 5, for the records, and so questions 2 and 3 for them.** Claims 1 to 5 give
-  what the game does for a play-time placement, and S-0009 and S-0208 (claim 5) what it does for a
-  map entry. How the measurement harness behind M-0001, M-0002 and M-0003 placed those units, what
-  it does when a placement is refused, and so how each unit came to stand on its cell, are facts
-  about how those records were made. They belong in the records' Setup and are left open here. The
-  records say that in every game every unit stood on its stated cell, and Q-1502 shows that some of
-  those cells have land type *rock*, which the entry test of claim 5 refuses to an infantry type
-  whose class cannot enter *rock* (S-0211 claim 10, S-0209 claim 4, part 4a). The lead's note on
-  M-0001 and M-0002 that Q-1502 quotes says that the stock harness placed units on these cells like
-  anywhere else. So those infantry units stood on the *rock* cells, and an ordinary play-time
-  placement would have refused them (claim 5): either the harness did not place them that way, or
-  claim 5's rock refusal is wrong for those cells. Which one is open; PT5 part d tests the refusal
-  directly. PT2 part c records the outcome of a placement outside the usable area, PT5 tests the
-  stated entry refusals, and any retry a harness makes elsewhere is reported separately (PT2, PT5).
-  Until the records' placement method is known, the answers to Q-1711 questions 2 and 3 (claims 1
-  to 3) hold for those records' units only if they were placed by a play-time placement; for map
-  entries, S-0206 and S-0208 claim 5 give them.
-- **Q-1713 question 1, for the records.** In the stock games of M-0001 and M-0002, how are the
-  infantry units on the cliff cells destroyed, or how do they destroy the enemy: by enemies that
-  attack them from open ground, by their own fire at enemies on open ground, or after they leave
-  the cliff cells? Claims 5 and 6 rule out none of the three:
-  - Attack from open ground stays possible. A hunter on open ground rejects them in its hunt
-    search (S-0309 claim 7), but can make one its target by retaliation after that unit hits it,
-    which the records' computer-controlled houses allow (claim 6, question 3), or, for a vehicle
-    with the limited-scan mark, by the range search (S-0309 claim 22).
-  - Their own fire stays possible, but only at an enemy that has become their target. Their hunt
-    search never makes one so; retaliation after that enemy hits them can (claim 6, question 2).
-  - Leaving the cells is neither established nor ruled out. S-0215 claim 27 keeps a hunter that
-    finds nothing where it stands; what a unit on such a cell does after gaining a target by
-    retaliation that is out of its weapon's range is not covered here.
-
-  Which of these ends the recorded games needs an oracle run (backlog). How the units came to
-  stand on the cells (*Q-1711 question 5*, above) does not decide it: claim 6's answers to
-  questions 2 and 3 hold however they were placed.
+- **Q-1711 question 5.** How the measurement records' units were put on the map: by a play-time
+  placement with its entry test (claims 1 to 5), or otherwise. M-0006 shows only that they were
+  in play at tick 0 and where the archived logs place them (claim 7). It needs a run that
+  observes the placement itself (backlog).
+- **Q-1713 question 1, for the records.** The request asks how the infantry units on the cliff
+  cells were destroyed in the stock games of M-0001 and M-0002, or how they destroyed the enemy,
+  because those games end and ours do not. No unit of those games was placed on the cliff cells
+  (claim 6): each unit stated on one was placed on a neighbouring cell. So what ends those games, and
+  what the units on the neighbouring cells did, is open. Claims 1 to 6 do not decide it, and
+  whether those neighbouring cells belong to a reach region is not established here. It needs an
+  oracle run on the records' stock replays (backlog).
 - **A failed placement.** What a placing step does with a unit whose placement fails (claims 2
   and 5): whether it tries another cell, keeps the unit off the map or removes it. This
   belongs to the step, not to the placement rule; PT2 parts d and e and PT5 record what the
