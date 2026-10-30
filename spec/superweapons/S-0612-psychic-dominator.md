@@ -2,11 +2,11 @@
 id: S-0612
 title: Psychic Dominator superweapon
 topic: superweapons
-revision: 2
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-30
 measurements: []
 requests: []
 supersedes: []
@@ -152,13 +152,15 @@ of scope.
 
 ### The sweep
 
-8. **Presentation at the sweep.** At the sweep, before the damage, a blast ring appears at the
-   centre of the target cell, and the sweep animation starts there, playing once. The blast ring is
-   presentation only: it deals no damage, starts no animation of its own and takes no draws. It is
+8. **Blast ring and animation at the sweep.** At the sweep, before the damage, a blast ring appears
+   at the centre of the target cell, and the sweep animation starts there, playing once. The blast
+   ring deals no damage, starts no animation of its own and takes no draws. It is
    updated with the other blast rings (S-0203 row 15) and is removed at its 80th update, so it is
-   present for 79 of them.
-   - Backing: `measurable` (PD3 part b for the ring's lifetime; PD9 for the absence of draws)
-   - Confidence: high
+   present for 79 of them. While it lasts it sets the body-rocking angles of objects near it, by
+   a formula not established here (S-0113 Open questions).
+   - Backing: `measurable` (PD3 part b for the ring's lifetime; PD9 for the absence of draws),
+     `unmeasured` for the rocking angles: no scenario records them
+   - Confidence: high; low for the rocking angles
 
 9. **Area damage.** At the sweep, before any takeover, area damage (S-0303) is dealt:
    - at the centre of the target cell at the height of its terrain surface (no bridge height is
