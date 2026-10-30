@@ -5,11 +5,12 @@
 //! - `arena_records_parse`: every oracle arena record under
 //!   `measurements/` (front matter plus the sibling CSV) parses and has the
 //!   protocol's shape, no record's CSV goes unread, and the scored pairings
-//!   and MIND against E2's line are M-0017's (in CI).
+//!   and MIND against E2's line are M-0017's, with M-0016's stock rows in
+//!   place of the archived SREF and V3 rows (in CI).
 //! - `arena_matches_the_oracle`: the local lane's comparison (never in
 //!   CI): with `GLASNOST_GAME_DIR` set, the records' games are played in
 //!   our engine with their setup (`glasnost_tools::oracle`) and compared
-//!   per pairing that stands as stock (M-0017): a two-proportion test on
+//!   per pairing that stands as stock (M-0017, M-0016): a two-proportion test on
 //!   the row's win proportion at `oracle::ALPHA`, and the same winner on
 //!   every side where every stock seed gave one.
 //! - `oracle_records_are_compared`: the oracle comparison on the synthetic
@@ -182,10 +183,11 @@ fn arena_records_parse() {
     arena::load_records(&measurements(), false).unwrap();
 }
 
-/// The pairings the comparison scores are those M-0017 confirms as stock:
-/// 84 of M-0001's 96, all 24 of M-0002's, 24 of M-0003's 35 (M-0017's
-/// table of games; the pairings with SREF or V3 on either side are not
-/// scored, M-0001 and M-0003 *Tolerance for tests*). The 7 crashed MIND
+/// M-0017 confirms as stock 84 of M-0001's 96 pairings, all 24 of
+/// M-0002's and 24 of M-0003's 35 (M-0017's table of games; the pairings
+/// with SREF or V3 on either side are not confirmed there). M-0016's stock
+/// rows stand for the SREF and V3 games, so with both records the
+/// comparison scores every pairing: 96, 24 and 35. The 7 crashed MIND
 /// against E2 games are the only stock games left out, and that pairing's
 /// line is M-0017's restated one: n = 5, 3 row wins, 2 column wins, no
 /// `none`, every game on side B. In CI; no game data is read.
@@ -197,20 +199,22 @@ fn scored_pairings_and_mind_against_e2_are_those_of_m0017() {
         return;
     }
     // measure: M-0017 (Setup: pairings per record; Result: the 7 crashed games and the restated line)
+    // measure: M-0016 (Result: with M-0017 every pairing is scored, 96, 24 and 35)
     let want = [
-        ("M-0001", 84, 96, 7),
-        ("M-0002", 24, 24, 0),
-        ("M-0003", 24, 35, 0),
+        ("M-0001", 84, 96, 96, 7),
+        ("M-0002", 24, 24, 24, 0),
+        ("M-0003", 24, 35, 35, 0),
     ];
-    for (id, scored, all, crashed) in want {
+    for (id, by_m0017, scored, all, crashed) in want {
         let r = oracle::find_record(&records, id).unwrap_or_else(|| panic!("no record {id}"));
         let ps = oracle::pairings(&r.games);
         assert_eq!(ps.len(), all, "{id}");
         assert_eq!(
             ps.iter().filter(|p| oracle::confirmed(p)).count(),
-            scored,
+            by_m0017,
             "{id}"
         );
+        assert_eq!(ps.iter().filter(|p| r.scores(p)).count(), scored, "{id}");
         assert_eq!(
             r.games.iter().filter(|g| oracle::crashed(g)).count(),
             crashed,
@@ -236,13 +240,175 @@ fn scored_pairings_and_mind_against_e2_are_those_of_m0017() {
     assert!(p.confirmed);
 }
 
+/// M-0016's stock rows: 48 games of M-0001 and M-0003 whose stock replay
+/// changed the archived row, each matching the record's archived row, and
+/// with them in place every per-pairing line of M-0016's table is the
+/// record's stock line (M-0016, Result, *What replaces what* and
+/// *Pairings with changed rows, stock*). In CI; no game data is read.
+#[test]
+fn m0016_stock_rows_replace_the_archived_ones() {
+    let records = oracle::load_records(&measurements()).unwrap();
+    if records.is_empty() {
+        println!("skipped: no oracle arena record in measurements/");
+        return;
+    }
+    let replays = oracle::load_stock_replays(&measurements()).unwrap();
+    let r = replays
+        .iter()
+        .find(|r| r.id == "M-0016")
+        .expect("no stock replay record M-0016");
+    // measure: M-0016 (Result: 48 changed rows, in M-0001 and M-0003; SREF and V3 covered)
+    assert_eq!(r.rows.len(), 48);
+    assert_eq!(r.covers, ["SREF", "V3"]);
+    assert!(
+        r.rows
+            .iter()
+            .all(|x| x.record == "M-0001" || x.record == "M-0003")
+    );
+    let restated: usize = records.iter().map(|x| x.restated).sum();
+    assert_eq!(restated, 48);
+    assert!(!r.pairings.is_empty());
+    for p in &r.pairings {
+        let rec = oracle::find_record(&records, &p.record).unwrap();
+        let (counts, sides) = oracle::stock_line(rec, &p.pairing);
+        assert_eq!(counts, p.counts, "{} {:?}", p.record, p.pairing);
+        assert_eq!(sides[0] + sides[1], p.n, "{} {:?}", p.record, p.pairing);
+        assert!(rec.scores(&p.pairing));
+    }
+    // A covered pairing is marked in the report.
+    let m1 = oracle::find_record(&records, "M-0001").unwrap();
+    let report = oracle::report(&oracle::compare_record(m1, &m1.games));
+    assert!(report.contains("[stock rows of M-0016]"), "{report}");
+    assert!(report.contains("scored through a stock replay"), "{report}");
+}
+
+/// M-0006's placement tables as the arena reads them: its W, the measured
+/// placements of the units stated on the cliff cells (each to a
+/// neighbouring cell, each stated cell a side-A stated cell of M-0001's
+/// layout), the cells of the map's neutral bunkers, and the records it
+/// covers (M-0001 to M-0003, not M-0011). In CI; no game data is read.
+#[test]
+fn m0006_placements_parse() {
+    let all = oracle::load_placements(&measurements()).unwrap();
+    let Some(p) = all.iter().find(|p| p.id == "M-0006") else {
+        println!("skipped: no placement record M-0006 in measurements/");
+        return;
+    };
+    // measure: M-0006 (Result, Units off their stated cells; Map content; Setup: W)
+    assert_eq!(p.covers, ["M-0001", "M-0002", "M-0003"]);
+    assert!(!p.moves.is_empty() && !p.neutral.is_empty());
+    for &(stated, placed) in &p.moves {
+        assert!(
+            (stated.x - placed.x).abs() <= 1
+                && (stated.y - placed.y).abs() <= 1
+                && stated != placed,
+            "every move is to a neighbouring cell: {stated:?} -> {placed:?}"
+        );
+        assert!(
+            (0..256).any(|i| oracle::cell_of(p.w, oracle::Side::A, i) == stated),
+            "a side-A stated cell: {stated:?}"
+        );
+    }
+    let rel = oracle::placed_for(&all, "M-0001");
+    assert_eq!(rel.len(), p.moves.len());
+    assert!(oracle::placed_for(&all, "M-0011").is_empty());
+}
+
+/// A measured placement puts its unit on the measured cell, and the setup
+/// names it as moved: our own synthetic ground, with an invented placement
+/// of side A's unit 0 onto the stated cell of a unit 1 (made-up data, not
+/// M-0006's).
+#[test]
+fn a_measured_placement_is_applied() {
+    let mut g = oracle::synthetic_ground(40);
+    let rel = |c: glasnost_map::CellXY| glasnost_map::CellXY::new(c.x - g.w.x, c.y - g.w.y);
+    let s0 = oracle::cell_of(g.w, oracle::Side::A, 0);
+    let s1 = oracle::cell_of(g.w, oracle::Side::A, 1);
+    g.placed = vec![(rel(s0), rel(s1))];
+    let a = oracle::setup(&g, ["CART", "WALKER"], 0).unwrap();
+    let u0 = a.units[0][0];
+    assert_eq!(a.world.obj(u0).unwrap().pos.cell(), s1);
+    let m = &a.moved[0];
+    assert_eq!((m.index, m.stated, m.placed), (0, s0, s1));
+    assert_eq!(m.why, "the placed cell of M-0006");
+}
+
+/// The local lane's check of M-0006 against our setup (never in CI): with
+/// `GLASNOST_GAME_DIR` set, our W of the record's map is M-0006's; a
+/// building of a house that is neither side stands on each of its neutral
+/// bunker cells at tick 0; in the setup of every type of M-0001 to M-0003,
+/// no side-B unit is moved, and each unit stated on a cell of the
+/// placement table stands on its placed cell (measure: M-0006, Tolerance
+/// for tests: exact).
+#[test]
+fn m0006_bunkers_and_placed_cells_in_our_setup() {
+    let records = oracle::load_records(&measurements()).unwrap();
+    let all = oracle::load_placements(&measurements()).unwrap();
+    let (Some(r), Some(p)) = (
+        oracle::find_record(&records, "M-0001"),
+        all.iter().find(|p| p.id == "M-0006"),
+    ) else {
+        println!("skipped: no record M-0001 or M-0006 in measurements/");
+        return;
+    };
+    let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+        println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
+        return;
+    };
+    let mut g = oracle::stock_ground(Path::new(&dir), &r.map_file, &r.map_sha256).unwrap();
+    // measure: M-0006 (Setup: W; Map content; Units off their stated cells)
+    assert_eq!(g.w, p.w, "our W is the record's");
+    g.placed = oracle::placed_for(&all, "M-0001");
+    let mut types: Vec<String> = Vec::new();
+    for id in ["M-0001", "M-0002", "M-0003"] {
+        for game in &oracle::find_record(&records, id).unwrap().games {
+            for t in [&game.row, &game.col] {
+                if !types.contains(t) {
+                    types.push(t.clone());
+                }
+            }
+        }
+    }
+    let mut checked = false;
+    for t in &types {
+        let a = oracle::setup(&g, [t, t], 0).unwrap();
+        let w = &a.world;
+        for &c in &p.neutral {
+            let here = w
+                .cells
+                .occ(c, glasnost_sim::world::Layer::Ground)
+                .is_some_and(|o| o.buildings > 0);
+            assert!(here, "{t}: a building stands on {c:?}");
+            assert!(
+                w.objects
+                    .values()
+                    .all(|o| o.kind != glasnost_sim::rules::Kind::Building
+                        || !o.owner.is_some_and(|h| a.houses.contains(&h))),
+                "{t}: neither side owns a building"
+            );
+        }
+        assert!(
+            a.moved.iter().all(|m| m.side == oracle::Side::A),
+            "{t}: no move on side B"
+        );
+        for (i, &u) in a.units[0].iter().enumerate() {
+            let stated = oracle::cell_of(g.w, oracle::Side::A, i as u32);
+            if let Some(&(_, placed)) = p.moves.iter().find(|(s, _)| *s == stated) {
+                assert_eq!(w.obj(u).unwrap().pos.cell(), placed, "{t}: unit {i}");
+                checked = true;
+            }
+        }
+    }
+    println!("placement table cells reached by some group: {checked}");
+}
+
 /// The local lane's comparison (never in CI): with `GLASNOST_GAME_DIR` set,
 /// every oracle arena record (or only `GLASNOST_ARENA_RECORD`, an ID) is
 /// played in our engine with the record's setup and compared with its
 /// CSV per pairing that stands as stock (M-0017): the two-proportion test
 /// on the row's wins at p < [`oracle::ALPHA`], and the same winner on every
 /// side where the stock seeds all gave it (each record's *Tolerance for
-/// tests*). The SREF and V3 pairings are played and shown, not scored. The
+/// tests*), the SREF and V3 pairings through M-0016's stock rows. The
 /// tables go to `local-lane/m7b/arena/oracle-<ID>.txt` (git-ignored). Fails
 /// while any scored pairing is outside the tolerance; see
 /// docs/development.md, *Arena mode*, for the open discrepancies.
