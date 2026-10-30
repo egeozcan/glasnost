@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 62
+revision: 64
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-30
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140]
 supersedes: []
 ---
 
@@ -166,10 +166,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Able to fire.** An own object that is armed, not disabled and not deactivated (S-0405 claims 13
   and 20). Falling (for example under a parachute) is part of neither this nor *movable*. A unit
   falling under a parachute takes orders, and carries them out once landed (S-0522 claim 17, whose
-  backing and medium rating this carries). Being movable or able to fire does not make an order take
-  effect: a seized unit ignores every new destination (S-0607 claim 9), and until it has its own
-  locomotor back every weapon and target is *illegal* for it (S-0607 claim 10). Those rules, with
-  their backing and ratings, are S-0607's.
+  backing and medium rating this carries). During the fall, though, a click offers *attack* on an
+  object only as claim 6 (e) allows, with that claim's backing and rating. Being movable or able to
+  fire does not make an order take effect: a seized unit ignores every new destination (S-0607 claim
+  9), and until it has its own locomotor back every weapon and target is *illegal* for it (S-0607
+  claim 10). Those rules, with their backing and ratings, are S-0607's.
 - **Melee-linked.** One of two objects joined by a *link*: the link that a hit of a weapon whose
   warhead carries the link flag (Import mapping) makes between the shooter and the object it hit,
   with both ends linked to each other (low for what creates it). It ends when the shooter is given a
@@ -422,6 +423,15 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      an infiltrator with the charge flag and a building that accepts charges), the firing rules of
      the combat specs do not rule the target illegal for the weapon it would use. Other reasons for
      not firing at this moment (facing, reloading, rotating, range and so on) do not count.
+     The combat specs rule every target illegal for a falling firer (S-0301 claim 9, rank 4). That
+     is a firing rule, not one of those other reasons, so a falling actor, for example under a
+     parachute, fails part (e) for every target unless force-fire is held or the infiltrator
+     exception applies. Over an enemy during its fall, an own armed infantry unit therefore gets
+     *nothing* from row G9 and then, unless an earlier row of table I applies, the fallback move
+     (row I28), usually *no-move*. A falling vehicle gets the same by row V4. The click gives the
+     move order of table M toward the target (claim 11), not an attack order. With force-fire held
+     the click gives an attack order at once, which the actor carries out after landing (Terms,
+     *able to fire*).
 
    *May attack as a friend:* the actor's type carries the attack-friendlies flag; or it carries the
    attack-cursor-on-friendlies flag, unless the warhead of the weapon it would use plants bombs and
@@ -442,9 +452,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    Whether a generic *attack* ends as *attack* is for the kind tables: for example, against a
    target whose type is immune to damage most kinds show *no-move* instead.
    - Backing: `measurable` (Scenario T4, including a unit travelling underground for part (b),
-     the permanently disguised target, and T4 part C for parts (d) and (e); Scenario T10 for the
+     the permanently disguised target, T4 part C for parts (d) and (e) and T4 part D for a falling
+     infantry unit; Scenario T10 for the
      attack-friendlies flag, the attack-cursor-on-friendlies flag and its bomb-planting
-     exception). Three parts are `unmeasured`: the sonic-warhead exception of *May attack as a
+     exception). Four parts are `unmeasured`: a falling vehicle, because no scenario here drops
+     one; the sonic-warhead exception of *May attack as a
      friend* and the case of a disguise that is currently disrupted (blinking), because the setup
      has no known way to put a parasite on a mobile unit or to disrupt a disguise at a chosen
      tick; and the case of a unit or building disguised as scenery over a terrain-fire weapon (low),
@@ -738,8 +750,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     change this ordinary box selection; holding force-fire with force-select still adds,
     regardless of the counted-modifiers rule (Terms) that governs actions. A type-select drag instead expands
     the types encountered through claim 32's type-selection rule, and is silent (S-0701
-    claim 17). Whether that expansion applies the band-box tests of a tap's candidates or only
-    a held click's *can be selected* (claim 32) has not been studied.
+    claim 17). Which objects in the box start that expansion, and which objects it adds, are
+    claim 32's (*held drags*): none of this claim's candidate tests applies to them, while its
+    clearing rule and its empty-box rule below still apply.
 
     If there is no live box candidate inside, an unmodified box does not clear the selection:
     its release continues as the ordinary release click at the final pixel. With force-select
@@ -1103,6 +1116,17 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     deactivated own object of the type, or one held in a tank bunker, joins a held click's
     selection while a tap leaves it out.
 
+    *Held drags.* With the role held, a band box does not use claim 19's candidate tests, though its
+    clearing and empty-box rules still apply. Instead every live box candidate inside the box
+    (claims 19 and 25), whatever its house and whatever its kind, buildings included, stands for its
+    own exact type. Each such object, in candidate order, then makes the additions of a held *toggle
+    select* click on an unselected object of its type (above), within the reach: own objects of that
+    type that can be selected, whether inside the box or not. So an enemy object in the box adds the
+    player's own objects of its type, and an own object in the box that a band box refuses (a
+    deactivated vehicle, or a building that is not vehicle-like, whether or not it powers a unit)
+    joins with the others of its type when it can be selected. A drag adds none of a tap's further
+    types: no building type that an object deploys into. The order of the additions is claim 29's.
+
     Held clicks and the type-select drag of claim 29 are silent (S-0701 claim 17) and do not
     change the reach they read. One that adds an object or clears the selection still makes the
     next tap set the reach to *screen*, as above. A quick press, click and release is a held click
@@ -1118,10 +1142,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       that slave masters control, but under no slave master, and no stock route to such an
       object for the human is identified. The erasure exclusion is claim 16's. Parts o to r test
       which changes reset the reach and which do not, part r the drag's reading of the reach, and
-      part s a mind-controlled object's joining. The original's four further selection commands
+      part s a mind-controlled object's joining, part t the objects a held drag starts from and
+      adds. The original's four further selection commands
       are `unmeasured`: our engine has none of them, so no scenario here uses them.
     - Confidence: high for a tap limit between 400 and 600 ms, own objects only and the
       held-click results.
+    - Confidence: medium for the held drags (the objects in the box that start an expansion, the
+      joining of objects that a band box refuses, and the absence of the tap's further types),
+      until part t runs.
     - Confidence: medium for the reach rule and the list of changes that reset it, until parts o
       to r run, for a mind-controlled or captured object's joining, until part s runs, the exact
       limit of 500 and its boundary, the tap's candidate test (its band-box tests, the
@@ -2315,6 +2343,20 @@ cell, by table GC). Falsified if any of these differs.
   Falsified by an attack where this says none (in particular an attack out of range with
   force-fire held), or none where it says attack. The bunker case is `measurable` only if a tank can be put in a bunker by the test map,
   and otherwise the record says so and part (d) stays open (Open questions).
+- *Part D, a falling actor (claim 6 (e)).* Use S-0522 scenario P10's setup for orders during the
+  fall (fresh human-owned payload infantry, scripted input, the record each tick), with an armed
+  payload infantry type and an enemy building in weapon range of the predicted landing cell that
+  the payload can neither garrison nor enter and whose type is not immune. Select only the
+  falling units. During the fall the script moves the cursor over the building and logs the
+  action shown, then clicks once without force-fire. In a second run it clicks once with
+  force-fire held. The record notes that the units are still falling at each click. Control: the
+  same two clicks after landing. Expected: during the fall, without force-fire, no attack action
+  (the no-move image) and no attack order, the click recording a move order instead (table M).
+  With force-fire, the attack action and an attack order on the building from the tick after the
+  click, no shot before landing and the attack after landing. After landing both clicks show
+  attack and give an attack order. Falsified by an attack action or attack order from the
+  ordinary click during the fall, or by no attack order from the force-fire click. A run in which
+  a click falls after landing, or the building leaves play before the units land, is void.
 
 **Scenario T5: infantry rows (claim 7, table I).**
 - Setup: own infantry, each tried alone: an engineer, a spy, a vehicle thief, a charge planter, a
@@ -3292,6 +3334,24 @@ readiness*, and Edge cases).**
   enemy two vehicles of one type that the human has none of. Each controller takes one of them.
   Select one taken vehicle alone and tap. Expected: the other added, with the across-screen
   text. Falsified if it is not added.
+- *(t) Held drag candidates.* Each case starts from an empty selection with the reach at
+  *screen* (run (a), then clear the selection) and drags a box with the role held. The recorder
+  logs which objects lie inside each box. Control: the same box without the role.
+  - Over the enemy's A tank alone. Expected: A1 to A3 selected, and not the enemy's tank; the
+    control selects nothing. Over the enemy's B tank alone: nothing selected.
+  - For this case the human has a second power plant on the screen, outside the box. Over the
+    first alone.
+    Expected: both plants selected; the control selects neither.
+  - With `S0214-deploy.ini` (parts k and l): over one of the two P buildings alone. Expected:
+    both P selected. Then over one V alone, with a K deployed from another V on the screen
+    outside the box and a third V on the screen. Expected: the Vs on the screen selected, and
+    not K (a tap would add it, part l).
+  - In part (m)'s first run, after the control centre is sold: click A1 alone and tap once, so
+    that the reach is *screen* as in (a), clear the selection, then drag over R1 alone.
+    Expected: R1 and R2 selected, and not R3, which is off the screen; the control selects
+    nothing.
+  Falsified if the enemy's tank, K or R3 joins, if the second plant, the second P or R2 is
+  missing, or if a control box selects a plant, a deactivated R or anything over an enemy tank.
 - Our engine gives only the first of (a)'s responses (claim 32, the DECIDED departure). The
   record logs the original's responses as heard.
 
@@ -3367,7 +3427,6 @@ readiness*, and Edge cases).**
 
 ## Open questions
 
-- Which of claim 32's candidate tests a type-select drag's expansion applies (claim 19).
 - The state-specific transient box points of claim 19 stay `unmeasured` beyond T14 part B.
 - Route-point editing cursor substitutions are not covered by table C, and building-placement
   hover images belong to the placement display's spec.
@@ -3447,15 +3506,6 @@ readiness*, and Edge cases).**
 - **S-0204, claim 5, uses of the table square root.** The claim lists the uses that
   `quirks.table_root_distance` covers. S-0214's representative distance (F1) and group centre
   point (F9) are object distances taken with the same table and should be on that list.
-- **S-0215, claim 11 and scenario B44, orders during a fall.** Claim 11's backing says that move
-  clicks during a fall are refused, not deferred until landing, and B44 expects scripted move
-  clicks during the descent to be refused and counts a deferred falling move as a falsifier.
-  Under this spec (Terms, *movable* and *able to fire*) and S-0522 claim 17, a falling unit is
-  movable and able to fire whenever a landed one would be: a move, attack or deploy click during
-  the fall gives an order at once, and the unit carries it out after landing. Claim 11's sentence
-  should then say that a move click during the fall gives a move order that starts after landing.
-  B44 should expect that move after landing, as S-0522 scenario P10 does. A move started while
-  still falling, or a click during the fall that gives no order, should falsify instead.
 - **S-0701, claim 17, type-select silence.** The silence should cover only the held type-select
   role (clicks and drags, S-0214 claims 29 and 32). A tap of the role gives one selection
   response, that of the first object it adds, as a band box does (S-0214 claim 32). Scenario
