@@ -67,7 +67,7 @@ Totals: (a) 0, (b) 5 (four requests, one open request reused), (c) 0, (d) 12.
 
 | request | question | interim |
 |---|---|---|
-| [Q-2111](../../spec/requests/Q-2111-steering-missile-fired-from-a-muzzle-at-the-surface.md) | does a steering projectile fired from a muzzle at the surface detonate in its first turn; is an absent muzzle position the zero triple | answered by S-0306 r45 and S-0313 r37, built in intake 51: a projectile starts 1 lepton above the terrain when placed at or below it; an absent elite muzzle position takes the same slot's |
+| [Q-2111](../../spec/requests/Q-2111-steering-missile-fired-from-a-muzzle-at-the-surface.md) | does a steering projectile fired from a muzzle at the surface detonate in its first turn; is an absent muzzle position the zero triple | answered by S-0306 r45 and S-0313 r37, built in intake 51: a projectile starts 1 lepton above the terrain when placed at or below it; an absent elite muzzle position takes the same slot's non-elite one (S-0313 claim 1a) |
 | [Q-2112](../../spec/requests/Q-2112-hunting-ground-units-against-hovering-jumpjets.md) | how ground hunters find a hovering jumpjet again after losing their target | the approved rules, unchanged |
 | [Q-2113](../../spec/requests/Q-2113-a-lifter-that-pulls-its-unit-inside-its-minimum-range.md) | does a lifter take the approach step against its own gripped unit inside its minimum range; what ends the stock holds | the approved rules, unchanged |
 | [Q-2114](../../spec/requests/Q-2114-targets-of-a-crushed-unit.md) | what happens to the targets of objects whose target is crushed | unchanged: the holder drops it on a later tick |
