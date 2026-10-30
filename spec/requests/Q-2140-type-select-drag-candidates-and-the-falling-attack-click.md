@@ -3,7 +3,7 @@ id: Q-2140
 title: Type-select drag candidates, the select-target announcement, and the attack rule for a falling unit
 status: open
 related: [S-0214, S-0512, S-0522, S-0301]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
