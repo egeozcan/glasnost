@@ -1,9 +1,9 @@
 ---
 id: Q-2146
 title: Do the primary and secondary muzzle-position keys apply to a type with numbered weapons?
-status: open
+status: answered
 related: [S-0313, S-0308]
-answered-by: []
+answered-by: [S-0313]
 ---
 
 ## Need
