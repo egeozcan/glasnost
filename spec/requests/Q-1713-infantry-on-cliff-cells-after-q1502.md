@@ -3,7 +3,7 @@ id: Q-1713
 title: How the stock arena games with infantry on the cliff cells end
 status: open
 related: [S-0309, S-0208, S-0212]
-answered-by: [S-0216]
+answered-by: [S-0216, M-0006]
 ---
 
 ## Need
