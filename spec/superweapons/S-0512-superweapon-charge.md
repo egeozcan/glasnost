@@ -2,13 +2,13 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 18
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-30
 measurements: []
-requests: [Q-0742, Q-0730, Q-0731, Q-0737, Q-1985]
+requests: [Q-0742, Q-0730, Q-0731, Q-0737, Q-1985, Q-2140]
 supersedes: []
 ---
 
@@ -474,31 +474,44 @@ between a fire order and the effect.
     - Backing: `measurable` (scenario X15)
     - Confidence: high
 
-25. **The unit selection when an icon is selected (Q-1985).** Selecting an icon that offers
-    targeting (claim 16) and whose type has any aim action other than no action (claim 23)
-    empties the local player's unit selection in that same input, before any later battlefield
-    click, and arms the type. This holds for every such action word (medium beyond the words
-    X18 tests), including one not normally used by a superweapon and one for which no later
-    battlefield click issues a superweapon order: the selection follows whether the icon enters
-    aiming, nothing else. A type with no
-    action, whether written as the no-action word, as an unknown word or never imported, takes
-    the no-aim bullet below. The same input ends building placement, sell, repair and power
-    modes, and requests the select-target announcement. A building awaiting placement stays
-    ready in its strip. So the units selected before do not take the next battlefield click:
-    with the selection empty, it aims the superweapon (S-0513 claim 1). Whether that input also
-    ends route mode (S-0213 claim 16) or beacon-placement mode (S-0214) is not claimed (Open
-    questions).
+25. **The unit selection when an icon is selected (Q-1985; Q-2140 question 2).** Selecting an icon
+    that offers targeting (claim 16) and whose type has any aim action other than no action (claim
+    23) empties the local player's unit selection in that same input, before any later battlefield
+    click, and arms the type. This holds for every such action word (medium beyond the words X18
+    tests), including one not normally used by a superweapon and one for which no later battlefield
+    click issues a superweapon order: the selection follows whether the icon enters aiming, nothing
+    else. A type with no action, whether written as the no-action word, as an unknown word or never
+    imported, takes the no-aim bullet below. The same input ends building placement, sell, repair
+    and power modes, and requests the select-target announcement (below). A building awaiting
+    placement stays ready in its strip. So the units selected before do not take the next
+    battlefield click: with the selection empty, it aims the superweapon (S-0513 claim 1). Whether
+    that input also ends route mode (S-0213 claim 16) or beacon-placement mode (S-0214) is not
+    claimed (Open questions).
+    - Every left click on a superweapon icon of the local player's strip requests the game-wide
+      build click sound, the one S-0701 claim 24 gives for production clicks. It is the first
+      sound or announcement request of that input, before the select-target announcement where
+      there is one, and it is requested whatever the icon's state: for an icon that aims, for a
+      no-aim icon whose order fires at once, and for an icon that does not offer targeting. Its
+      playback follows S-0701.
+    - The select-target announcement is the announcement data file's entry with the fixed
+      select-target section header (Import mapping), requested by the arming input. The
+      original shows no message-list line for it, and no entry of the game's string data is
+      tied to it, as to any announcement (S-0701 claim 26). Its
+      sample is chosen by the voice-set fields and it plays under the announcement rules, as
+      for every announcement: both are S-0701's (claims 26, 27 and 36, and its Import
+      mapping). A caption, where our engine's caption setting shows one, is S-0701 claim 26's.
     - Selecting an otherwise fireable icon whose type has no aim action issues its fire order
       at once (claim 23)
-      and leaves the selection unchanged. The input itself leaves sell, repair, power and
+      and leaves the selection unchanged. The input requests the click sound but no
+      select-target announcement. The input itself leaves sell, repair, power and
       building-placement modes as they were. The selected no-aim type is never armed, and a type
       armed before the input stays armed right after it, before the fire order is applied. What the
       applied order then does to an armed
       type's aiming is S-0513 claim 5's: a launch other than a teleport source pick ends the
       aiming mode.
     - Selecting an icon that does not offer targeting (not ready, suspended, or a drain-mode
-      record that is *charging*) changes nothing: no arming, no selection change, no
-      announcement.
+      record that is *charging*) changes nothing but the click sound request: no arming, no
+      selection change, no announcement.
     - Units selected after arming do not disarm the type. While the selection is not empty the
       cursor offers the units' actions (S-0513 claim 1); once it is empty again, the armed
       type's aim offer returns. S-0214 owns the inputs that empty a selection. Under its
@@ -530,12 +543,26 @@ between a fire order and the effect.
       or power mode is on is `unmeasured` and not claimed here: S-0513 claim 1 ranks only a
       non-empty unit selection above the aim offer. Part (f)'s mode runs in which the click
       sends no source pick are void, so they back only what a source pick does to the modes.
+      The click sound, its place first in the input, the select-target entry and the absence
+      of a message-list line are `measurable` in X18 part (i), which clicks a not-ready, a
+      ready and a ready no-aim icon. Parts (d2) and (d3) record the click sound at an icon on
+      hold and at a drain-mode record that is charging. The absence of a message-list line
+      under settings that part (i)
+      does not use, and that no string-data entry is tied to the announcement, are `unmeasured`
+      here and rest on S-0701 claim 26 (its G1 part T and the examination of the original).
     - Confidence: high for emptying the selection, for its following only whether the icon
       enters aiming for the action words X18 tests (medium for every other word), and for the three
       icons that do not
       offer targeting (one fireability test decides all three, claim 16). High for the no-aim
       icon with sell, repair or placement active, and for the selection and the announcement at
-      a source pick. Medium for each of these:
+      a source pick. High for the click sound request at a click on an icon in each state that
+      X18 clicks (charging, on hold, a drain-mode record that is charging, ready to aim, and
+      ready with no aim action), for its place first in the input, and for the select-target
+      entry. Medium for the click sound request at an icon in a state X18 does not click.
+      Medium, as S-0701 claim 26 rates them, for the absence of a message-list line, under part
+      (i)'s settings and under others, and for no string-data entry being tied to the
+      announcement. Medium for
+      each of these:
       - the no-aim icon in power mode, and an armed type right after the input: the icon
         selection itself touches neither, and what the fire order does to power mode once
         applied is not traced.
@@ -692,6 +719,22 @@ Observable ordering:
 | `MultiplayPassive` (rules, country) | passive house (S-0412 owns), claim 18 | boolean | no |
 | `SpecialSound` (rules, superweapon) | effect-specific fading sound, S-0513 claim 32 | sound-entry reference | keeps previous value when absent or unresolved; initially none |
 | `StartSound` (rules, superweapon) | effect-specific start sound, S-0513 claim 32 | sound-entry reference | keeps previous value when absent or unresolved; initially none |
+
+Announcement request of claim 25: a literal section header in the player's announcement data
+file, in S-0701's notation. The square brackets denote a section header, not a program
+identifier: it is an input-format binding, not a configurable rules key and not a sample name.
+Its samples are the voice-set fields of S-0701's Import mapping. Lookup ignores case, and an
+absent or unknown entry is silent (S-0701 claim 36). The build click sound of claim 25 is the
+game-wide build click entry of S-0701's Import mapping. Backing: `measurable` (X18 part (i)) for
+the select-target section header and the build click entry, which part (i)'s recorder names as
+requested. `unmeasured` here for the voice-set samples, the lookup ignoring case and the silent
+absent or unknown entry: X18 varies none of them, and they are S-0701's rules (its Import mapping
+and claim 36). Confidence: high for the section header and the build click entry, medium for the
+samples and the lookup rules.
+
+| Event | Fixed announcement section header |
+|---|---|
+| select target (claim 25) | `[EVA_SelectTarget]` |
 
 Kind words for `Type` and `PreDependent`, in kind-number order (0 to 11):
 
@@ -1109,10 +1152,11 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   coordinate is used, or the granted first stage preserves its old remaining time. An empty
   default source block producing no moved units is not evidence that the order was refused.
 
-**X18: unit selection when an icon is selected (claim 25; Q-1985).**
+**X18: unit selection when an icon is selected (claim 25; Q-1985; Q-2140 question 2).**
 - *Setup:* the common settings, with a named test rules file `S0512-select.ini` that shortens
-  the charge of the nuke, the curtain and the teleport types and gives a fourth granted type no
-  aim action. It gives the nuke type the power-dependent flag and the curtain type the
+  the charge of the nuke, the curtain, the teleport and a fourth granted type, and gives the
+  fourth type no aim action.
+  It gives the nuke type the power-dependent flag and the curtain type the
   drain-mode flag. The human player has two own tanks, a building ready for placement in its
   strip, the buildings that grant the four types, and power plants whose sale leaves the house
   with low power.
@@ -1138,33 +1182,53 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   (h) In two fresh games, set the fourth type's aim action in the test rules file first to a
   word of the Import mapping vocabulary not normally used by a superweapon, then to the
   explicit no-action word. Each time select both tanks, then its icon, then click open ground.
-- *Observable:* the selection marks after each input, the cursor action under it, the tanks'
-  orders, the fire order and its tick, the sell, repair, power and placement states, the armed
-  type, and the select-target announcement request (read-only recorder).
-- *Expected:* (a) the tanks are deselected when the icon is selected, the cursor shows the nuke
-  aim action and the click fires the nuke. (b) the mode or placement ends at the icon selection
-  and the building stays ready. (c) the no-aim order fires at once, the tanks stay selected,
-  no announcement. (c2) as (c). The recorder's reading right after the no-aim icon's input,
-  before its order is applied, shows each of the four modes still on, and with the nuke armed,
-  the nuke still armed. What follows once the order is applied is S-0513's (claim 5 for the
-  armed nuke) and is not part of this expectation. (d), (d2) and (d3) nothing changes: the
-  tanks stay selected, nothing is
-  armed and no announcement is requested. In (d2) and (d3) the click orders the tanks. (e) with
-  the tanks selected the cursor offers their actions, the right release cancels the aim, and
-  the tanks stay selected. If the recall does not select the tanks while armed, part (e) is
-  inconclusive for claim 25's units-selected-after-arming bullet. (f) the warp aim offer
-  appears with no selection change and no select-target request. Sell, repair and power mode
-  each stay on, and so does the placement in a run that is not void. (g) none of the
-  player-bindable key commands selects a superweapon icon. (h) with the unusual word the tanks
-  are deselected, the type is armed and the select-target announcement is requested, whatever
-  the click then does. With the no-action word the result is as (c).
-- *Falsified if:* the tanks stay selected after (a), the first click after (a) orders them, a
-  no-aim icon or an icon in (d), (d2) or (d3) changes the selection or arms a type, a no-aim
-  icon's input ends a mode or disarms the nuke in (c2), in the reading before its order is
-  applied, a source pick ends a mode or a valid run's placement in (f), the right
-  release in (e) clears the selection while the nuke is armed, a player-bindable key
-  command selects an icon, power mode stays on after the icon selection in (b), the tanks
-  stay selected in (h) with the unusual word, or they are deselected with the no-action word.
+  (i) In a fresh game with no unit selected, click the nuke icon while it is still charging.
+  Once it is ready, click it, then right-release to cancel the aim. Then, once the no-aim type's
+  icon shows ready, click it. A run in which the no-aim icon is not ready when clicked is void.
+- *Observable:* the selection marks after each input, the cursor action under it, the tanks' orders,
+  the fire order and its tick, the sell, repair, power and placement states, the armed type, and the
+  select-target announcement request (read-only recorder). In parts (d2), (d3) and (i), also every
+  interface sound and announcement request of each click's input, with its entry and its order
+  within the input (the same recorder). In part (i), also the message list's lines, read after each
+  click's input and before its order, if any, is applied.
+- *Expected:* (a) the tanks are deselected when the icon is selected, the cursor shows the nuke aim
+  action and the click fires the nuke. (b) the mode or placement ends at the icon selection and the
+  building stays ready. (c) the no-aim order fires at once, the tanks stay selected, no
+  announcement. (c2) as (c). The recorder's reading right after the no-aim icon's input, before its
+  order is applied, shows each of the four modes still on, and with the nuke armed, the nuke still
+  armed. What follows once the order is applied is S-0513's (claim 5 for the armed nuke) and is not
+  part of this expectation. (d), (d2) and (d3) nothing changes apart from the click sound: the tanks
+  stay selected, nothing is armed and no announcement is requested. In (d2) and (d3) the icon click
+  requests the build click entry, and the click on open ground orders the tanks. (e) with the tanks
+  selected the cursor offers their actions, the right release cancels the aim, and the tanks stay
+  selected. If the recall does not select the tanks while armed, part (e) is inconclusive for claim
+  25's units-selected-after-arming bullet. (f) the warp aim offer appears with no selection change
+  and no select-target request. Sell, repair and power mode each stay on, and so does the placement
+  in a run that is not void. (g) none of the player-bindable key commands selects a superweapon
+  icon. (h) with the unusual word the tanks are deselected, the type is armed and the select-target
+  announcement is requested, whatever the click then does. With the no-action word the result is as
+  (c). (i) the charging click requests the build click entry and no announcement. The ready click
+  requests the build click entry first and then the select-target entry of Import mapping. The
+  ready no-aim click requests the build click entry and issues the fire order, with no announcement
+  request in the recorder's reading before the order is applied. No click adds a message-list line
+  before its order, if any, is applied.
+- *Falsified if:* the tanks stay selected after (a), the first click after (a) orders them, a no-aim
+  icon or an icon in (d), (d2) or (d3) changes the selection or arms a type, a no-aim icon's input
+  ends a mode or disarms the nuke in (c2), in the reading before its order is applied, a source pick
+  ends a mode or a valid run's placement in (f), the right release in (e) clears the selection while
+  the nuke is armed, a player-bindable key command selects an icon, power mode stays on after the
+  icon selection in (b), the tanks stay selected in (h) with the unusual word, or they are
+  deselected with the no-action word. In (d2), (d3) or (i): an icon click requests no build click,
+  the ready click requests another entry or none, or requests the build click after it, the charging
+  click or the no-aim input requests an announcement before any order is applied, or a click adds a
+  message-list line before then.
+
+## Changes for other specs
+
+S-0701 claim 24's build click bullet must also list a left click on a superweapon icon, for
+every icon state, pointing to claim 25 here. S-0701's announcement request table must list the
+select-target event with the section header given in this spec's Import mapping, pointing to
+claim 25.
 
 ## Open questions
 
