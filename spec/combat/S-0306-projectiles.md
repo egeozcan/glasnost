@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 38
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111]
 supersedes: []
 ---
 
@@ -51,6 +51,8 @@ a projectile whose first turn a removal costs is now in tick *n* + 1 or later, s
 loses its first turns to removals has its first turn at *n* + 2 or later (S-0318 claim 5), where the
 committed text had tick *n* + 1 only. Claim 6 opens with "every projectile except a fragment", and
 claim 1's fragment sentence moves from the bullets into the claim's text.
+Claim 8 places a projectile whose fire point is not above the terrain 1 lepton above the terrain,
+at the same *x* and *y*; claims 5 to 7 and the line-of-fire walk keep the unraised fire point.
 
 ## Terms
 
@@ -345,14 +347,16 @@ S-0501 claim 20.
    vertical) is launched in the direction (S-0204 claim 8, F3) from the fire point towards the
    impact point. A projectile with ρ ≠ 0 (steering, or a negative ρ) and a dropping projectile
    start in the firer's aiming facing (S-0310). Only a dropping projectile starts from the firer's
-   own position instead of the fire point; a steering projectile starts at the fire point. A
+   own position instead of the fire point; a steering projectile starts at the fire point (raised by
+   claim 8 when it is not above the terrain, at claim 8's confidence). A
    fragment of S-0318 is excepted: it starts at the burst point and is aimed at the reference point
    of its aim point in S-0318's sense (S-0318 claim 6), not at this spec's aim point.
    - Backing: `measurable` (scenario P4; its variant g for the aiming facing of a projectile with
      ρ ≠ 0; P21 for a dropping projectile; P9 run a for the start of a steering projectile at the
      fire point). The fragment exception is not backed here: it rests on S-0318 claim 6 (S-0318
      scenario SH7 for the horizontal direction)
-   - Confidence: high; low for the fragment exception, as S-0318 claim 6 rates it
+   - Confidence: high (the horizontal start and the direction); medium for the raise in height,
+     as claim 8 rates it; low for the fragment exception, as S-0318 claim 6 rates it
 
 6. **Launch elevation.** Every projectile except a fragment of S-0318 takes its pitch from the
    first of (a) to (c) that fits its flags (Terms, "Flags and kinds"). (a) to (c) do not apply to a
@@ -427,12 +431,36 @@ S-0501 claim 20.
    - Confidence: high for the construction; medium for radial segments and the aircraft
      exceptions; low for the fragment exception, as S-0318 claim 6 rates it
 
-8. **Placement.** The projectile is placed at the fire point (claim 5 for dropping ones and fragments) and enters
-   play (S-0203 claim 4). Its first turn is in the same tick unless an earlier removal in the
-   turn pass costs it that turn (State and ordering).
-   - Backing: `measurable` through S-0203 scenario O1. A fragment's placement at the burst point
-     is not backed here: it rests on S-0318 claim 5
-   - Confidence: high; medium for a fragment's placement, which rests on S-0318 claim 5
+8. **Placement.** The projectile is placed at its *start point* and enters play (S-0203 claim 4).
+   The start point is the fire point (claim 5 for dropping ones and fragments), except in height:
+   when the fire point (or claim 5's start position, for those kinds) is not above the terrain
+   height at its *x* and *y* (a bridge deck there is ignored), the start point is 1 lepton above
+   that terrain height, with the same *x* and *y*. A position above the terrain is used as it is. So
+   a projectile never starts at or below the ground, and a steering projectile fired from a muzzle
+   at the surface starts at height 1 and is not detonated in its first turn by T1's
+   at-or-below-the-surface row (*h* ≤ 0). The other rows of T1 apply to that turn as to any other.
+   Every projectile placed this way is raised by the same rule, shots, fragments, the projectiles a
+   burst releases and superweapon payloads included. The later move of an invisible projectile
+   (claim 9) is not. The launch direction, pitch and velocity (claims 5 to 7) and the line-of-fire
+   walk's *X*₁ (claim 22) use the fire point as it is, not raised. T1 gives the placement distance Ω
+   of its passed-by row. Its first turn is in the same tick unless an earlier removal in the turn
+   pass costs it that turn (State and ordering).
+   - Backing: `measurable` through S-0203 scenario O1, and scenario P43 for the raised start of an
+     ordinary shot from a fire point at the surface or above it. The raise for fragments, the
+     projectiles a burst releases and superweapon payloads, for a fire point below the terrain and
+     for a fire point under a bridge deck is `unmeasured`: no scenario here places such a start at
+     or below the ground. A fragment's placement at the burst point is not backed here: it rests on
+     S-0318 claim 5. That the line-of-fire walk and claims 5 to 7 keep the unraised point is
+     `unmeasured`: for a fire point at the surface the two points differ by 1 lepton, which no
+     recorded direction or blocked cell tells apart
+   - DECIDED (autonomy, 2026-10-29): the engine applies this raise to every projectile placed
+     this way, and claims 5 to 7 and the line-of-fire walk use the unraised fire point. The rule
+     is meant to fit the stock outcome that Q-2111 reports, and no projectile then starts at or
+     below the ground.
+   - Confidence: high for the placement at the fire point in *x* and *y*; medium that the
+     original raises an ordinary shot exactly so, until P43 is run; medium for the raise in the
+     other cases above; medium for the unraised point of claims 5 to 7 and the walk; medium for
+     a fragment's placement, which rests on S-0318 claim 5
 
 9. **Stored target point, arming and invisible projectiles.** At placement the projectile stores
    *K*, the target's reference point at that moment (quirk `quirks.stored_target_point`), and an
@@ -1590,8 +1618,8 @@ what happens when several rows apply. Straight and arcing projectiles share ever
 | dropping | no longer falling (tested at the start of the turn) | detonate | low |
 | not steering | *P*′ outside the legal map (Terms) | removed, no detonation | high |
 
-The recorded value Ω of the passed-by row is set at placement to the full, unhalved spatial
-distance *d*₃ from the projectile's position at placement (the fire point, or for an invisible
+The recorded value Ω of the passed-by row is set at placement to the full, unhalved spatial distance
+*d*₃ from the projectile's position at placement (its start point, claim 8, or for an invisible
 projectile the point claim 9 moves it to) to *K*.
 Placement itself makes no arrival or passed-by check, so nothing at placement detonates a
 projectile by these rows. The checks are made in the projectile's turns only, the first in its
@@ -2178,7 +2206,9 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   *D* to the target; the position at the start of each turn.
 - Runs: 1 each (the turn phase *j* is read from the 15-tick oscillation of the heading change).
 - Expected: (a) the projectile's first position is the recorded fire point (S-0313), not the
-  firer's position; speed 1, 4, 7 … to 64; turning from the first turn; heading change per tick at most
+  firer's position, compared in *x* and *y*, and in height too when the fire point is above the
+  terrain (claim 8); speed 1, 4, 7 … to 64; turning from the first turn; heading change per tick at
+  most
   *t* of F7; while the planar distance to the target exceeds 3 cells the height stays within 52
   leptons of the cruising altitude of claim 15, *E* + *n* × 104 with *n* = min(trunc(*D* / 256), 5),
   so 5 height levels above the terrain of the cell ahead from 5 cells (spatial) on, and fewer
@@ -2228,7 +2258,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   even ticks), and the closing-average row never detonates it. (q) in every qualifying turn (run q)
   the projectile does not detonate in that turn; it detonates in the next turn (by the *h* ≤ 0 row,
   its start-of-turn height then being negative).
-- Falsified if: (a) the first position is the firer's position rather than the fire point, a
+- Falsified if: (a) the first position is the firer's position rather than the fire point (in
+  the same comparison), a
   heading change exceeds *t*, or the cruising altitude differs from the stated
   one by more than 52 leptons, (b) its heading changes during the lock, or the first heading change comes one turn after the
   first turn whose start-of-turn |*V*| + 0.5 ≥ 25, (c) it cruises, (d) it
@@ -3142,6 +3173,27 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   Record where the glow is in later ticks (Open questions). Falsified by a translucent body or by
   no glow at the projectile's entry point.
 
+**P43. Start point raised above the ground (claim 8; Q-2111).**
+- Setup: a tiny flat map with clear ground, no bridge and no cliff; stock data, director and mods
+  off. A test vehicle type with no turret and no turret displacement (S-0313) with a steering
+  anti-air projectile and no muzzle-position keys for the slot it fires (named test file), so that
+  its fire point is its own position at the surface (S-0313 claims 1 and 1a, its frame being the
+  flat body rotation of S-0313 scenario P1). One such vehicle of house A at rest, and one hovering
+  enemy jumpjet unit of house B held in place in range. Variant b: a test vehicle of the same kind
+  whose straight projectile has a muzzle position of 0, 0, 0, attacking a ground vehicle. Variant c:
+  the same as a, with a muzzle height 40 above the surface.
+- Procedure: order the vehicle to attack; record every projectile it creates at its placement,
+  before its first movement, and then on every tick: its position, the terrain height at its *x*
+  and *y*, its height above the surface and its speed; and the target's strength on every tick.
+- Observable: each projectile's height at its placement, where it detonates, and the target's
+  damage events.
+- Expected: in a and b, the height at placement is 1, at the vehicle's *x* and *y*; in a, its
+  detonations and the target's damage events are recorded, not judged. In c, the height at
+  placement is 40. Falsified if a height at placement other than 1 is recorded in a or b, or other
+  than 40 in c. If the recorder cannot log a projectile before its first movement, the run is
+  inconclusive for the height at placement.
+- Runs: 3 of each variant.
+
 ## Open questions
 
 - Q-1761 question 2, beyond this spec: this spec answers it for the firing check on every route
@@ -3175,10 +3227,18 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Whether a steering projectile whose new position lies outside the legal map is removed by
   some other part of the game: T1 and T2 say it is not removed by the rows of this spec, which was
   not checked beyond them.
+- (Q-2111 question 3.) Which of the column's weapons hits the discs in M-0001's pairing, and the
+  damage they take, is not answered here: the slot is S-0308's choice and the damage follows the
+  imported data (S-0302). P43 records the damage events of its test pairing only.
 - Whether the light-glow image of a projectile (claim 33) follows the projectile while it flies,
   and when it is removed, is not established; scenario P42 part h records it.
 
 ## Changes for other specs
+
+- S-0318 claim 5 places a fragment at the burst point and points to claim 8 here. By claim 8, a
+  fragment whose burst point is not above the terrain starts 1 lepton above it, at the same *x*
+  and *y*, so a burst at height 0 gives fragments that start at height 1. Claim 5 should say so,
+  pointing here, where that raise is `unmeasured` and rated medium.
 
 - S-0308 claim 11 leaves open whether the original refuses a shot when the firer's naval-targeting
   mode gives "none" (table N). Claim 23 here answers it: the firing check answers
