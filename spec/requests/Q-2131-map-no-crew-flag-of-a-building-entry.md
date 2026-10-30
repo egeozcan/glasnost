@@ -1,9 +1,9 @@
 ---
 id: Q-2131
 title: The map flag that leaves a building without crew
-status: open
+status: answered
 related: [S-0009, S-0312, S-0408]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
