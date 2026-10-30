@@ -220,6 +220,16 @@ fn crushing_approach(w: &World, id: ObjectId) -> bool {
     d < i64::from(r.general.crush_range)
 }
 
+/// A part h approach has given a lifter its target as its destination
+/// (S-0607 claims 11 and 12, revision 18): the lifter accepts that
+/// destination, which ends its grip and clears its target, also when it
+/// already held the same destination when it gripped (the end-of-turn test
+/// of `lift::lifter_destination` would not see that one).
+fn part_h_accepted(w: &mut World, id: ObjectId) {
+    // spec: S-0607 claim 11 (revision 18: part h's crushing or balloon-hover approaches come first and are not excepted: such an approach gives the lifter its gripped unit as its destination, which ends the grip) and claim 12 (row 2 and its exception: the grip ends and the lifter's target is cleared)
+    crate::lift::lifter_accepts(w, id);
+}
+
 /// r′ of F10 for the actor's weapon chosen for the target.
 fn r_prime(w: &World, id: ObjectId, t: Target, f2: bool) -> i32 {
     let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
@@ -256,6 +266,7 @@ pub fn step(w: &mut World, id: ObjectId) {
         if let Some(ob) = w.obj_mut(id) {
             ob.dest = Some(t);
         }
+        part_h_accepted(w, id);
         return;
     }
     // spec: S-0215 claim 37 (h) and S-0307 claim 18 (before the other parts: a balloon-hover vehicle whose weapon chosen for the target has a vertical projectile takes the target as its destination, keeps it, and does nothing else)
@@ -263,6 +274,11 @@ pub fn step(w: &mut World, id: ObjectId) {
         if let Some(ob) = w.obj_mut(id) {
             ob.dest = Some(t);
         }
+        part_h_accepted(w, id);
+        return;
+    }
+    // spec: S-0607 claim 11 (revision 18, Q-2113: a mobile lifter takes no approach step against the unit it grips while that unit is its target, in every behaviour; part h's approaches come first and are not excepted; the range test, minimum range included, gives no destination towards or away from it, and the keep-or-drop of part d does not run) and S-0607 Changes for other specs (S-0215 claim 37 part c's gripping case, after part h)
+    if crate::lift::gripped_unit(w, id).is_some_and(|g| t == Target::Object(g)) {
         return;
     }
     let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
@@ -369,7 +385,7 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
     }
     step(w, id);
     let Some(o) = w.obj(id) else { return };
-    // spec: S-0215 claim 37 (a) (still no destination and the target out of range: the target is dropped)
+    // spec: S-0215 claim 37 (a) (still no destination and the target out of range: the target is dropped) and S-0607 claim 11 (revision 18: unchanged for a lifter whose target is its gripped unit, after its empty approach step; the grip stays, claim 12 having no row for a target change, and the wave ends, claim 21)
     if o.dest.is_none()
         && let Some(t) = o.target
         && !in_range(w, id, t)

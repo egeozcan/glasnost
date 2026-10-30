@@ -932,7 +932,7 @@ pub fn lifter_destination(w: &mut World, lifter: ObjectId) {
     if l.gripped.is_none() {
         return;
     }
-    // spec: S-0607 claim 12 (row 2: the lifter is a mobile unit and accepts a non-empty destination, from an order, an approach step or another rule: the grip ends and the lifter's target is cleared)
+    // spec: S-0607 claim 12 (row 2: the lifter is a mobile unit and accepts a non-empty destination, from an order, an approach step or another rule: the grip ends and the lifter's target is cleared; revision 18: an approach step against its gripped unit gives none, claim 11, `approach::step`, except S-0215 claim 37 part h's, whose destination is the gripped unit and ends the grip here)
     if o.dest.is_some() && o.dest != l.grip_dest {
         end_grip(w, lifter, true);
     }
