@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 81
-sources-class: [decomp, design]
+revision: 102
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-26
-measurements: []
-requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890]
+approved-on: 2026-10-30
+measurements: [M-0007, M-0014]
+requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890, Q-2001]
 supersedes: []
 ---
 
@@ -26,7 +26,8 @@ needs an engineer before and at its ownership changes (claims 26 to 28). When a 
 while it already holds an animation, the new animation keeps the replaced one's stage and takes its
 own passes afresh (claim 25); that the stage, not the image frame, is what carries over when the two
 types' start fields differ is unmeasured and rated medium there. Claims 26 to 28 answer Q-1772,
-and claim 28's building placed switched off by the map answers Q-1890.
+and claim 28's building placed switched off by the map answers Q-1890. The superweapon slots of
+a building whose owner's record of the type is not granted (claims 11 and 18) answer Q-2001.
 Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
@@ -355,8 +356,22 @@ Skirmish only; network games and campaigns are out of scope.
     - For a refinery: only the *active* slot of its fill level (claim 15), with no occupied
       variant. Grand opening does not itself start *idle* for a refinery, nor stop slots
       already running.
-    - For a building with a superweapon: *super-3* when the weapon's remaining charge time is
-      below 15 ticks, otherwise *super-1*. Both allow occupied variants.
+    - For a building with a superweapon (its first superweapon only): when its owner's record of
+      that type (S-0512 Terms) is granted at that moment, *super-3* if the record's remaining
+      charge time is below 15 ticks, otherwise *super-1*. When the record is not granted, its
+      clock is read in the same way (`quirks.ungranted_super_reads_clock`). A record never
+      granted and never reset reads 0, so *super-3*. A record reset while it is not granted
+      (S-0512 claim 15) reads its clock as the reset left it. A lost record (S-0512 claim 7) reads
+      its clock as the loss left it, since the loss neither stops nor resets the clock (S-0512
+      Terms give a running clock that counts down every tick, and claim 7 does not stop it): a clock
+      running at the loss goes on counting down and reads 0 once it has run out, and a stopped
+      clock (S-0512 Terms) keeps the remaining time it had at the loss. Whether the record was
+      ready at the loss does not matter: a ready record whose clock has run out reads 0, and one
+      whose countdown a set-charge action restarted while it stayed ready (S-0512 claim 14) reads
+      that countdown. The
+      charge that S-0512 claim 7 forgets is the restart from the full *T* at the next grant.
+      With the switch off, a record that is not granted gives *super-1*. Both allow occupied
+      variants.
     - For a building with a turret whose turret art is not voxel art: the *turret* slot. This start
       always uses the normal name and counts as "not damaged". As a result, a building that is
       damaged when it completes shows the normal variant on every running slot animation, including
@@ -390,8 +405,49 @@ Skirmish only; network games and campaigns are out of scope.
     in the action's tick. It enters with its ready mark clear and *construction* queued, as
     S-0524 claim 15 states, and its grand opening is the ordinary one at the completion of that
     construction, with the slot starts listed above.
-    - Backing: `measurable` (B6 for unoccupied completion starts, set-up slot presence and the
-      turret case, S-0215 claim 1 for queued *guard* and readiness,
+
+    Whether the record is granted at a grand opening follows from S-0512. Building-grant
+    conditions and their check timing follow S-0512 claims 2 and 3: the house is not defeated, a
+    giving building of the type stands, and for a disableable type the superweapon setting is
+    on. A record that a trigger action granted (S-0512 claims 12 and 13) is met at an opening as
+    any granted record. The rest of this paragraph is about building grants. When those
+    conditions hold, a building placed by order in play is granted at
+    its house's next house update, so after a build-up that ends later its record is granted at
+    the grand opening, with its clock started at the grant. When they fail, for example for a
+    disableable type with the setting off, no building grants the record.
+    During set-up placement the only building-grant check is the one that an upgrade's placement
+    makes at once. This is an inference from S-0512 claim 2 (c), under which a building of the
+    house gaining an upgrade makes a check, and S-0009 claim 40, under which the map's upgrades
+    are placed at set-up right after their building. So a set-up opening meets a granted record only
+    when, earlier in the set-up, an upgrade of the same house was placed while a giving building
+    of the type stood and that check granted the type. The opening then reads that record as any
+    granted record, with its clock started at that grant. Every other set-up opening meets no
+    record that a building granted. A code-125 building meets a granted record only if its house
+    already holds the type. An opening that meets a record that is not granted reads its clock
+    as above. This holds in every house. Each house, the neutral and special houses (glossary,
+    *house*) included, holds one record of each type from its creation (S-0512 claim 1), so no
+    house is without a record, and the neutral and special houses are granted at their grant
+    checks as any house is. A pre-placed building whose owner matches no house never enters play
+    (S-0009 claim 27). Whether code 125 can create a building with no owner house is not
+    established (Open questions; confidence low). With
+    `quirks.ungranted_super_reads_clock` off, a record that was lost and one never granted are
+    the same case: *super-1*, whatever charge a lost record had left.
+    - Backing: `measurable` (B23 for a building placed in play meeting a granted record at its
+      opening, part (f) for a set-up opening after an upgrade's grant, and parts (b), (c), (e)
+      and (f) for the original's slot at openings that meet a record never granted and never
+      reset; part (g) for
+      an opening that meets a lost record, its clock running or stopped at the loss; part (h)
+      for the neutral and special houses). The switch-off *super-1* for those is `unmeasured` (a
+      design decision, Edge cases; no measurement of the original decides it). `unmeasured` for
+      a record ready at the loss (no part loses a ready record before an opening that meets a
+      record that is not granted), for a record
+      reset while not granted (no part resets one) and
+      for using only the first superweapon: no part has a building with two superweapons. That
+      a pre-placed building whose owner matches no house never opens rests on S-0009 claim 27.
+      B6 for
+      unoccupied
+      completion starts, set-up slot presence and the turret case, S-0215 claim 1 for queued
+      *guard* and readiness,
       S-0402 scenario H13 for the free unit, B22 part (a) for the slots of a building created by
       code 125 starting in the tick of the trigger action and not restarting later in the run,
       except that a replacing start that keeps the stage (claim 25) shows the same frames, so that
@@ -412,7 +468,14 @@ Skirmish only; network games and campaigns are out of scope.
       being no second opening (`unmeasured`); medium for the occupied grand-opening variants,
       the below-15-tick charge case, repeated set-up body-state changes, unknown-name starts and
       empty upgrade names (`unmeasured`); medium for the slot starts of a code-130 replacement at
-      the completion of its construction, which rest on S-0524 claim 15's entry state
+      the completion of its construction, which rest on S-0524 claim 15's entry state; high for
+      the switch-off *super-1* at an opening that meets no granted record, as decided (Edge
+      cases); medium for the original's reading of a record that is not granted, until B23 parts
+      (b), (c), (e), (g) and (h) run, and for a record ready at the loss, a record reset while not
+      granted and the first-superweapon rule (`unmeasured`); medium for a building
+      placed in play meeting a granted record at its opening and for a set-up opening after an
+      upgrade's grant, until B23 parts (a) and (f) run; low for code 125 with no owner house
+      (Open questions)
 
 12. **Damage swaps the variants.** Whenever the building's health changes through damage or repair
     and its damaged state then differs from its slot condition, the slot condition takes the new
@@ -537,19 +600,34 @@ Skirmish only; network games and campaigns are out of scope.
       delayed-fire outage exceptions and occupied-variant exclusion: no scenario exercises those
       cases or establishes a discriminating event path. `unmeasured` for the power-return reaction
       of a building that is in operation when it is placed or completed: no scenario judges it
-      against no reaction. For disablings and re-enablings close together: `measurable` by B22
-      part (n) for a switch-off order applied in the tick before an ownership change that
-      re-enables the building (the change leaves the slots playing although the building stays
-      switched off), and by part (o) for a switch-off order applied 2 or more ticks before or
-      after a pulse's end (the pulse's end re-enables a building switched off under the pulse; a
-      later switch-off freezes the slots again). For several in one tick: `unmeasured` for a
-      switch-off order applied in the tick of an ownership change that gives the building to the
-      order's house, since a cycle takes the player's input before its tick runs (S-0201,
-      *cycle*), while the building is still another house's, and S-0214 offers power mode only
-      over an own selectable building, so no player's order can be given in that tick. Also
-      `unmeasured` for a switch-off order applied in the tick of a pulse's end, since the light
-      that is the only drawn sign of the end may show one tick late (S-0405 scenario W15), so no
-      drawn frame fixes the end's tick, and for the other combinations, since no scenario here
+      against no reaction. For disablings and re-enablings close together: `measured` by M-0014
+      alone, one run each (*n* = 1), in order cycles that B22 parts (n) and (o) do not name: with
+      the switch-off order in the cycle of tick *t* − 2, before an ownership
+      change that re-enables the building (the change leaves the slots playing although the
+      building stays switched off), with the order in the cycle of tick *e* − 4 (the pulse's end
+      re-enables a building switched off under the pulse), and with the order in the cycle of tick
+      *e* + 1, for a later switch-off that freezes the slots again, each
+      for a type that needs an engineer, draws power and does not need power. M-0014's runs, one
+      each (*n* = 1), with the order in the cycles of *e* − 3, *e* and *e* + 2 that part (o)
+      names, and in that of *e* + 5, which M-0014 alone adds, meet the same expectations
+      (M-0014): `measured`, with B22's validity shown only as far as M-0014's end-of-tick lists
+      of buildings, vehicles and infantry show removals
+      (M-0014, Evidence), for these runs as for the others. With the order in the cycle of
+      *t* − 1 (part (n)), M-0014 shows the slots keeping their ordinary schedule, with an advance
+      at *t* + 2, and the building enabled after the change while switched off: `measured` for
+      that end state; no hold is shown. That they hold from such an order until the change is
+      `unmeasured`: the hold would last one tick, less than the slots' stage delay, so no frame
+      tells it from no hold, and it rests on the freeze at a switch-off shown with the order in
+      the cycle of *t* − 2. For several in one tick: `unmeasured`
+      for a switch-off order applied in the tick of an ownership change that gives the building to
+      the order's house, since a cycle takes the player's input before its tick runs (S-0201,
+      *cycle*), while the building is still another house's, and S-0214 offers power mode only over
+      an own selectable building, so no player's order can be given in that tick. A switch-off order
+      applied in the tick of a pulse's end is `measured` (M-0014) by part (o) with
+      the order in the cycle of tick *e*: the light's state shows again at the end of the tick in
+      which the pulse's hold reaches 0, so a recorder that reads that state fixes the tick, and
+      the slots show no new frame after the end of tick *e*. `unmeasured`
+      for the other combinations, since no scenario here
       can put a capture and a pulse's start in a chosen update order, and no spec states a
       trigger action that switches a building. `unmeasured`
       for the building's own reaction as one more event in that sequence, for a type that needs
@@ -559,15 +637,22 @@ Skirmish only; network games and campaigns are out of scope.
     - Confidence: high for the power-loss and power-return rules as they act at a change from
       powered to unpowered and back; medium for the disable and enable cases, whose triggers belong
       to other specs, for the same-or-next-tick timing, for the pulse ending on a building still
-      switched off until B11's pulse run runs, and for the rule that a building not powered since
+      switched off, for a type that needs power, until B11's pulse run runs (high for a type
+      that does not, `measured` by M-0014's part (o) order in the cycle of *e* − 4), and for the
+      rule that a building not powered since
       it was placed or completed has had no such change, until B22 parts (f) and (g) run; medium
       for the power-return reaction of a building in operation when placed or completed
-      (`unmeasured`, above); medium for disablings and re-enablings close together, until B22
-      parts (n) and (o) run, and for several in one tick, the switch-off order in the tick of a
-      pulse's end or of an ownership change among them (`unmeasured`, above), which rest on the
-      same rule and on S-0203's places in the tick; medium for the building's reaction counted
-      among those events (`unmeasured`, above), which rests on the power columns, the disable and
-      enable rules and the reaction's timing in its next update
+      (`unmeasured`, above); high for disablings and re-enablings close together with the order in
+      the cycles of *t* − 2, *e* − 4, *e* − 3, *e*, *e* + 1, *e* + 2 and *e* + 5, the switch-off
+      order in the tick of a pulse's end among them, and for the end state after the change
+      with the order in the cycle of *t* − 1 (the slots on their ordinary schedule and the building
+      enabled while switched off, M-0014); medium for the hold from an order in the
+      cycle of *t* − 1 (`unmeasured`, above); medium for the other
+      cases of several in
+      one tick, the switch-off order in the tick of an ownership change (`unmeasured`, above)
+      among them, which rest on the same rule and on S-0203's places in the tick; medium for the
+      building's reaction counted among those events (`unmeasured`, above), which rests on the
+      power columns, the disable and enable rules and the reaction's timing in its next update
 
 14. **Special outage.** For a type marked for special power behaviour, whether or not it needs
     power: when power comes back, the *low-power* slot stops and every slot with *special-outage* is
@@ -641,13 +726,34 @@ Skirmish only; network games and campaigns are out of scope.
     - When *super-2* finishes on its own, *super-3* starts. When *super-4* finishes on its own,
       *super-1* starts.
 
+    The check reads the owner's record of the type whether or not it is granted
+    (`quirks.ungranted_super_reads_clock`): while it is not, *t_r* comes from its clock as for a
+    granted record, and a record never granted and never reset gives *t_r* = 0. Once the record is
+    granted with
+    remaining time *T* (S-0512 claim 3), the checks after the grant use *t_r* from that clock.
+    So a *super-3* started at an opening without a grant gives way to *super-4* at the first
+    check after the grant at which *t_c* < *t_r*, and *super-1* starts when *super-4* finishes.
+    With the switch off, the check also needs the record to be granted and changes nothing while
+    it is not, so a *super-1* started at an opening without a grant changes only when
+    *t_c* ≥ *t_r*.
+
     All these starts use the normal or damaged variant. The four slots therefore form a loop:
     charging, opening, charged, closing.
-    - Backing: `measurable` (B9 for the four-slot cycle and its threshold).
-      `unmeasured` for the 990-minute cutoff and ignoring a second superweapon: B9 supplies
-      neither a cutoff comparison nor a two-superweapon building.
-    - Confidence: high (the four-slot cycle and its threshold); medium (the 990-minute cutoff and
-      ignoring a second superweapon, `unmeasured`)
+    - Backing: `measurable` (B9 for the four-slot cycle and its threshold; B23 part (e) for the
+      checks after the grant). In (e) the record was never granted, so a check before the grant
+      reads *t_r* = 0 and changes nothing, with the switch on or off, since B23's *t_c* is not
+      negative. Such a check cannot be told apart from no check, which gives the same result, so it
+      is rated with the checks after the grant. A check that reads a lost record's clock before the
+      record is granted again is `unmeasured`: that window lasts until its house's next update, and
+      the one part with a building in it, B23 (g), uses type A, whose check never runs. The
+      switch-off pause while the record is not granted is `unmeasured` (a design decision, Edge
+      cases; no measurement of the original decides it). `unmeasured` for the 990-minute cutoff and
+      ignoring a second superweapon: B9 supplies neither a cutoff comparison nor a two-superweapon
+      building.
+    - Confidence: high (the four-slot cycle and its threshold; the switch-off pause while the
+      record is not granted, as decided); medium (the checks after a grant, until B23 part (e)
+      runs; a lost record's reading before its grant, the 990-minute cutoff and ignoring a
+      second superweapon, `unmeasured`)
 
 19. **Turret slot animation.** For a building with a turret, the *turret* slot animation does not
     advance on its own. Every tick its image frame is set to (28 − *j*) mod 32, a value from 0 to 31,
@@ -677,7 +783,7 @@ Skirmish only; network games and campaigns are out of scope.
     |---|---|---|
     | Repair depot | it enters the working phase: its settling step answers *more needed* or *done* | *special-1* starts (a running one is replaced, claim 25); *active-1* and *idle* stop |
     | Repair depot in the working phase | a step answers *done*, *not needed* or *cannot pay*, or the depot is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start |
-    | Repair depot in the waiting phase | it is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start; the depot leaves its repair behaviour |
+    | Repair depot in the waiting phase | its repair processing finds no contact | *production* and *special-2* stop; *special-3* and *active-1* start; the depot is in *guard* from 1 tick later, while *special-3* runs (S-0314 claim 6) |
     | Repair depot in the settling phase, with *production* or *special-2* running | it is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start |
 
     So *special-1* starts once per entry into the working phase, on the tick of the first paid
@@ -692,11 +798,13 @@ Skirmish only; network games and campaigns are out of scope.
     When a working step sends the vehicle away (the working-phase row of the table above), the
     slot changes happen on the tick of that step. A settling
     step that sends the vehicle away changes no slot of its own (*After a send-away* below).
-    When contact ends without a step, because the vehicle is destroyed or leaves as S-0314
-    claims 20 to 22 say, the depot reacts at the processing that S-0314
-    claim 6's spacing table had already scheduled; the loss does not bring it forward (Q-1610,
-    answered in part through S-0314, whose claim 22 answers its third question for a depot back in
-    *guard*; the rest of that question stays open).
+    When contact ends without a step because the vehicle is destroyed (S-0314 claim 22), the depot
+    reacts at the processing that S-0314 claim 6's spacing table had already scheduled; the loss
+    does not bring it forward. When contact ends because the vehicle leaves (S-0314 claims 20 and
+    21), the same is expected, rated as S-0314 claim 22 rates it (medium in working and settling,
+    its scenario H4 part h runs 8 and 9). (Q-1610, answered in part through S-0314: its questions
+    1 and 2 for a destroyed vehicle only, and its third question for a depot back in *guard*; the
+    rest stays open.)
     In the working phase this is the same or the next tick when the depot misses no turn in
     between (S-0203 claim 10), except during the *D*<sub>p</sub> ticks after the
     settling step that started working; in the settling and waiting phases it is the pending
@@ -773,7 +881,7 @@ Skirmish only; network games and campaigns are out of scope.
       - B18 part j: stopping *production*, the every-tick row with *production* running, and the
         settling contact-loss row with *production* running.
       - B18 part k: the exclusion of occupied variants.
-      - S-0314 H4 part h: the reaction timing after a loss.
+      - S-0314 H4 part h: the reaction timing after a loss, `measured` (M-0007, runs 1 to 6).
       - S-0603 claim 12 and scenario G10: recycling-building natural completion.
       Recycling-building restart after external removal is `unmeasured`: no data-only fixture
       establishes removal without the building itself stopping or replacing the slot animation.
@@ -785,9 +893,18 @@ Skirmish only; network games and campaigns are out of scope.
       Repair-depot non-natural removal of *special-1* is `unmeasured`: no event in play is known
       that removes a running *special-1* other than the building itself stopping or replacing it
       (claim 12's condition swaps replace it), so no setup can produce the case.
-      The waiting-phase loss row is `measurable` (B18 part d), with the set-up that S-0314
-      claim 6 gives for its waiting row with no contact (H4 part h run 7): the docked vehicle,
-      ordered away while the depot waits, keeps its contact outside the starting distance.
+      The waiting-phase loss row's start of *special-3* and its *guard* 1 tick later are
+      `measured` (M-0007) for a loss by the vehicle leaving on a move order before the depot's
+      first waiting processing: the contact ended before that processing, which found none. For
+      a destroyed vehicle there they are medium, as S-0314 claim 22 rates them. That run is not a
+      B18 part d run, since part d's loss falls with the depot already waiting, and M-0007
+      reports it as inconclusive for part d. M-0007 records that *active-1* was already running
+      at that processing, and records nothing of *production* or *special-2* there. The row's
+      stops of *production* and
+      *special-2* are `unmeasured`: no scenario has either running at a waiting-phase loss, and
+      the stop of a slot that is not running looks the same as no stop. Its start of *active-1*
+      is `measurable` (B18 part d). A loss between two waiting processings is `measurable`
+      (B18 part d, with S-0314 H4 part h run 7's set-up).
       The exhaustive list of *production* starters (only the construction-yard, vehicle-factory
       unloading and refinery-docking roles; nothing in the repair cycle) is `unmeasured`: a
       finite set of types cannot establish it. That no building other than the kinds listed
@@ -810,9 +927,15 @@ Skirmish only; network games and campaigns are out of scope.
         damaged variants; that a working step's *done* answer and send-away (part a) and the
         vehicle's destruction (part c) leave *special-1* running, each judged in its repeat with
         the longer *special-1* art. The two loss rows of the
-        cycle's table take their own ratings below: the waiting-phase loss row medium
-        until part d runs, and the settling contact-loss row medium until part h runs. That the
-        cycle never stops *special-1* and never starts *production* are exhaustive negatives,
+        cycle's table take their own ratings: in the waiting-phase loss row, the start of
+        *special-3* and the *guard* 1 tick later high for a loss by the vehicle leaving before
+        the depot's first waiting processing (`measured`, M-0007's move order), medium for a
+        destroyed vehicle there as S-0314 claim 22 rates it, and medium for a loss between two
+        waiting processings until B18 part d runs with S-0314 H18 b's tethered vehicle, its start of
+        *active-1* medium until B18 part d runs, and its stops of *production* and *special-2*
+        medium and `unmeasured` for the reason given above; the settling contact-loss row
+        medium until part h runs. That the cycle never stops *special-1* and never starts
+        *production* are exhaustive negatives,
         rated with the others below.
       - medium until part b's repeat with the longer *special-1* art runs: that the *cannot
         pay* failing step and restart (part b) leave *special-1* running. That restart's
@@ -845,9 +968,19 @@ Skirmish only; network games and campaigns are out of scope.
         settling send-away with *special-2* running.
       - low, `unmeasured`: that roles the type may combine with the repair flag add their own
         starts of *special-1* to *special-3* (the reason is given in the list above).
-      - medium, resting on another rule: the event timing, which inherits S-0314 claim 6's
-        phases, and the settling hold while *special-3* runs; recycling-building natural
-        completion, which inherits S-0603 claim 12's rating of the restart.
+      - high, `measured` (M-0007, S-0314 H4 part h runs 1 to 6), for a loss by the vehicle's
+        destruction: after a loss in working, the
+        tick of the depot's first processing at or after the loss, which in run 2 is the tick of
+        the loss itself; after a loss in settling, the tick of the pending processing and the
+        return to *guard* at it (runs 3 and 5); and the
+        settling hold while *special-3* runs. That a loss in working is met in the next tick
+        when the depot's processing falls there rests on S-0203 claim 3, and is rated with it.
+      - medium: the tick of the changes when the depot's processing falls on a missed turn, as
+        S-0314 claim 22 rates it.
+      - medium, `measurable` (S-0314 H4 part h run 8 in working, run 9 in settling): the same
+        ticks for a loss by the vehicle leaving, as S-0314 claim 22 rates it.
+      - medium, resting on another rule: recycling-building natural completion, which inherits
+        S-0603 claim 12's rating of the restart.
 
 21. **Parsed but without effect.** The type's extra-damage-stage flag has no effect on how a
     building is drawn or behaves.
@@ -1290,7 +1423,7 @@ infantry. For sizes of 0 or more this equals the sum of the sizes each truncated
 | Body animation states | 6 | count | *full* has no import key; its deterministic range is the departure of claim 6 |
 | Default state range | a = 0, c = 1, d = 0 | image frames, image frames, ticks | *idle*, *active*, *aux-1*, *aux-2*; also *construction* for a type without a build-up sprite (claim 5) |
 | Anchor displacement | 128, 128 | leptons | From the top-left cell centre toward the foundation's top corner |
-| Grand-opening "charged" test | 15 | ticks | Remaining charge below this starts *super-3* |
+| Grand-opening "charged" test | 15 | ticks | A granted record below it starts *super-3* |
 | Charged-animation time limit | 990 | game minutes | Above it, claim 18 is disabled |
 | Charge time scale *κ* | 2 386 093 / 2³¹ | game minutes per tick | Single-precision constant, F6 |
 | Unloading depth adjustment | −20, −40 | depth units | Deploying sprite, roof-deploying sprite (claim 22) |
@@ -1315,7 +1448,8 @@ outside construction; gates using the special gate image use claim 4, not this t
 | other, damaged, *idle* state | *k* + 1 |
 | other, damaged, other states | *k* + max(*a* + *c*) over *idle*, *active*, *aux-1*, *aux-2* |
 
-**Superweapon slots** (claims 13 and 18):
+**Superweapon slots** (claims 13 and 18; with `quirks.ungranted_super_reads_clock` off, the two
+charge rows need a granted record):
 
 | Running | Event | Result |
 |---|---|---|
@@ -1407,6 +1541,18 @@ outside construction; gates using the special gate image use claim 4, not this t
   invalid data, not play behaviour. Our engine skips forcing the image frame (a departure), and the
   importer warns about a silo-fill type whose *special-1* name is
   empty or names no animation type.
+- **`quirks.ungranted_super_reads_clock`** (default: on; claims 11 and 18). The original reads
+  a superweapon record's clock whether or not the record is granted. A record never granted
+  and never reset reads 0, and a reset or lost record reads its clock as the reset or the loss
+  left it (claim 11). So a superweapon
+  building that opens with a record that was never granted and never reset, as at most set-up placements or from
+  code 125 (claim 11), shows the charged *super-3* although nothing has charged, and claim 18's
+  check runs on that clock. With a lost record it reads the clock as the loss left it. Off: a record
+  that is not granted counts as
+  not charged, so the grand opening starts *super-1* and claim 18's check waits for the grant.
+  DECIDED (autonomy, 2026-10-28): this is a switch, not a correction without one, because the
+  slot starts it changes take their creation draws (claim 12) and so can change the scenario
+  random stream, and an animation that ends can cost another object its turn (S-0203 claim 10).
 - **Refinery with zero storage capacity** (no switch). When a refinery type's storage capacity is 0
   and ore is stored in it, the original divides by zero when it computes the fill level, and the
   program fails. This is invalid data, not play behaviour. Our engine uses level 0 (a departure,
@@ -1538,7 +1684,10 @@ files and no engine add-ons, stock data, a tiny purpose-made map, one player wit
 one bystander computer player kept outside the observed area unless a scenario needs its named
 objects. The observed area is the test buildings, their nearby cells, and any route or units the
 scenario uses. Apply the glossary's bystander void rule. Use standard skirmish, 800 × 600 pixels,
-game speed 4 unless stated, high detail, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and no unrelated trigger effects. Record per tick, from a screen capture that keeps every drawn frame or a
+game speed 4 unless stated, high detail, no engine add-on and no mods (the named test files of a
+scenario and the purpose-made test maps excepted, and a pulse created outside the stock inputs where
+a scenario says it needs one), and no unrelated trigger effects. Record per tick, from a screen
+capture that keeps every drawn frame or a
 read-only recorder's tick-labelled log of the game state, the body sprite and image-frame index in use, bib and shadow
 visibility, and the slot animations present (slot, variant, image frame). One run per variant
 is enough unless a scenario says otherwise. Use deterministic animation playback in named test art
@@ -1749,7 +1898,10 @@ expected numbers are computed from the type's own fields at measurement time.
     While its house remains short of power, switch that building off and then on through the
     normal power-toggle order (S-0405 claim 10). Keep the house shortfall unchanged throughout. In
     a further pulse run at speed 4, with the house at ample power, switch the building off, hit it
-    with a pulse while it is switched off, and keep it switched off until at least 30 ticks after
+    with a pulse while it is switched off (from a stock input, or else a pulse created outside
+    the stock inputs, as B22 says; without a pulse, the pulse run is reported unreached), and keep
+    it switched off until at
+    least 30 ticks after
     the pulse's end; log the ticks of the switch-off, the hit and the pulse's end. The toggled-flag run is required, since it is the only
     backing of claim 21: run the copy through the same procedure as its original type, undamaged
     and then damaged past the yellow ratio, at both speeds.
@@ -1904,7 +2056,9 @@ expected numbers are computed from the type's own fields at measurement time.
       cells away; destroy it once it stands still there and the recorder shows a waiting
       processing after the order that did not accept it, with the contact still held. A repeat
       in which the depot leaves waiting before the order, or the order releases the contact, is
-      inconclusive and is run again, from a different starting cell. A loss after
+      inconclusive and is run again, from a different starting cell. Use S-0314 H18 b's
+      tethered vehicle: an untethered one loses its contact on the order (S-0314 claim 20).
+      A loss after
       that acceptance, in settling before the first paid step, is S-0314 scenario H4 part h,
       run 5.
     - e. As a, at the naval yard with the vessel.
@@ -2016,7 +2170,8 @@ expected numbers are computed from the type's own fields at measurement time.
     paid step after the credits return starts *special-1* again, replacing the running one
     (claim 25). In d, when the recorder shows waiting at the loss (otherwise the part is
     inconclusive), *special-1* never appears, and *special-3* and *active-1* appear when the
-    depot finds no contact. Outside part j, *production* never appears.
+    depot finds no contact; the depot is in *guard* 1 tick later, while *special-3* still runs.
+    Outside part j, *production* never appears.
     Every depot start uses the normal variant while undamaged and the damaged variant in
     the damaged repeat. In f, the delayed-fire building restarts *active-1* when *special-1*
     finishes on its own.
@@ -2078,7 +2233,7 @@ expected numbers are computed from the type's own fields at measurement time.
     failing to restart on re-entry into working, or *active-1* or *idle* surviving that entry.
     Part d, when the recorder shows waiting at the loss (otherwise it is inconclusive and
     backs nothing), is falsified if the waiting depot starts *special-1*, fails to start *special-3* and
-    *active-1* at its first no-contact processing, or stays in repair after that processing.
+    *active-1* at its first no-contact processing, or is not in *guard* 1 tick after it.
     Any wrong normal/damaged variant, or premature stopping of the long *special-1* at
     departure, at contact loss or at b's failing step, also falsifies the corresponding part.
     Part g is falsified by any depot processing between the loss and the processing *D*<sub>p</sub> ticks
@@ -2194,13 +2349,18 @@ expected numbers are computed from the type's own fields at measurement time.
     For part (j), test type F is a copy of a stock building type that has a free unit, and a map
     trigger action of code 125 creates F for the bystander computer house in the first tick, in view with open
     cells around it.
-    The player has engineers, a unit that can damage a building, and a pulse weapon. A map
-    trigger action, fired at least 30 ticks after part (b)'s capture, gives T1 to the bystander
-    house. For parts (f) and (g) the player's house has no power plant, so any positive drain
-    leaves it short of power. In the ample-power run of (f), and in (h), a map trigger creates, in the first
-    tick, a power plant for the player's house whose output exceeds the house's total drain (a
-    structure in the map's building list owned by a human player's house is dropped, S-0009
-    claim 27).
+    The player has engineers and a unit that can damage a building. Parts (e), (k) and (o) need
+    a pulse. No stock input that makes one is established (M-0014's pulse is not one), so
+    these parts may use a pulse created outside the stock inputs: a harness that starts the game's
+    own pulse
+    at a stated
+    cell, with a stated spread and length. Without a pulse, those parts are reported unreached.
+    A map trigger action, fired at least 30 ticks after part (b)'s capture, gives T1 to the
+    bystander house. For parts (f) and (g) the player's house has no power plant, so any positive
+    drain leaves it short of power. In the ample-power run of (f), and in (h), a map trigger
+    creates, in the first tick, a power plant for the player's house whose output exceeds the
+    house's total drain (a structure in the map's building list owned by a human player's house is
+    dropped, S-0009 claim 27).
     For parts (l) and (m), test type D is a copy of a stock building with a positive power drain
     and neither the needs-power nor the needs-engineer flag, test type E is D with the
     needs-power flag, and test type Z is D with no power drain. Each has T's test slot art. The
@@ -2220,7 +2380,10 @@ expected numbers are computed from the type's own fields at measurement time.
     over an own selectable building. Parts (n) and (o) need an input that gives a
     power order in the cycle of a chosen tick (S-0201, *cycle*), such as a scripted input or a
     replay of the recording run with the same seed and the same earlier inputs, plus the one
-    power order; without one they are reported unreached.
+    power order; without one they are reported unreached. A scripted order applied just before
+    the logic of tick F is an order in the cycle of tick F − 1. This is derived from S-0203
+    claim 7 and S-0405 claim 7, and M-0014 is consistent with it: there a human's power drain
+    from such an order falls in tick F, and the light goes out in tick F.
   - Procedure and parts:
     - (a) Record from the first drawn frame of play for at least 30 ticks, before any capture,
       and log the tick on which the trigger action creates T3 and P3.
@@ -2259,14 +2422,12 @@ expected numbers are computed from the type's own fields at measurement time.
       after *t* + 2.
     - (o) Capture W8 with an engineer, and once its *idle* and *active-1* slots have advanced, hit
       it with the pulse. In a recording run, log the tick *e*: the first tick after the hit at
-      whose end W8's light shows again. A drawn frame shows the state at the end of the previous
-      tick (S-0201 claim 6), so in a screen capture *e* is the tick before the first drawn frame
-      that shows the light again. The light may show one tick after the pulse's end (S-0405
-      scenario W15), so the pulse ends in tick *e* − 1 or tick *e*; the part places no order in
-      either. In two further runs with the same seed and the same earlier inputs, the player
-      gives the power-off order for W8 in the cycle of tick *e* − 3 and of tick *e* + 2, one per
-      run, so that each order falls at least 2 ticks before or after the pulse's end. Record at
-      least 30 ticks after *e* + 2.
+      whose end a read-only recorder shows W8's light state on again. That is the tick in which
+      the pulse's hold reaches 0 (M-0014), so the pulse ends in tick *e*. The light on the
+      ground can show one tick later (S-0405 scenario W15), so a screen capture alone does not
+      fix *e*. In three further runs with the same seed and the same earlier inputs, the player
+      gives the power-off order for W8 in the cycle of tick *e* − 3, of tick *e* and of tick
+      *e* + 2, one per run. Record at least 30 ticks after *e* + 2.
     - Remove all named test files afterwards.
   - Observable: per tick, for each test building and each of its four test slots (R: its running
     *active* slot; U1: its *turret* slot and turret facing; F: its free units; T3 also its body
@@ -2282,7 +2443,7 @@ expected numbers are computed from the type's own fields at measurement time.
     (a)'s record. Part (j) shares that run, which lasts at least 300 ticks after the first tick.
     Parts (d), (e), (g) and (k) take one run each, part (f) two, and part (h) up to five attempts, as its expected result says.
     Parts (l) and (m) share one run. Part (n) takes a recording run and one order run, and part
-    (o) a recording run and two order runs.
+    (o) a recording run and three order runs.
   - Expected:
     - (a) On T1, T2, T4, T5 and P1 the *idle* and *active-1* slots show their first image frame
       on every tick, and *active-2* and *active-3* advance every 3 ticks. On T3 all four slots
@@ -2344,15 +2505,18 @@ expected numbers are computed from the type's own fields at measurement time.
       their stage delay to the end of the record, while the record shows the player's house short
       of power; E1's *active-2* and *active-3* advance throughout. A tick of that record without
       a shortfall voids the part.
-    - (n) With the order in tick *t* − 1, W7's *idle* and *active-1* hold from the order and
-      advance again, although W7 stays switched off, at the first tick from *t* on at which at
-      least 3 ticks have passed since their last advance (S-0109 claim 23), so no later than
-      tick *t* + 2.
+    - (n) With the order in tick *t* − 1, W7's *idle* and *active-1* advance again, although W7
+      stays switched off, at the first tick from *t* on at which at least 3 ticks have passed
+      since their last advance (S-0109 claim 23), so no later than tick *t* + 2. Their hold from
+      the order until the change is shorter than their stage delay, and the part does not judge
+      it.
     - (o) With the order in tick *e* − 3, W8's *idle* and *active-1* show no new frame up to
       the end of tick *e* − 2, and advance again, although W8 stays switched off, no later than
       tick *e* + 1: the pulse's end re-enables W8, and their clocks are due after the pulse's
-      hold. With the order in tick *e* + 2, they show no new frame after the end of tick *e* + 2,
-      to the end of the record.
+      hold. With the order in tick *e*, they show no new frame after the end of tick *e*, to the
+      end of the record: the part does not judge the
+      frame they show at the end of tick *e*. With the order in tick *e* + 2, they show no new
+      frame after the end of tick *e* + 2, to the end of the record.
   - Falsified if: an unmanned map-placed building's *freeze-unpowered* slot advances or is not
     drawn before any capture, damage or pulse, or its *active-2* or *active-3* holds; T3 holds,
     its slots first appear on a later tick than the one on which the action creates it, or one of
@@ -2374,12 +2538,85 @@ expected numbers are computed from the type's own fields at measurement time.
     order for W7 in tick *t* − 1 leaves its slots held at the end of tick *t* + 2; or, in part
     (o), the order in
     tick *e* − 3 leaves them advancing before the end of tick *e* − 2 or held at the end of tick
-    *e* + 1, or the order in tick *e* + 2 leaves them advancing after the end of that tick.
+    *e* + 1, or the order in tick *e* or in tick *e* + 2 leaves them advancing after the end of
+    that tick.
   - Validity: a counting removal can cost a slot its turn (S-0109 claim 5, S-0203 claim 10). A
     run of parts (l) to (o) in whose record any object leaves play in a tick that a timing
     expectation of the part names is void for that expectation and is repeated. Those parts'
     inputs put no removal near those ticks (their captures and pulse hit come well before), so
     none is expected.
+- **B23 (claims 11 and 18, a record that is not granted; Q-2001).**
+  - Setup: a tiny skirmish map, stock data, the common game speed and settings, superweapons on.
+    Two houses: the human player's house P and one computer player's house C, neither defeated in
+    the recorded window. A pre-placed structure of a human player's house is dropped (S-0009
+    claim 27), so the set-up parts use C. C has power plants placed at set-up and P builds power
+    plants before its parts, so that each house's power output stays above its drain for the
+    whole recorded window. The house named in each part holds no superweapon
+    building at its start. Type A: test data, a copy of a stock superweapon building type whose
+    art names *super-1* and *super-3*, both endless (S-0109 claim 7; test art where stock art
+    is not), with its charged-animation time set above 990 so that
+    claim 18's check never runs for it. Its superweapon type is power-dependent and has a charge
+    time *T* of at least 600 ticks (a test copy of the superweapon type where needed). For type
+    A only the slot that each opening starts is judged. Type A′: test data, a copy of A whose
+    art names *super-1* to *super-4* (test
+    art where stock art lacks one or where it differs from what follows), whose *super-1* and
+    *super-3* are endless (S-0109 claim 7), so that neither ends on its own in the recorded
+    window (S-0109 claim 16), whose *super-4* plays once and ends in fewer than 200 ticks,
+    and whose charged-animation time *t_c* is at least 0, at most 990 and below
+    (*T* − 300) × *κ*, with *T*
+    the type's full charge time in ticks (claim 18, S-0512 claim 3).
+  - Procedure, one run per part:
+    - (a) P builds its first building of type A by order.
+    - (b) The map places a building of type A for C at set-up.
+    - (c) A trigger runs code 125 in play to create a building of type A for P.
+    - (d) P builds A, sells it with the charge partly done, and builds A again once the record
+      is lost. Repeat with the first one sold when its weapon is ready.
+    - (e) As (b), with type A′.
+    - (f) The map places for C, in this list order, a building of type A, a building of C's with
+      a map-listed upgrade (S-0009 claim 40), and a second building of type A.
+    - (g) P builds A and sells it while its record's clock runs with at least 300 ticks left,
+      so that the record is lost (S-0512 claim 7) with P holding no other building of the type.
+      A trigger then runs code 125 to create a building of type A for P. Let *R_L* be the
+      remaining charge ticks recorded at the loss and *k* the ticks from the loss to the opening.
+      Run 1: *R_L* − *k* is at least 30. Run 2: *k* is *R_L* or more. Run 3: as run 2, with P
+      switching A off (S-0405 claim 10) before the sale, so that the record is suspended and its
+      clock stopped at the loss (S-0512 claim 6). A run whose recorded *R_L* and *k* miss its
+      condition is void and is run again.
+    - (h) As (e), with the map placing the building of type A′ and a power plant for the neutral
+      house. A second run places them for the special house.
+  - Observable, with the read-only recorder, per tick: the building's superweapon slots, and the
+    house's record of the type, granted or not and suspended or not, with its remaining charge
+    ticks, and whether each superweapon slot is frozen. Parts (a) to (d)
+    and (f): from each grand opening for 10 ticks. Part (g): from the sale to 10 ticks after the
+    opening. Parts (e) and (h): from the grand opening for 300 ticks.
+  - Expected in the original: (a) and both runs of (d) meet a granted record and start the slot
+    that claim 11 gives for the recorded remaining charge at the opening: *super-1* when it is
+    15 ticks or more, *super-3* when it is below. (b) and (c) meet a record that is not granted,
+    reading 0, and start *super-3*. (e) and both runs of (h) start *super-3*, then after the
+    grant *super-4* and, when it finishes, *super-1*, all within the 300 ticks. (f): the first A
+    meets no granted record and starts *super-3*; the upgrade's placement grants the type; the
+    second A meets the granted record and starts the slot that claim 11 gives for the recorded
+    remaining charge (*super-1* when it is 15 ticks or more). (g) meets the lost record, not
+    granted, and starts *super-1* in run 1, *super-3* in run 2 (the clock has run out) and
+    *super-1* in run 3 (the stopped clock keeps *R_L*). A clock that the loss stopped would give
+    *super-1* in run 2, and one that the loss reset to 0 would give *super-3* in runs 1 and 3.
+  - Expected with `quirks.ungranted_super_reads_clock` on: as in the original. With it off:
+    parts (a) and (d) and the second A of part (f) as in the original. Parts (b), (c), (e), (g)
+    and (h) and the first A of part (f) start *super-1*. In (e) and (h) *super-1* runs for all 300
+    ticks, since *t_r* stays above *t_c* there.
+  - Falsified, for the original and the switch-on default, when (a), (d) or the second A of (f)
+    meets a record that is not granted at the opening, or starts a slot other than the one claim 11
+    gives for the recorded remaining charge, when (b), (c), (g) or the first A of (f) meets a
+    granted record, when (b), (c), (e), a run of (h) or the first A of (f) starts other than
+    *super-3*, when a run of (g) starts other than its expected slot, or when the slots of
+    (e) or (h) after the grant differ from the original's expectation (in (h), also when the
+    record is never granted in the 300 ticks). A switch-off run
+    of our engine, when one is judged,
+    is falsified when (b), (c), (e), (g), (h) or the first A of (f) starts other than *super-1*,
+    or when *super-1* changes within the 300 ticks of (e) or (h). A run in which the record is
+    suspended (S-0512 claim 4) or a superweapon slot is frozen (claim 13) at any recorded tick
+    is void and is run again, except that in run 3 of (g) the record is suspended and A's
+    superweapon slots are frozen (A is switched off before its sale), both by design.
 
 Construction timing in claim 5 uses S-0406 scenario PL11 a to f, including its setup,
 read-only per-tick observables and falsification criteria: placed buildings show two runs,
@@ -2446,6 +2683,10 @@ specified here.
 
 ## Open questions
 
+- **Code 125 with no owner house.** Whether trigger action code 125 creates a building when the
+  trigger has no owner house, for example when its owner country is played by nobody (S-0011
+  claim 5), is not established. Confidence: low.
+
 - **A code-125 building's construction behaviour.** Claim 11 has a building that trigger action
   code 125 creates in play open at once, and its placement queues the construction
   behaviour as any placement in play does. What the building shows while that behaviour lasts
@@ -2480,9 +2721,11 @@ specified here.
   to *guard*. Likewise for a vehicle that arrives at a depot still in its no-contact settling
   hold: whether the settling checks apply to it directly, skipping waiting. The slot changes of
   claim 20 for such a vehicle follow from those answers and are open with them.
-- (Q-1610 questions 1 and 2, S-0314's Open questions hold the entry.) For a depot type that is
-  also a vehicle bunker, when its processings come after a vehicle's contact ends, and so when
-  claim 20's slot changes for that loss happen, is open: S-0606 claim 20 gives only that its
+- (Q-1610 questions 1 and 2, S-0314's Open questions hold the entry.) For a vehicle that leaves,
+  both questions are open in working and settling until S-0314 scenario H4 part h runs 8
+  (working) and 9 (settling) run (S-0314 claim 22). For a depot
+  type that is also a vehicle bunker, when its processings come after a vehicle's contact ends, and
+  so when claim 20's slot changes for that loss happen, is open: S-0606 claim 20 gives only that its
   processing delay is the depot's.
 - B1 tests the delay from the imported value. Single-first input conversion is S-0003's, not
   a fresh binary64 conversion. No specific test fixture combining a sprite count and imported value
