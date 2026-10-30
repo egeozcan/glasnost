@@ -3865,6 +3865,18 @@ impl Builder<'_> {
                 ));
             }
         }
+        // spec: S-0408 Edge cases (A crew choice that always gives an engineer) and Terms (the importer warns for a side crew type or a technician type that is an engineer type)
+        for k in ["AlliedCrew", "SovietCrew", "ThirdCrew", "Technician"] {
+            let state = self.global(GENERAL, k);
+            let engineer = text_of(state.as_ref())
+                .and_then(|n| self.find_rec(Kind::Infantry, &n))
+                .is_some_and(|t| bool_of(key(t, "Engineer")) == Some(true));
+            if engineer {
+                self.warn_at(state.as_ref(), format!(
+                    "[General] {k} names an engineer type: a sale or destruction survivor choice that gives it repeats, so a sale releases no survivor for that attempt (S-0408 Edge cases, a departure)"
+                ));
+            }
+        }
         // spec: S-0601 Import mapping (the three overload lists: the importer warns when damage or frames is shorter than count, or when count is empty while the others are given)
         let untrimmed = self.i.ini_quirks.list_items_untrimmed;
         let lists: Vec<(&str, Option<KeyState>)> =

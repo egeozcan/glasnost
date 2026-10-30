@@ -1793,3 +1793,24 @@ fn pip_scale_warnings() {
         assert!(!warned(&w, quiet), "{quiet}: {w:#?}");
     }
 }
+
+/// spec: S-0408 Edge cases (A crew choice that always gives an engineer: the importer warns for a side crew type or a technician type that is an engineer type)
+#[test]
+fn engineer_crew_types_warn() {
+    let base =
+        "[InfantryTypes]\n1=Crewman\n2=Fixer\n[Crewman]\nEngineer=no\n[Fixer]\nEngineer=yes\n";
+    let run = |g: &str| sim(&format!("{base}[General]\n{g}"), "", "").1;
+    let w = run("AlliedCrew=Crewman\nTechnician=Crewman\n");
+    assert!(!warned(&w, "names an engineer type"), "{w:#?}");
+    let w = run("SovietCrew=Fixer\nTechnician=Crewman\n");
+    assert!(
+        warned(&w, "[General] SovietCrew names an engineer type"),
+        "{w:#?}"
+    );
+    let w = run("AlliedCrew=Crewman\nTechnician=Fixer\n");
+    assert!(
+        warned(&w, "[General] Technician names an engineer type"),
+        "{w:#?}"
+    );
+    assert!(!warned(&w, "AlliedCrew names an engineer"));
+}
