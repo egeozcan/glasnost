@@ -167,7 +167,7 @@ New quirk switches: none.
 
 | Claim | Bucket | Change | Code location / evidence |
 |---|---|---|---|
-| 11 Automatic crushing: "does not appear friendly" becomes "does not appear disguised" (S-0516 claims 35-36); not applied to a drive-through or to the omni-crusher / attack-target variants | (a, seam) for the automatic choice; (a, already done) for the variants | The disguise test belongs only to the automatic choice. | The automatic choice of the first list is not implemented: `general.player_auto_crush` is imported (`sim/src/rules.rs:491, 873`) but nothing reads it in `sim/src`. The omni-crusher and attack-target variants in `approach.rs:175-215` (`crushing_approach`) have no disguise test, as the claim now says. No disguise state exists. |
+| 11 Automatic crushing: "does not appear friendly" becomes "does not appear disguised" (S-0516 claims 35-36); not applied to a drive-through or to the omni-crusher / attack-target variants | (a, seam) for the automatic choice; (a, already done) for the variants | The disguise test belongs only to the automatic choice. | The automatic choice of the first list is not implemented: `general.player_auto_crush` is imported (`sim/src/rules.rs:491, 873`) but nothing reads it in `sim/src`. The omni-crusher and attack-target variants in `approach.rs:175-215` (`crushing_approach`) have no disguise test, as the claim now says. No disguise state exists. **M8 A3 intake 52a:** S-0210 r29 and S-0215 r88 claim 39 (Q-2005) make the automatic choice the *crush response* to a hit, built in `crush::respond_to_hit` with the disguise test; `general.player_auto_crush` is now read, behind `quirks.auto_crush_computer_only` ([ledger](../m8-claims/intake52a-S-0210-S-0215-S-0216.md)). |
 | 11 backing; scenario K13 (new); Open questions (appears-friendly item removed) | (c) | — | — |
 
 ## S-0211 Land types and passability (rev 15 to 16)
@@ -294,7 +294,8 @@ Seams worth noting for later milestones, with no work now:
 - bridge links in play (S-0511) under S-0212 3 and S-0214 I3/IC2;
 - transports (S-0507) under S-0214 Terms/VD and S-0215 29;
 - the automatic crush choice of S-0210 claim 11, which is not implemented at all
-  (`player_auto_crush` is unused).
+  (`player_auto_crush` is unused); built in M8 A3 intake 52a as the crush response to a hit
+  (S-0215 claim 39).
 
 Optional: a synthetic test for S-0010 claim 10's R4 overlap fixture. The code already gives
 *G* and *L*+15.

@@ -70,7 +70,7 @@ answer should be enough for the drones to leave play as the record has them.
 | S-0302 claim 10 (a further berserk hit sets the remaining time anew, longer or shorter) | tested | `m0011_a_further_berserk_hit_sets_the_time_anew_longer_or_shorter` (`claims_s0610.rs`): a long hit, then a short one that shortens the time, then a long one that lengthens it again |
 | S-0610 claims 6 and 8, S-0309 table C *firing check* (a berserk crusher's search never takes a berserk-friendly enemy, even one it could crush) | tested | `m0011_a_berserk_crusher_never_searches_out_a_berserk_friendly_enemy` |
 | S-0210 claims 3, 4 and 11, the attack-target variant (a berserk computer-controlled crusher holding a berserk-friendly crushable target drives over it: removed, no damage, the crush sound, no shot at it before the crush) | tested | `m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it`. The test leaves out the shot fired in the crush tick (Q-2006) |
-| S-0210 claim 11, the automatic choice of the first list (occasions, which enemy, berserk interplay) | seam, request | Q-2005; the built rules meanwhile |
+| S-0210 claim 11, the automatic choice of the first list (occasions, which enemy, berserk interplay) | answered, built | Q-2005, answered by S-0210 r29 and S-0215 r88 claim 39: the choice is now the *crush response* to a hit, built in intake 52a ([ledger](intake52a-S-0210-S-0215-S-0216.md)) |
 | what a ground unit does with a held target that has just left play | request | Q-2006 (below); the built rules meanwhile |
 
 **Side finding (Q-2006).** In the third test the crusher crushes its held target at the cell
@@ -100,7 +100,7 @@ intake 36):
 - M-0002: 13 of 24 fail (4, 6, 3); 43 of 47.
 - M-0003: 2 of 35 fail (0, 2, 0); 61 of 64.
 
-CAOS against BFRT still fails, now with its cause pinned to Q-2005.
+CAOS against BFRT still fails, now with its cause pinned to Q-2005. (Intake 52a builds the answer, the crush response of S-0215 claim 39; see [its ledger](intake52a-S-0210-S-0215-S-0216.md) for the arena after it.)
 
 After the rebase onto main badb202, the M6c, M7a and M7b sweeps (seeds 1 to 16) all pass, and with
 `GLASNOST_PLAY_FIXES=1` they print the same lines as the reference. The sim gate's goldens are

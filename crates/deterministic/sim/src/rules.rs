@@ -805,6 +805,10 @@ pub struct GeneralRules {
     pub guard_stray: Option<i32>,
     /// Scatter threshold of the house skill level.
     pub iq_scatter: i32,
+    /// Auto-crush threshold of the house skill level (S-0210 claim 11: the
+    /// original's computer-controlled row, kept by the neutral and special
+    /// houses and a test-only computer-controlled player house).
+    pub iq_auto_crush: i32,
     /// The maximum house skill level (S-0209 claim 11, S-0412 claim 3): the
     /// level of a computer player house of the original, which our engine
     /// gives only to a test-only computer-controlled player house (glossary).
@@ -1217,6 +1221,8 @@ impl SimRules {
             }),
             // spec: S-0209 Import mapping ([IQ] Scatter absent: 3)
             iq_scatter: g.iq_scatter.unwrap_or(3),
+            // spec: S-0210 Constants and Import mapping ([IQ] AutoCrush absent: 2)
+            iq_auto_crush: g.iq_auto_crush.unwrap_or(2),
             // spec: S-0209 Import mapping ([IQ] MaxIQLevels absent: 5 skill levels)
             iq_max: g.iq_max.unwrap_or(5),
             // spec: S-0215 claim 31 and Import mapping (AIAutoDeployFrameDelay: the list by difficulty index; no list: empty, and the row does not apply)

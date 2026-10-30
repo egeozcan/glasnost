@@ -75,7 +75,7 @@ That rule is open, so we built no interim rule. Any rule we picked would be fitt
 alone: **Q-2035**. Once it is answered, a restored fortress is an ordinary computer-house hunter
 under the built rules: search, fire, and the attack-target crushing approach of S-0210 claim 11
 (intake 38's test `m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it` shows
-that approach crushing). Q-2005 may bear on the crushes too.
+that approach crushing). Q-2005 may bear on the crushes too. (Q-2005 is answered by S-0215 r88 claim 39, the crush response to a hit, built in intake 52a ([ledger](intake52a-S-0210-S-0215-S-0216.md)); no TELE pairing of the arena moved with it.)
 
 ## Claims
 

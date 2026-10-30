@@ -337,8 +337,18 @@ fn inside_factory(w: &World, id: ObjectId) -> bool {
 
 /// Applies one hit to one object (S-0302 claims 5 to 20) and its reactions
 /// (claims 12 to 16; S-0107 claim 16; S-0309 claim 16; S-0311 claims 7 to
-/// 10; S-0312 when it kills).
+/// 10; S-0312 when it kills), then the crush response (S-0215 claim 39).
 pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
+    let result = apply_hit(w, target, hit);
+    // spec: S-0215 claim 39 (a hit that has been applied and has not killed the vehicle, unaffected and unchanged included, berserk hits too; now dead and post-mortem give none; after every other effect of the same hit)
+    if !matches!(result, HitResult::NowDead | HitResult::PostMortem) {
+        crate::crush::respond_to_hit(w, target, hit.attacker);
+    }
+    result
+}
+
+/// [`apply`] without the crush response.
+fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     let Some(o) = w.obj(target).cloned() else {
         return HitResult::Unaffected;
     };

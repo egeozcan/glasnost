@@ -79,13 +79,13 @@ pub fn enter(w: &mut World, target: ObjectId, t: i32) -> bool {
         return false;
     };
     if ob.combat.berserk.is_some() {
-        // spec: S-0610 claim 4 and S-0302 claim 10 (a hit on a unit already berserk only sets its remaining time to the new T; target and behaviour stay)
+        // spec: S-0610 claim 4 and S-0302 claim 10 (a hit on a unit already berserk only sets its remaining time to the new T; target and behaviour stay, as far as the berserk effect goes: the same hit's crush response comes after, S-0215 claim 39 and Changes for other specs)
         ob.combat.berserk = Some(t);
         return true;
     }
     // spec: S-0610 claim 4 (the remaining berserk time becomes T and the berserk state starts)
     ob.combat.berserk = Some(t);
-    // spec: S-0610 claim 4 (hunt is queued as its next behaviour, replacing whatever was queued; it becomes current at the next behaviour change)
+    // spec: S-0610 claim 4 (hunt is queued as its next behaviour, replacing whatever was queued; it becomes current at the next behaviour change; the same hit's crush response then queues move in its place, S-0215 claim 39)
     ob.beh.queue(Some(Behaviour::Hunt));
     // spec: S-0610 claim 4 (it drops its target)
     drop_target(w, target);

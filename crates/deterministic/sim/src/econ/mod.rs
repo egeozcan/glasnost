@@ -82,6 +82,22 @@ pub fn assign_destination(
     crate::infantry::destination_assigned(w, id, before);
 }
 
+/// Whether object `id` would accept the non-empty destination `dest` given
+/// through [`assign_destination`]: not a seized unit (S-0607 claim 9), not
+/// deployed or in transition (S-0517 claim 9, S-0207 claim 20 (a)) and not
+/// a bunkered vehicle (S-0606 claim 18). The same tests, in the same order.
+pub fn accepts_destination(
+    w: &crate::world::World,
+    id: ObjectId,
+    dest: Option<crate::world::Target>,
+) -> bool {
+    // spec: S-0607 claim 9, S-0517 claim 9 and S-0606 claim 18 (the refusals of assign_destination)
+    dest.is_some()
+        && !crate::lift::refuses_destination(w, id, dest)
+        && !inplace::blocks_destination(w, id)
+        && !crate::structures::bunker::refuses_destination(w, id)
+}
+
 /// A type of a production kind: infantry, vehicle, aircraft or building,
 /// with its registration index (what production orders name, S-0404 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

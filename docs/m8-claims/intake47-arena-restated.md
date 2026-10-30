@@ -68,7 +68,7 @@ local lane), with the records' values that are not local (seed 0; seed 1):
 | record fact | stock | ours today |
 |---|---|---|
 | M-0011: tick of the first gas on each fortress | 50 to 58 | 51 to 58 |
-| M-0011: end of game | BFRT wins at 608 and 912; every drone leaves play | frame limit (6080) in both; no drone leaves play (Q-2005, as at intake 38) |
+| M-0011: end of game | BFRT wins at 608 and 912; every drone leaves play | frame limit (6080) in both; no drone leaves play (Q-2005, as at intake 38). Intake 52a ([ledger](intake52a-S-0210-S-0215-S-0216.md)) builds Q-2005's answer: side A now ends `col` in all six seeds (304 or 608) |
 | M-0011: fire of one fortress at another | 198; 275 | 445; 476 over the whole game |
 | M-0015: fire events that started a hold | 56; 52 | 35; 25 |
 | M-0015: fire events at a fortress held by another Magnetron | 501; 439 | 130; 163 |
