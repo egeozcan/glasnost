@@ -1,9 +1,9 @@
 ---
 id: Q-2136
 title: Route points that no route holds, reused committed points, and the holder that gives up and waits
-status: open
+status: answered
 related: [S-0213, S-0215]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
