@@ -423,6 +423,41 @@ fn route_mode_adds_points_and_commits_on_release() {
     assert!(matches!(orders(&c).last(), Some(Order::RouteCommit)));
 }
 
+/// Route-mode refusals share one cue per tick (S-0213 claim 16, S-0701
+/// claim 24): a second refusal before the next tick completes adds no cue;
+/// after a completed tick a new one does.
+#[test]
+fn route_mode_refusals_share_one_cue_per_tick() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let [a, _, _] = three_gunrs(&mut c);
+    while glasnost_sim::orders::blocked(session(&c).play.world()) {
+        session_mut(&mut c).step();
+    }
+    session_mut(&mut c).play.selection = vec![a];
+    c.key(Key::Char('z'), true);
+    session_mut(&mut c).play.cues.clear();
+    let refuse = |c: &mut Client| {
+        c.key(Key::Char('g'), true);
+        c.key(Key::Char('g'), false);
+    };
+    // spec: S-0701 claim 24 (refusal notices before the next tick completes share one cue)
+    refuse(&mut c);
+    refuse(&mut c);
+    assert_eq!(
+        session(&c).play.cues,
+        vec![glasnost_audio::events::UiCue::StripEnd]
+    );
+    // spec: S-0701 claim 24 (a completed tick permits a new one)
+    session_mut(&mut c).step();
+    session_mut(&mut c).play.cues.clear();
+    refuse(&mut c);
+    assert_eq!(
+        session(&c).play.cues,
+        vec![glasnost_audio::events::UiCue::StripEnd]
+    );
+}
+
 /// The web stand-in for Ctrl+digit (M8 A4 round 5 seams, our design):
 /// with the fallback on, the held make-group key (N by default, rebindable)
 /// and a digit make that group; its release, or the focus going, ends it.
