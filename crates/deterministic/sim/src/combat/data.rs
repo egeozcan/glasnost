@@ -765,6 +765,8 @@ pub struct BuildingCombat {
     pub overpowerable: bool,
     /// Helipad.
     pub helipad: bool,
+    /// Crewed flag (S-0312 claim 18 and F5).
+    pub crewed: bool,
     /// Artillery flag.
     pub artillary: bool,
     /// Can be occupied.

@@ -933,6 +933,14 @@
           ],
           "default": null
         },
+        "crewed": {
+          "description": "`Crewed` (S-0312 claim 18 and F5; S-0408 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "crushable": {
           "description": "`Crushable`.",
           "type": [
