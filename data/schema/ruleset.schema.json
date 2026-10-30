@@ -1947,7 +1947,7 @@
           "default": null
         },
         "elite_primary_fire_flh": {
-          "description": "Art `ElitePrimaryFireFLH` (S-0313).",
+          "description": "Art `ElitePrimaryFireFLH` (S-0313); absent, the primary slot's\nmuzzle position (claim 1a).",
           "type": [
             "array",
             "null"
@@ -1961,7 +1961,7 @@
           "minItems": 3
         },
         "elite_secondary_fire_flh": {
-          "description": "Art `EliteSecondaryFireFLH` (S-0313).",
+          "description": "Art `EliteSecondaryFireFLH` (S-0313); absent, the secondary slot's\nmuzzle position (claim 1a).",
           "type": [
             "array",
             "null"
@@ -1987,7 +1987,7 @@
           }
         },
         "elite_weapon_flh": {
-          "description": "Art `EliteWeapon`n`FLH`, by slot (S-0313).",
+          "description": "Art `EliteWeapon`n`FLH`, by slot (S-0313); an absent entry holds\nweapon n's muzzle position as imported (claim 1a).",
           "type": [
             "array",
             "null"
