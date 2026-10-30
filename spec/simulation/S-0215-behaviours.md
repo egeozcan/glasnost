@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 76
+revision: 88
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113]
 supersedes: []
 ---
 
@@ -25,9 +25,11 @@ do at each processing, the approach step by which an attacking infantry unit or 
 whether to keep, renew or take a destination towards its target (claim 37, answering the behaviour
 side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 25), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
-that own the other behaviours (harvesting, structures, superweapons, team scripts).
+that own the other behaviours (harvesting, structures, superweapons, team scripts). It also gives
+the crush response, the one occasion on which a crusher goes for a crushable enemy that it does
+not already hold as its target: a reaction to that enemy's hit (claim 39, answering Q-2005).
 
-This revision narrows one statement of claim 32 in the committed text. Under claim 32's non-SAM attack rule, a building
+Under claim 32's non-SAM attack rule, a building
 whose target leaves its weapon's range returns to *guard* at the first processing at which the firing check
 answers *out of range*. While its rearm countdown runs, or while its animation-delayed shot is
 pending, that check answers *rearming* instead, and the building keeps its target; an answer that
@@ -406,6 +408,9 @@ Terms used by this spec:
   value, override or fallback. The *turn-rate field* is the type's imported turn rate, an integer (Import mapping); how it
   turns facings belongs to S-0206 (turn rates), and this spec uses it only in the bound of
   Formulas F8.
+- **Crush response:** a crusher's reaction to a hit from a crushable enemy, by which it drives at
+  that attacker to crush it (claim 39; S-0210 claim 11 owns who may make it and which attacker
+  qualifies).
 - **Opportunity target:** a target that an automatic search chose by itself and marked as such, as
   opposed to one given by an order. S-0309 (claim 24) owns which searches mark the targets they set
   (claim 33).
@@ -810,7 +815,7 @@ Terms used by this spec:
    change, unless the current behaviour is *wait* and *b* is *guard* (then nothing happens). The
    queue becomes empty and the behaviour start of claim 3 happens. Unlike queueing and overriding,
    force is not refused while the current behaviour is *selling*: a forced behaviour replaces
-   *selling* (no stock rule is known to force a behaviour on a selling building). The suspended
+   *selling* (no known input forces a behaviour on a selling building). The suspended
    behaviour is not touched (`quirks.stale_suspended_revert`).
 
    Rules that force a behaviour include the guard reset (Terms), which the original applies to an
@@ -818,7 +823,10 @@ Terms used by this spec:
    that enters an open-topped transport, to an actor whose locomotor is replaced by another,
    and to harvesting slaves through the slave rules (economy topic); and the processings of claims 23 and 27 (their original-only rules), which force *capture*, and of claim 30, which forces *guard*. No
    player's order is known to force a behaviour on the actor it is given to (claim 12); the stop
-   order given to a slave master gives its harvesting slaves a guard reset.
+   order given to a slave master gives its harvesting slaves a guard reset. S-0207 claim 28's
+   temporary driving and the restorations of S-0207 claim 27 and of claim 13 here are not
+   replacements of the locomotor in this sense: they leave the behaviour as it is (S-0207 scenario
+   D34 part c observes both).
    - Backing: `measurable` (scenario B3, cases f and i, for the force and the mind-control guard
      reset; case g for the stop order's guard reset of a slave master's slaves; also
      B45 f for disabling and enabling a control-centre-dependent vehicle; S-0405 claim 20,
@@ -1109,21 +1117,21 @@ Terms used by this spec:
       `unmeasured`. Starting *move* inside a deploying or undeploying transition has
       S-0517 claim 10's unreachable-input qualification. The unload or deploy cycle is always
       finished for vehicles (S-0517 claim 15, measurable in P6), so it never blocks readiness.
-      The vehicle below the surface: no vehicle of the
-      stock game travels below the surface, and no setup is known that puts one there. The two
+      The vehicle below the surface: no setup here puts one
+      there. The two
       *unload* rules with the allowance to interrupt movement: they fire only at the last stage of
       an unloading or of a descent, which belong to the transport and movement specs, and no setup
       is known that has the vehicle moving at that instant. Aircraft readiness and queued starts
       have S-0501 claim 31's backing: AC10 tests ordinary flight, take-off, landing and run-lock
       timing; its remaining exclusions are `unmeasured` for the reasons that claim gives. The building's
       second per-tick start is measurable at construction entry under S-0406 claim 17 and PL11.
-      The infantry falling condition is `measurable` with fresh paratroopers (S-0522
-      claim 17 and scenario B44): placement already queues rest, so no accepted order
-      during descent is needed to test readiness. Falling move clicks are refused, not
-      deferred until landing. Being in the middle of firing and a sequence that is not
-      interruptible are `measurable` (B45 c): scripted input places an order inside a
-      named test sequence or burst, while a read-only recorder verifies both the input
-      boundary and the independently observed readiness conditions.
+      The infantry falling condition is `measurable` with fresh paratroopers (S-0522 claim 17 and
+      scenario B44): placement already queues rest, so no accepted order during descent is needed to
+      test readiness. A move click during the fall gives a move order at once, which starts after
+      landing (S-0522 claim 17, at its confidence). Being in the middle of firing and a sequence
+      that is not interruptible are `measurable` (B45 c): scripted input places an order inside a
+      named test sequence or burst, while a read-only recorder verifies both the input boundary and
+      the independently observed readiness conditions.
     - Confidence: high (the engine warp-start design contract, infantry, and the vehicle
       conditions on *sticky* or *rescue* and on moving); low (matching the original's unresolved
       warp-start continuation); medium (the list of three vehicle transitions, the unload or deploy cycle, the
@@ -1282,7 +1290,7 @@ Terms used by this spec:
 
     | Situation | Effect |
     |---|---|
-    | its own locomotor has been temporarily replaced by another and that replacement can end | it gets its own locomotor back; for magnetic lift, S-0607 claim 20 requires jumpjet movement not to be *moving* (not merely not *moving now*) and the unit to be *set down* or no longer *seized*; S-0417 claim 5 establishes temporary driving during factory exit; S-0207 claim 21 owns the restored teleporting state |
+    | its own locomotor has been temporarily replaced by another and that replacement can end | it gets its own locomotor back; S-0607 claim 20 owns seized-jumpjet restoration eligibility, its end-of-turn opportunities and its exclusions; S-0417 claim 5 establishes temporary driving during factory exit; S-0207 claim 21 owns the restored teleporting state |
     | it is a vehicle with approach destinations remaining after refresh | the first of them becomes its destination and is removed from the list; the route row and the guard-spot row do not apply in this fall-back |
     | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it issues the action of the next route point as an order; this is not an immediate destination assignment |
     | it is an infantry unit that is not a harvesting slave, its guard spot is on another cell, the approach row does not apply, and it has not got its own locomotor back in this fall-back | the guard spot becomes its destination; unless its current behaviour is *area guard*, it also queues *move* and forgets the guard spot |
@@ -1398,9 +1406,10 @@ Terms used by this spec:
       setup is known that is sure to produce the case. The approach row and its refresh collision
       are `unmeasured`: no known input reliably provides specified approach entries at a
       fall-back. Temporary driving restoration is measurable for a factory-produced teleporting
-      vehicle. Magnetic-lift restoration and its eligibility conditions inherit `measurable`
-      backing from S-0607 claim 20, scenarios L3 and L11; other temporary replacements remain
-      `unmeasured` without an established setup.
+      vehicle. Magnetic-lift restoration,
+      its end-of-turn opportunities and its exclusions keep S-0607 claim 20's backing and
+      confidence, branch by branch (its being-erased case is `unmeasured`, low); other temporary
+      replacements remain `unmeasured` without an established setup.
       The guard-spot/memory and route/memory collisions are `unmeasured`: ordinary attack-move
       input clears the guard spot and ends the route, and no stock input sequence reliably keeps
       both states. B33 gives conditional recorder checks, not a way to manufacture them. Also `unmeasured`: the route row's condition on a *patrol* that has
@@ -1415,8 +1424,9 @@ Terms used by this spec:
       the local player's routes); high (that no scatter request
       is sent, and that memory refresh precedes the destination rows and rest table),
       medium for route-order timing and vehicle assignment's list effects; the memory lifecycle has
-      S-0309 claim 23's confidence; medium (factory-exit restoration and its guard-spot exclusion), low (other temporary
-      replacements and which rules fill the approach destinations)
+      S-0309 claim 23's confidence; medium (factory-exit restoration and its guard-spot
+      exclusion); magnetic-lift restoration has S-0607 claim 20's confidence; low (other
+      temporary replacements and which rules fill the approach destinations)
 
 14. **Falling back to rest: infantry.** When an infantry unit falls back to rest, after the common
     effects of claim 13 the result is the first matching row:
@@ -2541,8 +2551,8 @@ apply in our engine to the actors of every player house.
       the row *not facing*, case i for *still turning* in the row of other answers; for SAM
       *attack*, case c for the 1-tick intervals and the return to *guard*, case j for the power
       row, case k for the aiming tolerance, case l for firing both weapons and case m for the
-      out-of-stage rule, with a test gate type that has the SAM flag; no stock type reaches that
-      rule). These parts are `unmeasured`:
+      out-of-stage rule, with a test gate type that has the SAM flag; no other setup here reaches
+      that rule). These parts are `unmeasured`:
       - secondary refusals other than rearming and range: B16 l and B45 d make the unchecked
         secondary shot `measurable` despite rearming and despite its own range, respectively.
         No fixture isolates every other secondary refusal category,
@@ -2836,7 +2846,7 @@ apply in our engine to the actors of every player house.
       close delay and its counting from the opening start, case c for the open-while-occupied rule,
       case d for the reversal quirk, case g for where within the gate's turn the door reaches rest (part d), case f for the conversion of a gate time that does not fit,
       and scenario B30, case b, for a gate time whose product with 900 reaches 2⁶³).
-      `unmeasured`: the non-gate row of (c), since no stock rule
+      `unmeasured`: the non-gate row of (c), since nothing established here
       gives a building that is not a gate the behaviour *open*, map building entries carry no
       behaviour, and no other input that reaches this row is established; and the "door at rest closed" row of stage *opening*, which no
       known situation reaches (only a reversal stops an opening door, and only stage *start*
@@ -2857,7 +2867,7 @@ apply in our engine to the actors of every player house.
       to area guard), and one whose owner's level is 4 or higher rests in *area guard* by row 12.
     - (b) The guard stray distance of F5 has **no engine default in the original**: when no rules
       layer gives the key, the value the original uses is unspecified (Terms): it depends on
-      unrelated internal state and cannot be reproduced. Stock data always gives the key, so stock games never meet this. **In
+      unrelated internal state and cannot be reproduced. **In
       our engine** (decided under the project lead's delegated sign-off, 2026-10-10), when no layer
       gives the key, the leash *L* of an actor whose guard spot is a mobile actor is the area-guard
       leash of F5 as for any other guard spot, *L* = ⌊11 × *G* / 10⌋ leptons, and the importer
@@ -2870,7 +2880,8 @@ apply in our engine to the actors of every player house.
 
 ### Approaching the target
 
-37. **The approach step (Q-0072, questions 1, 4 and 5, and the behaviour side of question 3).**
+37. **The approach step (Q-0072, questions 1, 4 and 5, and the behaviour side of question 3,
+    and Q-2113 question 1, behaviour side).**
     - (a) **When it is taken.** An infantry unit or vehicle takes the approach step at every
       processing of *attack* in which it has a target after the charge-target check (claim 23,
       row *approach*), so at the cadence of that processing's delay (claim 23 and F3), not on
@@ -2902,9 +2913,15 @@ apply in our engine to the actors of every player house.
       firing check gives any answer other than one that comes from that range test, is in range
       for this claim if the range test passes. A blocked line of fire or a bridge counts only as
       far as S-0307's range test refuses it.
-    - (c) **Nothing to do.** The step does nothing when the actor has no target, or when its
-      target is the object that holds the actor with a magnetic beam (the object moving it by a
-      beam).
+    - (c) **Nothing to do.** The step does nothing when the actor has no target, or when the actor
+      grips a unit with a magnetic beam (it is that unit's lifter, S-0607) and its target is that
+      gripped unit. So a lifter never backs away from, or closes on, the unit it holds because of
+      the range test, minimum range included, and the approach step never gives it a destination
+      that would end the grip (S-0607 claim 12). Part h is decided before this, so a lifter type
+      with one of part h's approaches could still take its gripped unit as destination (medium,
+      `unmeasured`: no scenario here gives a lifter a part h approach). When the actor is a seized
+      unit and its target is its own lifter, the step runs as for any target. A destination it
+      gives has no effect, since a seized unit ignores destinations (S-0607 claim 9).
     - (d) **Whether the actor keeps its target.** A target in range is never dropped by the
       approach step. A target out of range is kept or dropped as the table says. Here an actor
       *may approach* when its type has the can-approach property (Import mapping) and it is not
@@ -3020,9 +3037,10 @@ apply in our engine to the actors of every player house.
       Part a2's independent eligibility and same-tick destination or target outcomes are
       `measurable` (B32 g). An unchanged in-range state imposes no requirement to repeat
       an indistinguishable evaluation.
-      Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c
-      (S-0607 owns the beam, but no scenario here isolates an approach step against the
-      object holding the attacker); the draining case of part d (the
+      Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and
+      confidence. Part c's magnetic-beam case is `measurable` (S-0607 scenario L17), not yet run.
+      These parts are `unmeasured`: the part h exception to that case (no scenario here gives a
+      lifter a part h approach); the draining case of part d (the
       draining link belongs to the structures and combat topics, and no scenario establishes
       that link while testing approach); the *sticky* and *any other*
       rows of part d (an actor in those behaviours takes the step only by the per-tick case of
@@ -3035,9 +3053,10 @@ apply in our engine to the actors of every player house.
       of parts d and g, because B32 tests human-controlled attackers only and supplies neither
       a computer-controlled non-approaching hunting unit nor a deployed computer-controlled
       unit at an identified approach step.
-    - Confidence: high (parts a, b, c, d, e and the outcomes of part f); medium (the per-tick rule of
-      part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types).
-      High for part a2's ordering and independent eligibility.
+    - Confidence: high (parts a, b, c apart from its magnetic-beam case, d, e and the outcomes of
+      part f); medium (part c's magnetic-beam case and its part h exception, as S-0607 claim 11
+      rates them, the per-tick rule of part a, the in-the-playfield mark, part f2, part g's deployed
+      infantry and zero-speed types). High for part a2's ordering and independent eligibility.
 
 38. **House-selected centre after path give-up (Q-0238 and Q-0312).** This complements
     S-0212 claim 23a and its final nearby-search row in T5. It applies to the original's
@@ -3096,6 +3115,107 @@ apply in our engine to the actors of every player house.
       no-base fallback, building refresh or draw rules.
     - Confidence: high for selection and draw assignments; medium for record-refresh
       geometry and usable-area correction
+
+### Reactions to being hit
+
+39. **Crush response to a hit (Q-2005).** When a hit on a vehicle has been applied and has not
+    killed it (among the results of S-0302 claim 12, this includes *unaffected* and
+    *unchanged*), the vehicle makes the **crush response** (Terms) to the hit's attacker when all of
+    these hold (a hit that reports *now dead* or *post-mortem*, S-0302 claim 12, gives no
+    response):
+    - the hit names an attacker (S-0302 claim 1),
+    - the vehicle is not a team member (Terms) and is not tethered (glossary, *tether link*),
+    - its owner is not allied with the attacker's owner. A house counts as allied with itself, so
+      a unit of the vehicle's own house never gets the response,
+    - its owner is not human-controlled,
+    - the vehicle and the attacker meet the conditions of S-0210 claim 11: the vehicle is a
+      crusher, the attacker is crushable by it and does not appear disguised to its house, the
+      distance between their centres is at most the crush range, and the table there allows the
+      owner.
+
+    **Effect.** The vehicle is given the attacker object itself as its destination, not a cell. When
+    the destination is accepted, the response queues *move* (claim 7), with no immediate start. The
+    destination is given under the rules that govern every new destination of a vehicle: a vehicle
+    that is deployed, deploying or undeploying receives none (S-0207 claim 20 (a)), under S-0517
+    claim 9 and S-0607 claim 9, and a seized vehicle ignores it (S-0607 claim 9). Whether *move* is
+    still queued when the destination is refused is open (Open questions). The response itself does
+    not change the vehicle's target; S-0607 claim 12 applies to a lifter that takes the destination.
+    Nothing else about the vehicle decides it: the response is made in every current behaviour,
+    whether or not the vehicle holds a target or a destination, and whether or not it is berserk.
+    Among the conditions above, being a team member or tethered is the only "busy" exception. The
+    response is the only occasion of S-0210 claim 11's first list: no behaviour's processing and no
+    search makes that choice, and an enemy that does not hit the vehicle is never chosen.
+
+    **Order within the hit.** The response follows every other effect of the same hit on the
+    vehicle (S-0302), so:
+    - when the hit makes the vehicle berserk, the berserk entry first drops its target and queues
+      *hunt* (S-0610 claim 4), and the response then queues *move* in its place (claim 7, last
+      row). A berserk hit on a vehicle that is already berserk queues nothing of its own, and the
+      response queues *move* in the same way,
+    - in the original, a team member that the hit makes berserk leaves its team at the berserk
+      entry, so the team condition does not hold it back,
+    - an ordinary hit may first make the vehicle retaliate (claim 18): it then holds the attacker
+      as its target, under an *attack* override (claim 10), and the response's queued *move*
+      becomes current at the next start (claim 11). A berserk hit causes no retaliation (S-0302
+      claim 10),
+    - a vehicle that makes the response does not, for that hit, make the return to a refinery
+      that the original gives a damaged resource-gathering vehicle of a computer-controlled owner
+      (economy topic, not specified here),
+    - when several hits on the vehicle are applied in one tick, each one that qualifies makes the
+      response in the order in which they are applied (S-0302 claim 19).
+
+    **While it drives.** Once *move* is current, the vehicle follows the attacker as S-0207 claims
+    25 and 26 give for a destination that names a unit (claim 22), and crushes it under S-0210
+    claims 3 and 4 when it reaches it. The response does not make it fire or stop firing: whether it
+    fires on the way follows its target and the firing rules (S-0301, S-0309), and the opportunity
+    search of *move* (claim 33) sets no destination: what it does to the target is S-0309's. A later
+    qualifying hit replaces the destination with the newer attacker. While the destination is held,
+    the original's attack-target variant of S-0210 claim 11 does not apply, because it needs a
+    vehicle without a destination.
+
+    **In our engine.** Under the glossary entry *AI house*, the owners of every player house,
+    human-controlled or AI house, count as human-controlled here, so by default their vehicles
+    never make the response, as in the original for a human-controlled owner. With
+    `quirks.auto_crush_computer_only` off (S-0210, Edge cases), the condition "its owner is not
+    human-controlled" is dropped for a player house, and S-0210 claim 11 gives the permission that
+    applies instead. The vehicles of the neutral and special houses and of test-only
+    computer-controlled player houses make the response by the original's rule. The team
+    condition never holds back a vehicle in our engine, as no house there has teams (Terms).
+    **Original only (note for AI designers):** the original's computer-controlled crushers chase
+    and crush the crushable enemies that hit them from close by; our AI may reproduce this by
+    giving a hit crusher an ordinary move order that names the attacker.
+    - Backing: `measurable` (S-0210 scenario K7 cases 1 to 4, 8 and 13 to 17 for the occasion, the
+      destination and the owner conditions, and case 18 for no response without a hit, in *guard*
+      and in *hunt*; K13 part a for the disguise condition; K15 for a berserk vehicle, the replaced
+      *hunt* and the unchanged target). The alliance condition is `unmeasured` until a route for
+      S-0210 K15 c is named: K15 c decides it once one is, and no other case here isolates it. The
+      tether and team conditions and the harvester ordering are `unmeasured`: no scenario here holds
+      a crusher tethered or in a team while an enemy hits it, and the harvester's own reaction is
+      not specified. The order with retaliation and the case of several qualifying hits in one tick
+      are `unmeasured`: K7's responding crushers are unarmed, so none retaliates, and no scenario
+      here lands two qualifying hits on a crusher in one tick. The refused destination of a
+      deployed, deploying, undeploying or seized vehicle is `unmeasured`: no scenario here hits a
+      crusher in one of those states. A hit with the *unaffected* result is `unmeasured`: no
+      scenario here lands a hit that leaves the crusher unaffected. The *post-mortem* result is
+      `unmeasured`: S-0302 claim 12 finds no effect of it in a skirmish. That the response is made
+      whatever the current behaviour, and whether or not the vehicle already holds a target or a
+      destination, is `unmeasured`: K7's responding crushers are unarmed and idle with no
+      destination, K7 case 18 covers *guard* and *hunt* only for no hit, and K15's crusher starts
+      idle, so no scenario here lands a qualifying hit on a computer-controlled crusher that is busy
+      with another target, destination or behaviour, and none tells the rule from one limited to
+      idle crushers.
+    - Confidence: high for the occasion (a hit, and only a hit, other than one with the *unaffected*
+      or *post-mortem* result; K7 cases 1 to 4 and 18), the owner (except as below), disguise, range
+      and crusher conditions, the destination naming the attacker and the queued *move*. The
+      attacker's being crushable is not part of that high rating: it keeps S-0210 claim 2's ratings
+      (medium for "not falling"), as S-0210 claim 11 states. Medium for the response in every
+      current behaviour and whatever target or destination the vehicle holds, for the tether and
+      team conditions, the replacement of the queued *hunt*, the order with retaliation, the berserk
+      team member, several qualifying hits in one tick, the refused destination, a hit with the
+      *unaffected* or *post-mortem* result, the alliance condition, the harvester ordering, and the
+      owner condition for the neutral and special houses of S-0210 K7 case 17, which rest on S-0412
+      claim 5 (as S-0210 claim 11 rates them); low for the behaviour while driving (firing and
+      searches)
 
 ## Formulas
 
@@ -3225,7 +3345,7 @@ each one double-precision multiplication, rounded as in F1 (toward zero with `qu
 on), then converted to a signed 32-bit integer exactly as F1 converts *p*: truncated toward zero
 and wrapped by *w* of F1, or 0 when the product is too large for that conversion or not a number
 (F1 says which values reach that case; a gate time of about 1.02 × 10¹⁶ game minutes or more gives
-0). No stock gate comes near the wrap. A negative result behaves as 0 (the door is at rest at its first
+0). A negative result behaves as 0 (the door is at rest at its first
 update; the countdown has run out at once).
 
 **F10. Approach radius and renewal threshold** (claim 37). Let ρ be the firer's weapon range of
@@ -3594,7 +3714,7 @@ orders).
   distance, the original's leash for a guard spot that is a mobile actor is unspecified. Our
   engine uses the area-guard leash of F5, as for any other guard spot, and the importer warns
   (documented departure by the project lead's delegated decision of 2026-10-10, no switch, since
-  the original's value cannot be reproduced). Stock data always gives the key.
+  the original's value cannot be reproduced).
 - **A late revert can bring back an old behaviour** (claims 8 to 10 and 12). A start-next, a force
   and a behaviour order all leave the suspended slot as it is, and an override stays in effect
   while a behaviour is suspended (claim 10). So an override that none of claim 10's causes has
@@ -4349,10 +4469,13 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   by a destination other than the guard spot's cell, by no *move* queued, or by a guard spot kept.
   Runs: three each. (e) Temporary driving: produce a stock teleporting vehicle at a stock
   ground vehicle factory with no rally point, recording locomotion, contact, behaviours and
-  fall-backs as S-0417 U6/U8 propose. Expected: factory exit uses temporary driving and the first
-  eligible fall-back restores teleporting locomotion. After release, order a distant clear cell:
-  it jumps rather than driving there. Failure to restore at that fall-back, or later continued
-  driving, falsifies the restoration. Three runs; no modified locomotor data is needed.
+  fall-backs as S-0417 U6/U8 propose. Expected: factory exit uses temporary driving, and at the
+  first eligible fall-back the recorder shows the active movement kind change from driving to
+  teleporting. After release, order a distant clear cell: on the order's tick the movement kind
+  changes back to driving (S-0207 claim 28) and the vehicle drives there. No restoration at that
+  fall-back, or a jump to the ordered cell, falsifies. A docking jump at a later refinery approach
+  (S-0402) is a further sign that teleporting locomotion was restored. Three runs; no modified
+  locomotor data is needed.
   (f) Rest with an existing destination: a named test map gives *move* the no-threat property,
   clears its zombie and retaliate properties, and turns player scatter off. Order a plain long
   move to a non-area-guard-default infantry unit and an unarmed vehicle, with no route,
@@ -5353,21 +5476,21 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   and destination from release until 60 ticks after landing. Include readings around
   each due processing and start. Three valid runs, with the common bystander void rules.
 
-  Expected: release leaves current *none*, ordinary rest queued, and no target or
-  destination. While falling the unit is not ready and rest stays queued. A due
-  processing with *none* current chooses exactly 450 ticks without a delay draw or
-  changing those slots. Record random state around that processing separately from
-  release and animation draws. Landing itself issues no order and replaces neither
-  slot; the resting behaviour starts when ordinary readiness permits, resets the
-  timer, and is processed under claims 3 and 11, without waiting for the 450-tick
-  delay to expire. Do not infer this start from the first shot or require it on the
-  landing tick. Repeat with P10's eligible enemy and named type override selecting
-  *area guard*, retaining its setup and falsifiers. Scripted move clicks during descent
-  must be refused and leave no deferred move. Starting queued rest while still falling,
-  a non-450-tick *none* processing, a delay draw for it, a landing-generated replacement
-  order, or a deferred falling move falsifies the corresponding clause. Do not force
-  slots, timers or readiness. Other readiness conditions can still delay the start
-  after falling ends.
+  Expected: release leaves current *none*, ordinary rest queued, and no target or destination. While
+  falling the unit is not ready and rest stays queued. A due processing with *none* current chooses
+  exactly 450 ticks without a delay draw or changing those slots. Record random state around that
+  processing separately from release and animation draws. Landing itself issues no order and
+  replaces neither slot; the resting behaviour starts when ordinary readiness permits, resets the
+  timer, and is processed under claims 3 and 11, without waiting for the 450-tick delay to expire.
+  Do not infer this start from the first shot or require it on the landing tick. Repeat with P10's
+  eligible enemy and named type override selecting *area guard*, retaining its setup and falsifiers.
+  Starting queued rest while still falling, a non-450-tick *none* processing, a delay draw for it,
+  or a landing-generated replacement order falsifies the corresponding clause. Variant b, run
+  separately: a scripted move click on a distinct free cell during descent, with S-0522 scenario P10
+  (c)'s expectations: the move order kept through the fall and carried out after landing. In variant
+  b rest is not expected to stay queued after the click. A move started while still falling, or a
+  click that gives no order, falsifies it. Do not force slots, timers or readiness. Other readiness
+  conditions can still delay the start after falling ends.
 
 - **B45 (additional discriminating fixtures for claims 6, 10, 11 and 32).** These are
   proposed measurements, not results. Use the common tiny-map skirmish setup, game speed
@@ -5569,6 +5692,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ## Open questions
 
+- **Claim 39 and a later revert.** When an ordinary hit makes the vehicle retaliate under an
+  *attack* override (claims 10 and 18) and the crush response then gives it the attacker as its
+  destination, whether a later revert of that override brings back the destination put aside
+  before the hit over the response's destination is not established. Our engine applies claim 10:
+  the revert brings back the destination put aside. Whether the original does is `unmeasured`,
+  medium.
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
   geometric answer, also answering Q-0312. S-0212 claim 23a supplies the same-tick queue
   and destination rules and final nearby search. Keep Q-0238 open until the
@@ -5583,12 +5712,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - Whether an attack-move order can reach a building in the original. Buildings are never eligible
   for attack-move (S-0214), so input does not create one; if one arrived, the building would queue
   *attack move* (claim 12).
-- Whether any stock situation reaches the out-of-stage rule of a SAM building's *attack* (claim 32): a
-  building with the SAM flag in a behaviour whose rule leaves the progress count outside 0 and 1
+- Whether any stock situation reaches the out-of-stage rule of a SAM building's *attack* (claim 32):
+  a building with the SAM flag in a behaviour whose rule leaves the progress count outside 0 and 1
   (a gate's *open* in its stages 2 to 5, or a *repair* or *missile* processing), followed by an
-  override to *attack* (for example a retaliation) while that value stands. No stock type combines
-  them; scenario B16 (m) reaches the rule only with a test gate type, and only if the retaliation
-  rules allow the override while the gate is in *open*.
+  override to *attack* (for example a retaliation) while that value stands. Scenario B16 (m) reaches
+  the rule only with a test gate type, and only if the retaliation rules allow the override while
+  the gate is in *open*.
 - Which additional structures rules set or clear a building's ready mark (claim 11), beyond
   the established processings, the body-range rule and the grand opening (claim 1). An unarmed building's own *guard*
   processing never sets it, but its non-turreted body range can. Factory release and unloading
@@ -5649,8 +5778,23 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   This remains low-confidence and `unmeasured`: B21 d does not establish the needed
   legal waiting-line fixture. Validate that input sequence before using the proposed
   expected result and falsifier to settle the question.
+- Whether the crush response (claim 39) still queues *move* when the vehicle's new destination
+  is refused, because it is deployed, deploying, undeploying or seized, is not established. With
+  no destination, a current *move* falls back to rest (claim 22), so the two outcomes differ only
+  in the behaviour that the vehicle passes through.
 
 ### Cross-spec changes to confirm
+
+- S-0402 (or the economy spec that takes it): the original's return of a damaged resource-gathering
+  vehicle to a refinery after a hit, for a computer-controlled owner, is not specified. When it is,
+  it should say that it is skipped after a hit that gives the crush response, and so only where the
+  response is made: the skip shares the response's conditions on teams, the tether, alliance and
+  the owner only as a consequence of that (claim 39). The skip is
+  `unmeasured`, medium, as claim 39 rates the harvester ordering.
+- S-0309 and S-0610: M-0011 reports that a berserk fortress held as its target the drone that it
+  then drove over. The crush response sets only the destination. Whether the opportunity search
+  of *move* (claim 33) can take a unit of a berserk-friendly type decides where that target comes
+  from. No change is requested: the source of that target stays open (S-0210 Open questions).
 
 - S-0206 Terms already distinguishes its locomotor-moving query from claim 11's readiness
   query, and S-0603 claim 3 already delegates readiness here. Retain those distinctions.
@@ -5726,7 +5870,29 @@ contract with S-0307 claims 15 to 25, S-0212 claim 25's failed-approach paramete
 S-0208 claims 3, 17 and 21's position-choice and walking outcomes. These are coordination
 checks, not additional rules of this spec.
 
+## Changes for other specs
+
+- **S-0302, claims 10 and 12.** They say that a berserk hit sets off none of the reactions that
+  claim 12 ties to a result ("a berserk hit has none, whatever it reports"). The crush response
+  (claim 39) is not tied to the result and is made after a berserk hit too. S-0302 claims 10 and
+  12 should say so where they list what a berserk hit does not set off.
+- **S-0610, claim 4.** The *hunt* that the berserk entry queues is replaced by *move* when the
+  same hit gives the crush response (claim 39). Its re-hit sentence ("A berserk hit on a unit that
+  is already berserk only sets its remaining time to the new *T* … Nothing else changes: its
+  target and behaviour stay") holds for the berserk effect only: the same hit's crush response
+  then gives the crusher a destination and queues *move* (claim 39). S-0610 should point here for
+  both cases.
+
 ## Questions for the project lead
+
+- Claim 39 and the glossary entry *AI house*: the crushers of every player house, AI houses
+  included, follow the human-controlled rule and so never make the crush response by default.
+  The arena behaviour of M-0011 (fortresses driving over the drones that gas them) then appears
+  in our engine only between test-only computer-controlled player houses, and our AI gets it only
+  by giving move orders. Decided by the glossary's *AI house* entry; recorded here for the lead.
+- `quirks.auto_crush_computer_only` (S-0210, Edge cases), default on as the original: the
+  auto-crush flag and the player-auto-crush rule have no effect. Decided under the autonomy grant
+  (2026-10-28); recorded here for the lead.
 
 - Claim 31, a too-short auto-deploy delay list for the neutral and special houses: the spec
   states our engine's result (importer warning, the row does not apply). Confirm it, or choose
