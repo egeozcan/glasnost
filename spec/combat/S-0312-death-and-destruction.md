@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 44
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132, Q-2133, Q-2135]
 supersedes: []
 ---
 
@@ -257,8 +257,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    this spec.
    - Backing: `measurable` for the debris, the death weapon and the attached bomb of an infantry unit
      (scenario D4 variant b, D6 variant e; S-0107 scenario M10 for the rest); `unmeasured` for the
-     passengers of an infantry unit (no stock infantry type is believed to carry passengers, so no
-     scenario can show the passenger part of claim 5 for infantry)
+     passengers of an infantry unit (no scenario here gives an infantry unit passengers, so none
+     shows the passenger part of claim 5 for infantry)
    - Confidence: high for the debris, the death weapon and the bomb; low for the passengers
 
 ### Vehicles
@@ -387,18 +387,46 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       crewed flag and has no passenger capacity, a chance test "less than" with the game-wide crew
       escape chance (one unit-interval value, S-0202 claim 6) decides, and the crew's type is chosen
       by Formulas F4.
-    A crew that is due takes S-0202's creation draw (claim 10) whether or not it can then be placed
-    at the vehicle's position. A crew that cannot be placed there never enters play and takes no
-    health draw. A placed crew's health is a ranged draw over 5 to half its type's strength
+    A crew that is due takes S-0202's creation draw (claim 10) whether or not it can then be placed.
+    It is put down at the vehicle's exact position, after the dying vehicle has given up its place
+    in the cell's occupancy record, so the vehicle never refuses its own crew.
+    - When the height of that position is the terrain surface height there, the crew's standing
+      position is chosen by S-0208 claim 3's occupant-aware table on the cell's ground record, with
+      the vehicle's exact position as the desired point. Its class is S-0208 claim 2's. Only a
+      centre-class choice that the table's first row does not refuse takes a draw (one ranged draw
+      over 0 to 3). In a cell outside the usable area of the map the choice ignores the cell's
+      occupants and takes no draw: the crew stands at its class's own position. This exception
+      belongs to the crew's placement, not to S-0208 claim 3's rule for walking into a cell.
+    - When the height differs (for example a vehicle on a bridge deck), no position is chosen and no
+      draw is taken: the crew is put at the vehicle's exact position.
+    - The crew's placement then makes one entry test for that cell: the single placement test
+      that S-0209 Terms give for an ordinary return placement, under S-0209 claim 4's table for an
+      infantry mover, with no approach direction and no source elevation. Only *clear* accepts the
+      crew. Every other outcome refuses it at once, *moving blocker* included, with no waiting,
+      re-routing, scatter request, gate opening or attack. So the crew's test is narrower than the
+      escape gate of claim 12, which also passes *moving blocker*. A survivor (claim 18) differs:
+      it is put at the position the table chose with no entry test, so no occupant or cell outcome
+      refuses it there, while a crew is refused there unless its entry test gives *clear*.
+      A crew that gets no position, or whose placement is refused, never enters play and takes no
+      health draw. A placed crew's health is a ranged draw over 5 to half its type's strength
     (truncated toward zero). It faces map north, receives the same scatter request as escaping
     passengers (claim 12), is put on the *guard* behaviour when its house is human-controlled and
     on the *hunt* behaviour when it is computer-controlled (S-0215; which one our engine applies
     depends on the owner, claim 25), and keeps the vehicle's trigger tag when that tag is of a kind that passes
     on (trigger specs). The draws come in the order: chance test (not for a hijacker type), crew type
-    (F4, when it takes a draw), creation, health (only for a placed crew).
-    - Backing: `measurable` (scenario D10, statistical for the chance; variant d for the behaviour)
-    - Confidence: high for the chance and the health draw; medium for the hijacker case, the tag and
-      the behaviour
+    (F4, when it takes a draw), creation, position (only for a centre-class choice that is not
+    refused), health (only for a placed crew).
+    - Backing: `measurable` (scenario D10, statistical for the chance; variant d for the
+      behaviour; variant f for the standing position and its draw). `unmeasured` for a cell
+      outside the usable area and for a position whose height differs from the surface: variant f
+      runs on flat ground inside the usable area, and no scenario here destroys a crewed vehicle
+      on a bridge deck or outside the usable area. `unmeasured` for the entry test (clear only)
+      and for the survivor's differing from it: variant f's cells give the crew *clear*, and no
+      scenario here destroys a crewed vehicle in a cell whose entry outcome for the crew is
+      another one while the standing-position table still gives a position.
+    - Confidence: high for the chance and the health draw; medium for the hijacker case, the tag,
+      the behaviour, the standing position and its two exceptions; medium for the entry test
+      (only *clear* accepts the crew) and for the survivor's making none
 
 14. **Crates from crate-carrying vehicles.** A destroyed vehicle whose type carries a crate leaves a
     crate with random contents on a free cell near its position, when the game's crate setting
@@ -545,20 +573,53 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     it does not.
 
     After its type draws, a survivor takes S-0202's creation draw (claim 10) whether or not it can
-    then be placed. It goes on a free standing position of that cell. A survivor for which no
-    standing position is free, or which cannot be placed, never enters play, takes no health draw
-    and does not count against *C*. A placed survivor's health is a ranged draw over 5 to its
-    type's strength, and it receives the same scatter
-    request as escaping passengers (claim 12). Its behaviour then depends on the building's charge
-    planter (Terms): when the building has one and the owner is not allied with it, the survivor is
-    ordered to attack it. Otherwise the survivor is put on the *move* behaviour when its house is
-    human-controlled and on the *hunt* behaviour when it is computer-controlled (S-0215; which one our
-    engine applies depends on the owner, claim 25). The attacker of the killing hit plays no
-    part in this order. When the killing damage ignores defences, the building counts as having no
-    crew (F5), so it releases no survivors at all.
+    then be placed. Its standing position in that cell is chosen as for an absorbed infantry
+    passenger (claim 24): the desired point lies 36 leptons from the cell centre along the map y
+    axis, so its class is centre, and S-0208 claim 3's table on the cell's ground record gives the
+    position, with one ranged draw over 0 to 3 unless the table's first row refuses the cell (a
+    vehicle in it, or the object-present flag without an open gate), which takes no draw. The
+    destroyed building itself never refuses its survivors: the building-present flag plays no part
+    in that table, in either round (claim 21). The chosen position is kept: putting the survivor
+    down makes no second choice, takes no further draw and makes no entry test. A survivor of
+    claim 21's second round has its position chosen in the same way. A survivor for which
+    the table gives no position never enters play, takes no health draw and does not count against
+    *C*. A placed survivor's health is a ranged draw over 5 to its type's strength, and it receives
+    the same scatter request as escaping passengers (claim 12). Its behaviour then depends on the
+    building's charge planter (Terms): when the building has one and the owner is not allied with
+    it, the survivor is ordered to attack it. Otherwise the survivor is put on the *move* behaviour
+    when its house is human-controlled and on the *hunt* behaviour when it is computer-controlled
+    (S-0215; which one our engine applies depends on the owner, claim 25). The attacker of the
+    killing hit plays no part in this order.
+
+    *No crew.* When the killing damage ignores defences, the building counts as having no crew
+    (F5), so it releases no survivors at all, and its absorbed passengers die instead of coming
+    out (claim 24). That is the only way a building comes to have no
+    crew. No field of a map's building entry sets the state, and no other event does: a building
+    has crew whenever it is created (placed from a map, built or deployed), and an owner change, a
+    repair or an upgrade cannot carry the no-crew state, which arises only at the building's
+    destruction. So a sale's survivors (S-0408 claim 7), a vehicle's crew (claim 13) and a capture
+    are never affected by it. The crewed flag is a separate field of the type. A type whose section
+    leaves it out is not crewed (Import mapping), so its *C* is 0 by F5.
     - Backing: `measurable` (scenario D13, statistical; variant d for the damage that ignores
-      defences; variant e for the engineer draw and the behaviours)
-    - Confidence: high for the counts, chances, types and the draw order; medium for the charge
+      defences; variant e for the engineer draw and the behaviours; variant g for the standing
+      position and its draw, and for a survivor with no free position; variant h for the crewed
+      flag's absent-key default on building types)
+      - `unmeasured` for the no-crew state's lifecycle (no field of a map's building entry or other
+        event sets it; a building placed from a map, built or deployed has crew; an owner change,
+        a repair or an upgrade does not carry the state): no part of D13 deploys the building, or
+        repairs or upgrades it before the death, and no finite set of runs shows that no other
+        event sets the state
+      - `unmeasured` for the absence of an entry test when the survivor's cell holds another
+        house's infantry: variant g's cell holds infantry of the building's own house, which an
+        entry test would not refuse either, so the run does not tell the two apart
+      - `unmeasured` for the crewed flag's absent-key default on vehicle, infantry and aircraft
+        types, and on walls, gates and types infantry can occupy: variant h uses two plain
+        building types only
+    - Confidence: high for the counts, chances, types and the draw order, and for the crewed
+      flag's absent-key default on plain building types; medium for the absence of an entry test
+      when the survivor's cell holds another house's infantry; medium for the no-crew state's
+      lifecycle and for that default on the other kinds of type; medium for the standing position
+      rule, which is claim 24's and rated medium there; medium for the charge
       planter as the target of the attack order (which events set and clear the remembered planter
       is not known) and for the *hunt* behaviour; low for the *move* behaviour of a survivor
       without an attack order
@@ -597,33 +658,47 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - (g) releases its absorbed passengers (claim 24), then its survivors (claim 18). When *C* = 0
       (claim 18) nothing more happens in this item. Otherwise, the table below gives the survivor and smudge outcomes and their draws in claim 18's cell order, beginning after the cells used by absorbed passengers. The observable draw precedence is cell-ordered: the applicable draws for one cell precede those for the next. Every cell in that order has the smudge outcome, whether or not survivors remain to release and regardless of which survivor outcomes apply.
 
-      Throughout these first-round cell outcomes, the destroyed building still occupies its foundation cells; it leaves them only when it leaves play (claim 21). For the smudge step's clear-for-movement test, buildings, vehicles and infantry in the foundation cell are ignored, but the cell's land type and walls still determine whether it is clear (S-0211). The plain form of claim 26 rejects any smudge type whose footprint touches a cell holding a building, including the destroyed building. Accordingly, when the nearby point lands in one of the destroyed building's foundation cells, no smudge is placed and no smudge-type draw is taken.
+      Throughout these first-round cell outcomes, the destroyed building still occupies its foundation cells; it leaves them only when it leaves play (claim 21). For the smudge step, a foundation cell is *clear for movement* unless one of three tests fails it. (1) The occupancy record it reads has its object-present flag on (S-0209 Terms; for example a landed aircraft). The infantry positions, the positions a terrain object marks, and the vehicle-present and building-present flags are ignored: they do not affect this test. (2) The cell's overlay type has the wall flag. (3) The tracked locomotion class's multiplier *M*(*ℓ*, track) of the cell's land type *ℓ* (S-0211 claims 2 and 5) is exactly 0 (not merely below S-0211's 0.01 threshold). No mover is involved, so the class is fixed: test 3 reads the tracked class for every building type, whatever the building's own kind of movement and whatever stands in the cell. For a high-bridge cell (S-0211 claim 15) the record read is the bridge-deck record and test 3 is not made; for every other cell it is the ground record. This is not a passability category of S-0211 claim 11: a cell with a crushable or rubble overlay that is not a wall, a beach or water cell, or a cell holding a terrain object is clear exactly when the three tests pass. The same test applies in claim 21's second round. The plain form of claim 26 rejects any smudge type whose footprint touches a cell holding a building, including the destroyed building. Accordingly, when the nearby point lands in one of the destroyed building's foundation cells, no smudge is placed and no smudge-type draw is taken.
 
       A nearby point 128 leptons from a cell centre remains in that cell unless it lies exactly on the cell's east or south edge; a point on either edge belongs to the next cell (F2 truncates). Therefore the first-round smudge steps can place a smudge only in the rare case that the point lies on the foundation's outer east or south edge. Every other smudge step takes its percent draw and the nearby point's raw value, and no further smudge-type draw. Claim 21's second round occurs after the building has left its cells and is not limited by the dying building's obstruction.
 
       | Row | Taken when | Draws | Effect |
       |---|---|---|---|
       | survivor chance | as claim 18 (*Chance*) gives | one ranged draw R(0, *g*) | a result of 1 releases a survivor |
-      | survivor | the chance row released a survivor | its type, creation and health draws, as claim 18 gives them | one survivor, when it can be placed |
+      | survivor | the chance row released a survivor | its type, creation, position and health draws, as claim 18 gives them | one survivor, when it can be placed |
       | smudge step | the foundation cell itself (not the cell of the nearby point) is clear for movement | one percent draw, then the raw value of the nearby point N(cell centre, 128, *b*), then the draws of claim 26's smudge choice in its plain form | a scorch mark when the percent draw is below 50, otherwise a crater, at the cell of the nearby point, when claim 26 finds a smudge type that fits there |
 
     - (h) kills any passengers still inside it.
     - Backing: `measurable` (scenario D14; the draw order through the random-state recorder, which
-      gives the number of raw values taken, and through the statistics of the effects)
+      gives the number of raw values taken, and through the statistics of the effects; variant i for
+      the clear-for-movement test). `unmeasured` for the high-bridge case: variant i tests ground
+      cells only, and no scenario here puts a foundation cell under a high bridge. `unmeasured`
+      for test 1's ignoring the vehicle-present flag: no part of D14 has a vehicle on a
+      foundation cell at the smudge step. Test 3's class being the tracked one for building types
+      other than variant i's test building is `unmeasured`: no scenario here repeats variant i
+      with another building type.
     - Confidence: medium (the list and the draws, and the building still being in its cells during
       the smudge steps); high for the order of the draws within a cell and for the cell the smudge
-      step tests; high for item f's eligibility, attachment condition, selection, displacement
-      and emission lifetime
+      step tests; high for test 2 on the overlays variant i tests (a wall overlay and a crushable
+      overlay that is not a wall), medium for test 2 on other overlays; high for test 3, and for
+      test 1's ignoring the building-present flag (the
+      destroyed building's own foundation, in every run) and the terrain object's positions
+      (variant i); medium for test 1's ignoring infantry positions, which D14 meets only where a
+      survivor stands in the cell at its smudge step, and for its ignoring the vehicle-present
+      flag; medium for the object-present flag in test 1, for the high-bridge case and for test
+      3's tracked class on other building types; high for
+      item f's eligibility, attachment
+      condition, selection, displacement and emission lifetime
 
 20. **Rubble and crates beneath.** When a destroyed building's type leaves rubble and has a rubble
     image (a separate rubble building image, or a sprite with more than 7 image frames), each of its
-    foundation cells receives the overlay type of registration index 239 (in stock data the rubble
-    overlay, S-0004; the index is built into the original, so a mod's overlay list can change which
-    type it is: `quirks.rubble_overlay_by_index`, Edge cases), with its overlay data value left as
-    it was, and the building's top-left cell remembers the building's type for drawing the rubble
-    (rendering specs). When the type has a crate beneath, a crate appears
-    on the building's top-left foundation cell: a money crate (power-up 0) when the type says
-    so, otherwise a crate with random contents (S-0520 claim 5).
+    foundation cells receives the overlay type of registration index 239 (the overlay at that index
+    of the list in force, S-0004; the index is built into the original, so the overlay list decides
+    which type it is: `quirks.rubble_overlay_by_index`, Edge cases), with its overlay data value
+    left as it was, and the building's top-left cell remembers the building's type for drawing the
+    rubble (rendering specs). When the type has a crate beneath, a crate appears on the building's
+    top-left foundation cell: a money crate (power-up 0) when the type says so, otherwise a crate
+    with random contents (S-0520 claim 5).
     - Backing: `measurable` (scenario D14, variant b; S-0520 scenario CR3 for contents)
     - Confidence: medium for the rubble condition and the crate cell; high for the contents
 
@@ -716,15 +791,18 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     human-controlled and is put on the *hunt* behaviour when it is computer-controlled (S-0215; which
     one our engine applies depends on the owner, claim 25). One that cannot be placed
     dies, credited to the building's charge planter (Terms), if any, and otherwise to no one (not to
-    the attacker of the killing hit). When the building has no crew (a map setting, or killing
-    damage that ignores defences, F5), all of its absorbed passengers die instead of coming out,
-    credited in the same way. They come out whatever the survivor count. The original does not
+    the attacker of the killing hit). When the building has no crew (killing damage that
+    ignores defences, F5), all of its absorbed passengers die instead of coming out,
+    credited in the same way. They come out whatever the survivor count. The release tests only
+    that no-crew state, not the type's crewed flag: a building whose type lacks the crewed flag
+    releases its absorbed passengers as any other does, and no survivors (*C* = 0 by F5). The
+    original does not
     stop at the last foundation cell: with more passengers than cells it places the further
     passengers at unspecified positions (Edge cases, *Absorbed passengers beyond the last cell*).
-    - Backing: `measurable` (scenario D16)
+    - Backing: `measurable` (scenario D16; variant f for the release's ignoring the crewed flag)
     - Confidence: medium for the placement and the credit; high for the passenger order, crate
       infantry count restoration, cell order and survivors starting after the last cell used,
-      medium for the *hunt* behaviour
+      medium for the *hunt* behaviour; high for the release's ignoring the crewed flag
 
 ### Computer-controlled houses
 
@@ -1042,7 +1120,7 @@ otherwise. No measurement has been completed for this revision.
 | 13 | `unmeasured` for crew trigger-tag inheritance: the kinds of tag that pass on are not established here, so D10 cannot predict a tag outcome. |
 | 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run. |
 | 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
-| 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. Failed survivor placement and the eight-cell 3 × 3 foundation are also unmeasured here: D13 uses free positions and a full nine-cell foundation and supplies no blocked-survivor or eight-cell run. |
+| 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. The eight-cell 3 × 3 foundation is also unmeasured here: D13 uses a full nine-cell foundation. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
 | 19(f) | `unmeasured` for the exact eligibility kinds, suppression by an earlier destruction-smoke system and the below-terrain height boundary: D14 f tests creation, displacement and marking at removal, not these conditions. |
 | 20 | `unmeasured` for the sprite-frame threshold: D14 b tests a type already having a rubble image, not the threshold. Crate contents use S-0520 claim 5 and scenario CR3. Remembering the building type for rubble drawing is a pointer to the rendering specs, not independently tested by D14 b. |
@@ -1122,9 +1200,8 @@ unreduced value; S-0408 records that rule); the neutral and special houses take 
 value, as there. *K* ≤ 0 (a negative refund, S-0408 Edge cases) gives *C* = 1 by the lower bound.
 
 *C* = 0 when the building has no crew, its type lacks the crewed flag, the owner's side is not 0, 1
-or 2, or *q* = 0 (the original makes no division then). A building has no crew when its map entry
-says so, or when its killing damage ignores defences (claims 18 and 24). Integer division truncated
-toward zero. Unit: infantry units.
+or 2, or *q* = 0 (the original makes no division then). When a building has no crew is claim 18's
+(*No crew*). Integer division truncated toward zero. Unit: infantry units.
 
 **F6. Delayed death** (claim 3; S-0302 F7 owns it). With *F* the warhead's delay-kill tick count, *A* its delay factor at the edge (single precision), *d* the epicentre distance of the killing hit (leptons, in the number domain S-0302 F7 gives it) and *S* the warhead's spread, let *V* be the divisor used by S-0302 F7: *V* = 256 × trunc(*S*) with `quirks.delay_kill_whole_cell_spread` on, and *V* = *R* of S-0302 F3 with it off. Define, in order, *a* = RZ₅₃(*A* × *F*), *b* = RZ₅₃(*a* − *F*), *c* = RZ₅₃(*b* / *V*), *e* = RZ₅₃(*c* × *d*), and *T* = trunc(RZ₅₃(*e* + *F*)).
 
@@ -1184,7 +1261,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 4 | infantry | death sequence or removal (S-0107 claim 17) | S-0107 |
 | 4 | vehicle | sinking (claim 10), or wake and splash (claim 11), or explosion and destruction animations (claim 9) | up to two list picks (claim 9); none for sinking or for claim 11 |
 | 5 | vehicle | passengers (claim 12): they get out, or die, or stay inside as the table of claim 12 gives (a vehicle with the bomb mark that cannot crash kills them) | their scatter requests' |
-| 6 | vehicle | crew (claim 13) | unit-interval value, crew type (F4), creation draw, health |
+| 6 | vehicle | crew (claim 13) | unit-interval value, crew type (F4), creation draw, position (centre class not refused), health |
 | 7 | vehicle | crate (claim 14) | the crate's |
 | 8 | vehicle | crash, sinking or leaving play (claim 15); passengers still inside die at the start of a crash (claim 16) | crash: three |
 | 4 | aircraft | explosion animation only with a nonempty explosion list, then crash or leaving play (claim 16) | one list pick only with a nonempty list; crash: three |
@@ -1317,7 +1394,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | rules, building type section, `EligibleForDelayKill` | eligible for delayed death (claim 3) | boolean | no |
 | rules, type section, `Naval`, `Underwater`, `Organic`, `Weight` | sinking conditions (claim 10) | boolean, boolean, boolean, decimal | type specs |
 | rules, type section, `Crashable` | can crash (claims 12, 15); failed crash start removes the vehicle, including a first sinking hit (claim 10), and remaining passengers die without attacker credit (S-0507 claim 16) | boolean | no at type creation; later absence preserves the value in force |
-| rules, type section, `Crewed` | crewed flag (claim 13, F4, F5) | boolean | type specs |
+| rules, type section, `Crewed` | crewed flag (claim 13, F4, F5) | boolean | no (not crewed), for every kind of type (building, vehicle, infantry, aircraft) and whatever else the type is (a wall, a gate, a type infantry can occupy, a neutral map building); a later rules layer without the key keeps the value in force. Claim 18 rates this default: high for plain building types, medium for the other kinds |
 | rules, type section, `Passengers` | passenger capacity (claim 13); capacity and boarding are S-0507 claims 1 to 6. Destruction escape excludes the dying vehicle independently of this value (claim 12); removal cleanup is S-0507 claim 16 | integer | 0 |
 | rules, unit type section, `CarriesCrate` | crate carrier (claim 14) | boolean | no |
 | rules, building type section, `Helipad` | helipad (claim 17) | boolean | no |
@@ -1338,7 +1415,6 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | theater tileset section, `Morphable` | the morphable flag of a tile's tileset (claim 26) | as S-0010's Import mapping | as S-0010's |
 | the no-type spellings of a list item | an item that claim 28 leaves out | `none` or `<none>`, compared ignoring letter case, as S-0303's Import mapping gives them | |
 | rules, the general section, `InfantryExplode`, `Wake` | cyborg crippling animation (claim 2), wake animation (claim 11) | animation name | none |
-| map, building entry | building has no crew (F5) | map flag (map specs) | crew present |
 | the animation type named `FIRE3`, a name built into the original rather than read from a key | barrel fire animation (claim 23) | animation type name | when no animation type has that name the original takes an entry from outside the animation type list (bad data): our engine creates no animation and the importer warns |
 
 The importer warns about debris maxima lists shorter than their types lists or all 0 with a
@@ -1498,18 +1574,18 @@ not for zero ammo or suicide alone; the explosion list pick is still consumed, f
 destruction list pick. Missing animations, wrong override cases or a replay mismatch falsify
 these parts.
 
-**D8. Sinking (claim 10).** *Setup:* a stock naval vessel whose weight meets the sinking weight,
-killed on water, with crashability off; variant b a test naval type with weight below it. *Observable:* whether the vessel
-sinks (stays in play at 1 health) or shows an explosion. *Expected:* the first sinks with no
-explosion animation; the second explodes. *Falsified if:* the first explodes, or the below-threshold
-vessel sinks instead of showing an explosion. Use named map overrides to repeat the above-threshold vessel
-with its underwater flag set, its organic flag set, and as an amphibious non-naval type on water.
-Each fails the sinking condition; sinking falsifies that part. Repeat the ordinary vessel at
-exactly the imported sinking weight: it must sink. Record both explosion and destruction
-animations; either on a sinking instance falsifies their omission.
-S-0504 scenarios N5 and N6 test the subsequent duration, removal and sinking behaviour.
-S-0614 scenario P6 separately tests culling-induced sinking without a killing hit, including
-unchanged health; the killing-hit expectations above do not apply to that cull.
+**D8. Sinking (claim 10).** *Setup:* a naval vessel type whose weight meets the sinking weight (a
+test copy that sets its weight when needed), killed on water, with crashability off; variant b a
+test naval type with weight below it. *Observable:* whether the vessel sinks (stays in play at 1
+health) or shows an explosion. *Expected:* the first sinks with no explosion animation; the second
+explodes. *Falsified if:* the first explodes, or the below-threshold vessel sinks instead of showing
+an explosion. Use named map overrides to repeat the above-threshold vessel with its underwater flag
+set, its organic flag set, and as an amphibious non-naval type on water. Each fails the sinking
+condition; sinking falsifies that part. Repeat the ordinary vessel at exactly the imported sinking
+weight: it must sink. Record both explosion and destruction animations; either on a sinking instance
+falsifies their omission. S-0504 scenarios N5 and N6 test the subsequent duration, removal and
+sinking behaviour. S-0614 scenario P6 separately tests culling-induced sinking without a killing
+hit, including unchanged health; the killing-hit expectations above do not apply to that cull.
 
 *First-hit crashable variant (claims 10 and 15; Q-0652).* Use named map override
 "sinking-first-crashable" on the tiny water map, speed 6, 800×600, no engine add-on and no mods (the named test files of a scenario excepted)
@@ -1532,17 +1608,18 @@ picks. Omitting an applicable shared effect or adding either pick falsifies that
 A recorder that cannot separate the hit from later own updates is inconclusive for timing.
 Remove the named override after the test.
 
-*Marked-water variant (claim 11).* Use S-0503 claim 11's scenario H7 for a stock hover switched
-off over flat water, and S-0511 claims 9 and 10's scenario B3 for a stock vehicle dropped from
-a bridge deck over water. Use stock data, no engine add-on and no mods (the named test files of a scenario excepted), at a fixed game speed. Record
-heights, death ticks and animations with tick-aligned capture and a read-only recorder. Expect
-a fall followed by wake and the last splash animation at low-water death, without the ordinary
-debris, death weapon or vehicle explosion/destruction animations. Ordinary death effects in
-place of wake and splash falsify this rule. Repeat the bridge test with a loaded, non-crashable
-stock amphibious transport: record passenger deaths and any escape. Expect no passenger to get
-out; a surviving escaped passenger falsifies the passenger rule. This is not a test of where
-passengers leave a vehicle destroyed on an intact deck (claim 12); that placement remains open
-in S-0511. These ordinary falls do not discriminate the exact 10-lepton death threshold.
+*Marked-water variant (claim 11).* Use S-0503 claim 11's scenario H7 for a stock hover switched off
+over flat water, and S-0511 claims 9 and 10's scenario B3 for a stock vehicle dropped from a bridge
+deck over water. Use stock data, no engine add-on and no mods (the named test files of a scenario
+excepted), at a fixed game speed. Record heights, death ticks and animations with tick-aligned
+capture and a read-only recorder. Expect a fall followed by wake and the last splash animation at
+low-water death, without the ordinary debris, death weapon or vehicle explosion/destruction
+animations. Ordinary death effects in place of wake and splash falsify this rule. Repeat the bridge
+test with a loaded amphibious transport type whose crashability is off (a test copy that sets it
+when needed): record passenger deaths and any escape. Expect no passenger to get out; a surviving
+escaped passenger falsifies the passenger rule. This is not a test of where passengers leave a
+vehicle destroyed on an intact deck (claim 12); that placement remains open in S-0511. These
+ordinary falls do not discriminate the exact 10-lepton death threshold.
 
 **D9. Passengers of destroyed vehicles (claim 12).** *Setup:* a stock transport with five infantry,
 killed (a) on open ground by normal damage, (b) by a train driving into its cell (damage that
@@ -1611,7 +1688,21 @@ successful placement or different replay falsifies this part. For successful rel
 initial facing (map north), health and the F4, creation and health draws. Repeat an unarmed
 ordinary crewed type for sides 0 to 2: its side crew with no F4 percent draw is expected. A
 different type or replay falsifies that case. Repeat c with crates disabled: no crate is expected,
-one falsifies the negative case.
+one falsifies the negative case. Variant f (the crew's standing position, claim 13): a crewed test
+vehicle with the escape chance set to 1 in the named test map, killed 100 times standing still at
+the cell centre and 100 times in the middle of a step between two cells, each on flat ground with
+no other occupant; record the vehicle's exact position at the kill. A mid-step run stays in the
+sample when its point lies outside S-0208 claim 2's centre radius, whatever class that claim then
+gives it (the centre class included); a mid-step run whose point lies within the radius is void,
+since its point is of the centre class by distance alone and only repeats the centre runs. Repeat
+the centre runs with two own infantry placed by the map on the right and left positions of the
+vehicle's cell; runs in which they do not stay there are inconclusive. Record the crew's position
+and the draws the recorder reports.
+*Expected of f:* at the centre, and at a mid-step point whose class is the centre (S-0208 claim
+2), one draw over 0 to 3 between the creation and health draws, and the first free position of the
+row of S-0208 table O it picks (right about half the time in the empty cell); at a mid-step point
+of another class, no position draw and the position of that class (or the first free position of
+its table O row). A different position, row or draw count falsifies f.
 
 **D11. Crashing (claims 15, 16).** *Setup:* a stock aircraft with a test death weapon, shot down in
 flight above a target vehicle; variant b an aircraft that crashes alive (out of a landing place, if
@@ -1696,12 +1787,27 @@ variant c's survivors attack the destroyer rather than a live hostile planter, o
 behaviours differ. Use distinct live planter and destroyer units in c; repeat with the planter
 allied to the owner, when the attack order must be absent. Record survivor health and ordered
 type, creation and health draws: health outside 5 to its strength or a replay mismatch falsifies
-this part. Variant f: give divisor 0, set the map no-crew flag, and clear the crewed type flag,
-in separate kills. Each gives no survivors and no per-cell smudge steps; an occurrence falsifies
+this part. Variant f: give divisor 0, and clear the crewed type flag, in separate kills. Each gives
+no survivors and no per-cell smudge steps; an occurrence falsifies
 the exclusion. With crew present, use invented refund/divisor pairs giving quotients below 1,
 between 1 and 2, and above 5. Expected per-round limits: 1, 1 and 5, from refund rather than cost.
 Record 300 kills per pair and replay the stopping point. A release beyond the limit or continued
 survivor-chance draws after reaching it falsifies F5. D14 g tests the separate second-round limit.
+Variant g (the survivor's standing position): the base building with own infantry already on two
+positions of its first foundation cell (placed as D16 variant d occupies a foundation cell), and,
+separately, on all of that cell's positions; a run in which the map does not keep those infantry
+in the cell is inconclusive. Record each survivor's position and the draws the recorder reports.
+*Expected of g:* each survivor that a cell releases takes one draw over 0 to 3 after its creation
+draw and stands on the first free position of the table O row that draw picks; with every position
+taken, a survivor of that cell still takes the creation and position draws, takes no health draw,
+never enters play and does not count against *C*. A different position, row or draw count
+falsifies g. Variant h (the crewed flag's absent-key default): two test building types,
+defined wholly in the named test file (not copied from a stock section), that differ only in that
+one sets the crewed flag and the other leaves it unset in its section, with refund and divisor
+giving *C* = 5; sell each (S-0408 claim 7, which takes no chance draw).
+*Expected of h:* at least one survivor from the first, none from the second (a survivor attempt can
+fail to be placed, S-0408 claim 7). A survivor from the second falsifies the default. A run in which
+the first releases none is inconclusive.
 
 **D14. Building destruction effects (claims 19 to 21, 23).** *Setup:* test buildings with explosion
 lists and the crewed flag off (so *C* = 0), one of 1 × 1 and one of 3 × 3 foundation, each
@@ -1778,7 +1884,24 @@ vacancy, second round during the wait, or removal before the first eligible own 
 *C* = 0, the 3 × 3 building leaves no smudge or the 1 × 1 building leaves one, the share of scorch
 marks lies more than 3 standard errors from one half, an explosion position or starting delay
 differs from the exact F2 and draw replay, the raw-value count differs from the replayed count, or
-any other statement of the variants fails.
+any other statement of the variants fails. Variant i (the clear-for-movement test of claim 19 (g)):
+a crewed 3 × 3 test building with *C* ≥ 1 whose foundation is built with a map editor to cover, in
+separate maps, a beach cell, a cell with a crushable overlay that is not a wall, a cell with a wall
+overlay, and a cell holding a terrain object; each map also with a named test file that sets the
+tracked class's multiplier of that cell's land type to 0 and, separately, to a value above 0
+and below S-0211's 0.01 threshold as S-0211 parses it. Add a test building type with a landing pad whose landed aircraft stands on a
+foundation cell
+when the building is destroyed. That aircraft is in contact with the pad, whose type has the helipad
+flag, so it does not survive: claim 17's helipad rule destroys it with the building, whatever its
+distance. The part tests test 1 only in a run in which the recorder still shows its object-present
+flag set on that cell at the smudge step, and is inconclusive otherwise. Destroy each 50 times.
+*Expected of i:* the smudge step's percent draw and nearby-point raw value are present for the cell
+exactly when tests 1 to 3 pass: absent for the wall overlay, the
+landed aircraft and the test file's zero multiplier, present under the test file's
+below-threshold multiplier for every other map, the terrain object's included, whatever S-0211's
+category of the cell. A step present or absent against this falsifies i. In particular, a step
+absent under the below-threshold multiplier, where tests 1 and 2 pass, shows a threshold rule
+rather than test 3's exactly 0.
 
 **D15. Spilled resources (claim 22; conditional, not runnable yet).** No known skirmish map
 setting or start-credit conversion fills building storage, so claim 22 is unmeasured. If a
@@ -1808,7 +1931,7 @@ source cell separately from the smudge's placement cell. Variant c uses the comm
 protocol: computer, neutral and special owners' passengers hunt. *Falsified if:* fewer passengers
 appear while placement is free, initial facing or behaviour differs, or a survivor chance or
 smudge-step draw is attributed to one of the first three cells.
-Variant d: use the map no-crew flag, then S-0011's defence-ignoring trigger kill in a separate run.
+Variant d: use S-0011's defence-ignoring trigger kill.
 All passengers die and none get out; without a charge planter nobody gets their kill credit.
 With crew present, occupy all standing positions of the first foundation cell: its passenger
 dies, while the next still uses the second cell, not the first. Any escape in a no-crew case,
@@ -1818,6 +1941,9 @@ Vehicle passenger placement and credit to a separately remembered planter remain
 no setup here establishes vehicle absorption or a surviving planter for the failed releases.
 Variant e: set the side's survivor divisor to 0 with crew otherwise present. The three passengers
 still come out although *C* = 0. No passenger release in this case falsifies that independence.
+Variant f: the main case with named overrides that turn the building's crewed flag off, destroyed
+while not being sold. *Expected of f:* the three passengers come out as in the main case, and no
+survivor is released (*C* = 0). A missing passenger release, or a survivor, falsifies f.
 
 **D17. Smudge choice (claim 26).** *Setup:* named test files that replace the smudge type list
 with test types: two scorch-mark types of footprint 1 × 1, one scorch-mark type of footprint 3 × 3,
@@ -2091,6 +2217,20 @@ scenario makes no prediction for their untraced path. No measurement is claimed 
 - Measurement of the destruction particle-system below-terrain boundary (claim 19(f))
   and the other boundary cases excluded from measurement in Backing boundaries remains wanted.
   S-0616 claim 1 resolves the eligible kinds and the attachment condition.
+
+## Changes for other specs
+
+S-0408 claims 7 and 8 and scenario S6 (e): the no-crew state of F5 arises only at a destruction
+whose killing damage ignores defences (claim 18 here, *No crew*), so it never holds at a sale.
+Claim 7's "A building with no crew (S-0312, F5) releases none" and claim 8's "A building with no
+crew deletes them instead" can then never apply. At a sale, a type without the crewed flag
+releases no survivors because its *C* is 0 by F5, and its absorbed passengers come out as from
+any other building: the passengers' release tests only the no-crew state, not the crewed flag
+(claim 24 here gives the same for a destruction). S6 (e)'s expectation "None come from the type
+with the crewed flag off" and its falsifier "any passenger from the type with the crewed flag off"
+should then be reversed: that type's passengers come out on its first foundation cells in reverse
+entry order, as from the crewed type. Claims 7 and 8 can drop the two sentences or say that the
+no-crew case does not arise at a sale.
 
 ## Questions for the project lead
 
