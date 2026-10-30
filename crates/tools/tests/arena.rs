@@ -399,7 +399,7 @@ fn m0006_bunkers_and_placed_cells_in_our_setup() {
             }
         }
     }
-    println!("placement table cells reached by some group: {checked}");
+    assert!(checked, "some group reaches a cell of the placement table");
 }
 
 /// The local lane's comparison (never in CI): with `GLASNOST_GAME_DIR` set,

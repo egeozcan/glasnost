@@ -6,6 +6,7 @@
 
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Decimal, SequenceEntry, WarheadType};
+use glasnost_sim::combat::check::{self, Answer};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::held;
 use glasnost_sim::objects;
@@ -247,4 +248,93 @@ fn claim_27_a_pending_delayed_shot_without_a_target() {
     let o = w.obj(t).unwrap();
     assert_eq!(o.combat.delayed_shot, None, "no longer pending");
     assert_eq!(shots_by(&w, t), 0, "no shot");
+}
+
+/// One tick of `w`: whether `x` made a shot in it (its shot effects).
+fn step_shot(w: &mut World, x: ObjectId) -> bool {
+    use glasnost_sim::combat::effects::Effect;
+    w.effects.clear();
+    glasnost_sim::tick::step(w);
+    w.effects
+        .iter()
+        .any(|e| matches!(e, Effect::Shot { firer, .. } if *firer == x))
+}
+
+// spec: S-0309 claim 27 (consequences: a target destroyed earlier in the tick by another firer's shot, S-0306 scenario P27, is dropped before the firing step of a holder whose turn comes later, S-0203 claim 3; that step asks no firing check and fires nothing; the drop restarts a timer with more than 10 ticks left); S-0203 claim 10 (the object right after a removed projectile misses its turn, so a filler unit stands between)
+#[test]
+fn claim_27_a_target_killed_earlier_in_the_tick_by_another_firer() {
+    let mut w = game();
+    let v = put(&mut w, Kind::Vehicle, "BUGGY", 1, 0, 0);
+    let a = put(&mut w, Kind::Vehicle, "CRUSHER", 0, -4, 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(v));
+    // A's first shot, through its own firing step.
+    let mut fired = false;
+    for _ in 0..200 {
+        if step_shot(&mut w, a) {
+            fired = true;
+            break;
+        }
+    }
+    assert!(fired, "A fired at V");
+    w.obj_mut(v).unwrap().health = 1;
+    // B is created while the shell flies, so its turn comes after the
+    // shell's in every tick (key order). A unit created between them takes
+    // the missed turn that the shell's removal gives the object right after
+    // it (S-0203 claim 10), so B keeps its turn in the kill's tick.
+    put(&mut w, Kind::Vehicle, "BUGGY", 0, 6, 6);
+    let b = put(&mut w, Kind::Vehicle, "CRUSHER", 0, -4, 2);
+    {
+        let tick = w.tick;
+        let o = w.obj_mut(b).unwrap();
+        o.target = Some(Target::Object(v));
+        o.targeting_timer = tick + 500;
+    }
+    let gone = |w: &World| w.obj(v).is_none_or(damage::dead);
+    // The tick of the kill, in a copy.
+    let mut c = w.clone();
+    let mut kill = None;
+    for _ in 0..200 {
+        glasnost_sim::tick::step(&mut c);
+        if gone(&c) {
+            kill = Some(c.tick);
+            break;
+        }
+    }
+    let kill = kill.expect("the shell kills V");
+    // `kill` is the counter after the kill's step, so that step runs tick
+    // `kill - 1`. B's countdown runs below `rearm_until` (S-0301 claim 1),
+    // so B holds its fire before that tick and is ready in it.
+    w.obj_mut(b).unwrap().combat.rearm_until = kill - 1;
+    // The control: with V kept alive, B fires in that tick.
+    let mut control = w.clone();
+    control.obj_mut(v).unwrap().health = 1_000_000;
+    let mut shot_in = None;
+    while control.tick < kill + 1 {
+        let t = control.tick;
+        if step_shot(&mut control, b) {
+            shot_in.get_or_insert(t);
+        }
+    }
+    assert_eq!(
+        shot_in,
+        Some(kill - 1),
+        "control: B fires in the kill's tick"
+    );
+    let mut b_shots = 0;
+    while w.tick < kill - 1 {
+        b_shots += usize::from(step_shot(&mut w, b));
+    }
+    assert!(!gone(&w), "V is still in play when the kill's tick starts");
+    assert_eq!(
+        check::check(&w, b, Some(Target::Object(v)), 0, true),
+        Answer::CanFire,
+        "B's firing check against V allows the shot when that tick starts"
+    );
+    b_shots += usize::from(step_shot(&mut w, b));
+    assert!(gone(&w), "killed in that tick");
+    assert_eq!(b_shots, 0, "B fires nothing in or before that tick");
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.target, None, "dropped before B's firing step");
+    let left = o.targeting_timer - w.tick;
+    assert!((3..=8).contains(&left), "one draw over 4 to 8: {left} left");
 }
