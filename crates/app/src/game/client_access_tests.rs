@@ -366,14 +366,14 @@ fn keyboard_reaches_every_control_of_the_screens() {
     assert!(c.menu_focus.rect(&c.menu_targets).is_none());
     c.pointer_up(Button::Left, Point::new(0, 0), Modifiers::default());
 
-    // The settings screen: 7 values, 9 bindings, Reset and Back.
+    // The settings screen: 7 values, 10 bindings, Reset and Back.
     while c.menu_focus.target(&c.menu_targets) != Some(MenuHit::Settings) {
         key(&mut c, Key::Down);
     }
     key(&mut c, Key::Enter);
     assert_eq!(c.shell.screen, Screen::Settings);
     let _ = c.frame();
-    assert_eq!(c.settings_targets.stops.len(), 18);
+    assert_eq!(c.settings_targets.stops.len(), 19);
     key(&mut c, Key::Tab);
     assert_eq!(
         c.settings_focus.target(&c.settings_targets),

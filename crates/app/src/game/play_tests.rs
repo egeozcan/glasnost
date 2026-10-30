@@ -887,8 +887,11 @@ fn a_superweapon_icon_without_an_aim_action_fires_at_cell_zero() {
         .position(|e| *e == hud::Entry::Superweapon(0))
         .expect("the silo's superweapon in the 2nd tab");
     p.tab = hud::SW_TAB;
-    p.selection.clear();
+    // spec: S-0512 claim 25 (an icon with no aim action fires at once and changes nothing else: the selection stays)
+    p.selection = own(&p, Kind::Vehicle);
+    let kept = p.selection.clone();
     p.cameo_click(n, Button::Left, false);
+    assert_eq!(p.selection, kept);
     assert_eq!(p.tool, Tool::Select, "no aiming");
     assert_eq!(
         fired(&p),
@@ -972,9 +975,9 @@ fn s0513_claim_1_a_selection_takes_precedence() {
     );
 }
 
-/// Arming from the icon with units selected clears the selection, so the
-/// next click fires (our design for Q-1985, M8 A4 round 5 note 27); a
-/// selection made after arming still takes precedence (S-0513 claim 1).
+/// spec: S-0512 claim 25 (arming from an icon with an aim action empties
+/// the selection in the same input and ends sell, repair and power mode), so
+/// the next click fires (S-0513 claim 1).
 #[test]
 fn arming_from_the_icon_clears_the_selection_and_the_next_click_fires() {
     let mut p = sw_start("MultiMissile", &[], true);
@@ -987,9 +990,11 @@ fn arming_from_the_icon_clears_the_selection_and_the_next_click_fires() {
     p.tab = hud::SW_TAB;
     p.selection = own(&p, Kind::Vehicle);
     assert!(!p.selection.is_empty());
+    p.tool = Tool::Mode(Mode::Sell);
     p.cameo_click(n, Button::Left, false);
     assert!(matches!(p.tool, Tool::Superweapon { sw: 0, .. }));
     assert!(p.selection.is_empty(), "arming deselects");
+    assert!(p.sel_reset, "a clearing resets the type-select reach");
     let at = CellXY::new(10, 10);
     p.click_map(Button::Left, None, at, Modifiers::default());
     assert_eq!(fired(&p), vec![Order::FireSuperweapon { sw: 0, cell: at }]);
@@ -1192,48 +1197,236 @@ fn type_expansion_takes_the_seed_types_from_the_pool() {
     assert_eq!(p.selection, vec![n1, n2]);
 }
 
-/// Our control groups (Q-1988): making a group, adding to it, selecting
-/// it, an object in one group at most, and an object lost to the house
-/// leaving it.
+/// The selection `sel` grows to by S-0214 claim 12's rule when `add` joins
+/// it one by one, skipping objects already in it.
+fn added_in_order(p: &Play, sel: &[ObjectId], add: &[ObjectId]) -> Vec<ObjectId> {
+    let mut out = sel.to_vec();
+    for &id in add {
+        if !out.contains(&id) {
+            targeting::add_to_selection(p.world(), &mut out, id);
+        }
+    }
+    out
+}
+
+/// spec: S-0214 claim 33 (make group: every own object in the group leaves it, then every selected own object joins it and leaves any other group; the selection does not change) and Terms (members are own objects on the map, in creation order)
 #[test]
-fn control_groups_make_add_and_select() {
+fn claim_33_make_group() {
     let mut p = start();
     let m = mixed_mobiles(&mut p);
     let theirs = their_gunr(&mut p);
-    p.selection = vec![m[1], m[2], theirs];
-    p.group_assign(1, false);
-    // design: only own objects join a group
-    assert_eq!(p.groups[1], vec![m[1], m[2]]);
+    p.selection = vec![m[2], m[1], theirs];
+    p.make_group(1);
+    assert_eq!(p.group(1), vec![m[1], m[2]], "own only, creation order");
+    assert_eq!(p.selection, vec![m[2], m[1], theirs], "the selection stays");
+    // Making the group again replaces its members.
     p.selection = vec![m[3]];
-    p.group_assign(1, true);
-    assert_eq!(p.groups[1], vec![m[1], m[2], m[3]]);
-    // Making group 2 of one of them takes it out of group 1.
+    p.make_group(1);
+    assert_eq!(p.group(1), vec![m[3]]);
+    // An object is in one group at most.
+    p.selection = vec![m[1], m[2]];
+    p.make_group(2);
     p.selection = vec![m[2]];
-    p.group_assign(2, false);
-    assert_eq!(p.groups[1], vec![m[1], m[3]]);
-    assert_eq!(p.groups[2], vec![m[2]]);
-    // Selecting group 1 replaces the selection, by claim 12's rule, and
-    // the first member speaks.
-    p.selection = vec![m[4]];
-    p.selected.clear();
-    let first = p.group_recall(1);
-    // spec: S-0214 claim 12 (the selection order of an addition) and S-0701 claim 17 (one response)
-    assert_eq!(p.selection, claim_12_order(&p, &[m[1], m[3]]));
-    assert_eq!(first, p.selection.first().copied());
-    assert_eq!(p.selected, vec![m[1]]);
-    // An empty group leaves the selection as it was.
-    assert_eq!(p.group_recall(5), None);
-    assert_eq!(p.selection, claim_12_order(&p, &[m[1], m[3]]));
-    // A member given to another house leaves the group.
-    let other = p.world().obj(theirs).unwrap().owner;
-    p.game.world.obj_mut(m[1]).unwrap().owner = other;
-    p.group_recall(1);
-    assert_eq!(p.groups[1], vec![m[3]]);
-    assert_eq!(p.selection, vec![m[3]]);
+    p.make_group(3);
+    assert_eq!(p.group(2), vec![m[1]]);
+    assert_eq!(p.group(3), vec![m[2]]);
     // Making a group of an empty selection empties it.
     p.selection.clear();
-    p.group_assign(1, false);
-    assert!(p.groups[1].is_empty());
+    p.make_group(2);
+    assert!(p.group(2).is_empty());
+    // spec: S-0214 claim 33 (make group ends no mode)
+    p.tool = Tool::Mode(Mode::Sell);
+    p.selection = vec![m[1]];
+    p.make_group(4);
+    assert_eq!(p.tool, Tool::Mode(Mode::Sell));
+}
+
+/// spec: S-0214 claim 33 (select group clears the selection, even for an empty group, and adds every member that can be selected in creation order, the first one added giving the only response; add group does so without the clearing, and a selection holding another house's object is replaced; both end sell, repair and power mode) and S-0701 claim 17
+#[test]
+fn claim_33_select_and_add_group() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let theirs = their_gunr(&mut p);
+    p.selection = vec![m[3], m[1]];
+    p.make_group(2);
+    p.selection = vec![m[4]];
+    p.selected.clear();
+    p.tool = Tool::Mode(Mode::Repair);
+    p.select_group(2);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[m[1], m[3]]));
+    assert_eq!(p.selected, vec![m[1]], "the first member in creation order");
+    assert_eq!(p.tool, Tool::Select, "the mode ends");
+    assert!(p.sel_reset, "an addition resets the type-select reach");
+    // An empty group leaves the selection empty.
+    p.select_group(5);
+    assert!(p.selection.is_empty());
+    // Add group keeps the selection and adds the members after it.
+    p.selection = vec![m[4]];
+    p.selected.clear();
+    p.tool = Tool::Mode(Mode::Power);
+    p.add_group(2);
+    assert_eq!(p.selection, added_in_order(&p, &[m[4]], &[m[1], m[3]]));
+    assert_eq!(p.selected, vec![m[1]]);
+    assert_eq!(p.tool, Tool::Select);
+    // Members already selected add nothing and give no response.
+    p.selected.clear();
+    let before = p.selection.clone();
+    p.add_group(2);
+    assert_eq!(p.selection, before);
+    assert!(p.selected.is_empty());
+    // Another house's object in the selection is replaced.
+    p.selection = vec![theirs];
+    p.add_group(2);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[m[1], m[3]]));
+    // A member given to another house is no member while it is theirs.
+    let other = p.world().obj(theirs).unwrap().owner;
+    p.game.world.obj_mut(m[1]).unwrap().owner = other;
+    p.select_group(2);
+    assert_eq!(p.selection, vec![m[3]]);
+}
+
+/// spec: S-0214 claim 33 (centre group: the selection is cleared when its first object is not in the group, then the members are added; the group centre point of F9 is returned) and Edge cases (quirks.group_center_keeps_extra_selection on: other selected objects stay when the first one is a member)
+#[test]
+fn claim_33_centre_group_keeps_extra_selection() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    p.selection = vec![m[1], m[2]];
+    p.make_group(6);
+    // The first selected object is a member: the extra one stays.
+    p.selection = vec![m[1], m[4]];
+    let c = p.centre_group(6).expect("a selection");
+    assert_eq!(p.selection, added_in_order(&p, &[m[1], m[4]], &[m[2]]));
+    assert_eq!(Some(c), targeting::group_centre(p.world(), &p.selection));
+    // The first selected object is no member: the selection is cleared.
+    p.selection = vec![m[4], m[1]];
+    p.centre_group(6);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[m[1], m[2]]));
+    // An empty group: no centre and an empty selection.
+    p.selection = vec![m[4]];
+    assert_eq!(p.centre_group(7), None);
+    assert!(p.selection.is_empty());
+}
+
+fn start_with_quirks(f: impl FnOnce(&mut glasnost_rules::quirks::Quirks)) -> Play {
+    let mut rs = fixture::ruleset();
+    f(&mut rs.globals.quirks);
+    start_with(std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &rs,
+        "synthetic-skirmish",
+    )))
+}
+
+/// spec: S-0214 Edge cases (quirks.group_center_keeps_extra_selection off: centre group replaces the selection by the group's members)
+#[test]
+fn claim_33_centre_group_switch_off() {
+    let mut p = start_with_quirks(|q| q.group_center_keeps_extra_selection = false);
+    let m = mixed_mobiles(&mut p);
+    p.selection = vec![m[1], m[2]];
+    p.make_group(6);
+    p.selection = vec![m[1], m[4]];
+    p.centre_group(6);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[m[1], m[2]]));
+}
+
+/// spec: S-0214 Edge cases (quirks.group_kept_on_owner_change on: the number stays with an object given away, which is a member again when it comes back; off: make group by the house removes its earlier members wherever they are)
+#[test]
+fn claim_33_group_kept_on_owner_change_both_ways() {
+    for kept in [true, false] {
+        let mut p = start_with_quirks(|q| q.group_kept_on_owner_change = kept);
+        let m = mixed_mobiles(&mut p);
+        let theirs = their_gunr(&mut p);
+        let other = p.world().obj(theirs).unwrap().owner;
+        let local = Some(p.local);
+        p.selection = vec![m[1], m[2]];
+        p.make_group(1);
+        p.game.world.obj_mut(m[1]).unwrap().owner = other;
+        assert_eq!(p.group(1), vec![m[2]], "not a member while theirs");
+        p.selection = vec![m[3]];
+        p.make_group(1);
+        p.game.world.obj_mut(m[1]).unwrap().owner = local;
+        let want = if kept { vec![m[1], m[3]] } else { vec![m[3]] };
+        assert_eq!(p.group(1), want, "kept {kept}");
+    }
+}
+
+/// The screen-candidate pool of a type-select tap given by hand, the
+/// fixture drawing none: a tap of `p` with `screen` and `reach`.
+fn tap(p: &mut Play, screen: &[ObjectId], reach: Reach) -> Reach {
+    p.messages.clear();
+    p.type_tap(screen, reach)
+}
+
+fn said(p: &Play) -> String {
+    p.messages
+        .iter()
+        .map(|m| String::from_utf16_lossy(&m.units))
+        .collect()
+}
+
+/// An own GUNR placed `dx` cells east of the base unit's row of
+/// [`mixed_mobiles`].
+fn own_gunr(p: &mut Play, dx: i32) -> ObjectId {
+    let base = own(p, Kind::Vehicle)[0];
+    let local = p.local;
+    let w = &mut p.game.world;
+    let at = w.obj(base).unwrap().pos.cell();
+    let t = w.rules().index_of(Kind::Vehicle, "GUNR").unwrap();
+    let id = glasnost_sim::objects::create(w, Kind::Vehicle, t, Some(local));
+    let c = CellXY::new(at.x + dx, at.y + 6);
+    let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+    glasnost_sim::objects::place(w, id, glasnost_sim::world::Pos::centre(c, z), 0);
+    id
+}
+
+/// spec: S-0214 claim 32 (with reach screen and an unselected screen candidate, the tap adds the screen candidates in candidate order and the reach stays screen; otherwise the reach becomes map and every candidate is added in creation order; own objects only; one response, from the first object added; the messages by the reach and an empty selection)
+#[test]
+fn claim_32_a_tap_widens_from_the_screen_to_the_map() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let (g1, g2) = (m[1], m[3]);
+    let far = own_gunr(&mut p, 9);
+    let theirs = their_gunr(&mut p);
+    p.selection = vec![g1];
+    p.selected.clear();
+    // The screen holds g2 (and the selected g1, another type and theirs).
+    let r = tap(&mut p, &[g1, m[2], theirs, g2], Reach::Screen);
+    assert_eq!(r, Reach::Screen);
+    assert_eq!(p.selection, added_in_order(&p, &[g1], &[g2]));
+    assert_eq!(p.selected, vec![g2]);
+    assert_eq!(said(&p), "MSG:SelAcrossScreen");
+    assert!(!p.sel_reset, "the tap keeps its reach");
+    // Nothing unselected on the screen: the reach becomes map.
+    p.selected.clear();
+    let r = tap(&mut p, &[g1, g2], Reach::Screen);
+    assert_eq!(r, Reach::Map);
+    assert!(p.selection.contains(&far) && !p.selection.contains(&theirs));
+    assert_eq!(p.selected, vec![far]);
+    assert_eq!(said(&p), "MSG:SelAcrossMap");
+    // A tap at map adding nothing still says across the map.
+    p.selected.clear();
+    let before = p.selection.clone();
+    assert_eq!(tap(&mut p, &[], Reach::Map), Reach::Map);
+    assert_eq!(p.selection, before);
+    assert!(p.selected.is_empty(), "nothing added, no response");
+    assert_eq!(said(&p), "MSG:SelAcrossMap");
+    // An empty selection: nothing selected.
+    p.clear_selection();
+    assert!(p.sel_reset, "a clearing resets the reach");
+    tap(&mut p, &[g1], Reach::Screen);
+    assert!(p.selection.is_empty());
+    assert_eq!(said(&p), "MSG:NothingSelected");
+}
+
+/// spec: S-0214 claim 32 (if the selection is a single object that is not own, the tap first removes it)
+#[test]
+fn claim_32_a_single_foreign_object_is_removed_first() {
+    let mut p = start();
+    mixed_mobiles(&mut p);
+    let theirs = their_gunr(&mut p);
+    p.selection = vec![theirs];
+    tap(&mut p, &[], Reach::Screen);
+    assert!(p.selection.is_empty());
+    assert_eq!(said(&p), "MSG:NothingSelected");
 }
 
 /// spec: S-0415 claim 6 (the deployed building takes over the deploying
@@ -1244,27 +1437,23 @@ fn a_deploy_hands_the_control_group_and_the_selection_to_the_building() {
     let mut p = start();
     let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
     let m = mixed_mobiles(&mut p);
-    // The base unit in group 3, between two others; selected with one of them.
-    p.selection = vec![m[1]];
-    p.group_assign(3, false);
-    p.selection = vec![mcv];
-    p.group_assign(3, true);
-    p.selection = vec![m[2]];
-    p.group_assign(3, true);
+    // The base unit in group 3 with two others; selected with one of them.
+    p.selection = vec![m[1], mcv, m[2]];
+    p.make_group(3);
     p.selection = vec![m[1], mcv];
     step_until(&mut p, 10, |p| p.world().tick >= 4);
     p.key(KeyCommand::Deploy);
     step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
     let yard = own(&p, Kind::Building)[0];
     assert!(p.world().obj(mcv).is_none(), "the vehicle is gone");
-    // design: it takes the vehicle's place in the group's and the selection's order
-    assert_eq!(p.groups[3], vec![m[1], yard, m[2]]);
+    // spec: S-0214 claim 33 (membership passes on deploy; members in creation order); design: it takes the vehicle's place in the selection's order
+    assert_eq!(p.group(3), vec![m[1], m[2], yard]);
     assert_eq!(p.selection, vec![m[1], yard]);
     // spec: S-0111 claim 17 (key 3's group shows 3)
     assert_eq!(p.group_digits().get(&yard), Some(&3));
     // Recalling the group selects the building with the others.
     p.selection.clear();
-    p.group_recall(3);
+    p.select_group(3);
     assert!(p.selection.contains(&yard));
 }
 
@@ -1283,7 +1472,7 @@ fn a_pack_up_hands_the_control_group_and_the_selection_to_the_vehicle() {
     step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
     let yard = own(&p, Kind::Building)[0];
     p.selection = vec![yard];
-    p.group_assign(0, false);
+    p.make_group(0);
     // spec: S-0111 claim 17 (the tenth group, key 0, shows 0)
     assert_eq!(p.group_digits().get(&yard), Some(&0));
     let local = p.local;
@@ -1308,7 +1497,7 @@ fn a_pack_up_hands_the_control_group_and_the_selection_to_the_vehicle() {
         });
         true
     });
-    assert_eq!(p.groups[0], vec![vehicle]);
+    assert_eq!(p.group(0), vec![vehicle]);
     assert_eq!(p.selection, vec![vehicle]);
     assert_eq!(p.group_digits().get(&vehicle), Some(&0));
 }
@@ -1319,12 +1508,15 @@ fn a_pack_up_hands_the_control_group_and_the_selection_to_the_vehicle() {
 fn a_hand_over_keeps_the_order() {
     let (a, b, c, d) = (ObjectId(10), ObjectId(11), ObjectId(12), ObjectId(13));
     let mut selection = vec![a, b];
-    let mut groups: [Vec<ObjectId>; GROUPS] = Default::default();
-    groups[0] = vec![c, b];
+    let mark = GroupMark {
+        group: 0,
+        by: HouseId(0),
+    };
+    let mut groups = BTreeMap::from([(c, mark), (b, mark)]);
     converted(&mut selection, &mut groups, b, d);
     assert_eq!(selection, vec![a, d]);
-    assert_eq!(groups[0], vec![c, d]);
+    assert_eq!(groups, BTreeMap::from([(c, mark), (d, mark)]));
     converted(&mut selection, &mut groups, ObjectId(99), ObjectId(100));
     assert_eq!(selection, vec![a, d]);
-    assert_eq!(groups[0], vec![c, d]);
+    assert_eq!(groups, BTreeMap::from([(c, mark), (d, mark)]));
 }

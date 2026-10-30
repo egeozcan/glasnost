@@ -436,6 +436,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     keyboard::Key::Named(NamedKey::Space) => Some(Key::Space),
                     keyboard::Key::Named(NamedKey::PageUp) => Some(Key::PageUp),
                     keyboard::Key::Named(NamedKey::PageDown) => Some(Key::PageDown),
+                    keyboard::Key::Named(NamedKey::Delete) => Some(Key::Delete),
                     keyboard::Key::Named(NamedKey::Escape) => Some(Key::Escape),
                     keyboard::Key::Named(NamedKey::ArrowLeft) => Some(Key::Left),
                     keyboard::Key::Named(NamedKey::ArrowRight) => Some(Key::Right),

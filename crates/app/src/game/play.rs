@@ -94,22 +94,45 @@ pub enum Button {
 /// The number of control groups (S-0111 claim 17: groups 0 to 9).
 pub const GROUPS: usize = 10; // spec: S-0111 claim 17 (the local player's ten control groups)
 
+/// The control-group number an object carries (S-0214 claim 33), and
+/// the house whose *make group* gave it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GroupMark {
+    /// The group, 0 to 9 (digit 0 stands for group 10, S-0213 claim 22).
+    pub group: u8,
+    /// The house that made the group.
+    pub by: HouseId,
+}
+
 /// A deploy or pack-up replaced object `old` by `new` (S-0415 claims 6
 /// and 10): `new` takes over `old`'s control group and, when `old` was
 /// selected, its selection.
 pub fn converted(
     selection: &mut [ObjectId],
-    groups: &mut [Vec<ObjectId>; GROUPS],
+    groups: &mut BTreeMap<ObjectId, GroupMark>,
     old: ObjectId,
     new: ObjectId,
 ) {
-    // spec: S-0415 claim 6 (deploy) and claim 10 (pack-up): the new object takes over the old one's control group and its selection (a selected old object gives a selected new one)
-    // design: the new object takes the old one's place in the selection's order and in its group's order (Q-1988 keeps groups in joining order)
-    for x in selection.iter_mut().chain(groups.iter_mut().flatten()) {
+    // spec: S-0415 claim 6 (deploy) and claim 10 (pack-up), S-0214 claim 33 (membership passes on deploy and undeploy): the new object takes over the old one's control group and its selection (a selected old object gives a selected new one)
+    // design: the new object takes the old one's place in the selection's order
+    for x in selection.iter_mut() {
         if *x == old {
             *x = new;
         }
     }
+    if let Some(m) = groups.remove(&old) {
+        groups.insert(new, m);
+    }
+}
+
+/// The type-select reach (S-0214 Terms and claim 32).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Reach {
+    /// The screen candidates.
+    #[default]
+    Screen,
+    /// Every object in play.
+    Map,
 }
 
 /// The local player's game.
@@ -120,11 +143,15 @@ pub struct Play {
     pub local: HouseId,
     /// The selection, in selection order.
     pub selection: Vec<ObjectId>,
-    /// The local player's ten control groups, 0 to 9 (S-0111 claim 17
-    /// draws their numbers), each in the order its objects joined. Our
-    /// own keys make and select them (M8 A4 round 5, Q-1988); an object is
-    /// in one group at most.
-    pub groups: [Vec<ObjectId>; GROUPS],
+    /// The control-group number each object carries (S-0214 claim 33;
+    /// S-0111 claim 17 draws them): an object is in one group at most, and
+    /// the members of a group follow creation order. Interface state, not
+    /// hashed.
+    pub groups: BTreeMap<ObjectId, GroupMark>,
+    /// Whether an object was added to the selection, or the selection was
+    /// cleared, since the last type-select tap (S-0214 claim 32: the next
+    /// tap then sets the reach to *screen*).
+    pub sel_reset: bool,
     /// What a battlefield click does.
     pub tool: Tool,
     /// The sidebar tab asked for (S-0411 claim 2 picks the one shown).
@@ -212,7 +239,8 @@ impl Play {
             game,
             local,
             selection: Vec::new(),
-            groups: Default::default(),
+            groups: BTreeMap::new(),
+            sel_reset: false,
             tool: Tool::Select,
             tab: 0,
             scroll: 0,
@@ -434,9 +462,8 @@ impl Play {
             if let Effect::Bunkered { vehicle, .. } = *e {
                 // spec: S-0606 claim 7 (the vehicle leaves any control group it belonged to and is removed from the selection)
                 self.selection.retain(|&x| x != vehicle);
-                for g in &mut self.groups {
-                    g.retain(|&x| x != vehicle);
-                }
+                // spec: S-0214 claim 33 (a member leaves its group when a vehicle enters a tank bunker)
+                self.groups.remove(&vehicle);
             }
             if let Effect::Converted { old, new } = *e {
                 converted(&mut self.selection, &mut self.groups, old, new);
@@ -457,6 +484,9 @@ impl Play {
         self.captured_yard_cancels_placement();
         self.selection
             .retain(|&id| targeting::selectable_by(&self.game.world, id, local));
+        // spec: S-0214 claim 33 (an object leaves its group when it is destroyed and removed from play)
+        let w = &self.game.world;
+        self.groups.retain(|&id, _| w.obj(id).is_some());
         self.outcome = self.game.outcome();
         if let Some(o) = &self.outcome {
             let listed: Vec<HouseId> = o.results.iter().map(|r| r.0).collect();
@@ -602,7 +632,7 @@ impl Play {
                 self.apply_click(sel, on, mods);
             }
             // spec: S-0214 claim 26 (a right-button release without a scroll drag clears the selection in ordinary mode, over an object or the ground; it never gives an order)
-            (Tool::Select, Button::Right) => self.selection.clear(),
+            (Tool::Select, Button::Right) => self.clear_selection(),
         }
     }
 
@@ -705,6 +735,12 @@ impl Play {
         {
             self.selected.push(first);
         }
+        // spec: S-0214 claim 32 (an addition or a clearing makes the next tap set the reach to screen; a toggle that removes one object does not): select replaces the selection with the clicked object, so a new selection holding it is a clearing or an addition
+        if let (Some(new), ClickOn::Object(t)) = (&r.selection, on)
+            && new.contains(&t)
+        {
+            self.sel_reset = true;
+        }
         self.selection = r.selection.clone().unwrap_or_else(|| sel.clone());
         // spec: S-0701 claim 28 (rally point set: the local player's matching action, a building's guard-spot order of S-0213 claim 20)
         let w = &self.game.world;
@@ -744,13 +780,14 @@ impl Play {
             if w.rules().quirks.empty_box_release_click {
                 return true;
             }
-            self.selection.clear();
+            self.clear_selection();
             return false;
         }
         // spec: S-0214 claim 19 (without force-select a box with a live candidate clears the old selection, even when nothing in it is eligible; with force-select eligible objects are added, not toggled)
         if !force_select {
-            self.selection.clear();
+            self.clear_selection();
         }
+        let w = &self.game.world;
         let mut first = None;
         // spec: S-0214 claim 29 (successful additions keep the admitted candidate order of claim 25 restricted to the box and claim 19's eligibility, whether the box replaces or adds and whatever the drag direction; no reversal or re-sort at release)
         for &id in candidates {
@@ -762,23 +799,46 @@ impl Play {
         }
         // spec: S-0701 claim 17 and S-0214 claims 20 and 29 (only the earliest successful addition in candidate order speaks, not the eventual first selected object)
         self.selected.extend(first);
+        // spec: S-0214 claim 32 (a band box's addition makes the next tap set the reach to screen)
+        self.sel_reset |= first.is_some();
         false
     }
 
-    /// Type selection (S-0214 claim 12): every object of `pool` whose
-    /// type is one of `seeds`' types joins the selection, or with `remove`
-    /// leaves it. Types are taken in the order of their first seed and,
-    /// within a type, objects in `pool`'s order (claim 29: the on-screen
-    /// candidate order, or creation order across the map); each addition
-    /// follows claim 12's front/end rule. Silent (S-0701 claim 17).
-    ///
-    /// design: a type counts only with the seed's owner, so that clicking
-    /// an own tank does not take an ally's tanks of the same type; asked
-    /// in Q-1987.
-    pub fn expand_types(&mut self, seeds: &[ObjectId], pool: &[ObjectId], remove: bool) {
+    /// Clears the selection; the next type-select tap sets the reach to
+    /// *screen* (S-0214 claim 32: every clearing counts, even of an empty
+    /// selection).
+    pub fn clear_selection(&mut self) {
+        self.selection.clear();
+        self.sel_reset = true;
+    }
+
+    /// Adds `id` to the selection by S-0214 claim 12's front/end rule,
+    /// unless it is selected already. Returns whether it was added; an
+    /// addition makes the next type-select tap set the reach to *screen*
+    /// (claim 32).
+    fn add_selected(&mut self, id: ObjectId) -> bool {
+        if self.selection.contains(&id) {
+            return false;
+        }
+        // spec: S-0214 claim 12 (positive-primary-damage objects at the front, the others at the end) and claim 29 (already-selected objects are not added again or repositioned)
+        targeting::add_to_selection(&self.game.world, &mut self.selection, id);
+        // spec: S-0214 claim 32 (every addition counts, whatever makes it)
+        self.sel_reset = true;
+        true
+    }
+
+    /// The type-select role's expansion (S-0214 claims 12, 29 and 32):
+    /// every own object of `pool` that can be selected and whose type is
+    /// one of `seeds`' types joins the selection, or with `remove` every
+    /// selected own one of those types leaves it. Types are taken in the
+    /// order of their first seed and, within a type, objects in `pool`'s
+    /// order (the screen candidates' order, or creation order across the
+    /// map); each addition follows claim 12's front/end rule. Silent
+    /// (S-0701 claim 17). Returns whether an object was added.
+    pub fn expand_types(&mut self, seeds: &[ObjectId], pool: &[ObjectId], remove: bool) -> bool {
         let w = &self.game.world;
-        let local = Some(self.local);
-        let key = |id: ObjectId| w.obj(id).map(|o| (o.kind, o.type_index, o.owner));
+        let local = self.local;
+        let key = |id: ObjectId| w.obj(id).map(|o| (o.kind, o.type_index));
         let mut types = Vec::new();
         for &id in seeds {
             if let Some(k) = key(id)
@@ -787,91 +847,255 @@ impl Play {
                 types.push(k);
             }
         }
+        let mut take = Vec::new();
         for k in types {
             for &id in pool {
-                if key(id) != Some(k) {
-                    continue;
+                // spec: S-0214 claim 32 (the role only ever takes the acting house's own objects; exactly the clicked object's type; a held click asks only can be selected)
+                if key(id) == Some(k)
+                    && w.obj(id).is_some_and(|o| o.owner == Some(local))
+                    && (remove || targeting::selectable_by(w, id, Some(local)))
+                    && !take.contains(&id)
+                {
+                    take.push(id);
                 }
-                if remove {
-                    // spec: S-0214 claim 12 (removing an object keeps the others' order)
-                    self.selection.retain(|&x| x != id);
-                } else if targeting::selectable_by(w, id, local) {
-                    // spec: S-0214 claim 12 (positive-primary-damage objects at the front, the others at the end) and claim 29 (already-selected objects are not added again or repositioned)
-                    targeting::add_to_selection(w, &mut self.selection, id);
-                }
+            }
+        }
+        let mut added = false;
+        for id in take {
+            if remove {
+                // spec: S-0214 claim 12 (removing an object keeps the others' order)
+                self.selection.retain(|&x| x != id);
+            } else {
+                added |= self.add_selected(id);
+            }
+        }
+        added
+    }
+
+    /// A type-select tap (S-0214 claim 32) with the reach `reach` and the
+    /// screen candidates `screen` in candidate order. Returns the reach the
+    /// tap leaves. The caller has already decided that the release is a
+    /// tap and that the reach is kept or set to *screen*.
+    pub fn type_tap(&mut self, screen: &[ObjectId], reach: Reach) -> Reach {
+        let local = self.local;
+        let own = |w: &World, id: ObjectId| w.obj(id).is_some_and(|o| o.owner == Some(local));
+        // spec: S-0214 claim 32 (if the selection is a single object that is not own, the tap first removes it)
+        if let [only] = self.selection[..]
+            && !own(&self.game.world, only)
+        {
+            self.selection.clear();
+        }
+        let w = &self.game.world;
+        let types = targeting::tap_types(w, &self.selection);
+        let candidate =
+            |sel: &[ObjectId], id: ObjectId| targeting::tap_candidate(w, local, sel, &types, id);
+        let on_screen: Vec<ObjectId> = screen
+            .iter()
+            .copied()
+            .filter(|&id| candidate(&self.selection, id))
+            .collect();
+        let (reach, take) = if reach == Reach::Screen && !on_screen.is_empty() {
+            // spec: S-0214 claim 32 (with reach screen and an unselected screen candidate of the tap, add every such screen candidate in candidate order, whatever their types; the reach stays screen)
+            (Reach::Screen, on_screen)
+        } else {
+            // spec: S-0214 claim 32 (otherwise the reach becomes map: every candidate of the tap in play, in creation order among surviving objects)
+            let all = w
+                .objects
+                .keys()
+                .copied()
+                .filter(|&id| candidate(&self.selection, id))
+                .collect();
+            (Reach::Map, all)
+        };
+        let mut first = None;
+        for id in take {
+            if self.add_selected(id) {
+                first = first.or(Some(id));
+            }
+        }
+        // spec: S-0214 claim 32 (DECIDED: one selection response, that of the first object the tap adds, none if it adds nothing; S-0701 claim 17)
+        self.selected.extend(first);
+        // spec: S-0214 claim 32 (the tap's message: nothing selected for an empty selection, else across the screen or across the map by the reach; Import mapping MSG:NothingSelected, MSG:SelAcrossScreen, MSG:SelAcrossMap)
+        let key = if self.selection.is_empty() {
+            "MSG:NothingSelected"
+        } else if reach == Reach::Screen {
+            "MSG:SelAcrossScreen"
+        } else {
+            "MSG:SelAcrossMap"
+        };
+        self.notice(key);
+        // spec: S-0214 claim 32 (the reach is kept to the next tap only when nothing was added or cleared since this one)
+        self.sel_reset = false;
+        reach
+    }
+
+    /// A message by string-table label (S-0213 and S-0214 Import mapping).
+    /// Our client loads no string table yet, so the line names the label,
+    /// the missing-entry diagnostic those mappings give (seam).
+    pub fn notice(&mut self, label: &str) {
+        self.say(label);
+    }
+
+    /// The members of control group `g` (S-0214 Terms and claim 33):
+    /// objects carrying its number that the local player owns now and that
+    /// are on the map, in creation order. Under
+    /// `quirks.group_kept_on_owner_change` off, only the local player's own
+    /// marks count.
+    pub fn group(&self, g: usize) -> Vec<ObjectId> {
+        let w = &self.game.world;
+        let local = self.local;
+        let kept = w.rules().quirks.group_kept_on_owner_change;
+        self.groups
+            .iter()
+            .filter(|(_, m)| usize::from(m.group) == g)
+            // spec: S-0214 Edge cases (quirks.group_kept_on_owner_change: on, the number stays with the object whichever house gave it; off, a group belongs to the house that made it)
+            .filter(|(_, m)| kept || m.by == local)
+            .map(|(&id, _)| id)
+            // spec: S-0214 Terms (a member is the local player's own at that moment and on the map: not carried and not inside a building)
+            .filter(|&id| {
+                w.obj(id)
+                    .is_some_and(|o| o.owner == Some(local) && o.on_map)
+            })
+            .collect()
+    }
+
+    /// *Make group* `g` (S-0214 claim 33): every own object in the group
+    /// leaves it, then every selected own object joins it and leaves any
+    /// other group. Neither the selection nor the type-select reach
+    /// changes; no mode ends.
+    pub fn make_group(&mut self, g: usize) {
+        let Ok(n) = u8::try_from(g) else { return };
+        if g >= GROUPS {
+            return;
+        }
+        let w = &self.game.world;
+        let local = self.local;
+        let own = |id: ObjectId| w.obj(id).is_some_and(|o| o.owner == Some(local));
+        if w.rules().quirks.group_kept_on_owner_change {
+            // spec: S-0214 claim 33 (every own object in group N leaves it; objects of other houses that carry the number keep it)
+            self.groups.retain(|&id, m| m.group != n || !own(id));
+        } else {
+            // spec: S-0214 Edge cases (quirks.group_kept_on_owner_change off: make group by that house removes its earlier members wherever they are)
+            self.groups.retain(|_, m| m.group != n || m.by != local);
+        }
+        // spec: S-0214 claim 33 (every selected own object joins group N and leaves any other group; infantry, vehicles, aircraft and buildings can all join)
+        for &id in &self.selection {
+            if own(id) {
+                self.groups.insert(
+                    id,
+                    GroupMark {
+                        group: n,
+                        by: local,
+                    },
+                );
             }
         }
     }
 
-    /// Makes control group `g` of the selection's own objects (`add`
-    /// false), or adds them to it (`add` true); each leaves any other
-    /// group (our design, Q-1988).
-    pub fn group_assign(&mut self, g: usize, add: bool) {
-        let Some(_) = self.groups.get(g) else {
-            return;
-        };
+    /// Ends sell, repair and power mode before *select group*, *add group*
+    /// and *centre group* (S-0214 claim 33). Superweapon targeting and
+    /// building placement stay.
+    fn end_group_modes(&mut self) {
+        // spec: S-0214 claim 33 (select, add and centre group end sell, repair and power mode; no group command ends superweapon targeting or a building's placement)
+        if matches!(self.tool, Tool::Mode(_)) {
+            self.tool = Tool::Select;
+        }
+    }
+
+    /// Adds the members of group `g` that can be selected and are not
+    /// selected yet, in creation order; the first that joins gives the
+    /// only selection response (S-0214 claim 33). Returns whether one was
+    /// added.
+    fn add_members(&mut self, g: usize) -> bool {
         let w = &self.game.world;
-        let own: Vec<ObjectId> = self
-            .selection
-            .iter()
-            .copied()
-            .filter(|&id| w.obj(id).is_some_and(|o| o.owner == Some(self.local)))
+        let local = Some(self.local);
+        let members: Vec<ObjectId> = self
+            .group(g)
+            .into_iter()
+            .filter(|&id| targeting::selectable_by(w, id, local))
             .collect();
-        if !add {
-            self.groups[g].clear();
-        }
-        for (i, group) in self.groups.iter_mut().enumerate() {
-            if i != g {
-                group.retain(|id| !own.contains(id));
+        let local = self.local;
+        let mut first = None;
+        for id in members {
+            // spec: S-0214 claim 33 (add group: when the selection holds another house's object, the first member added replaces it, by the owner rule of toggle select, claim 12)
+            if first.is_none()
+                && !self.selection.contains(&id)
+                && self.selection.first().is_some_and(|&f| {
+                    self.game
+                        .world
+                        .obj(f)
+                        .is_none_or(|o| o.owner != Some(local))
+                })
+            {
+                self.clear_selection();
+            }
+            if self.add_selected(id) {
+                first = first.or(Some(id));
             }
         }
-        for id in own {
-            if !self.groups[g].contains(&id) {
-                self.groups[g].push(id);
-            }
+        // spec: S-0214 claim 33 and S-0701 claim 17 (the first member that becomes selected gives the only selection response)
+        self.selected.extend(first);
+        first.is_some()
+    }
+
+    /// *Select group* `g` that is not a repeat (S-0214 claim 33): ends the
+    /// modes, clears the selection, even for an empty group, and adds the
+    /// members.
+    pub fn select_group(&mut self, g: usize) {
+        self.end_group_modes();
+        // spec: S-0214 claim 33 (the selection is cleared, and then every member that can be selected is added, in creation order; a group with no member leaves the selection empty)
+        self.clear_selection();
+        self.add_members(g);
+    }
+
+    /// *Add group* `g` (S-0214 claim 33): as *select group* without the
+    /// clearing.
+    pub fn add_group(&mut self, g: usize) {
+        self.end_group_modes();
+        // spec: S-0214 claim 33 (as select group, but the selection is not cleared first; members already selected keep their places)
+        self.add_members(g);
+    }
+
+    /// *Centre group* `g` (S-0214 claim 33): the selection becomes the
+    /// group's, and the group centre point of F9 over it is returned for
+    /// the view, `None` when the selection is then empty.
+    pub fn centre_group(&mut self, g: usize) -> Option<(i32, i32, i32)> {
+        self.end_group_modes();
+        let members = self.group(g);
+        let first_in = self.selection.first().is_some_and(|f| members.contains(f));
+        // spec: S-0214 claim 33 (if the first selected object is not in group N, the selection is cleared) and Edge cases (quirks.group_center_keeps_extra_selection: on, when it is, the rest of the selection stays; off, the selection is replaced by the group's members)
+        if !first_in
+            || !self
+                .game
+                .world
+                .rules()
+                .quirks
+                .group_center_keeps_extra_selection
+        {
+            self.clear_selection();
         }
+        // spec: S-0214 claim 33 (every member not yet selected is added as by select group)
+        self.add_members(g);
+        self.selection_centre()
+    }
+
+    /// The group centre point of F9 over the selection, `None` when it is
+    /// empty (S-0214 claim 33: the view then stays where it was).
+    pub fn selection_centre(&self) -> Option<(i32, i32, i32)> {
+        // spec: S-0214 claim 33 and F9 (the view is centred on the group centre point over the selected objects)
+        targeting::group_centre(&self.game.world, &self.selection)
     }
 
     /// The digit each member of the control groups shows (S-0111 claim
-    /// 17), for the drawing. Only the local player's own objects count:
-    /// one that changed owner is still listed until the group is next
-    /// selected, and the drawing's pip-scale test (claim 9) decides the rest.
+    /// 17), for the drawing: only the local player's own members.
     pub fn group_digits(&self) -> BTreeMap<ObjectId, u8> {
-        let w = &self.game.world;
         let mut out = BTreeMap::new();
-        for (i, group) in self.groups.iter().enumerate() {
-            for &id in group {
-                if w.obj(id).is_some_and(|o| o.owner == Some(self.local)) {
-                    out.insert(id, crate::mapview::combat::group_digit(i));
-                }
+        for g in 0..GROUPS {
+            for id in self.group(g) {
+                out.insert(id, crate::mapview::combat::group_digit(g));
             }
         }
         out
-    }
-
-    /// Selects control group `g`: its own objects that can still be
-    /// selected replace the selection, each added by S-0214 claim 12's
-    /// rule, and the first to join speaks (S-0701 claim 17). Returns the
-    /// selection's first object; an empty group leaves the selection.
-    pub fn group_recall(&mut self, g: usize) -> Option<ObjectId> {
-        let w = &self.game.world;
-        let local = self.local;
-        let group = self.groups.get_mut(g)?;
-        group.retain(|&id| w.obj(id).is_some_and(|o| o.owner == Some(local)));
-        let members: Vec<ObjectId> = group
-            .iter()
-            .copied()
-            .filter(|&id| targeting::selectable_by(w, id, Some(local)))
-            .collect();
-        let &first = members.first()?;
-        self.selection.clear();
-        for id in members {
-            // spec: S-0214 claim 12 (the selection order of an addition)
-            targeting::add_to_selection(w, &mut self.selection, id);
-        }
-        // spec: S-0701 claim 17 (the first object the input selects speaks)
-        self.selected.push(first);
-        self.selection.first().copied()
     }
 
     /// A key command for the selection (S-0213 table T2).
@@ -1024,13 +1248,9 @@ impl Play {
                             sw,
                             from_source: false,
                         };
-                        // design: arming from the icon clears the selection,
-                        // so the next battlefield click aims the superweapon
-                        // instead of acting for the units (S-0513 claim 1's
-                        // precedence then never hides the aim). Whether the
-                        // original clears it is asked in Q-1985 (M8 A4
-                        // round 5, note 27).
-                        self.selection.clear();
+                        // spec: S-0512 claim 25 (selecting an icon that offers targeting and has an aim action empties the selection in that same input and arms the type; arming ends building placement, sell, repair and power mode, the building awaiting placement staying ready in its strip)
+                        self.clear_selection();
+                        // Seam (Q-2140): the select-target announcement has no identifier in S-0512's Import mapping, so none is made.
                     }
                 }
                 return;

@@ -38,7 +38,7 @@ use glasnost_vfs::{FileRef, Vfs};
 use super::band;
 use super::cursor::{self, Offer};
 use super::paint::Painter;
-use super::play::{Button, Play, Tool, local_house};
+use super::play::{Button, GROUPS, Play, Reach, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
 use super::status_font;
 use crate::mapview::build::{self, GameMode, Inputs, Options};
@@ -155,6 +155,8 @@ pub struct Session {
     pub mods: Modifiers,
     /// The type-select role's key (S-0214 claim 12).
     type_select: TypeSelect,
+    /// Route mode's key and point selection (S-0213 claims 16 and 16e).
+    route: RouteMode,
     /// The last control group selected and when, for the double press
     /// that goes to it.
     last_group: Option<(usize, i64)>,
@@ -453,6 +455,7 @@ impl Session {
             cursor_shown: None,
             mods: Modifiers::default(),
             type_select: TypeSelect::default(),
+            route: RouteMode::default(),
             last_group: None,
             clock_ms: 0,
             house_colours,
@@ -1089,30 +1092,47 @@ impl Session {
                     } else {
                         Vec::new()
                     };
-                    let pool = self.type_pool(self.type_select.wide);
+                    // spec: S-0214 claims 29 and 32 (the drag reads the reach the last tap left and does not change it)
+                    let pool = self.type_pool(self.type_select.reach == Reach::Map);
                     self.play.expand_types(&seeds, &pool, false);
                 }
             }
+            Some(HudHit::Map)
+                if !dragged
+                    && self.route.held
+                    && b == Button::Left
+                    && self.play.tool == Tool::Select =>
+            {
+                let (cell, object) = self.under(p);
+                self.route_click(object, cell, mods);
+            }
             Some(HudHit::Map) if !dragged => {
                 let (cell, object) = self.under(p);
-                let typed = self.type_select_click(b, object, cell, mods);
-                let before = self.play.selection.clone();
-                self.play.click_map(b, object, cell, mods);
-                if let Some((t, replace)) = typed {
-                    let (was, now) = (before.contains(&t), self.play.selection.contains(&t));
-                    // spec: S-0214 claim 12 (while the type-select role is held, select and toggle select act on every object of the clicked object's type on the screen, or across the map after a double press: select replaces the selection with them, toggle select adds or removes them)
-                    if now {
-                        // A toggle that acted as select (claim 12) replaced it too.
-                        let kept = before.iter().all(|x| self.play.selection.contains(x));
-                        self.play.selection = if replace || !kept { Vec::new() } else { before };
-                    }
-                    if now || was {
-                        let mut pool = self.type_pool(self.type_select.wide);
-                        if !pool.contains(&t) {
-                            pool.insert(0, t);
+                if b == Button::Right {
+                    // spec: S-0213 claim 16e (a short right-click clears the point selection)
+                    self.route.point = None;
+                }
+                match self.type_select_click(b, object, cell, mods) {
+                    Some((t, held)) => {
+                        // spec: S-0214 claims 12 and 32 (with the role held, select and toggle select act on the clicked object's type as a whole within the reach the last tap left; silent, and the reach is not changed)
+                        let pool = self.type_pool(self.type_select.reach == Reach::Map);
+                        match held {
+                            HeldClick::Select => {
+                                // spec: S-0214 claim 32 (select clears the selection, then adds every own object of exactly the clicked object's type that can be selected within the reach; the clicked object joins only if it is own)
+                                self.play.clear_selection();
+                                self.play.expand_types(&[t], &pool, false);
+                            }
+                            HeldClick::Add => {
+                                // spec: S-0214 claim 32 (toggle select on an unselected object makes the same additions and keeps the selection)
+                                self.play.expand_types(&[t], &pool, false);
+                            }
+                            HeldClick::Remove => {
+                                // spec: S-0214 claim 32 (toggle select on a selected object removes every selected own object of that type within the reach; with reach screen, selected ones off the screen stay)
+                                self.play.expand_types(&[t], &pool, true);
+                            }
                         }
-                        self.play.expand_types(&[t], &pool, was && !now);
                     }
+                    None => self.play.click_map(b, object, cell, mods),
                 }
                 self.show_markers();
             }
@@ -1140,18 +1160,16 @@ impl Session {
         SessionEvent::None
     }
 
-    /// The clicked object of a left click whose action is *select*,
-    /// *toggle select* or *nothing* (an object clicked that the selection
-    /// already holds) while the type-select role is held, and whether the
-    /// type replaces the selection (*select*) rather than joining it
-    /// (S-0214 claim 12).
+    /// The clicked object of a left click whose action is *select* or
+    /// *toggle select* while the type-select role is held, and what the
+    /// held click does (S-0214 claims 12 and 32).
     fn type_select_click(
         &self,
         b: Button,
         object: Option<ObjectId>,
         cell: CellXY,
         mods: Modifiers,
-    ) -> Option<(ObjectId, bool)> {
+    ) -> Option<(ObjectId, HeldClick)> {
         if b != Button::Left || !self.type_select.held || self.play.tool != Tool::Select {
             return None;
         }
@@ -1160,9 +1178,17 @@ impl Session {
             return None;
         };
         let w = &self.play.game.world;
-        match targeting::cursor(w, self.play.local, &self.play.selection, on, mods) {
-            targeting::Action::Select => Some((t, true)),
-            targeting::Action::ToggleSelect | targeting::Action::Nothing => Some((t, false)),
+        let local = self.play.local;
+        let sel = &self.play.selection;
+        // spec: S-0214 claim 12 (toggle select acts only when the first selected object is the acting house's own, and otherwise acts as select)
+        let first_own = sel
+            .first()
+            .is_some_and(|&f| w.obj(f).is_some_and(|o| o.owner == Some(local)));
+        match targeting::cursor(w, local, sel, on, mods) {
+            targeting::Action::Select => Some((t, HeldClick::Select)),
+            targeting::Action::ToggleSelect if !first_own => Some((t, HeldClick::Select)),
+            targeting::Action::ToggleSelect if sel.contains(&t) => Some((t, HeldClick::Remove)),
+            targeting::Action::ToggleSelect => Some((t, HeldClick::Add)),
             _ => None,
         }
     }
@@ -1472,75 +1498,210 @@ impl Session {
         }
     }
 
-    /// The type-select role's key went down or up (S-0214 claim 12). A
-    /// press that comes at most 500 whole milliseconds after the one
-    /// before widens the role to the whole map while it is held. A press
-    /// alone also selects every object of the selection's types, on the
-    /// screen or across the map (scenario T2; our reading, Q-1987).
-    /// A key repeat while held is no new press.
+    /// The type-select role's key went down or up (S-0214 claim 32).
+    /// A release at most [`TYPE_SELECT_TAP_MS`] after the press is a tap;
+    /// a key repeat while held is no new press.
     pub fn type_select_key(&mut self, down: bool) {
-        if !down {
-            self.type_select.held = false;
-            return;
-        }
-        if self.type_select.held || self.paused {
-            return;
-        }
         let now = self.clock_ms;
-        // spec: S-0214 claim 12 and Constants (the second press counts when its time minus the first press's time is at most 500 whole milliseconds; our interface's input clock, Edge cases)
-        let wide = self
-            .type_select
-            .last
-            .is_some_and(|t| (0..=TYPE_SELECT_DOUBLE_MS).contains(&(now - t)));
-        self.type_select = TypeSelect {
-            held: true,
-            wide,
-            last: Some(now),
-        };
-        let seeds = self.play.selection.clone();
-        if !seeds.is_empty() {
-            let pool = self.type_pool(wide);
-            self.play.expand_types(&seeds, &pool, false);
+        if down {
+            // spec: S-0214 claim 32 (the press time is that of the first press: a key's automatic repeat while it is held does not restart it)
+            if self.type_select.held || self.paused {
+                return;
+            }
+            self.type_select.held = true;
+            self.type_select.pressed = now;
+            return;
         }
+        if !self.type_select.held {
+            return;
+        }
+        self.type_select.held = false;
+        // spec: S-0214 claim 32 and Constants (a tap: release time minus press time, whole milliseconds, at most 500; a longer hold does nothing at its release; after the acting player's defeat a tap does nothing)
+        let tap = (0..=TYPE_SELECT_TAP_MS).contains(&(now - self.type_select.pressed));
+        if !tap || self.paused || victory::defeated(&self.play.game.world, self.play.local) {
+            return;
+        }
+        // spec: S-0214 claim 32 (a tap keeps the reach only when nothing was added to the selection and it was not cleared since the last tap; otherwise it first sets it to screen)
+        if self.play.sel_reset {
+            self.type_select.reach = Reach::Screen;
+        }
+        let screen: Vec<ObjectId> = if self.type_select.reach == Reach::Screen {
+            self.screen_candidates()
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        self.type_select.reach = self.play.type_tap(&screen, self.type_select.reach);
     }
 
-    /// Whether the type-select role is held (S-0214 claim 12).
+    /// The type-select role's key is let go without a release, as when
+    /// the window loses the focus: no tap (our design; the release may
+    /// never come).
+    pub fn type_select_cancel(&mut self) {
+        self.type_select.held = false;
+    }
+
+    /// Whether the type-select role is held (S-0214 claim 32).
     pub fn type_select_held(&self) -> bool {
         self.type_select.held
     }
 
-    /// A control-group key (our design, Q-1988): with force-fire (Ctrl)
-    /// it makes group `g` of the selection, with force-select (Shift) it
-    /// adds the selection to it, and alone it selects the group; selecting
-    /// the same group twice within [`GROUP_DOUBLE_MS`] also centres the
-    /// view on its first object.
-    pub fn group_key(&mut self, g: usize, mods: Modifiers) {
-        if self.paused {
-            return;
-        }
-        if mods.force_fire || mods.force_select {
-            self.play.group_assign(g, !mods.force_fire);
-            self.last_group = None;
+    /// The type-select reach as the last tap left it (S-0214 claim 32).
+    pub fn type_select_reach(&self) -> Reach {
+        self.type_select.reach
+    }
+
+    /// A control-group key press (S-0214 claim 33) for group `g`.
+    pub fn group_key(&mut self, g: usize, cmd: GroupCommand) {
+        // spec: S-0214 claim 33 (while the options menu is open the group keys do nothing)
+        if self.paused || g >= GROUPS {
             return;
         }
         let now = self.clock_ms;
-        let again = self
-            .last_group
-            .is_some_and(|(h, t)| h == g && (0..=GROUP_DOUBLE_MS).contains(&(now - t)));
-        self.last_group = Some((g, now));
-        if let Some(first) = self.play.group_recall(g)
-            && again
-            && let Some(o) = self.play.game.world.obj(first)
-        {
-            let (x, y, z) = (o.pos.x, o.pos.y, o.pos.z);
+        let centre = match cmd {
+            GroupCommand::Make => {
+                // spec: S-0214 claim 33 (make group ends no mode and neither starts nor restarts the 800 ms)
+                self.play.make_group(g);
+                None
+            }
+            GroupCommand::Add => {
+                self.play.add_group(g);
+                None
+            }
+            GroupCommand::Centre => self.play.centre_group(g),
+            GroupCommand::Select => {
+                let members = self.play.group(g);
+                let local = self.play.local;
+                let w = &self.play.game.world;
+                let mut own: Vec<ObjectId> = self
+                    .play
+                    .selection
+                    .iter()
+                    .copied()
+                    .filter(|&id| w.obj(id).is_some_and(|o| o.owner == Some(local)))
+                    .collect();
+                own.sort();
+                // spec: S-0214 claim 33 (a repeat: the last select-group press that was not a repeat was for group N, came less than 800 ms before, and the selection's own objects are exactly the members)
+                let repeat = self
+                    .last_group
+                    .is_some_and(|(h, t)| h == g && (0..GROUP_REPEAT_MS).contains(&(now - t)))
+                    && own == members;
+                if repeat {
+                    // spec: S-0214 claim 33 (a repeat leaves the selection as it is, centres the view as centre group does and does not restart the 800 ms)
+                    self.play.selection_centre()
+                } else {
+                    self.last_group = Some((g, now));
+                    self.play.select_group(g);
+                    None
+                }
+            }
+        };
+        // spec: S-0214 claim 33 and F9 (the view is centred on the group centre point; when the selection is empty the view stays)
+        if let Some((x, y, z)) = centre {
             self.set_centre(project_lifted(x, y, z));
         }
     }
 
     /// A key command (S-0213 table T2).
     pub fn key(&mut self, cmd: KeyCommand) {
-        if !self.paused {
-            self.play.key(cmd);
+        if self.paused {
+            return;
+        }
+        if self.route.held {
+            // spec: S-0213 table T2 (while route mode is held, guard, stop, scatter and deploy issue no orders and add no route point; each is refused with its own message and a sound)
+            let m = match cmd {
+                KeyCommand::Guard => "MSG:PlanningModeNoGuardArea",
+                KeyCommand::Stop => "MSG:PlanningModeNoStop",
+                KeyCommand::Scatter => "MSG:PlanningModeNoScatter",
+                KeyCommand::Deploy => "MSG:PlanningModeNoDeploy",
+            };
+            self.route_refused(m);
+            return;
+        }
+        self.play.key(cmd);
+    }
+
+    /// The route-mode key went down or up (S-0213 claims 16 and 22):
+    /// held, clicks build routes; released, the routes are committed.
+    pub fn route_key(&mut self, down: bool) {
+        if down {
+            if !self.paused {
+                self.route.held = true;
+            }
+            return;
+        }
+        if !self.route.held {
+            return;
+        }
+        self.route.held = false;
+        // spec: S-0213 claim 16a (releasing the key sends one commit order for the local player's house)
+        self.play
+            .issue(vec![glasnost_sim::orders::Order::RouteCommit]);
+    }
+
+    /// Whether the route-mode key is held (S-0213 claim 16).
+    pub fn route_held(&self) -> bool {
+        self.route.held
+    }
+
+    /// The selected route point (S-0213 claim 16e).
+    pub fn route_point(&self) -> Option<u32> {
+        self.route.point
+    }
+
+    /// The delete key (S-0213 claim 16e): a point-delete order for the
+    /// selected route point.
+    pub fn delete_key(&mut self) {
+        if self.paused {
+            return;
+        }
+        if let Some(point) = self.route.point.take() {
+            // spec: S-0213 claim 16e (the delete key sends a point-delete order for the selected point)
+            self.play
+                .issue(vec![glasnost_sim::orders::Order::RouteDelete { point }]);
+        }
+    }
+
+    /// A route-mode refusal (S-0213 claim 16): its message and the
+    /// game-wide refusal sound, one shared cue per tick.
+    fn route_refused(&mut self, label: &str) {
+        let tick = self.play.game.world.tick;
+        // spec: S-0213 claim 16 and S-0701 claim 24 (refusal notices before the next tick completes share one message-and-sound cue; a completed tick permits a new one)
+        if self.route.cue_tick == Some(tick) {
+            return;
+        }
+        self.route.cue_tick = Some(tick);
+        self.play.notice(label);
+        self.play.cues.push(glasnost_audio::events::UiCue::StripEnd);
+    }
+
+    /// A left click on the battlefield in route mode (S-0213 claims 16 to
+    /// 16e).
+    fn route_click(&mut self, object: Option<ObjectId>, cell: CellXY, mods: Modifiers) {
+        let on = self.play.target(object, cell);
+        let w = &self.play.game.world;
+        let sel = self.play.selection.clone();
+        match glasnost_sim::routes::click(w, self.play.local, &sel, on, cell, mods) {
+            glasnost_sim::routes::RouteClick::Orders(o) => {
+                self.play.issue(o);
+            }
+            glasnost_sim::routes::RouteClick::Refused(m) => self.route_refused(m),
+            glasnost_sim::routes::RouteClick::SelectPoint(p) => {
+                self.route.point = Some(p);
+                // spec: S-0213 claim 16e (selecting a point shows an information message)
+                self.play.notice("MSG:PlanningModeDeleteHelp");
+            }
+            glasnost_sim::routes::RouteClick::Ignored => {}
+            glasnost_sim::routes::RouteClick::Ordinary => {
+                let before = self.play.selection.clone();
+                self.play.click_map(Button::Left, object, cell, mods);
+                // spec: S-0213 claim 16e (selecting any object clears the point selection)
+                if self.play.selection.iter().any(|id| !before.contains(id)) {
+                    self.route.point = None;
+                }
+            }
         }
     }
 
@@ -1713,8 +1874,15 @@ impl Session {
                 } else if targeting::shows_attack_move(w, local, sel, on, mods) {
                     Offer::AttackMove
                 } else {
+                    let action = targeting::cursor(w, local, sel, on, mods);
+                    // spec: S-0214 table VD row VD1, table I rows v2 and I22 (route mode held: no-deploy)
+                    let action = if self.route.held {
+                        targeting::in_route_mode(action)
+                    } else {
+                        action
+                    };
                     Offer::Action {
-                        action: targeting::cursor(w, local, sel, on, mods),
+                        action,
                         in_range: targeting::attack_cursor_in_range(w, sel, on),
                         shroud_moves: targeting::first_may_move_into_shroud(w, sel),
                     }
@@ -1863,6 +2031,45 @@ impl Session {
             let (tx, ty) = cell_top(c.x, c.y);
             let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
             diamond(&mut d, sx, sy, AIM_INK, m);
+        }
+        if self.route.held {
+            // spec: S-0213 claim 16g (route points and the routes through them are drawn only while the viewer holds the route-mode key, for the viewer's own house and allied houses; each point with a marker, each holder's route as lines from the holder through its points); design: their look is ours (not studied)
+            let w = &self.play.game.world;
+            let local = self.play.local;
+            let at_cell = |c: CellXY| {
+                let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+                let (qx, qy) = project_lifted(256 * c.x + 128, 256 * c.y + 128, 0);
+                world_to_screen(qx, qy - TERRAIN_LIFT * level)
+            };
+            for (id, cells) in glasnost_sim::routes::drawn(w, local) {
+                let Some(o) = w.obj(id) else { continue };
+                let (qx, qy) = project_lifted(o.pos.x, o.pos.y, o.pos.z);
+                let mut prev = world_to_screen(qx, qy);
+                for c in cells {
+                    let next = at_cell(c);
+                    if m.contains(Point::new(prev.0, prev.1))
+                        && m.contains(Point::new(next.0, next.1))
+                    {
+                        d.line(prev, next, ROUTE_INK);
+                    }
+                    prev = next;
+                }
+            }
+            for (&n, p) in &w.routes.points {
+                if p.house != local && !w.allied(Some(local), Some(p.house)) {
+                    continue;
+                }
+                let c = glasnost_sim::routes::point_cell(w, p);
+                let (tx, ty) = cell_top(c.x, c.y);
+                let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+                let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
+                let ink = if self.route.point == Some(n) {
+                    ROUTE_SELECTED_INK
+                } else {
+                    ROUTE_POINT_INK
+                };
+                diamond(&mut d, sx, sy, ink, m);
+            }
         }
         if let Some(cell) = at
             && let Some((cells, ok)) = self.play.preview(cell)
@@ -2155,22 +2362,66 @@ const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
 /// The keyboard cell's mark (our own; the interface's focus colour, veiled).
 // nocite: our own client setting (keyboard aiming)
 const AIM_INK: [u8; 4] = [96, 208, 255, 90];
-/// The type-select double press's longest gap, whole milliseconds.
-const TYPE_SELECT_DOUBLE_MS: i64 = 500; // spec: S-0214 Constants (type-select double press: 500 milliseconds, inclusive)
-/// The longest gap between two presses of a control-group key that go to
-/// the group, milliseconds (our own).
-// nocite: our own client setting (control groups), the same gap as S-0214's type-select double press
-pub const GROUP_DOUBLE_MS: i64 = 500;
+/// The type-select tap limit: the longest hold that is a tap, whole
+/// milliseconds.
+pub const TYPE_SELECT_TAP_MS: i64 = 500; // spec: S-0214 Constants (type-select tap limit: 500 milliseconds; a release at most 500 after the press is a tap)
+/// The group repeat interval: a *select group* press less than this after
+/// the last one that selected the group can be a repeat, milliseconds.
+pub const GROUP_REPEAT_MS: i64 = 800; // spec: S-0214 Constants (group repeat interval: 800 milliseconds of real time, less than counts)
 
-/// The type-select role's key (S-0214 claim 12): whether it is held,
-/// whether the press that holds it came soon enough after the one before
-/// to widen the role to the whole map, and when it was pressed last.
+/// The type-select role's key (S-0214 claim 32): whether it is held, the
+/// time of the press that holds it, and the reach the last tap left.
 #[derive(Clone, Copy, Debug, Default)]
 struct TypeSelect {
     held: bool,
-    wide: bool,
-    last: Option<i64>,
+    pressed: i64,
+    reach: Reach,
 }
+
+/// Route mode's interface state (S-0213 claims 16, 16e and 16g): whether
+/// its key is held, the selected route point, and the tick of the last
+/// refusal cue.
+#[derive(Clone, Copy, Debug, Default)]
+struct RouteMode {
+    held: bool,
+    point: Option<u32>,
+    cue_tick: Option<i32>,
+}
+
+/// What a click with the type-select role held does (S-0214 claim 32).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HeldClick {
+    /// *Select*: the type replaces the selection.
+    Select,
+    /// *Toggle select* on an unselected object: the type joins.
+    Add,
+    /// *Toggle select* on a selected object: the type leaves.
+    Remove,
+}
+
+/// A control-group command (S-0214 claim 33; its default keys, S-0213
+/// claim 22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GroupCommand {
+    /// The digit alone: select the group.
+    Select,
+    /// Shift and the digit: add the group to the selection.
+    Add,
+    /// Ctrl and the digit: make the group from the selection.
+    Make,
+    /// Alt and the digit: select the group and centre the view on it.
+    Centre,
+}
+
+/// Route lines' ink (our own look; S-0213 claim 16g leaves it open).
+// nocite: our own look of route lines, not studied (S-0213 claim 16g)
+const ROUTE_INK: [u8; 4] = [120, 230, 120, 230];
+/// A route point marker's ink (our own look).
+// nocite: our own look of route point markers, not studied (S-0213 claim 16g)
+const ROUTE_POINT_INK: [u8; 4] = [120, 230, 120, 110];
+/// The selected route point's ink (our own look).
+// nocite: our own look of the selected route point, not studied (S-0213 claim 16g)
+const ROUTE_SELECTED_INK: [u8; 4] = [255, 255, 140, 160];
 
 /// The placement range indicator's ink (our own).
 // nocite: our own colour for the placement range indicator

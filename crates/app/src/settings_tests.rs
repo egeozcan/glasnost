@@ -46,6 +46,8 @@ fn defaults_are_the_specified_ones() {
     assert_eq!(s.bindings.key(Action::Mark), 'm');
     // Our key for S-0214's type-select role, whose key is the player's.
     assert_eq!(s.bindings.key(Action::TypeSelect), 't');
+    // Our key for S-0213 claim 16's route mode, whose key is the player's.
+    assert_eq!(s.bindings.key(Action::RouteMode), 'z');
     assert_eq!(Settings::mixer_level(100), 16384);
     assert_eq!(Settings::mixer_level(0), 0);
 }

@@ -42,7 +42,7 @@ use super::link::{Connect, DEFAULT_RELAY, platform_connect};
 use super::paint::Painter;
 use super::play::Button;
 use super::report::{SaveReport, platform_save};
-use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent, SideKey};
+use super::session::{GroupCommand, MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent, SideKey};
 use crate::mapview::live::Pacer;
 use crate::settings::{Action, Bindings, Settings, Store};
 use glasnost_ui::settings::SettingsHit;
@@ -180,6 +180,8 @@ pub enum Key {
     Space,
     /// Page Up: the previous sidebar tab.
     PageUp,
+    /// Delete: deletes the selected route point (S-0213 claim 16e).
+    Delete,
     /// Page Down: the next sidebar tab.
     PageDown,
 }
@@ -877,6 +879,14 @@ impl Client {
         {
             s.type_select_key(false);
         }
+        // The route-mode key's release commits, wherever the focus is
+        // (S-0213 claim 16).
+        if !down
+            && bound_with(&self.settings.bindings, k) == Some(Bound::RouteMode)
+            && let Some(s) = self.session.as_mut()
+        {
+            s.route_key(false);
+        }
         // The make-group key ends when it comes up, wherever the focus is.
         if !down && bound_with(&self.settings.bindings, k) == Some(Bound::MakeGroup) {
             self.group_held = false;
@@ -942,6 +952,10 @@ impl Client {
         let Some(s) = self.session.as_mut() else {
             return;
         };
+        if k == Key::Delete {
+            s.delete_key();
+            return;
+        }
         match bound_with(&self.settings.bindings, k) {
             Some(Bound::Options) => {
                 s.open_options();
@@ -953,20 +967,25 @@ impl Client {
             }
             Some(Bound::Mark) => s.mark(),
             Some(Bound::TypeSelect) => s.type_select_key(true),
+            Some(Bound::RouteMode) => s.route_key(true),
             Some(Bound::MakeGroup) => self.group_held = self.group_fallback,
             None => {
-                // Our control-group keys (Q-1988): a digit no binding takes.
-                // On the web the held make-group key plays Ctrl's part
-                // (design, M8 A4 round 5 seams).
+                // spec: S-0213 claim 22 (the control-group defaults: the digit alone selects the group, Shift with it adds the group to the selection, Ctrl with it makes the group, Alt with it selects the group and centres the view; digits 1 to 9 for groups 1 to 9 and 0 for group 10)
+                // design: a digit no other binding takes; with several modifiers Ctrl wins, then Alt, then Shift. On the web the held make-group key plays Ctrl's part (M8 A4 round 5 seams).
                 if let Key::Char(c) = k
                     && let Some(g) = c.to_digit(10)
                 {
-                    let mut mods = self.mods;
-                    if self.group_held {
-                        mods.force_fire = true;
-                        mods.force_select = false;
-                    }
-                    s.group_key(g as usize, mods);
+                    let m = self.mods;
+                    let cmd = if m.force_fire || self.group_held {
+                        GroupCommand::Make
+                    } else if m.force_move {
+                        GroupCommand::Centre
+                    } else if m.force_select {
+                        GroupCommand::Add
+                    } else {
+                        GroupCommand::Select
+                    };
+                    s.group_key(g as usize, cmd);
                 }
             }
             _ => {}
@@ -1116,9 +1135,12 @@ impl Client {
         if !on {
             self.held = [false; 4];
             self.group_held = false;
-            // The key-up of a held type-select key may not come back.
+            // The key-up of a held type-select key may not come back: the
+            // role ends without a tap (our design). A held route-mode key
+            // is released, which commits (our design).
             if let Some(s) = self.session.as_mut() {
-                s.type_select_key(false);
+                s.type_select_cancel();
+                s.route_key(false);
             }
         }
     }
@@ -1416,6 +1438,8 @@ pub enum Bound {
     Mark,
     /// The type-select role (S-0214 claim 12), held or pressed.
     TypeSelect,
+    /// The route-mode key (S-0213 claims 16 and 22).
+    RouteMode,
     /// Held with a digit, makes that control group (the web stand-in
     /// for Ctrl+digit; design, M8 A4 round 5 seams).
     MakeGroup,
@@ -1440,6 +1464,7 @@ pub fn bound_with(b: &Bindings, k: Key) -> Option<Bound> {
             Action::PathReport => Bound::PathReport,
             Action::Mark => Bound::Mark,
             Action::TypeSelect => Bound::TypeSelect,
+            Action::RouteMode => Bound::RouteMode,
             Action::MakeGroup => Bound::MakeGroup,
         });
     }
