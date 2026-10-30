@@ -2,12 +2,12 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 22
-sources-class: [decomp]
+revision: 31
+sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
-measurements: []
+approved-on: 2026-10-30
+measurements: [M-0008]
 requests: [Q-0087, Q-0212, Q-1525, Q-1715]
 supersedes: []
 ---
@@ -456,14 +456,61 @@ used by this spec only:
     not the *idle-b* request was turned down. It uses the unsynchronised
     random stream (an integer drawn from 0 to 2, a comment on 0), and only the type's first comment
     sound is ever used (`quirks.first_comment_only`).
-    - Backing: `measurable` (scenario M9: part (a) for the timer bounds and the outcome ratios,
-      tested statistically over many games; part (b) for the streams used, the number and the
-      order of the draws, read with a *recorder* (glossary) that reads the random streams'
-      state; part (c) for the *hunt* trigger; part (d) for the cow designation and the
-      exclusion of display and image names). The assertion that no other behaviour attempts
-      idle actions is `unmeasured`: these scenarios do not exercise every behaviour path.
-    - Confidence: high (outcomes, the streams used and the draw order), medium (the exhaustive
-      list of behaviours that attempt idle actions)
+    - Backing, by part:
+      - Draws in the stream: `measured` (M-0008) for one infantry unit of one type, owned by the
+        human player, placed during play and left in *guard*, over one window of four attempts
+        read with the random-state recorder. The four attempts drew *r* = 6, 0, 10 and 5. Each
+        took a timer draw and then *r*, and a δ from 0 to 7 followed *r* = 6 and *r* = 10 only,
+        none following *r* = 0 and *r* = 5. The replay of every logged draw from the logged seed
+        matches. These draws are the unit's only by the attribution below. The other values of
+        *r*, and the draws that follow them, rest on the table, not on this record: `measurable`
+        (scenario M9 (b), case (3)).
+      - Attribution of those draws to the unit: inferred in M-0008. The recorder logs the whole
+        stream, and the unit's draws are the draws left in its ranges once the bystanders' draws
+        are matched by count, not predicted. `measurable` (scenario M9 (b), case (3), which
+        predicts every draw on every non-void tick, apart from the soldier's first
+        targeting-timer restart draw, which it identifies).
+      - Outcome table, the ranges of *r* and δ, and the outcome ratios: `measurable` (scenario
+        M9 (a) for the ratios of the visible outcomes, M9 (b) for the outcome that follows each
+        predicted *r* and δ). M-0008 records the desired body facing after the attempt that drew δ =
+        7 as
+        7 × 8192 and does not say when it changed, so that the facing is set at once is not shown.
+        After the attempt that drew δ = 2 no change shows, because the unit already had that
+        facing. After *r* = 5 the facing later changes, which fits *idle-a*. That this facing change
+        marks the end of *idle-a* (claim 9) is inferred, and M-0008 does not observe the outcome
+        of *r* = 0.
+      - Fraidycat row: `measurable` (scenario M9 (b), case (2)). The scatter on *r* = 8 of a
+        fraidycat whose owner is not human-controlled: `measurable` (scenario M9 (b), case (4)).
+      - Cow row and cow designation: `measurable` (scenario M9 (a), M9 (b) case (1), and M9 (d)).
+      - Owners: that an AI house counts as human-controlled is a decision of the project lead,
+        not a behaviour of the original. The neutral house's rule is `measurable` (scenario M9 (b),
+        cases (2) and (4)). No scenario places a unit of the special house, which is taken
+        to follow the neutral house's rule.
+      - Comment chance and its unsynchronised stream: `measurable` (scenario M9 (b), case (3)).
+        M-0008 has no row for that stream.
+      - Triggers: *guard* `measurable` (scenario M9 (b)). M-0008's attempts fit *guard*
+        processings (Timing below), but its recorder does not record those processings. *hunt*
+        `measurable` (scenario M9 (c)), *area guard* by the backing of S-0215 claim 26, and
+        *sticky* by its processing as *guard* (S-0215 claim 25). The assertion that no other
+        behaviour attempts idle actions is `unmeasured`: these scenarios do not exercise every
+        behaviour path.
+      - Timing: a fit to M-0008, not a check. M-0008 takes one family of the unit's ranged draws
+        from 0 to 2 as its *guard* processings' delay draws, telling that family apart by ticks
+        and values only, and each later attempt comes at the first tick of that family at or
+        after the expiry that F4 gives from the previous attempt's timer draw. In that fit, a unit
+        placed during play first attempts at the second tick of the family, which M-0008 takes
+        as its second *guard* processing, not at the one on its placement tick. Why no attempt
+        is made at the placement tick was not recorded.
+        `measurable` (scenario M9 (b), which predicts the ticks of the processings and of each
+        attempt from the recorded state). The timer bounds are `measurable` (scenario M9 (a)).
+      - A created unit's idle timer having run out: `measurable` (scenario M9 (b), the first
+        attempt of each case).
+    - Confidence: medium (the ranges and the order of the draws in the scenario random stream at
+      an attempt, which M-0008 tells apart by the same ranges and order, the attribution of those
+      draws to the unit, the outcome table and its ratios, the *guard* trigger, the fraidycat and
+      cow rows, the owner rule, the comment chance and its stream, the *sticky*, *area guard* and
+      *hunt* triggers, the attempts' timing at *guard* processings, a created unit's idle
+      timer having run out, and the exhaustive list of behaviours that attempt idle actions)
 
 15. **Fear selects prone, get-up and panic.** Write *f* for a unit's fear level at the start of a
     tick and *f*′ for that start-of-tick level once that tick's decay has applied to it: *f*′ = *f* − 1 when *f* > 0 and
@@ -1604,29 +1651,49 @@ whose …") means any stock type with that property; the property is a precondit
     has made the type fearless and it has been hit once, as in M6(c), so that its fear level stays
     300, with the attacker removed after the hit and the recording counted from that
     removal; (3) one soldier of the local player whose type has at least one comment sound, left unselected,
-    and then the same soldier kept selected. The test map gives each of these units *guard* as its
-    initial behaviour. Record the scenario random stream's position and state at every tick, in
+    and then the same soldier kept selected; (4) one unit of a fraidycat type, owned by the
+    neutral house, never hurt, so that its fear level stays 0. The test map gives each of these
+    units *guard* as its initial behaviour. Record the scenario random stream's position and state
+    at every tick, in
     case (3) also the unsynchronised random stream's. From the recorded state, predict each
     attempt's draws under claim 14: (1) the timer draw, *r*, *e*, then δ when the outcome is a
     turn, plus the draws of the scatter that follows when *e* < 5 or *r* = 8 (S-0208 claims 11 to
     13); (2) the timer draw only, plus the draws of its scatter; (3) the timer draw, *r*, then δ on
     a turn, and, when the outcome is *idle-b* and the unit is not selected, one ranged draw over 0
-    to 2 from the unsynchronised stream, with a comment exactly when it gives 0. A ranged draw can
+    to 2 from the unsynchronised stream, with a comment exactly when it gives 0; (4) the timer
+    draw, *r*, then δ on a turn, plus the draws of the scatter that follows when *r* = 8 (with
+    fear level 0 the table's first row does not apply, so case (4) tests only that scatter). A
+    ranged
+    draw can
     take more than one raw value from its stream; the prediction counts raw values, as S-0202
     claim 4 gives them for each ranged draw from the recorded state, rejected values included.
     In case (2), the flee rule of claim 15 also scatters the unit between attempts; predict those
     scatters' draws as S-0208 gives them. Every processing of the unit's behaviour, whether or not
     it attempts the idle action and whether or not the attempt goes ahead, also takes the draw of
     that behaviour's delay, after any draws of the attempt; predict it, and the ticks of the
-    processings, from S-0215's delay rule for *guard* (claims 6 and 24). Expected: on every non-void tick the
+    processings, from S-0215's delay rule for *guard* (claims 6 and 24). A case unit whose type
+    has a weapon also takes the targeting-timer restart draws of S-0215 F6 that the per-tick
+    search of S-0309 claim 1 takes. As in S-0202 scenario R5 (a), the first of them is
+    identified, not predicted: it is the unit's first *R*(0, 2) draw after its creation tick that
+    is left once the bystander's and other unrelated draws, the predicted attempts and the
+    predicted behaviour processings are accounted for. Exactly one such candidate must remain,
+    and every later restart draw must follow from it by F6; with none or more than one, the case
+    is inconclusive. Each later restart draw is predicted from the one before by F6. Expected: on
+    every non-void tick the
     recorded advance of the scenario random stream, less accounted unrelated draws, equals the prediction, and that of the
     unsynchronised stream equals the prediction plus its accounted presentation draws; the visible outcomes match the
     predicted *r*, *e* and δ; the timer expires after the length F4 gives from the predicted timer draw, and the next
-    eligible behaviour processing makes the next attempt; the comment heard is always the type's first comment sound; a selected unit takes
-    no draw from the unsynchronised stream at its attempts. Falsified by any other advance (for
-    example an *r* draw in case (2), no *e* draw in case (1), or an unsynchronised draw from a
+    eligible behaviour processing makes the next attempt; a unit's first attempt comes at its first
+    processing that meets the other conditions of claim 14; the comment heard is always the type's
+    first comment sound; a selected unit takes
+    no draw from the unsynchronised stream at its attempts. Falsified by any other advance, counting
+    the identified first restart draw as predicted (for
+    example an *r* draw in case (2), no *e* draw in case (1), no scatter on *r* = 8 in case (4),
+    or an unsynchronised draw from a
     selected unit), by an extra draw at a sequence start, by an outcome that differs from the
-    prediction, or by an attempt before expiry or at a different eligible processing. Runs: one game per case, until at least 30 attempts of the unit have been recorded. Timer
+    prediction, or by an attempt before expiry or at a different eligible processing. Runs: one
+    game per case, until at least 30 attempts of the unit have
+    been recorded, and in case (4) also at least 3 attempts with *r* = 8. Timer
     expiry only enables an attempt: if expiry falls between behaviour processings, or the unit
     is moving or playing an ineligible sequence then, the next attempt is the first later
     processing that meets every eligibility condition of claim 14, not necessarily the expiry tick.
