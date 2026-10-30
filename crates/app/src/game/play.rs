@@ -573,6 +573,22 @@ impl Play {
         }
     }
 
+    /// Issues the point adds or joins of an accepted route-mode click
+    /// (S-0213 claims 16a and 16b) with the click's move-target marker: an
+    /// accepted cell click in route mode uses the marker rule of a click
+    /// outside it (S-0214 claim 30).
+    pub fn issue_route_click(&mut self, orders: Vec<Order>, on: ClickOn, mods: Modifiers) {
+        let w = &self.game.world;
+        // spec: S-0214 claim 30 (an accepted cell click in route mode uses the same feedback rule: the first selected object, a mobile actor, takes the action move on a cell)
+        let marker = targeting::click(w, self.local, &self.selection, on, mods).marker;
+        let at = match on {
+            ClickOn::Cell(c) if marker => Some(targeting::move_marker_at(w, c)),
+            _ => None,
+        };
+        self.issue(orders);
+        self.markers.extend(at);
+    }
+
     /// A click on the battlefield at `cell`, with `object` under the
     /// pointer.
     pub fn click_map(

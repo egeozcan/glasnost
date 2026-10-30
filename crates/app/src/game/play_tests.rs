@@ -1520,3 +1520,40 @@ fn a_hand_over_keeps_the_order() {
     assert_eq!(selection, vec![a, d]);
     assert_eq!(groups, BTreeMap::from([(c, mark), (d, mark)]));
 }
+
+/// spec: S-0214 claim 30 (an accepted cell click in route mode uses the move-target marker rule of a click outside it: a move on a cell gives the marker at the clicked cell, a click on an object none) and S-0213 claim 16a (the click's orders are point adds)
+#[test]
+fn an_accepted_route_mode_cell_click_shows_the_move_marker() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    step_until(&mut p, 10, |p| !glasnost_sim::orders::blocked(p.world()));
+    p.selection = vec![mcv];
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    let to = CellXY::new(cell.x, cell.y + 2);
+    let on = ClickOn::Cell(to);
+    let glasnost_sim::routes::RouteClick::Orders(o) = glasnost_sim::routes::click(
+        p.world(),
+        p.local,
+        &p.selection,
+        on,
+        to,
+        Modifiers::default(),
+    ) else {
+        panic!("a point add");
+    };
+    assert!(matches!(o.as_slice(), [Order::RoutePoint { .. }]));
+    p.markers.clear();
+    p.issue_route_click(o, on, Modifiers::default());
+    assert_eq!(
+        std::mem::take(&mut p.markers),
+        [glasnost_sim::targeting::move_marker_at(p.world(), to)]
+    );
+    assert!(
+        p.game
+            .replay()
+            .orders
+            .iter()
+            .any(|(_, _, o)| matches!(o, Order::RoutePoint { .. })),
+        "the point add is in the replay"
+    );
+}

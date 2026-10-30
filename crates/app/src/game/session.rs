@@ -1685,7 +1685,8 @@ impl Session {
         let sel = self.play.selection.clone();
         match glasnost_sim::routes::click(w, self.play.local, &sel, on, cell, mods) {
             glasnost_sim::routes::RouteClick::Orders(o) => {
-                self.play.issue(o);
+                self.play.issue_route_click(o, on, mods);
+                self.show_markers();
             }
             glasnost_sim::routes::RouteClick::Refused(m) => self.route_refused(m),
             glasnost_sim::routes::RouteClick::SelectPoint(p) => {

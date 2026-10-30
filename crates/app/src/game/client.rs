@@ -1445,8 +1445,7 @@ pub enum Bound {
     MakeGroup,
 }
 
-/// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
-/// route-mode key Z is not bound: route mode does not exist yet.
+/// The key bindings of a fresh profile (S-0213 claims 22 and 23).
 pub fn bound(k: Key) -> Option<Bound> {
     bound_with(&Bindings::default(), k)
 }
