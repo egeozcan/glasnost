@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 25
+revision: 31
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-30
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061, Q-0614]
 supersedes: []
@@ -473,26 +473,30 @@ addition:
 
 20. **Particle systems and rocking.** A warhead that names a particle system creates it at *P* at
     the end of the detonation, owned by the source house. When the system has a held particle type,
-    it immediately receives one particle of that type at *P*, subject to the terrain floor of
-    S-0613 claim 5; without a held type no initial particle appears (S-0613 claim 4).
-    The system takes its type's lifetime, whose absent default is −1 ticks, meaning it never
-    times out (S-0613 claim 4). This is the system's lifetime, not the particle's.
-    A warhead with the rocking flag rocks the
+    it immediately receives one particle of that type at *P*, subject to the terrain floor of S-0613
+    claim 5; without a held type no initial particle appears (S-0613 claim 4). The system takes its
+    type's lifetime, whose absent default is −1 ticks, meaning it never times out (S-0613 claim 4).
+    This is the system's lifetime, not the particle's. A warhead with the rocking flag rocks the
     bodies of the objects drawn as voxel models (of any kind) in the 7 × 7 cells around the centre
-    cell, in the same cell layer, when the rocking strength min(*D* × 0.01, 4.0) exceeds 0.3.
-    The strength is formed in double precision from the integer *D*, rounded as S-0205 sets for
-    floating point; whatever the rounding, it exceeds 0.3 exactly when *D* ≥ 31, and it reaches
-    its cap of 4.0 at *D* ≥ 400. Objects in the centre cell are pushed away from the source object
-    when there is one, the others away from *P* and only when *S* > 0. Rocking sets only the
-    body-rocking rates that S-0106 draws (scaled by the type's weight), takes no draw, and is
-    believed not to reach game state. The strength is passed on to that presentation as a number
-    whose precision this spec does not fix.
-    - Backing: `measurable` for the particle system (scenario A13, variant c; S-0613 scenario G3
-      for the initial particle, absent held type and system lifetime), and
-      `unmeasured` for rocking: no scenario calibrates visible tilt against strength, weight and
-      direction, or tests its possible effect on firing. Presentation alone does not make it
-      unobservable
-    - Confidence: high for the particle system; low that rocking never reaches game state
+    cell, in the same cell layer, when the rocking strength min(*D* × 0.01, 4.0) exceeds 0.3. The
+    strength is formed from the integer *D* and rounded as S-0113 F2 sets; whatever the rounding, it
+    exceeds 0.3 exactly when *D* ≥ 31, and it reaches its cap of 4.0 at *D* ≥ 400. Objects in the
+    centre cell are pushed away from the source object when there is one. The others, and the centre
+    cell's objects when there is no source object, are pushed away from *P*, and only when the
+    spread *S* (Terms) is above 0. Rocking sets only the body-rocking rates of S-0113 (divided by
+    the type's weight) and takes no draw. The rocked angles reach game state as S-0113 claim 19
+    decides (S-0113 claims 9, 11 and 19).
+    - Backing: `measurable` for the particle system (scenario A13, variant c; S-0613 scenario G3 for
+      the initial particle, absent held type and system lifetime), S-0113 scenario RK1 for the
+      rocking push's direction and strength (its damage amount whose strength is not exact in single
+      precision for the rounding; its part d for a centre-cell object when there is no source
+      object), and `unmeasured` for the rocking threshold, the 7 × 7 area and the cell-layer limit:
+      no scenario varies them. `unmeasured` that rocking takes no draw: no scenario records the
+      scenario random stream around a rocking detonation
+    - Confidence: high; medium for the rocking threshold, the 7 × 7 area and the cell-layer limit,
+      and for rocking's taking no draw; medium for the angles' reaching game state, as S-0113 claim
+      19 rates it, and for the weight's division of the push on infantry and buildings drawn as
+      voxel models, as S-0113 claim 10 rates it
 
 ### Detonation effects of a projectile's warhead
 
@@ -851,11 +855,19 @@ outcomes can be distinguished through the random-state recorder and nested deton
   hit-related draws and before centre-cell exploding-overlay effects. The overlay's nested
   detonation and percent draws (claim 19) occur before creation of the warhead's particle system
   (claim 20).
-- Rocking (claim 20) is believed to be presentation only and to take no draw; its place among
-  these observable events is not specified. The resource-before-object timing above and the
-  post-hit ordering of bridge, overlay and particle effects are `unmeasured` except for the
-  wall-draw ordering tested by A11 variant e: no scenario combines those other effects with an
-  identifiable object-hit draw to distinguish their order. Confidence: medium.
+- Rocking (claim 20) takes no draw (`unmeasured`, medium, as claim 20 rates it). A detonation's
+  rocking comes after all of its object hits, with their damage resolution, death effects and the
+  nested detonations those make, and before its bridge-test draws, its centre-cell exploding-overlay
+  effects and its particle system. Since only the last push before a body's turn counts (S-0113
+  claim 2), a body that this detonation and a nested detonation from a death both push keeps this
+  detonation's push, and one that the exploding overlay's nested detonation also pushes keeps that
+  one's, in each case when the later push changes the rates: a push that changes nothing leaves the
+  earlier rates (S-0113 claims 2 and 3). These last-push outcomes rest on this place, which is
+  `unmeasured` (medium): no scenario here pushes one body by two nested detonations. The
+  resource-before-object timing above and the post-hit ordering of bridge, overlay and particle
+  effects are `unmeasured` except for the wall-draw ordering tested by A11 variant e: no scenario
+  combines those other effects with an identifiable object-hit draw to distinguish their order.
+  Confidence: medium.
 
 **Order of a projectile's detonation** (claims 21 to 23, with S-0306 for the rest). The random-state
 recorder sees the draws of a projectile's detonation on the scenario random stream in this order:
@@ -1560,8 +1572,6 @@ not an oracle measurement.
   the amount supplied by the producer. The possible factor change is `unmeasured`, confidence
   low: no producer or named-data setup that changes it is known.
 - How a projectile can leave play during its own area damage (claim 21), which S-0306 owns.
-- Rocking (claim 20): whether a rocked body's tilt can reach game state (for example through a
-  firing angle).
 
 ## Questions for the project lead
 
