@@ -66,7 +66,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 27 | approved | — |
 | [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 9 | approved | — |
 | [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 7 | approved | — |
-| [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 9 | approved | — |
+| [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 18 | approved | — |
 | [S-0515](structures/S-0515-tech-buildings.md) | Tech buildings (manned state, acquisition bonus, periodic income, ownership changes) | structures | 5 | approved | — |
 | [S-0525](combat/S-0525-radiation-fields.md) | Radiation fields | combat | 4 | approved | — |
 | [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 6 | approved | — |

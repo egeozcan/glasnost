@@ -2,13 +2,13 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 9
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0742, Q-0730, Q-0731, Q-0737]
+requests: [Q-0742, Q-0730, Q-0731, Q-0737, Q-1985]
 supersedes: []
 ---
 
@@ -18,7 +18,8 @@ supersedes: []
 
 How a house comes to have a superweapon and loses it, how its charge runs, stops and starts again,
 when it is ready, what firing it does to the charge, and what the sidebar and the on-screen
-countdown show of that state. Skirmish only; campaigns and network games are out of scope.
+countdown show of that state, and what selecting an icon does to the unit selection.
+Skirmish only; campaigns and network games are out of scope.
 What a launched superweapon does (missile, storm, curtain,
 chronosphere jump, paradrop and the rest) belongs to S-0513; this spec gives only the contract
 between a fire order and the effect.
@@ -342,8 +343,10 @@ between a fire order and the effect.
     A suspended record whose clock is stopped shows the clock stage of the time it kept. The
     icon offers targeting when granted and not suspended and, for an ordinary type, ready; for
     a drain-mode type, in its *ready* or *active* state. These sidebar conditions differ from
-    order application in claim 8's exceptional states. Selecting an icon arms that superweapon
-    type, identified by its registration index in the superweapon type list, not by its kind.
+    order application in claim 8's exceptional states. Selecting an icon whose type has an aim
+    action arms that superweapon type, identified by its registration index in the superweapon
+    type list, not by its kind. Selecting a no-aim icon arms nothing (claim 23). What arming
+    does to the unit selection is claim 25.
     Aim offers follow S-0513 claim 1. A battlefield or radar click instead orders the first type
     in list order whose aim action matches the cursor action, under
     `quirks.superweapon_order_first_type_of_action` (S-0513 claim 2, default on = original,
@@ -470,6 +473,76 @@ between a fire order and the effect.
     use remains subject to claim 11.
     - Backing: `measurable` (scenario X15)
     - Confidence: high
+
+25. **The unit selection when an icon is selected (Q-1985).** Selecting an icon that offers
+    targeting (claim 16) and whose type has any aim action other than no action (claim 23)
+    empties the local player's unit selection in that same input, before any later battlefield
+    click, and arms the type. This holds for every such action word (medium beyond the words
+    X18 tests), including one not normally used by a superweapon and one for which no later
+    battlefield click issues a superweapon order: the selection follows whether the icon enters
+    aiming, nothing else. A type with no
+    action, whether written as the no-action word, as an unknown word or never imported, takes
+    the no-aim bullet below. The same input ends building placement, sell, repair and power
+    modes, and requests the select-target announcement. A building awaiting placement stays
+    ready in its strip. So the units selected before do not take the next battlefield click:
+    with the selection empty, it aims the superweapon (S-0513 claim 1). Whether that input also
+    ends route mode (S-0213 claim 16) or beacon-placement mode (S-0214) is not claimed (Open
+    questions).
+    - Selecting an otherwise fireable icon whose type has no aim action issues its fire order
+      at once (claim 23)
+      and leaves the selection unchanged. The input itself leaves sell, repair, power and
+      building-placement modes as they were. The selected no-aim type is never armed, and a type
+      armed before the input stays armed right after it, before the fire order is applied. What the
+      applied order then does to an armed
+      type's aiming is S-0513 claim 5's: a launch other than a teleport source pick ends the
+      aiming mode.
+    - Selecting an icon that does not offer targeting (not ready, suspended, or a drain-mode
+      record that is *charging*) changes nothing: no arming, no selection change, no
+      announcement.
+    - Units selected after arming do not disarm the type. While the selection is not empty the
+      cursor offers the units' actions (S-0513 claim 1); once it is empty again, the armed
+      type's aim offer returns. S-0214 owns the inputs that empty a selection. Under its
+      right-release row and S-0214 claim 28, a right release while armed cancels the aim before
+      it would clear a selection.
+    - None of the player-bindable key commands of S-0213 claim 22 and table T2 selects a
+      superweapon icon. Keys fixed outside that set (S-0213 claim 23) are not claimed here.
+      DECIDED (autonomy, 2026-10-28): a
+      keyboard path to an icon, where our client offers one, behaves exactly as the mouse
+      selection above.
+    - A teleport source pick (S-0513 claim 33, which says what the pick arms) changes neither
+      the selection nor sell, repair, power or building-placement mode, and it requests no
+      select-target announcement. A battlefield click while units are selected goes to the
+      units, so a source pick is normally ordered with an empty selection. Units selected after
+      that click and before the pick takes effect stay selected, and they mask the warp aim
+      offer until the selection is empty.
+    - Backing: `measurable` (scenario X18) for the mouse cases, the source pick and the absence
+      of an icon command among the player-bindable key commands. Part (b) runs arming in each of
+      the four modes, and part (h) arms a type whose action word is not normally used by a
+      superweapon and selects a type written with the no-action word. X18 parts (d), (d2) and
+      (d3) select the three icons that do not offer targeting. Part (c2) runs the no-aim icon
+      in each of the four modes and with an armed type, and part (f) runs the source pick in
+      sell, repair and power mode, and with a placement started after arming where that is
+      possible (arming itself ends placement, above). For units selected after arming, X18
+      part (e) selects them by a control-group recall, since a band box is not available while
+      armed (S-0214 claim 18). Units selected
+      between a source-pick click and its effect are `unmeasured`: the window is too short for
+      normal input. Which offer a battlefield click takes while a type is armed and sell, repair
+      or power mode is on is `unmeasured` and not claimed here: S-0513 claim 1 ranks only a
+      non-empty unit selection above the aim offer. Part (f)'s mode runs in which the click
+      sends no source pick are void, so they back only what a source pick does to the modes.
+    - Confidence: high for emptying the selection, for its following only whether the icon
+      enters aiming for the action words X18 tests (medium for every other word), and for the three
+      icons that do not
+      offer targeting (one fireability test decides all three, claim 16). High for the no-aim
+      icon with sell, repair or placement active, and for the selection and the announcement at
+      a source pick. Medium for each of these:
+      - the no-aim icon in power mode, and an armed type right after the input: the icon
+        selection itself touches neither, and what the fire order does to power mode once
+        applied is not traced.
+      - the modes at a source pick.
+      - the modes that arming ends, power mode included.
+      - the absence of an icon command among the player-bindable key commands.
+      - units selected after arming.
 
 ## Formulas
 
@@ -1036,6 +1109,63 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   coordinate is used, or the granted first stage preserves its old remaining time. An empty
   default source block producing no moved units is not evidence that the order was refused.
 
+**X18: unit selection when an icon is selected (claim 25; Q-1985).**
+- *Setup:* the common settings, with a named test rules file `S0512-select.ini` that shortens
+  the charge of the nuke, the curtain and the teleport types and gives a fourth granted type no
+  aim action. It gives the nuke type the power-dependent flag and the curtain type the
+  drain-mode flag. The human player has two own tanks, a building ready for placement in its
+  strip, the buildings that grant the four types, and power plants whose sale leaves the house
+  with low power.
+- *Procedure:* (a) select both tanks, then select the ready nuke icon; hover open ground and
+  then click it. (b) As (a) with the player in sell mode, then in repair mode, then in power
+  mode, then with the ready building's placement started, before the icon is selected.
+  (c) Select both tanks, then the no-aim type's icon. (c2) As (c) with the player in sell
+  mode, then in repair mode, then in power mode, then with the ready building's placement
+  started, before the no-aim icon is selected. Then arm the nuke (which empties the
+  selection) and select the no-aim icon. (d)
+  Select both tanks, then the nuke icon while it is still charging. (d2) With the nuke ready,
+  sell the power plants and wait until its icon shows *on hold*. Select both tanks, then the
+  nuke icon, then click open ground. (d3) Select both tanks, then the curtain icon while its
+  drain-mode record is *charging*, then click open ground. (e) Assign both tanks to a control
+  group, deselect them, arm the nuke with no selection, then recall the group by its key.
+  Hover, right-release, then hover again. (f) Pick a teleport source with no selection, then
+  note the selection, the cursor and the announcement requests. Repeat, turning on sell mode,
+  then repair mode, then power mode after arming and before the pick. A mode run in which the
+  click sends no source pick is void. Then arm the teleport type, start the ready
+  building's placement and pick a source. That run is void if the placement cannot be started
+  while the type is armed, or if starting it disarms the type. (g) List the player-bindable
+  key commands of S-0213 claim 22 and table T2, as the keyboard options screen shows them.
+  (h) In two fresh games, set the fourth type's aim action in the test rules file first to a
+  word of the Import mapping vocabulary not normally used by a superweapon, then to the
+  explicit no-action word. Each time select both tanks, then its icon, then click open ground.
+- *Observable:* the selection marks after each input, the cursor action under it, the tanks'
+  orders, the fire order and its tick, the sell, repair, power and placement states, the armed
+  type, and the select-target announcement request (read-only recorder).
+- *Expected:* (a) the tanks are deselected when the icon is selected, the cursor shows the nuke
+  aim action and the click fires the nuke. (b) the mode or placement ends at the icon selection
+  and the building stays ready. (c) the no-aim order fires at once, the tanks stay selected,
+  no announcement. (c2) as (c). The recorder's reading right after the no-aim icon's input,
+  before its order is applied, shows each of the four modes still on, and with the nuke armed,
+  the nuke still armed. What follows once the order is applied is S-0513's (claim 5 for the
+  armed nuke) and is not part of this expectation. (d), (d2) and (d3) nothing changes: the
+  tanks stay selected, nothing is
+  armed and no announcement is requested. In (d2) and (d3) the click orders the tanks. (e) with
+  the tanks selected the cursor offers their actions, the right release cancels the aim, and
+  the tanks stay selected. If the recall does not select the tanks while armed, part (e) is
+  inconclusive for claim 25's units-selected-after-arming bullet. (f) the warp aim offer
+  appears with no selection change and no select-target request. Sell, repair and power mode
+  each stay on, and so does the placement in a run that is not void. (g) none of the
+  player-bindable key commands selects a superweapon icon. (h) with the unusual word the tanks
+  are deselected, the type is armed and the select-target announcement is requested, whatever
+  the click then does. With the no-action word the result is as (c).
+- *Falsified if:* the tanks stay selected after (a), the first click after (a) orders them, a
+  no-aim icon or an icon in (d), (d2) or (d3) changes the selection or arms a type, a no-aim
+  icon's input ends a mode or disarms the nuke in (c2), in the reading before its order is
+  applied, a source pick ends a mode or a valid run's placement in (f), the right
+  release in (e) clears the selection while the nuke is armed, a player-bindable key
+  command selects an icon, power mode stays on after the icon selection in (b), the tanks
+  stay selected in (h) with the unusual word, or they are deselected with the no-action word.
+
 ## Open questions
 
 - The completion-versus-loss announcement is traced, but X4 still needs tight timing to confirm
@@ -1048,3 +1178,6 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
 - Battle-lab force-shield availability follows claim 3's imported-building grant rule.
   S-0513 claim 31 describes the effect and scenario SW16 proposes its test. There is no separate
   unresolved effect-scope gate.
+- Whether arming a type (claim 25) also ends route mode or beacon-placement mode is not
+  claimed. Route mode lasts only while its key is held, so an icon selection inside it needs
+  the key held through a sidebar click. No X18 part tests either mode.
