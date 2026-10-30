@@ -3,7 +3,7 @@ id: Q-1703
 title: Measurement round for the arena-reached and frequent claims, in ranked order
 status: open
 related: [S-0202, S-0301, S-0302, S-0306, S-0309, S-0311, S-0207, S-0206, S-0307]
-answered-by: []
+answered-by: [M-0008]
 ---
 
 ## Need
