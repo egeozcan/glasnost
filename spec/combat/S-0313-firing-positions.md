@@ -2,13 +2,13 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack, shot animation position)
 topic: combat
-revision: 29
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-22
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0601, Q-0670, Q-1600]
+requests: [Q-0601, Q-0670, Q-1600, Q-2111]
 supersedes: []
 ---
 
@@ -27,6 +27,8 @@ whether the driving locomotor shifts the draw point and whether a constant one-p
 to the animation stay open.
 The fire point is game state: projectiles normally start there (S-0306 claim 8), so it changes
 flight times and what a projectile passes.
+Claim 1a replaces the committed 0, 0, 0 for an absent elite muzzle position: the elite version of
+a slot takes the same slot's non-elite muzzle position, as imported.
 The placement exceptions are owned by S-0306 claim 5, including dropping projectiles, which
 start at the firer's own position rather than its fire point. Disc lasers create no projectile
 (S-0615 claim 12); their rings follow the current slot-0 fire point as S-0615 claim 15 specifies.
@@ -63,7 +65,8 @@ S-0202: R(*a*, *b*). In addition:
   For every other firer, its position (its reference point, with its world height).
 - **Muzzle position (F, L, H).** Three integers in leptons that the art data gives per weapon slot of
   a type (primary, secondary, their elite versions and the numbered weapons): forward, lateral
-  (positive to the left) and up. Which slot a shot uses is S-0308's.
+  (positive to the left) and up. Which slot a shot uses is S-0308's. Claim 1a gives the muzzle
+  position of a slot whose art data gives none.
 - **Turret displacement** *δ*. The type's imported turret displacement, in leptons along the
   forward axis (the same field S-0105 uses for drawing).
 - **Alternate muzzle positions.** Five extra muzzle positions (numbered 0 to 4) that a type's art
@@ -108,6 +111,26 @@ S-0202: R(*a*, *b*). In addition:
      no separating launch-position case is established here.
    - Confidence: high (composition, the sign of *L*, the base point); medium (bit-exact single
      precision, which follows S-0105 F0)
+
+1a. **Absent muzzle positions (Q-2111 question 2).** A non-elite slot (the primary, the secondary or
+   a numbered weapon) whose art data gives no muzzle position has the muzzle position 0, 0, 0. It
+   takes nothing from the other slot or from an alternate muzzle position: where claim 1 applies
+   (claims 5 to 8 can replace it), its fire point is claim 1's with (*F*, *L*, *H*) = (0, 0, 0),
+   which is the firer's base point moved by the translation of its frame *M* (claim 1) when its
+   turret displacement is 0, so the base point itself when *M* is the flat body rotation of scenario
+   P1. For a firer with a turret displacement, that fire point is the turret pivot itself, so a
+   fall-back to the pivot cannot be told from this rule. The elite version of a slot whose art data
+   gives no elite muzzle position has the muzzle position of the same slot's non-elite version, as
+   imported, so 0, 0, 0 when that is absent too. For numbered weapons, the elite version of weapon
+   *n* takes weapon *n*'s. Numbered weapon *n* here is the weapon of S-0308's slot *n*, counted
+   from 0, which S-0308 claim 1 fills from the numbered field *n* + 1; "the second weapon" is
+   weapon 1, the slot that weapon number 1 selects (S-0308 claim 5).
+   - Backing: `measurable` (scenario P1 part d for the elite versions, part e for the forward and
+     lateral parts of an absent non-elite muzzle position, for the primary, the secondary and a
+     numbered weapon, with alternate muzzle positions present). That the height part is 0, not
+     negative, is `unmeasured`: part e's firer stands at the surface, where S-0306 claim 8's raise
+     gives the same start for a height part of 0 or less.
+   - Confidence: high (the forward and lateral parts, the elite rule); medium (the height part)
 
 2. **Burst alternation.** The lateral part of the muzzle position alternates within a burst: shots
    made with an even burst counter (the first, third, … shot of a burst; the counter a shot uses is
@@ -597,8 +620,10 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 
 | Key (file, section) | Concept | Form | Absent |
 |---|---|---|---|
-| `PrimaryFireFLH`, `SecondaryFireFLH`, `ElitePrimaryFireFLH`, `EliteSecondaryFireFLH` (art, type image) | muzzle positions (*F*, *L*, *H*) of the primary and secondary slots | three integers, leptons | 0, 0, 0 |
-| `Weapon`*n*`FLH` and its elite form, the same key with `Elite` in front (art, type image) | muzzle positions of numbered weapons | three integers | 0, 0, 0 |
+| `PrimaryFireFLH`, `SecondaryFireFLH` (art, type image) | muzzle positions (*F*, *L*, *H*) of the primary and secondary slots | three integers, leptons | 0, 0, 0 (claim 1a) |
+| `ElitePrimaryFireFLH`, `EliteSecondaryFireFLH` (art, type image) | muzzle positions of the elite primary and elite secondary slots | three integers, leptons | the muzzle position of the same slot's non-elite version, as imported (claim 1a) |
+| `Weapon`*n*`FLH` (art, type image) | muzzle position of numbered weapon *n* − 1 (claim 1a) | three integers | 0, 0, 0 (claim 1a) |
+| the elite form of `Weapon`*n*`FLH`, the same key with `Elite` in front (art, type image) | muzzle position of the elite version of numbered weapon *n* − 1 | three integers | the muzzle position of numbered weapon *n* − 1, as imported (claim 1a) |
 | `TurretOffset` (art, type image) | turret displacement *δ* | integer, leptons | 0 |
 | `AlternateFLH` followed by 0 to 4 (art, type image) | alternate muzzle positions, also used as mind-control link anchors (S-0601 claim 17) | three integers, leptons | 0, 0, 0 |
 | `MuzzleFlash` followed by 0, 1, … (art, building image) | garrison muzzle points | two integers, pixels | (0, 0) |
@@ -628,14 +653,15 @@ no engine add-on and no mods (the named test files of a scenario excepted). Stoc
 and art files of each scenario, removed after that scenario.
 
 Procedure for every part: position the firer, load passengers or occupants where named, order an
-attack through ordinary input, and record complete bursts after the required facings settle.
-Where a part needs a changing facing, record that facing at each shot rather than inferring it
-from the order. A read-only object-state recorder logs ticks, firer and projectile positions,
-facings, burst counters, selected weapon slot and passenger or occupant identities. Compare the
-projectile's launch position before its first movement with F1 or F3 in integer leptons. A beam
-image can corroborate placement but cannot establish lepton-exact arithmetic. For disc lasers
-record the effect's origin. A missing recorder capability is a proposed harness addition for
-the user, not a request to alter the game.
+attack through ordinary input, and record complete bursts after the required facings settle. Where a
+part needs a changing facing, record that facing at each shot rather than inferring it from the
+order. A read-only object-state recorder logs ticks, firer and projectile positions, facings, burst
+counters, selected weapon slot and passenger or occupant identities. Compare the projectile's launch
+position before its first movement with F1 or F3 in integer leptons, then S-0306 claim 8: a fire
+point that is not above the terrain gives a start 1 lepton above it, at the same *x* and *y*, and
+only the start's height differs from F1 or F3 then. A beam image can corroborate placement but
+cannot establish lepton-exact arithmetic. For disc lasers record the effect's origin. A missing
+recorder capability is a proposed harness addition for the user, not a request to alter the game.
 
 **P1. Vehicle fire point.**
 - Setup: a stock turreted vehicle with known muzzle position and turret displacement, on flat
@@ -660,6 +686,41 @@ the user, not a request to alter the game.
 - Part c: repeat with a driving vehicle stationary on each reachable slope orientation of the
   test map, recording its settled body transform (S-0106). Expected: F1 tilts the muzzle and
   turret displacement with that transform. Falsified by any different integer start position.
+- Part d (absent elite muzzle positions; claim 1a, Q-2111): named test art gives a test vehicle with
+  no turret and no turret displacement distinct primary and secondary muzzle positions, each with
+  non-zero forward and lateral parts and a height part of at least 40 leptons (so each fire point is
+  above the terrain), and no elite muzzle-position keys; named test rules make it elite from the
+  start and give its elite primary and elite secondary slots weapons of their own, distinct from the
+  non-elite ones, so that S-0308 claim 2 makes it fire the elite weapons. With its body at facings 0
+  and 16384, record the start positions of its elite primary and elite secondary shots. The elite
+  primary fires at an ordinary test target. For the elite secondary the target is a test vehicle on
+  the ground in range, of an armour class against which the elite primary's warhead has a zero
+  versus value and the elite secondary's does not, so that S-0308 table P gives slot 1 (its row for
+  a primary with a zero versus value). Expected: each starts as F1 gives for the same slot's
+  non-elite muzzle position. A numbered-weapon gunner test type, with a turret count above 0 and
+  neither the gattling nor the charge-turret flag, carrying one passenger whose mode index is 1 so
+  that it fires its second weapon (S-0308 claim 6), with two numbered weapons of distinct muzzle
+  positions of the same kind and no elite muzzle-position keys, and with named test rules that make
+  it elite from the start and give its elite second numbered weapon a weapon of its own, distinct
+  from the non-elite one, repeats this for the second weapon. Falsified by any start other than F1
+  of the same slot's non-elite muzzle position, the other slot's or weapon 0's included.
+- Part e (an absent non-elite muzzle position; claim 1a, Q-2111): named test art gives a test
+  vehicle with no turret and no turret displacement a primary muzzle position with non-zero forward
+  and lateral parts and a height part of at least 40 leptons, and no secondary muzzle-position key,
+  and five alternate muzzle positions with distinct non-zero forward and lateral parts. Named test
+  rules give it a primary weapon whose warhead's versus value against the target's armour class is
+  zero and a secondary weapon whose warhead's is not, so that S-0308 table P gives slot 1 (its row
+  for a primary with a zero versus value). The target is a test vehicle of that armour class on the
+  ground in range. With its body at facings 0 and 16384, record the start positions of its secondary
+  shots. A second test type with the keys swapped (a secondary muzzle position, none for the
+  primary) and ordinary versus values for both weapons, so that table P's last row gives slot 0,
+  repeats this for its primary. A copy of part d's numbered-weapon test type, with its passenger but
+  without part d's elite rules, so that it fires as a non-elite unit, no muzzle-position key for its
+  second weapon and five alternate muzzle positions with distinct non-zero forward and lateral
+  parts, repeats it for that weapon. Expected: each start has the vehicle's own *x* and *y* (its
+  frame *M* being the flat body rotation of P1, with no translation), and the height S-0306 claim 8
+  gives for a fire point at the surface. Falsified by a start at the other slot's F1, at an
+  alternate muzzle position's or at any *x* and *y* other than the vehicle's own.
 - Runs: one full burst per facing/transform combination; no random draw decides the start shift.
 
 **P2. Burst alternation.**
@@ -1003,6 +1064,8 @@ the user, not a request to alter the game.
 
 ## Open questions
 
+- (Outside Q-2111.) Which muzzle position an elite object uses for a slot whose elite version holds
+  no weapon (S-0308 claim 2): the elite slot's own, as claim 1a gives it, or the non-elite slot's.
 - (Q-1600 question 1, claims 11 and 11a.) Whether the original's driving locomotor shifts a
   vehicle's draw point. This decides how far question 1's answer holds for the original: every
   position in claims 11 to 11e and P10 is counted from the vehicle's unshifted draw point. A
