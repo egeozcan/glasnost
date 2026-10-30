@@ -31,3 +31,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0013](economy/M-0013-germinable-cells.md) | Which cells receive spreading ore (S-0401 scenario E8) | economy | contradicts | local |
 | [M-0005](combat/M-0005-arena-ltnk-against-robo-stall.md) | Hunters against disabled robot tanks in the unit arena (the LTNK against ROBO stall) | combat | contradicts | local |
 | [M-0006](combat/M-0006-arena-stock-replay-bunkers.md) | Unit arena, stock replay of archived games, the map's neutral bunkers and moved units | combat | new finding | committed |
+| [M-0016](combat/M-0016-stock-replay-sref-v3.md) | Unit arena, stock replay of every archived game with SREF or V3 | combat | new finding | local |
