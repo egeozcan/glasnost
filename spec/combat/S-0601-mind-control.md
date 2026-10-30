@@ -2,11 +2,11 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 16
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-30
 measurements: []
 requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203]
 supersedes: []
@@ -165,8 +165,8 @@ The glossary also defines *trigger*, used here.
      the rookie primary does not create a control record, including an elite primary takeover
      weapon over a rookie primary without one (departure).
    - Backing: `measurable` (MC3 for firing refusal). The missing-record crash is `unmeasured`:
-     this arrangement is outside the measurement setup, which uses stock data except named test
-     variants; the safe refusal and warning are design
+     the original's fault must not be provoked on the oracle. The safe refusal and warning are
+     design
    - Confidence: high
 
 5. **Detonation: takeover replaces damage and other special hits.** A warhead with the
@@ -539,7 +539,8 @@ The glossary also defines *trigger*, used here.
       about the original, and is `measurable` in our engine (S-0513 SW23 part f, which S-0203 claim 4
       also cites for it).
     - Confidence: high for the order inside the update and for the set of updates; medium for
-      the fate of the rest of the turn after a lethal pulse of a non-vehicle controller
+      the fate of the rest of the turn after a lethal pulse of a non-vehicle controller, and for
+      F4's replacing a nonzero roll rate and its rate's not being scaled by the weight (F4)
 
 ### Presentation
 
@@ -595,8 +596,14 @@ stream:
 **F4. Rocking.** After the sparks, one draw *r* in [0, 100] (inclusive):
 > magnitude = 0.015 radians per tick if *i* = 1, 0.03 radians per tick if *i* ≥ 2,
 > rate = −magnitude if *r* < 50, otherwise +magnitude. The magnitudes are the nearest binary32 representations of these decimal constants.
-> Choosing the sign is exact; no arithmetic rounding is involved. The rate is a presentation input
-> to S-0106 claim 9; its scenario-stream draw still changes subsequent gameplay random results.
+> Choosing the sign is exact; no arithmetic rounding is involved. The rate replaces the
+> controller's roll rate, not scaled by the type's weight (S-0113 claim 17). The draw changes
+> later random results.
+
+That the rate replaces a nonzero roll rate rather than adding to it, and that the weight does not
+scale it, are `unmeasured` here (medium): MC8 repeats its pulses, so a later pulse can land on a
+rolling controller, but it does not compare such a pulse with one onto a controller at rest, and
+it does not vary the weight.
 
 **F5. Link anchor.** For the victim at its current position *k* on the list (0 = the first):
 > alternate link anchor index = *k* mod 5.
