@@ -196,13 +196,27 @@ fn pump(
     clock: &Clock,
     clients: &mut [&mut Client],
     what: &str,
+    done: impl FnMut(&[&mut Client]) -> bool,
+) {
+    pump_seen(clock, clients, what, |_, _| {}, done);
+}
+
+/// `pump`, calling `seen(k, client)` after each update of client `k`, so a
+/// caller sees every tick that runs while it waits (the ticks go on while
+/// a room is still starting up, and under load a peer runs a few ahead).
+fn pump_seen(
+    clock: &Clock,
+    clients: &mut [&mut Client],
+    what: &str,
+    mut seen: impl FnMut(usize, &Client),
     mut done: impl FnMut(&[&mut Client]) -> bool,
 ) {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        for c in clients.iter_mut() {
+        for (k, c) in clients.iter_mut().enumerate() {
             c.update(clock.now());
             run_start(c);
+            seen(k, c);
         }
         if done(clients) {
             return;
@@ -210,6 +224,20 @@ fn pump(
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
         std::thread::sleep(Duration::from_millis(1));
     }
+}
+
+/// Keeps the client's state hash for its current tick when it is a new
+/// one (tick 0 is not a played tick); says whether it was new.
+fn keep_hash(hashes: &mut BTreeMap<i32, String>, c: &Client) -> bool {
+    let Some(s) = c.session.as_ref() else {
+        return false;
+    };
+    let w = &s.play.game.world;
+    if w.tick == 0 || hashes.contains_key(&w.tick) {
+        return false;
+    }
+    hashes.insert(w.tick, glasnost_sim::save::state_hash(w));
+    true
 }
 
 /// A person's scripted orders at `tick`: now and then one of the house's
@@ -324,10 +352,22 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
             .all(|m| m.ready || m.row == 0)
     });
     press_room(&mut a, SetupHit::Start_);
-    pump(&clock, &mut [&mut a, &mut b], "the start", |c| {
-        c.iter()
-            .all(|c| c.lockstep().is_some_and(|ls| ls.phase() == Phase::Running))
-    });
+    // The ticks start running as soon as a peer's phase is Running, and under
+    // load that peer can run several before the other is: every tick's
+    // hash is kept from the first update on, not from the loop below.
+    let mut hashes = [BTreeMap::new(), BTreeMap::new()];
+    pump_seen(
+        &clock,
+        &mut [&mut a, &mut b],
+        "the start",
+        |k, c| {
+            keep_hash(&mut hashes[k], c);
+        },
+        |c| {
+            c.iter()
+                .all(|c| c.lockstep().is_some_and(|ls| ls.phase() == Phase::Running))
+        },
+    );
     for c in [&a, &b] {
         assert_eq!(c.shell.screen, Screen::Game);
         let s = c.session.as_ref().unwrap();
@@ -341,7 +381,6 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
     );
 
     // Both play; every tick's state hash is kept.
-    let mut hashes = [BTreeMap::new(), BTreeMap::new()];
     let mut issued = [0, 0];
     let mut rng = [1u64, 2u64];
     let deadline = Instant::now() + Duration::from_secs(60);
@@ -350,8 +389,7 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
             c.update(clock.now());
             let w = &c.session.as_ref().unwrap().play.game.world;
             let t = w.tick;
-            if !hashes[k].contains_key(&t) && t > 0 {
-                hashes[k].insert(t, glasnost_sim::save::state_hash(w));
+            if keep_hash(&mut hashes[k], c) {
                 issued[k] += script(c, t, &mut rng[k]);
             }
         }
