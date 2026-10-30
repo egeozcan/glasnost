@@ -3,7 +3,7 @@ id: Q-1988
 title: How does the player make, add to and select a control group?
 status: open
 related: [S-0111, S-0606, S-0415, S-0214, S-0213, S-0701]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
