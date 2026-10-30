@@ -1,9 +1,9 @@
 ---
 id: Q-2133
 title: Which cells are clear for movement in a destroyed building's smudge steps
-status: open
+status: answered
 related: [S-0211, S-0312]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
