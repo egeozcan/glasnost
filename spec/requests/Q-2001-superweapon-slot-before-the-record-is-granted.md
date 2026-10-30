@@ -3,7 +3,7 @@ id: Q-2001
 title: S-0108 claims 11 and 18 for a superweapon building whose house's record is not granted yet
 status: open
 related: [S-0108, S-0512]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need
