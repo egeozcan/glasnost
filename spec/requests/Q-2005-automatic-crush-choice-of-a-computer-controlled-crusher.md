@@ -3,7 +3,7 @@ id: Q-2005
 title: When a computer-controlled crusher chooses a crushable enemy by itself, and whether a berserk one does
 status: answered
 related: [S-0210, S-0215, S-0309, S-0610, S-0302]
-answered-by: [S-0210]
+answered-by: [S-0210, S-0215]
 ---
 
 ## Need
