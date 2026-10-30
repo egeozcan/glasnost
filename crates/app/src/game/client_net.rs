@@ -127,6 +127,17 @@ const CHECKPOINTS_KEPT: usize = 4096;
 // nocite: our own netcode (once a second, well inside the relay's message rate)
 const RELAY_PING_MS: u64 = 1_000;
 
+/// The shortest wait between two updates of a network game by the pump
+/// (fixed after the M9 exit run), in milliseconds: while the game waits
+/// for frames, or catches up after a rejoin, the pump does not spin.
+// nocite: our own netcode (a fraction of the fastest network period)
+const WAKE_MIN_MS: u64 = 4;
+
+/// The wait between two updates by the pump on the network screens and
+/// while a game loads, in milliseconds.
+// nocite: our own netcode (the room and the start answer within a few frames' time)
+const WAKE_LINK_MS: u64 = 50;
+
 /// What the person asked the relay for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Intent {
@@ -1790,6 +1801,26 @@ impl Client {
     /// Whether a network link is open or opening.
     pub fn networked(&self) -> bool {
         self.net.is_some()
+    }
+
+    /// How long the client may go without an update at host time `now_ms`
+    /// while a network link is open, for [`super::pump::Pump`]: in a
+    /// network game until its next tick is due, at least [`WAKE_MIN_MS`]
+    /// (also while it waits for frames or catches up); on the network
+    /// screens and while a game loads, [`WAKE_LINK_MS`]. `None` without a
+    /// link.
+    pub fn net_wait_ms(&self, now_ms: i64) -> Option<u64> {
+        let net = self.net.as_ref()?;
+        let session = self
+            .session
+            .as_ref()
+            .filter(|_| self.shell.screen == Screen::Game && net.begin.is_some());
+        let Some(s) = session else {
+            return Some(WAKE_LINK_MS);
+        };
+        let period = net_period_ms(s.speed).max(1);
+        let left = self.pacer.remaining_for(now_ms, period).max(0) as u64;
+        Some(left.clamp(WAKE_MIN_MS, period as u64))
     }
 
     /// The field the multiplayer screen types into (tests and the window).

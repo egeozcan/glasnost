@@ -2681,6 +2681,10 @@ In a network game the options menu and lost focus never stop the ticks (S-0201 c
 
 The client reads its link once per update, on every screen. It sorts lobby messages (`GL`) from lockstep messages (`GN`, `lobby_wire::is_lobby`). Lockstep messages that arrive after `Begin` but before the game has loaded are kept for the session (at most 4096).
 
+**Without frames: the network pump** (fixed after the M9 exit run, `crates/app/src/game/pump.rs`). The window updates the client once per drawn frame. A window that draws none (covered, as by KDE's screenshot overlay on Wayland, or minimised) or a background browser tab (no animation frames) used to update it never: no pings, acknowledgements or frames left, the relay closed the silent connection after 15 s (`silent_ms`), and the house surrendered after the grace period (the exit run's first game). So while a network link is open (`Client::networked`) the window's loop also wakes on a timer (winit's `about_to_wait` with `ControlFlow::WaitUntil`, `Pump::wait_ms`), and when no frame has updated the client for `STALE_MS` (200 ms) it runs the same `Client::update` a frame runs, without drawing (`Pump::between_frames`), and the job a frame would run after it (natively, so a game that begins in a covered window still loads). In a network game the timer is the time to the next tick (`Client::net_wait_ms`, at least 4 ms); on the network screens and while a game loads, 50 ms. While frames come it only wakes when they would be stale, and does nothing, so camera, scrolling, sound, cosmetic animation and the frame bench run once per frame as before. Without a link the loop waits for events as before, so an idle single-player window does not wake. The benchmark is left alone (`--bench` sets no timer), and `--exit-after-frames` counts presented frames, which the pump never makes.
+
+The pump runs the lockstep's ticks too: a peer makes its frames as it runs ticks, so a covered peer that did not tick would stop the game for everyone, and in a network game neither the menu nor lost focus stops the ticks (S-0201 claims 15 and 16); a window nobody sees is the same case. The pacer still runs at most one tick per update and makes up no lost time (S-0201 claim 17). Natively the timer keeps the full pace. A browser throttles a background tab's timers (Firefox to about once a second), so a hidden tab runs about one tick a second and the others wait for it ("Waiting for ..."), but its connection lives on, well inside the relay's 15 s.
+
 **Chat.** `ToRelay::Chat` and `FromRelay::Chat(ChatLine)` are part of N2's lobby protocol. They carry a line to every member of the room, the sender included, both in the room and during the game; a line never reaches a simulation. They changed the lobby layout, so the shared wire version became 3 (4 since N4).
 
 The relay cleans each line: control characters go, the ends are trimmed, and at most 200 characters are kept. It refuses an empty line as bad text. It also refuses lines that come faster than one a second on average, with a burst of five (`Refusal::ChatTooFast`). Those refusals do not count against the refusal limit. This adds the limits `chat_every_ms` and `chat_burst` and the stats `chats` and `chats_too_fast`.
@@ -2696,6 +2700,7 @@ In the game, Enter opens the chat line, Enter sends and closes it, and Escape dr
 - `two_clients_meet_chat_and_play_in_lockstep`: the host makes a room and adds a computer row; the guest joins by the typed code; a chat line reaches both; the guest says ready and the host starts. They play 300 ticks with scripted orders through the order path, and the state hashes are equal at every tick. When the guest stops, the host shows the waiting banner. When the guest goes, the host shows "Bea left the game." and plays on.
 - `a_join_of_another_build_is_refused_on_that_field`.
 - `an_unreachable_relay_is_reported`.
+- The pump, on a relay with a silence limit of 1 s: `a_network_game_plays_on_while_its_window_draws_no_frames` (one client draws frames, the other none for 4 s and is updated only when its pump asks: it is not dropped, both run their ticks and the hashes agree; while frames come, the pump does nothing) and its control `a_window_that_draws_no_frames_and_is_not_pumped_loses_its_game`. `game::pump`: `without_a_network_link_the_pump_never_wakes_nor_updates`. The winit wiring itself (`GameApp::about_to_wait`) was checked by inspection and by hand only.
 
 The local lane `crates/app/tests/m9_lane.rs` (opt-in, needs `GLASNOST_GAME_DIR`) does the same with real data against the relay binary, which it starts with `cargo run --release -p glasnost-relay` on a free port. It writes each client's room and game screens to `local-lane/m9/n3/`. Run it with `cargo test --release -p glasnost-app --test m9_lane -- --ignored --nocapture`; `GLASNOST_LANE_TICKS` sets how many ticks it plays (default 400).
 
@@ -2707,6 +2712,8 @@ The local lane `crates/app/tests/m9_lane.rs` (opt-in, needs `GLASNOST_GAME_DIR`)
 4. In the other window, click **Multiplayer**, type the code and click **Join**.
 
 Web: run `cargo run -p glasnost-relay` and `cargo xtask web --serve`, then open `/?mode=game&relay=ws://127.0.0.1:8787/` in two tabs.
+
+The pump by hand: start a network game, then cover the window with another one (or a screenshot overlay) or minimise it for 30 s, and in the browser switch to another tab for 30 s. The other player's game must play on, with no "left the game" notice; natively at full pace, in a background tab slowly.
 
 **Seams for the later steps.**
 

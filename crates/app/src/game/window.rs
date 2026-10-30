@@ -14,13 +14,14 @@ use glasnost_ui::geom::Point;
 use glasnost_vfs::PickedFile;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{self, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
 
 use super::bench::{self, Bench, FrameEnd};
 use super::client::{Client, Done, Key, run_job};
 use super::play::Button;
+use super::pump::Pump;
 use super::session::{MAP_IMAGE, Session};
 use crate::Status;
 use glasnost_ui::shell::Screen;
@@ -147,6 +148,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         mods: ModifiersState::empty(),
         pointer: Point::new(0, 0),
         cursor_hidden: false,
+        pump: Pump::default(),
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -211,6 +213,9 @@ struct GameApp {
     pointer: Point,
     /// The system pointer is hidden for the game's own cursor.
     cursor_hidden: bool,
+    /// Keeps a network game going while no frames are drawn (the M9 exit
+    /// run).
+    pump: Pump,
 }
 
 impl GameApp {
@@ -465,7 +470,9 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     }
                     Some(_) => None,
                     None => {
-                        self.client.update(now_ms());
+                        let now = now_ms();
+                        self.client.update(now);
+                        self.pump.drew(now);
                         None
                     }
                 };
@@ -525,6 +532,28 @@ impl ApplicationHandler<GameEvent> for GameApp {
         if self.client.quit {
             event_loop.exit();
         }
+    }
+
+    /// Between events: while a network link is open, the client is
+    /// updated even when the window draws no frames (covered, minimised, a
+    /// background tab), and the loop wakes on a timer for it; otherwise the
+    /// loop waits for events as before. The benchmark is left alone.
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.bench.is_some() {
+            return;
+        }
+        let now = now_ms();
+        if self.pump.between_frames(&mut self.client, now) {
+            self.run_jobs(true);
+            if self.client.quit {
+                event_loop.exit();
+                return;
+            }
+        }
+        event_loop.set_control_flow(match self.pump.wait_ms(&self.client, now) {
+            Some(ms) => ControlFlow::wait_duration(std::time::Duration::from_millis(ms)),
+            None => ControlFlow::Wait,
+        });
     }
 }
 
