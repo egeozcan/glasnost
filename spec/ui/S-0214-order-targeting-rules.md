@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 49
+revision: 62
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988]
 supersedes: []
 ---
 
@@ -23,7 +23,8 @@ click for itself, and which order of S-0213 each action produces. The rules depe
 the acting object, its type's abilities, the relation of the target to it and the modifier keys
 held. These are input rules. They decide which orders are created, never how an order is applied
 (S-0213). This spec also covers battlefield pointer images, ordinary band-box selection,
-mouse-button gestures and the distinction between a right click and right-drag scrolling.
+mouse-button gestures, the type-select role, control groups and the distinction between a
+right click and right-drag scrolling.
 Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
@@ -70,10 +71,21 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   command bindings of S-0213. The *attack-move gesture* is force-fire and force-select held
   together: Ctrl+Shift with the original's bindings.
 - **Type-select role.** A fourth role, like the modifier roles a role and not a physical key:
-  while it is held during a *select* or *toggle select* click, the click applies to every object
-  of the clicked object's type that is on the screen (claim 12). Pressing it twice in quick
-  succession widens that to the whole map. Which physical key plays it is the player's key
-  binding.
+  while it is held during a *select* or *toggle select* click, or a band-box drag, the click or
+  drag applies to the clicked object's whole type (claims 12, 29 and 32). A *tap* of the role,
+  with no click needed, extends the selection by its own types (claim 32). Which physical key
+  plays it is the player's key binding.
+- **Tap.** One press and release of the type-select role whose release comes at most the tap
+  limit (Constants) after its press (claim 32).
+- **Type-select reach.** Interface state with two values, *screen* and *map*: whether the role
+  acts on the screen candidates (claim 25) or on every object in play. It is *screen* at first.
+  Taps change it. In the original one further command, which no spec of this project defines,
+  can also change it (claim 32); our engine has no such command. Held clicks and drags only read
+  it.
+- **Control group, member.** One of ten numbered sets of the local player's objects, 1 to 10,
+  that the group commands of claim 33 make and recall. An object is in at most one group. A
+  *member* of group *N* is an object in group *N* that is the local player's own at that moment
+  and is on the map: not carried in a transport and not inside a building.
 - **Counted modifiers.** When force-fire and force-select are both held, every rule of this spec
   for resolving an action except claim 5 treats both as not held. "Held" in the action tables
   means counted in this way. Band-box selection reads force-select independently (claim 19).
@@ -143,7 +155,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   hold: it is not disabled; it is not deactivated (S-0405 claims 13 and 20); it is not being
   erased or phasing in; it is not held
   (S-0614 claims 7 and 8); it is not held inside a tank bunker; its type is not a spawned
-  aircraft type; it is not a slave unit; it is not falling (for example under a parachute); and,
+  aircraft type; it is not a slave unit; and,
   if it launches spawned aircraft, its launching count is not strictly between 0 and its spawn
   count (S-0506 claim 10). These are S-0506's counts, not the number of aircraft away from the
   spawner. A building is movable when it is not paralysed and either it is
@@ -151,8 +163,13 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   game is not a campaign game, the game option that lets construction yards be packed up again is
   on, and the yard is not mind-controlled. (The original also asks that the yard's house be
   human-controlled; every acting house meets that, Terms, *acting house*.)
-- **Able to fire.** An own object that is armed, not disabled, not deactivated (S-0405
-  claims 13 and 20) and not falling.
+- **Able to fire.** An own object that is armed, not disabled and not deactivated (S-0405 claims 13
+  and 20). Falling (for example under a parachute) is part of neither this nor *movable*. A unit
+  falling under a parachute takes orders, and carries them out once landed (S-0522 claim 17, whose
+  backing and medium rating this carries). Being movable or able to fire does not make an order take
+  effect: a seized unit ignores every new destination (S-0607 claim 9), and until it has its own
+  locomotor back every weapon and target is *illegal* for it (S-0607 claim 10). Those rules, with
+  their backing and ratings, are S-0607's.
 - **Melee-linked.** One of two objects joined by a *link*: the link that a hit of a weapon whose
   warhead carries the link flag (Import mapping) makes between the shooter and the object it hit,
   with both ends linked to each other (low for what creates it). It ends when the shooter is given a
@@ -341,7 +358,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    included. So the split between *select* and *nothing* in rows G2, G9 and G10 changes only the
    cursor that the representative shows. A click does the same under both. For example, a tank that
    is being erased and is alone clicks an enemy tank: the action is *nothing*, no order is made, and
-   the enemy tank becomes the selection. While route mode is held (S-0213, claim 16), a command click adds route points instead of creating orders. The click is refused when the route-holder limit would be passed or when a selected object cannot take part in a route; either refusal adds no route point (S-0213, claim 16).
+   the enemy tank becomes the selection. While route mode is held (S-0213, claim 16), a command
+   click adds route points instead of creating orders. The click is refused when the route-holder
+   limit would be passed, when a selected object cannot take part in a route, or when it is a
+   click on an existing point that S-0213 claim 16b refuses; no refusal adds a route point
+   (S-0213, claim 16).
    - Backing: `measurable` (Scenario T2, whose tower and power-plant steps give the *nothing*
      cases, Scenario T9 part A for an actor that is being erased, and S-0213's Scenario O8 for the
      refusal at the route-holder limit)
@@ -556,13 +577,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     *Select* replaces the selection with the clicked object. *Toggle
     select* adds the clicked object to the selection, or removes it if it is already selected; it
     acts only when the first selected object is the acting house's own, and otherwise acts as
-    *select*. While the type-select role is held, both act on every object of the clicked object's
-    type that is on the screen. The type-select role pressed twice selects that type across the
-    whole map, instead of on the screen, when the second press comes at most 500 milliseconds
-    after the first. Press times are
-    whole milliseconds, so a gap of 500 counts and a gap of 501 does not (Constants). The
-    original reads a real-time clock in whole milliseconds; our engine's interface applies the same
-    rule to the whole-millisecond times of its input events (Edge cases, departure).
+    *select*. While the type-select role is held, both act on the clicked object's type as a
+    whole, within the type-select reach. Claim 32 gives which objects that takes, their order and
+    the silence, and what a tap of the role does without a click.
     Cloaking can remove an object from an existing selection: at cloak start every non-owner
     viewer loses it, even with sensors; at later re-evaluation a fully cloaked object is removed
     from a non-owner viewer's selection when unsensed (S-0516 claim 26). Owning the object and
@@ -570,16 +587,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenarios T1 and T2 for selection order; S-0701 scenarios D2 and D3
       for selection-response lists and silence; S-0516 claims 26 and 36, CS9 part e and CS15
       for cloak/scenery click exclusions and cloak selection
-      loss), except two parts, which are `unmeasured`. (1) The last
-      millisecond of the interval (500 against 501): the timing of scripted input is not exact to
-      a millisecond, so Scenario T2 only separates 200 ms from 1 s. (2) The fallback of *toggle
+      loss), except one part, which is `unmeasured`: the fallback of *toggle
       select* to *select* when the first selected object is not the acting house's own while an
       own object is the representative: the rows give *toggle select* only to an own actor, so
       the case needs an object that changes owner while it is selected, and whether such an
       object stays selected is not known (Open questions). Over a first selected object that is
       an enemy, the click gives *select* by row G10 and does not reach the fallback.
     - Confidence: high for selection order and absence of response-list fallback; medium for
-      selection clicks and which objects use the variant lists; low for the last millisecond
+      selection clicks and which objects use the variant lists
 
 13. **Sidebar modes.** With an empty selection, the sidebar's mode buttons give these actions:
     - *Sell mode:* over an own building that can be sold and is not vehicle-like, *sell*. Over a
@@ -722,8 +737,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     already-selected objects remain selected. Force-move and force-fire do not otherwise
     change this ordinary box selection; holding force-fire with force-select still adds,
     regardless of the counted-modifiers rule (Terms) that governs actions. A type-select drag instead expands
-    the types encountered through claim 12's type-selection rule, and is silent (S-0701
-    claim 17).
+    the types encountered through claim 32's type-selection rule, and is silent (S-0701
+    claim 17). Whether that expansion applies the band-box tests of a tap's candidates or only
+    a held click's *can be selected* (claim 32) has not been studied.
 
     If there is no live box candidate inside, an unmodified box does not clear the selection:
     its release continues as the ordinary release click at the final pixel. With force-select
@@ -934,8 +950,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     encounter. Within each type's on-screen expansion, additions retain the candidate order
     of claim 25, including matching candidates outside the box. Already-selected objects
     are not added again or repositioned, so encountering that type again does not reorder
-    its earlier additions. When claim 12's double-press widens the expansion to the whole
-    map, additions within each type instead follow creation order among surviving objects.
+    its earlier additions. When the type-select reach is *map* (claim 32), the expansion
+    covers the whole map, and additions within each type follow creation order among surviving
+    objects.
     Claim 12's front/end rule still determines the final selection in both variants.
     The type-select drag is silent under S-0701 claim 17, independently of these orders.
     - Backing: `measurable` (Scenario T21; S-0701 claim 17 for response ownership and silence)
@@ -1013,6 +1030,199 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenario T23; S-0410 scenario R12 for radar)
     - Confidence: high
 
+32. **Type-select role: tap, reach and scope (Q-1987).** The role only ever takes the acting
+    house's own objects. An ally's objects, and those of every other house, never join. A
+    mind-controlled or captured object that the acting house now owns is own and does join.
+
+    *Tap.* A tap acts when the role is released. Its release time minus its press time, both in
+    whole milliseconds, must be at most the tap limit of 500 (Constants): 500 counts and 501 does
+    not. A longer hold does nothing at its release. The press time is that of the first press, so
+    a key's automatic repeat while it is held does not restart it. Two taps have no timing between
+    them. After the acting player has been defeated, a tap does nothing.
+
+    *What a tap takes.* If the selection is a single object that is not own, the tap first
+    removes it. The tap's types are the types of the objects then selected, together with the
+    building type that each of them deploys into, if any. A candidate of the tap is an own object
+    in play of one of those types that passes one of two tests. Either it passes the eligibility
+    tests of an ordinary band box (claim 19) other than the screen: it is not deactivated, not
+    controlled by a slave master, not held in a tank bunker and not tethered to a building that
+    its cell holds, and a building passes only when it is vehicle-like. Or it is a building whose
+    type powers a unit, which needs none of those tests. A candidate is added only if it can be
+    selected (Terms) and is not selected yet, and never while it is being erased (claim 16). A
+    candidate need not be on the screen: only reach *screen* below asks for screen candidates.
+    A tap never adds another object of those types, an ordinary building for example.
+
+    *Reach.* A tap keeps the reach as the previous tap left it only when, since that tap, no
+    object has been added to the selection, the selection has not been cleared, and none of the
+    original's further selection commands (below) has been used. Otherwise it first sets the
+    reach to *screen*. Every addition counts, whatever makes it: a band box, a click, a held click,
+    a type-select drag, *select group*, *add group* or *centre group* (claim 33). Every clearing
+    counts too, even of a selection that is already empty, so a *select group* press that is not
+    a repeat always counts. Removing single objects from the selection, by a held click or a death,
+    does not count, and neither do *make group*, a repeat *select group* press, an *add group*
+    press that adds nothing, or a *centre group* press that neither clears nor adds. The
+    original has four further selection commands that no spec of this project defines. One of
+    them selects the player's combat units, and it can also set the reach to *map*, which a held
+    click then uses. The effects of the other three are not established here. Using any of the
+    four makes the next tap set the reach to *screen*. Our engine has none of them, so for our
+    engine the list above is complete. With reach *screen*, if at least
+    one screen candidate (claim 25) that is a candidate of the tap is unselected, the tap adds
+    every such screen candidate in candidate order, whatever their types, and the reach stays
+    *screen*. Otherwise the reach becomes
+    *map*. With reach *map*, the tap adds every candidate of the tap in play, in creation order
+    among surviving objects. Each addition follows claim 12's front/end rule, and objects already
+    selected keep their places. So the first tap after a selection change extends on the screen,
+    and a second tap with no change between them extends across the map, however late it comes.
+    A single tap goes across the map at once when every candidate on the screen is already
+    selected, for example right after a box took them all. Types that match nothing anywhere
+    leave the selection as it was.
+
+    *Message.* After each tap the message list shows, in the acting player's colour, the
+    nothing-selected text when the selection is empty, otherwise the across-screen text for reach
+    *screen* and the across-map text for reach *map* (Import mapping).
+
+    *Selection response.* DECIDED (autonomy, 2026-10-28): a tap gives one selection response, that
+    of the first object it adds (S-0701 claim 17), as a band box does, and none if it adds nothing.
+    The original instead lets every object a tap adds queue a selection response of its own.
+    Responses are presentation only, so no switch.
+
+    *Held clicks.* With the role held, a click uses the reach as the last tap left it:
+    - *select* clears the selection, then adds every own object of exactly the clicked object's
+      type that can be selected (Terms) within the reach: the screen candidates in candidate
+      order, or every such object in play in creation order among surviving objects. Claim 12's
+      front/end rule then orders them. The clicked object gets no place of its own and joins only
+      if it is own. A click on another house's object of a type the player also has selects the
+      player's own objects of that type, and a type the player has none of leaves the selection
+      empty.
+    - *toggle select* on an unselected object makes the same additions and keeps the selection.
+    - *toggle select* on a selected object removes every selected own object of that type within
+      the reach. With reach *screen*, selected ones off the screen stay selected.
+    - The role does not change row B6's result.
+
+    A held click asks only *can be selected*, not the band-box tests of a tap's candidates. So a
+    deactivated own object of the type, or one held in a tank bunker, joins a held click's
+    selection while a tap leaves it out.
+
+    Held clicks and the type-select drag of claim 29 are silent (S-0701 claim 17) and do not
+    change the reach they read. One that adds an object or clears the selection still makes the
+    next tap set the reach to *screen*, as above. A quick press, click and release is a held click
+    followed by a tap. For a
+    type that deploys into no building, the tap after a held *select* goes across the map,
+    because every screen candidate of the type is then selected.
+    - Backing: `measurable` (Scenario T25; part c bounds the tap limit between 400 and 600 ms,
+      parts k and l test the powers-a-unit and deploys-into candidates, part m the deactivation
+      and tank-bunker tests for taps and held clicks, part n the tether test). The exact limit
+      of 500 and "at most" are `unmeasured`: the game reads the press and release times when it
+      handles the key events, not when the key moves, so no hold is exact to the millisecond.
+      The slave-master test is `unmeasured`: a tap would need a selected own object of a type
+      that slave masters control, but under no slave master, and no stock route to such an
+      object for the human is identified. The erasure exclusion is claim 16's. Parts o to r test
+      which changes reset the reach and which do not, part r the drag's reading of the reach, and
+      part s a mind-controlled object's joining. The original's four further selection commands
+      are `unmeasured`: our engine has none of them, so no scenario here uses them.
+    - Confidence: high for a tap limit between 400 and 600 ms, own objects only and the
+      held-click results.
+    - Confidence: medium for the reach rule and the list of changes that reset it, until parts o
+      to r run, for a mind-controlled or captured object's joining, until part s runs, the exact
+      limit of 500 and its boundary, the tap's candidate test (its band-box tests, the
+      slave-master test included, and the deploys-into and powers-a-unit parts), the held
+      clicks' joining of objects that fail those tests, the message, and the original's
+      per-object responses.
+    - Confidence: low for removals by a held click or a death not resetting the reach.
+
+33. **Control groups (Q-1988).** The local player has ten control groups (Terms), and four
+    commands act on each group *N*. Their keys are player bindings (S-0213 claim 22). Each
+    command acts on the key press and issues no order. Its effects on the selection, the groups,
+    the view and the interface modes are given below (*Modes* for the modes).
+
+    *Make group.* Every own object in group *N* leaves it. Then every selected own object joins
+    group *N* and leaves any other group it was in. Infantry, vehicles, aircraft and buildings can
+    all join. With an empty selection the command leaves group *N* empty. Objects of other houses
+    that carry the number *N* keep it (the owner-change quirk below). Making a group neither
+    changes the selection nor resets the type-select reach (claim 32).
+
+    *Select group.* Unless the press is a repeat (below), the selection is cleared, and then every
+    member of group *N* that can be selected (Terms) is added, in creation order among surviving
+    objects, each by claim 12's front/end rule. The first member that becomes selected gives the
+    only selection response (S-0701 claim 17). A group with no member leaves the selection empty.
+    DECIDED (autonomy, 2026-10-28): this follows S-0701 with no switch, because the response is
+    presentation only. The original gives no response at all when the first member it tries cannot
+    be selected.
+
+    *Add group.* As *select group*, but the selection is not cleared first and no press is a
+    repeat. Members already selected keep their places, and the first member that becomes selected
+    gives the only response. When the selection holds another house's object, the first member
+    added replaces it, by the owner rule of *toggle select* (claim 12).
+
+    *Repeat.* A *select group* press for group *N* is a repeat when the last *select group* press
+    that was not a repeat was for group *N*, came less than 800 ms of real time before it
+    (Constants), and the selection's own objects are exactly the members of group *N*. A repeat
+    leaves the selection as it is and centres the view as *centre group* does. It does not restart
+    the 800 ms, so repeats centre the view only within 800 ms of the press that last selected the
+    group, and the next press after that selects the group again. *Add group*, *make group* and
+    *centre group* presses neither start nor restart the 800 ms.
+
+    *Centre group.* If the first selected object is not in group *N*, the selection is cleared.
+    Then every member not yet selected is added as by *select group*, the first that becomes
+    selected giving the only response. If the selection is then not empty, the view is centred on
+    the group centre
+    point of F9 over the selected objects. If it is then empty, as it is for an empty group, the
+    view stays where it was. Quirk `quirks.group_center_keeps_extra_selection`:
+    when the first selected object is in group *N*, the rest of the selection stays, objects
+    outside the group included, and they count in F9 (Edge cases).
+
+    *Membership over time.* A member keeps its group while it is carried or inside a building,
+    and is not selected by a group command until it is on the map again. A deactivated member
+    keeps its group and is selected like any other member that can be selected. A vehicle that
+    deploys into a building passes its group to the building (S-0415 claim 6), and a building
+    that undeploys into a vehicle passes it back (S-0415 claim 10). An object leaves its group when
+    it is destroyed and
+    removed from play, and when a vehicle enters a tank bunker (S-0606 claim 7). An object can
+    also start in a group: a map's object line can give an infantry unit, a vehicle or an aircraft
+    a group number, and a scripted team gives each object it takes on its team type's group
+    number (Import mapping).
+    Quirk `quirks.group_kept_on_owner_change`: the group number stays with the object when its
+    owner changes. A member that is mind-controlled or captured away is skipped while another
+    house owns it, and is a member again when it comes back. An object that the local player
+    gains while it carries a number joins the player's group of that number, whichever house
+    gave it the number (Edge cases).
+
+    *Modes.* *Select group*, *add group* and *centre group* end sell, repair and power mode
+    (claim 13) and beacon placement before they act. *Make group* ends none. No group command
+    ends superweapon targeting or a building's placement: a recall while a superweapon is armed
+    selects the group and the superweapon stays armed (S-0512 claim 25). While the options menu
+    is open (S-0213 claim 23), the group keys do nothing. In a skirmish the game is paused only
+    while that menu is open (no default key binding pauses it), so the group keys do not act
+    during a pause.
+    - Backing: `measurable` (Scenario T26, S-0512 scenario X18 part e for the armed superweapon, and
+      S-0213 Scenario O19 part d for the keys). Part e of T26 bounds the repeat interval between 600
+      and 1000 ms, and its third run covers a *centre group* press within it. Part k covers the
+      response when the first member tried cannot be selected. The exact 800 ms and "less than" are
+      `unmeasured` for the reason given in claim 32 for the tap limit. F9's branches for *n* ≤ 2,
+      for a tie for the largest *d*ᵢ and for every *d*ᵢ 0 are `unmeasured`: part f centres on three
+      objects with one far from the other two, part e's repeat moves the view to a group of two
+      without naming the point, and no part places two objects equally far or objects at one point.
+      The team type's group number is `unmeasured`: no stock skirmish map builds a scripted team for
+      the human player's house. The deactivated member is `unmeasured` here: it rests on the
+      selection rules (Terms, *can be selected*), which T26 does not vary. The modes that *add
+      group* and *centre group* end, beacon placement and the pause are `unmeasured` here: part j
+      presses only *select group*, in sell, repair and power mode and with the options menu open.
+    - Confidence: high for make, select and add, one group per object, the empty-group results,
+      the repeat condition, a repeat interval between 600 and 1000 ms, the end of sell, repair
+      and power mode at *select group* and of none at *make group*, and a member taken away and
+      given back rejoining its group. Medium for an object gained with a number joining the
+      player's group of that number (T26 part i's second case, which can be void), for the
+      type-select reach after a group command (T25 parts o to q), for the original giving no
+      response when the first member it tries cannot be
+      selected, until T26 part k runs, for the presses other than *select group* not restarting
+      the 800 ms (only *centre group* is tested, by T26 part e), for the exact 800 ms and its
+      boundary, the view centring and F9 (its
+      branches for *n* ≤ 2, a tie and every *d*ᵢ 0 included, `unmeasured`), membership
+      through deploy and undeploy, the deactivated member, and the map and team group
+      numbers; low for the options menu and the pause, for the modes that *add group* and *centre
+      group* end,
+      and for beacon placement
+
 ## Formulas
 
 > **F1 (representative distance).** *d* = ⌊*r*(*n*)⌋, *n* = (*x*ₒ − *x*ₜ)² + (*y*ₒ − *y*ₜ)² +
@@ -1084,6 +1294,21 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > The factor 2 is an engine constant. In the original the two metrics are host input
 > settings; our engine fixes both at 4 pixels (lead decision, claim 27).
 
+> **F9 (group centre point).** Let the selection hold *n* ≥ 1 objects with positions
+> *p*₁ … *p*ₙ in selection order, each three integer coordinates in leptons, height included.
+> The mean *m* is the coordinate-wise sum divided by *n*, each coordinate truncated toward
+> zero. For *n* ≤ 2 the centre point is *m*. For *n* ≥ 3 let *s*ᵢ be the sum of the squares of
+> the three coordinate differences between *p*ᵢ and *m*, an exact integer, and let
+> *d*ᵢ = ⌊*r*(*s*ᵢ)⌋ in whole leptons, where *r* is S-0204's table square root (S-0204 F1), under
+> S-0204's switch `quirks.table_root_distance`: with that switch off, *d*ᵢ = ⌊√*s*ᵢ⌋. Two objects
+> whose exact distances differ by less than the table's shortfall can swap which is farthest.
+> Scenario T26 keeps the distances apart and does not test such a tie. Let *k* be the first object
+> in selection order whose *d*ₖ is the largest, and the largest is
+> above 0. The centre point is the coordinate-wise sum of all positions minus *p*ₖ, divided by
+> *n* − 1 and truncated toward zero, so the object farthest from the mean is left out. If every
+> *d*ᵢ is 0, the centre point is *m*. Claim 33 centres the view on the centre point; how the view
+> maps a point to its screen position is S-0101's.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1094,7 +1319,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Screen candidates | 500 | objects per drawn frame | Claims 20, 24 and 25; not the selected-object limit |
 | Mobile candidate margin | 32 | pixels on each axis | F7; independent of image dimensions |
 | Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
-| Type-select double press | 500 | milliseconds | Claim 12; an engine constant of the original, not a host setting. Press times are whole milliseconds; a second press counts when its time minus the first press's time is at most 500. Input only. |
+| Control groups | 10 | groups per player | Claim 33; digit keys 1 to 9 and 0 for group 10 (S-0213 claim 22) |
+| Group repeat interval | 800 | milliseconds of real time | Claim 33; a *select group* press less than 800 after the last one that selected the group can be a repeat, 800 cannot. Not ticks and not a host setting. Input only. |
+| Type-select tap limit | 500 | milliseconds | Claim 32; an engine constant of the original, not a host setting. Times are whole milliseconds; a release is a tap when its time minus the press time is at most 500. Input only. |
 | Full health | 1 | health ratio | Tables I and V. The original fixes the threshold at 1 and does not read it from data. |
 | Attackable height limit | −20 | leptons of height above the surface | F3; a target must be strictly above it |
 | Passenger land-speed limit | 0.01 | land multiplier (a factor; 1 = unchanged speed) | Row VD7 and Formulas F4; a first passenger whose multiplier on the cell's land type is strictly below it counts as unable to move there, except that the test is not applied where the land is water. A data value of exactly 0.01 counts as below it, because the original stores the multiplier in single precision (Formulas F4) |
@@ -1698,10 +1925,10 @@ Ordering consequences:
   to attack; the unarmed infiltrator is handled by rows I24 and I25. Force-fire never gives an
   unarmed actor an *attack*, unless it is an infiltrator; it can still change an unarmed actor's
   action through rows that read force-fire directly (for example value *e*, row I8 and row G6).
-- **Type-select interval** (claim 12). Departure: the original times the double press with the
-  machine's clock. Our engine keeps the threshold (at most 500 whole milliseconds between the two presses) but
-  measures it between the time stamps of its own input events, which it keeps in whole milliseconds. Selection is not game state, so this never reaches the simulation. No
-  switch.
+- **Type-select tap limit** (claim 32). Departure: the original times the tap with the
+  machine's clock. Our engine keeps the limit (a release at most 500 whole milliseconds after the
+  press) but measures it between the time stamps of its own input events, which it keeps in whole
+  milliseconds. Selection is not game state, so this never reaches the simulation. No switch.
 - **Berserk carrier tote** (claim 15). Every other berserk object gets no order, but a berserk
   carrier aircraft can still pick up an allied vehicle. This is probably an oversight of the
   original. `quirks.berserk_carrier_tote` (default: the original, the exception applies). With the
@@ -1756,6 +1983,27 @@ Ordering consequences:
   computes the same value with the table square root of S-0204 (`quirks.table_root_distance`
   there).
 
+- **Centre group keeps extra objects.** `quirks.group_center_keeps_extra_selection` (default:
+  YR behaviour). When the first selected object is in the group, *centre group* keeps the rest
+  of the selection, objects outside the group included, and centres the view on all of them
+  (claim 33). Off: *centre group* replaces the selection with the group's members, as *select
+  group* does, before it centres the view. Backing: `measurable` (T26 part f), confidence high.
+- **Group number kept on owner change.** `quirks.group_kept_on_owner_change` (default: YR
+  behaviour). The group number stays with the object through an owner change, so a member
+  taken away and given back rejoins, and an object the player gains with a number joins the
+  player's group of that number (claim 33). Off: a group belongs to the house that made it. An
+  object counts as a member only while that house owns it, and *make group* by that house
+  removes its earlier members wherever they are. So a member that comes back rejoins unless the
+  house made the group again meanwhile, and a gained object joins no group until the gaining
+  house groups it. When the gaining house makes a group of it, it leaves the earlier house's
+  group, since an object is in at most one group. Backing: `measurable` (T26 part i). Confidence
+  high for a member taken away and given back, medium for a gained object (part i's second case
+  can be void).
+- **Group centre with co-located objects.** When three or more selected objects all lie exactly
+  at their truncated mean, so that every *d*ᵢ of F9 is 0, F9 takes the mean and the view centres
+  on them. In the original the view jumps away from them instead: a display bug with no
+  switch. Backing: `unmeasured` (no T26 part places objects at one
+  point). Confidence: medium (F9's mean is our rule; the original's jump is not observed).
 - **Empty box release.** `quirks.empty_box_release_click` (default: original). An unmodified
   box with no live screen candidate falls through to a click at its release pixel instead of
   clearing the selection. Off: every unmodified box replaces the selection with its eligible
@@ -1797,7 +2045,7 @@ Ordering consequences:
 | Weapon `AreaFire` | deploy weapon fires over an area (value *v* of table I) | boolean (S-0003) | no |
 | Vehicle types, `DeployToFire` | deploy-to-fire flag (Terms, *deploy check*) | boolean (S-0003) | no |
 | Vehicle types, `Crusher` | can crush (value *k* of table V) | boolean (S-0003) | no |
-| Vehicle types, `DeploysInto` | deploys into a building (row VD2; deploy readiness) | building type name | none |
+| Vehicle types, `DeploysInto` | deploys into a building (row VD2; deploy readiness; the tap's types, claim 32) | building type name | none |
 | Vehicle types, `NonVehicle` | does not count as a vehicle (Terms) | boolean (S-0003) | no |
 | Vehicle types, `IsTrain` | train (row I14) | boolean (S-0003) | no |
 | Vehicle and aircraft types, `Passengers` | transport (values *x* of table I and *q* of table V, rows VD4 to VD8, AC7): more than 0 | integer (S-0003) | 0 |
@@ -1868,6 +2116,10 @@ Ordering consequences:
 | Infantry, vehicle, aircraft and building types, `VoiceSpecialAttack` | special-attack order-response list (claim 14; F5); *n* counts its entries, numbered from 0 in listed order | list of sound names (S-0003), kept in the listed order | empty (no response) |
 | Object type `Primary`, weapon `Damage` | primary-weapon presence and positive damage for selection order (claim 12); the weapon mapping is S-0308's | weapon type name; integer (S-0003) | no primary weapon; 0 damage |
 | Rules `[General]` `HarvesterUnit` | the harvester list of the row I15 quirk | list of vehicle types | empty |
+| Building types, `PowersUnit` | a building whose type powers a unit is a candidate of a tap (claim 32) | vehicle type name | none |
+| Map sections `[Infantry]`, `[Units]` and `[Aircraft]`, the group field of each object line | the object's starting control group (claim 33) | integer: 0 to 9 for groups 1 to 10, −1 for none; any other value matches no group; the field's place in the line is the map format's | none |
+| Team type sections, `Group` | the group number a scripted team gives each object it takes on (claim 33) | integer, as the map's group field | no group |
+| String-table entries `MSG:NothingSelected`, `MSG:SelAcrossScreen` and `MSG:SelAcrossMap` | the tap's nothing-selected, across-screen and across-map texts (claim 32) | translated text from the user's string table | missing-entry diagnostic |
 
 The defaults in the Absent column are the values the original gives a field when the type (or the
 rules data) is created. They are engine constants, read from the original's program rather than
@@ -1888,8 +2140,16 @@ teams (S-0412, claim 8). The glossary's void rule applies to each bystander, and
 of each scenario is the part of the map that holds its test objects. A scenario that clicks an
 object of the allied bystander uses one of that bystander's objects, which the scenario names. The
 scenarios use Alt for force-move, Ctrl for force-fire and Shift for force-select.
-Scenario T17 checks those physical bindings directly. Objects are pre-placed by the map. A recorder logs each object's behaviour, target and destination per tick, and each order
-issued. The cursor shape is observed on screen and used only to read the representative's action.
+Scenario T17 checks those physical bindings directly. Objects are pre-placed by the map, except
+the human player's buildings: a skirmish drops a pre-placed structure that a human player's house
+owns (S-0009 claim 27). Each building that a scenario gives the human (T8, T25 and T26 among
+them) is built by the human before the part starts, from the construction yard that its starting
+vehicle deploys into. A building type that the human's side cannot build is made
+buildable for that side by the scenario's named test file. The human's other starting units stay
+out of the observed area, and a part that counts objects of a type across the whole map uses a
+type that none of them has. A recorder logs each object's behaviour, target and destination
+per tick, and each order issued.
+The cursor shape is observed on screen and used only to read the representative's action.
 Each test is done once, because no click draws from the scenario random stream (response-choice
 and playback draws use the unsynchronised stream, which T2 part B reads). Where a
 scenario says "alone", that object is the only one selected, so that it is the representative.
@@ -1949,13 +2209,10 @@ or the cursor does not follow the selection order in the tie-break.
 - An own power plant, alone, clicked on itself (row B6, *nothing*, and the plant is already
   selected), and then clicked on an empty cell. Expected: no selection change and no order in
   both. Falsified if either click changes the selection or records an order.
-- Hold the type-select role and click one own unit of the further type, once. Expected: every
-  object of that type on the screen is selected, and none off it. Falsified if only the clicked
-  unit is selected, or off-screen ones are too.
-- Press the type-select role twice with about 200 ms between the presses, and later twice with
-  about 1 s between them. Expected: the first pair selects that type across the whole map, the
-  second only on the screen. Falsified if the two pairs give the same selection while objects of
-  the type exist off screen. (200 ms and 1 s lie clearly on either side of the 500 ms constant.)
+- Hold the type-select role for more than 1 s and click one own unit of the further type, once,
+  with no tap made earlier in the game. Expected: every object of that type on the screen is
+  selected, and none off it. Falsified if only the clicked unit is selected, or off-screen ones
+  are too. Scenario T25 tests taps and the reach (claim 32).
 - With the tank selected, hold route mode and click two cells. Expected: no order is recorded for
   the tank until route mode ends (claim 3). Falsified if a move order is recorded at the first
   click.
@@ -2754,18 +3011,19 @@ identity, not merely the eventual first selected object. Expect the earliest suc
 addition to own that response under S-0701 claim 17. Repeat with ground and airborne
 own mobile objects so layer order differs from creation order.
 
-For type expansion, label two selectable own types A and B, with candidate order
-A0, B0, A1, B1. Arrange a box containing only A1 and B1, with A0 and B0 elsewhere
-in the same view. Hold the type-select role once, not a double press, and release the
-box. Expected addition order: A0, A1, B0, B1, before claim 12's front/end transformation,
-with no selection response. Enclosing another A candidate must not reposition the already
-added A objects. Reverse which type has the first in-box encounter while keeping each
-type's recorded candidate order: the type groups reverse, not their within-type order.
-Repeat additively with A0 preselected. Then double-press the type-select role within
-claim 12's interval and repeat with same-type objects off screen whose creation order
-differs from drawing order. Expected: each encountered type expands map-wide in surviving
-creation order. Remove an early-created witness and create a later one in a separate
-run to test that surviving creation order is retained. Type-select runs remain silent.
+For type expansion, label two selectable own types A and B, with candidate order A0, B0, A1, B1.
+Arrange a box containing only A1 and B1, with A0 and B0 elsewhere in the same view. With no tap
+made earlier in the game, so that the reach is *screen*, hold the type-select role for more than
+1 s and release the box. Expected addition order: A0, A1, B0, B1, before claim 12's front/end
+transformation, with no selection response. Enclosing another A candidate must not reposition
+the already added A objects. Reverse which type has the first in-box encounter while keeping
+each type's recorded candidate order: the type groups reverse, not their within-type order.
+Repeat additively with A0 preselected. Then tap the role twice with no selection change between
+the taps, so that the reach is *map* (claim 32), clear the selection, which leaves the reach as
+it is, and repeat with same-type objects off screen whose creation order differs from drawing
+order. Expected: each encountered type expands map-wide in surviving creation order. Remove an
+early-created witness and create a later one in a separate run to test that surviving creation
+order is retained. Type-select runs remain silent.
 
 A different successful-addition sequence, change with drag direction, repositioning of
 an already-selected object, or speech from a later ordinary-box addition falsifies the
@@ -2932,8 +3190,184 @@ readiness*, and Edge cases).**
   passed gives none; any event of (e) ends the refusal early; or *D*₋ is refused in
   any sequence of (g).
 
+**Scenario T25: type-select tap, reach and held clicks (claim 32, Q-1987).**
+- *Setup:* a skirmish on a small purpose-made map, stock data, the human with an allied computer
+  player and an enemy one. The human has tanks of one type A: A1 to A3 on the screen and A4 and
+  A5 off it, created in the order A4, A1, A5, A2, A3. The ally has a tank of type A on the screen,
+  and the enemy has one of type A and one of a type B that the human does not have. The human
+  also has a power plant and two infantry units of type C on the screen. The recorder logs the
+  selection in order after every input, the message-list texts and every selection response
+  heard, with the object that gives it. Every hold of the role that is not meant as a tap lasts
+  more than 1 s, every tap less than 200 ms.
+- *(a) One tap.* Click A1 alone, then tap. Expected: A1, A2 and A3 selected, A4, A5 and the
+  ally's and enemy's tanks not, the across-screen text shown, and a selection response queued by
+  each of A2 and A3. Falsified if off-screen or other houses' tanks join, or nothing changes.
+- *(b) Second tap.* Tap again at once, and in another run 5 s after (a). Expected in both: A4 and
+  A5 added in creation order (A4, then A5), each by claim 12's front/end rule, and the across-map
+  text. A screen-only result after 5 s falsifies the absence of a timing between taps. Then click
+  A1 alone and tap: the screen again (the click reset the reach).
+- *(c) Hold limit.* Click A1 alone, press the role, release it after 1 s. Expected: no change and
+  no text. Repeat with a 300 ms hold: as (a). A change after the long hold falsifies the limit.
+  Then, by scripted input (measurement setup), make 10 holds of 400 ms and 10 of 600 ms, each
+  after clicking A1 alone. Expected: every 400 ms hold acts as (a), and no 600 ms hold changes
+  anything. Falsified if a 400 ms hold does nothing or a 600 ms hold acts. The game reads the
+  key times when it handles the key events, so the scripted lengths carry up to one frame of
+  error; the 100 ms margins on each side of 500 cover it.
+- *(d) Box then tap.* Box A1 to A3, then tap. Expected: straight across the map (A4 and A5 added,
+  across-map text).
+- *(e) Other types.* Select the power plant alone and tap. Expected: no change, across-map text.
+  Select one C alone and tap: both own C units. Click the enemy's B tank alone and tap.
+  Expected: an empty selection and the nothing-selected text.
+- *(f) Held select.* Run (a), so the reach is *screen*, then clear the selection. Click the
+  enemy's A tank with the role held: with an empty selection the click is *select* (claim 1).
+  Expected: exactly A1 to A3, no response heard. Clear the selection again and repeat on the
+  enemy's B tank: an empty selection. Then run (a) and (b) up to its second tap, so the reach is
+  *map*, clear the selection and repeat on the enemy's A tank: A1 to A5. Clearing the selection
+  leaves the reach as the last tap left it (claim 32, *held clicks*).
+- *(g) Held toggle.* With A1 to A3 and one C selected and the reach at *screen*, toggle-select A2
+  with the role held. Expected: A1 to A3 removed and C kept. Then select A1 to A3 again, scroll
+  to A4 and A5 and toggle-select them without the role, scroll back and repeat: A4 and A5 stay.
+  After (b), with A1 to A5 selected and the reach at *map*, the same click removes all five.
+- *(h) Held click on the sole selection.* Select the power plant alone and click it again with the
+  role held. Expected: no change.
+- *(i) Order across types.* Select one A and one C, with the screen candidates of A and C
+  interleaved in candidate order (claim 25, logged by the recorder), and tap. Expected: the added
+  A and C units in that interleaved order before claim 12's front/end rule. All of one type added
+  before the other falsifies it.
+- *(j) Defeat.* In a run where the human loses, tap after the defeat. Expected: no change and no
+  text.
+- *(k) Unit-powering building.* The named test rules file `S0214-deploy.ini` of part (l) also
+  gives a test building type P, larger than 1 × 1 and undeploying into nothing, a stock vehicle
+  type to power, and a test building type P′ of the same size none. Give the human two
+  buildings of type P, both on the screen. Select one alone and tap. Expected: both selected, the
+  across-screen text. Control: give the human two buildings of type P′ on the screen, select one
+  alone and tap. Expected: it stays alone, with the across-map text. Falsified if the second P
+  is not added, or the second P′ is.
+- *(l) Deploys-into types.* With a named test rules file `S0214-deploy.ini` that gives a stock
+  vehicle type V a 1 × 1 building type K to deploy into, and K that vehicle type to undeploy
+  into, deploy one V into K on the screen, then select another V alone and tap. Expected: K is
+  added with the other Vs on the screen. Control: the same file gives a test vehicle type V′ a
+  test building type K′ to deploy into, larger than 1 × 1, undeploying into nothing and powering
+  no unit. Deploy one V′ into K′ on the screen, select another V′ alone and tap. Expected: K′ is
+  not added. Falsified if K is not added, or if K′ is.
+- *(m) Deactivated and bunkered.* In a separate run, give the human three vehicles R1 to R3,
+  created in that order, of a stock type that depends on a control centre (S-0405 claim 13), R1
+  and R2 on the screen and R3 off it, and one control centre. Click R1 alone and tap twice.
+  Expected: R2, then R3, added. Sell the control centre, so that R1 to R3 are deactivated, then
+  click R1 alone and tap twice. Expected: R1 stays alone, with the across-map text after each
+  tap. Then clear the selection and click R1 with the role held (the reach is *map*). Expected:
+  R1 to R3 selected. In another run, add to the setup a tank bunker of the human on the screen
+  and a tank A6 of type A, created last, that has entered it before the part starts. Click A1
+  alone and tap twice. Expected: A2 to A5 added, A6 not. Clear the selection and click A1 with
+  the role held. Expected: A1 to A6 selected. Falsified if a tap adds a deactivated R or A6, or
+  if a held click leaves one of them out.
+- *(n) Tether.* In a separate run, give the human a refinery and two harvesters H1 and H2 of a
+  stock type that unloads standing on its refinery's cells, both on the screen. While H2
+  unloads there, click H1 alone and tap twice. Expected: H1 stays alone. After H2 has left the
+  refinery's cells, click H1 alone and tap. Expected: H2 added. The record notes where H2 stood
+  at each tap. A run in which H2 left the refinery's cells before the first two taps is void.
+  Falsified if H2 is added while it stands on the refinery's cells, or not added after.
+- *(o) to (r) What resets the reach.* Each part starts from the same state S: run (a) and (b), so
+  that A1 to A5 are selected and the reach is *map*, after making group 1 of A1 to A5 and group 2
+  of one C before (a). Then a new tank A7 of type A comes into play on the screen, built by the
+  human, and is not selected (the recorder confirms that the selection
+  does not change). A tap that keeps the reach adds A7 with the across-map text; a tap whose
+  reach was set to *screen* adds A7 with the across-screen text. The text tells them apart.
+- *(o) Make group.* From S, press Ctrl+3, then tap. Expected: the across-map text. Falsified by
+  the across-screen text.
+- *(p) Select and add group.* From S, press 1, then tap. Expected: the across-screen text.
+  From S again, press Shift+2 (C joins), then tap: the across-screen text. Falsified by the
+  across-map text in either.
+- *(q) Centre group.* From S, with A1 still the first selected object, press Alt+1, which neither
+  clears nor adds (the recorder confirms the selection), then tap. Expected: the across-map
+  text. Falsified by the across-screen text.
+- *(r) Type-select drag.* Give the human a third unit C3 of type C off the screen for this part.
+  From S, with force-select held, so that the drag adds and does not clear (claim 19), drag a box
+  with the role held over one C on the screen, leaving A7 outside the box. Expected: A1 to A5
+  kept, every C in play added, C3 included, because the drag reads the reach *map* (claim 29),
+  and A7 not added. Then tap: A7 added with the across-screen text, because the drag added
+  objects, so the tap set the reach to *screen*. Falsified if C3 is not added, if the drag adds
+  A7 or drops an A, or by the across-map text after the tap.
+- *(s) Captured objects.* In a separate run, the human has two mind-controlling units and the
+  enemy two vehicles of one type that the human has none of. Each controller takes one of them.
+  Select one taken vehicle alone and tap. Expected: the other added, with the across-screen
+  text. Falsified if it is not added.
+- Our engine gives only the first of (a)'s responses (claim 32, the DECIDED departure). The
+  record logs the original's responses as heard.
+
+**Scenario T26: control groups (claim 33, Q-1988).**
+- *Setup:* a skirmish on a small purpose-made map, stock data, fresh keyboard bindings, the
+  human and one enemy computer player. The human has tanks A1 to A3 of one stock type, created in
+  that order, an infantry unit C with a weapon, an engineer, a power plant, an aircraft of a
+  stock type standing on its landing building, a stock transport that carries vehicles, a
+  construction vehicle, a tank bunker and a mind-controlling infantry unit. The enemy has a
+  mind-controlling
+  infantry unit kept away from the human's units until a part needs it, and a tank E whose map
+  object line gives it group 3. The recorder logs, after every input, the selection in order,
+  each object's group number, the view position in leptons, the sell, repair, power and
+  placement states, the message list and every selection response heard.
+- *(a) Make and select.* Select A1 and A2, press Ctrl+1, clear the selection, press 1. Expected:
+  A1 and A2 selected in creation order under claim 12's rule, one response, from the first
+  added. Falsified if the group is not made or the selection is not A1 and A2.
+- *(b) Reassign.* Select A2 alone and press Ctrl+2. Press 1, then 2. Expected: 1 gives A1 alone,
+  2 gives A2 alone. Falsified if A2 is in both groups. Then select the power plant and press
+  Ctrl+8, and the aircraft and press Ctrl+9. Clear the selection and press 8, then 9. Expected:
+  the power plant, then the aircraft. Falsified if either kind cannot join.
+- *(c) Empty group.* Select A3 and press Ctrl+4, then clear the selection and press Ctrl+4 again.
+  Select C and press 4. Expected: an empty selection. Falsified if C stays selected or A3 is
+  selected.
+- *(d) Add.* Select C alone and press Shift+1. Expected: C and A1 selected, A1 placed by claim
+  12's rule. Falsified if C is removed.
+- *(e) Repeat.* Make group 1 of A1 and A2 again and scroll the view away from them. By scripted
+  input, press 1, then 1 again 600 ms later, 10 times; then the same with a 1000 ms gap, 10
+  times. A press that selects the group gives a selection response and leaves the view; a repeat
+  gives none and moves the view to the group. Expected: after a 600 ms gap a repeat, after a
+  1000 ms gap a new selection. Then press 1 at 0, 600 and 1200 ms: the second press is a repeat,
+  the third selects again (1200 ms after the first) and gives a response. In another run press
+  1, toggle-select C into the selection and press 1 within 600 ms: the group is selected again,
+  with a response. In a third run press 1, then Alt+1 300 ms later and 1 at 900 ms: the third
+  press selects again, since the *centre group* press did not restart the 800 ms. Falsified if
+  a 600 ms press selects again, a 1000 ms one is a repeat, the third press at 1200 ms is one, or
+  the press at 900 ms after Alt+1 is one.
+- *(f) Centre and its point.* Make group 5 of A1, A2 and A3 with A3 far from the other two.
+  Clear the selection, scroll away and press Alt+5. Expected: the three selected, and the view
+  centred on the mean of A1 and A2, by F9. Then select A1 alone, toggle-select the engineer (the
+  recorder confirms that A1 stays first) and press Alt+5. Expected: A1 to A3
+  and the engineer selected (quirk). Select C alone, toggle-select the engineer (C stays first)
+  and press Alt+5: A1 to A3 only. Falsified if the view centres on the mean of all three, or if
+  the engineer is dropped in the first case or kept in the second. With the switch off, the
+  first case gives A1 to A3 only.
+- *(g) Carried and deployed.* Make group 1 of A1 and A2 again. Put A1 into the transport and
+  press 1: A2 only. Unload, and press 1: A1 and A2. Put the construction vehicle in group 6,
+  deploy it and press 6: the
+  construction yard. With the lobby option that lets a yard be packed up (Import mapping),
+  pack it up into the vehicle again and press 6: the vehicle. Put A3 in group 7, move it into
+  the tank bunker, then out, and press 7: an empty selection. Falsified if A1 is lost from its
+  group, the yard or the vehicle is not selected, or A3 is still in group 7.
+- *(h) Destroyed.* Let the enemy destroy A2 and press 1: A1 alone, no error.
+- *(i) Owner change.* Let the enemy's controller take A1 and press 1: A1 not selected. Make
+  group 1 of C while A1 is taken. Kill the controller so that A1 returns, and press 1. Expected:
+  A1 and C. Then let the human's controller take E, and press 3 without having made group 3.
+  Expected: E selected. The second case is void unless the recorder shows E still in group 3
+  when it is taken, since the enemy's teams can give it another number. In another run, let A1
+  be taken and come back without group 1 being made meanwhile, and press 1: A1. Fixed behaviour
+  (the switch off): C alone in the first case, nothing in the second, A1 in the third.
+- *(j) Modes.* Enter sell mode and press 1: sell mode ends and group 1 is selected. Repeat with
+  repair mode and power mode. Enter sell mode and press Ctrl+0: sell mode stays. Start a ready
+  building's placement and press 1: the placement stays. With the options menu open, press 1
+  and close it: the selection is unchanged. Falsified if a mode survives a recall, *make group*
+  ends one, or the placement ends. Superweapon targeting is S-0512 scenario X18 part e.
+- *(k) First member not selectable.* In a separate run with a named test file, a test copy U of
+  A1's tank type has its selection flag off (Import mapping). Map object lines put U and a tank A4
+  of A1's type in group 2, U's line before A4's, so that U is created first (the recorder confirms
+  the order). With an empty selection press 2. Expected in the original: A4 selected, U not, and
+  no selection response heard, the display bug of claim 33. Fixed behaviour: A4's response.
+  Falsified if U is selected, A4 is not, or the original gives A4's response.
+- *Runs:* 3 of each part; part e as stated. The record logs the responses as heard.
+
 ## Open questions
 
+- Which of claim 32's candidate tests a type-select drag's expansion applies (claim 19).
 - The state-specific transient box points of claim 19 stay `unmeasured` beyond T14 part B.
 - Route-point editing cursor substitutions are not covered by table C, and building-placement
   hover images belong to the placement display's spec.
@@ -2964,6 +3398,9 @@ readiness*, and Edge cases).**
 - Whether the test map can put a vehicle on a cell of a vehicle factory (row AC2), a live
   veinhole monster on a cell (row GC4 line of T10), and a garrisoned building that belongs to
   the human player (Scenario T6).
+- What a control-group key does while the route-mode key is held (claim 33, S-0213 claim 16).
+- The effects of three of the original's four further selection commands on the selection
+  (claim 32). Our engine has none of them.
 - Whether a selected object that changes owner (for example one that an enemy captures) stays
   selected, which decides whether the fallback of *toggle select* (claim 12) can be reached.
 - Whether a click finds a building whose type is invisible in the game as the clicked object (row B1, target half).
@@ -2994,9 +3431,33 @@ readiness*, and Edge cases).**
 - What a gap generator's boosted radius is, and when it starts and ends (row B4); and how the extra
   power drain of row B4 is derived from the type's extra-power field ("the drain part of a negative
   value", Import mapping).
+- A *repeat* over a selection whose first object is another house's and whose own objects are
+  exactly group *N*'s members (claim 33) is not stated. It is probably unreachable: a *select
+  group* press that is not a repeat clears the selection, and adding an own object replaces
+  another house's by the owner rule of *toggle select* (claim 12).
 
 - **Coordinated hand-off checks (verifications for the hand-off, not decisions).** Confirm S-0212 claim 25 and P16 runs (u) and (r)
   preserve claim 11's direct-destination bypass, unrestricted free-mover no-move search
   and distinction from rally-point searches. The current companion passage already agrees.
   Confirm S-0213 claims 22 and 23 cite claims 5 and 23 here for Q-0286 question 2, and
   S-0408 claim 12a keeps claim 13's cursor-cell and object-versus-wall-sale distinction.
+
+## Changes for other specs
+
+- **S-0204, claim 5, uses of the table square root.** The claim lists the uses that
+  `quirks.table_root_distance` covers. S-0214's representative distance (F1) and group centre
+  point (F9) are object distances taken with the same table and should be on that list.
+- **S-0215, claim 11 and scenario B44, orders during a fall.** Claim 11's backing says that move
+  clicks during a fall are refused, not deferred until landing, and B44 expects scripted move
+  clicks during the descent to be refused and counts a deferred falling move as a falsifier.
+  Under this spec (Terms, *movable* and *able to fire*) and S-0522 claim 17, a falling unit is
+  movable and able to fire whenever a landed one would be: a move, attack or deploy click during
+  the fall gives an order at once, and the unit carries it out after landing. Claim 11's sentence
+  should then say that a move click during the fall gives a move order that starts after landing.
+  B44 should expect that move after landing, as S-0522 scenario P10 does. A move started while
+  still falling, or a click during the fall that gives no order, should falsify instead.
+- **S-0701, claim 17, type-select silence.** The silence should cover only the held type-select
+  role (clicks and drags, S-0214 claims 29 and 32). A tap of the role gives one selection
+  response, that of the first object it adds, as a band box does (S-0214 claim 32). Scenario
+  D3's expectation of no response for type-select should then cover the held role only, and
+  expect one response, from the first object added, for a tap.
