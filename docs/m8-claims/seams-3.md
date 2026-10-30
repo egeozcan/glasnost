@@ -53,7 +53,7 @@ unused).
 | S-0111 | claim 1's culling is read at each status redraw, not at each scroll step | design | Presentation only. |
 | c7 | pathing "Left open" items (shore maximum, the harvesters' dock, the yield's choice of side with more than two groups) | proposals | Not claims; the lead's decision of 2026-10-29 admits the improvements as our design. |
 | B10 | the AI's broke-house recovery | own AI | Tuning of our own AI, no spec rows. |
-| a6 | the arena triage rows | requests | Open requests Q-1710, Q-2096 to Q-2099 and others. |
+| a6 | the arena triage rows | requests | Open requests Q-2096 to Q-2099 and others. Q-1710 was answered by S-0405 r47 (intake 52b). |
 | S-0501 | claims 47 (a), 48 (c), 48 (d), 18, T1 | as sweep 2 | Sweep 2's reasons hold. |
 | S-0212 | claims 17 and 18, the flattening's threat test | partly | As sweep 2: no gate or arena unit has a coefficient. |
 | S-0306 | claim 23, the magnetic-beam *rearming* of a live wave | covered | `claim_11_rearming_while_gripping` (`claims_s0607.rs`) tests the wave; row 10 tests claim 23's exception. |

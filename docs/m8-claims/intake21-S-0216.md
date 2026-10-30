@@ -3,7 +3,10 @@
 This intake takes in one new spec, **S-0216 revision 20** (units placed after the game has
 started; spec commit 8b1e0b8). It answers Q-1711 questions 2 and 3 for play-time placements and
 Q-1713 questions 2 and 3 (claim 6) for the measurement records' units (406d635, 3635992). Q-1711
-questions 1, 4 and 5 and Q-1713 question 1 stay open in the spec.
+questions 1, 4 and 5 and Q-1713 question 1 stay open in the spec. M-0006 (intake 52b,
+[ledger](intake52b-S-0309-S-0405-M-0005-M-0006-M-0016.md)) settles only that the records' units are in play at tick 0 (Q-1711 question 5)
+and shows that no archived game placed a unit on a cliff cell of Q-1502 (Q-1713 question 1's
+premise does not hold).
 
 **What a play-time placement is.** S-0216 Terms defines it as the placement of the measurement
 harness of its scenarios PT1 to PT5, "and so can another rule of the game where its own spec says
@@ -83,7 +86,7 @@ placing steps use it: the testkit's harness (`testkit::spawn_in_play`) and the s
 | reinforcements, trigger-created units, teams | none | S-0011 claim 30 hands them to teams, which have no spec | not built |
 | our harness | `testkit::spawn_in_play` | S-0216 | **new**, follows claims 1 to 5 |
 | our synthetic arena | `glasnost_tools::arena::setup` | S-0216 | **switched** from `testkit::spawn` |
-| the oracle arena | `glasnost_tools::oracle::setup` | A1 interim (Q-1711 question 5) | **kept** (below) |
+| the oracle arena | `glasnost_tools::oracle::setup` | A1 interim (Q-1711 question 5) | **kept** (below); since intake 52b the units stated on the cliff cells stand on M-0006's placed cells |
 | tests and diagnostics | `testkit::spawn` (sim, app, tools tests), `path_report` | none | unchanged: a test fixture that places at the centre with *guard* forced, no draw, no entry test |
 
 **The oracle arena** (the records' units). Q-1711 question 5, how the stock harness placed the
@@ -140,4 +143,4 @@ synthetic map, draws checked against a cloned scenario stream).
 | Scenarios PT1 to PT5 | by construction | Oracle scenarios; the tests above play each one's synthetic shape. No measurement record yet |
 | Changes for other specs: S-0206 claim 5 | built (S-0216's side) | `place_in_play` |
 | Changes for other specs: S-0215 claims 4, 11, 14, 15 | built (S-0216's side only) | `place_in_play`; the general placement fall-back waits for S-0215's revision |
-| Open questions | interim / open | above; Q-1711 questions 1, 4 and 5, Q-1713 question 1 open |
+| Open questions | interim / open | above; Q-1711 questions 1, 4 and 5, Q-1713 question 1 open (M-0006, intake 52b: question 5 settled only as far as the units are in play at tick 0; question 1's premise does not hold) |
