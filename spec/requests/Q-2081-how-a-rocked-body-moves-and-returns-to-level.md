@@ -1,9 +1,9 @@
 ---
 id: Q-2081
 title: How a rocked body moves, how its type's weight scales it, and how it returns to level
-status: open
+status: answered
 related: [S-0303, S-0614, S-0601, S-0210, S-0106, S-0504]
-answered-by: []
+answered-by: [S-0113]
 ---
 
 ## Need
