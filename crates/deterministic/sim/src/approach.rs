@@ -257,10 +257,7 @@ pub fn step(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 37 (c) (no target: nothing)
     let Some(t) = o.target else { return };
-    // spec: S-0215 claim 37 (c) (the target is the object that holds the actor with a magnetic beam: nothing)
-    if crate::lift::lifter_of(w, id).is_some_and(|l| t == Target::Object(l)) {
-        return;
-    }
+    // spec: S-0215 claim 37 (c) (revision 88: a seized unit whose target is its own lifter takes the step as for any target; a destination it gives has no effect, S-0607 claim 9)
     // spec: S-0215 claim 37 (h) and S-0210 claim 11 (before the other parts: a crushing approach takes the target object itself as destination, and nothing else of the step happens)
     if crushing_approach(w, id) {
         if let Some(ob) = w.obj_mut(id) {
@@ -277,7 +274,7 @@ pub fn step(w: &mut World, id: ObjectId) {
         part_h_accepted(w, id);
         return;
     }
-    // spec: S-0607 claim 11 (revision 18, Q-2113: a mobile lifter takes no approach step against the unit it grips while that unit is its target, in every behaviour; part h's approaches come first and are not excepted; the range test, minimum range included, gives no destination towards or away from it, and the keep-or-drop of part d does not run) and S-0607 Changes for other specs (S-0215 claim 37 part c's gripping case, after part h)
+    // spec: S-0215 claim 37 (c) (revision 88, Q-2113: an actor that grips a unit with a magnetic beam and whose target is that unit: nothing; part h is decided before this) and S-0607 claim 11 (revision 18: in every behaviour; the range test, minimum range included, gives no destination towards or away from it, and the keep-or-drop of part d does not run)
     if crate::lift::gripped_unit(w, id).is_some_and(|g| t == Target::Object(g)) {
         return;
     }
