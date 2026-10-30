@@ -2,12 +2,12 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 88
-sources-class: [decomp, design]
+revision: 107
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-27
-measurements: []
+approved-on: 2026-10-30
+measurements: [M-0007]
 requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876]
 supersedes: []
 ---
@@ -23,12 +23,14 @@ S-0302's, and the orders that send a unit to be healed are S-0213's and S-0214's
 Only skirmish is covered; network games and campaigns are out of scope. Claims 12 to 15 specify
 automatic building repair and sale when the skill-level gate passes, including their random choices
 and the differences between player and non-player houses.
-Claim 6 gives the spacing of a repair depot's processings (Q-1610, in part). Claim 22 answers
-that request's question 3 for a depot back in *guard*; the rest of that question is open.
+Claim 6 gives the spacing of a repair depot's processings (Q-1610, in part); claim 22 answers
+that request's questions 1 and 2 for a destroyed vehicle, and for a vehicle that leaves they are
+open. It answers question 3 for a depot back in *guard*; the rest of that question is open.
 Claims 21 and 22 say when a vehicle at a depot becomes settled, when it stops being settled, and
 what that changes. This includes a hovering vehicle being switched off at claim 21's settling
 processings until it is down.
-A vehicle becomes settled on its movement arrival in the docking-point cell (Terms, claim 17).
+A vehicle is expected to become settled on its movement arrival in the docking-point cell (Terms,
+claim 17), or else at the first waiting processing (claim 21 leaves which open).
 Its first repair step then comes 3 ticks after the waiting processing that accepts it, if it is
 still settled then and stands still (claim 6). If it is not settled, a vehicle standing still within
 200 leptons of its docking point gets the step 4 ticks after that processing; this
@@ -87,6 +89,15 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       settled, nor switches it on, nor stops its locomotor; a settled vehicle standing still
       within 200 leptons takes its settling step at that processing, with its order-level
       destination empty from then on (claim 21).
+    - *Not an end:* the clearing of a driving vehicle's order-level destination at its movement
+      arrival in the docking-point cell (claim 17), when the vehicle is already settled as the
+      clearing comes. M-0007 infers that arrival from the tick at which the destination is first
+      observed empty. Whether the vehicle becomes settled at that arrival, before or after the
+      clearing within it, or only at the first waiting processing, is `unmeasured` (claim 21). In
+      the readings in which it is settled when the clearing comes, the clearing leaves it
+      settled. In the others there is nothing yet for the clearing to end. M-0007's first
+      settling step, 3 ticks after the acceptance, is consistent with this, but does not tell the
+      readings apart.
   - *What it changes:* within 200 leptons of the docking point, the settling step comes only at
     a processing that finds the vehicle already settled and, if it hovers, down on the ground
     (claims 6 and 21). So after an end of being settled, the first settling processing that
@@ -335,7 +346,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    | otherwise | the paying house pays the step cost, health becomes the strength; the step reports *done* |
 
    A step has the outcome of the first row whose condition holds, so a full-health object whose
-   paying house cannot pay reports *not needed*, not *cannot pay* (scenario H4, part b). A step cost of 0 is not refused at non-negative available credits, including 0. The
+   paying house cannot pay reports *not needed*, not *cannot pay* (scenario H4: the repeat of
+   part h run 6 with the paying house at 0 credits, listed under part b). A step cost of 0 is
+   not refused at non-negative available credits, including 0. The
    affordability comparison still applies if available credits are negative. The paying house
    is the owner of the repaired object, not necessarily the depot's owner: an allied depot can
    accept it too (claim 16).
@@ -391,8 +404,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      (claim 3). A vehicle within 200 leptons of its docking
      point gets no step unless it is already settled (Terms) and, if it hovers, down on the
      ground: the depot rechecks after 1 tick, and a processing that finds it standing still
-     makes it settled (claim 21). A vehicle becomes settled on its movement arrival in the
-     docking-point cell (Terms). If nothing has ended that by the acceptance, and nothing ends it before the
+     makes it settled (claim 21). A vehicle is expected to become settled on its movement arrival
+     in the docking-point cell, or else at the first waiting processing (Terms, claim 21). If
+     nothing has ended that by the acceptance, and nothing ends it before the
      first settling processing (for example an enabling, claim 21), a vehicle that
      does not hover (a driving vehicle or a ship, S-0504 claim 8) standing still gets its settling step at the first settling processing, 3 ticks after the
      accepting waiting processing. If something has, for example a waiting processing that did
@@ -401,8 +415,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      settling processing makes it settled and the step comes at the second, 4 ticks after the
      accepting processing. Only a depot type that also has the resource-unloading or the
      obsolete-unloading flag sends the entry exchange that leads to that confirmation (claim
-     17), so the confirmation-only case arises at no other depot. Which of the two an ordinary docking gives depends on whether the
-     depot's first waiting processing after the arrival accepts the vehicle (Open questions). A
+     17), so the confirmation-only case arises at no other depot. In M-0007's pilot and in its
+     runs 1 to 4 and 6 of H4 part h, the depot's first waiting processing after the driving
+     vehicle's arrival accepted it, and that vehicle's step came 3 ticks later. A
      hovering vehicle's step also waits until it is down. Neither condition applies at 200
      leptons or more (claim 21). On *not needed* the vehicle is sent away at once, as below, and
      no repair-complete announcement is
@@ -434,7 +449,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
    | Phase, and what the processing finds or does | Next processing (if it falls on a turn missed by S-0203 claim 10, it waits until the depot's next update that runs, as in claim 22) |
    |---|---|
-   | waiting, no contact (claim 22) | none: the depot returns to *guard* |
+   | waiting, no contact (claim 22); this processing stops the *production* and *special-2* slot animations and starts *special-3* and *active-1* (S-0108 claim 20; M-0007 saw *active-1* already running there, so a restart of it is not observed) | it sets the next one 1 tick later; the depot is in *guard* from that tick, whether or not *special-3* is still running |
    | waiting, the vehicle not accepted (it stops being settled, if it was: claim 21) | *D* ticks later |
    | waiting, the vehicle accepted | 3 ticks later, in settling |
    | settling, no contact, *special-3* slot animation running after this processing's slot changes (claim 22; S-0108 claim 20) | 1 tick later |
@@ -448,8 +463,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    step count *K*<sub>u</sub>, not from the spacing of its processings. The one longer gap is the
    first working processing, which comes *D* ticks after the settling step that started working.
    This gap is where the *D* in the second step's *D* + *K*<sub>u</sub> − 1 comes from. The end of
-   a contact by destruction or departure (claims 20 to 22) neither brings a processing forward
-   nor puts it back. (Backing and confidence for this table, row by row: the claim's final
+   a contact by the vehicle's destruction (claims 20 to 22) neither brings a processing forward
+   nor puts it back, and its end by the vehicle leaving is expected to do the same (claim 22).
+   (Backing and confidence for this table, row by row: the claim's final
    lists below.)
    *The repair-complete announcement.* It belongs to the depot's owner: it is heard only when that
    house is the local player. It tries to create the *unit repaired* radar event, the kind that
@@ -514,20 +530,17 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      make the vehicle settled is `unmeasured`, medium (claim 21). The
      uncharacterised original non-human-owner branch is `unmeasured`: its additional
      vehicle-state condition is not established, so no reproducible setup and expected outcome
-     are available. The waiting row with no contact is `measurable` (H4 part h run 7, and H18 d's
-     waiting case): H18 b's waiting repeat holds a contacted vehicle in waiting outside its
-     starting distance, since a move order given to the docked vehicle while the depot waits
-     keeps its contact (claim 21) and every later waiting processing finds it moving or outside
-     that distance and does not accept it; run 7 destroys it there. It is rated medium until
-     run 7 runs. Its rule is the one the settling row with
-     no contact follows (H4 part h runs 1 and 5; S-0108 B18 part g): the processing already
-     scheduled finds no contact and the depot returns to *guard*. H4 part h run 2 shows whether
-     the depot processes the working phase every tick or only when a step falls due: under this
-     claim the reaction comes within a tick of the loss, while processing only at due steps would
-     put it at the next step's due tick, a full step interval later (*K*<sub>u</sub> = 113 ticks at
-     H4 part a's invented repair rate). The
-     settling step's place is `measurable` (H4 part a, which records the waiting processings
-     between the arrival and the acceptance) for a vehicle still settled from its arrival: 3
+     are available. The waiting row with no contact is `measured` (M-0007) for a loss before the
+     depot's first waiting processing, which found no contact; that run is not an S-0108 B18
+     part d run. A loss between two waiting processings is `measurable` (H4 part h run 7, and
+     H18 d's waiting case): H18 b's waiting repeat holds a contacted vehicle in waiting outside
+     its starting distance, and run 7 destroys it there. M-0007 did not reach that state.
+     Unlike the settling row with no contact (H4 part h runs 1 and 5; S-0108 B18 part g), the
+     waiting row does not wait for *special-3*. H4 part h run 2 (M-0007) shows that the depot
+     processes the working phase every tick: the reaction came on the tick of the loss, not at
+     the next step's due tick. The
+     settling step's place is `measured` (M-0007, H4 part a's pilot) for a vehicle still settled
+     from its arrival: 3
      ticks after the accepting waiting processing. For one that is not, 4 ticks after it, at
      the processing after the one that makes it settled, it is `unmeasured` (claim 21: no input
      is known that ensures an earlier waiting processing that does not accept the vehicle). It is the moment at which an arriving
@@ -541,39 +554,42 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      step falling due while moving and being taken when movement ends.
    - Confidence for the rest of the claim: high (one step per count of *K*<sub>u</sub>, the cost, the end on *done*,
      the waiting thresholds, spatial distance, 3-tick delay, suppression row and trigger/depot
-     pair, and departure destination/no-cell outcome); medium
-     (that the working phase is processed every tick and that in settling and working the end
-     of a contact reschedules no processing, both resting on H4 part h, not yet run; the
-     settling step and which earlier event makes the vehicle settled, the movement arrival or
-     the processing before the step, the hovering
-     vehicle's wait to come down, the waiting row with no contact (until H4 part h run 7 runs), the phase *D* + *K*<sub>u</sub> − 1 and the *D*-tick gap after the
-     settling step that it comes from, the return to settling after *cannot
-     pay*, the owner conditions of the two announcements, that the settling *not needed* makes no
+     pair, and departure destination/no-cell outcome; and, `measured` in M-0007, that the
+     working phase is processed every tick, that in settling and working the end of a contact
+     by the vehicle's destruction reschedules no processing, the settling step 3 ticks after the
+     acceptance at the first
+     waiting processing after the arrival (that the arrival makes the vehicle settled is claim
+     21's, `unmeasured`), the hovering vehicle's wait to come down, the waiting row with no
+     contact as its table row rates it, the phase *D* + *K*<sub>u</sub> − 1 and the *D*-tick gap
+     after the settling step
+     that it comes from, and the return to settling after *cannot pay*); medium (that an end of
+     contact by the vehicle leaving reschedules none either, H4 part h runs 8 and 9; the owner
+     conditions of the two announcements, that the settling *not needed* makes no
      announcement, and that *not needed* is tested before *cannot pay*), and low (the return to
      the guard spot; the moving step's exact phase; the uncharacterised non-human-owner branch).
      The *production*-slot settling hold is medium in both its parts: its missing step until
      H23 part a runs, since H23 uses a named test type that no stock type matches and may be
      reported unreached (as S-0108 rates its B18 parts i to k), and its not making the vehicle
      settled.
-   - Processing spacing table, row by row. The rows that H4 part h tests are held lower than
-     other unrun scenarios, because they are the timings least confirmed by observation.
+   - Processing spacing table, row by row.
 
      | Row | Backing | Confidence |
      |---|---|---|
-     | waiting, no contact | `measurable` (H4 part h run 7, with H18 b's waiting set-up) | medium until run 7 runs |
+     | waiting, no contact | `measured` (M-0007, a loss by the vehicle leaving on a move order before the depot's first waiting processing); `measurable` (H4 part h run 7, with H18 b's waiting set-up) for a loss between two waiting processings | high for a loss by the vehicle leaving before the first waiting processing: the 1-tick delay it sets, *guard* from that tick and the start of *special-3*; medium for a destroyed vehicle there, as claim 22 rates it; medium for a loss between two waiting processings until H4 part h run 7 runs with H18 b's set-up; the row's other slot changes take S-0108 claim 20's rating |
      | waiting, the vehicle not accepted | `measurable` (S-0504 N8) | medium, as S-0504 claim 8 rates this *D*-tick spacing |
-     | waiting, the vehicle accepted | `measurable` (S-0504 N8 as committed, for the 3-tick spacing to the settling processing, which S-0504 already gives; H4 part a for the parts that the amendment under Changes for other specs adds to S-0504, and for the place of the first step after it when the accepting processing is the depot's first waiting processing after the arrival, which does not establish which event makes the vehicle settled (claim 21), the 4-tick place being `unmeasured` (claim 21); H4 part h run 5 repeats it, but the row does not rest on it) | high for the 3-tick spacing; medium for the first step's place: 3 ticks after the acceptance until H4 part a runs, and 4 ticks after it, which is `unmeasured` (claim 21) |
-     | settling, no contact, *special-3* running | `measurable` (H4 part h runs 1 and 5) | medium until H4 part h runs |
-     | settling, no contact, no *special-3* running | `measurable` (H4 part h runs 1 and 5) | medium until H4 part h runs |
+     | waiting, the vehicle accepted | `measurable` (S-0504 N8 as committed, for the 3-tick spacing to the settling processing, which S-0504 already gives; H4 part a for the parts that the amendment under Changes for other specs adds to S-0504, and for the place of the first step after it when the accepting processing is the depot's first waiting processing after the arrival, which does not establish which event makes the vehicle settled (claim 21), the 4-tick place being `unmeasured` (claim 21); H4 part h run 5 repeats it, but the row does not rest on it; `measured` in M-0007's pilot for the 3-tick place) | high for the 3-tick spacing and for the first step's place 3 ticks after the acceptance; medium for the 4-tick place, which is `unmeasured` (claim 21) |
+     | settling, no contact, *special-3* running | `measured` (M-0007, H4 part h runs 1 and 2) | high |
+     | settling, no contact, no *special-3* running | `measured` (M-0007, H4 part h runs 3, 5 and 6) | high |
      | settling, *production* slot animation running | `measurable` (H23 part a) for the missing step; `unmeasured` (claim 21) for not making the vehicle settled | medium for the missing step until H23 part a runs; medium for not making the vehicle settled |
      | settling, within 200 leptons and not settled or not down, moving | `measurable` (H18 b) | high for the 1-tick recheck of a moving vehicle, which does not rest on how the vehicle stopped being settled, and H18 b observes it with movement and step ticks alone, needing no new recorder; medium for its resting on the order having ended being settled (claim 22), until H18 b and e run, as claim 22 rates that end |
-     | settling, within 200 leptons and not settled or not down, standing still | `measurable` (H4 part a's hovering repeat) for a hovering vehicle not yet down; `unmeasured` for a vehicle that is not settled (claim 21) | medium |
-     | settling, *cannot pay* | `measurable` (H4 part h run 3) | medium until H4 part h runs |
-     | settling, *not needed* with the vehicle sent away | `measurable` (H4 part h run 6) | medium until H4 part h runs |
-     | settling, a failed departure | `measurable` (H21) | high for the held contact and the absence of a departure order; medium until H4 part h runs for the 1-tick and *D*-tick spacing of the retries, which H21 reads with H4 part h's recorder, as the rows H4 part h tests |
+     | settling, within 200 leptons and not settled or not down, standing still | `measured` (M-0007, H4 part a's hovering repeat) for a hovering vehicle not yet down; `unmeasured` for a vehicle that is not settled (claim 21) | high for the hovering vehicle not yet down; medium for a vehicle that is not settled |
+     | settling, *cannot pay* | `measured` (M-0007, H4 part h run 3) | high |
+     | settling, *not needed* with the vehicle sent away | `measured` (M-0007, H4 part h run 6, with a direct health write standing in for the healer) | high |
+     | settling, a failed departure | `measurable` (H21) | high for the held contact and the absence of a departure order; medium until H21 runs for the 1-tick and *D*-tick spacing of the retries, which H21 reads with H4 part h's recorder |
      | settling, moving at 200 leptons or more | `measurable` (H20) | medium until H20 runs |
-     | settling, a step that starts working | `measurable` (H4 part h run 1) | medium until H4 part h runs |
-     | working, every outcome | `measurable` (H4 part h runs 1 and 2) | medium until H4 part h runs |
+     | settling, a step that starts working | `measured` (M-0007, H4 part a's pilot and part h run 1) | high |
+     | working, a contact loss | `measured` (M-0007, H4 part h runs 1 and 2) | high |
+     | working, the other outcomes | `measurable` (H4 part a for the steps that report *more needed*, S-0108 B18 part h for the send-away case) | medium until those runs |
 
 7. **Hospital.** An infantry unit inside a hospital gets repair steps at a cost of 0, on the
    timing of the depot's working phase with the infantry repair count *K*<sub>i</sub> (Formulas
@@ -848,8 +864,19 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 16. **Permission and player entry (Q-0641).** S-0214 claim 8, table V row n3,
     already supplies the ordinary click's *enter* action over an accepting allied building.
     Its claim 10, table M, supplies the enter order. S-0215 claim 29 owns the repeated entry
-    requests. The depot's permission does not require damage or affordable repair: a full-health
-    vehicle can enter, and claim 6 sends it away at the settling check without payment.
+    requests. The depot's permission does not require affordable repair, and its first
+    acceptance makes no damage test.
+
+    **Full health refused at the repeated request.** Each repeated entry request to a repair
+    depot (claim 17) also asks the vehicle whether it needs repair. A vehicle at full health (Terms:
+    a health ratio of exactly 1) answers no, and the depot refuses the request. A
+    vehicle without a tether then loses its contact and falls back to rest (S-0215 claim 29).
+    So a vehicle at full health that is ordered to enter is refused at its first *enter*
+    processing after the order, before it reaches the docking point: the depot takes no
+    settling processing for it, and it gets no step and no payment, however often it is
+    ordered. Whether a tick end between its first acceptance and that refusal shows its
+    contact is not stated here. A tethered vehicle keeps its contact on such a refusal (S-0215
+    claim 29).
     The depot's owner must count the vehicle as allied. Construction, selling, remaining in
     the build-up state, being switched off, and no contact place free for this vehicle prevent
     acceptance. A place already assigned to this vehicle is not considered occupied by another.
@@ -860,9 +887,17 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     A vehicle already standing on this very depot does
     not receive a new acceptance through this query. The click's fly-zone refusal remains
     S-0214 claim 8, table V row n1. These are permission rules, not a new repair-sidebar command.
-    - Backing: `measurable` (H16 a, b and d).
-    - Confidence: high (no damage or money gate, alliance and contact-place tests), medium
-      (input consequences of the refusal cases)
+    - Backing: `measurable` (H16 a, b and d). For the full-health refusal, H16 b's full-health
+      part tells it apart from a silent *not needed* step (claims 3 and 6): a refused vehicle
+      never reaches the docking point, and the depot's settling processing never runs for it.
+      The first acceptance's lack of a damage test, and so which of the two exchanges refuses
+      a vehicle at full health, is `unmeasured`: it lasts less than a tick, which no tick-end
+      record shows. M-0007's full-health attempt does not record its set-up
+      and backs none of this.
+    - Confidence: high (no money gate, alliance and contact-place tests), medium (input
+      consequences of the refusal cases; the full-health refusal at the first repeated
+      request, with no step, no payment and no settling processing; that the first acceptance
+      has no damage test)
 
 17. **Contact is earlier than repair (Q-0641).** A depot has max(*d*, 1) contact
     places, where *d* is its imported docking-place count. A successful entry request establishes
@@ -884,7 +919,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
     Contact alone does not set a tether. Each due *enter* processing repeats the entry request.
     Acceptance or an existing tether allows entry to continue. Refusal without a tether releases
-    contact and falls back to rest (S-0215 claim 29). This is not a repeat of claim 16's initial
+    contact and falls back to rest (S-0215 claim 29). At a repair depot the repeated request is
+    also refused for a vehicle at full health, by the rule claim 16 states.
+    This is not a repeat of claim 16's initial
     permission test: entering a foundation cell does not by itself trigger its already-standing
     refusal.
 
@@ -964,14 +1001,35 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     the depot and *sleep* at the vehicle, neither with an immediate start. S-0215 claim 29
     already states this ready-mark effect; starts still follow S-0215 claim 11, rather than
     a forced or synchronous repair processing.
+    **Behaviour after arrival.** M-0007 ran one driving vehicle and one hovering vehicle, called
+    *the measured driving vehicle* and *the measured hovering vehicle* here. The measured driving
+    vehicle's arrival is inferred from the first tick at which its order-level destination is
+    empty. It was recorded in *guard*, not *sleep*, at every tick end from that tick to the
+    settling step (M-0007's Notes). The measured
+    hovering vehicle's arrival is inferred from the first tick at which it is in *sleep*, so its
+    being in *sleep* from its arrival holds by that inference: what is measured is that it was in
+    *sleep* at the tick end before the depot's accepting processing. Repair went
+    ahead in both. A tick-end record does not show whether the queued *sleep* became current
+    within a tick. What puts the driving vehicle in *guard* is open (Open questions): its
+    locomotion or any other difference between the two vehicles could decide it.
+    - The measured driving vehicle shows *guard* and the measured hovering vehicle shows
+      *sleep*.
+    - For other driving and hovering vehicles, and for ships, the behaviour after arrival is
+      not stated (Open questions).
+
+    M-0007's settling step, 3 ticks after the acceptance, is consistent with the driving
+    vehicle's staying settled through that clearing of its order-level destination (Terms,
+    claim 21).
 
     **Arrival does not start a turn (Q-1162).** Docking-point-cell movement arrival itself
     requests no map-east body turn, even for a tethered vehicle facing another way. There is
     no turn scheduled for a later enter processing merely because arrival queued sleep.
     An ordinary depot's repeated request, including the pad case above, does not provide
     the separate turn-producing confirmation. Thus tether alone neither guarantees map-east
-    facing nor holds sleep pending such a turn. If the vehicle is ready at the arrival update's
-    late start, sleep becomes current there and no further enter processing is needed.
+    facing nor holds sleep pending such a turn. If the measured hovering vehicle is
+    ready at the arrival update's late start, sleep becomes current there and no further enter
+    processing is needed. For other hovering vehicles, for a driving vehicle and for a ship that
+    late start is part of the open question above.
     Neither exact agreement with the docking point's horizontal coordinates nor a tether
     is required for the arrival queues.
 
@@ -1010,11 +1068,20 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       mark and one-place approach; H19 f for same-cell assignment and blocked persistence,
       with S-0207 claims 25 and 26's D29 and D30 controls for set, clear and cleanup events). Named test data distinguish pad combinations unavailable
       among stock types; no observation of them is claimed.
-    - Confidence: high (capacity, repeated request, cell test, movement reports, empty-place
-      result, ready mark, same-cell destination assignment and absence of initial tether), medium (stock approach observations,
-      early guard start and the uninterrupted one-place approach); high (arrival itself requests no turn,
-      and no extra depot-specific readiness gate); the driving-only existing-turn hold inherits
-      S-0215 claim 11's confidence
+    - Backing for the behaviour after arrival: `measured` (M-0007, the pilot and the hover run)
+      for the measured driving vehicle's *guard* at every recorded tick end from its inferred
+      arrival and the measured hovering vehicle's *sleep* from the tick end before the accepting
+      processing. H18 d's repeats record other driving and hovering vehicles and a ship without
+      judging them. The
+      refusal of a vehicle at full health is claim 16's.
+    - Confidence: high (capacity, repeated request, cell test, movement reports, empty-place result,
+      ready mark, same-cell destination assignment and absence of initial tether), medium (stock
+      approach observations, early guard start and the uninterrupted one-place approach; that the
+      repeated request refuses a vehicle at full health, claim 16); high (arrival itself requests no
+      turn, and no extra depot-specific readiness gate); the driving-only existing-turn hold
+      inherits S-0215 claim 11's confidence; high (the driving vehicle's *guard* from the first tick
+      with an empty destination, the reading from which its arrival is inferred); medium (that the
+      hovering vehicle's *sleep* follows its arrival, which is inferred from that reading)
 
 18. **Depot docking point and stopping (Q-0641, Q-0680).** For an ordinary repair depot,
     including a naval yard, without obsolete-unloading, resource-unloading or tank-bunker flags,
@@ -1099,12 +1166,23 @@ only the vehicle in that place.
       *enter* falls back to rest at its next processing. So, for a vehicle standing on the depot,
       the contact is lost in the first turn in which the order's *enter* is current, not in a later
       one (Q-1158). A docked vehicle not standing on the depot is not refused by claim 16, so its
-      retry is decided by claim 23's permission instead. A vehicle at full health loses its contact at once. Otherwise the order runs
-      normally, and claim 21 decides what the depot then does.
-    - Backing: `measurable` (H18 a; H19 c for untethered repair-phase interruption).
+      retry is decided by claim 23's permission instead.
+      Unless the order is ignored under the first bullet, a docked vehicle at full health given
+      this *enter* order is released by the order itself,
+      not in a later turn: the order takes claim 23's full-health case, which gives it no
+      destination and no queued
+      entry. This claim adds that the order ends its contact when it is executed. So the tick
+      end of the order's tick does not show that contact, whatever the depot's pad flag. This
+      release is not claim 16's full-health refusal at a repeated entry request, which a
+      tethered vehicle survives (claim 16). Whether the vehicle takes contact with the depot
+      again afterwards is open (Open questions).
+      Otherwise the order runs normally, and claim 21 decides what the depot then does.
+    - Backing: `measurable` (H18 a, including its full-health repeat for the release at the
+      order; H19 c for untethered repair-phase interruption).
     - Confidence: high (approaching release, ignored repeat), medium (docked retention under
       each order kind; that the processing of the own-depot *enter* queues nothing and the
-      contact is lost in the same turn), low (the full tick-by-tick sequence of a same-depot
+      contact is lost in the same turn; that a docked vehicle at full health loses its contact
+      when the order is executed), low (the full tick-by-tick sequence of a same-depot
       enter order while docked, composed from separately established steps)
 
 21. **Moving away while docked.** The depot's checks of claim 6 continue for a docked vehicle
@@ -1128,10 +1206,10 @@ only the vehicle in that place.
       as moving only while it holds an order-level destination and its locomotor gives claim
       17's movement report (for a hovering vehicle, S-0503's *is moving*). Whether a vehicle within 200 leptons that is not settled, or not down,
       stands still is its locomotor's movement report alone, whatever its destination. The removal neither stops its locomotor nor switches it on, and it does not end the
-      vehicle's being settled (Terms). An arriving vehicle is
-      settled while it still holds the depot as its order-level destination (claim 17; S-0215
-      claim 29), so in an ordinary docking the processing that takes the settling step removes
-      that destination. At a
+      vehicle's being settled (Terms). In M-0007 a driving vehicle's order-level destination
+      was first observed empty at the inferred arrival (claim 17), so in such a docking this removal
+      changes nothing. That clearing at the arrival does not end its being settled either
+      (Terms); M-0007's step 3 ticks after the acceptance is consistent with this. At a
       distance of 200 leptons or more, being settled and being down on the ground play no part
       in whether a step comes, and no processing makes the vehicle settled; there the depot asks whether the vehicle is
       moving: a moving vehicle takes no step, keeps settling and contact, stops being settled,
@@ -1239,8 +1317,8 @@ only the vehicle in that place.
       destination switches it on (it takes effect while it is down and switched off, Terms) or
       when it is above the ground or was still switched on from an earlier end of being settled,
       and none otherwise:
-      - *Before the settling step,* at a docking point in a depot cell, the vehicle still has its
-        destination, so the cleared destination takes effect: it switches on a hovering vehicle
+      - *Before the settling step,* at a docking point in a depot cell, a hovering vehicle still has
+        its destination, so the cleared destination takes effect: it switches on a hovering vehicle
         that is down, and one still above the ground is powered already, so either way a hovering
         vehicle takes the two draws.
       - *After the settling step,* in settling or working, its order-level destination is
@@ -1336,10 +1414,15 @@ only the vehicle in that place.
       `unmeasured`: no order is known that leaves the vehicle standing still within 200 leptons
       of its docking point, since the nearest other cell centre is 256 leptons away, and H18 b's
       settling repeat checks only the moving recheck. The removal
-      of a settled vehicle's destination within 200 leptons is `measurable` (H4 part a: the depot
-      destination held since the arrival is gone from the processing that takes the settling
-      step). That the step comes at that processing is `measurable` by the same part: the step
-      comes at the processing from which the destination is gone. Which test the question uses is `unmeasured`: H4 part a does
+      of a settled vehicle's destination within 200 leptons is `measurable` by H4 part a's
+      hovering repeat, in a run whose vehicle still holds the depot as its destination at
+      the settling step: the destination is gone from the processing that takes that step. The
+      measured driving vehicle's destination was already empty from its inferred arrival (claim
+      17), so the driving run cannot show the removal. A hovering run whose destination is gone
+      before the settling step backs nothing here. That the step comes at that processing is
+      `measurable` by the same repeat: the step comes at the processing from which the
+      destination is gone.
+      Which test the question uses is `unmeasured`: H4 part a does
       not tell the moving-destination test from a test of the locomotor's movement report
       alone.
       That a moving vehicle at 200 leptons
@@ -1383,10 +1466,20 @@ only the vehicle in that place.
 
       At its next processing the selling depot releases every contact. A selling depot already
       refuses new entry (claim 16).
-    - *Destruction or other removal.* Every contact is released without a run-away notice.
-      An approaching vehicle loses its target and falls back to *guard* where it stands.
-      A docked vehicle stays in *sleep*: it does nothing until it receives an order
-      (`quirks.depot_loss_leaves_sleep`).
+    - *Destruction or other removal.* Every contact is released without a run-away notice. A
+      contacted vehicle before its movement arrival in the docking-point cell (claim 17) loses its
+      target and falls back to *guard* where it stands. The release leaves the current behaviour
+      of a contacted vehicle after that arrival as it was, docked or not. A contacted vehicle in
+      *sleep*, as the measured hovering vehicle is (claim 17; its tether not read, M-0007), stays
+      in *sleep*: it does nothing until it receives an order (`quirks.depot_loss_leaves_sleep`). A
+      contacted vehicle in *guard*, as the
+      measured driving vehicle is at every recorded tick end from its arrival to the settling
+      step (claim 17, M-0007; its tether not read), stays in *guard*. Whether it then takes a
+      target in range is open (Open questions). Which behaviour
+      other kinds of vehicle are in is claim 17's open question. The same holds for a docked vessel
+      at a naval yard with the repair flag: its behaviour stays as it was, so a vessel in *sleep*
+      stays asleep until ordered, as S-0504 claim 14 states, and one in another behaviour keeps that
+      behaviour (Changes for other specs).
     - *Settled vehicles.* Becoming settled (Terms) and the settling step that follows are as
       claim 21 states. Normally a vehicle stops being settled when it receives a destination
       while a depot or tank bunker occupies its cell and its locomotor counts as switched off
@@ -1439,17 +1532,21 @@ only the vehicle in that place.
         accepting waiting processing, or *D* ticks after a *cannot pay* retry. The accepting
         waiting processing has already put the depot in settling, so a loss in the 3 ticks after
         it is met by the settling row of S-0108 claim 20, not its waiting row, at the
-        processing 3 ticks after the acceptance (H4 part h, run 5). So the wait after
+        processing 3 ticks after the acceptance (M-0007, H4 part h run 5). So the wait after
         the loss is at most the larger of 3 and *D* ticks, provided the depot loses no turn in
         between. If the pending processing falls on a missed turn, it waits until the depot's next update that runs, as in working.
 
       These timings apply when no other vehicle has taken the freed contact place by that
       processing; that case is open (Open questions).
 
-      A vehicle that leaves by claims 20 and 21 ends its contact in the same way and gets the
-      same timing.
-      In waiting the depot returns to *guard* at that processing
-      without an animation wait. In working it enters settling and rechecks after 1 tick.
+      A vehicle that leaves by claims 20 and 21 ends its contact in the same way and is expected
+      to get the same timing. M-0007 shows it for a loss in waiting before the depot's first
+      waiting processing (a move order). In working and settling it is `measurable` (H4 part h
+      runs 8 and 9), medium (Open questions).
+      In waiting that processing starts *special-3* and *active-1* (S-0108 claim 20; M-0007 saw
+      *active-1* already running there, so a restart of it is not observed), and the
+      depot is in *guard* from 1 tick later, without an animation wait. In working it enters
+      settling and rechecks after 1 tick.
       In settling, from that already scheduled processing on, it stays in its repair behaviour,
       checking every tick, until its *special-3*
       slot animation has stopped running, and only then returns to *guard*. The slot's duration
@@ -1485,15 +1582,25 @@ only the vehicle in that place.
       runs. For the run-away notice's scatter request it is `unmeasured`, medium: H18 e starts
       after the settling step, where S-0207 claim 16 can refuse the scatter. That a destination
       received while a hovering vehicle is still above the ground does not end its being settled
-      is `unmeasured`, rated medium, for the reason that Terms gives.
+      is `unmeasured`, rated medium, for the reason that Terms gives. That a contacted vehicle
+      after its movement arrival keeps its current behaviour after its depot's destruction is
+      `measurable` (H18 d) for the tether status that H18 d's record shows, medium. For the
+      other tether status it is `unmeasured` (no part here sets the tether at will), medium,
+      since the release does not read the tether. H18 d's expectations:
+      *sleep* for the hovering repeat, *guard* for the driving repeat, and for an arrived vessel
+      whatever H18 d's ship repeat shows before the destruction. H18 d records but does not
+      judge whether a vehicle in *guard* fires at an enemy in range, and records which behaviour
+      the ship has without judging it.
     - Backing for the other ends and the restart: `measurable` (H18 b for the 1-tick recheck
       within 200 leptons of a vehicle that has received a destination and is moving. It backs the end of being settled on receiving a destination
       only that far: a rule that rechecks after 1 tick whenever the vehicle moves, settled or not,
       would give the same recheck, so that end stays medium; H18 c, d
       and e, with e's second-depot repeat for a vehicle settled at a lost depot that docks
       again; S-0108 claim 20, B18 g for the no-contact
-      settling hold and deterministic animation timing; H4 part h for the reaction tick after
-      a loss, the fresh step count of a later vehicle and (run 5) a loss just after an acceptance,
+      settling hold and deterministic animation timing; `measured` (M-0007, H4 part h runs 1
+      to 6) for the reaction tick after a loss by destruction, the fresh step count of a later
+      vehicle and
+      (run 5) a loss just after an acceptance,
       S-0108 B18 part h for the processing
       after a send-away). The restart from waiting for a later vehicle at a depot back in *guard*
       is `unmeasured`: run 4 times that vehicle's steps from its own settling step, not its
@@ -1506,22 +1613,30 @@ only the vehicle in that place.
       newly arriving or contacting vehicle is an open question, not a claim.
     - Confidence:
       - high: the sale notice and release, and no power test.
-      - medium, resting on H4 part h and S-0108 B18 part h, which are not yet run: a lost contact
-        in working or settling reacted to only at an already scheduled processing, the depot
-        already in settling after a send-away, and the fresh step count for a later vehicle
-        served after the depot's return to *guard*.
-      - medium: the no-contact settling hold, and the same for a loss in waiting (until H4 part
-        h run 7 runs, claim 6).
+      - high, `measured` (M-0007 runs 1 to 5, whose losses destroy the vehicle), for a destroyed
+        vehicle: a lost contact in working or settling reacted to only at an already scheduled
+        processing, the fresh step count for a later vehicle served after the depot's return to
+        *guard*, the no-contact settling hold, the reaction tick within the *D*-tick gap after
+        the settling step, and the settling row for a loss in the 3 ticks after an acceptance.
+      - high, `measured` (M-0007's nearest case of S-0108 B18 part d, a vehicle that leaves by a
+        move order), for a vehicle that leaves: the waiting row's *guard* 1 tick later for a
+        loss before the depot's first waiting processing.
+      - medium, expected by the same rule, with no record or scenario part that destroys the
+        vehicle there: that row for a destroyed vehicle.
+      - medium: the waiting row's *guard* 1 tick later for a loss between two waiting
+        processings (claim 6).
+      - medium, `measurable` (H4 part h run 8 in working, run 9 in settling): the same timings
+        for a contact that ends because the vehicle leaves by claims 20 and 21.
+      - medium, resting on S-0108 B18 part h, which is not yet run: the depot already in
+        settling after a working send-away.
       - medium: behaviour after destruction, and hover stranding.
-      - medium: the reaction tick within the *D*-tick gap after the settling step, and the
-        reaction tick after a missed turn.
+      - medium: the reaction tick after a missed turn.
       - medium: the restart from waiting for a later vehicle at a depot back in *guard*.
       - medium, resting on H18 b and e, which are not yet run: that a destination received on
         the depot ends being settled, and that a vehicle settled at a lost depot gets claim 6's
         timing at another.
       - medium, `unmeasured` (Terms): no end of being settled at a destination received while a
         hovering vehicle is still above the ground.
-      - medium: the settling row for a loss in the 3 ticks after an acceptance.
       - low: the scatter request, and no stranding for other land locomotors.
 
 23. **Simultaneous and queued entry.** Orders execute one at a time in event order (S-0213), so
@@ -1773,7 +1888,7 @@ Backing and confidence are claim 15's.
 | waiting for a contacted vehicle, tethered or not | moving or outside its starting distance | waiting, next processing after *D* ticks; the vehicle stops being settled, if it was (claim 21) |
 | settling, with contact | *production* slot animation running | no step; recheck after 1 tick (claim 6) |
 | settling scheduled | later processing finds no *production* slot animation, the vehicle still (and, within 200 leptons, settled and, if hovering, down) | settling step (claim 3) |
-| waiting, no contact | repair processing | return to *guard* without animation wait (claim 22) |
+| waiting, no contact | repair processing | *special-3* and *active-1* start; *guard* from 1 tick later, without waiting for *special-3* (claims 6 and 22) |
 | working, no contact | repair processing | settling; recheck after 1 tick (claim 22) |
 | settling, no contact | repair processing | remain in repair and recheck after 1 tick while *special-3* runs; otherwise return to *guard* (claim 22) |
 | settling | *not needed* | sent away |
@@ -1788,13 +1903,14 @@ Backing and confidence are claim 15's.
 | working | step reports *cannot pay* | contact retained; settling retry next tick, then unsuccessful retries every *D* ticks; low-funds announcement as claim 6 says |
 | approaching vehicle | any order other than a repeated enter on this depot | contact released at once; queued entry cleared (claim 20) |
 | docked vehicle | any order other than an enter order on this depot, unless it gains contact elsewhere | contact and tether kept; the phase continues (claims 20 and 21) |
-| docked vehicle standing on the depot | enter order on this depot | queued entry, no destination; *enter* current and processed in the vehicle's next turn, and contact lost in that turn (claim 20) |
+| docked vehicle standing on the depot, damaged | enter order on this depot, unless ignored under claim 20's first bullet | queued entry, no destination; *enter* current and processed in the vehicle's next turn, and contact lost in that turn (claim 20) |
+| docked vehicle at full health | enter order on this depot, unless ignored under claim 20's first bullet | no destination, no queued entry; contact ended when the order is executed, so the order's tick end does not show it (claim 20; a later new contact is open) |
 | settling, vehicle within 200 leptons, not settled or, hovering, not down | processing | no step; standing still, it becomes settled; recheck next tick (claims 6 and 21) |
 | settling, vehicle at least 200 leptons away and moving | processing | no step, settling and contact retained; it stops being settled, if it was; recheck after *D* ticks (claim 21) |
 | settling, no departure destination available | departure attempted | no departure, settling and contact retained; recheck after *D* ticks (claims 6 and 25) |
 | working, vehicle standing still at any distance | a step falls due | repair step (`quirks.depot_remote_repair`) |
 | any phase | depot starts selling | run-away notice to every contact; contacts released at the next processing (claim 22) |
-| any phase | depot destroyed | contacts released; docked vehicle stays in *sleep* (claim 22) |
+| any phase | depot destroyed | contacts released; a contacted vehicle after its movement arrival, docked or not, keeps its current behaviour; one before it falls back to *guard* (claim 22) |
 | depot holds any contact | enter order for a damaged vehicle | queued entry; no destination (claim 23) |
 | queued entry, *enter* queued | vehicle's next ready per-tick start (claim 23) | *enter* current and processed that turn; its request to the remembered depot is accepted without contact while no place is free; no destination, no walk |
 | queued entry | tick with a free place and permission | contact taken; *enter* (claim 23) |
@@ -1882,10 +1998,16 @@ alternatives are design rules, not claims of oracle measurements.
   paid working-phase steps (claim 21), and in settling beyond 200 leptons too. With the switch off,
   a docked vehicle given a move or attack order loses its contact as an approaching one does
   (claim 20), so steps happen only at the depot.
-- **Docked vehicle left asleep** (quirk `quirks.depot_loss_leaves_sleep`, default: the
-  original's behaviour). After its depot is destroyed, a docked vehicle stays in *sleep* and
-  neither fires nor reacts until ordered (claim 22). With the switch off, destruction treats
-  contacts as a sale does: each receives the run-away notice and switches to *guard*.
+- **Contacted vehicle left asleep** (quirk `quirks.depot_loss_leaves_sleep`, default: the original's
+  behaviour). After its depot is destroyed, a contacted vehicle in *sleep* after its movement
+  arrival, docked or not, as the measured hovering vehicle is (claim 17; its tether not read),
+  stays in *sleep* and neither fires nor reacts until ordered (claim 22). A contacted vehicle
+  already in *guard*, as the measured driving vehicle is (claim 17; its tether not read), stays
+  in it.
+  With the switch off, destruction treats contacts as a sale does: each receives the run-away
+  notice, and one in *sleep* switches to *guard*. DECIDED (autonomy, 2026-10-29): the switch keeps
+  its name for continuity, although it covers every behaviour an arrived vehicle keeps, not only
+  *sleep*.
 - **Hovering vehicle stranded** (quirk `quirks.depot_loss_strands_hover`, default: the
   original's behaviour). A hovering vehicle whose depot is destroyed after it became settled
   (claim 21), or sold without the vehicle receiving any destination before the depot's removal
@@ -2066,8 +2188,9 @@ first waiting processing after the arrival, the settling step 3 ticks after it (
 still settled from its arrival: claim 21); if an earlier waiting processing did not accept the
 vehicle, no step 3 ticks after the accepting processing (that processing makes the vehicle
 settled) and the settling step 1 tick later, 4 ticks after it. Report which case each run
-gives (Open questions). In both cases the vehicle's order-level destination is the depot from
-its arrival, and is empty from the processing that takes the settling step on (claim 21).
+gives. The measured driving vehicle (claim 17) is in *guard* with no order-level destination from
+its arrival; for any other vehicle, record its behaviour from its arrival without
+judging it.
 Then the second step 126 ticks after the settling step
 (14 + 113 − 1), then one every 113 ticks. With the vehicle repair rate absent (0.016): every 15
 ticks after the second. Repeat S-0504 N8's land, ship and hovering comparisons for the strict
@@ -2094,14 +2217,20 @@ or any later interval differs from 113 ticks (15 at the absent rate). Intervals 
 14 would mean the depot uses the truncated building period. The
 tick on which the vehicle leaves the depot after the step that brings it to full health is recorded
 too.
-- *Part b (full health):* a vehicle at full health docks. *Expected:* it is sent away at its settling
-  step, 3 or 4 ticks after the accepting waiting processing as in part a (part a's records
-  tell which), with no healing,
-  no payment and no repair-complete announcement (the local player owns the depot). Repeat with
-  the paying house at 0 credits. *Expected:* the same settling-time departure. *Falsified if:*
-  a charge, departure at another processing in the stable case, or an
-  announcement; or, in the repeat, the vehicle stays and the depot asks again *D* ticks later
-  (that would mean *cannot pay* takes precedence over *not needed*).
+- *Part b (full health):* a vehicle at full health is ordered to enter, from at least 6 cells
+  away. *Expected:* it is refused at its first *enter* processing (claim 16): it never reaches
+  the docking point, the depot never enters its settling phase for it, and there is no
+  healing, no payment and no announcement. Its contact at a tick end is recorded but not
+  judged (claim 16). This part does not tell a refusal at the first acceptance from one at the
+  repeated request: which exchange refuses the vehicle is `unmeasured` (claim 16).
+  *Falsified if* the vehicle reaches the docking point or the depot settles
+  it and sends it away (a silent *not needed* step). For the precedence of *not needed* over
+  *cannot pay*,
+  repeat run 6 of part h
+  with the paying house at 0 credits. *Expected:* the same settling-time departure. *Falsified
+  if:* a charge or an announcement is recorded; or, in the repeat, the vehicle stays
+  and the depot asks again *D* ticks later (that would mean *cannot pay* takes precedence over
+  *not needed*).
 - *Part c (done, then not needed):* a vehicle one step short of full health docks. *Expected:* the
   settling step brings it to full health and pays once; it leaves on the second step, 126 ticks
   later, with no further payment. *Falsified if:* it leaves on any other tick, or a second
@@ -2190,12 +2319,14 @@ too.
   the acceptance is inconclusive and backs nothing; repeat it a few times.
   *Run 6 (send-away in settling):* on a newly placed depot of the same type. A named test healer vehicle in *area
   guard* beside the docking point (claims 1 and 2), whose one heal restores a vehicle's full
-  strength, heals the damaged vehicle after its enter order has been accepted (claim 23) and
-  before the depot's settling step. Repeat until the recorder shows a
-  settling step that reports *not needed* and sends the vehicle away, at most ten times. If no
-  repeat reaches that step, dock H4 part b's full-health vehicle at a newly placed depot
-  instead: its settling step reports *not needed* and sends it away (claim 6). *Expected,* for
-  either set-up: the depot's next processing
+  strength, heals the damaged vehicle after its movement arrival at the docking point (claim
+  17) and before the depot's settling step. Repeat until the recorder shows a
+  settling step that reports *not needed* and sends the vehicle away, at most ten times. A
+  repeat in which the heal comes before the arrival is void (a vehicle at full health is
+  expected to be refused at its repeated entry request, claims 16 and 17). If no
+  repeat reaches that step, write the vehicle's health to full between the acceptance and the
+  settling step instead.
+  *Expected,* for either set-up: the depot's next processing
   is *D* = 14 ticks after that step, in settling with no contact, and it returns to *guard* at
   that processing: on a depot fresh from placement no *special-3* runs, and none starts there
   (S-0108 claim 20).
@@ -2208,17 +2339,33 @@ too.
   approaching does, H18 a), is inconclusive and is run again; vary the vehicle's starting cell
   between repeats so that its arrival falls at different points of the depot's *D*-tick
   cadence. *Expected:* at the depot's pending waiting processing, at most 14
-  ticks after the loss, it returns to *guard*, with no settling processing and no *special-3* wait.
+  ticks after the loss, *special-3* and *active-1* start, and the depot is in *guard* from 1
+  tick later without waiting for *special-3* to finish, with no settling processing between.
   *Falsified if:* run 1 reacts before or after the first working processing (14 ticks after the
   settling step), or does not return to *guard* at its first processing after *special-3* ends; run 6's
   next processing comes other than 14 ticks after the step, or the depot does not return to
-  *guard* at that processing; run 7 reacts at any processing other than the pending waiting one, or
-  enters settling; run 2 reacts later than the
+  *guard* at that processing; run 7 reacts at any processing other than the pending waiting one,
+  enters settling, or is in *guard* other than 1 tick after that processing; run 2 reacts later
+  than the
   tick after the loss (or, after a missed turn, later than the depot's next update that runs), or
   only at a step's due tick; run 3 reacts on the tick after the loss or
   at any processing other than the pending retry; in either repeat of run 4 the second step comes other than 126 ticks after its settling step, or any later
   interval differs from 113 ticks; run 5 reacts before the processing 3 ticks after the acceptance, starts *special-3*
   or *active-1* there, or stays in repair after it.
+  *Run 8 (departure in working, Q-1610 question 1):* repeat run 2 with a move order 6 cells away
+  (scripted input) in place of the destruction, 1 tick after the second step. A repeat in which
+  the recorder does not show the contact released on the order's tick is inconclusive.
+  *Expected:* the same reaction as run 2, on the tick of the order or the next tick, not at the
+  next step's due tick. *Falsified if:* the depot reacts later than that (or, after a missed
+  turn, later than its next update that runs), or only at a step's due tick.
+  *Run 9 (departure in settling, Q-1610 question 2):* repeat run 3 with a move order 6 cells
+  away (scripted input) in place of the destruction, at the same tick (3 ticks after the second
+  failed settling retry). A repeat in which the recorder does not show the depot in settling and
+  the contact released on the order's tick is inconclusive. *Expected:* the same as run 3: the
+  depot's next processing is still 14 ticks after that retry, not on the order's tick, and it
+  returns to *guard* there, with no processing in between. *Falsified if:* the depot processes
+  before or after that processing (after a missed turn, other than at its next update that
+  runs), or does not return to *guard* there.
 
 - *Part i (a hovering vehicle switched off again; enabling and disabling while settled; the naval-yard water case, claim 21):* part a's
   hovering repeat, with the random-state recorder logging every scenario-stream draw and a
@@ -2722,23 +2869,35 @@ body facing, contact places, tether, behaviour, building processing and health e
   destination, tether, processing ticks and current/queued behaviours before and after arrival
   and the late start. Include arrivals between enter processings, varying the approach length
   if needed. Expected: arrival queues sleep but introduces no new map-east turn, regardless of
-  tether. If otherwise ready, sleep is current at that turn's late start without another enter
-  processing. A newly requested map-east turn caused solely by movement arrival falsifies the
-  claim. A driving vehicle already turning is held only by S-0215 claim 11's readiness rule.
+  tether. If otherwise ready, the measured hovering vehicle's sleep is current at that turn's late
+  start without another enter processing; for the measured driving vehicle record the behaviour at
+  every tick end from the arrival (expected: *guard*, M-0007); for any other vehicle or a ship
+  record it without judging it (claim 17). A newly requested
+  map-east turn caused
+  solely by movement arrival falsifies the claim. A driving vehicle already turning is held only by
+  S-0215 claim 11's readiness rule.
   a ship or hovering vehicle with rotation alone is not held by that driving-only condition.
   Compare the driving control with S-0215 B47. Report a fixture inconclusive if ordinary input
   cannot produce the required tethered approach or existing-turn state; do not create either
   by writing into the running game. No separate completed-entry confirmation is assumed from
   an ordinary depot, with or without the pad flag.
-- *b, eligibility:* repeat at full health, then with no credits. Expected: entry is still allowed,
-  full health leaves without payment at settling, and an injured unaffordable vehicle stays for
-  retries. Repeat with a depot switched off and one in selling: no new enter action. Repeat on
+- *b, eligibility:* repeat at full health, then with no credits, and record the tick limit.
+  Expected: a vehicle at full health is refused at its first *enter* processing (claim 16): it
+  never reaches the docking point, the depot never enters its settling phase for it, and it
+  gets no step and no payment up to the tick limit; its contact at a tick end is recorded but
+  not judged, so this part does not tell which exchange refuses it (claim 16). Reaching the
+  docking point, or a settling-time departure, falsifies the
+  refusal (that would be a silent *not needed* step, claims 3 and 6). An injured
+  unaffordable vehicle
+  stays for retries. Repeat with a depot switched off and one in selling: no new enter action.
+  Repeat on
   an allied bystander's depot, keeping that building in view and excluding its other objects
   from the observed area. Expected: the own vehicle can enter and its owner pays; the depot's
   owner need not pay. Record sounds too: completion at that non-local depot produces no local
   repair-complete announcement, unlike the own-depot control. Exhaust the vehicle owner's funds
   during working and leave the allied depot owner funded: no local low-funds announcement.
-  An own-only restriction, damage/money entry gate, payment by the depot owner, or either local
+  An own-only restriction, a money entry gate, a step or payment for a full-health vehicle,
+  payment by the depot owner, or either local
   announcement at the non-local depot falsifies the relevant claim. Void a run if the bystander
   sells or loses the allied test depot.
 - *c, contention:* send the first vehicle, wait until its contact is recorded, then click with
@@ -2783,7 +2942,13 @@ damaged to half strength unless a part says otherwise.
   current in the tick the contact ends; no destination; the depot queues no new *repair* and
   the vehicle no new *sleep* between the order and the end of contact. *Falsified if:* either is
   queued again, a destination appears, or the contact outlives the first tick with *enter*
-  current. Repeat at full health: contact ends in the order's tick.
+  current. Repeat at full health: dock a damaged vehicle at a depot with the pad flag, raise
+  its health to full by scripted input before the depot's next step, and give the order in
+  that tick. Judge this repeat only when the order is not ignored under claim 20's first bullet.
+  Expected: no contact at the end of the order's tick, no destination and no queued entry
+  (claim 20). *Falsified if:* the contact is shown at that tick end. Go on recording contact,
+  tether, place, current behaviour and position every tick for 120 ticks after the order,
+  without judging them: whether the vehicle takes contact again is open (claim 20).
 - *b, moving away:* order a docked vehicle 6 cells away during working and let it stand still.
   Expected: health keeps rising by steps, credits fall, and at full health the vehicle is sent to
   the rally point or exit cell, not left at the ordered cell. Repeat during waiting: no step while
@@ -2811,20 +2976,36 @@ damaged to half strength unless a part says otherwise.
   both switch to *guard*, the depot destination is cleared, contacts end one depot processing
   later; record any scatter movement. *Falsified if:* the depot stays in a working state, a
   contact outlives the next depot processing, or a destination on the depot remains.
-- *d, destruction:* destroy the depot (scripted damage outside the vehicle) in the same two
-  cases. Expected: contacts released; the approaching vehicle falls back to *guard*; the docked
-  vehicle stays in *sleep* and does not fire at an enemy test unit placed in range. Then
-  destroy the contacted vehicle instead, separately during waiting (held 6 cells away as in
-  b's waiting repeat and H4 part h run 7), settling and working.
-  Log depot behaviour and slot-animation starts and ends every tick. Expected: waiting returns
-  to *guard* at its next processing without waiting for *special-3*; working enters settling
+- *d, destruction:* destroy the depot (scripted damage outside the vehicle) in two cases: (i)
+  with a contacted vehicle after its movement arrival in the docking-point cell (claim 17),
+  docked or not, a hovering vehicle in one repeat and a driving vehicle in
+  another, and (ii) with a contacted vehicle before that arrival. Add three record-only repeats
+  for claim 17: a test copy of the measured driving vehicle and one of the measured hovering
+  vehicle, each with its weapon removed if it has one or a
+  weapon added if it has none (named test files), and a ship at a stock naval yard. In every repeat
+  record the arrived vehicle's current behaviour and whether it is tethered
+  at every tick end from its arrival. Expected: contacts released; case (ii)'s vehicle
+  falls back to *guard*; the arrived vehicle keeps its current behaviour, tethered or not
+  (claim 22). The arrived measured hovering vehicle stays in *sleep* and does not fire at an
+  enemy test unit placed in range; the arrived measured driving vehicle stays in *guard*, and
+  whether it fires at that unit is recorded but not judged (claim 22, Open questions). In the
+  two test-copy repeats and the ship repeat the behaviour from the arrival is recorded but not
+  judged (claim 17, Open questions); a change of it at the destruction falsifies claim 22 there
+  too. Then destroy the contacted vehicle instead, separately during waiting (held 6 cells away
+  as in b's waiting repeat and H4 part h run 7), settling and working.
+  Log depot behaviour and slot-animation starts and ends every tick. Expected: in waiting, the
+  next processing starts *special-3* and *active-1*, and the depot is in *guard* from 1 tick
+  later without waiting for *special-3* (claim 6); working enters settling
   with a 1-tick retry; after its first no-contact processing, no-contact settling checks every
   tick and returns to *guard* only once
   *special-3* has stopped running. Repeat the settling hold with the depot off-screen and at
   different drawing-frame cadences: the simulation ticks of the animation end and guard return
   do not change (S-0108 claim 20, B18 g). Then order another vehicle to enter.
-  *Falsified if:* a contact survives, the approaching vehicle keeps its depot order, the docked
-  vehicle fires, no-contact settling returns to *guard* while *special-3* still runs, the wait
+  *Falsified if:* a contact survives, the approaching vehicle keeps its depot order, a docked
+  vehicle's behaviour changes at the destruction from the one recorded before it, for the two
+  vehicle types M-0007 measured the docked hovering vehicle fires or leaves *sleep* or the
+  docked driving vehicle leaves *guard*, no-contact
+  settling returns to *guard* while *special-3* still runs, the wait
   changes with drawing cadence, or the depot refuses the next otherwise eligible vehicle.
 - *e, locomotors:* repeat d with a hovering vehicle after its settling step, then give move
   orders. Expected: it never moves. Repeat c with a hovering vehicle after its settling step,
@@ -3127,18 +3308,27 @@ The measurement scenario requires a read-only record of the ordered events; end-
   carries over from the lost one. After a loss in waiting: whether the pending waiting
   processing checks the new vehicle's stillness and starting distance as for any vehicle, or
   finds no contact and returns the depot to *guard*. No reproducible setup is established.
+- (Claim 22, Q-1610 questions 1 and 2, a vehicle that leaves.) Whether a depot whose contact ends
+  because the vehicle leaves by claims 20 and 21 reacts at the processing already scheduled, as
+  for a destroyed vehicle. Expected yes; H4 part h run 8 tests it in working and run 9 in
+  settling. In waiting, M-0007 shows it for a loss before the depot's first waiting processing.
 - (Claims 6 and 22.) Q-1610 questions 1 and 2 for a depot type that is also a vehicle bunker:
   when such a depot's processings come after a docked or approaching vehicle's contact ends.
   S-0606 claim 20 gives only that its processing delay is the depot's; this spec's claim 6
   table does not cover that type, and no trace of it is recorded.
-- (Claims 6 and 21.) Which first-step timing an ordinary docking gives. A vehicle is settled
-  from its movement arrival, so its step comes 3 ticks after the acceptance if the depot's
-  first waiting processing after the arrival accepts it, and 4 ticks after it if an earlier
-  waiting processing found it moving or outside the starting distance and so ended its being
-  settled. That turns on when the depot's *repair* becomes current after the arrival (S-0215
-  claims 7 and 11) and on whether the vehicle, at rest at its docking point with the depot
-  still its destination, gives the movement report of claim 17 at that processing; neither is
-  established here. H4 part a records which case each run gives.
+- (Claims 17 and 21.) What makes the measured driving vehicle's behaviour *guard*, not the
+  queued *sleep*, from its movement arrival at the docking point, and empties its order-level
+  destination on that tick (M-0007), while the measured hovering vehicle is in *sleep*. No
+  exchange of the arrival found so far queues *guard*. So it is open whether locomotion or
+  another difference between the two vehicles decides it, and what other vehicles and a ship
+  show. H18 d's record-only repeats would tell these apart. Whether
+  a vehicle in *guard* there differs from one in *sleep* in any later rule of this spec (for
+  example S-0215's start rules) is open with it.
+- (Claim 22.) Whether a contacted driving vehicle, in *guard* when its depot is destroyed, then
+  takes a target in range and fires at it. H18 d records it without judging it.
+- (Claim 20.) After an enter order on its own depot releases a docked vehicle at full health,
+  whether that vehicle's later processings take contact with the depot again, and if so how
+  that contact ends. H18 a's full-health repeat records it without judging it.
 - Which additional vehicle-state condition makes the original's non-human-owner branch return
   a depot from a paid settling step to waiting without starting work (claim 6), and what
   subsequent vehicle orders result? Only neutral and special houses retain this branch in our
@@ -3158,8 +3348,8 @@ The measurement scenario requires a read-only record of the ordered events; end-
 - The former allied-depot blocking question concerns route-point action selection, owned by
   S-0215 claim 13, not a separate permission to cross a blocking foundation. Foundation entry
   remains S-0209 claim 5's.
-- The exact phase of the second depot step and the first hospital step (±1 tick); scenarios H4
-  and H6 record them. Claim 21 distinguishes the near 1-tick settling retry of a vehicle that is
+- The exact phase of the first hospital step (±1 tick); scenario H6 records it. Claim 21
+  distinguishes the near 1-tick settling retry of a vehicle that is
   not settled (moving or not) from the *D*-tick retry of a moving vehicle
   200 leptons or more away. Claim 25 and H21 cover a failed departure search.
 - Whether a unit inside a hospital can reach full health by another rule, so that *not needed* can
@@ -3220,13 +3410,62 @@ The measurement scenario requires a read-only record of the ordered events; end-
   spec's *settled* term. What the enabling and the disabling do to a vehicle's being settled is
   stated once, in this spec's Terms and claim 21, which own the term. S-0606 needs no change:
   leaving a tank bunker is not an end that this spec states (claim 22).
+- S-0215 claim 29, the docking-point arrival that queues *sleep* at the vehicle: its sleep
+  start at a ready update's late start is scoped to the hovering vehicle measured in M-0007. The
+  claim gains: "At a repair depot, the driving vehicle measured in M-0007 is in *guard* at every
+  recorded tick end from that arrival to the settling step, with its order-level destination
+  empty. M-0007's settling step 3 ticks after the acceptance is consistent with its being
+  settled at the depot continuing (S-0314 Terms and claim 17; M-0007). Whether the queued
+  *sleep* becomes
+  current within the tick, and what puts the vehicle in *guard*, are open. The hovering vehicle
+  measured there is in *sleep* as stated (M-0007). What other driving and hovering vehicles and
+  ships show is not stated (S-0314 claim 17)". Its tank-bunker paragraph's sentence "As at a
+  depot, arrival does not clear the order-level destination" then holds for the measured
+  hovering vehicle only. It becomes: "As at a depot for the hovering vehicle measured in M-0007,
+  arrival does not clear
+  the order-level destination; at a depot the order-level destination of the driving vehicle
+  measured there is empty from its arrival (S-0314 claim 17)".
+- S-0215 scenario B39, which expects *sleep* to start at the arrival update's late start "if
+  otherwise ready": that expectation is scoped to the hovering vehicle measured in M-0007. For the
+  driving vehicle
+  measured there, B39 records the behaviour at every tick end from the arrival (expected:
+  *guard*, S-0314 claim 17); for any other vehicle and for a ship it records it without judging
+  it.
+- S-0215 scenario B48, which tests a driving vehicle's readiness "from *sleep* after an ordinary
+  repair-depot arrival under S-0314 claim 17": under claim 17 the driving vehicle measured in M-0007
+  is in *guard*, not *sleep*, from that
+  arrival, and other driving vehicles' behaviour there is not stated, so the set-up does not give
+  *sleep*. B48 keeps its driving vehicle, since its
+  readiness test is driving-specific (S-0215 claim 11). It reaches *sleep* for it by another
+  way that S-0215 states, or, if none exists, its driving *sleep* comparison is `unmeasured`.
+- S-0214 scenario (a vehicle clicked on an own repair depot), "Repeat at full health, at zero
+  credits, and with a mutually allied depot: none of these alone prevents entry": the targeting
+  results are unchanged (the *enter* action and an enter order in each repeat), but at full
+  health the vehicle does not enter. The depot refuses it at its first repeated entry request
+  after the order, before it reaches the docking point (S-0314 claim 16). The sentence becomes
+  "none of these alone prevents the *enter* action or the enter order; at full health the depot
+  then refuses the vehicle at its first repeated entry request (S-0314 claim 16)". S-0214's
+  line "Neither full health nor zero funds prevents acceptance" concerns the first acceptance
+  and needs no change.
+- S-0504 claim 14, "Destruction releases contact without that notice: an approaching vessel
+  falls back to guard, and a docked vessel stays asleep until ordered" becomes "Destruction
+  releases contact without that notice: a vessel before its movement arrival at the yard's
+  docking point falls back to guard, and a vessel after it, docked or not, keeps its current
+  behaviour, as S-0314 claim 22 states for a vehicle: a vessel in *sleep* stays asleep until
+  ordered. Which behaviour a vessel has after its arrival at the yard is S-0314 claim 17's open
+  question". The release changes no behaviour of a contacted vehicle of any locomotor after its
+  movement arrival (S-0314 claim 22; H18 d's ship repeat tests it). S-0504's
+  confidence for this sentence is unchanged. Its scenario N15, where it destroys a yard with a
+  docked vessel, should record that vessel's behaviour from its arrival to after the
+  destruction, and is falsified by a change of behaviour at the destruction.
 - Checked, no change needed: S-0504 claim 8's sentence that settling is scheduled 3 ticks
   after the processing that first finds the vehicle at rest, and its state table's row
   "settling scheduled 3 ticks later", concern the waiting-to-settling delay, not the first
   step; S-0606 claim 20 uses the depot's processing delay and states no first-step tick.
-- S-0504 claim 8 and scenario N8: a vehicle becomes settled on its movement arrival in the
-  docking-point cell (S-0314 Terms). If it is still settled when its first settling processing
-  comes, 3 ticks after the accepting waiting processing, the first repair comes at that
+- S-0504 claim 8 and scenario N8: a vehicle is expected to become settled on its movement
+  arrival in the docking-point cell (S-0314 Terms). If it is still settled when its first
+  settling processing comes, 3 ticks after the accepting waiting processing, the first repair
+  comes at that
   processing. If something has ended its being settled by then, for example a waiting
   processing that did not accept it, that processing makes it settled and takes no step, and
   the first repair comes at the next processing, 4 ticks after the acceptance. For a hovering
