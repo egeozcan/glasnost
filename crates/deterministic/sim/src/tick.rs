@@ -233,6 +233,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0616 claim 1 (a deactivated vehicle's spark step comes first in its turn, before every other draw of that turn, also in turns that end early for another reason)
     crate::emitters::deactivated_sparks(w, id);
+    // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw)
+    crate::combat::held::turn_start_drop(w, id);
     // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and S-0203 claim 4 revision 32: the warp update is the whole member turn, with the intrinsic exceptions)
     if crate::superweapons::warp::turn(w, id) {
         // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)

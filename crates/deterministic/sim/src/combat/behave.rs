@@ -35,7 +35,8 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     let Some(u) = rules.unit(o.kind, o.type_index) else {
         return false;
     };
-    let Some(t) = o.target else {
+    // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
+    let Some(t) = crate::combat::held::firing_target(w, &o) else {
         // spec: S-0609 claim 5 (a firing step with no target: spin-down)
         crate::gattling::vehicle_step(w, id, None, false);
         return false;
@@ -216,7 +217,8 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
         // spec: S-0107 claim 11 (a tick that begins with a current sequence whose stage delay is 0 ends the attack state and asks for stand)
         end_attack(w, true);
     }
-    let Some(t) = o.target else {
+    // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
+    let Some(t) = crate::combat::held::firing_target(w, &o) else {
         if s.attack {
             // spec: S-0107 claim 11 (the attack state ends when the unit has no target)
             end_attack(w, false);
@@ -334,7 +336,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         if b.building.sam {
             return sam_attack(w, id);
         }
-        let Some(t) = o.target else {
+        // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
+        let Some(t) = crate::combat::held::firing_target(w, &o) else {
             // spec: S-0518 claim 10 (a prism master's attack processed with no target resets its support count)
             crate::linked::reset_count(w, id);
             // spec: S-0215 claim 32 (no target: queues guard and starts it at once, 1 tick)
@@ -606,8 +609,10 @@ pub fn delayed_shot_turn(w: &mut World, id: ObjectId) {
         crate::linked::master_shot(w, id);
         return;
     }
-    // spec: S-0301 claim 14 (the check and the shot use the building's target at the end of the delay; Q-1770 answered)
-    let Some(t) = o.target else { return };
+    // spec: S-0301 claim 14 (the check and the shot use the building's target at the end of the delay; Q-1770 answered) and S-0309 claim 27 (with no target then, no check and no shot, and the shot is no longer pending; DECIDED: a restored object off the map or destroyed in play is no target)
+    let Some(t) = crate::combat::held::firing_target(w, &o) else {
+        return;
+    };
     // spec: S-0301 claim 14 and S-0308 claim 14 (the slot chosen when the delay started, not chosen again)
     let slot = usize::from(o.combat.delayed_slot);
     // spec: S-0301 claim 14 (the firing check again, with range, not refused by this shot itself, which is no longer pending: a shot on can fire, else dropped with no projectile, countdown or draw)

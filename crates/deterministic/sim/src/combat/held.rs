@@ -1,0 +1,133 @@
+//! A held target that leaves play (S-0309 claims 27 and 28): every holder
+//! of an object as its target drops it when the object is destroyed, goes
+//! off the map or is removed, inside that action; each drop resets the
+//! holder's targeting timer; a revert can give the object back, and our
+//! engine's design rule for such a target (claim 27, DECIDED).
+
+use crate::rules::Kind;
+use crate::world::{Object, ObjectId, Target, World};
+
+// spec: S-0309 claim 27 (a draw only when the targeting timer has more than 10 integer ticks left; S-0501 claim 37 for an aircraft)
+const DROP_TIMER_LEFT: i32 = 10;
+// spec: S-0309 claim 27 (one ranged draw over 4 to 8 ticks, both included; S-0501 claim 37 for an aircraft)
+const DROP_TIMER_DRAW: (i32, i32) = (4, 8);
+
+/// How a held object leaves play (S-0309 claim 27; glossary, *in play …
+/// destroyed, removed*).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Leaving {
+    /// The killing hit, also of an object that stays in play after it.
+    Destroyed,
+    /// It goes off the map (a transport, a building entered, a master).
+    OffMap,
+    /// It is removed (a crush included).
+    Removed,
+}
+
+/// The drop's timer reset for holder `id` (S-0309 claims 27 and 28, S-0501
+/// claim 37): with more than 10 ticks left on its targeting timer, one
+/// ranged draw over 4 to 8 ticks restarts it; otherwise no draw.
+pub(crate) fn timer_draw(w: &mut World, id: ObjectId) {
+    let tick = w.tick;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    if w.obj(id)
+        .is_some_and(|o| o.targeting_timer.wrapping_sub(tick) > DROP_TIMER_LEFT)
+    {
+        // spec: S-0309 claim 27 and S-0501 claim 37 (the draw, from the scenario random stream, before the target is cleared, inside the action that drops it)
+        let v = w.rng.ranged(DROP_TIMER_DRAW.0, DROP_TIMER_DRAW.1, half);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.targeting_timer = tick.wrapping_add(v);
+        }
+    }
+}
+
+/// Every infantry unit, vehicle, building and aircraft holding `gone` as
+/// its target drops it now (S-0309 claim 27): the timer draw, then the
+/// clear, and an overridden holder reverts (S-0215 claim 10), which can
+/// give it `gone` again. A removal drops such a restored `gone` once more
+/// within the same action, with no second draw (after a first draw at most
+/// 8 ticks are left). A destroyed object that stays in play, or one off the
+/// map, stays the restored target; [`turn_start_drop`] and
+/// [`firing_target`] are our engine's rule for it.
+pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
+    // spec: S-0309 claim 27 and Open questions (no exception for the holder's owner or for what covers the cell; the order of several holders' draws is not established: key order, as S-0501 claim 32's aircraft, interim)
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.target == Some(Target::Object(gone)))
+        .map(|o| o.id)
+        .collect();
+    for x in ids {
+        // spec: S-0309 claim 27 (the drop resets the targeting timer: the draw first, S-0501 claim 37)
+        timer_draw(w, x);
+        let Some(ob) = w.obj_mut(x) else { continue };
+        let mut restored = None;
+        if ob.kind == Kind::Aircraft && how != Leaving::Destroyed {
+            // spec: S-0501 claim 32 (an aircraft holds no target, then an overridden one is reverted right after the loss)
+            crate::spawn::clear_own_target(ob);
+            if ob.beh.suspended.is_some()
+                && let Some((t, d)) = ob.beh.revert()
+            {
+                // spec: S-0501 claim 32 and S-0215 claim 10 (the revert brings back the target put aside, even the object that left the map)
+                crate::spawn::set_own_target(ob, t);
+                ob.dest = d;
+            }
+        } else if ob.beh.suspended.is_some()
+            && let Some((t, d)) = ob.beh.revert()
+        {
+            // spec: S-0215 claim 10 and S-0309 claim 27 (the drop ends an override: the revert can make the same object the target again)
+            crate::spawn::set_own_target(ob, t);
+            if ob.kind.is_mobile() {
+                restored = Some(ob.dest);
+                ob.dest = d;
+            }
+        } else {
+            crate::spawn::clear_own_target(ob);
+        }
+        if how == Leaving::Removed && ob.target == Some(Target::Object(gone)) {
+            // spec: S-0309 claim 27 (the removal drops a restored object again; together the drops take at most one timer draw)
+            crate::spawn::clear_own_target(ob);
+        }
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, x, before);
+        }
+    }
+}
+
+/// Whether object `x`, held as a target, is one that only a revert can
+/// have given back (S-0309 claim 27, DECIDED): off the map, or destroyed
+/// and still in play.
+fn left(w: &World, x: ObjectId) -> bool {
+    w.obj(x)
+        .is_some_and(|o| !o.on_map || crate::combat::damage::dead(o))
+}
+
+/// The target a holder's firing step uses (S-0309 claim 27, DECIDED): a
+/// held object that is off the map, or destroyed and still in play, counts
+/// as no target, so no firing check is asked about it and no shot is fired
+/// at it or at its place.
+pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
+    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step)
+    o.target
+        .filter(|t| !matches!(*t, Target::Object(x) if left(w, x)))
+}
+
+/// The start of a holder's turn (S-0309 claim 27, DECIDED): a held object
+/// that is off the map, or destroyed and still in play, is dropped, with no
+/// timer draw and no revert (S-0215 claim 10: clearing the target by another
+/// rule does not revert).
+pub(crate) fn turn_start_drop(w: &mut World, id: ObjectId) {
+    let Some(Target::Object(x)) = w.obj(id).and_then(|o| o.target) else {
+        return;
+    };
+    if !left(w, x) {
+        return;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0309 claim 27 (DECIDED: dropped at the start of the holder's next turn, no draw, no revert)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+}

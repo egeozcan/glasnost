@@ -218,7 +218,8 @@ pub fn grant_own_flag(w: &mut World, id: ObjectId) {
 /// Every object that has `id` as its target keeps it only if it has the
 /// same owner or its house senses the target (S-0516 claim 14, S-0215
 /// claim 10: an overridden attacker reverts first, then drops it if it is
-/// still its target).
+/// still its target); each one that drops it takes S-0309 claim 28's timer
+/// reset first.
 fn drop_attackers(w: &mut World, id: ObjectId) {
     let Some(owner) = w.obj(id).map(|o| o.owner) else {
         return;
@@ -235,6 +236,8 @@ fn drop_attackers(w: &mut World, id: ObjectId) {
         if xo == owner || senses(w, xo, id) {
             continue;
         }
+        // spec: S-0309 claim 28 (each cloak drop resets the holder's targeting timer as in claim 27; one kept under an exception takes no draw)
+        crate::combat::held::timer_draw(w, x);
         let Some(ob) = w.obj_mut(x) else { continue };
         let mut restored = None;
         if ob.beh.suspended.is_some()
@@ -479,7 +482,7 @@ pub fn late_turn(w: &mut World, id: ObjectId) {
 /// are seams (those locomotors are not built). Entering play alone, unloading included, is not one: the disc is
 /// added by [`entered_map`] with no adjacency test.
 pub fn cell_movement_completed(w: &mut World, id: ObjectId) {
-    // spec: S-0405 claim 13 (revision 20: a powered-unit vehicle is disabled when it completes its arrival in a cell, which covers driving, landing after a fall and arriving by a chrono jump; placement and creation are not arrivals)
+    // spec: S-0405 claim 13 (revision 20: a powered-unit vehicle is disabled when it completes its arrival in a cell, which covers driving, landing after a fall and arriving by a chrono jump; placement and creation are not arrivals; revision 47, Q-1710: for a hovering vehicle the arrivals are the cell-arrival updates of its non-refusing heading-point choices, read on the cell it stands in)
     crate::econ::power::arrival(w, id);
     let Some(o) = w.obj(id) else { return };
     if !o.on_map || !o.kind.is_mobile() {

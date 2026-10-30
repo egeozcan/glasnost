@@ -176,9 +176,10 @@ fn exploding(w: &World, id: ObjectId) -> bool {
 }
 
 /// Marks an object killed: projectiles it fired carry no attacker any more
-/// (S-0302 claim 1), actors that overrode against it revert (S-0215 claim
-/// 10), and objects targeting it lose it; projectiles aimed at it target
-/// its cell (S-0306 claim 17).
+/// (S-0302 claim 1), every holder of it as its target drops it with the
+/// timer reset and actors that overrode against it revert (S-0309 claim 27,
+/// S-0215 claim 10); projectiles aimed at it target its cell (S-0306 claim
+/// 17).
 pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     if let Some(ob) = w.obj_mut(id) {
@@ -197,39 +198,8 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
             p.target = (!airborne).then_some(Target::Cell(o.pos.cell()));
         }
     }
-    let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
-    for x in ids {
-        if !w
-            .obj(x)
-            .is_some_and(|ob| ob.target == Some(Target::Object(id)))
-        {
-            continue;
-        }
-        // spec: S-0501 claim 37 (an aircraft losing its target: the targeting-timer draw comes before the clear)
-        crate::air::target_loss_draw(w, x);
-        let Some(ob) = w.obj_mut(x) else { continue };
-        let mut restored = None;
-        if ob.beh.suspended.is_some() {
-            // spec: S-0215 claim 10 (the target is destroyed: the revert comes at the killing hit)
-            if let Some((t, d)) = ob.beh.revert() {
-                crate::spawn::set_own_target(ob, t);
-                if ob.kind.is_mobile() {
-                    restored = Some(ob.dest);
-                    ob.dest = d;
-                }
-            }
-            if ob.target == Some(Target::Object(id)) {
-                crate::spawn::clear_own_target(ob);
-            }
-        } else {
-            crate::spawn::clear_own_target(ob);
-        }
-        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-        if let Some(before) = restored {
-            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
-            crate::infantry::destination_assigned(w, x, before);
-        }
-    }
+    // spec: S-0309 claim 27 (every holder drops it at the killing hit, also when it stays in play; the timer draws come with the hit, before the death effects, S-0309 Open questions) and S-0215 claim 10 (the revert at the killing hit)
+    crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Destroyed);
     w.effects.push(Effect::Killed { id, pos: o.pos });
 }
 

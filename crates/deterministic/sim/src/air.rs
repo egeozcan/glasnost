@@ -2854,63 +2854,8 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
 // ---------------------------------------------------------------------------
 // Losing a target that leaves the map (claims 32 and 37)
 
-// spec: S-0501 claim 37 (Target loss: a draw only when the targeting timer has more than 10 integer ticks left)
-const LOSS_TIMER_LEFT: i32 = 10;
-// spec: S-0501 claim 37 (Target loss: one U(4, 8) draw restarts the timer with the drawn number of ticks)
-const LOSS_TIMER_DRAW: (i32, i32) = (4, 8);
-
-/// Claim 37's target-loss draw for aircraft `id` losing its target object
-/// now: with more than 10 ticks left on its targeting timer, one draw
-/// restarts it. Not an aircraft: no draw (the every-actor draw is S-0309's).
-pub(crate) fn target_loss_draw(w: &mut World, id: ObjectId) {
-    if !is_aircraft(w, id) {
-        return;
-    }
-    let tick = w.tick;
-    let half = w.rules().quirks.ranged_draw_half_span;
-    if w.obj(id)
-        .is_some_and(|o| o.targeting_timer.wrapping_sub(tick) > LOSS_TIMER_LEFT)
-    {
-        // spec: S-0501 claim 37 (Target loss: the draw before the target is cleared, in the turn in which the event happens)
-        let v = w.rng.ranged(LOSS_TIMER_DRAW.0, LOSS_TIMER_DRAW.1, half);
-        if let Some(ob) = w.obj_mut(id) {
-            ob.targeting_timer = tick.wrapping_add(v);
-        }
-    }
-}
-
-/// Every aircraft whose target is object `gone` loses it at once (claim
-/// 32): `gone` goes off the map (a transport, a building as occupant) or is
-/// removed. In key order, each takes claim 37's draw, holds no target, and
-/// an overridden one is reverted (S-0215 claim 10), which brings back the
-/// target put aside even when it is `gone`; `removed` then clears such a
-/// target, as the object no longer exists. A kill is
-/// [`crate::combat::death::mark_killed`]'s.
-pub(crate) fn targeters_lose(w: &mut World, gone: ObjectId, removed: bool) {
-    let ids: Vec<ObjectId> = w
-        .objects
-        .values()
-        .filter(|o| o.kind == Kind::Aircraft && o.target == Some(Target::Object(gone)))
-        .map(|o| o.id)
-        .collect();
-    for x in ids {
-        // spec: S-0501 claim 32 (no owner, alliance or sensor exception; the draw first, claim 37)
-        target_loss_draw(w, x);
-        let Some(ob) = w.obj_mut(x) else { continue };
-        crate::spawn::clear_own_target(ob);
-        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-        if ob.beh.suspended.is_some()
-            && let Some((t, d)) = ob.beh.revert()
-        {
-            // spec: S-0501 claim 32 and S-0215 claim 10 (an overridden aircraft is reverted right after the loss; the revert brings back the target put aside, even the object that left the map)
-            crate::spawn::set_own_target(ob, t);
-            ob.dest = d;
-            if removed && ob.target == Some(Target::Object(gone)) {
-                crate::spawn::clear_own_target(ob);
-            }
-        }
-    }
-}
+// Claim 37's draw and claim 32's loss are `combat::held`'s, which S-0309
+// claim 27 extends to every holder.
 
 // ---------------------------------------------------------------------------
 // Falling back to rest (claim 18, table T2)

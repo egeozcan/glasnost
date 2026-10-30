@@ -521,8 +521,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     if !o.on_map {
         return;
     }
-    // spec: S-0501 claim 32 (an aircraft loses as its target an object that leaves the map, a transport or a building entered, at that moment)
-    crate::air::targeters_lose(w, id, false);
+    // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that goes off the map, a transport or a building entered, at that moment)
+    crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::OffMap);
     // spec: S-0306 claim 17 (a projectile whose target goes inside: the cell it stood in when not airborne, else nothing)
     crate::combat::projectile::target_leaves(w, id);
     // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
@@ -586,8 +586,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
-    // spec: S-0501 claim 32 (an aircraft loses as its target an object that is removed, at that moment)
-    crate::air::targeters_lose(w, id, true);
+    // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that is removed, a crush included, at that moment)
+    crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Removed);
     // spec: S-0306 claim 17 (a projectile whose target is removed from the map: the cell it stood in when not airborne, else nothing; a killed target was dealt with at the kill)
     crate::combat::projectile::target_leaves(w, id);
     // spec: S-0615 claim 14 (removed or taken off the map, a transport or building entered included: lost to its disc lasers at once)
