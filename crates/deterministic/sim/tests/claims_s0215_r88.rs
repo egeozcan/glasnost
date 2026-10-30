@@ -43,6 +43,8 @@ fn hunting_its_lifter(human: bool) -> (World, ObjectId, ObjectId) {
 }
 
 // spec: S-0215 claim 37 (c) (revision 88: a seized unit whose target is its lifter takes the step as for any target) and (d) (hunt, may not approach, human-controlled owner: the target is dropped, target and destination cleared at once) with S-0607 claim 9 (a rule that gives a gripped unit no destination ends its grip without a drop; still seized) and claim 12 (that row leaves the lifter's target as it was)
+// Interim rule under request Q-2151 (does a cleared destination end the grip here?): as built, yes.
+// Flip this test when Q-2151 is answered otherwise.
 #[test]
 fn a_seized_unit_hunting_its_lifter_drops_it_and_the_grip_ends() {
     let (mut w, l, v) = hunting_its_lifter(true);
