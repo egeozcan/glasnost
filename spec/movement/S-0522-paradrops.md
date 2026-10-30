@@ -2,13 +2,13 @@
 id: S-0522
 title: Parachutes and drops
 topic: movement
-revision: 12
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-30
 measurements: []
-requests: [Q-0736, Q-0750, Q-0751, Q-0752, Q-0753, Q-0754, Q-2000]
+requests: [Q-0736, Q-0750, Q-0751, Q-0752, Q-0753, Q-0754, Q-2000, Q-2140]
 supersedes: []
 ---
 
@@ -24,8 +24,10 @@ Pointers:
 - S-0513 claim 43 reuses claims 4 and 5 here for the spy plane's arrival edge, cell and draws.
 - S-0107 claims 6, 17 and 21 and its state table give the *parachute* sequence and how deaths of
   falling infantry are shown.
-- S-0203 claim 4 gives what a falling unit cannot do in its turn. Falling does not limit the
-  player's orders (claim 17, medium until scenario P10 runs; S-0214 Terms).
+- S-0203 claim 4 gives what a falling unit cannot do in its turn. The order rules carry no falling
+  condition of their own, but the attack action follows the firing rules, which refuse every target
+  while the unit falls, so an ordinary click on an enemy then gives a move order (claim 17, medium
+  until scenario P10 runs; S-0214 Terms, claim 6 and table I).
 - S-0312 claims 5 and 16 give the death of an aircraft and of its passengers.
 - S-0011 claim 36 gives the drop-zone animation; it is not part of delivery.
 - S-0501 gives aircraft flight. Its claim 20 makes a shot of a carrying aircraft a drop (claim 11
@@ -33,19 +35,13 @@ Pointers:
   fall-back to rest.
 - S-0511 claim 10 and its Formula F3 give falling and the fall rate.
 
-Cross-spec coordination for this hand-off: S-0501 claims 13 to 15 and 20 and S-0301
-claims 1, 4, 10 and 15 need claim 11's drop-shot exception. S-0513 claim 43 needs claim 2's
-compact-list clarification. S-0109 claim 25 and S-0511 claim 10 need claim 13's absent-type
-fall-rate distinction; S-0103 claim 8 needs its corresponding absent-type default and
-open-question update. S-0215 claims 4 and 11 can use claim 17's fresh-paratrooper fixture
-for their previously unmeasured readiness cases. S-0215 claim 11's backing says that move
-clicks during a fall are refused, not deferred until landing, and its scenario B44 expects them
-refused and counts a deferred falling move as a falsifier. Under claim 17 a move, attack or
-deploy click during the fall gives an order at once, carried out after landing. S-0215 claim
-11's sentence, its scenario B44 and S-0215's other references to claim 17 and B44 need that
-correction, as S-0214's *Changes for other specs* states: B44 should expect the move after
-landing, as P10 does. These are coordinated corrections, not alternative rules to apply
-alongside this spec.
+Cross-spec coordination for this hand-off: S-0501 claims 13 to 15 and 20 and S-0301 claims 1, 4, 10
+and 15 need claim 11's drop-shot exception. S-0513 claim 43 needs claim 2's compact-list
+clarification. S-0109 claim 25 and S-0511 claim 10 need claim 13's absent-type fall-rate
+distinction; S-0103 claim 8 needs its corresponding absent-type default and open-question update.
+S-0215 claims 4 and 11 can use claim 17's fresh-paratrooper fixture for their previously unmeasured
+readiness cases. These are coordinated
+corrections, not alternative rules to apply alongside this spec.
 
 ## Terms
 
@@ -401,16 +397,28 @@ alongside this spec.
     can be acquired without a player order; landing grants neither an immediate target nor
     an unconditional shot.
 
-    Falling does not limit the player's orders: they reach a falling paratrooper
-    exactly as on the ground (S-0214's *movable* and *able to fire* carry no falling condition):
-    a deploy press (S-0213, table T2's deploy rule), a move click and
-    an attack click are each taken as an order at once. The order sets its destination or
-    target, and its behaviour becomes the queued behaviour in place of the queued rest
-    behaviour (S-0213 claim 5, table T3 part (d); for the deploy press, claim 10's *unload*).
-    While falling the unit takes no
-    step and fires no shot (S-0203 claim 4), and it cannot start the ordered behaviour. After
-    landing that behaviour becomes current at the first start readiness permits, the moment the
-    rest behaviour would otherwise have started, and the unit then carries the order out:
+    The order rules carry no falling condition of their own: S-0214's *movable* and *able to fire*
+    hold for a falling paratrooper as on the ground. A deploy press (S-0213, table T2's deploy rule)
+    and a move click are each taken as an order at once. The attack action instead follows the
+    firing rules, which rule every target illegal for a falling unit (S-0301 claim 9, rank 4). That
+    refusal counts against S-0214 claim 6 (e): it is not one of the other reasons for not firing at
+    this moment. So, without force-fire, the cursor of a falling armed paratrooper over an object of
+    another house does not offer *attack*: row G8 of S-0214 table G does not hold, and the generic
+    result is *nothing* (row G9). Unless an earlier row of S-0214 table I applies, the paratrooper's
+    action is then the fallback move of row I28, which for a movable actor is *no-move* (*move* for
+    a target disguised as an overlay). A click there gives the move order that S-0214 table M gives
+    for that action on an object, toward the target, at once and not an attack order; the unit
+    carries the move out after landing, as for a move click. With force-fire held, claim 6 (e) does
+    not apply, so an attack click is taken as an attack order at once. The same holds for the
+    infiltrating infantry facing a building it can enter that claim 6 (e) excepts: the falling
+    refusal does not remove the action S-0214 gives it.
+
+    An order taken during the fall sets its destination or target, and its behaviour becomes the
+    queued behaviour in place of the queued rest behaviour (S-0213 claim 5, table T3 part (d); for
+    the deploy press, claim 10's *unload*). While falling the unit takes no step and fires no shot
+    (S-0203 claim 4), and it cannot start the ordered behaviour. After landing that behaviour
+    becomes current at the first start readiness permits, the moment the rest behaviour would
+    otherwise have started, and the unit then carries the order out:
     - a deploy press: an in-place deployer then deploys by the ordinary deploy processing. The
       deploy check and deploy readiness of S-0214 are applied at the press, as for any press.
       A falling deployer counts as not deployed for the deploy rule's mixed-selection exception.
@@ -418,7 +426,7 @@ alongside this spec.
       such a selection are ordered and when each starts: an ordered landed one deploys at its
       next start, an ordered falling one after landing.
     - a move click: the unit carries out its move after landing.
-    - an attack click: the unit attacks its target after landing.
+    - a force-fire attack click: the unit attacks its target after landing.
 
     A second deploy press during the fall gives the same order again and cancels nothing. A
     stop order during the fall clears the destination and target but keeps the ordered
@@ -426,15 +434,20 @@ alongside this spec.
     or attack order replaces a pending deploy, as on the ground. This does not erase a
     pre-existing order on a non-fresh passenger: release uses the ordinary placement
     fall-back, which respects existing state by S-0215 claims 13 and 14.
-    - Backing: `measurable` (scenario P10) for fresh payload infantry and player orders,
-      `unmeasured` for retention combinations on a previously ordered passenger, because
-      no fixture here establishes all of those prior states
-    - Confidence: high for the placement fall-back; medium for orders being taken during the
-      fall, for a deploy pressed during the fall happening after landing, for the stop and the
-      second press, and for the mixed-selection rule and the deploy check at the press, which
-      also rest on S-0213's deploy order (medium) and S-0214's deploy readiness (medium until
-      S-0214 scenario T24 runs), all until P10 runs; medium for the move and the attack after
-      landing, whose first step after landing is not established
+    - Backing: `measurable` (scenario P10) for fresh payload infantry and player orders, the attack
+      action and the force-fire attack order included (part d); `unmeasured` for retention
+      combinations on a previously ordered passenger, because no fixture here establishes all of
+      those prior states, and for the infiltrator exception, because no scenario here drops an
+      infiltrating type over a building it can enter
+    - Confidence: high for the placement fall-back; medium for orders being taken during the fall,
+      for a deploy pressed during the fall happening after landing, for the stop and the second
+      press, and for the mixed-selection rule and the deploy check at the press, which also rest on
+      S-0213's deploy order (medium) and S-0214's deploy readiness (medium until S-0214 scenario T24
+      runs), all until P10 runs; medium for the attack action withheld without force-fire, for the
+      fallback move and the move order that click then gives, and for the force-fire attack order
+      taken during the fall, until P10 part (d) runs; medium for the infiltrator exception; medium
+      for the move and the force-fire attack after landing, whose first step after landing is not
+      established, and for the move after landing that the ordinary click on an enemy gives
 
 18. **Parachute drawing.** The parachute and an ordinary walking paratrooper are both in the
     ground render layer. Attachment is not a special instruction to paint behind the unit.
@@ -797,10 +810,21 @@ proposal, not a change to the harness.
   - (b) control: the same press after landing. Expect the ordinary deploy.
   - (c) a move click on a distinct free cell during the fall. Expect the move order kept
     through the fall and carried out after landing. A refused click falsifies it.
-  - (d) an attack click during the fall on an enemy structure within weapon range of the
-    predicted landing cell, so the target cannot move. Expect the structure recorded as the
-    units' target from the tick after the click, no shot before landing and the attack after
-    landing. A run in which the structure leaves play before the units land is void.
+  - (d) attack clicks during the fall. Setup: as above, the test type armed with a weapon that can
+    damage an enemy structure placed within its range of the predicted landing cell, so the target
+    cannot move. The test type can neither garrison, enter nor capture the structure, and the
+    structure's type is not immune to damage. Procedure: select the falling units, move the cursor
+    over the structure and screenshot the cursor; then click the structure once without force-fire
+    at a recorded tick. In a second run, click it once with force-fire held. Observable: the cursor,
+    and each unit's order, queued behaviour, destination, target and shots until landing, then as
+    above. Expected: in the first run the cursor shows *no-move*, not *attack*. The click records a
+    move order with a destination by the structure and no target, and *move* as the queued
+    behaviour; no unit fires before landing, and the units move after landing. In the second run the
+    structure is the units' target from the tick after the click, with no shot before landing and
+    the attack after landing. An *attack* cursor, an attack order or a recorded target from the
+    ordinary click, an ordinary click that gives no order, or a force-fire click that gives no
+    attack order, falsifies claim 17. A run in which the structure leaves
+    play before the units land is void.
   - (e) a mixed selection of falling units and landed, undeployed units of the same type, one
     press. Expect the landed ones to deploy at their next start, the falling ones after landing.
   - (f) the press of (a), then a stop order during the fall. Expect the deploy after landing.
