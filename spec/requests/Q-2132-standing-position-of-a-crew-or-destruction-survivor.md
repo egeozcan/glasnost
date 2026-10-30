@@ -1,9 +1,9 @@
 ---
 id: Q-2132
 title: Which free standing position a vehicle crew or a destruction survivor takes
-status: open
+status: answered
 related: [S-0208, S-0312, S-0408, S-0605]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
