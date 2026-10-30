@@ -33,3 +33,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0006](combat/M-0006-arena-stock-replay-bunkers.md) | Unit arena, stock replay of archived games, the map's neutral bunkers and moved units | combat | new finding | committed |
 | [M-0016](combat/M-0016-stock-replay-sref-v3.md) | Unit arena, stock replay of every archived game with SREF or V3 | combat | new finding | local |
 | [M-0007](combat/M-0007-repair-depot-timing.md) | Repair depot timing and contact loss with the depot recorder (Q-1610) | combat | contradicts | local |
+| [M-0014](rendering/M-0014-building-slots-power-off.md) | Building slots after a power-off order next to an ownership change or a pulse's end | rendering | confirms | local |
