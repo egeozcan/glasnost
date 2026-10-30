@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 36
-sources-class: [decomp, design]
+revision: 47
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
-measurements: []
-requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505]
+approved-on: 2026-10-30
+measurements: [M-0005]
+requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505, Q-1710]
 supersedes: []
 ---
 
@@ -22,14 +22,15 @@ power switch, and what low power changes: which buildings stop working, the unit
 a control centre, and the pointers to the production slowdown and to the radar rule (S-0410), in a
 skirmish. Campaigns and network games are out of scope.
 
-Against revision 21, revision 36 corrects claims 9, 10 and 20. A building out of operation keeps
-its working animations, except as the rendering spec's power rules change them, and keeps its
-light, which changes only at the events claim 9 lists; a sold or packed-up building's working
-animations stay drawn until its build-down. An accepted switch-off freezes the building's
-*freeze-unpowered* slots rather than stopping them, and an ownership change leaves the power
-switch as it is. A disabled hovering vehicle still above the ground can accept a scatter request
-(claim 20). A sell order to a type with no build-up sprite starts no sale. Revision 36 also adds
-scenario W15 for the light, the beam and a pack-up's working animation.
+A building out of operation keeps its working animations, except as the rendering spec's power
+rules change them, and keeps its light, which changes only at the events claim 9 lists; a sold or
+packed-up building's working animations stay drawn until its build-down. An accepted switch-off
+freezes the building's *freeze-unpowered* slots rather than stopping them, and an ownership
+change leaves the power switch as it is (claim 10). A sell order to a type with no build-up
+sprite starts no sale. Scenario W15 tests the light, the beam and a pack-up's working animation.
+In M-0005 every placed robot tank was disabled while still on its placement cell (claim 13).
+A disabled vehicle is targeted, damaged and destroyed (claim 20, M-0005), and a disabled hovering
+vehicle still above the ground can accept a scatter request (claim 20).
 
 ## Terms
 
@@ -565,6 +566,22 @@ house's own update in a tick, which comes after the turn pass and before orders 
     after a fall, arriving by a chrono jump and coming out of a tunnel or a burrow. Being placed on
     a cell by the map, or created on one, is not an arrival (Q-1503 part 2): such a vehicle stays
     enabled, and can act normally, until its first completed arrival in a cell without a building.
+
+    **Hovering vehicles (Q-1710).** During hovering movement, the arrivals of this claim are the
+    cell-arrival updates of S-0503 claim 15. Those come at each choice of a heading
+    point that does not refuse entry, the first choice after a destination is given and a choice
+    that ends without a point included, and are made at its actual position before it travels. So
+    the test, the building exception included, reads the cell it stands in, not the cell it is
+    heading for.
+    A placed hovering vehicle with the flag, on a cell without a building, while its house has no
+    active control centre, is then disabled on the tick of its first such choice, still on its
+    placement cell. A choice that refuses entry makes no update, so it does not disable. A placed
+    hovering vehicle that is never given a destination, by an order or by its own behaviour, makes
+    no choice, so it stays enabled until its first such choice. Whether a disabled one then
+    finishes the step it chose follows S-0503's rules for a switched-off hovering vehicle
+    (claims 8 and 10–11). In M-0005 every placed robot tank was disabled before its first change
+    of cell. Some were disabled in the tick-0 state and never changed cell. The others had risen to
+    hover height while enabled and were disabled later, still on their placement cells.
     Disabling and enabling also reset the vehicle's behaviour; claim 20 gives these one-off
     effects and what a disabled vehicle cannot do. A disabled vehicle
     is inactive until enabled, but disabling does not imply immediate rest: a hovering vehicle can
@@ -582,9 +599,15 @@ house's own update in a tick, which comes after the turn pass and before orders 
     may coexist with it. S-0616 claim 1 owns the sparks and their timing.
     - Backing: `measurable` (scenario W8, parts a to i, part h for off-map vehicles at disabling,
       part j for placement and the first arrival, part k for the tethered exception at a factory,
-      part m for depot service with and without tether and disabling after departure,
-      with S-0314 claim 17 supplying the depot tether conditions and its backing,
-      S-0616 scenarios P1 and P23 for the deactivated-vehicle sparks).
+      part m for depot service with and without tether and disabling after departure, with
+      S-0314 claim 17 supplying the depot tether conditions and its backing, and S-0616 scenarios
+      P1 and P23 for the deactivated-vehicle sparks). `measured` (M-0005) for hovering vehicles:
+      every placed robot tank of those games, under *hunt*, was disabled before it first left its
+      placement cell. `unmeasured` for the moment of a hovering vehicle's disabling (the first
+      non-refusing choice of a heading point), the refused choice and the vehicle never given a
+      destination: M-0005 records the disabling tick, not the choice, and no scenario part places
+      a hovering vehicle and gives it no destination. These rest on the hovering locomotion as
+      S-0503 claim 15 states it.
       Hover effects inherit the backing and confidence of S-0503 claims 8 and 10–11, with
       scenario H7 there testing ordinary disabling, settling, spin, residual travel and water loss.
       `unmeasured` for off-map vehicles at enabling, for loss or owner-change transitions and
@@ -592,9 +615,14 @@ house's own update in a tick, which comes after the turn pass and before orders 
       vehicle cannot be ordered into a transport).
     - Confidence: medium (the count and its two transitions, the off-map and tethered exceptions,
       the deactivated-state distinction, the cell-entry rule's arrival timing and placement
-      exception, depot transition outcomes composed with S-0314 claim 17); high (neither pad
-      flag nor repair phase enters the disabling test); low (the building exception of the
-      cell-entry rule)
+      exception, depot transition outcomes composed with S-0314 claim 17); high (neither pad flag
+      nor repair phase enters the disabling test; a placed robot tank under *hunt*, with no active
+      control centre, is disabled before it leaves its placement cell, as M-0005 measured: this
+      rating covers only that it is disabled before it leaves, not the moment); medium (the same for
+      other hovering types and other behaviours; the first non-refusing choice of a heading point as
+      the moment of a hovering vehicle's disabling, no disabling at a refused choice and none for a
+      placed hovering vehicle never given a destination, all inferred from S-0503 claim 15 and not
+      recorded); low (the building exception of the cell-entry rule)
 
 14. **Spy satellite.** The map reveal of a spy satellite (S-0409 owns it) does not depend on
     power: neither low power, nor a blackout, nor switching the building off stops it, whether or
@@ -740,43 +768,61 @@ house's own update in a tick, which comes after the turn pass and before orders 
       Which requests reach it, and whether it accepts them, are otherwise S-0215 claim 19's and
       S-0207 claim 16's. The run-away notice of a depot's sale (S-0314 claim 22) and the scatter
       from damage (S-0215 claim 19) are among them. When an accepted request supplies a
-      destination (S-0207 claim 16), it moves there as S-0503 states, still disabled. Its arrival
-      there is an arrival in claim 13's sense: if its type has the powered-unit flag and the cell
-      holds no building while its house has no active control centre, it gets the disabling's
-      guard reset and locomotor switch-off again, with no sound (*Sounds*, above), and comes down
-      as S-0503 states. A vehicle disabled at a 1-to-0 transition whose type lacks the flag gets
-      no such second switch-off at an arrival. Claim 13 adds no switch-off in a cell with a
-      building; other switch-offs there, such as a repair depot's, are S-0503's and S-0314's.
+      destination (S-0207 claim 16), its movement is S-0503's, still disabled, and its arrivals
+      are claim 13's for a hovering vehicle: the cell-arrival updates of its heading-point choices,
+      the first one after the destination is given, each read on the cell it stands in. At each
+      one, if its type has the powered-unit flag and that cell holds no building while its house
+      has no active control centre, it gets the disabling's guard reset and locomotor switch-off
+      again, with no sound (*Sounds*, above). So the first update that meets those conditions
+      clears the destination the request gave it, rather than its reaching that destination.
+      Whether it finishes the step it chose, and how it comes down, are S-0503's (claims 8 and
+      10–11). A vehicle disabled at a 1-to-0 transition whose type lacks the flag gets no such
+      second switch-off. Claim 13 adds no switch-off in a cell with a building; other
+      switch-offs there, such as a repair depot's, are S-0503's and S-0314's.
       A hovering vehicle's remaining motion is S-0503's. The disabled state
       itself stops neither its body nor its turret from turning; it only leaves them nothing to
       turn towards.
     - **As a target.** It is targeted, attacked, crushed and damaged like any other vehicle.
-      No targeting or damage rule reads the disabled state.
+      No targeting or damage rule reads the disabled state. M-0005 measures the targeting part:
+      hunters pick disabled robot tanks and keep them as targets. It also records disabled robot
+      tanks taking damage and being destroyed: of its robot tanks disabled in the tick-0
+      state, every hit one but one was destroyed. It does not compare the damage a disabled and
+      an enabled vehicle take. In its stall the hunters go on firing at disabled robot tanks and no
+      shot damages one: the shells detonate outside every robot tank's damage reach. Whether an
+      enabled target would change that is not separated by M-0005, and what sets where the shells
+      land is open (Open questions).
     - **Passengers.** The disabled state of an open-topped transport does not stop its passengers
       from firing out of it.
     - **Drawing.** A voxel vehicle is drawn at half brightness: trunc(*b* / 2), where *b* is the
       brightness it would otherwise be drawn at (S-0104 claim 13), after any flash or effect
       tint. Whether a sprite-drawn vehicle is darkened too is open (Open questions).
     - Backing: `measurable` (scenario W8, part a for orders, part j for firing and acquisition,
-      part l for the reset at enabling). Drawing and sounds are `measurable` by inspection in
+      part l for the reset at enabling). `measured` (M-0005) for being kept as a hunter's target
+      and for a disabled vehicle's taking damage and being destroyed. `unmeasured` for crushing and
+      for the damage amount's being that of an enabled vehicle: no scenario part crushes a
+      disabled vehicle or compares the damage a disabled and an enabled one take, and both rest on
+      no damage or crushing rule's reading the disabled state.
+      Drawing and sounds are `measurable` by inspection in
       W8 part a, whose run records a screenshot and the sounds. The late order is `unmeasured`:
       it needs an order and a disabling in the same tick. Passengers are `unmeasured`: no
       scenario part puts a disabled open-topped transport in play. The depot's switch-on of a
       still-disabled hovering vehicle is `unmeasured` here and carries S-0314 claim 21's rating
       (medium): no scenario ensures a disabled vehicle in contact meets an end of being settled.
       The scatter request accepted by a disabled hovering vehicle, in either state, the movement
-      it starts, and the second switch-off at the arrival are `unmeasured`: the first state needs
+      it starts, and the second switch-off at a heading choice are `unmeasured`: the first state
+      needs
       a request to reach the vehicle in the ticks between its switch-off and its touching down,
       and the second needs that unensured end of being settled, and no known input ensures
       either. The first state rests on the reading of S-0207 claim 16 case (g) above, which S-0207
       rates low, and is rated low here too, with what follows a request accepted in it; the second
       state and what follows a request accepted in it are rated medium.
     - Confidence: high (firing and acquisition, the guard reset, deselection, orders refused,
-      being a normal target); medium (enabling resets every vehicle of the type, the turn
-      continuing, drawing, sounds, the scatter request accepted by a disabled hovering vehicle
-      after a depot's switch-on and what follows it); low (the scatter request accepted while still
-      above the ground after the switch-off and what follows it, the late order,
-      passengers, no new movement for a vehicle whose locomotor does not itself stop when
+      being targeted and kept as a target, taking damage and being destroyed); medium (the damage
+      amount's being that of an enabled vehicle, crushing, enabling resets every vehicle of the
+      type, the turn continuing, drawing, sounds, the scatter request accepted by a disabled
+      hovering vehicle after a depot's switch-on and what follows it); low (the scatter request
+      accepted while still above the ground after the switch-off and what follows it, the late
+      order, passengers, no new movement for a vehicle whose locomotor does not itself stop when
       switched off)
 
 ## Formulas
@@ -870,7 +916,7 @@ is implementer design, not a further game-state rule. No formula here prescribes
 | switched off | applicable power-on order (live building on the map, type without the firestorm-wall flag), no pulse | switched on |
 | active control centres 1 | the last one stops | its powered-unit vehicles on the map disabled, except one tethered to the building in its cell (claim 13) |
 | active control centres 0 | one comes into operation | its powered-unit vehicles enabled, each with a guard reset (claim 20) |
-| enabled powered-unit vehicle, no active control centre | completes an arrival in a cell without a building (not placement or creation) | disabled: guard reset, deselected, locomotor off (claims 13, 20) |
+| enabled powered-unit vehicle, no active control centre | completes an arrival in a cell without a building (not placement or creation); during hovering movement: a cell-arrival update (S-0503 claim 15) while standing in a cell without a building | disabled: guard reset, deselected, locomotor off (claims 13, 20) |
 
 Observable ordering: a building's in-operation state uses the house totals as last worked out
 (claim 7), so a defence that loses power by a building's death in tick *n* still fires in the turns
@@ -1182,11 +1228,15 @@ switched off the house has full power (W3's second pair).
   a drain of 10 and powered unit X; a plant that covers every drain (full power throughout, so low
   power never decides the result); vehicle type X with the powered-unit flag, and vehicle type
   X' with no powered-unit flag, used only in part (f); vehicle type Z with the powered-unit flag
-  that no centre names; an own repair depot; an own factory that can build X (part k); two vehicles of each of X and Z, and one of X'. For part
-  c the file adds a second control-centre type K2 (same flags and drain) with powered unit Y,
-  one of each centre, and vehicles of X and Y. For part h the file adds an own test transport type
-  that can carry the X' vehicle. The centres are switched off by power orders (the type's drain
-  makes the order effective, claim 10).
+  that no centre names; an own repair depot; an own factory that can build X (part k); two
+  vehicles of each of X and Z, and one of X'. For part c the file adds a second control-centre
+  type K2 (same flags and drain) with powered unit Y, one of each centre, and vehicles of X and
+  Y. For part h the file adds an own test transport type that can carry the X' vehicle. The
+  centres are switched off by power orders (the type's drain makes the order effective, claim
+  10). In every part X, X', Y and Z drive (not hover: claim 13's *Hovering vehicles* paragraph
+  and M-0005 cover hovering vehicles), so wherever claim 13's arrival test applies in parts d,
+  e, h, k and l, it reads a completed arrival in a cell, not a heading choice on the cell the
+  vehicle stands in.
 - *Procedure:*
   - (a) switch the centre K off, read the state of both X vehicles and give them orders. (b) switch
     it on again and repeat.
@@ -1203,7 +1253,8 @@ switched off the house has full power (W3's second pair).
     orders.
   - (i) continue (c) by switching K2 off too, then switch K on again with K2 still off.
   - (j) (Q-1503) a second test map, with no control centre for the house at any time. The X
-    and Z types are armed with a weapon that can hit the enemy test vehicle, and have passive
+    and Z types drive (not hover: M-0005 covers hovering vehicles) and are armed with a weapon
+    that can hit the enemy test vehicle, and have passive
     acquisition enabled. One X vehicle and one Z vehicle are placed by the map on cells without
     a building, each with an unarmed enemy test vehicle (strength high enough to outlast the run)
     already in its weapon range. Let the game run for 300 ticks without orders, then order each
@@ -1238,9 +1289,9 @@ switched off the house has full power (W3's second pair).
   Part m additionally records contact, tether, current cell, enabled state, health and credits
   every tick through centre loss and departure; confirm that paid repair was occurring before
   centre loss and distinguish the loss tick from subsequent movement arrivals.
-- *Expected:* (a) both X vehicles are disabled and refuse orders; a hovering vehicle can still
-  settle, spin and travel residually as S-0503 claims 8 and 10–11 specify (scenario H7 there tests
-  those effects and water destruction). (b) Both work again; (c) the X vehicles
+- *Expected:* (a) both X vehicles are disabled and refuse orders (for a hovering vehicle, which
+  W8 does not use, S-0503 claims 8 and 10–11 and its scenario H7 cover settling, spinning,
+  residual travel and water destruction). (b) Both work again; (c) the X vehicles
   keep working (quirk); (d) the Z vehicle is disabled on entering the cell; (e) it stays enabled on
   the depot's cell and is disabled on the first cell without a building after it; (f) the X'
   vehicle is disabled and enabled like X in (a) and (b); (g) the Z vehicle stays disabled; (h) the
@@ -1514,6 +1565,18 @@ switched off the house has full power (W3's second pair).
   as claim 9 gives them (W6 part i for a sale, W15 part k for a pack-up; medium).
 
 ## Open questions
+
+- Q-1710 is answered in part. Claim 20 answers question 1 (a disabled vehicle is targeted like any
+  other, and M-0005 measures hunters keeping one as their target), and claim 13 answers the first
+  half of question 3 (every placed robot tank of M-0005 was disabled before it left its cell).
+  Whether a still-enabled vehicle fares differently as a target is not separated by M-0005's games.
+  Question 2, what a hunter does once only disabled vehicles are left, is answered only as far as
+  M-0005 shows it: at the stall each hunter keeps a disabled robot tank as its target and fires at
+  it. M-0005 explains the stall as a selection: every stall shell comes from a group of shells that
+  never detonates at its target's position and lands outside every robot tank's damage reach. What
+  in the projectile's flight sets where a group's shells land is open: it needs the projectile's
+  position at every tick of its flight. Also unexplained: some hunters at the stall make a fire
+  attempt every tick and no projectile (M-0005).
 
 - Claim 10's frame hold for a turret slot or a silo-fill slot, whose image frame S-0108 claims 19
   and 16 set from the turret facing and the fill level: whether such a slot, frozen by a
