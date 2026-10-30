@@ -1,9 +1,9 @@
 ---
 id: Q-2137
 title: Which holder's route a point join copies, and a loop that starts before the joined point
-status: open
+status: answered
 related: [S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
