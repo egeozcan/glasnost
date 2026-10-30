@@ -1,9 +1,9 @@
 ---
 id: Q-1987
 title: What does the type-select role do when pressed alone, and which objects does it take?
-status: open
+status: answered
 related: [S-0214, S-0701]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
