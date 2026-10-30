@@ -185,6 +185,25 @@ fn claim8_9_silo_launch_flight_and_falling_missile() {
 }
 
 #[test]
+fn s0306_claim8_upward_missile_from_a_silo_without_muzzle_keys_starts_above_the_ground() {
+    // spec: S-0306 claim 8 (revision 45: superweapon payloads are raised as every placed projectile is; `unmeasured` in the spec) and S-0313 claim 1a (no muzzle-position key: the fire point is the silo's base point, on the ground)
+    let (mut w, silo) = ready_silo();
+    let target = at(2, 0);
+    fire(&mut w, ALPHA, STRIKE, target);
+    step(&mut w);
+    step(&mut w);
+    let up = missiles(&w, "Lift");
+    assert_eq!(up.len(), 1);
+    let base = glasnost_sim::combat::position::fire_point(&w, silo, 0, 0);
+    assert_eq!(base.z, w.surface_at(base.x, base.y), "at the surface");
+    assert_eq!(up[0].fire_point, base, "the walk's X₁ is not raised");
+    assert_eq!(
+        up[0].placed_at,
+        glasnost_sim::world::Pos::new(base.x, base.y, base.z + 1)
+    );
+}
+
+#[test]
 fn claim13_silo_sold_or_destroyed_before_its_update_launches_nothing() {
     // spec: S-0513 claim 13 (destroyed before its next update: no missile leaves)
     let (mut w, silo) = ready_silo();

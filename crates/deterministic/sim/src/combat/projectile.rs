@@ -299,6 +299,25 @@ fn aim_target_point(w: &World, t: Target) -> Pos {
     p
 }
 
+/// The start point of a projectile placed at `p` (S-0306 claim 8, revision
+/// 45): `p` itself when it is above the terrain at its *x* and *y*, else 1
+/// lepton above that terrain, at the same *x* and *y*. Every placement
+/// raises by this rule (shots, fragments, the projectiles a burst releases,
+/// superweapon payloads); the launch direction, pitch and velocity and the
+/// line-of-fire walk's *X*₁ keep the unraised point, and the later move of
+/// an invisible projectile (claim 9) is not raised.
+pub fn start_point(w: &World, p: Pos) -> Pos {
+    // spec: S-0306 claim 8 (the terrain height at its x and y; a bridge deck there is ignored)
+    let terrain = w.surface_at(p.x, p.y);
+    if p.z > terrain {
+        // spec: S-0306 claim 8 (a position above the terrain is used as it is)
+        p
+    } else {
+        // spec: S-0306 claim 8 (not above the terrain: 1 lepton above it, the same x and y)
+        Pos::new(p.x, p.y, terrain + 1)
+    }
+}
+
 /// Launches the projectile of a shot (S-0306 claims 1 to 9, 24). Returns
 /// `None` for a void shot (S-0301 claim 15), whose launch draws stay taken.
 #[allow(clippy::too_many_arguments)]
@@ -439,7 +458,8 @@ pub fn launch(
     } else {
         p.arm
     };
-    let mut pos = start_pos;
+    // spec: S-0306 claim 8 (revision 45: placed at its start point, the fire point or claim 5's start position raised 1 lepton above the terrain when not above it; claims 5 to 7 above keep the unraised fire point)
+    let mut pos = start_point(w, start_pos);
     if p.inviso {
         if p.flak_scatter {
             // spec: S-0306 claim 9 (an invisible flak projectile: K scattered by trunc(R(0, 2B) × D / R₀))
@@ -481,7 +501,7 @@ pub fn launch(
         arm,
         placed: w.tick,
         damage,
-        // spec: S-0306 T1 (Ω starts as the full spatial distance from the placement position to K)
+        // spec: S-0306 T1 (revision 45: Ω starts as the full spatial distance from the start point of claim 8, or an invisible projectile's moved position, to K)
         omega: d3(w, pos, stored),
         top_speed,
         turns: 0,
@@ -489,6 +509,7 @@ pub fn launch(
         locked: p.course_lock != 1,
         closing: F64::ZERO,
         prev_cell: pos.cell(),
+        // spec: S-0306 claims 8 and 22 (revision 45: the line-of-fire walk's X₁ is the fire point as it is, not raised)
         fire_point,
         nuke_wait: None,
         vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
@@ -1542,6 +1563,8 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
         let _ = w.rng.ranged(0, 32, half);
         let cell = CellXY::new(c.x + dx, c.y + dy);
         let cc = Pos::centre(cell, pr.pos.z);
+        // spec: S-0306 claim 8 (revision 45: a projectile a burst releases is raised to 1 lepton above the terrain of its own x and y when not above it)
+        let at = start_point(w, cc);
         let id = w.new_id();
         let child = Projectile {
             id,
@@ -1550,11 +1573,11 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             house: pr.house,
             firer: pr.firer,
             firer_house: pr.firer_house,
-            pos: cc,
+            pos: at,
             vel: [F64::ZERO, F64::ZERO, f(-i64::from(sw / 10), mode)],
             target: Some(Target::Cell(cell)),
             stored: Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y)),
-            placed_at: cc,
+            placed_at: at,
             arm: 0,
             placed: w.tick,
             damage: rules.combat.weapon(aw).damage,
@@ -1565,6 +1588,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             locked: false,
             closing: F64::ZERO,
             prev_cell: cell,
+            // spec: S-0306 claims 8 and 22 (revision 45: the line-of-fire walk's X₁ is not raised)
             fire_point: cc,
             nuke_wait: None,
             vehicle_scalable: false,

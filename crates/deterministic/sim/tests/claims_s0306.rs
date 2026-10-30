@@ -741,7 +741,7 @@ fn claim24_launch_draws_in_order() {
     assert_eq!(pr(&s, id).stored, Pos::new(k.0, k.1, aim.z));
 }
 
-// spec: S-0306 claim 5 (ρ = 0, not dropping: the direction from the fire point towards the impact point)
+// spec: S-0306 claim 5 (ρ = 0, not dropping: the direction from the fire point towards the impact point) and claim 8 (revision 45: a fire point at the surface starts 1 lepton above it; the direction uses the unraised point)
 #[test]
 fn claim5_launch_direction_towards_the_impact_point() {
     let mut s = setup(&base(), 4, 3);
@@ -752,10 +752,10 @@ fn claim5_launch_direction_towards_the_impact_point() {
     let tp = pos(&s, s.t);
     let start = arc(d2(&s.w, f, tp)).min(d3(&s.w, f, tp) / 2);
     assert_eq!(pr(&s, id).vel, f1(yaw_to(f, tp), 16383, start));
-    assert_eq!(pr(&s, id).pos, f);
+    assert_eq!(pr(&s, id).pos, Pos::new(f.x, f.y, f.z + 1));
 }
 
-// spec: S-0306 claim 5 (a dropping projectile starts from the firer's own position, in the aiming facing)
+// spec: S-0306 claim 5 (a dropping projectile starts from the firer's own position, in the aiming facing) and claim 8 (revision 45: that position, at the surface here, raised 1 lepton)
 #[test]
 fn claim5_dropping_starts_at_the_firer() {
     let mut r = base();
@@ -767,7 +767,8 @@ fn claim5_dropping_starts_at_the_firer() {
     let t = Target::Object(s.t);
     let id = fire(&mut s, t, f).unwrap();
     let tp = pos(&s, s.t);
-    assert_eq!(pr(&s, id).pos, pos(&s, s.a));
+    let own = pos(&s, s.a);
+    assert_eq!(pr(&s, id).pos, Pos::new(own.x, own.y, own.z + 1));
     let start = arc(d2(&s.w, f, tp)).min(d3(&s.w, f, tp) / 2);
     let pitch = if (tp.z - f.z).abs() <= 200 { 16383 } else { 0 };
     assert_eq!(pr(&s, id).vel, f1(12000, pitch, start));
@@ -2950,6 +2951,66 @@ fn claim21_cluster_detonations_and_draws() {
             assert!((255..=513).contains(&dd), "cluster {cluster}: step {dd}");
         }
     }
+}
+
+// spec: S-0306 claim 8 (revision 45: the projectiles a burst releases are raised as every placed projectile is: a child whose position is not above the terrain of its own x and y starts 1 lepton above it; the walk's X₁ keeps the unraised point; `unmeasured` in the spec)
+#[test]
+fn claim8_airburst_children_start_above_their_cells_terrain() {
+    let mut r = base();
+    ball(&mut r).airburst = Some(true);
+    ball(&mut r).airburst_weapon = Some("Burst".into());
+    r.sim.weapons.insert(
+        "Burst".into(),
+        WeaponType {
+            damage: Some(9),
+            range: Some(d("6")),
+            speed: Some(77),
+            projectile: Some("Pellet".into()),
+            warhead: Some("Dud".into()),
+            ..Default::default()
+        },
+    );
+    r.sim
+        .projectiles
+        .insert("Pellet".into(), ProjectileType::default());
+    let mut s = setup(&r, 18, 18);
+    let p = c(-12, -12, 20);
+    // The cell east of the detonation cell is raised two levels.
+    let det = Pos::new(p.x + 50, p.y, 0).cell();
+    let high = CellXY::new(det.x + 1, det.y);
+    set_level(&mut s.w, high, 2);
+    let id = place(&mut s, far(), p, [50, 0, -40]);
+    let before: Vec<ObjectId> = s.w.projectiles.keys().copied().collect();
+    assert!(matches!(step(&mut s, id), Out::Detonated(_)));
+    let kids: Vec<Projectile> =
+        s.w.projectiles
+            .values()
+            .filter(|x| !before.contains(&x.id))
+            .cloned()
+            .collect();
+    assert_eq!(kids.len(), 9);
+    let z0 = kids[0].fire_point.z;
+    let mut raised_high = false;
+    for k in &kids {
+        assert_eq!(k.fire_point.z, z0, "X₁ at the burst's height, unraised");
+        let t = s.w.surface_at(k.fire_point.x, k.fire_point.y);
+        let want = if k.fire_point.z > t {
+            k.fire_point.z
+        } else {
+            t + 1
+        };
+        assert_eq!(
+            k.placed_at,
+            Pos::new(k.fire_point.x, k.fire_point.y, want),
+            "child in {:?}",
+            k.fire_point.cell()
+        );
+        if k.fire_point.cell() == high {
+            assert_eq!(k.placed_at.z, 2 * 104 + 1);
+            raised_high = true;
+        }
+    }
+    assert!(raised_high);
 }
 
 // spec: S-0306 claim 21 (an airburst detonates once and launches nine children at the eight neighbouring cells and its own, falling at trunc(S_w / 10), one draw R(0, 32) each)

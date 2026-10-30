@@ -5,7 +5,9 @@ Rows read: `intake45-*`, `intake46-S-0111.md`, `intake47-arena-restated.md`, `in
 `a4-rocking.md`, `c7-pathing.md`, `a6-arena-triage.md`, the B10 section of
 `docs/own-ai-m8-track-b.md`, the seams of `S-0109-playback.md` (step A5), and sweep 2's *Left*
 rows. Skipped as blocked by an open request: Q-2081 (rocking's rates, return to level, weight,
-sideways limit, passenger fire point), Q-2096 to Q-2099 (arena), Q-2111 to Q-2114.
+sideways limit, passenger fire point), Q-2096 to Q-2099 (arena), Q-2111 to Q-2114 (Q-2111 since
+answered by S-0306 r45 and S-0313 r37 and built in intake 51,
+[intake51-S-0306-S-0313.md](intake51-S-0306-S-0313.md)).
 
 **Result.** One seam built (the animation clock's switches reach the simulation) and 11 tests
 written: 6 for the switches in both positions, 3 for S-0207 claim 28's exclusions, 1 for S-0306

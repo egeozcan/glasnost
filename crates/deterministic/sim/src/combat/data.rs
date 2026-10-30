@@ -1451,22 +1451,26 @@ pub fn type_combat(
             elite_slots[1] = w(primary[3]); // nocite: index into the four names above
         }
     }
-    let mut flh = [[0; 3]; SLOTS]; // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
-    let mut elite_flh = [[0; 3]; SLOTS]; // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
-    // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
+    // spec: S-0313 claim 1a and Import mapping (revision 37: an absent non-elite muzzle position is 0, 0, 0)
+    let mut flh = [[0; 3]; SLOTS];
     if let Some(v) = &c.weapon_flh {
         for (i, f) in v.iter().take(SLOTS).enumerate() {
             flh[i] = *f;
         }
     }
+    if c.weapon_flh.is_none() {
+        // A type with numbered slots but no numbered muzzle key reads these
+        // two keys (and the elite pair below) for slots 0 and 1: interim,
+        // Q-2146.
+        flh[0] = c.primary_fire_flh.unwrap_or([0; 3]); // spec: S-0313 claim 1a (an absent primary muzzle position is 0, 0, 0; nothing from the other slot)
+        flh[1] = c.secondary_fire_flh.unwrap_or([0; 3]); // spec: S-0313 claim 1a (an absent secondary muzzle position is 0, 0, 0; nothing from the other slot)
+    }
+    // spec: S-0313 claim 1a and Import mapping (revision 37: the elite version of a slot with no elite muzzle position takes the same slot's non-elite one, as imported; for numbered weapons, elite weapon n takes weapon n's)
+    let mut elite_flh = flh;
     if let Some(v) = &c.elite_weapon_flh {
         for (i, f) in v.iter().take(SLOTS).enumerate() {
             elite_flh[i] = *f;
         }
-    }
-    if c.weapon_flh.is_none() {
-        flh[0] = c.primary_fire_flh.unwrap_or([0; 3]); // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
-        flh[1] = c.secondary_fire_flh.unwrap_or([0; 3]); // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
     }
     if c.elite_weapon_flh.is_none() {
         elite_flh[0] = c.elite_primary_fire_flh.unwrap_or(flh[0]);

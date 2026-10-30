@@ -882,6 +882,27 @@ fn art_combat_fields() {
     );
 }
 
+/// spec: S-0313 Import mapping and claim 1a (revision 37: an absent `Weapon`n`FLH` is 0, 0, 0; an absent elite form takes the muzzle position of numbered weapon n − 1 as imported, not 0, 0, 0; an absent `ElitePrimaryFireFLH` or `EliteSecondaryFireFLH` stays absent here and the simulation takes the same slot's non-elite one)
+#[test]
+fn absent_elite_muzzle_positions_take_the_non_elite_ones() {
+    let base = "[VehicleTypes]\n1=Cart\n[Cart]\nImage=CARTART\nTurretCount=1\nWeaponCount=3\n";
+    let art = "[CARTART]\nWeapon1FLH=1,2,3\nWeapon3FLH=4,5,6\nEliteWeapon2FLH=7,8,9\n\
+               PrimaryFireFLH=10,11,12\n";
+    let (s, _) = sim(base, "", art);
+    let c = &s.vehicles["Cart"].combat;
+    assert_eq!(c.weapon_flh, Some(vec![[1, 2, 3], [0, 0, 0], [4, 5, 6]]));
+    // Elite weapon 0 takes weapon 0's; elite weapon 2 is past the list and
+    // takes weapon 2's in the simulation (S-0313 claim 1a).
+    assert_eq!(c.elite_weapon_flh, Some(vec![[1, 2, 3], [7, 8, 9]]));
+    assert_eq!(c.elite_primary_fire_flh, None);
+    // No elite numbered key: no elite list.
+    let art = "[CARTART]\nWeapon2FLH=4,5,6\n";
+    let (s, _) = sim(base, "", art);
+    let c = &s.vehicles["Cart"].combat;
+    assert_eq!(c.weapon_flh, Some(vec![[0, 0, 0], [4, 5, 6]]));
+    assert_eq!(c.elite_weapon_flh, None);
+}
+
 /// spec: S-0301 Import mapping (OpenToppedAnim and AssaultAnim of a weapon: an animation name, none
 /// when absent; TargetLaser of a vehicle type: boolean, no when absent)
 #[test]

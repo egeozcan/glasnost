@@ -918,7 +918,41 @@ fn sh1n_radiation_of_shot_and_fragment() {
     assert_eq!(lost, vec![FRAG, FRAG, FRAG, 0, 0]);
 }
 
-// spec: S-0318 claim 6 (launched from the burst point towards the aim point's reference point, climbing at about 45°)
+// spec: S-0318 claim 5 and S-0306 claim 8 (revision 45, Changes for other specs: a fragment whose burst point is not above the terrain starts 1 lepton above it, at the same x and y; a burst above the terrain is kept; an invisible fragment's move to K is not raised; the walk's X₁ is the burst point)
+#[test]
+fn s0306_claim8_fragments_start_above_the_ground() {
+    let mut r = base(1);
+    r.sim.projectiles.get_mut("Bit").unwrap().inviso = None;
+    for dz in [-150, 0, 1, 90] {
+        let mut s = setup(&r, true);
+        put(&mut s, 1, 2, 0);
+        let pr = shoot_t(&mut s);
+        let ground = s.w.surface_at(pr.pos.x, pr.pos.y);
+        let at = Pos::new(pr.pos.x, pr.pos.y, ground + dz);
+        let rules = s.w.rules_arc();
+        let p = rules.combat.projectile_of(pr.weapon).unwrap().clone();
+        shrapnel::burst(&mut s.w, &pr, &p, at, None);
+        let f = &frags(&s)[0];
+        let want = if dz > 0 { ground + dz } else { ground + 1 };
+        assert_eq!(f.placed_at, Pos::new(at.x, at.y, want), "dz {dz}");
+        assert_eq!(f.fire_point, at, "dz {dz}");
+    }
+    // Invisible fragments are moved to K at once; that move is not raised.
+    let mut s = setup(&base(1), true);
+    let v = put(&mut s, 1, 2, 0);
+    let pr = shoot_t(&mut s);
+    burst(&mut s, &pr);
+    let f = &frags(&s)[0];
+    assert_eq!(f.target, Some(Target::Object(v)));
+    assert_eq!(f.pos, f.stored, "at K");
+    assert_eq!(
+        f.pos.z,
+        s.w.surface_at(f.pos.x, f.pos.y),
+        "on the ground, not raised"
+    );
+}
+
+// spec: S-0318 claims 5 and 6 (launched from the burst point towards the aim point's reference point, climbing at about 45°) and S-0306 claim 8 (revision 45: a burst point at the surface gives a start 1 lepton above it; Changes for other specs)
 #[test]
 fn claim6_visible_fragment_direction() {
     let mut r = base(1);
@@ -929,7 +963,20 @@ fn claim6_visible_fragment_direction() {
     burst(&mut s, &pr);
     let f = &frags(&s)[0];
     assert_eq!(f.target, Some(Target::Object(v)));
-    assert_eq!(f.pos, pr.pos, "placed at the burst point");
+    assert_eq!(
+        pr.pos.z,
+        s.w.surface_at(pr.pos.x, pr.pos.y),
+        "a burst at the surface"
+    );
+    assert_eq!(
+        f.pos,
+        Pos::new(pr.pos.x, pr.pos.y, pr.pos.z + 1),
+        "placed at the burst point, raised to height 1"
+    );
+    assert_eq!(
+        f.fire_point, pr.pos,
+        "the walk's X₁ is the burst point itself"
+    );
     let [x, y, z] = f.vel;
     assert!(x.gt(glasnost_num::F64::ZERO), "towards +x");
     assert!(y.to_i32_common().abs() <= 1, "no sideways part");
