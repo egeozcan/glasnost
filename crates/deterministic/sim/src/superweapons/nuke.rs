@@ -119,6 +119,9 @@ fn missile(
     let id = w.new_id();
     let tc = Pos::centre(target, 0);
     let stored = Pos::new(tc.x, tc.y, w.surface_at(tc.x, tc.y));
+    // spec: S-0306 claim 8 (revision 45: a superweapon payload is placed at its start point, 1 lepton above the terrain when its position is not above it); the line-of-fire walk's X₁ keeps the given position
+    let given = pos;
+    let pos = crate::combat::projectile::start_point(w, pos);
     let pr = Projectile {
         id,
         weapon,
@@ -141,7 +144,7 @@ fn missile(
         locked: false,
         closing: F64::ZERO,
         prev_cell: pos.cell(),
-        fire_point: pos,
+        fire_point: given,
         nuke_wait: None,
         vehicle_scalable: false,
         airburst_child: false,

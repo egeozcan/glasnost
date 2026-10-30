@@ -194,8 +194,8 @@ fn fragment(
     } else {
         fp.arm
     };
-    // spec: S-0318 claim 5 (placed at the burst point) and S-0306 claims 5 and 8 (revision 38: a fragment starts at the burst point, not the fire point)
-    let mut pos = burst;
+    // spec: S-0318 claim 5 (placed at the burst point) and S-0306 claims 5 and 8 (revision 38: a fragment starts at the burst point, not the fire point; revision 45: raised to 1 lepton above the terrain when the burst point is not above it, S-0306 Changes for other specs)
+    let mut pos = crate::combat::projectile::start_point(w, burst);
     if fp.inviso {
         // spec: S-0318 claims 5 and 6 and S-0306 claim 9 (an invisible fragment is moved at once to K, or the first blocking cell's centre; no launch scatter draw, S-0318 Open questions)
         pos = match crate::combat::lof::walk(w, &fp, pr.house, burst, stored) {
@@ -226,7 +226,7 @@ fn fragment(
         placed: w.tick,
         // spec: S-0318 claim 5 (the fragment weapon's damage field, unscaled)
         damage: wr.damage,
-        // spec: S-0306 T1 (Ω starts as the full spatial distance from the placement position to K)
+        // spec: S-0306 T1 (revision 45: Ω starts as the full spatial distance from the start point of claim 8, or an invisible fragment's moved position, to K)
         omega: d3(w, pos, stored),
         top_speed: speed,
         turns: 0,
@@ -234,6 +234,7 @@ fn fragment(
         locked: fp.course_lock != 1,
         closing: F64::ZERO,
         prev_cell: pos.cell(),
+        // spec: S-0306 claims 8 and 22 (revision 45: the line-of-fire walk's X₁, the burst point as it is, not raised)
         fire_point: burst,
         nuke_wait: None,
         vehicle_scalable: false,
