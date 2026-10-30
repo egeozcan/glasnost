@@ -321,3 +321,88 @@ pub fn assign_wall_owners(w: &mut World) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// The crush response (S-0210 claim 11, S-0215 claim 39)
+
+/// Whether the owner of crusher `id` is allowed the crush response (S-0210
+/// claim 11's table and our engine's rule after it; S-0215 claim 39).
+fn response_allowed(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let r = w.rules();
+    let house = o.owner.and_then(|h| w.houses.get(usize::from(h.0)));
+    // spec: S-0215 claim 39 (in our engine every player house, AI houses included, counts as human-controlled, glossary *AI house*; an object with no owner is taken as a player house's, as in the crushing approaches of approach.rs)
+    if let Some(h) = house.filter(|h| !h.human) {
+        // spec: S-0210 claim 11 (the computer-controlled row: house skill level at least the auto-crush threshold, and difficulty index not 2; the neutral and special houses and a test-only computer-controlled player house keep it whatever the switch)
+        return h.skill >= r.general.iq_auto_crush && h.econ.setup.difficulty != 2;
+    }
+    if r.quirks.auto_crush_computer_only {
+        // spec: S-0210 claim 11 and Edge cases (quirks.auto_crush_computer_only on, the original: the crushers of player houses never make the crush response; the flag and the rule have no effect) and S-0215 claim 39
+        return false;
+    }
+    // spec: S-0210 claim 11 (our engine's rule for player houses, switch off: the player-auto-crush rule is on or the type has the auto-crush flag; no skill, difficulty or handicap condition)
+    r.general.player_auto_crush
+        || r.unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.auto_crush.unwrap_or(false))
+}
+
+/// The crush response of vehicle `id` to a hit whose attacker is `attacker`
+/// (S-0215 claim 39, S-0210 claim 11), after every other effect of that
+/// hit. The caller has checked that the hit did not kill the vehicle.
+pub fn respond_to_hit(w: &mut World, id: ObjectId, attacker: Option<ObjectId>) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0215 claim 39 (a hit on a vehicle)
+    if o.kind != Kind::Vehicle {
+        return;
+    }
+    // spec: S-0215 claim 39 (the hit names an attacker, S-0302 claim 1; a hit that names none never gives the response)
+    let Some(a) = attacker else { return };
+    let Some(ao) = w.obj(a) else { return };
+    // spec: S-0215 claim 39 (not tethered; not a team member: no house of our engine has teams, Terms)
+    if crate::econ::tethered(w, id) {
+        return;
+    }
+    // spec: S-0215 claim 39 (its owner is not allied with the attacker's owner; a house counts as allied with itself)
+    if w.allied(o.owner, ao.owner) {
+        return;
+    }
+    // spec: S-0215 claim 39 (its owner is not human-controlled; in our engine with the switch off, S-0210 claim 11's permission instead) and S-0210 claim 11 (the table)
+    if !response_allowed(w, id) {
+        return;
+    }
+    // spec: S-0210 claim 11 (the vehicle is a crusher, claim 1)
+    if !occupancy::is_crusher(w, id) {
+        return;
+    }
+    // spec: S-0210 claim 11 (the attacker is crushable by it, claim 2)
+    if !occupancy::crushable_by(w, id, a) {
+        return;
+    }
+    // spec: S-0210 claim 11 (the attacker does not appear disguised to the crusher's house, S-0516 claims 35 and 36)
+    if crate::cloak::appears_disguised(w, a, o.owner) {
+        return;
+    }
+    let r = w.rules();
+    let (dx, dy, dz) = (
+        i64::from(ao.pos.x - o.pos.x),
+        i64::from(ao.pos.y - o.pos.y),
+        i64::from(ao.pos.z - o.pos.z),
+    );
+    // spec: S-0210 claim 11 and F2 (the distance between the centres in three dimensions, taken when the hit is applied, at most the crush range)
+    let d = glasnost_num::geom::root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    ) as i64;
+    if d > i64::from(r.general.crush_range) {
+        return;
+    }
+    let dest = Some(Target::Object(a));
+    let accepted = crate::econ::accepts_destination(w, id, dest);
+    // spec: S-0215 claim 39 (the attacker object itself becomes the destination, under the rules of every new destination: S-0207 claim 20 (a), S-0517 claim 9, S-0607 claims 9 and 12) and S-0210 claim 11
+    crate::econ::assign_destination(w, id, dest);
+    if accepted && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 39 (when the destination is accepted, move is queued, claim 7, with no immediate start; it replaces a queued hunt of the same hit's berserk entry) and S-0210 claim 11 (the response does not change the target)
+        ob.beh.queue(Some(crate::rules::Behaviour::Move));
+    }
+}

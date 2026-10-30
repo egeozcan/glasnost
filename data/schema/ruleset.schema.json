@@ -8765,6 +8765,11 @@
           "type": "boolean",
           "default": true
         },
+        "auto_crush_computer_only": {
+          "description": "The crushers of player houses never make the crush response: the auto-crush flag and the\nplayer-auto-crush rule have no effect.",
+          "type": "boolean",
+          "default": true
+        },
         "barrel_probe_top_left_only": {
           "description": "An exploding building probes for barrels from its top-left cell only.",
           "type": "boolean",

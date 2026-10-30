@@ -281,6 +281,11 @@ pub struct Quirks {
     // spec: S-0210 claim 9
     #[serde(default = "on")]
     pub crush_slowdown_first_overlay: bool,
+    /// The crushers of player houses never make the crush response: the auto-crush flag and the
+    /// player-auto-crush rule have no effect.
+    // spec: S-0210 claim 11 and Edge cases (default on: the original); S-0215 claim 39
+    #[serde(default = "on")]
+    pub auto_crush_computer_only: bool,
     /// The passability category judges every class by the wheel column.
     // spec: S-0211 claim 11
     #[serde(default = "on")]
@@ -2206,6 +2211,7 @@ impl Default for Quirks {
             crushable_overlay_stays: true,
             crush_slowdown_persists: true,
             crush_slowdown_first_overlay: true,
+            auto_crush_computer_only: true,
             passability_wheel_column: true,
             passability_laser_fence_lost: true,
             cliff_back_case_sets: true,
@@ -2824,6 +2830,7 @@ impl Quirks {
                 "crush_slowdown_first_overlay",
                 self.crush_slowdown_first_overlay,
             ),
+            ("auto_crush_computer_only", self.auto_crush_computer_only),
             ("passability_wheel_column", self.passability_wheel_column),
             (
                 "passability_laser_fence_lost",
