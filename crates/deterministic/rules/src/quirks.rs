@@ -443,6 +443,21 @@ pub struct Quirks {
     // spec: S-0213 claim 19
     #[serde(default = "on")]
     pub cheer_memory_spans_session: bool,
+    /// An object keeps its route record once its route is empty, so a
+    /// route-mode click on a point its route does not hold is refused and it
+    /// never joins a point again (the original). Off: an empty route counts
+    /// as no route record.
+    // spec: S-0213 claim 16b and Edge cases (quirks.spent_route_blocks_join, default: original)
+    #[serde(default = "on")]
+    pub spent_route_blocks_join: bool,
+    /// The house's route-holder count is raised only by a point add to an
+    /// empty route and lowered only when a route that still holds a point
+    /// ends, so a deletion that empties a route leaves it raised and a join
+    /// that begins a route does not raise it (the original). Off: the count
+    /// is always the number of the house's route holders.
+    // spec: S-0213 claim 16f and Edge cases (quirks.route_holder_count_drift, default: original)
+    #[serde(default = "on")]
+    pub route_holder_count_drift: bool,
     /// No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off (our design, C7 part 4): a member whose look gives no cell of its own gets the nearest open cell round the common cell, in the common cell's reach region and given to no other member.
     // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
@@ -473,6 +488,19 @@ pub struct Quirks {
     // spec: S-0214 claim 19 and Edge cases
     #[serde(default = "on")]
     pub empty_box_release_click: bool,
+    /// *Centre group* keeps the rest of the selection, objects outside the
+    /// group included, when the first selected object is in the group, and
+    /// centres on all of them (the original). Off: it replaces the
+    /// selection with the group's members first, as *select group* does.
+    // spec: S-0214 claim 33 and Edge cases (quirks.group_center_keeps_extra_selection, default: YR behaviour)
+    #[serde(default = "on")]
+    pub group_center_keeps_extra_selection: bool,
+    /// A control-group number stays with the object through an owner
+    /// change (the original). Off: a group belongs to the house that made
+    /// it, and an object counts as a member only while that house owns it.
+    // spec: S-0214 claim 33 and Edge cases (quirks.group_kept_on_owner_change, default: YR behaviour)
+    #[serde(default = "on")]
+    pub group_kept_on_owner_change: bool,
     /// Hovering an engineer over a building above its capture threshold retains the preceding cursor; off: it uses the capture cursor of table C.
     // spec: S-0214 claim 21 and Edge cases
     #[serde(default = "on")]
@@ -2214,12 +2242,16 @@ impl Default for Quirks {
             pending_order_limit: true,
             detonate_in_planter_name: true,
             cheer_memory_spans_session: true,
+            spent_route_blocks_join: true,
+            route_holder_count_drift: true,
             group_spread_no_detour: true,
             rally_point_shared: true,
             harvest_cell_shared: true,
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
+            group_center_keeps_extra_selection: true,
+            group_kept_on_owner_change: true,
             damaging_entry_cursor_retained: true,
             blocked_arrow_events: true,
             queued_move_sleeps: true,
@@ -2873,6 +2905,8 @@ impl Quirks {
                 "cheer_memory_spans_session",
                 self.cheer_memory_spans_session,
             ),
+            ("spent_route_blocks_join", self.spent_route_blocks_join),
+            ("route_holder_count_drift", self.route_holder_count_drift),
             ("group_spread_no_detour", self.group_spread_no_detour),
             ("rally_point_shared", self.rally_point_shared),
             ("harvest_cell_shared", self.harvest_cell_shared),
@@ -2885,6 +2919,14 @@ impl Quirks {
                 self.permadisguise_attack_cursor,
             ),
             ("empty_box_release_click", self.empty_box_release_click),
+            (
+                "group_center_keeps_extra_selection",
+                self.group_center_keeps_extra_selection,
+            ),
+            (
+                "group_kept_on_owner_change",
+                self.group_kept_on_owner_change,
+            ),
             (
                 "damaging_entry_cursor_retained",
                 self.damaging_entry_cursor_retained,

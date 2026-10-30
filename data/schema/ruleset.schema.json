@@ -9615,6 +9615,16 @@
           "type": "boolean",
           "default": true
         },
+        "group_center_keeps_extra_selection": {
+          "description": "*Centre group* keeps the rest of the selection, objects outside the\ngroup included, when the first selected object is in the group, and\ncentres on all of them (the original). Off: it replaces the\nselection with the group's members first, as *select group* does.",
+          "type": "boolean",
+          "default": true
+        },
+        "group_kept_on_owner_change": {
+          "description": "A control-group number stays with the object through an owner\nchange (the original). Off: a group belongs to the house that made\nit, and an object counts as a member only while that house owns it.",
+          "type": "boolean",
+          "default": true
+        },
         "group_spread_no_detour": {
           "description": "No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off (our design, C7 part 4): a member whose look gives no cell of its own gets the nearest open cell round the common cell, in the common cell's reach region and given to no other member.",
           "type": "boolean",
@@ -10405,6 +10415,11 @@
           "type": "boolean",
           "default": true
         },
+        "route_holder_count_drift": {
+          "description": "The house's route-holder count is raised only by a point add to an\nempty route and lowered only when a route that still holds a point\nends, so a deletion that empties a route leaves it raised and a join\nthat begins a route does not raise it (the original). Off: the count\nis always the number of the house's route holders.",
+          "type": "boolean",
+          "default": true
+        },
         "rubble_overlay_by_index": {
           "description": "Rubble is the overlay type at a fixed registration index.",
           "type": "boolean",
@@ -10612,6 +10627,11 @@
         },
         "speed_normalised_delays": {
           "description": "Game speed reaches game state through speed-normalised delays and a chrono flash stepping in frozen cycles.",
+          "type": "boolean",
+          "default": true
+        },
+        "spent_route_blocks_join": {
+          "description": "An object keeps its route record once its route is empty, so a\nroute-mode click on a point its route does not hold is refused and it\nnever joins a point again (the original). Off: an empty route counts\nas no route record.",
           "type": "boolean",
           "default": true
         },
