@@ -457,7 +457,8 @@ fn round_5_notes_on_the_real_data() {
         added.contains(&far[0])
     );
     shots.save(&mut c, "r5-31-type-box");
-    // Control groups: Ctrl+1 of two near tanks, Shift+1 adds a far one.
+    // Control groups: Ctrl+1 of two near tanks; Shift+1 with a far one
+    // selected adds the group to the selection (S-0214 claim 33).
     let ctrl = Modifiers {
         force_fire: true,
         ..Modifiers::default()
@@ -466,12 +467,13 @@ fn round_5_notes_on_the_real_data() {
     key_with(&mut c, Key::Char('1'), ctrl);
     c.session.as_mut().unwrap().play.selection = vec![far[0]];
     key_with(&mut c, Key::Char('1'), shift);
-    c.session.as_mut().unwrap().play.selection.clear();
     let s = c.session.as_mut().unwrap();
     println!(
-        "note 31: group 1 has {} (expected 3)",
-        s.play.groups[1].len()
+        "note 31: group 1 has {} (expected 2), Shift+1 selection {} (expected 3)",
+        s.play.group(1).len(),
+        s.play.selection.len()
     );
+    s.play.selection.clear();
     let before = s.centre();
     s.clock_ms = 30_000;
     key_with(&mut c, Key::Char('1'), Modifiers::default());

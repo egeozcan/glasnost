@@ -32,6 +32,8 @@ pub enum Action {
     Deploy,
     /// Cheer.
     Cheer,
+    /// Route mode, held (S-0213 claims 16 and 22).
+    RouteMode,
     /// The type-select role (S-0214 Terms and claim 12): held during a
     /// selecting click, or pressed.
     TypeSelect,
@@ -46,12 +48,13 @@ pub enum Action {
 }
 
 /// Every bindable action, in the order the screen lists them.
-pub const ACTIONS: [Action; 9] = [
+pub const ACTIONS: [Action; 10] = [
     Action::Stop,
     Action::Scatter,
     Action::Guard,
     Action::Deploy,
     Action::Cheer,
+    Action::RouteMode,
     Action::TypeSelect,
     Action::PathReport,
     Action::Mark,
@@ -67,6 +70,7 @@ impl Action {
             Action::Guard => "guard",
             Action::Deploy => "deploy",
             Action::Cheer => "cheer",
+            Action::RouteMode => "route",
             Action::TypeSelect => "typeselect",
             Action::PathReport => "report",
             Action::Mark => "mark",
@@ -93,7 +97,7 @@ pub const FIXED_KEYS: [(&str, &str); 2] = [
 /// command (the group keys give way); none is Escape or a plain arrow in
 /// running play (S-0213 claims 22 and 23 keep their meaning there).
 // nocite: our own client setting (keyboard-only play of the menus and the sidebar; control groups)
-pub const KEYBOARD_KEYS: [(&str, &str); 12] = [
+pub const KEYBOARD_KEYS: [(&str, &str); 14] = [
     ("Next, previous control", "Tab, Shift+Tab"),
     ("Move in menus", "Up, Down"),
     ("Change a value", "Left, Right"),
@@ -104,14 +108,16 @@ pub const KEYBOARD_KEYS: [(&str, &str); 12] = [
     ("Sidebar tab", "Page Up, Page Down"),
     ("Placement cell; place", "Ctrl+arrows; Enter"),
     ("Make a control group", "Ctrl+0 to 9; web: group key+digit"),
-    ("Add to a control group", "Shift+0 to Shift+9"),
-    ("Select a group; twice: go to it", "0 to 9"),
+    ("Add a group to the selection", "Shift+0 to Shift+9"),
+    ("Select a group; again soon: centre", "0 to 9"),
+    ("Select a group and centre", "Alt+0 to Alt+9"),
+    ("Delete the route point", "Delete"),
 ];
 
 /// The key bindings of the command keys. Keys are lower-case letters or
 /// digits, and no two actions share one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Bindings([char; 9]);
+pub struct Bindings([char; 10]);
 
 /// Why a key could not be bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,10 +130,10 @@ pub enum BindError {
 
 impl Default for Bindings {
     fn default() -> Self {
-        // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer)
-        // nocite: our own client setting (T plays S-0214's type-select role, whose key is the player's binding; P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22, Z included)
-        // design: N held with a digit makes a group on the web (M8 A4 round 5 seams; no command key of S-0213 claim 22, Z included)
-        Self(['s', 'x', 'g', 'd', 'c', 't', 'p', 'm', 'n'])
+        // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer, Z route mode)
+        // nocite: our own client setting (T plays S-0214's type-select role, whose key is the player's binding; P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22)
+        // design: N held with a digit makes a group on the web (M8 A4 round 5 seams; no command key of S-0213 claim 22)
+        Self(['s', 'x', 'g', 'd', 'c', 'z', 't', 'p', 'm', 'n'])
     }
 }
 
@@ -384,8 +390,10 @@ impl Settings {
         // written before M8 A4) keeps its default unless the file gives
         // that key to another action; it then takes the first letter or
         // digit free. The command keys of S-0213 table T2 are left as they
-        // were. The make-group key (M8 A4 round 5 seams) does the same.
+        // were. The make-group key (M8 A4 round 5 seams) and the route-mode
+        // key (a file written before intake 50, which had none) do the same.
         for a in [
+            Action::RouteMode,
             Action::TypeSelect,
             Action::PathReport,
             Action::Mark,

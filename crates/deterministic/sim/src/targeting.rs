@@ -10,9 +10,9 @@
 //!
 //! The tables are implemented row by row. Rows whose conditions need state
 //! our engine does not have yet evaluate as that state makes them: nothing is
-//! berserk, melee-linked, being erased, phasing in, disabled, falling,
-//! disguised, bomb-carrying or a loaner; there is no shroud, fog of war or
-//! route mode; no docking answer is given (no contact exchange exists yet,
+//! berserk, melee-linked, being erased, phasing in, disabled,
+//! disguised, bomb-carrying or a loaner; there is no shroud or fog of war
+//! (route mode's clicks are `crate::routes::click`); no docking answer is given (no contact exchange exists yet,
 //! so the answer is neither); weapon ranges, damage and warhead flags are
 //! weapon choice, ranges, healing weapons, veterancy abilities and the
 //! firing rules' legality answer come from the combat module (M4), with its
@@ -314,6 +314,105 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
         && !bunker
 }
 
+/// The types a tap of the type-select role extends the selection by
+/// (S-0214 claim 32): the type of each selected object, and the building
+/// type each of them deploys into, if any, in the selection's order.
+pub fn tap_types(w: &World, selection: &[ObjectId]) -> Vec<(Kind, u32)> {
+    let mut out = Vec::new();
+    let mut push = |k: (Kind, u32)| {
+        if !out.contains(&k) {
+            out.push(k);
+        }
+    };
+    for &id in selection {
+        let Some(o) = w.obj(id) else { continue };
+        // spec: S-0214 claim 32 (the tap's types: the types of the objects then selected)
+        push((o.kind, o.type_index));
+        // spec: S-0214 claim 32 and Import mapping (DeploysInto: together with the building type each of them deploys into)
+        if let Some(b) = unit(w, id)
+            .and_then(|u| u.raw.deploys_into.as_deref())
+            .and_then(|n| w.rules().index_of(Kind::Building, n))
+        {
+            push((Kind::Building, b));
+        }
+    }
+    out
+}
+
+/// Whether `id` is a candidate of a type-select tap of house `house` over
+/// `types` (S-0214 claim 32): an own object in play of one of the types
+/// that passes the ordinary band box's tests other than the screen, or is a
+/// building whose type powers a unit; and that can be selected and is not
+/// selected yet.
+pub fn tap_candidate(
+    w: &World,
+    house: HouseId,
+    selection: &[ObjectId],
+    types: &[(Kind, u32)],
+    id: ObjectId,
+) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if !types.contains(&(o.kind, o.type_index)) {
+        return false;
+    }
+    // spec: S-0214 claim 32 and Import mapping (PowersUnit: a building whose type powers a unit needs none of the band-box tests)
+    let powers = o.kind == Kind::Building
+        && w.rules()
+            .econ
+            .power
+            .buildings
+            .get(o.type_index as usize)
+            .is_some_and(|p| p.powers_unit.is_some());
+    // spec: S-0214 claim 32 (the role only ever takes the acting house's own objects; the band box's tests of claim 19 other than the screen, or the powers-a-unit building; added only if it can be selected and is not selected yet, never while being erased)
+    own(w, house, id)
+        && (box_eligible(w, house, selection, id) || powers)
+        && selectable_by(w, id, Some(house))
+        && !selection.contains(&id)
+}
+
+/// The group centre point of `ids` (S-0214 F9), in leptons: the mean of
+/// their positions, or for three or more the mean of all but the first
+/// one farthest from it. `None` for no object. Interface only: it moves
+/// the view, never game state.
+pub fn group_centre(w: &World, ids: &[ObjectId]) -> Option<(i32, i32, i32)> {
+    let p: Vec<[i64; 3]> = ids // nocite: three coordinate axes
+        .iter()
+        .filter_map(|&id| w.obj(id))
+        .map(|o| [o.pos.x, o.pos.y, o.pos.z].map(i64::from))
+        .collect();
+    let n = i64::try_from(p.len()).ok().filter(|&n| n > 0)?;
+    let sum = p
+        .iter()
+        .fold([0i64; 3], |a, q| [a[0] + q[0], a[1] + q[1], a[2] + q[2]]); // nocite: three coordinate axes
+    // spec: S-0214 F9 (the mean: the coordinate-wise sum over n, each coordinate truncated toward zero)
+    let mean = sum.map(|s| s / n);
+    let back = |c: [i64; 3]| c.map(|v| i32::try_from(v).unwrap_or(0)); // nocite: three coordinate axes
+    // spec: S-0214 F9 (for n at most 2 the centre point is the mean)
+    if n <= 2 {
+        return Some(back(mean).into());
+    }
+    let r = w.rules();
+    let mut far: Option<(u64, usize)> = None;
+    for (i, q) in p.iter().enumerate() {
+        let s: u64 = (0..3).map(|k| (q[k] - mean[k]).unsigned_abs().pow(2)).sum(); // spec: S-0214 F9 (s, the sum over the three axes of the squared difference from the mean)
+        // spec: S-0214 F9 (d = the table root of s in whole leptons under S-0204's quirks.table_root_distance; off, the floor of the exact root)
+        let d = root_floor(s, r.quirks.table_root_distance, r.mode);
+        // spec: S-0214 F9 (the first object in selection order whose d is the largest)
+        if far.is_none_or(|(best, _)| d > best) {
+            far = Some((d, i));
+        }
+    }
+    match far {
+        // spec: S-0214 F9 (the sum of all positions less the farthest one's, over n - 1, truncated toward zero)
+        Some((d, k)) if d > 0 => {
+            let c = [0, 1, 2].map(|j| (sum[j] - p[k][j]) / (n - 1));
+            Some(back(c).into())
+        }
+        // spec: S-0214 F9 (if every d is 0, the centre point is the mean)
+        _ => Some(back(mean).into()),
+    }
+}
+
 /// Rally-capable (S-0214 Terms): a factory of infantry or vehicles, a
 /// cloning building or a repair depot.
 fn rally_capable(w: &World, id: ObjectId) -> bool {
@@ -389,10 +488,7 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     if crate::spawn::partly_launched(w, id) {
         return false;
     }
-    // spec: S-0214 Terms (a movable mobile object is not falling)
-    if crate::fall::falling(w, id) {
-        return false;
-    }
+    // spec: S-0214 Terms (revision 62: falling is part of neither movable nor able to fire; a falling unit takes orders and carries them out once landed, S-0522 claim 17)
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
@@ -471,11 +567,12 @@ pub fn first_may_move_into_shroud(w: &World, selection: &[ObjectId]) -> bool {
         .is_some_and(|u| u.move_to_shroud)
 }
 
-/// Able to fire (S-0214 Terms): own, armed, not disabled, not falling
-/// (S-0511 claim 10).
+/// Able to fire (S-0214 Terms): own, armed, not disabled. A falling
+/// unit is able to fire: it takes the order and fires once landed (S-0522
+/// claim 17; S-0511 claim 10 and S-0203 keep it from firing in the air).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
-    // spec: S-0214 Terms (able to fire: armed, not disabled, not falling)
-    own(w, house, id) && armed(w, id) && !disabled(w, id) && !crate::fall::falling(w, id)
+    // spec: S-0214 Terms (revision 62: able to fire is armed, not disabled and not deactivated; falling is no part of it)
+    own(w, house, id) && armed(w, id) && !disabled(w, id)
 }
 
 /// A healing actor (S-0214 Terms): an armed object whose default weapon
@@ -884,6 +981,27 @@ fn health_cmp(w: &World, id: ObjectId, c: F64) -> std::cmp::Ordering {
     }
 }
 
+/// Whether building `b` serves `actor` for S-0215 claim 13's
+/// repair/reload route points: a unit repair building for an actor below
+/// full health that is not infantry, or a unit reload building for an actor
+/// whose ammunition is below its type's maximum and not unlimited.
+pub fn service_building_for(w: &World, b: ObjectId, actor: ObjectId) -> bool {
+    let Some(bt) = building(w, b) else {
+        return false;
+    };
+    let Some(a) = w.obj(actor) else { return false };
+    // spec: S-0215 claim 13 (a unit repair building, the actor's integer health below its type's maximum, and the actor not infantry)
+    let repair =
+        bt.raw.unit_repair.unwrap_or(false) && a.kind != Kind::Infantry && below_full(w, actor);
+    // spec: S-0215 claim 13 (a unit reload building, the actor's integer ammunition below its type's maximum and not -1)
+    let max = crate::combat::veterancy::type_combat(w, actor).map_or(-1, |t| t.ammo);
+    let reload = bt.raw.econ.unit_reload.unwrap_or(false)
+        && a.combat.ammo != -1
+        && max != -1
+        && a.combat.ammo < max;
+    repair || reload
+}
+
 fn below_full(w: &World, id: ObjectId) -> bool {
     let mode = w.rules().mode;
     // spec: S-0214 Constants (full health: a health ratio of exactly 1)
@@ -993,8 +1111,10 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
     let e = mods.force_fire || infiltrator_entry(w, actor, t) || {
         let (slot, x) = weapon::would_use(w, actor, Some(Target::Object(t)));
         // Without a weapon there is no firing rule to rule the target illegal.
+        // spec: S-0214 claim 6 (e) (other reasons for not firing at this moment do not count) and Terms (falling is part of neither movable nor able to fire; S-0522 claim 17: an attack click during the fall gives an attack order at once): the falling firer's refusal of S-0301 claim 9 rank 4 is not asked
         x.is_none()
-            || check::check(w, actor, Some(Target::Object(t)), slot, false) != Answer::Illegal
+            || check::check_ignoring_fall(w, actor, Some(Target::Object(t)), slot)
+                != Answer::Illegal
     };
     a && b && c && d && e
 }
@@ -1321,7 +1441,7 @@ fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
     // spec: S-0214 Terms (deploy readiness: never on a tunnel cell, the tunnel-marked or edge predicate of S-0507 claim 7)
     let ready = !on_tunnel;
     let deploy_weapon = uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false));
-    // spec: S-0214 table VD row VD1 (route mode held: no-deploy). Seam: route mode does not exist yet (no key binds it), so it is never held here
+    // S-0214 table VD row VD1 (route mode held: no-deploy) is applied by `in_route_mode`: route mode is the client's input state, and its clicks are `crate::routes::click`
     // spec: S-0214 table VD row VD2 (deploys into a building: deploy if the building could be placed where the vehicle stands, the vehicle not counting as an obstacle and a wide foundation anchored by the deploy anchor step S-0415 F3, and the vehicle has deploy readiness; else no-deploy). The placement test is the deploy order's own (econ::deploy::fits)
     if let Some(o) = w.obj(actor)
         && let Some(b) = crate::econ::deploy::deploys_into(w, o.kind, o.type_index)
@@ -1610,7 +1730,7 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     }
     let mv = movable(w, house, actor);
     let rally = rally_capable(w, actor);
-    // spec: S-0214 table GC row GC3 (force-move and force-fire: area guard; no route points yet)
+    // spec: S-0214 table GC row GC3 (force-move and force-fire: area guard). Seam: its patrol on a cell that holds a route point is not given, as patrol processing is not built (S-0215); Q-2138 question 2
     if mods.force_move
         && mods.force_fire
         && mv
@@ -1798,6 +1918,32 @@ pub fn building_cell(c: Action, b: BuildingCell, no_weapon_attack: bool) -> Acti
     }
     // spec: S-0214 table BC row BC7 (otherwise c)
     c
+}
+
+/// The action of one selected actor on a target, with the whole selection
+/// in view (S-0214 claims 4 to 9), as [`click`] resolves it for that actor.
+pub fn action_of(
+    w: &World,
+    house: HouseId,
+    sel: &[ObjectId],
+    actor: ObjectId,
+    on: ClickOn,
+    mods: Modifiers,
+) -> Action {
+    action_in(w, house, sel, actor, on, mods)
+}
+
+/// An action as it stands while route mode is held (S-0214 table I value v
+/// row v2, row I22 and table VD row VD1: route mode held gives no-deploy
+/// where the action would be deploy). Route mode is the client's input
+/// state, so its rows are applied to the action the tables give without it.
+pub fn in_route_mode(a: Action) -> Action {
+    // spec: S-0214 table I row v2, row I22 and table VD row VD1 (route mode held: no-deploy)
+    if a == Action::Deploy {
+        Action::NoDeploy
+    } else {
+        a
+    }
 }
 
 /// The action of one selected actor on a target, with the whole selection

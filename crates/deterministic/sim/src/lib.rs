@@ -70,6 +70,7 @@ pub mod refresh;
 pub mod regions;
 pub mod rng;
 pub mod rocket;
+pub mod routes;
 pub mod rules;
 pub mod save;
 pub mod scatter;

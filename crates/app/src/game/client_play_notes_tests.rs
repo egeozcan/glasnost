@@ -182,30 +182,41 @@ fn sorted(mut v: Vec<ObjectId>) -> Vec<ObjectId> {
     v
 }
 
-/// A press of the type-select key selects the selection's type on the
-/// screen, and a second press at most 500 ms after the one before across
-/// the map (note 31). The bare session imports no art, so it draws no
-/// mobile object and its screen holds no candidate: a press on the screen
-/// adds nothing here (the local lane shows it on the real data), the
-/// map-wide press adds the type wherever it is.
+/// A tap of the type-select key is a release at most 500 ms after the
+/// press; a key repeat does not restart the press (S-0214 claim 32). The
+/// bare session imports no art, so it draws no mobile object and its screen
+/// holds no candidate: the tap's reach becomes the map at once and it adds
+/// the type wherever it is.
 #[test]
-fn the_type_select_key_widens_to_the_map_on_a_quick_second_press() {
+fn the_type_select_key_taps_on_a_release_within_500_ms() {
     let mut c = client((800, 600), 100);
     start_by_keyboard(&mut c);
     let [a, b, far] = three_gunrs(&mut c);
     session_mut(&mut c).play.selection = vec![a];
-    let press = |c: &mut Client, at: i64| {
-        session_mut(c).clock_ms = at;
-        key(c, Key::Char('t'));
+    let hold = |c: &mut Client, down: i64, up: i64| {
+        session_mut(c).clock_ms = down;
+        c.key(Key::Char('t'), true);
+        session_mut(c).clock_ms = up;
+        c.key(Key::Char('t'), false);
         sorted(session(c).play.selection.clone())
     };
-    // spec: S-0214 claim 12 (on the screen only; Q-1987: a press alone acts, scenario T2)
-    assert_eq!(press(&mut c, 1000), vec![a]);
-    // spec: S-0214 Constants (501 ms after the press before is too late for the double press)
-    assert_eq!(press(&mut c, 1501), vec![a]);
-    // spec: S-0214 claim 12 and Constants (500 ms, inclusive, widens it to the whole map)
-    let wide = press(&mut c, 2001);
+    // spec: S-0214 claim 32 and Constants (a release 501 ms after the press is no tap and does nothing)
+    assert_eq!(hold(&mut c, 1000, 1501), vec![a]);
+    // spec: S-0214 claim 32 (the key's automatic repeat while held does not restart the press time)
+    session_mut(&mut c).clock_ms = 3000;
+    c.key(Key::Char('t'), true);
+    session_mut(&mut c).clock_ms = 3400;
+    c.key(Key::Char('t'), true);
+    session_mut(&mut c).clock_ms = 3600;
+    c.key(Key::Char('t'), false);
+    assert_eq!(sorted(session(&c).play.selection.clone()), vec![a]);
+    // spec: S-0214 claim 32 and Constants (500 ms, inclusive, is a tap; with no screen candidate the reach becomes map)
+    let wide = hold(&mut c, 5000, 5500);
     assert!([a, b, far].iter().all(|id| wide.contains(id)), "{wide:?}");
+    assert_eq!(
+        session(&c).type_select_reach(),
+        crate::game::play::Reach::Map
+    );
     // Every own GUNR, the fixture's own ones too, and nothing else.
     let w = session(&c).play.world();
     let ty = w.obj(a).unwrap().type_index;
@@ -215,6 +226,16 @@ fn the_type_select_key_widens_to_the_map_on_a_quick_second_press() {
         .collect();
     assert_eq!(wide, sorted(gunrs));
     assert!(!session(&c).type_select_held(), "released");
+    // spec: S-0214 claim 32 (a clearing since the last tap sets the reach to screen before the next one)
+    session_mut(&mut c).play.clear_selection();
+    session_mut(&mut c).paused = true;
+    hold(&mut c, 7000, 7100);
+    assert_eq!(
+        session(&c).type_select_reach(),
+        crate::game::play::Reach::Map,
+        "paused: no tap"
+    );
+    session_mut(&mut c).paused = false;
 }
 
 /// The type-select key is held from its press to its release, and losing
@@ -247,49 +268,159 @@ fn the_type_select_key_is_held_until_released_or_the_focus_goes() {
     assert!(!session(&c).type_select_held());
 }
 
-/// The control-group keys: Ctrl+digit makes a group, Shift+digit adds to
-/// it, the digit selects it, and a second press within the interval goes
-/// to it (note 31, our design, Q-1988).
+fn with(c: &mut Client, mods: Modifiers, d: char) {
+    c.modifiers(mods);
+    key(c, Key::Char(d));
+    c.modifiers(Modifiers::default());
+}
+
+const CTRL: Modifiers = Modifiers {
+    force_fire: true,
+    force_move: false,
+    force_select: false,
+    attack_move_mode: false,
+};
+const SHIFT: Modifiers = Modifiers {
+    force_fire: false,
+    force_move: false,
+    force_select: true,
+    attack_move_mode: false,
+};
+const ALT: Modifiers = Modifiers {
+    force_fire: false,
+    force_move: true,
+    force_select: false,
+    attack_move_mode: false,
+};
+
+/// The control-group keys (S-0213 claim 22, S-0214 claim 33): Ctrl+digit
+/// makes a group, Shift+digit adds the group to the selection, Alt+digit
+/// centres on it, and the digit selects it; a second press less than 800 ms
+/// after the last select that was not a repeat centres the view.
 #[test]
-fn control_group_keys_make_select_and_go_to_a_group() {
+fn control_group_keys_make_add_select_and_centre() {
     let mut c = client((800, 600), 100);
     start_by_keyboard(&mut c);
     let [a, b, far] = three_gunrs(&mut c);
-    let with = |c: &mut Client, mods: Modifiers, d: char| {
-        c.modifiers(mods);
-        key(c, Key::Char(d));
-        c.modifiers(Modifiers::default());
-    };
-    let ctrl = Modifiers {
-        force_fire: true,
-        ..Modifiers::default()
-    };
-    let shift = Modifiers {
-        force_select: true,
-        ..Modifiers::default()
-    };
     session_mut(&mut c).play.selection = vec![a, b];
-    with(&mut c, ctrl, '3');
+    with(&mut c, CTRL, '3');
+    assert_eq!(session(&c).play.group(3), vec![a, b]);
+    // spec: S-0213 claim 22 and S-0214 claim 33 (Shift with the digit adds the group to the selection)
     session_mut(&mut c).play.selection = vec![far];
-    with(&mut c, shift, '3');
-    assert_eq!(session(&c).play.groups[3], vec![a, b, far]);
-    session_mut(&mut c).play.selection.clear();
-    let start = (session(&c).centre().0 + 300, session(&c).centre().1);
-    session_mut(&mut c).set_centre(start);
-    let start = session(&c).centre();
-    session_mut(&mut c).clock_ms = 5000;
-    with(&mut c, Modifiers::default(), '3');
+    with(&mut c, SHIFT, '3');
     assert_eq!(
         sorted(session(&c).play.selection.clone()),
         sorted(vec![a, b, far])
     );
-    assert_eq!(session(&c).centre(), start, "one press only selects");
-    session_mut(&mut c).clock_ms = 5000 + crate::game::session::GROUP_DOUBLE_MS;
+    assert_eq!(session(&c).play.group(3), vec![a, b], "the group stays");
+    // The digit alone selects the group, the view stays.
+    session_mut(&mut c).play.selection = vec![far];
+    let away = (session(&c).centre().0 + 300, session(&c).centre().1);
+    session_mut(&mut c).set_centre(away);
+    let start = session(&c).centre();
+    session_mut(&mut c).clock_ms = 5000;
     with(&mut c, Modifiers::default(), '3');
-    assert_ne!(session(&c).centre(), start, "the second press goes to it");
-    // Another group's digit with nothing in it keeps the selection.
+    assert_eq!(sorted(session(&c).play.selection.clone()), vec![a, b]);
+    assert_eq!(session(&c).centre(), start, "one press only selects");
+    // spec: S-0214 claim 33 and Constants (a repeat less than 800 ms later centres the view)
+    session_mut(&mut c).clock_ms = 5799;
+    with(&mut c, Modifiers::default(), '3');
+    let centred = session(&c).centre();
+    assert_ne!(centred, start, "the repeat goes to it");
+    // spec: S-0214 claim 33 (a repeat does not restart the 800 ms: 801 ms after the select is a new select, which does not move the view)
+    session_mut(&mut c).set_centre(away);
+    session_mut(&mut c).clock_ms = 5801;
+    with(&mut c, Modifiers::default(), '3');
+    assert_eq!(session(&c).centre(), start, "no repeat");
+    // spec: S-0214 Constants (800 ms exactly is no repeat)
+    session_mut(&mut c).clock_ms = 6601;
+    with(&mut c, Modifiers::default(), '3');
+    assert_eq!(session(&c).centre(), start, "800 ms is too late");
+    // spec: S-0214 claim 33 (a repeat needs the selection's own objects to be exactly the members)
+    session_mut(&mut c).play.selection = vec![a];
+    session_mut(&mut c).clock_ms = 6700;
+    with(&mut c, Modifiers::default(), '3');
+    assert_eq!(session(&c).centre(), start, "a select, not a repeat");
+    assert_eq!(sorted(session(&c).play.selection.clone()), vec![a, b]);
+    // spec: S-0213 claim 22 and S-0214 claim 33 (Alt with the digit: the selection becomes the group's and the view is centred on it)
+    session_mut(&mut c).play.selection = vec![far];
+    with(&mut c, ALT, '3');
+    assert_eq!(sorted(session(&c).play.selection.clone()), vec![a, b]);
+    assert_eq!(session(&c).centre(), centred, "centred as by the repeat");
+    // spec: S-0214 claim 33 (selecting a group with no member leaves the selection empty)
+    session_mut(&mut c).clock_ms = 9000;
     with(&mut c, Modifiers::default(), '4');
-    assert_eq!(session(&c).play.selection.len(), 3);
+    assert!(session(&c).play.selection.is_empty());
+    // spec: S-0214 claim 33 (while the options menu is open the group keys do nothing)
+    session_mut(&mut c).play.selection = vec![far];
+    session_mut(&mut c).paused = true;
+    session_mut(&mut c).group_key(3, crate::game::session::GroupCommand::Select);
+    assert_eq!(session(&c).play.selection, vec![far]);
+    session_mut(&mut c).paused = false;
+}
+
+/// Route mode through the client (S-0213 claims 16, 16a and table T2):
+/// the bound key held, a battlefield click gives the selection's
+/// behaviour order as a route point; T2's commands are refused with their
+/// message and no order; the key's release, or the focus going, sends one
+/// commit.
+#[test]
+fn route_mode_adds_points_and_commits_on_release() {
+    use glasnost_sim::orders::Order;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let [a, _, _] = three_gunrs(&mut c);
+    // Past the opening order block (S-0201 claim 14).
+    while glasnost_sim::orders::blocked(session(&c).play.world()) {
+        session_mut(&mut c).step();
+    }
+    let orders = |c: &Client| -> Vec<Order> {
+        let s = session(c);
+        s.play
+            .game
+            .replay()
+            .orders
+            .iter()
+            .filter(|(_, h, _)| *h == s.play.local)
+            .map(|(_, _, o)| o.clone())
+            .collect()
+    };
+    let before = orders(&c).len();
+    assert_eq!(c.settings.bindings.key(Action::RouteMode), 'z');
+    session_mut(&mut c).play.selection = vec![a];
+    c.key(Key::Char('z'), true);
+    assert!(session(&c).route_held());
+    // spec: S-0213 table T2 (guard in route mode: no order, refused with its message and the refusal sound; the bare session loads no font, so the message line is not kept)
+    session_mut(&mut c).play.cues.clear();
+    c.key(Key::Char('g'), true);
+    c.key(Key::Char('g'), false);
+    assert_eq!(
+        session(&c).play.cues,
+        vec![glasnost_audio::events::UiCue::StripEnd]
+    );
+    assert_eq!(orders(&c).len(), before, "no order");
+    // spec: S-0213 claim 16a (a click gives the behaviour order as a route point)
+    let at = session(&c).map_rect().centre();
+    super::access_tests::click_at(&mut c, at);
+    let new = orders(&c)[before..].to_vec();
+    assert!(
+        matches!(new.as_slice(), [Order::RoutePoint { actor, .. }] if *actor == a),
+        "{new:?}"
+    );
+    // spec: S-0213 claim 16a (the release sends one commit)
+    c.key(Key::Char('z'), false);
+    assert!(!session(&c).route_held());
+    assert!(matches!(orders(&c).last(), Some(Order::RouteCommit)));
+    let n = orders(&c).len();
+    c.key(Key::Char('z'), false);
+    assert_eq!(orders(&c).len(), n, "a second release sends nothing");
+    // design: the focus going lets go of the key, which commits
+    c.key(Key::Char('z'), true);
+    c.focus(false);
+    c.focus(true);
+    assert!(!session(&c).route_held());
+    assert_eq!(orders(&c).len(), n + 1);
+    assert!(matches!(orders(&c).last(), Some(Order::RouteCommit)));
 }
 
 /// The web stand-in for Ctrl+digit (M8 A4 round 5 seams, our design):
@@ -309,13 +440,13 @@ fn the_make_group_key_stands_in_for_ctrl_on_the_web() {
     c.key(Key::Char('n'), true);
     key(&mut c, Key::Char('5'));
     c.key(Key::Char('n'), false);
-    assert!(session(&c).play.groups[5].is_empty());
+    assert!(session(&c).play.group(5).is_empty());
     // On: N held and 5 make group 5 of the selection.
     c.group_fallback = true;
     session_mut(&mut c).play.selection = vec![a, b];
     c.key(Key::Char('n'), true);
     key(&mut c, Key::Char('5'));
-    assert_eq!(session(&c).play.groups[5], vec![a, b]);
+    assert_eq!(session(&c).play.group(5), vec![a, b]);
     // Released, 5 selects the group again.
     c.key(Key::Char('n'), false);
     session_mut(&mut c).play.selection = vec![far];
@@ -343,9 +474,10 @@ fn the_make_group_key_stands_in_for_ctrl_on_the_web() {
     c.key(Key::Char('n'), true);
     key(&mut c, Key::Char('6'));
     c.key(Key::Char('n'), false);
-    assert!(session(&c).play.groups[6].is_empty());
+    assert!(session(&c).play.group(6).is_empty());
+    session_mut(&mut c).play.selection = vec![far];
     c.key(Key::Char('j'), true);
     key(&mut c, Key::Char('6'));
     c.key(Key::Char('j'), false);
-    assert_eq!(session(&c).play.groups[6], vec![far]);
+    assert_eq!(session(&c).play.group(6), vec![far]);
 }

@@ -497,6 +497,7 @@ pub fn new_game(
         walkers: Default::default(),
         mutation: Default::default(),
         drain: Default::default(),
+        routes: Default::default(),
         domination: Default::default(),
         depot_anims: Default::default(),
         anims: Default::default(),
