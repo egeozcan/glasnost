@@ -29,3 +29,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0017](combat/M-0017-stock-replay.md) | Unit arena, stock replay of every archived game without SREF or V3 | combat | new finding | committed |
 | [M-0015](combat/M-0015-arena-tele-against-bfrt-replay.md) | Unit arena, TELE against BFRT, stock replay watched per unit | combat | confirms | local |
 | [M-0013](economy/M-0013-germinable-cells.md) | Which cells receive spreading ore (S-0401 scenario E8) | economy | contradicts | local |
+| [M-0005](combat/M-0005-arena-ltnk-against-robo-stall.md) | Hunters against disabled robot tanks in the unit arena (the LTNK against ROBO stall) | combat | contradicts | local |
