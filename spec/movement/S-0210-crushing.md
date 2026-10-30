@@ -2,13 +2,13 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 22
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0020, Q-0036, Q-0684]
+requests: [Q-0020, Q-0036, Q-0684, Q-2005]
 supersedes: []
 ---
 
@@ -18,11 +18,11 @@ supersedes: []
 
 Which vehicles can crush, which objects they can crush, the moment at which crushing happens, what
 happens to the crushed object, how crushing vehicles flatten crushable overlays and walls, how they
-warn infantry ahead of them, when crushing slows a vehicle down, and when a vehicle chooses on its
-own to drive over a crushable enemy. The entry outcomes that let a crushing vehicle treat a cell of
-crushable enemies as clear are in S-0209 (claim 5). It also gives where a wall type's damage-stage
-count and strength come from, with their engine defaults, and which house owns a wall that the map
-places.
+warn infantry ahead of them, when crushing slows a vehicle down, and when a vehicle drives over a
+crushable enemy on its own, either one that hits it or one that it already holds as its target.
+The entry outcomes that let a crushing vehicle treat a cell of crushable enemies as clear are in
+S-0209 (claim 5). It also gives where a wall type's damage-stage count and strength come from,
+with their engine defaults, and which house owns a wall that the map places.
 
 ## Terms
 
@@ -69,13 +69,16 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
   on water, and the walking-vehicle locomotor moves vehicles that walk on legs. A type's locomotor is
   an imported field (Import mapping).
 - **Crush range.** A game-wide imported distance in leptons used by automatic crushing (claim 11).
-- **Auto-crush flag.** A vehicle type's imported flag that lets its units choose crushing
-  targets on their own (claim 11).
-- **Player-auto-crush rule.** A game-wide imported yes/no rule that does the same for every vehicle
-  (claim 11).
+- **Crush response.** A crusher's reaction to a hit from a crushable enemy: it drives at the
+  attacker to crush it. S-0215 claim 39 owns when it happens and what it does; claim 11 here owns
+  who may make it and which attacker qualifies.
+- **Auto-crush flag.** A vehicle type's imported flag meant to give its units the crush response
+  under a human-controlled owner (claim 11). In the original it has no effect.
+- **Player-auto-crush rule.** A game-wide imported yes/no rule meant to do the same for every
+  vehicle (claim 11). In the original it has no effect either.
 - **Auto-crush threshold.** A game-wide imported house skill level that a computer-controlled house
-  of the original must reach before its crushers choose crushing targets on their own. Only the
-  original's rule uses it (claim 11); AI houses of our engine never do.
+  of the original must reach before its crushers make the crush response. Only the original's rule
+  uses it (claim 11); AI houses of our engine never do.
 - **Crush-slowdown state.** A yes/no state of a vehicle, set by the events of claim 9 and ended by
   crushing an overlay (claim 8).
 - **Body tilt.** A presentation value of a vehicle: the rate per tick at which its drawn body rocks
@@ -335,46 +338,58 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       whose strength exceeds 10000.
     - Confidence: medium
 
-11. **Automatic crushing.** A crusher may choose, as a target to drive over, a crushable enemy
-    unit, on the occasions on which the behaviour specs (S-0215) let a unit pick a target of its own,
-    when all of these hold:
-    - the target is crushable by it (claim 2) and does not appear disguised to the crusher's house
+11. **Automatic crushing.** A crusher makes the crush response (S-0215 claim 39) to a hit from an
+    attacker only when all of these hold:
+    - the attacker is crushable by it (claim 2) and does not appear disguised to the crusher's house
       (S-0516 claims 35–36),
-    - the distance between their centres (in three dimensions) is at most the crush range (F2),
-    - the game-wide player-auto-crush rule is on, or the crusher's type has the auto-crush flag.
+    - the distance between their centres (in three dimensions), taken when the hit is applied, is at
+      most the crush range (F2),
+    - the crusher's owner is allowed the response by the table below (with our engine's rule after
+      it).
 
-    This disguise condition belongs to the automatic choice in this list, not to crushing along an
+    The attacker is the object that the hit names as its attacker (S-0302 claim 1). A hit that names
+    none never gives the response. No other object is a candidate: the response never chooses
+    among the crushable enemies in range, and an enemy that does not hit the crusher is never
+    chosen by it. Whether the crusher is berserk, and whether the attacker's type is
+    berserk-friendly, play no part: S-0610 claims 6 and 8 restrict firing and searches, not this
+    response.
+
+    This disguise condition belongs to the response in this list, not to crushing along an
     existing route: a unit that appears disguised can still be crushed under claims 2–3 when the
     crusher is ordered through its cell. The disguise condition does not add a requirement to the
     omni-crusher or original's attack-target variants below.
 
-    When the target is chosen, the crusher is given a move to the target's cell, as if ordered to move
-    there. When it reaches the cell centre, claim 3 applies. Which behaviours give the crusher the
-    chance to choose, and so what counts as being busy with another order, belongs to the behaviour
-    specs. Scenario K7 shows one occasion that does not offer it: a crusher with an attack order
-    (case 7).
+    When the response is made, the crusher's destination becomes the attacker object itself, not a
+    cell, and *move* is queued for it (S-0215 claim 39). The response does not change the crusher's
+    target. Crushing along that route follows claim 3. Scenario K7 case 7
+    shows an occasion that gives no response, once the victim's return fire has hit the crusher: a
+    crusher of a human-controlled owner with an attack order.
 
     **Omni-crusher variant.** A vehicle whose type has the omni-crusher flag and whose current target
     (the object it has been told or has chosen to attack; glossary, *target, destination*) it can crush
-    under claim 2 drives at that target in the same way, at any distance. The crusher flag is not
-    required for this choice, although without it the vehicle crushes nothing (claim 1). Unlike the first list, the variant is not tied to the occasions on which a unit picks a target of its own: it applies also while the vehicle has a move destination. There is one exception: the
-    vehicle does not do this when its target is an opportunity target (S-0215 claim 33), one that it
-    picked by itself while moving, harvesting or guarding.
+    under claim 2 drives at that target, at any distance: its destination becomes the target
+    object. The crusher flag is not required for this choice, although without it the vehicle
+    crushes nothing (claim 1). Unlike the
+    crush response of the first list, the variant needs no hit, and unlike the attack-target
+    variant below, it applies also while the vehicle has a move destination. There is one
+    exception: the vehicle does not do this when its target is an opportunity target (S-0215
+    claim 33), one that it picked by itself while moving, harvesting or guarding.
 
     **Replacement approach.** The omni-crusher variant above and the original's attack-target
     variant below replace the common approach step of S-0215 claim 37 (part h). Their destination
     is the target object itself, not a fixed cell chosen by the common approach rules. The
     cadence and occasions for taking that step are S-0215 claim 37 (part a); the eligibility
-    conditions remain those of this claim. This differs from the automatic choice in the first
-    list, which gives a move to the chosen target's cell.
+    conditions remain those of this claim. The crush response of the first list also names the
+    object as the destination, but it is a reaction to a hit that also queues *move*, and it
+    needs no target.
 
     **Our engine and the original's computer-controlled houses.** The rules above are the rules of
     our engine for every player house, human-controlled or AI house (glossary, *AI house*). The
     original treats a house that its computer player plays differently in three places, and our
     engine does not reproduce them for AI houses. As the glossary entry *AI house* says, an AI house
     follows the rules of a human-controlled house, so for an AI house:
-    - the permission to choose targets automatically is the third condition of the list above, never
-      the computer-controlled row of the table below,
+    - the crush response follows the human-controlled row of the table below and our engine's rule
+      after it, never the computer-controlled row,
     - the attack-target variant below does not exist for its units,
     - the opportunity-target exception of the omni-crusher variant applies to it as to a
       human-controlled house.
@@ -382,20 +397,35 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     This is a departure of our engine by design choice of scope, with no quirk switch. Units of the
     neutral and special houses are not units of an AI house: they keep the original's
     computer-controlled rules below (the table row, the attack-target variant and the exemption from
-    the opportunity-target exception) in our engine (glossary, *AI house*, *Player houses only*). Our AI may
-    obtain the original's computer behaviour by giving its crushers ordinary move orders to the cells
-    of targets it chooses. The original's rules, which scenario K7 measures with computer-owned
-    crushers:
+    the opportunity-target exception) in our engine (glossary, *AI house*, *Player houses only*).
+    So do test-only computer-controlled player houses (glossary). Our AI may obtain the original's
+    computer behaviour by giving a crusher that was hit an ordinary move order that names the
+    attacker. The original's rules, which scenario K7 measures with computer-owned crushers:
 
-    | Original: crusher's owner | Automatic crushing allowed when |
+    | Original: crusher's owner | Crush response allowed when |
     |---|---|
-    | human-controlled | the game-wide player-auto-crush rule is on, or the crusher's type has the auto-crush flag |
+    | human-controlled | never (see below) |
     | computer-controlled | its house skill level is at least the game-wide auto-crush threshold, and its difficulty index is not 2, the index given by the lobby's easy computer entry (S-0412 claim 4; the auto-crush flag and the player-auto-crush rule play no part) |
+
+    In the original, a crusher of a human-controlled owner never makes the crush response
+    (S-0215 claim 39), so the auto-crush flag and the player-auto-crush rule have no effect at all.
+    A human-controlled house has difficulty index 1 in a skirmish (S-0412 claim 4).
+
+    **Our engine's rule for player houses** (`quirks.auto_crush_computer_only`, Edge cases). With
+    the switch on (the default, the original), the crushers of player houses never make the crush
+    response, and the auto-crush flag and the player-auto-crush rule have no effect. With it off,
+    by a design rule of our engine, a crusher of a player house may make it when the
+    player-auto-crush rule is on or its type has the auto-crush flag. No house skill level,
+    difficulty or handicap condition applies to it: a player house has no difficulty index in our
+    engine, and its handicap row acts only through the factors of S-0412 claim 5. The other
+    conditions of the list above and of S-0215 claim 39 stay. The neutral and special houses and
+    test-only computer-controlled player houses keep the computer-controlled row whatever the
+    switch.
 
     The neutral and special houses have difficulty index 1 and house skill level 0 (S-0412
     claims 3 and 5). They therefore fail this table's skill-level condition with the engine-default
     auto-crush threshold of 2, or with any positive imported threshold. A threshold of 0 or less
-    lets them pass it. This restriction belongs only to the table's automatic choice: it does not
+    lets them pass it. This restriction belongs only to the table's crush response: it does not
     exclude the attack-target or omni-crusher variants.
 
     - *Original: attack-target variant.* A crusher of a computer-controlled house that already has a
@@ -408,20 +438,29 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     - *Original: opportunity targets.* A vehicle of a computer-controlled house with the
       omni-crusher flag drives at an opportunity target too, which the human-controlled vehicle of
       the exception above does not.
-    - Backing: `measurable` (scenarios K7 and K13; K13 for the disguise condition and its distinction
-      from crushing along an ordered route). The first list under a human-controlled owner: cases 3
-      (rule and flag both off, no crushing), 13 and 14 (flag or rule on, crushing), 15 and 16 for the
-      range in force and its absent-key default (F2), and 8 and 9 for the
-      range condition under a computer-controlled owner. The omni-crusher variant: case 10, and 12h
-      for its exception. The original's computer-controlled rules: cases 1, 2 and 4 (the table
-      row), 17 (the neutral and special houses' skill-level condition), 5, 6, 9 and 11 (the attack-target variant, 11 for its move-destination condition) and
-      12c (opportunity targets); case 7 shows that a human-controlled vehicle with an attack
-      order does not get the variant. The departure itself is a design rule that no measurement of
-      the original can confirm.
-    - Confidence: medium for the conditions of the first list (the exact moment at which the choice
-      is made belongs to the behaviour specs); medium for the meaning of the move-destination
-      condition; low for the omni-crusher variant as a whole and for its opportunity-target
-      exception; low for the original's attack-target variant
+    - Backing: `measurable` (scenarios K7, K13 and K15; K13 for the disguise condition and its
+      distinction from crushing along an ordered route; K15 for a berserk crusher, with K15 c
+      deciding the alliance condition once a route for it is named). The crush response under a
+      computer-controlled owner:
+      cases 1, 2 and 4 (the table row), 8 for the range condition, 15 and 16 for the range in force
+      and its absent-key default (F2), 17 (the neutral and special houses' skill-level
+      condition), and 18 for the occasion (no response without a hit, in *guard* and in
+      *hunt*). Under a human-controlled owner: cases 3, 13 and 14 (no response, with the rule
+      and flag off, the flag on and the rule on). The omni-crusher variant: case 10, and 12h for
+      its exception. The original's attack-target variant: cases 5, 6, 9 and 11 (11 for its
+      move-destination condition), and 12c for opportunity targets; case 7 shows that a
+      human-controlled vehicle with an attack order does not get the variant. Our engine's rule
+      for player houses is a design rule that no measurement of the original can confirm; with
+      the switch off, cases 13 and 14 give the expected engine results stated in K7.
+    - Confidence: high that the response is offered to crushers of owners that are not
+      human-controlled only, so that the auto-crush flag and the player-auto-crush rule have no
+      effect in the original; high for the occasion (a hit that names its attacker, K7 cases 1 to
+      4 and 18), for the range condition (cases 8, 15 and 16), for the owner's row (cases 1 and 4,
+      medium for the neutral and special houses of case 17, which rest on S-0412 claim 5) and for
+      the disguise condition (K13 part a); the attacker's being crushable keeps
+      claim 2's ratings (medium for "not falling"); medium for the meaning of the
+      move-destination condition; low for the omni-crusher variant as a whole and
+      for its opportunity-target exception; low for the original's attack-target variant
 
 12. **Smaller rocking limit while slowed (presentation only).** While a vehicle is in the
     crush-slowdown state, whatever its locomotor, its forward rocking angle is limited to π/10 in
@@ -552,7 +591,7 @@ applies. Unit: fraction of full speed.
 | Wall-owner flag of a country, absent-key default | yes | boolean | claim 14 |
 | Forward rocking angle limit in the crush-slowdown state | π/10 (otherwise π/4) | radians (rendering) | claim 12; single-precision reals |
 | Auto-crush threshold, absent-key default | 2 | house skill level | claim 11, the original's computer-controlled houses only |
-| Player-auto-crush rule, absent-key default | off | boolean | claim 11 |
+| Player-auto-crush rule, absent-key default | off | boolean | claim 11, only with `quirks.auto_crush_computer_only` off |
 
 ## State and ordering
 
@@ -636,7 +675,7 @@ Ordering stated as consequences:
   and then crushes an overlay. The switch
   `quirks.crush_slowdown_persists` (default: the original) selects this. With it off, the state also
   ends when the vehicle next reaches a cell centre where the cell layer it is in holds no vehicle
-  other than itself (whatever the other two switches select), and the speed is no longer limited
+  other than itself (whatever the other two switches select), and the speed is not limited
   from then on. It is entered again by the next event of claim 9.
 - **Overlay of registration index 0.** With the ship and walking-vehicle locomotors the crush-slowdown
   state is set by the overlay type that happens to be first in the overlay registry (claim 9), not by
@@ -655,9 +694,16 @@ Ordering stated as consequences:
 - **AI houses and the original's computer-controlled rules (departure).** The computer-controlled
   row of the table, the attack-target variant and the computer-controlled exemption from the
   opportunity-target exception (claim 11) describe the original only, except for units of the
-  neutral and special houses, which keep them. In our engine every player house, AI houses
-  included, follows the human-controlled rules. This is a departure with no switch, as the glossary
-  entry *AI house* states for every spec (with its *Player houses only* exception).
+  neutral and special houses and of test-only computer-controlled player houses, which keep them.
+  In our engine every player house, AI houses included, follows the human-controlled rules. This
+  is a departure with no switch, as the glossary entry *AI house* states for every spec (with its
+  *Player houses only* exception).
+- **No crush response for human-controlled owners.** In the original a crusher of a
+  human-controlled owner never makes the crush response (claim 11; S-0215 claim 39), so the
+  auto-crush flag and the player-auto-crush rule have no effect. This affects
+  play with data that sets either key. The switch `quirks.auto_crush_computer_only` (default on:
+  the original) keeps it for every player house of our engine. With it off, the flag or the rule
+  gives a player house's crusher the crush response, under claim 11's rule for that case.
 - **Rounding.** F2 follows the round-toward-zero mode of S-0205 (number domains), switch
   `quirks.chop_rounding`.
 
@@ -684,8 +730,8 @@ Ordering stated as consequences:
 | Map, `[Structures]` entries, owner and type fields | wall-building origin and initial owner (claim 14) | comma-separated records; owner resolution and dropped entries: S-0009 claim 27 | no entries means no walls from this list; surviving entries do not preserve their initial wall owner against claim 14 (a) |
 | Rules, building type sections, `Wall`, `ToOverlay` | whether a building places a wall, and its overlay type | boolean and overlay type name, respectively (S-0112 claim 7) | no and none, respectively |
 | Rules, the combat-damage section, `Crush` | crush range *c* (F2) | real, cells; exactly −1 counts as absent | keeps the value in force; before any rules layer gives it, 384 leptons |
-| Rules, the combat-damage section, `PlayerAutoCrush` | player-auto-crush rule | boolean | no |
-| Rules, unit type sections, `AutoCrush` | auto-crush flag | boolean | no |
+| Rules, the combat-damage section, `PlayerAutoCrush` | player-auto-crush rule (no effect while `quirks.auto_crush_computer_only` is on, claim 11) | boolean | no |
+| Rules, unit type sections, `AutoCrush` | auto-crush flag (no effect while `quirks.auto_crush_computer_only` is on, claim 11) | boolean | no |
 | Rules, `[IQ]`, `AutoCrush` | auto-crush threshold of the house skill level (the original's computer-controlled houses only, claim 11) | integer | 2 |
 | Rules, type sections, `OpportunityFire` | opportunity-fire flag, which lets a moving unit pick opportunity targets (S-0215; used by scenario K7 cases 11 and 12) | boolean | owned by S-0215 |
 | Rules, unit type sections, `Accelerates` | accelerating type (claim 9) | boolean | owned by S-0207 |
@@ -943,12 +989,21 @@ cell-centre crushing.
 
 **Scenario K7: automatic crushing (claim 11).**
 - *Setup:* a stock crusher type without the omni-crusher flag (unless a case says otherwise), and a
-  crushable infantry of the other player standing idle. Cases with a computer-owned crusher measure
-  the original's computer-controlled rules of claim 11; our engine does not apply them to AI houses,
-  and the human-owned cases (3, 7, 10, 12h, 13 to 16) measure the rules our engine applies to every
-  player house. Where a
+  crushable infantry of the other player. In cases 1 to 4, 8 and 13 to 17 the infantry is armed
+  and *attacks the crusher*, so that its shots hit the crusher, which only a hit makes eligible
+  for the crush response (S-0215 claim 39). A human-owned infantry is ordered to attack it by the
+  human player. For a computer-owned infantry these setups name no order route (S-0011 has no
+  attack-order action): it is placed within its weapon's range of the crusher and left to fire
+  on its own, and a run in which no shot of it hits the crusher decides nothing. Its weapon must
+  not destroy the crusher within the run (raise the crusher's health through the override
+  section if needed). In the
+  other cases the infantry stands idle. Cases with a computer-owned crusher measure the original's
+  computer-controlled rules of claim 11; our engine applies them to test-only computer-controlled
+  player houses, not to AI houses. The human-owned cases (3, 7, 10, 12h, 13 and 14) measure the
+  original's rules for human-controlled owners, which our engine applies to every player house
+  with `quirks.auto_crush_computer_only` on. Where a
   case says *unarmed*, the crusher's weapons are removed through the test map's override section, so
-  that it never gets a target to attack and only the first list of claim 11 can move it. Where it
+  that it never gets a target to attack and only the crush response can move it. Where it
   says *armed*, the stock weapons are kept and the victim's health is raised through the override
   section so that the crusher's weapon cannot kill it within the run. Every case starts from a fresh
   program start: the crush-range key and the player-auto-crush rule are game-wide keys, so a value
@@ -961,8 +1016,9 @@ cell-centre crushing.
     auto-crush flag (set through the override section if the stock type has it), the infantry
     computer-owned at half the crush range, the computer house at the hardest difficulty,
   - (4) as (1), with the computer house at the easiest difficulty in the lobby,
-  - (5) armed crusher, computer-owned, the computer house at the easiest difficulty (so the first
-    list cannot apply), the infantry at half the crush range and within weapon range,
+  - (5) armed crusher, computer-owned, the computer house at the easiest difficulty (so the crush
+    response is not allowed: the table's difficulty condition fails), the infantry at half the
+    crush range and within weapon range,
   - (6) as (5), the infantry at one and a half times the crush range, within weapon range,
   - (7) armed crusher, human-owned, its type given the auto-crush flag through the override section,
     the player-auto-crush rule off, ordered by the human player to attack the infantry at half the crush
@@ -986,44 +1042,70 @@ cell-centre crushing.
     vehicle is human-owned, the player-auto-crush rule is off and its type is without the auto-crush
     flag (set through the override section if the stock type has it), and the human player orders it
     to move to the end of the route. Run 12c: the vehicle is computer-owned, the computer house at the
-    easiest difficulty (so the first list cannot apply), and a map trigger gives it the same move
-    order,
+    easiest difficulty (so the crush response is not allowed: the table's difficulty condition
+    fails), and a map trigger gives it the same move order,
   - (13) as (3), with the crusher's type given the auto-crush flag through the override section,
   - (14) as (3), with the player-auto-crush rule on through the override section,
-  - (15) as (14), with the crush-range key set to −1 through the override section (F2), and the
+  - (15) as (1), with the crush-range key set to −1 through the override section (F2), and the
     infantry placed once at 0.9 and once at 1.1 times the range in force from the rules layers
     below the override,
-  - (16) as (14), with a named test rules file in which no layer gives the crush-range key (F2), and
+  - (16) as (1), with a named test rules file in which no layer gives the crush-range key (F2), and
     the infantry placed once at about 1.4 cells and once at about 1.6 cells from the crusher,
   - (17) unarmed crusher without the omni-crusher flag, owned in separate runs by the neutral
     and special houses, with their countries made non-passive through the test map's override
     section. Place hostile crushable infantry at half the crush range. Use named test rules
     that set the auto-crush threshold first to 2, then to 0. The houses' alliances must make the
-    infantry hostile from the crusher's side. Observe only runs that give the crusher an occasion
-    to pick a target of its own under S-0215; otherwise the run decides nothing.
+    infantry hostile from the crusher's side. The infantry attacks the crusher as in (1),
+  - (18) as (1), with the infantry unarmed (its weapons removed through the override section) and
+    idle, so that it never hits the crusher. Run 18g: the crusher is in *guard*. Run 18h: a map
+    trigger gives the crusher *hunt* (S-0011).
 - *Procedure:* wait 600 ticks, or give the order and wait 600 ticks.
-- *Observable:* whether the crusher drives to the victim's cell and crushes it, and whether it fires,
-  and in cases 11 and 12 also whether it leaves the route before reaching its end. In cases 5,
-  10 and 12c the recorder also reads whether the destination names the victim object or a cell.
-- *Runs:* 10 per case (per run in case 12; per house and threshold in case 17). In cases 5, 6 and 9 a run in which the crusher neither
+- *Observable:* whether the crusher drives to the victim and crushes it, and whether it fires,
+  and in cases 11 and 12 also whether it leaves the route before reaching its end. In cases 1, 5,
+  8, 10, 12c, 15, 16 and 18 the recorder also reads, on every tick, whether the destination names
+  the victim object or a cell, the crusher's target, and its current and queued behaviours. In
+  cases 1 to 4, 7, 8 and 13 to 18 it records every damage event on the crusher with its attacker
+  and the centre distance between the crusher and the infantry at that event.
+- *Runs:* 10 per case (per run in case 12; per house and threshold in case 17). In cases 1 to 4,
+  8 and 13 to 17 a run in which no shot of the infantry hits the crusher decides nothing. In
+  case 2, case 15 at 1.1 and case 16 at about 1.6, a run in which a hit lands while the infantry
+  is within the crush range decides nothing. In case 18 a run with any damage event on the
+  crusher decides nothing. In case 7 a run in which no shot of the infantry hits the crusher
+  decides the attack-target variant only, not the crush response after a hit. In
+  cases 5, 6 and 9 a run in which the crusher neither
   fires nor moves (it never took the infantry as a target) decides nothing. In cases 11 and 12 a run
   in which it does not fire at the victim while on the route (it never took the victim as an
   opportunity target) decides nothing. Run 12c is the positive control for case 11: case 11
   decides the move-destination condition only when run 12c leaves the route, which shows that the
-  choice of claim 11 is offered while moving; otherwise case 11 decides nothing.
-- *Expected:* it drives over the victim in cases 1, 5, 8, 10, 13 and 14, in case 15 at 0.9 and in
+  omni-crusher variant's step is taken while moving (S-0215 claim 37, part a); otherwise case 11
+  decides nothing.
+- *Expected:* it drives over the victim in cases 1, 5, 8, 10, in case 15 at 0.9 and in
   case 16 at about 1.4 cells (and not at 1.1 or at about 1.6), and in run 12c (it leaves the route
-  for the vehicle's cell although it has a move destination); it does not in cases 2 (beyond the
-  range), 3, 4, 6 (beyond the range), 7 (the variant is for computer-controlled houses only, and the
-  attack order is not an occasion on which it picks a target of its own), 9 (*d* is not less than *R*), 11 (it has a move destination) and
-  run 12h (a human-controlled vehicle with an opportunity target). In cases 6, 7, 9, 11 and run 12h it
-  fires at the victim instead, and in 11 and 12h it keeps to the route. In case 17 neither house's
-  crusher chooses to drive over the victim with threshold 2; each does with threshold 0.
+  for the vehicle's position although it has a move destination); it does not in cases 2 (beyond
+  the range), 3, 13 and 14 (no crush response for a human-controlled owner, whatever the rule and
+  the flag), 4 (the easiest difficulty gives difficulty index 2), 6 (beyond the range), 7 (the
+  variant is for computer-controlled houses only, and a human-controlled owner gets no crush
+  response even after the victim's return fire hits it; the case decides that part only after
+  such a hit), 9 (*d* is not less than *R*), 11 (it has a move destination), 18 in both runs (no
+  hit, so no occasion for the crush response) and run 12h (a human-controlled vehicle with an
+  opportunity target). In cases 6, 7, 9, 11 and run 12h it fires at the victim instead, and in
+  11 and 12h it keeps to the route. In case 17 neither house's crusher chooses to drive over the
+  victim with threshold 2; each does with threshold 0.
+  In cases 1 and 8, case 15 at 0.9 and case 16 at about 1.4 the destination names the infantry
+  object from the tick of the first hit that the infantry lands within the range, *move* is
+  queued then and becomes current, and
+  the crusher's target stays empty. In our engine with `quirks.auto_crush_computer_only` off,
+  cases 13 and 14 drive over the victim in the same way, case 7 does so once the victim's return
+  fire hits the crusher (its type has the auto-crush flag), and case 3 still does not.
   In cases 5, 10 and 12c the crushing approach sets the destination to the victim object itself,
   including when that victim is already within weapon range; the common approach's in-range
   rule does not prevent this destination.
-- *Falsified if:* in those variant cases the destination is a fixed cell rather than the victim
-  object, or no destination is set solely because the victim is within weapon range; or a
+- *Falsified if:* in those variant cases or in the crush response the destination is a fixed cell
+  rather than the victim object, or no destination is set solely because the victim is within
+  weapon range; or, in the original or in our engine with `quirks.auto_crush_computer_only` on,
+  the crusher drives over the victim in case 13 or 14; or it drives over it in case 1 before the
+  first hit, or takes the infantry as its target at that hit; or, in either run of case 18, it
+  drives over the infantry or its destination names it within the 600 ticks; or a
   different pattern, including case 15 behaving as if the range were zero or
   unbounded, or case 16 using any other range than 1.5 cells; in particular, the crusher leaving the
   route for the victim in case 11 or run 12h, or keeping to the route while firing at the vehicle in run 12c.
@@ -1195,26 +1277,31 @@ cell-centre crushing.
   dropped human-owned entry creates a wall or removes the independent overlay-list wall.
 - *Runs:* one per case. The recorder is sufficient; no harness changes are required.
 
-**Scenario K13: disguise blocks automatic choice, not a drive-through (claim 11).**
+**Scenario K13: disguise blocks the crush response, not a drive-through (claim 11).**
 - *Setup:* the measurement setup, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed index 2. On a purpose-made
-  flat map, place a human-owned unarmed crusher without the omni-crusher flag, its auto-crush flag
-  enabled through the named test map's override section, and an enemy crushable spy within half
-  the crush range. The spy has copied an infantry unit of the crusher's house. Keep the spy in
+  flat map, (a) place an unarmed crusher without the omni-crusher flag owned by the computer
+  player at the hardest difficulty, and an enemy crushable spy of the human player within half
+  the crush range. The spy's type is given a weapon through the named test map's override
+  section. The spy has copied an infantry unit of the crusher's house. Keep the spy in
   a one-cell-wide corridor with no scatter exit. Compare separate runs with and without the
   crusher's house having building disguise-detector coverage on the spy's cell (S-0516 claim 35).
-  The bystander computer player remains outside the test area.
-- *Procedure:* in each run let the crusher stand idle for 600 ticks on an occasion that offers
-  automatic choice under S-0215. In a separate no-coverage run, order it through the spy's cell
-  to a cell beyond it. Record the spy's disguise, owner, position, presence and health, detector
-  coverage, and the crusher's position each tick.
-- *Runs:* three per case. A drive-through run decides nothing unless the crusher reaches the
-  spy's cell centre while the spy remains within the crush radius and still appears disguised.
-- *Expected:* without coverage the crusher does not choose the spy for automatic crushing. With
-  coverage it chooses and crushes the spy. The ordered drive-through crushes the still-disguised
-  spy on arrival at the cell centre, as in claims 2–4.
-- *Falsified if:* the idle crusher automatically chooses the spy while the spy appears disguised,
-  the covered control fails to choose it despite an automatic-choice occasion, or the spy survives
-  a valid drive-through solely because it appears disguised.
+  (b) Separately, a human-owned crusher without the omni-crusher flag and the same spy without a
+  weapon, owned by the computer player. The rest of each map is kept away from the test area.
+- *Procedure:* (a) order the spy to attack the crusher and wait 600 ticks. (b) Order the crusher
+  through the spy's cell to a cell beyond it. Record the spy's disguise, owner, position,
+  presence and health, detector coverage, every damage event on the crusher with its attacker,
+  and the crusher's position and destination each tick.
+- *Runs:* three per case. A run of (a) decides nothing unless the spy's shot hits the crusher
+  while the spy still appears disguised (S-0516 owns whether firing ends a disguise); the
+  covered control needs only the hit. A drive-through run decides nothing unless the crusher
+  reaches the spy's cell centre while the spy remains within the crush radius and still appears
+  disguised.
+- *Expected:* in (a) without coverage the crusher does not drive at the spy. With coverage it
+  drives at it and crushes it. The ordered drive-through of (b) crushes the still-disguised spy
+  on arrival at the cell centre, as in claims 2–4.
+- *Falsified if:* in (a) the crusher drives at the spy after a hit that the spy made while it
+  appeared disguised, or the covered control does not drive at it after a hit, or in (b) the spy
+  survives a valid drive-through solely because it appears disguised.
 
 **Scenario K14: object crushing uncloaks, passage alone does not (claims 4, 5 and 8).**
 - *Setup:* the measurement setup, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed index 2, one human
@@ -1239,6 +1326,52 @@ cell-centre crushing.
   no other uncloak cause. If no takeover run meets the eligibility conditions, that case
   remains unconfirmed rather than establishing an uncloak.
 
+**Scenario K15: a berserk crusher answers the hit that made it berserk (claim 11).**
+- *Setup:* the measurement setup, game speed index 2, a purpose-made flat map. A stock crusher
+  vehicle type without the omni-crusher flag, of a type that can go berserk (S-0610), owned by the
+  computer player at the hardest difficulty, standing idle. A *gas firer*: a stock crushable
+  vehicle type with a weapon whose warhead makes targets go berserk and which has an area spread,
+  fired at an area through its deploying behaviour (S-0610 claim 8), owned by the human player,
+  and crushable by the crusher (claim 2). The crusher must be within the area spread in every
+  part; raise the weapon's spread through the override section if it does not reach twice the
+  crush range. Parts:
+  - (a) the gas firer at half the crush range from the crusher,
+  - (b) as (a), the gas firer at twice the crush range,
+  - (c) as (a), the gas firer owned by the crusher's own house. These setups name no route that
+    makes a computer-owned unit deploy (S-0011 has no deploy-order action), so part c is run
+    only once such a route is named,
+  - (d) as (a), the computer house at the easiest difficulty.
+- *Procedure:* the human player orders the gas firer to deploy, so that it fires its area weapon,
+  and the recorder records 300 ticks: for the crusher on every tick
+  its position, berserk state, target, destination and its current and queued behaviours; every
+  damage event on it with attacker, warhead, the distance between the centres and whether it
+  comes from the weapon's detonation or from a gas particle; and when the gas firer leaves play.
+  Only a hit of the weapon's detonation names the gas firer as its attacker (S-0302 claim 1); a
+  gas particle's damage names no attacker and never gives the response.
+- *Runs:* 5 per part. A run decides nothing if no hit of the gas firer's weapon detonation
+  reaches the crusher.
+- *Expected:* (a) at the first detonation hit the crusher goes berserk, its destination names
+  the gas firer object and *move* is queued in place of the *hunt* that the berserk entry queued
+  (S-0610 claim 4); *move* becomes current and the crusher drives over the gas firer, which
+  leaves play with no damage event. Its target is not the gas firer at that hit. (b) it goes
+  berserk but does not drive at the gas firer because of the hit. (c) it does not go berserk (S-0302
+  claim 10) and does not drive at its own house's unit. (d) it goes berserk, the hit queues
+  *hunt*, not *move*, and it does not drive at the gas firer because of the hit.
+- *Falsified if:* (a) the destination is a cell, or *hunt* stays queued, or the crusher takes the
+  gas firer as its target at the hit, or never drives at it; (b), (c) or (d) the crusher's
+  destination names the gas firer after a hit.
+
+## Changes for other specs
+
+- **For S-0516 (Q-2005).** Claim 11's crush response answers a hit; it does not select an enemy
+  through an automatic search, so an enemy that does not hit the crusher is never chosen by it.
+  Committed S-0516 claim 36 still names an "automatic crushing target choice" that excludes a unit
+  appearing disguised, and its scenario CS15 (c) expects an idle crusher with detector coverage to
+  choose and crush a disguiser that has not hit it. Under claim 11 that run gives no response.
+  S-0516 claim 36 should name the crush response to a hit (claim 11; S-0215 claim 39), and CS15 (c)
+  should have the disguiser hit the crusher, as K13 part a here does, with no response expected
+  while the disguise fools the crusher's house and a response with detector coverage.
+
 ## Open questions
 
 - Whether other locomotors that carry vehicles over the ground (for example hovering vehicles) crush
@@ -1256,10 +1389,11 @@ cell-centre crushing.
   example through effects that it ends, such as claim 4's release of controlled units) was not
   established, so the position of such draws relative to those of F3 on the same tick is not
   specified. K4 part c shows only F3's draws, on a map where no unit is crushed.
-- Whether the target choice of claim 11 is offered at all while a vehicle is moving (K7 cases 11
-  and 12) belongs to the behaviour specs; if it is not, case 11 and run 12h still come out as
-  expected, but run 12c does not, and the omni-crusher variant's reach while moving must be
-  restated.
+- What makes a fortress in the M-0011 games hold the drone that it drives over as its
+  target is not established. The crush response sets only the destination, and a berserk hit
+  sets off no retaliation (S-0302 claim 10). One candidate is a search that the fortress makes
+  once *move* is current (S-0215 claim 33), if that search can take a unit of a berserk-friendly
+  type. S-0309 and S-0610 own whether it can.
 - With the ship and walking-vehicle locomotors, a vehicle whose type has the crusher flag (the
   veterancy ability does not count here) also treats a cell whose overlay is of the
   overlay type with registration index 0 as *clear* when it would otherwise get the entry outcome
