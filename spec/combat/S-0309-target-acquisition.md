@@ -2,13 +2,13 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 38
+revision: 51
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-22
+approved-on: 2026-10-30
 measurements: []
-requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763]
+requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006]
 supersedes: []
 ---
 
@@ -19,7 +19,8 @@ supersedes: []
 How objects pick targets by themselves in *automatic searches* (range, area and map-wide): what a
 search looks for, where and in which order it looks, which objects are candidates, the *threat
 score* and the winner, plus the retaliation conditions, the rules for dropping or replacing a
-self-chosen target, and the owner rules that the neutral and special houses keep. S-0215 owns when
+self-chosen target, the drop of a held target that is destroyed or removed, starts to cloak or
+goes underground, and the owner rules that the neutral and special houses keep. S-0215 owns when
 most searches run (claim 1 also names contexts owned by other specs). Skirmish only: network games and
 campaign missions are out of scope.
 
@@ -1211,6 +1212,120 @@ index 1. This is a design rule, not an additional claim about the original.
     - Backing: `measurable` (scenario A16)
     - Confidence: high
 
+### A held target that leaves play
+
+27. **A held target is dropped when it is destroyed, goes off the map or is removed (Q-2006).** When
+    an object is destroyed, goes off the map or is removed (glossary, *in play … destroyed,
+    removed*), every infantry unit, vehicle, building and aircraft that holds it as its target drops
+    it at that moment, inside the action that destroys it, takes it off the map or removes it. A
+    destroyed object is dropped at the killing hit, also when it stays in play after that hit (a
+    sinking or crashing object, an infantry unit playing its death sequence). An object that starts
+    to sink without being destroyed is S-0504 claim 5's, which leaves open when a target held before
+    sinking is dropped. An object crushed under S-0210 claim 4 is dropped during the crush. These
+    drops have no exception for the holder's owner or for what covers the object's cell (claim 28's
+    drops have such exceptions). No holder keeps such an object until its own next turn, and none
+    fires at the object's last place, unless a revert gives it the object again (below).
+    Consequences:
+    - A holder whose turn in that tick comes after the drop (S-0203 claim 3), and which no revert
+      (below) and no search in its own turn (claim 1) gives a target, has no target in that turn.
+      Its firing step asks no firing check and fires nothing (S-0310 claim 9 for a vehicle). This
+      is a firing step that begins after the drop. So a target destroyed earlier in the tick by
+      another firer, as S-0306 scenario P27 sets up, gives that holder no shot in its later
+      firing step. S-0306 claim 3's aim without a target is left to shots that leave while the
+      firer holds no current target for another reason (Changes for other specs). Its
+      rearm countdown runs on unchanged, and its behaviour then does what it does with no target.
+      A building whose animation-delayed shot (S-0301 claim 14) is pending makes, in the turn that
+      ends the delay, no firing check and no shot if it then holds no target, and the shot is no
+      longer pending. A target that a revert or a search has given it by then is the one that
+      check uses.
+    - Within a vehicle's or infantry unit's turn, its ordinary movement comes before its separate
+      firing step (A18 part a for a crushing vehicle; `unmeasured` otherwise, as rated below). A
+      crusher that drives over the object it holds as its target therefore drops it in its movement
+      and, unless a revert (below) or a search in its own turn (claim 1) gives it a target, makes no
+      shot in that tick's firing step. Unless a revert gives the object back (Open questions), it
+      does not fire at the object or at its cell.
+    - No holder asks the firing check about a removed object, so no answer for such a target
+      is needed (S-0301 claim 9).
+
+    A holder whose targeting timer (S-0215 claim 33) has more than 10 integer ticks left when it
+    drops the object resets that timer with one ranged draw from the scenario random stream over
+    4 to 8 ticks, both included, as at the phasing-in end of claim 1. With at most 10 ticks left
+    no draw is taken. This reset belongs to the drops of this claim and of claim 28. It is not part
+    of a search (Observable ordering). When several holders drop the same object at once, the
+    order of their draws is not established (Open questions).
+    When one crush removes several objects held by different holders, how the draws for the
+    different objects interleave is not established (Open questions).
+
+    When the drop ends an override of the holder (S-0215 claim 10), the revert can make the same
+    object the holder's target again, so a destroyed object that stays in play, or an object off the
+    map, can still be held. The removal is expected to drop it again after the revert (medium), so
+    that no holder holds a removed object. DECIDED (autonomy, 2026-10-30), for Q-2006 question 3:
+    while a holder holds an object that a revert gave it again and that is off the map, or destroyed
+    but still in play, our engine treats that target as no target in the holder's firing step: no
+    firing check is asked about it and no shot is fired at it or at its place. At the start of the
+    holder's next turn it drops such a target, unless the object's removal has dropped it first.
+    This drop takes no timer draw and causes no revert (S-0215 claim 10: clearing the target by
+    another rule does not revert), and the holder's behaviour then does what it does with no target.
+    What the original does with such a target until its removal, and what its firing check answers
+    for it, is not established (Open questions). A crush gives both drops within the crush, and
+    together they take at most one timer draw: after a first draw at most 8 ticks are left. For an
+    aircraft holder, the adjustment of its behaviour that follows belongs to the aircraft specs.
+    - Backing: `measurable` (scenario A18: part a for the crusher, part b for a removal by another
+      unit, run b1 with the crusher's turn first and run b2 with the firer's turn first, part c for
+      the killing hit of an object that stays in play, part d for the timer draw). The drop's
+      moment, inside the action rather than at the start of the holder's own next turn, is
+      `measurable` only by run b1's read of *A*'s target at the end of *C*'s turn, where the
+      recorder allows that read: it tells a drop by the end of *C*'s turn from one at *A*'s next
+      turn. It does not separate a drop inside the action from one later in *C*'s turn. Parts a to
+      c otherwise give the same records and fire events under both moments. The
+      off-map target drop is `unmeasured` here: no part of A18 runs a holder whose target boards a
+      transport, and S-0215 scenario B7, case j, backs the revert and the restoration of the saved
+      target, not a drop before it. The movement-before-firing order is `unmeasured` for infantry
+      and for movement other than a crush: A18 part a separates it only for a crushing vehicle.
+      `unmeasured` for a building or aircraft holder (a building's pending delayed shot included),
+      and for the second drop at the removal of an object the revert named again: no part of A18
+      or of B7 has a building or aircraft holder, or removes the object that a revert named again.
+      Our engine's handling of a restored object that stays off the map or in play after its
+      killing hit is a design rule (DECIDED above), not a claim about the original.
+      `unmeasured` for a vehicle or building destroyed by a hit (removed at once, or a building
+      staying in play awaiting its removal, S-0312 claim 21) and for a sinking or crashing object
+      at its killing hit: parts a and b crush their objects, and the only object killed by a hit,
+      in part c, is an infantry unit in its death sequence.
+    - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
+      infantry and vehicle holders of an object that is crushed, as in A18 parts a and b, or of an
+      infantry unit killed in its death sequence, as in part c); medium (the drop's moment inside
+      the action, until run b1's read is made; the timer draw; the revert of S-0215 B7 case j; and
+      each `unmeasured` case above: a vehicle or building destroyed by a hit, a building awaiting
+      removal, a sinking or crashing object at its killing hit, the off-map drop, a building or
+      aircraft holder and a building's pending delayed shot, movement before firing outside a
+      crush, and the second drop after a revert); the handling of a restored object that stays off
+      the map or in play after its killing hit is a design rule
+
+28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
+    are S-0516 claim 14's: at the start of cloaking and again when the object becomes fully cloaked
+    (a building's completed fade does not repeat the drop), every holder of the object as its target
+    drops it, unless the holder's house senses the object's cell or the holder has the same owner as
+    the object. When an object of an underground type goes underground, every infantry unit,
+    vehicle, building and aircraft that holds it as its target drops it at that moment, inside that
+    action, with the same two exceptions. These are the exceptions that S-0215 claim 10 gives for
+    these events as revert causes. Each of these drops, at either cloak moment and on going
+    underground, resets the holder's targeting timer as in claim 27. A holder that keeps the target
+    under an exception takes no timer draw. When a drop ends an override, the revert of S-0215 claim
+    10 follows. Without an override the holder is left with no target, as in claim 27's
+    consequences.
+    - Backing: the cloak drops at both moments, with the building's single drop and the two
+      exceptions: S-0516 claim 14's own backing (`measurable`, S-0516 scenario CS9: parts a and b
+      for the house's sensing, part c for the same owner; the building's single drop rests on that
+      claim's backing as it stands).
+      The timer reset at each cloak moment and on going underground: `unmeasured`: CS9 records
+      whether the target is kept, not the holder's targeting timer, and no scenario here makes a
+      holder's target cloak or go underground. The underground drop and its exceptions:
+      `unmeasured`: no scenario here or in S-0215 has a holder whose target goes underground. The
+      revert: S-0215 claim 10's backing.
+    - Confidence: medium for the cloak drops at both moments (S-0516 claim 14's level); medium for
+      the timer reset at each cloak moment and on going underground; medium for the underground
+      drop and its exceptions; the revert at S-0215 claim 10's level
+
 ## Formulas
 
 Notation: trunc is truncation toward zero (S-0205, claims 2 and 7). ρ₃(*P*, *Q*) and ρ₂(*P*, *Q*)
@@ -1436,7 +1551,11 @@ between the wall target *W*, the best candidate and no target.
   (S-0518 claim 15, scenario A17 here). A search takes no other draw, except the
   disguise draws of a searcher of the neutral or special house (claims 12 and 25). In searches
   covered by claim 4 these follow the timer draw; the charging search has no such draw to precede them. The teleport case can additionally take claim 1's conditional draw before the search's
-  timer draw (scenario A1, part f). Each part of the search itself is `measurable`:
+  timer draw (scenario A1, part f). The timer reset at a dropped target (claims 27 and 28) is not
+  a search draw: it comes inside the action that destroys, removes, cloaks or buries the object,
+  at both cloak moments of claim 28. Its place against the destruction's own draws (S-0312
+  claim 1) is open (Open questions).
+  Each part of the search itself is `measurable`:
   - that a search takes no fixed further draw besides the timer draw: scenario A15, part h, case
     i, where a search tick on which nothing else draws advances the stream by exactly the raw
     values of the timer draw, and the targeting-timer restart shows which value it took,
@@ -2811,8 +2930,83 @@ scenario random state each tick, and identify attack processings using the proce
   search, the no-auto-fire control returns a candidate, a confirmed same-object result retains
   the mark, or an isolated processing tick contains the additional targeting-delay draw.
 
+**A18: a held target that is destroyed or removed (claim 27; Q-2006).** A tiny flat skirmish map,
+one human house and one computer house, game speed 6, no engine add-on and no mods (the named test
+files of a scenario excepted). Record each tick, at the end of each object's turn where the recorder
+allows it and otherwise at the end of the tick: the target of each test object, its fire events
+(tick, weapon and what was aimed at), its rearm countdown, its weapon's facing (its turret's, for
+a turreted type), its targeting timer and the scenario
+random state, and the tick on which the victim is crushed (the crush sound) or takes the killing
+hit. Each part runs 5 times from a fresh game.
+- *Part a (crusher, S-0210 scenario K7 cases 5 and 10):* set up K7 case 5 (computer-owned armed
+  crusher in *guard*, which drives over the victim by K7's crushing approach, the victim object
+  itself being its destination, and an infantry victim with raised health) and case 10 (human-owned
+  crusher ordered to attack a crushable enemy vehicle with raised health). Record from 30 ticks
+  before the crush to 30 ticks after it. In both cases give the crusher a weapon whose rearm delay
+  is 1 tick in the test map, as part b does for *A* and *A*′. Also give the crusher's type the
+  mobile-fire flag and that weapon the fire-while-moving flag in the test map, so that driving onto
+  the victim does not refuse its shots (S-0310 claim 7). Then a crusher whose firing step came
+  before its movement could fire in the crush tick. A run in which the crusher does not hold the
+  victim as its target in the tick before the crush, does not fire at the victim in that tick (so
+  its aim or another refusal could hide a shot), whose recorded facing is not on the victim at the
+  start of the crush tick, or whose recorded rearm countdown would not let it fire in the crush
+  tick, decides nothing. *Expected:* at the end of the crush tick the crusher
+  holds no target, it has no fire event in the crush tick or later aimed at the victim or its cell,
+  and its rearm countdown goes on from its value before the crush without a restart in that tick.
+  *Falsified if:* the crusher still holds the victim after the crush tick, or fires in the crush
+  tick or later at the victim or its cell.
+- *Part b (removal by another unit, both turn orders):* a human-owned infantry firer *A* ordered
+  to attack a stationary enemy vehicle *V* whose health is raised so that neither the firer nor
+  *C* can kill it, and a human-owned armed crusher *C* set up as in S-0210 scenario K7 case 10
+  (crusher and omni-crusher flags, ordered to attack *V*), so that *V* is crushable and does not
+  move away. A run in which *C* does not crush *V* decides nothing. In run b1 *C*, a vehicle,
+  takes its turn before the infantry *A* in every tick, because map-placed vehicles enter play
+  before map-placed infantry (S-0203 claim 3). In b1 place *V* after *C* among the map's vehicle
+  entries, so that crushing *V* in *C*'s turn removes an object standing after *C* and costs no
+  object its turn (S-0203 claim 10). A b1 run in which *A* takes no turn in the crush tick decides
+  nothing. Where the recorder allows a read between two objects' turns, b1 also records *A*'s
+  target at the end of *C*'s turn in the crush tick, before *A*'s own turn. Run b2 replaces *A*
+  by a human-owned armed vehicle
+  *A*′ without the crusher flag, standing within range of *V* and ordered to attack it, and places
+  *A*′ before *C* among the map's vehicle entries, so that *A*′ takes its turn first (same claim,
+  entry order within one kind). A b2 run in which *A*′ moves decides nothing. Give *A* and *A*′ a
+  weapon whose rearm delay is 1 tick in the test map, so that rearm never decides whether they
+  fire. *Expected:* b1: *A* has no fire event in the crush tick or later, and holds no target at
+  the end of its turn in the crush tick; where read, *A* already holds no target at the end of
+  *C*'s turn in that tick. b2: *A*′ may fire in the crush tick, before the crush,
+  and has no fire event after it. In both runs the firer holds no target after the crush.
+  *Falsified if:* the firer fires after the crush, in b1 in the crush tick, or still holds *V*
+  after the crush tick. The drop's moment inside the action is falsified if, where read, *A* still
+  holds *V* at the end of *C*'s turn in the crush tick.
+- *Part c (killing hit of an object that stays in play):* *A* as in part b, ordered to attack an
+  enemy infantry *V* of a type whose death sequence leaves it in play for at least one tick after
+  the killing hit, and a human-owned armed
+  vehicle *K* ordered to attack *V*. Give *A* a weapon with a small nonzero damage in the test map,
+  and set *V*'s health above the total damage of *A*'s shots before *K*'s first hit and at most the
+  damage of one shot of *K*, so that only *K*'s first hit kills it. A run in which *A* has no fire
+  event at *V* before the killing hit decides nothing. *Expected:* after the killing hit *A* holds
+  no target and fires no shot at *V* or its cell, although *V* is still in play during its death
+  sequence. *Falsified if:* *A* holds *V* or fires at it or its cell on any tick after the killing
+  hit.
+- *Part d (timer draw):* part b, run b1, but *A* has no order: it starts in *guard* with *V* in
+  range and picks it by its own search (claims 1 to 4), with the normal targeting delay given a test
+  value of 100 ticks. Start *C* at different distances so that the crush ticks fall at different
+  points of *A*'s targeting timer. A run in which *C*'s targeting timer has more than 10 ticks left
+  immediately before the crush is void, so that *A* is the only holder whose drop can take a draw.
+  Classify crush ticks by the timer's remaining ticks immediately before the crush, repeating until
+  at least five have more than 10 left and five have at most 10 left. This overrides the general
+  count of 5 runs. Predict the scenario-stream draws of each crush tick from the other specs and
+  compare. *Expected:* with more than 10 ticks left, one extra draw over 4 to 8, and the timer then
+  holds the drawn value. With at most 10 left, no extra draw. *Falsified if:* the extra draw is
+  missing or present against these conditions, or in the first group the timer after the crush holds
+  a value outside 4 to 8.
+
 ## Open questions
 
+- When one crush removes several objects held by different holders (claim 27), the order of the
+  timer draws for the different objects: per object in the order of the crush, or per holder.
+  Low confidence either way, `unmeasured`: scenario A18 part d voids every run with a second
+  holder's draw.
 - The order in which a cell holds its objects (claim 10): which object the search offers first
   in a shared cell. Scenario A3 shows it; the occupancy specs (S-0209) may already fix it.
 - The airborne order of claim 9 is S-0303's F7 order. What the registration order inside one sector
@@ -2871,6 +3065,24 @@ scenario random state each tick, and identify attack processings using the proce
   the target recorder, with the behaviour current at the time, to show whether the drops follow
   a fixed cadence. Until this is established, scenario A6 part m and S-0306 scenario P16 part i
   do not judge the tick of the drop.
+- Q-2006 question 3, the original's side of one case. A held object that a revert restores after
+  it is destroyed or goes off the map (claim 27): what the original's holder does with it while
+  it stays in play as a dying object or stays off the map, and what the firing check answers for
+  it, is not established. Our engine's rule for the case is the design rule of claim 27.
+- The place of claim 27's timer draws at a killing hit against the destruction's own draws in
+  S-0312's ordering table (claim 1 there). They are believed to come before the debris draws (S-0312
+  precedence 1) and every later row, since the drop comes with the killing hit's damage, before the
+  death effects begin; low, `unmeasured`: scenario A18 part d crushes its object, so no killing hit
+  with death-effect draws is in its runs. Their place against the rows before precedence 1
+  (destruction raises and a slave master's slaves) is not established.
+- A route to a shot that leaves while its firer holds no current target (S-0306 claim 3's aim
+  without a target). Claim 27 gives no such route for a target that leaves play: a firing step
+  that begins with no target fires nothing. Whether the original reaches that aim by some other
+  route, for example a shot whose target is supplied apart from the firer's current target, and
+  so whether S-0306's quirk can be reached at all, is not established here.
+- The order of the timer draws of claim 27 when several holders drop the same object at once.
+  No order is committed: scenario A18 part d voids the runs in which a second holder's timer has
+  more than 10 ticks left, so no scenario tests it.
 - Q-1761 question 3 (the attack action offered when a person hovers an aircraft, flying or
   landed, with an anti-air-only building selected, with and without force-fire) is order
   legality: S-0214 row B7, which this spec does not change. Row B7 is rated low in S-0214, so
@@ -2891,6 +3103,47 @@ land rows, which depend on the firer's type, and ranks them at rank 4 of S-0301 
 row's *rearming* answer is limited to the firer's own gripped unit, as S-0301 claim 9 and S-0607
 claim 11 give, so scenario A6 part m here (a held target that lifts off is dropped) agrees with
 it.
+
+S-0301 claim 14: the turn that ends the delay could say that a building which then holds no
+target makes no firing check and no shot, and the shot is no longer pending. Claim 27 here makes
+the case reachable: a held target destroyed or removed while the shot is pending.
+
+S-0301 claim 9: no change needed. A sentence after the rank table could say that the firing
+check is never asked about a removed target, because claim 27 here drops it at the removal.
+
+S-0504 claim 10: its sentence that the start of the killing-hit sinking state "does not clear
+every other object's already-held target" should say that the drop of a held target at the
+killing hit is claim 27's here: the killing hit drops it, and the start of sinking adds no
+further drop.
+
+S-0504 claim 5: for a vessel sinking from a killing hit, its case "while it is still asked about
+as a target" meets only a holder that a revert gave the vessel again (claim 27 here), since every
+other holder dropped it at the killing hit. Its sentence that it "does not itself establish when a
+target already held before sinking is cleared" can point to claim 27 here for the killing-hit
+case.
+
+S-0215 claim 10: its pointer for what the actor does with a target restored by a revert can
+name claim 27 here. Claim 27 gives that the removal of such an object drops it again, and our
+engine's rule for such a target while it stays off the map or in play after its killing hit.
+Claim 28 here points the cloak drops to S-0516 claim 14 and gives the drop on going underground
+for any holder, with the same exceptions as that claim's revert causes.
+
+S-0215 F6 and table T2: the targeting timer's draws there could add the drop's reset of claims
+27 and 28 here: when a holder drops its target with more than 10 ticks left on that timer, one
+ranged draw over 4 to 8 ticks inside the action that drops it, not at a search.
+
+S-0312 claim 1: its ordering table could gain a row for the holders' timer draws of claim 27
+here at a killing hit. Their place is open here (Open questions); the leaning is ahead of the
+debris draws of precedence 1.
+
+S-0306 claim 3 and scenario P27: under claim 27 here, a target destroyed earlier in the tick by
+another firer is dropped before the firer's firing step, which then fires nothing; a firer whose
+turn comes first fires at the live target. P27's setup therefore gives no shot with an empty
+current target, and needs another way to reach one, or a restatement.
+
+S-0210 claim 4 and scenario K7: no change needed. Scenario A18 part a here reuses K7 cases 5 and
+10 and records target, fire events and rearm countdown per tick around the crush. Claim 4 could
+point to claim 27 here for what a crusher does with a crushed target.
 
 S-0215 claim 33 already includes the charging break-off exception and its backing through
 scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from timer resets.
