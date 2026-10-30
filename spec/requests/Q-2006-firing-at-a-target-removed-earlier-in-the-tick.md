@@ -1,9 +1,9 @@
 ---
 id: Q-2006
 title: What a ground unit does with a target that has just left play, and what the firing check answers for it
-status: open
+status: answered
 related: [S-0301, S-0309, S-0310, S-0210, S-0215]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
