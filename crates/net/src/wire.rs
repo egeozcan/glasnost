@@ -58,9 +58,10 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 /// Version 9 (M8 step C7): the room's setup and `Edit::Game` carry the
-/// *Pathing and other fixes* choice.
+/// *Pathing and other fixes* choice. Version 10 (M8 A3 intake 50): the
+/// route-mode order kinds.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 9;
+pub const WIRE_VERSION: u8 = 10;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.

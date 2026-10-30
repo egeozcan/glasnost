@@ -143,12 +143,49 @@ pub enum Order {
         /// The new game-speed index, 0 to 6.
         speed: u8,
     },
+    /// A route-point add (S-0213 claim 16a): the behaviour order a
+    /// route-mode click gave the actor, marked as a route point. It adds a
+    /// point at the order's place to the end of the actor's route.
+    RoutePoint {
+        /// The actor.
+        actor: ObjectId,
+        /// The behaviour.
+        behaviour: Behaviour,
+        /// An attack-move order.
+        attack_move: bool,
+        /// Target.
+        target: Option<Target>,
+        /// Destination.
+        dest: Option<Target>,
+    },
+    /// A point join (S-0213 claim 16a): the actor joins an existing route
+    /// point of the house, or closes a loop at it.
+    RouteJoin {
+        /// The actor.
+        actor: ObjectId,
+        /// The route point, by number.
+        point: u32,
+    },
+    /// Commit every route of the issuing house (S-0213 claim 16a). A
+    /// house order with no actor.
+    RouteCommit,
+    /// Delete a route point of the issuing house (S-0213 claim 16a).
+    RouteDelete {
+        /// The route point, by number.
+        point: u32,
+    },
+    /// An order a route issued for its point (S-0213 claim 16c, S-0215
+    /// claim 13): applied as the order it holds, without ending the route
+    /// (S-0213 claim 17). Issued by the simulation only, never by input.
+    Routed(Box<Order>),
 }
 
 impl Order {
     /// The actor the order names; house orders have none.
     pub fn actor(&self) -> Option<ObjectId> {
         match *self {
+            Order::Routed(ref o) => o.actor(),
+            Order::RoutePoint { actor, .. } | Order::RouteJoin { actor, .. } => Some(actor),
             Order::Behaviour { actor, .. }
             | Order::Stop { actor }
             | Order::Scatter { actor }
@@ -170,6 +207,8 @@ impl Order {
             | Order::Surrender
             | Order::FireSuperweapon { .. }
             | Order::GameSpeed { .. }
+            | Order::RouteCommit
+            | Order::RouteDelete { .. }
             | Order::Alliance { .. } => None,
         }
     }
@@ -249,6 +288,8 @@ fn refused_while_disabled(w: &World, order: &Order) -> bool {
 /// in house order; per house the orders that are not behaviour orders in
 /// issue order, then the behaviour orders in issue order.
 pub fn apply_pending(w: &mut World) {
+    // spec: S-0213 claim 16f (objects destroyed and removed from play since the last order boundary leave their routes)
+    crate::routes::prune(w);
     for hi in 0..w.houses.len() {
         let orders = std::mem::take(&mut w.houses[hi].pending);
         // spec: S-0213 claim 3 (non-behaviour orders first, in issue order)
@@ -256,26 +297,38 @@ pub fn apply_pending(w: &mut World) {
         for a in orders.iter().filter_map(Order::actor) {
             crate::path::order_given(w, a);
         }
-        for o in orders
-            .iter()
-            .filter(|o| !matches!(o, Order::Behaviour { .. }))
-        {
-            apply_other(w, HouseId(hi as u8), o);
+        for o in orders.iter().filter(|o| !is_behaviour(o)) {
+            // spec: S-0213 claim 17 (every order naming an actor ends its route when it is applied, route orders excepted)
+            crate::routes::order_ends(w, o);
+            apply_other(w, HouseId(hi as u8), unrouted(o));
             // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike when the change applies, in the tick of the order)
             crate::strike::sweep(w);
         }
         // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
-        let behaviour: Vec<Order> = orders
-            .into_iter()
-            .filter(|o| matches!(o, Order::Behaviour { .. }))
-            .collect();
+        let marked: Vec<Order> = orders.into_iter().filter(is_behaviour).collect();
+        let behaviour: Vec<Order> = marked.iter().map(|o| unrouted(o).clone()).collect();
         let dests = group_destinations(w, &behaviour);
-        for (o, d) in behaviour.iter().zip(dests) {
+        for ((o, d), m) in behaviour.iter().zip(dests).zip(&marked) {
+            // spec: S-0213 claim 17 (a behaviour order ends the actor's route when applied, unless a route issued it)
+            crate::routes::order_ends(w, m);
             apply_behaviour(w, o, d);
             // spec: S-0519 claim 19 (revision 3: cancellation when the change applies)
             crate::strike::sweep(w);
         }
     }
+}
+
+/// The order a route issued, or the order itself.
+fn unrouted(o: &Order) -> &Order {
+    match o {
+        Order::Routed(inner) => unrouted(inner),
+        o => o,
+    }
+}
+
+/// A behaviour order (S-0213 claim 3), a route-issued one included.
+fn is_behaviour(o: &Order) -> bool {
+    matches!(unrouted(o), Order::Behaviour { .. })
 }
 
 /// Live and on the map (S-0213 Terms).
@@ -503,7 +556,26 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 w.game_speed = speed;
             }
         }
-        Order::Behaviour { .. } => {}
+        Order::RoutePoint {
+            actor,
+            behaviour,
+            attack_move,
+            target,
+            dest,
+        } => {
+            let step = crate::routes::Step {
+                point: 0,
+                behaviour,
+                attack_move,
+                target,
+                dest,
+            };
+            crate::routes::apply_point(w, house, actor, step);
+        }
+        Order::RouteJoin { actor, point } => crate::routes::apply_join(w, house, actor, point),
+        Order::RouteCommit => crate::routes::apply_commit(w, house),
+        Order::RouteDelete { point } => crate::routes::apply_delete(w, house, point),
+        Order::Behaviour { .. } | Order::Routed(_) => {}
     }
 }
 

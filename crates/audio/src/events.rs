@@ -1077,6 +1077,7 @@ impl Audio {
             | Effect::Bunkered { .. }
             | Effect::Converted { .. }
             | Effect::Seized { .. }
+            | Effect::Route { .. }
             | Effect::Deactivated { .. }
             | Effect::Dropped { .. } => {}
             // spec: S-0518 claim 6 (the support beam is drawing only: no sound)

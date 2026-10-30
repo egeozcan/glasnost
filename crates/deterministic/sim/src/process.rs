@@ -238,8 +238,9 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         crate::lift::lifter_rest(w, id);
         // spec: S-0215 claim 13 row 1 (a temporarily replaced locomotor is given back; S-0417 claim 5)
         let restored = lifted || crate::econ::release::restore_locomotor(w, id);
-        // The approach row and the route row are seams: our engine keeps no approach
-        // destinations list and no routes.
+        // The approach row is a seam: our engine keeps no approach destinations list.
+        // spec: S-0215 claim 13 (the route row: it follows a route, the approach row does not apply and it is not in a patrol already begun: it issues the action of the next route point as an order, taking effect at the order boundary); our engine has no patrol progress, so no patrol has begun
+        crate::routes::fall_back(w, id);
         // spec: S-0215 claim 13 (an infantry unit that is not a harvesting slave, guard spot on another cell, not given its locomotor back: it becomes the destination)
         let Some(o2) = w.obj(id).cloned() else { return };
         if o2.kind == Kind::Infantry

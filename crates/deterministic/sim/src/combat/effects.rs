@@ -559,6 +559,14 @@ pub enum Effect {
         /// The creation point.
         pos: Pos,
     },
+    /// A route order of a house was applied (S-0213 claim 16b): the
+    /// messages and the route-point sound for the house's own player.
+    Route {
+        /// The house whose order it was.
+        house: HouseId,
+        /// What it did.
+        note: crate::routes::RouteNote,
+    },
 }
 
 /// The two heights an object's render layer is evaluated from (S-0102

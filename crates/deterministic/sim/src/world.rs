@@ -456,6 +456,8 @@ pub struct World {
     /// partner.
     #[serde(default)]
     pub drain: crate::drain::DrainWorld,
+    /// Route mode's points and routes (S-0213 claims 16 to 17).
+    pub routes: crate::routes::RouteWorld,
     /// The psychic domination (S-0612).
     #[serde(default)]
     pub domination: crate::domination::DominationWorld,

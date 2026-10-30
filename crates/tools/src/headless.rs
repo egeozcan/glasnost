@@ -198,6 +198,7 @@ async fn smoke_async(
                         | Effect::Bunkered { .. }
                         | Effect::Converted { .. }
                         | Effect::Seized { .. }
+                        | Effect::Route { .. }
                         | Effect::Deactivated { .. }
                         | Effect::Dropped { .. }
                         | Effect::Disc { .. }

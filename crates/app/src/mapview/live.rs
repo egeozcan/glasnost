@@ -2469,6 +2469,7 @@ impl Live {
                 | Effect::Bunkered { .. }
                 | Effect::Converted { .. }
                 | Effect::Seized { .. }
+                | Effect::Route { .. }
                 | Effect::Deactivated { .. }
                 | Effect::Dropped { .. }
                 | Effect::Disc { .. }

@@ -905,8 +905,9 @@ fn claim13_a_short_parachute_ends_before_landing() {
 // --- Claim 17 ----------------------------------------------------------------
 
 #[test]
-fn claim17_released_infantry_rests_with_guard_queued_and_takes_no_move_while_falling() {
-    // spec: S-0522 claim 17 (Q-0753): at release the ordinary placement fall-back to rest leaves the current behaviour none with guard or area guard queued, no target and no destination; a falling unit is not movable, so a move click is refused; landing issues, replaces and clears no order, target or destination
+fn claim17_released_infantry_rests_with_guard_queued_and_a_move_click_while_falling_is_kept_for_landing()
+ {
+    // spec: S-0522 claim 17 (Q-0753: at release the ordinary placement fall-back to rest leaves the current behaviour none with guard or area guard queued, no target and no destination; r12, Q-2000: falling does not limit the player's orders, so a move click during the fall gives a move order at once, which sets the destination; the unit takes no step while falling and carries the move out after landing) and S-0214 Terms (r62: falling is part of neither movable nor able to fire); scenario P10 (c)
     let mut w = game(&rules());
     let p = launch(&mut w);
     let (x, y) = west_of(at(1, 1));
@@ -922,18 +923,30 @@ fn claim17_released_infantry_rests_with_guard_queued_and_takes_no_move_while_fal
     );
     assert!(o.target.is_none() && o.dest.is_none());
     assert!(
-        !glasnost_sim::targeting::movable(&w, ALPHA, first),
-        "falling: not movable"
+        glasnost_sim::targeting::movable(&w, ALPHA, first),
+        "falling: still movable"
     );
-    until(&mut w, 2000, |w| !falling(w, first));
-    let o = w.obj(first).unwrap();
-    assert!(o.dest.is_none(), "no move emerges after landing");
-    assert!(
-        !matches!(o.beh.current, Some(Behaviour::Move | Behaviour::QueuedMove)),
-        "{:?}",
-        o.beh.current
+    let goal = at(4, 1);
+    let click = glasnost_sim::targeting::click(
+        &w,
+        ALPHA,
+        &[first],
+        glasnost_sim::targeting::ClickOn::Cell(goal),
+        glasnost_sim::targeting::Modifiers::default(),
     );
-    assert!(glasnost_sim::targeting::movable(&w, ALPHA, first));
+    assert_eq!(click.orders.len(), 1, "a move order at once");
+    issue_all(&mut w, click.orders);
+    step(&mut w);
+    assert!(falling(&w, first), "still in the air");
+    assert_eq!(w.obj(first).unwrap().dest, Some(Target::Cell(goal)));
+    let (fx, fy) = (w.obj(first).unwrap().pos.x, w.obj(first).unwrap().pos.y);
+    while falling(&w, first) {
+        let o = w.obj(first).unwrap();
+        assert_eq!((o.pos.x, o.pos.y), (fx, fy), "no step while falling");
+        assert_eq!(o.dest, Some(Target::Cell(goal)), "the move is kept");
+        step(&mut w);
+    }
+    until(&mut w, 2000, |w| w.obj(first).unwrap().pos.cell() == goal);
 }
 
 #[test]
@@ -1120,42 +1133,170 @@ fn deploy_press(w: &World, id: ObjectId) -> Vec<glasnost_sim::orders::Order> {
     )
 }
 
-#[test]
-fn claim17_a_deploy_press_while_falling_gives_no_order_and_nothing_follows_at_landing() {
-    // spec: S-0522 claim 17 (a falling paratrooper is not movable; landing issues, replaces and clears no order) with S-0213 the deploy rule (each selected object needs to be movable or able to fire) and S-0214 Terms (movable and able to fire: not falling)
-    let mut w = game(&deployer_rules());
-    let p = launch(&mut w);
+/// Drops the first paratrooper of the deployer rules and returns it,
+/// falling.
+fn dropped_deployer(w: &mut World) -> ObjectId {
+    let p = launch(w);
     let (x, y) = west_of(at(1, 1));
-    hold(&mut w, p, x, y, 0, 3);
-    let first = transport::passengers(&w, p)[0];
-    assert!(paradrop::attempt(&mut w, p));
+    hold(w, p, x, y, 0, 3);
+    let first = transport::passengers(w, p)[0];
+    assert!(paradrop::attempt(w, p));
+    assert!(falling(w, first));
+    first
+}
+
+fn deployed(w: &World, id: ObjectId) -> bool {
+    matches!(
+        seq(w, id),
+        Some(Seq::Deploy | Seq::Deployed | Seq::DeployedIdle | Seq::DeployedFire)
+    )
+}
+
+fn issue_all(w: &mut World, orders: Vec<glasnost_sim::orders::Order>) {
+    for o in orders {
+        assert!(glasnost_sim::orders::issue(w, ALPHA, o));
+    }
+}
+
+#[test]
+fn claim17_a_deploy_press_while_falling_deploys_after_landing() {
+    // spec: S-0522 claim 17 (r12, Q-2000: a deploy press during the fall is taken as an order at once; its behaviour becomes the queued behaviour in place of the queued rest; the unit cannot start it while falling; after landing an in-place deployer deploys) with S-0213 table T2's deploy rule and claim 10 (unload); scenario P10 (a)
+    let mut w = game(&deployer_rules());
+    let first = dropped_deployer(&mut w);
+    let orders = deploy_press(&w, first);
+    assert_eq!(
+        orders,
+        vec![glasnost_sim::orders::Order::Deploy { actor: first }],
+        "an order at once"
+    );
+    issue_all(&mut w, orders);
+    step(&mut w);
     assert!(falling(&w, first));
-    // A press in every tick of the fall gives no order, so none is kept for
-    // later.
+    assert_eq!(
+        w.obj(first).unwrap().beh.queued,
+        Some(Behaviour::Unload),
+        "queued the tick after the press"
+    );
     while falling(&w, first) {
-        assert!(deploy_press(&w, first).is_empty(), "no order while falling");
+        assert!(!deployed(&w, first), "no deploy in the air");
         step(&mut w);
     }
-    // Landed: no deploy follows by itself.
+    until(&mut w, 200, |w| deployed(w, first));
+}
+
+#[test]
+fn claim17_a_deploy_press_after_landing_deploys() {
+    // spec: S-0522 claim 17 (landing issues no order: with no press nothing follows by itself) and scenario P10 (b): the same press after landing gives the ordinary deploy
+    let mut w = game(&deployer_rules());
+    let first = dropped_deployer(&mut w);
+    while falling(&w, first) {
+        step(&mut w);
+    }
     run(&mut w, 60);
-    assert!(
-        !matches!(seq(&w, first), Some(Seq::Deploy | Seq::Deployed)),
-        "{:?}",
-        seq(&w, first)
-    );
-    // A press after landing deploys it.
+    assert!(!deployed(&w, first), "{:?}", seq(&w, first));
     let orders = deploy_press(&w, first);
     assert_eq!(
         orders,
         vec![glasnost_sim::orders::Order::Deploy { actor: first }]
     );
-    for o in orders {
-        glasnost_sim::orders::issue(&mut w, ALPHA, o);
+    issue_all(&mut w, orders);
+    until(&mut w, 200, |w| deployed(w, first));
+}
+
+#[test]
+fn claim17_stop_or_a_second_press_during_the_fall_keeps_the_deploy() {
+    // spec: S-0522 claim 17 (a stop order during the fall clears destination and target but keeps the ordered behaviour, S-0213 claim 8, so the deploy still happens after landing; a second press gives the same order again and cancels nothing); scenario P10 (f)
+    for second in [false, true] {
+        let mut w = game(&deployer_rules());
+        let first = dropped_deployer(&mut w);
+        let orders = deploy_press(&w, first);
+        issue_all(&mut w, orders);
+        step(&mut w);
+        assert!(falling(&w, first));
+        let o = if second {
+            deploy_press(&w, first)
+        } else {
+            vec![glasnost_sim::orders::Order::Stop { actor: first }]
+        };
+        issue_all(&mut w, o);
+        step(&mut w);
+        assert!(falling(&w, first));
+        assert_eq!(w.obj(first).unwrap().beh.queued, Some(Behaviour::Unload));
+        until(&mut w, 2000, |w| !falling(w, first));
+        until(&mut w, 200, |w| deployed(w, first));
     }
-    until(&mut w, 200, |w| {
+}
+
+#[test]
+fn claim17_a_mixed_selection_deploys_the_landed_at_once_and_the_falling_after_landing() {
+    // spec: S-0522 claim 17 (a falling deployer counts as not deployed for the mixed-selection exception; an ordered landed one deploys at its next start, an ordered falling one after landing); scenario P10 (e)
+    let mut w = game(&deployer_rules());
+    let first = dropped_deployer(&mut w);
+    let landed = spawn(&mut w, "DROPDEP", ALPHA, -3, -3);
+    run(&mut w, 1);
+    assert!(falling(&w, first));
+    let orders = glasnost_sim::targeting::key_command(
+        &w,
+        ALPHA,
+        &[landed, first],
+        glasnost_sim::targeting::KeyCommand::Deploy,
+    );
+    assert_eq!(
+        orders,
+        vec![
+            glasnost_sim::orders::Order::Deploy { actor: landed },
+            glasnost_sim::orders::Order::Deploy { actor: first },
+        ]
+    );
+    issue_all(&mut w, orders);
+    until(&mut w, 200, |w| deployed(w, landed));
+    assert!(
+        falling(&w, first),
+        "the landed one deploys while the other still falls"
+    );
+    assert!(!deployed(&w, first));
+    until(&mut w, 2000, |w| !falling(w, first));
+    until(&mut w, 200, |w| deployed(w, first));
+}
+
+#[test]
+fn claim17_an_attack_click_while_falling_attacks_after_landing() {
+    // spec: S-0522 claim 17 (an attack click during the fall is taken as an order at once and its target recorded; no shot before landing, S-0203 claim 4 and S-0511 claim 10; the attack after landing); scenario P10 (d), with a target that cannot move (STUCK)
+    let mut w = game(&rules());
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let first = transport::passengers(&w, p)[0];
+    assert!(paradrop::attempt(&mut w, p));
+    let enemy = spawn(&mut w, "STUCK", BETA, 2, 1);
+    let full = w.obj(enemy).unwrap().health;
+    let click = glasnost_sim::targeting::click(
+        &w,
+        ALPHA,
+        &[first],
+        glasnost_sim::targeting::ClickOn::Object(enemy),
+        glasnost_sim::targeting::Modifiers::default(),
+    );
+    assert!(
         matches!(
-            seq(w, first),
-            Some(Seq::Deployed | Seq::DeployedIdle | Seq::DeployedFire)
-        )
+            click.orders.as_slice(),
+            [glasnost_sim::orders::Order::Behaviour {
+                behaviour: Behaviour::Attack,
+                ..
+            }]
+        ),
+        "an attack order at once: {:?}",
+        click.orders
+    );
+    issue_all(&mut w, click.orders);
+    step(&mut w);
+    assert!(falling(&w, first));
+    assert_eq!(w.obj(first).unwrap().target, Some(Target::Object(enemy)));
+    while falling(&w, first) {
+        assert_eq!(w.obj(enemy).unwrap().health, full, "no shot in the air");
+        step(&mut w);
+    }
+    until(&mut w, 600, |w| {
+        w.obj(enemy).is_none_or(|o| o.health < full)
     });
 }
