@@ -34,3 +34,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0016](combat/M-0016-stock-replay-sref-v3.md) | Unit arena, stock replay of every archived game with SREF or V3 | combat | new finding | local |
 | [M-0007](combat/M-0007-repair-depot-timing.md) | Repair depot timing and contact loss with the depot recorder (Q-1610) | combat | contradicts | local |
 | [M-0014](rendering/M-0014-building-slots-power-off.md) | Building slots after a power-off order next to an ownership change or a pulse's end | rendering | confirms | local |
+| [M-0008](simulation/M-0008-random-streams-recorder.md) | Random streams with the random-state recorder (seeding, ranges, creation, idle draws) | simulation | confirms | local |
