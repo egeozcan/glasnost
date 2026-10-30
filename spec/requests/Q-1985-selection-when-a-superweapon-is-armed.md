@@ -1,9 +1,9 @@
 ---
 id: Q-1985
 title: What happens to the unit selection when a superweapon is armed from its icon?
-status: open
+status: answered
 related: [S-0513, S-0512, S-0214]
-answered-by: []
+answered-by: [S-0512]
 ---
 
 ## Need
