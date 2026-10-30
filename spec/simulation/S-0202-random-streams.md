@@ -2,12 +2,12 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 36
-sources-class: [decomp, design]
+revision: 54
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
-measurements: []
+approved-on: 2026-10-30
+measurements: [M-0008]
 requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711, Q-1562]
 supersedes: []
 ---
@@ -23,22 +23,6 @@ random stream and which from the unsynchronised random stream. It also states th
 no feature spec lists yet: the creation draw of an object, the draws of overlay placement (with the
 low-bridge and vein placement rules they depend on) and the creation draws of an animation
 (claim 10).
-
-Revision 34 takes in the S-0202 entry of S-0317's Changes for other specs: claim 10's
-bouncing-type row covers the sprite animations of S-0109 only, and a voxel-model debris piece's
-creation draws are S-0317's (claims 3 and 4). Only the row's scope is stated; its draws for
-sprite animations are unchanged. The scope is medium: it awaits S-0317 scenario V1 and the lead's
-question in S-0317 on it.
-
-Against revision 34, revision 35 changes no behaviour: claim 10 rates the bouncing row's
-exclusion of voxel-model debris pieces medium, gives it a backing line (S-0317 scenario V1),
-names the row's dependency in its confidence and points to S-0109's Terms without restating
-them.
-
-Against revision 35, revision 36 changes no behaviour: the bouncing row's first cell keeps only
-its condition and the exclusion of voxel-model debris pieces, whose rating stays in the backing
-table and the confidence, and claim 10 says once that *animation* in its creation-draw table means
-the sprite kind of S-0109.
 
 **Joint hand-off checks.** Claim 14 agrees with S-0009's loading-order table and
 S-0412 claim 14: game-start tile-animation draws follow starting units, crates,
@@ -170,7 +154,10 @@ original's recording modes are retained as deferred context, not implementation 
    seeding; by claim 2 they determine every later raw value. Each raw value is the
    recurrence's result of claim 2 itself, all 32 bits of it, with no bit dropped or changed. A
    stream returns the same sequence for the same seed on every machine.
-   - Backing: `measurable` (scenario R2)
+   - Backing: `measured` on one host (M-0008: every logged draw of the eight runs it describes,
+     replayed from its seed on this generator, matches in result and in index steps); that the
+     sequence is the same on every machine is `measurable` (scenario R2 (b), the local-network
+     games) and not measured: M-0008 compares no two machines
    - Confidence: high
 
 2. **Recurrence.** For every n ≥ 0, x<sub>n</sub> = x<sub>n−250</sub> ⊕ x<sub>n−147</sub>, where ⊕
@@ -179,14 +166,15 @@ original's recording modes are retained as deferred context, not implementation 
    including the lowest two, obeys the same relation on its own, so the low bits that a small
    power-of-two range keeps (claim 4) satisfy x<sub>n</sub> = x<sub>n−250</sub> ⊕
    x<sub>n−147</sub> too.
-   - Backing: `measurable` (scenarios R1 and R2)
+   - Backing: `measured` (M-0008, the same replay); `measurable` (scenarios R1 and R2)
    - Confidence: high
 
 3. **Seeding function.** Seeding a stream with seed *s* sets seed value x<sub>k−250</sub> = F(*s*,
    *k*) for *k* = 0 … 249, where F is the four-round mixing function of the Formulas. Seeding
    discards all previous state, and the next raw value taken is x₀. Test values are in the
    Formulas.
-   - Backing: `measurable` (scenario R2)
+   - Backing: `measured` (M-0008: the replay from seed 1000 and from three clock seeds), and
+     `measurable` (scenario R2)
    - Confidence: high
 
 ### Ranged draws and derived forms
@@ -206,7 +194,10 @@ original's recording modes are retained as deferred context, not implementation 
    number consumed is 2<sup>*m*</sup> / (*d* + 1), an exact rational less than 2.
    For example, R(0, 10) retains the lowest 4 bits, rejects values 11 … 15, and consumes
    16/11 raw values on average. The exceptional spans are defined separately in claim 5.
-   - Backing: `measurable` (R1 and R5 for ordinary ranges; R13 for equal and reversed bounds)
+   - Backing: `measured` (M-0008: the replay matches the index steps that each rejected value of
+     every logged ranged draw takes, and in M-0008's control interval the logged draws with equal
+     bounds take no raw value), and
+     `measurable` (R1 and R5 for ordinary ranges, R13 for equal and reversed bounds)
    - Confidence: high
 
 5. **Very wide spans.** Two spans fall outside claim 4, both reachable only when a range bound comes
@@ -285,10 +276,11 @@ original's recording modes are retained as deferred context, not implementation 
    is read. The two streams therefore start in identical states: their raw-value sequences are the
    same, and only the number of values each has taken differs once their users diverge. Where the
    seed comes from:
-   - *Skirmish and campaign mission:* the original uses a millisecond counter of the host, the
-     number of milliseconds that the host computer has been running, modulo 2³², read when the game
-     is set up. So the seed differs from game to game and from launch to launch, and the seeds of
-     two games started in one session differ by the time between their starts, in milliseconds.
+   - *Skirmish and campaign mission:* the original uses the host's millisecond tick count, modulo
+     2³², read when the game is set up. That count runs from about the start of the host computer
+     (on the measured host it trailed the uptime by about 0.5 s). So the seed differs from game
+     to game and from launch to launch, and the seeds of two games started in one session differ
+     by the time between their starts, in milliseconds.
      **Departure** (host- and clock-dependent): our engine takes the seed as a 32-bit unsigned value
      given with the game setup, and is otherwise fully deterministic in it. How the setup chooses
      that value is a matter for the interface, not for the simulation.
@@ -309,17 +301,18 @@ original's recording modes are retained as deferred context, not implementation 
 
    | Part | Backing | Confidence |
    |---|---|---|
-   | Skirmish: same seed for both streams | `measurable` (R2 a) | high |
-   | Skirmish: seeding precedes map reading | `unmeasured` (R2 a reads only at the first tick and does not isolate the seeding checkpoint before map reading) | high |
-   | Skirmish: the seed is a millisecond counter (seeds of one session differ by the time between game starts) | `measurable` (R2 a; R4 for the change between launches) | high |
-   | Skirmish: the counter counts from the start of the host computer | `measurable` (R2 a, secondary expectation) | medium (the measurement setup runs the original on a host layer that supplies the counter) |
+   | Skirmish: same seed for both streams (the unsynchronised stream, seeded before at program start, is reseeded at game start) | `measured` for a game started without the setup menus (M-0008: three launches, each stream's state at the first tick is the seed's state advanced by a count); `measurable` from the menus (R2 a); the earlier seeding at program start rests on claim 11 (R9 d) | medium (the launches did not use the setup menus) |
+   | Skirmish: seeding precedes map reading | `unmeasured` (R2 a reads only at the first tick and does not isolate the seeding checkpoint before map reading) | medium (`unmeasured`) |
+   | Skirmish: the seed is a millisecond counter | `measured` for a game started without the setup menus (M-0008: in three launches the seed equals the host's millisecond tick count read just before the seeding, and seed differences match wall-clock differences within 2 ms); `measurable` from the menus (R2 a); the reduction modulo 2³² is `unmeasured` and rests on the formula: the measured seeds are far below the wrap | medium (the launches did not use the setup menus) |
+   | Skirmish: seeds of games started in one session differ by the time between their starts | `measurable` (R2 a's games of one session; R4 for the change between launches) | medium (it follows from the seed being the millisecond counter, rated medium above because the launches did not use the setup menus) |
+   | Skirmish: the counter counts from about the start of the host computer | `measured` as far as the host layer passes the counter on (M-0008: the seed equals the host's millisecond tick count, which was the host's uptime minus about 0.5 s) | medium (the measurement setup runs the original on a host layer that supplies the counter) |
    | Local network: one shared seed, in 0 … 32767 | `measurable` (R2 b) | medium |
    | Internet game and other setup programs | `unmeasured` (the measurement setup has no online service or other setup program) | medium |
    | Playback uses the recording's seed | `unmeasured` (the recording and playback modes are development features outside the measurement setup, as in claim 12) | medium |
    | Recording and playback modes skip the clock | `unmeasured` (same reason) | low |
    | Campaign continuation: no reseeding | `measurable` (R2 c) | medium |
-   - Backing: `measurable` (scenarios R2, R4) for the parts so marked above; the rest `unmeasured`,
-     with the reasons given above
+   - Backing: `measured` (M-0008) and `measurable` (scenarios R2, R4) for the parts so marked
+     above; the rest `unmeasured`, with the reasons given above
    - Confidence: high to low by part, as given above
 
 9. **Saved games keep the scenario random stream.** A saved game stores the scenario random
@@ -621,16 +614,16 @@ original's recording modes are retained as deferred context, not implementation 
 
       | Part | Backing |
       |---|---|
-      | The creation draw is taken when an object is created | `measurable` (R5 b; R8 G for its exact count) |
+      | The creation draw is taken when an object is created | `measurable` (R5 b for its timing; R8 G for its exact count), high; M-0008 is consistent with it for an infantry unit (placed during play, it takes at its creation tick a raw value, then *R*(0, 3), then *R*(0, 2), which fit, in order and by range, the creation draw, its standing-position draw and its first behaviour-processing draw: a fit by range and order; that the third is the first behaviour-processing draw rests on the *guard* processing family fit of the S-0215 hand-off below, medium) |
       | Creation-derived report value: low-bit reduction and fixed normal report selection | `measurable` (S-0701 F2), high confidence |
       | Our engine retains, saves, restores and hashes the report value and exposes it to presentation without another draw | `unmeasured` design contract (Q-0327), high confidence; this is a requirement of our engine, not an oracle claim |
-      | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
+      | A produced object is created, with its draw, when its production begins | `measurable` (R5 c), high; M-0008 is consistent with it for an infantry unit (exactly one raw value logged at tick 300, after the order applied before that tick's logic, the unit leaving the building later: a fit by range and order; M-0008 does not exclude a different draw at the start of production that takes one raw value); a produced vehicle `measurable` (R5 c, vehicle repeat), medium; other produced kinds `unmeasured` (R5 c's repeat produces only a vehicle), medium |
       | Paradrop plane, arrival, placement and paratrooper creation order at launch; later drop draws | `measurable` (S-0522 P2/P3), high confidence |
       | Pack-up vehicle and temporary hidden-slave creation draws precede placement and old-group removal, including successful placement | `measurable` (S-0402 H24), high confidence; retaining these draws with the failed-pack-up quirk off is an `unmeasured` design rule |
       | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
       | Parasite explicit ranged choices, including six wake-displacement choices per push start and their ordering around effects and hits | `measurable` (S-0614 P8); high confidence for the explicit choices, medium for their composition with additional effect-creation choices, which remains unestablished |
       | Lightning sound choice: stream, count, empty-list gate, repeated-point non-suppression and position within a strike | `measurable` (Companion assignment and sound tests; S-0701 F6), high confidence |
-      | Pre-placed objects: an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
+      | Pre-placed objects (this row covers objects placed at map load only; an infantry unit placed during play takes its standing-position draw, S-0216 claim 3): an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
       | Pre-placed objects: one that is created but cannot be placed has still taken its creation draw | `unmeasured` (no case is established in which the original creates a pre-placed object and then fails to place it: an entry on a cell that is not legal is unspecified there, and a vehicle is placed whatever occupies its cell, S-0009 claim 38) |
       | Bridges: number, form, order and base types of the piece draws | `measurable` (R8 A) |
       | Bridges: the end-row test, the partner, the case *m* = 1 | `measurable` (R8 D) |
@@ -651,9 +644,10 @@ original's recording modes are retained as deferred context, not implementation 
       | Game-start pass: new tile animations take their creation draws in visiting order, after end-of-loading tags and before the first tick; cells that already started one in the second pass take no further creation draws | `measurable` (R10) |
       | Animation creation: the start-event draws come at once, before any later draw | `measurable` for cell-before-tile ordering (R8 I), middle-event gates and choice (S-0109 claims 14 and 25, AN23), and the resource-chain-reaction sequence (S-0401 claim 20, E17); particle and smudge draw counts are completed by claim 15 (R14) |
       | The list of systems that draw from the scenario random stream | `unmeasured` (no finite number of runs can confirm a list of every system that draws; each system's draws are backed by the topic spec that states them) |
-    - Confidence: high (the creation draw is taken; a produced object is created when its
-      production begins; the overlay draw counts and forms); medium (production-start
-      assignment at the causing action, S-0404 claim 11; the list of kinds; which
+    - Confidence: high (the creation draw is taken; a produced infantry unit is created when its
+      production begins; the overlay draw counts and forms); medium (the same timing for other
+      produced kinds: a vehicle on R5 c's vehicle repeat, the others `unmeasured`,
+      production-start assignment at the causing action, S-0404 claim 11; the list of kinds; which
       vein neighbours are set or re-patterned and in which order, the placement test and the connection
       pattern; the end-row cells, the partner search and the *m* = 1 case; the order of the
       bridge pieces and the base types; where each map-loading group sits in the stream; the
@@ -721,25 +715,27 @@ original's recording modes are retained as deferred context, not implementation 
     How this stream runs on the machines of a network game is for the future multiplayer
     spec (network games are out of scope for now).
     - Backing: `measurable` (scenario R6 a) that no draw of this stream reaches the scenario random
-      stream; `measurable` (R6 b) for voice responses and the choice of music track.
-      Sound-instance pitch, volume shift, pre-delay, sample and play-order draws inherit
-      S-0701 claims 13 and 14's backing (E1 and E3) and confidence for the explicitly
-      established choices only; the complete delayed-mode sequence remains outside
-      coverage, not an additional claim with backing here. Shared-stream retention and the
-      deterministic schedule are S-0701 claim 30's design requirements, tested by its
-      engine-only H2 rather than oracle measurements. Report choices and the creation-derived value retain
-      S-0701 claims 21 and 32's backing and confidence; the damage-feedback chance inherits claim 20's
-      high confidence and `measurable` backing (F1). The map-load use through S-0010's scenario V2: part A for the
-      pattern's properties, part B for the draws themselves, with the random-state recorder's
-      reading of the unsynchronised stream (Measurement scenarios); the random map seed through
-      R9 b; the seeding at program start through R9 d; the local-network seed's range through
-      R2 b. `unmeasured`: the screen shake, the electric-bolt and radiation-beam jitter, the flicker
-      colour, the default network port range and how a setup screen derives the game seed (each
-      combat effect comes with a sound whose variant is drawn from the same stream in the same
-      tick, so the effect's own draws cannot be told apart from the sound's; the objects that
+      stream; `measurable` (R6 b) for voice responses and the choice of music track. Sound-instance
+      pitch, volume shift, pre-delay, sample and play-order draws inherit S-0701 claims 13 and 14's
+      backing (E1 and E3) and confidence for the explicitly established choices only; the complete
+      delayed-mode sequence remains outside coverage, not an additional claim with backing here.
+      Shared-stream retention and the deterministic schedule are S-0701 claim 30's design
+      requirements, tested by its engine-only H2 rather than oracle measurements. Report choices and
+      the creation-derived value retain S-0701 claims 21 and 32's backing and confidence; the
+      damage-feedback chance inherits claim 20's high confidence and `measurable` backing (F1). The
+      map-load use through S-0010's scenario V2: part A for the pattern's properties, part B for the
+      draws themselves, with the random-state recorder's reading of the unsynchronised stream
+      (Measurement scenarios); the random map seed through R9 b; the seeding at program start
+      through R9 d; the local-network seed's range through R2 b; `measured` (M-0008), medium, that
+      each launch has an earlier seeding, of a stream the record does not identify; the time between
+      the two seedings is not shown. That this earlier seeding is a clock seeding at program start
+      rests on R9 d. `unmeasured`: the screen shake, the electric-bolt and radiation-beam jitter,
+      the flicker colour, the default network port range and how a setup screen derives the game
+      seed (each combat effect comes with a sound whose variant is drawn from the same stream in the
+      same tick, so the effect's own draws cannot be told apart from the sound's; the objects that
       flicker and the moment the port range is chosen are not identified, so no scenario can set
-      them off on purpose; and the seed derivation passes through the third generator of claim
-      13, which shows only through the resulting seed)
+      them off on purpose; and the seed derivation passes through the third generator of claim 13,
+      which shows only through the resulting seed)
     - Confidence: medium (every use was classified, but some only briefly; Open questions); high
       for the map-load use
 
@@ -1517,8 +1513,14 @@ The recorder is part of the measurement setup (the project lead has approved it)
   repeat the pattern, or the pattern is the same every launch.
 - **R5, range rule, unit-interval value and the creation draw (claims 4, 6, 10).** (a) A test map
   with one human house and one distant bystander computer player, kept out of the observed area
-  under the glossary's bystander void rule. The observed area contains nothing that moves or
-  animates except the named test infantry. With the random-state recorder, read the stream
+  under the glossary's bystander void rule. The bystander owns a construction yard and has the
+  game-wide starting credits, 0 for every house (the glossary's *bystander computer player*, with
+  the human house's exceptions below). The human house owns one power plant, outside the observed
+  area. A skirmish drops pre-placed structures owned by a human player's house (S-0009 claim 27),
+  so the measurement harness creates it on a stated cell after load and before tick 0. The observed
+  area contains
+  nothing that moves or animates except the named test infantry.
+  With the random-state recorder, read the stream
   position at every tick and predict/account for the bystander's and any other unrelated draws
   under their owning specs; a tick whose unrelated draws cannot be accounted for is void for
   the stream comparison. Control interval: for the first 300 ticks the observed area holds no
@@ -1530,33 +1532,56 @@ The recorder is part of the measurement setup (the project lead has approved it)
   compute the raw values that each idle attempt takes (S-0107, claim 14: a timer draw
   R(0, 2147483646), then *r* = R(0, 10), then δ = R(0, 7) when the outcome is a turn) under
   claim 4's rule, including rejected values. Also predict the guard behaviour-processing delay
-  draws and their timing under S-0215 claims 6 and 24. *Expected:* at every non-void tick where
+  draws and their timing under S-0215 claims 6 and 24, and the targeting-timer restart draws of
+  S-0215 F6 that the per-tick search of S-0309 claim 1 takes. The first of those restart draws
+  is identified, not predicted, since no spec gives its timing for every infantry type: it is
+  the placed infantry's first *R*(0, 2) draw after its creation tick that is left once the
+  bystander's and other unrelated draws and the predicted guard processings are accounted
+  for. The placed infantry's type has a weapon, so that it takes those restart draws (as in
+  S-0107 scenario M9). Exactly one such candidate must remain: with none or more than one, the
+  part is inconclusive. Each later restart draw is then predicted from the one before by F6. If a
+  bystander voids the window early, the part counts only when at least four idle attempts fall
+  before the first void tick.
+  *Expected:* at every non-void tick where
   the position advances, it advances by exactly the predicted count after accounting for the
   bystander's and other unrelated draws; the infantry's visible outcome matches the predicted
   *r* and δ; the idle timer expires after the length S-0107's timer formula gives from the
   predicted unit-interval value; and, if expiry falls between guard processings or eligibility
   conditions are not met, the next idle attempt occurs at the first subsequent guard processing
-  that meets all of S-0107 claim 14's conditions. *Falsified if* any unexplained advance remains,
-  any advance differs from the prediction (for example by counting one raw value per ranged
-  draw, or none for rejections), an outcome differs from the prediction, or an attempt occurs
-  before expiry or at a processing other than the first eligible one. (b) At the tick the
+  that meets all of S-0107 claim 14's conditions. *Falsified if* any unexplained advance remains
+  (counting the identified first restart draw as predicted), the later restart draws do not
+  follow from the identified one by F6, any advance differs from the
+  prediction (for example by counting one raw value per ranged draw, or none for rejections),
+  an outcome differs from the prediction, or an attempt occurs before expiry or at a processing
+  other than the first eligible one. (b) At the tick the
   infantry is placed, *expected:* after accounting for other predicted draws, the position
   advances by at least one (its creation draw; R8 G checks the exact count of a creation,
   where nothing else draws). *Falsified if* the position shows no advance attributable to the
   creation draw in that tick. (c) *Production.* The same map, with the human house also owning
-  a power plant and an infantry-producing building from the start, both pre-placed. The control
-  interval must still show no unexplained advance with them in place (otherwise the part is
-  inconclusive). After the control interval, scripted input starts the production of one
+  a power plant and an infantry-producing building before the control interval. A skirmish
+  drops pre-placed structures owned by a human player's house (S-0009 claim 27), so the
+  measurement harness creates them on stated cells after load and before tick 0. Scripted input
+  before tick 0 also sets the human house's credits to a value, kept in the record, that pays
+  for every production of this part. The harness creations of parts a and c and this credits
+  change are exceptions to the glossary's measurement setup, and the record states each. The
+  control interval then runs for 300 ticks from tick 0 and must still show no unexplained advance
+  with them in place (otherwise the part is inconclusive). After the control interval, scripted
+  input starts the production of one
   infantry unit. *Expected:* after accounting for unrelated draws, the position advances by
   at least one in the tick the production begins (the unit's creation draw), before the unit
   leaves the building. *Falsified if* there is no advance attributable to that creation in
   that tick (for example because the draw comes only when the finished unit leaves the building).
+  Repeat with a vehicle-producing building and one vehicle in place of the infantry, with the
+  same expectation, for a produced vehicle.
 - **R6, unsynchronised draws stay out of game state (claim 11).** (a) The map and recorder of R5 (a),
   with two infantry instead of one and the same distant bystander computer player. 4 runs of
   2 game minutes: in 2 runs keep the infantry selected and click them repeatedly so that they
   give voice responses (each response takes draws from the unsynchronised stream); in 2 runs
   never select them. Predict and account for the bystander's and other unrelated draws, and
-  include the infantry behaviour-processing delay draws as in R5 (a). *Expected:* in every
+  include the infantry behaviour-processing delay draws as in R5 (a). Each infantry's first
+  targeting-timer restart draw is identified as in R5 (a). If both fall on one tick, both ways
+  of giving that tick's two values to the two infantry are tried, and the prediction that holds
+  for every later draw is used. *Expected:* in every
   non-void tick the per-tick advance of the scenario random stream equals R5's prediction from
   the idle attempts and behaviour-processing delays, after accounting for the bystander's and
   other unrelated draws; ticks in which a voice response starts show no extra advance of the
@@ -2083,6 +2108,52 @@ The recorder is part of the measurement setup (the project lead has approved it)
     rule; no third draw in the third run means the setup does not reach the colour gate, and the part
     must be repeated another way. The smoke update draws of S-0616 claim 6 come later and are not
     part of the compared group.
+
+## Changes for other specs
+
+- S-0215 F6 (targeting timer): in M-0008 one infantry unit of one type, placed during play at tick
+  300, and one armed tank type created before tick 0, both left in *guard*, show a second periodic
+  *U*(0, 2) draw. The tank's run is not stock: a test rules file makes the Americans' buildings
+  durable and gives the tank test copies of its weapons, the tank fires no shot, and its
+  surroundings are the Americans' two barracks, power plant and air pad and one Russian far power
+  plant. M-0008 does not show that the weapon copies leave the targeting timer unchanged. M-0008
+  tells the second draw apart from their *guard* processings' draws by ticks and values only: the
+  infantry unit's first draw comes a fixed first run-out after the tick of its creation and the
+  tank's the same run-out after tick 0 (its length local to M-0008), and each later one comes the
+  normal targeting delay plus the previous draw after the one before. The draws and that spacing are
+  found together, so the spacing is a fit, not a separate check. It fits F6's timer restarted by the
+  per-tick search of S-0309 claim 1, first row. For those two cases this hand-off asks S-0215 to
+  state that an object's targeting timer first runs out a fixed delay after its creation, or after
+  tick 0 for an object created before it, which S-0215 should give as a constant of its own, low
+  confidence; M-0008 keeps the observed length local. Backing: `measured` (M-0008) for the draws of
+  those two units. That they are the timer's restarts, and their spacing, are a fit, since M-0008's
+  recorder does not record the timer itself. Confidence low for those two cases. For other units and
+  other behaviours this hand-off establishes no first-restart timing. S-0215 B10 part (a), an armed
+  vehicle in *guard*, has in M-0008 only the tank's first draw at the first run-out and its later
+  draws at family T's spacing (M-0008's name for the infantry unit's chain of these draws), in a
+  control run with no attack order and with the test rules file above (durable buildings, test
+  copies of the tank's weapons), picked out of that run's draws by the same fit. The same fit also
+  picks out a second chain of the tank's draws, from tick 0, at family G's spacing (M-0008's chain
+  of the infantry unit's *guard* processing draws, next bullet). That this chain is the tank's
+  *guard* processing is a fit, low confidence, since the family fit of the next bullet is rated
+  medium for one infantry type only.
+- S-0215 claims 6 and 24, F1 and F2 (*guard* processing): in M-0008 one family of an infantry
+  unit's *U*(0, 2) draws is taken as its *guard* processings' delay draws. M-0008 tells that
+  family apart by ticks and values only: its first draw is the third of the placement tick's
+  draws, and each idle attempt falls on one of its ticks. In every interval of its clean window
+  the family fits the spacing of the guard rate plus the previous
+  processing's delay draw. The family and its spacing are found together, so the spacing is a
+  fit, not a separate check. The first *guard* processing of an infantry unit placed during
+  play falls on its placement tick in the same fit. Backing: `measured` (M-0008) for the
+  family's draws, ticks and values; the family's identification, its spacing and the first
+  processing's tick are a fit. Confidence medium for one infantry type in *guard*.
+- S-0216 claim 3: the order at an infantry unit's placement during play, the creation draw, then
+  the standing-position draw *R*(0, 3), then the first *guard* processing's delay draw, has
+  consistent evidence in M-0008 (part b of scenario R5: three draws that fit these in order and
+  by range). A fit does not raise the claim: S-0216 claim 3 stays at medium until its scenario
+  PT3 runs, with M-0008 as consistent evidence.
+  That the third draw is the first *guard* processing's delay draw rests on the family fit of
+  the hand-off above, at medium.
 
 ## Open questions
 
