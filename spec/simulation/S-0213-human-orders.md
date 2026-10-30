@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 54
+revision: 60
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-30
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137]
 supersedes: []
 ---
 
@@ -94,8 +94,9 @@ Terms).
   action) for the selected objects instead of ordering them at once (claim 16). An object whose
   planned route holds at least one point, being built or being followed, is a *route holder*. A
   *route point* is one place of a planned route; it belongs to the house and can be shared by
-  several routes (claim 16a). An object has a *route record* from its first route point until
-  it is removed from play, even while its route is empty (claim 16b).
+  several routes (claim 16a). It is deleted once no route holds it (claim 16f). An object has a
+  *route record* from its first route point until it is removed from play, even while its route
+  is empty (claim 16b).
 - **Route-holder count.** A number kept for each house, which the route-holder limit of claim 16
   reads. It starts at 0. Applying a point add to an object whose route holds no point raises it
   by 1. It is lowered by 1, never below 0, when an object whose route still holds a point stops
@@ -814,8 +815,9 @@ Terms).
     joins, and it copies part of a route of at most 16 points (claim 16b). A route point is a
     place on the map that belongs to the house (claim 16b gives the place of each point add), so
     one click with several objects selected adds the same point to each of their routes whose
-    orders have that place, and a later point add at that point's place reuses it instead of
-    making a second point there. Route mode sends four order kinds:
+    orders have that place. Point adds share a point only when they are applied in the same
+    tick: a point add applied in a later tick makes a new point, even at the place of an
+    existing one, so two points can stand at one place. Route mode sends four order kinds:
 
     | Order kind | Names | Effect when applied |
     |---|---|---|
@@ -829,11 +831,13 @@ Terms).
     point that claim 16b's point-click test accepts sends point-join orders instead. Releasing
     the key sends one commit order for the local player's house.
     - Backing: `measurable` (Scenario O8, parts c and d, for shared points and per-object
-      routes, and part e for the 16 points of point adds). The division into order kinds is
+      routes, part s for a later point add at an existing point's place, and part e for the 16
+      points of point adds). The division into order kinds is
       `unmeasured` as such: only its consequences
       cross the lockstep stream observably, and those are claims 16b to 16e.
     - Confidence: high for one route per object and the 16-point limit of point adds; medium
-      for shared points and for joins never passing 16 points
+      for shared points, for a later point add making a new point, and for joins never passing
+      16 points
 
 16b. **What a route point stands for, Q-1986 question 2.** A route-mode click over an object
     or a cell stands for the action that the same click would order outside route mode under
@@ -882,13 +886,28 @@ Terms).
       object whose route is empty is tested as one with no route record, so an object that
       has used up, lost or emptied its route can join a point again.
 
-    *Joins.* A joining holder does not get an action of its own from the click: as far as
-    studied, the join gives it a copy of the route of one of the point's holders, from the joined
-    point to that route's end, with the actions recorded there for that holder and with that
-    route's loop if it has one (low). What the copy keeps of a loop whose first point lies before
-    the joined point has not been studied.
-    Which holder's route is copied when the point has several
-    holders has not been studied (Open questions). The joining holder's own route is empty, so
+    *Joins.* A joining holder does not get an action of its own from the click. The join gives
+    it a copy of the route of the point's longest holder: of the objects whose routes hold the
+    point when the join is applied, the one whose route has held it for the longest time (since
+    the point add or join that gave it the point). Of holders given the point in the same tick,
+    the one whose order was applied first counts as the longest holder: for the orders of one
+    click, the first in S-0214's selection order (claim 16a). The copy runs from the joined
+    point to the
+    end of that route as it then stands, with the actions recorded there for that holder.
+    - If that route has no loop, the copy has none.
+    - If its loop's first point (as that route then stands, claim 16c) is the joined point or a
+      later one, the copy has the same loop,
+      from the same first point.
+    - If its loop's first point comes before the joined point, the copy goes on, after that
+      route's last point, with the loop's points from its first point up to the one before the
+      joined point. Its loop is then the whole copy, beginning at the joined point: the joining
+      holder goes round the same loop, entered at the joined point.
+
+    A holder that is going round a loop has its points in the order it will next issue them
+    (claim 16c), so the copy starts at the joined point and holds the whole loop, whatever point
+    that holder is going to. A holder that has already issued a point of a route without a loop
+    no longer holds it (claim 16c), so it is never the one copied. The copied points are
+    uncommitted until the next commit (claim 16c). The joining holder's own route is empty, so
     it has no last point and no loop, and the copy holds at most 16 points: the four refusals
     above never apply to a join. The checks of claim 16d are made at the click, so they apply to
     a join too. The joining holder issues each copied point under S-0215 claim 13, as any holder
@@ -902,28 +921,62 @@ Terms).
     the added point is itself terminating or continual, or is the 16th point, the message of
     that case is shown as information. The checks are made when the order is applied, and only
     the messages depend on the local player.
-    - Backing: `measurable` (Scenario O8, parts a, b, e, f and l, part n for joins, and part q
-      for the order's place, the clicks on existing points and the route record kept)
+    - Backing: `measurable` (Scenario O8, parts a, b, e, f and l, parts n and r for joins, with
+      part r (5) for holders given the point in the same tick, and part q for the order's place,
+      the clicks on existing points and the route record kept).
+      The copied points' being uncommitted until the next commit is `unmeasured`: parts n and r
+      release the key after the join, so the commit follows at once and no run shows a joining
+      holder waiting at a copied point before a commit
     - Confidence: high that the click takes its ordinary S-0214 action, and for the deploy
       refusal; medium for the four refusal cases and their separate texts, the action
       kept per holder, the order's place, the info messages, the sound and the three conditions
-      of the point-click test; low for the copied route of a join, for the route record kept
-      once the route is empty, and for the hover highlight
+      of the point-click test, and for the holder that a join copies (holders given the point
+      in the same tick included) and what the copy holds and loops; medium for the copied
+      points' being uncommitted until the next commit; low for
+      the route record kept once the route is empty, and for the hover highlight
 
 16c. **Commit, following and loops, Q-1986 question 3.** Points added since the last commit are
     not followed: a holder whose route reaches them falls back to rest there and waits for a
     commit. When a commit order is applied, every point of the house's routes becomes committed.
-    Whether a later point add that reuses a committed point (claim 16a) is followed before the
-    next commit has not been studied.
+    Being committed belongs to each route, not to the place. A point add applied after a commit
+    at a committed point's place does not share that point (claim 16a): it adds a new,
+    uncommitted point to the actor's route, and the actor waits there for the next commit as at
+    any new point. The routes holding the committed point are not changed.
     A holder whose route could not run before the commit (it had no committed point left to
     follow) starts at once if its current behaviour is *guard*, or is a continual action of
     claim 16b: it gives up that behaviour and waits, and it issues the order of its next point,
-    which takes effect at the next order boundary (claim 1). Any other holder, for example one
+    which takes effect at the next order boundary (claim 1). Giving up is a queue of *wait* with
+    an immediate start (S-0215 claim 7). So a holder that is ready to change (S-0215 claim 11)
+    has *wait* current from the commit until the issued order's behaviour becomes current: at
+    the holder's first per-tick start after that order applies if it is ready then, otherwise at
+    the first later permitted start (S-0215 claims 11 and 12). Its *guard* or *area guard*
+    processing does not run in that time: a processing of *wait* does nothing (S-0215
+    claim 4), so no shot or move that processing would have made is made. The commit itself
+    does not change the holder's target or destination. The commit applies at its tick's order
+    boundary (claim 1), after that tick's object updates, so in the commit's tick the holder's
+    drop rule and firing step still run under its earlier behaviour: it keeps its target and can
+    fire at it. For a ready holder, *wait* is first current at S-0215 claim 33's drop rule in the
+    tick after the commit's tick, since the issued order applies at that tick's order boundary at
+    the earliest. So a target of the holder's that is an opportunity target (S-0309 claims 23 and
+    24) is dropped in that tick, before its firing step (S-0310 claim 9 for a vehicle), and the
+    holder makes no shot at it from that tick until the issued order's behaviour becomes
+    current. A target that is not an
+    opportunity target is kept, and that firing step, which runs in each tick in which the holder
+    has a target, can still fire at it while *wait* is current. Any other holder, for example one
     still moving under an earlier order or point, is not interrupted. It issues its next point
-    at its next fall-back to rest (S-0215 claim 13), as it does for each later point. Issuing a
+    at its next fall-back to rest (S-0215 claim 13), as it does for each later point. Each such
+    issue is preceded by the same queue of *wait* with an immediate start as at the commit, so
+    a holder that is ready to change has *wait* current from that fall-back until the issued
+    order's behaviour becomes current, and the fall-back queues no *guard* (Changes for other
+    specs, S-0215 claim 13). Issuing a
     point takes it off the front of the route, so a route without a loop is used up when its
     last point has been issued. The holder then keeps doing the last point's action: the route
     neither stops it nor starts again.
+    Issuing a point of a loop moves it to the end of the route instead, so the route of a holder
+    going round a loop always holds its points in the order it will next issue them. As the
+    route stands, its loop's first point is the earliest of the loop's points in it: the point
+    the loop was closed from while points before the loop remain, and the point the holder will
+    issue next once they have all been issued.
     Looping is an input, never automatic. A click, in route mode, on a point that is already in
     the selection's routes closes a loop from that point to the route's end. The loop's points
     are then issued in turn, the first loop point again after the last, until the holder gets an
@@ -934,12 +987,25 @@ Terms).
     Holders that share a point appear to start that point's action together, each waiting in
     place until the others have reached the point before it. That synchronisation's exact rule
     has not been settled (Open questions).
-    - Backing: `measurable` (Scenario O8, steps 1 and 2, parts b, c and g, and part q for the
-      3-point minimum)
+    - Backing: `measurable` (Scenario O8, steps 1 and 2, parts b, c and g, part q for the
+      3-point minimum, part s for a point add at a committed point's place, part t for the
+      *wait* at the commit and at P₁ for the *wait* before a fall-back's issue, part t (2) for the
+      target kept in the commit's tick and dropped in the next, with no shot at it from the next
+      tick on, and part r (4)
+      for the order of a looping holder's route and its loop's first point). That the commit
+      itself leaves the holder's destination, and a target that is not an opportunity target,
+      unchanged, and that the firing step can still fire at such a target, are `unmeasured`:
+      part t's V has no destination, and no scenario here gives a holder in *guard* a target that
+      is not an opportunity target
     - Confidence: high for looping by input; medium for the 3-point minimum, for the start at
-      commit and its behaviour
-      condition, for uncommitted points, for the holder keeping its last action and for points
-      before the loop; low for synchronisation
+      commit and its behaviour condition, for the *wait* at the commit and at a fall-back's
+      issue, for the opportunity target kept in the commit's tick and dropped in the next, with no
+      shot at it from the next tick on,
+      for the commit's leaving the destination and any other target unchanged and the firing at
+      such a target, for the order of a looping holder's route and its loop's first point, for
+      uncommitted points
+      and a point add at a committed point's place, for the holder keeping its last action and
+      for points before the loop; low for synchronisation
 
 16d. **Who can take part, Q-1986 question 5.** Only vehicles and infantry can hold a route.
     The rule is fixed for each kind of object and no imported key changes it. A route-mode
@@ -985,8 +1051,7 @@ Terms).
     - its route is removed by an order (claim 17), at that order's application.
     - its route without a loop is used up (claim 16c), when the last point is issued. When the
       last point needs travel, the holder is then on its way to it, not yet there.
-    - it is destroyed and removed from play. It leaves every point it held, and a point that no
-      route holds any more is deleted.
+    - it is destroyed and removed from play. It leaves every point it held.
 
     Deleting a route's last remaining point (claim 16e) also ends holding, but in the original it
     does not lower the count. The count then stays raised for that object for the rest of the
@@ -998,6 +1063,11 @@ Terms).
     A point join that gives an object its first points does not raise the count, as far as
     studied (low), and the end of that route lowers it like any other, never below 0. So joins
     can give a house more than 128 route holders (claim 16).
+    A route point that no route holds any more is deleted at once, whichever way its last holder
+    left it: by an order that removes the route (claim 17), by issuing it from a route without a
+    loop or before a loop's first point (claim 16c), by a point delete (claim 16e) or by the
+    holder's destruction. A deleted point's marker is no longer drawn, a click can no longer
+    select or join it. A loop's points stay while the loop is followed.
     - Quirk: `quirks.route_holder_count_drift` (default: original). With the switch off, the
       house's route-holder count is always the number of its route holders: a deletion that
       empties a route lowers it, and a join that begins a route raises it.
@@ -1007,9 +1077,10 @@ Terms).
     - Backing: `measurable` (Scenario O8: step 4 for removal by an order, part j for the used-up
       route and the moment it ends, part k for destruction and its deleted points, part m for
       the last point deleted and the order, destruction and new selection after it, part p for a
-      new route on top, and part o for joins)
+      new route on top, part o for joins, and part u for points that no route holds)
     - Confidence: high for removal by an order; medium for the used-up route and its moment,
-      for destruction, and for the count kept after the last point is deleted; low for joins
+      for destruction, for the count kept after the last point is deleted, and for the deletion
+      of points that no route holds; low for joins
 
 16g. **What the player sees, Q-1986 question 7.** Route points and the routes that lead
     through them are drawn only while the viewing player holds the route-mode key. They are
@@ -2285,6 +2356,95 @@ Q-1753).**
     found by the nearby-cell search, and keep holding. Expected: the marker on a land cell next
     to the water, with T's route line ending there, and after the release T goes to that cell.
     A marker on the water cell falsifies the order's place.
+  - *(r) Which route a join copies (claim 16b):* a fresh game, with vehicles A to H of the player's
+    that have not held a route point. B is created before A (a lower object number) and stands
+    nearer to C than A does. All points are cells. (1) Give A a plain move order to a far cell and,
+    while it moves, select A, hold the key, click P₁, P₂ and P₃ and release (A is not interrupted,
+    claim 16c). Give B a plain move order to a far cell too and, while it moves, select B, hold the
+    key, click P₂'s marker and then a cell P₄, and release: B's route is P₂, P₃, P₄, and B is not
+    interrupted. Select C, hold the key, click P₂'s marker and release. Expected: with the key held,
+    C's route line runs through P₂ and ends at P₃, and C goes to P₂, then P₃, and stays. C's line
+    reaching P₄, or C going to P₄, means B's route was copied, which falsifies the longest holder.
+    The clicks must come before A or B has issued P₂. (2) Select D, at rest, hold the key, click Q₁,
+    Q₂, Q₃ and Q₄, then Q₂'s marker (a loop from Q₂), and release: D starts at once and issues Q₁.
+    Hold the key with nothing selected. Expected: no marker at Q₁, which was issued before the
+    loop's first point and which no other route holds, and markers at Q₂, Q₃ and Q₄. A marker at Q₁
+    falsifies claim 16f's deletion of such a point. Release. Select E, hold the key, click Q₃'s
+    marker and release. Expected: E goes to Q₃, Q₄, Q₂, Q₃, Q₄, Q₂ and on, never to Q₁. E going only
+    between Q₃ and Q₄, stopping, or visiting Q₁ falsifies the copied loop. (3) Give F a plain move
+    order to a far cell and, while it moves, route it through R₁ to R₄ with a loop from R₂. Select
+    G, hold the key, click R₁'s marker and release before F has issued R₁. Expected: G goes to R₁,
+    then round R₂, R₃ and R₄, and never back to R₁. (4) After D has gone round its loop at least
+    once, select H, hold the key, click Q₄'s marker and release. Expected: H goes to Q₄, then round
+    Q₂, Q₃ and Q₄, whatever point D is heading for. H stopping before it has visited all three, or
+    visiting Q₁, falsifies the copy of a loop whose holder is part of the way round. (5) A tie, in
+    a fresh game, with vehicles J, K and L of the player's, of one type whose primary weapon has
+    positive damage, that have not held a route point. Give J and K plain move orders to far cells
+    and, while they move, select K and
+    then add J, so that J is first in selection order (Terms). Hold the key, click S₁ and release:
+    the click's orders give J and K the point S₁ in the same tick. Select J alone, hold the key,
+    click S₂ and release. Select K alone, hold the key, click S₃ and release. Select L, hold the
+    key, click S₁'s marker and release, before J or K has issued S₁. Expected: L's route line runs
+    through S₁ to S₂, and L goes to S₁, then S₂ (J's route). Repeat in a fresh game,
+    with fresh vehicles J, K and L set up in the same way but with J selected first and K
+    added, so that K is first: L goes to S₁, then S₃. L taking the other holder's continuation in
+    either run falsifies the tie rule.
+  - *(s) A point add at a committed point's place (claims 16a and 16c):* a fresh game, with an
+    enemy building Y far from armed vehicles V and W of the player's, neither of which has held a
+    route point. (1) Give V a plain move order to a far cell and, while it moves, select V, hold
+    the key, click a cell P₁ and then Y (an attack point), and release: V keeps moving and holds
+    committed points. Select W at rest, hold the key, click far cells Q₁ and then Q₂ (away from
+    Y and from each other), and release: W heads for Q₁ and still holds Q₂ (claim 16c). While W
+    is on its way to Q₁, select W, hold the key, click Y on a cell of its foundation away from
+    the point's marker, and release. W now has a route record and V's point at Y is not in its
+    route, so a click that meets the marker is refused with the invalid-point text (claim 16b)
+    and adds nothing: such a click is void, repeat it farther from the marker. Then, with
+    nothing selected,
+    hold the key, click the marker at Y, press delete and release. Expected: the next time the
+    key is held, exactly one of V's and W's route lines reaches Y. Neither reaching it means
+    that the two point adds shared one point, which falsifies claim 16a's later point add.
+    (2) In a second game, set V up as in (1). Select W at rest, hold the key, click a far cell
+    Q₁ and release: W heads for Q₁. While W is on its way, select W, hold the key, click Y
+    away from the marker as in (1), and keep holding the key until W has come to rest at Q₁ and
+    for several seconds after. Expected: W rests at Q₁ while the key is held and attacks Y only
+    after the release. W heading for Y while the key is still held falsifies the new point's
+    being uncommitted.
+  - *(t) Waiting at the commit (claim 16c):* a vehicle V of the player's, at rest in *guard*,
+    with no route and no order for several seconds. (1) Select V, hold the key, click a far cell
+    P₁ and then a far cell P₂, and release. Record V's current behaviour and whether it is ready
+    to change (S-0215 claim 11) on every tick from 3 ticks before the commit to 3 ticks after
+    it, and again from its arrival at P₁ until it heads for P₂. A run in which V is not ready
+    to change at the commit is void. Expected: *guard* until the commit's tick, *wait* in the
+    commit's tick after its order boundary, and *move* from V's next per-tick start after the
+    issued order applies (S-0215 claims 11 and 12).
+    *Guard* followed directly by *move*, with no tick of *wait*, falsifies the queue of *wait*.
+    At P₁, expected: at least one tick of *wait* between the arrival and *move* towards P₂ (the
+    issue at the fall-back to rest; whether another behaviour comes before the *wait* is not
+    part of the test). No *wait* there falsifies the hand-off for S-0215 below. Repeat with an
+    infantry unit. (2) A second run, as (1) but with an enemy vehicle E in V's range before the
+    key is held, which V takes as its target in *guard* by its per-tick search (an opportunity
+    target, S-0309 claims 23 and 24) and does not destroy within the run. A run in which E is
+    destroyed, or V has no target at the commit, is void. Record V's target and its shots on
+    every tick from 3 ticks before the commit until the issued order applies. Expected: E as
+    V's target up to and including the commit's tick (a shot at E in that tick is allowed), no
+    target from the tick after the commit's tick on, and no shot by V from that tick until the
+    issued order's behaviour is current. V keeping E as its target in the tick after the
+    commit's tick, or firing at it from then until that behaviour is current, falsifies the drop
+    under *wait*; E dropped already in the commit's tick falsifies the commit's timing at the
+    order boundary. Repeat with an infantry unit.
+  - *(u) Points that no route holds (claim 16f):* a fresh game, with vehicles V and W of the
+    player's, neither of which has held a route point, and cells P₁, P₂ and P₃ far from both
+    and from each other. Give V a plain move order to a far cell and, while it moves, select V,
+    hold the key, click P₁, P₂ and P₃ and release. Select W, hold the key, click P₂'s marker
+    and release: W joins (its route is P₂ and P₃) and starts for P₂ at once, issuing it. While
+    W is on its way to P₂: (1) with nothing selected, hold the key. Expected: markers at P₁, P₂
+    and P₃. Release. (2) Select V and give it a plain move order, which ends its route (claim
+    17). With nothing selected, hold the key. Expected: no marker at P₁ or P₂, and a marker at
+    P₃, which W still holds. Click where P₂'s marker was: no point is selected and no
+    point-selected message is shown. Release. (3) After W has reached P₂ and while it is on its
+    way to P₃, hold the key with nothing selected. Expected: no marker at P₃, since W issued it
+    at P₂. A marker left at P₁ or P₂ in (2), or at P₃ in (3), falsifies the deletion of points
+    that no route holds.
 
 **Scenario O9: one input event per cycle (claims 1 and 3).**
 - *Setup:* one vehicle of the player's, selected, moving towards a far cell *A*. Game speed 6
@@ -2826,9 +2986,7 @@ extension is a design rule and has no oracle measurement.
 
 ## Open questions
 
-- Route points (claims 16a to 16c): what a route-mode click that would order a detonate does,
-  what a join's copy keeps of a loop whose first point lies before the joined point, and
-  whether a point add that reuses a committed point is followed before the next commit.
+- Route points (claim 16b): what a route-mode click that would order a detonate does.
 - Q-0391's three input-acceptance questions are answered by claim 23 and O22.
   S-0101 claims 14 and 15 already own displacement and retained scrolling.
   S-0201 claim 14 owns the initial block and claim 11 the chrono-flash block.
@@ -2878,9 +3036,10 @@ extension is a design rule and has no oracle measurement.
   message.
 - Whether leaving the map for a time ends a route by itself (claim 16f), the part of Q-1986
   question 6 left open, and whether an owner change keeps it (S-0215 claim 13, Open questions).
-- Which holder's route a point join copies when the joined point has several holders (claim
-  16b). That a join does not raise the route-holder count is stated in claim 16f at low
-  confidence (O8 o).
+- Which of two points at one place (claim 16a) a click on their markers selects, joins or
+  closes a loop at (claims 16b and 16e). The click area of a marker is Q-2138's question.
+- Whether a point join raises the route-holder count: claim 16f states that it does not, at
+  low confidence (O8 o).
 - Whether a point whose place is an object's moves with the object (claim 16b). It appears to.
 - Which message a route-mode click gets when two kind refusals of claim 16d apply together (an
   aircraft and a building selected), or a kind refusal and the same-route-state refusal.
@@ -2931,6 +3090,23 @@ extension is a design rule and has no oracle measurement.
   these as cues; which sound each plays is not established here (Open questions).
 - **S-0701, Scenario D4.** Its route-mode guard case should expect the refusal message and sound
   of table T2 here, with no guard point added, and no ordinary guard cue.
+- **S-0215, claim 13, route row.** Every issue of a route point, at a fall-back to rest as at
+  a commit, is preceded by the same queue of *wait* with an immediate start that claim 16c
+  gives for the commit (Scenario O8, part t at P₁, medium). For a holder that is ready to
+  change, *wait* is then current when the rest tables of S-0215 claims 14 and 15 run, since they
+  run after claim 13's common effects, and their row 1 (current *wait*: nothing changes)
+  applies, so a fall-back that issues a route point queues no *guard*. B15 b's fall-back at its
+  first point issues the next point, so under this row it queues *wait*, not *guard*: its "that
+  fall-back can queue *guard*" is an allowance that this case does not use, and B15 c's like
+  allowance for infantry is the same. Neither allowance is part of what falsifies B15 b or c,
+  so their expected results (the next point's *move*, at an order boundary, not through the
+  queued destinations) are unchanged. S-0215's route row may say so, and B15 b and c may then
+  expect *wait* where they allow *guard*. The route row's sentence "Within this fall-back it
+  leaves the refreshed destination, target and slots alone" holds for the destination and the
+  target, but not for the slots: the issue's queue of *wait* changes them, as at any other
+  fall-back that issues a route point, also when memory survives. That sentence should read
+  that the fall-back leaves the refreshed destination and target alone, and changes the slots
+  only by the queue of *wait* that precedes the issue (S-0213 claim 16c).
 
 ## Questions for the project lead
 
