@@ -1,9 +1,9 @@
 ---
 id: Q-2135
 title: The default of the crewed flag for building types
-status: open
+status: answered
 related: [S-0312, S-0408]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
