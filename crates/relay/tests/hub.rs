@@ -487,6 +487,56 @@ fn a_lost_person_is_reported_dropped_with_the_frames_everyone_holds() {
     assert_eq!(h.rooms(), 0);
 }
 
+/// A person with no other live person in the game (the M9 exit run's
+/// second game): nobody lacks any of its frames, so a frames message counts
+/// past a gap, also while a rejoining peer is sent the game (which holds
+/// the frames below the serving peer's first). With another live person a
+/// gap still does not count.
+#[test]
+fn a_lone_person_s_frames_count_past_a_gap() {
+    let mut h = hub();
+    let (code, c, tickets) = game_tickets(&mut h, 3);
+    h.receive(100, c[0], &frames(0, 0, 3));
+    h.closed(101, c[2]);
+    // Slot 1 is still live: the gap holds.
+    h.receive(102, c[0], &frames(0, 5, 1));
+    assert_eq!(h.kept(&code, 0), Some(3));
+    h.closed(103, c[1]);
+    // Alone: a frames message of its next frame, with no frames, counts.
+    h.receive(104, c[0], &frames(0, 10, 0));
+    assert_eq!(h.kept(&code, 0), Some(10));
+    h.receive(105, c[0], &frames(0, 12, 2));
+    assert_eq!(h.kept(&code, 0), Some(14));
+    // An older resend never lowers it.
+    h.receive(106, c[0], &frames(0, 4, 1));
+    assert_eq!(h.kept(&code, 0), Some(14));
+    // Slot 1 rejoins: slot 0 serves it and is still the only live person.
+    let back = h.connect(107).unwrap();
+    h.receive(
+        107,
+        back,
+        &msg(&ToRelay::Rejoin {
+            code: code.clone(),
+            slot: 1,
+            ticket: tickets[1],
+            build: "build-1".into(),
+            rules_hash: "rules-1".into(),
+        }),
+    );
+    assert_eq!(h.rejoining(&code), Some(1));
+    h.take_out();
+    h.receive(108, c[0], &frames(0, 20, 3));
+    assert_eq!(h.kept(&code, 0), Some(23));
+    assert_eq!(
+        game_out(&h.take_out())
+            .into_iter()
+            .map(|(to, _)| to)
+            .collect::<Vec<_>>(),
+        [back],
+        "forwarded to the rejoining connection"
+    );
+}
+
 #[test]
 fn the_drop_comes_after_everything_forwarded_from_the_slot() {
     let mut h = hub();

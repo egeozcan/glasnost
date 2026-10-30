@@ -29,10 +29,14 @@
 //! the hub forwarded to every other person: each of them holds those
 //! frames, since each connection's messages leave in the order the hub
 //! queued them, so every peer treats the same frames as the slot's last
-//! (N1, `Session::drop_slot`). Unless the slot rejoins, every peer
-//! surrenders its house on tick `kept + grace_ticks`; the hub works out
-//! `grace_ticks` at the start from [`Limits::grace_ms`] and the room's game
-//! speed (N5).
+//! (N1, `Session::drop_slot`). While a person has no other live person in
+//! the game, nobody lacks any of its frames: each of its frames messages
+//! then raises `kept` to its end even past a gap (its session sends no
+//! frame nobody needs, and a peer rejoining meanwhile is sent the frames
+//! below the serving peer's first in the game itself). Unless the slot
+//! rejoins, every peer surrenders its house on tick `kept + grace_ticks`;
+//! the hub works out `grace_ticks` at the start from [`Limits::grace_ms`]
+//! and the room's game speed (N5).
 //!
 //! **Rejoins (N5).** Every person is sent a secret ticket for its slot in
 //! its [`lobby::Begin`]. A connection that brings a slot's ticket back
@@ -385,7 +389,8 @@ struct Game {
     /// Per slot: the connection of its person while it is live.
     conns: Vec<Option<ConnId>>,
     /// Per slot: its frames forwarded to every other live person, from
-    /// frame 0 without a gap.
+    /// frame 0 without a gap; while the slot's person is the only live one,
+    /// to the furthest end of its frames messages.
     kept: Vec<u32>,
     /// The start values, for a rejoin.
     started: Started,
@@ -1016,8 +1021,15 @@ impl Hub {
                 }
                 game.markers
                     .retain(|m| m.from != slot || m.frame >= f.first);
+                // With no other live person, every frame of the slot is
+                // held by everyone, so a gap counts too: a lone peer sends
+                // none of the frames nobody needs (its first is its next
+                // frame), and a rejoining peer has the frames below the
+                // serving peer's first in the game it is sent. Our own
+                // netcode (the M9 exit run).
+                let alone = game.live().all(|(s, _)| s == slot);
                 let k = &mut game.kept[usize::from(slot)];
-                if f.first <= *k {
+                if f.first <= *k || alone {
                     *k = (*k).max(f.first.saturating_add(f.frames.len() as u32));
                 }
                 game.max_ran = game.max_ran.max(f.ran);

@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use super::*;
+use crate::game::pump::{Pump, STALE_MS};
 use crate::mapview::load::Loaded;
 use glasnost_ai::fixture;
 use glasnost_convert::find::Listing;
@@ -1081,6 +1082,168 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
     for t in seen.into_iter().flatten() {
         assert!(t <= last + 60, "doomed at {t}, Ann left at {last}");
     }
+    relay.stop();
+}
+
+/// The relay's silence limit in the pump tests, in milliseconds: short, so
+/// that a test outlasts it several times in a few seconds.
+const SHORT_SILENCE_MS: u64 = 1_000;
+
+/// Two persons and a computer in a room on a relay that closes a
+/// connection silent for [`SHORT_SILENCE_MS`]; their games run.
+fn short_silence_game(seed: u64) -> (tokio::runtime::Runtime, Relay, Clock, Client, Client) {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .expect("a runtime");
+    let limits = Limits {
+        silent_ms: SHORT_SILENCE_MS,
+        ..Limits::default()
+    };
+    let relay = rt
+        .block_on(glasnost_relay::bind_with(
+            "127.0.0.1:0",
+            limits,
+            Box::new(Fake(seed)),
+        ))
+        .expect("the relay binds");
+    let clock = Clock(Instant::now());
+    let mut a = client(&relay, "Ann");
+    let mut b = client(&relay, "Bea");
+    press_menu(&mut a, MenuHit::Multiplayer);
+    press_net(&mut a, NetHit::Host);
+    pump(&clock, &mut [&mut a], "the room", |c| {
+        c[0].room_code().is_some()
+    });
+    let code = a.room_code().unwrap().to_owned();
+    press_room(&mut a, SetupHit::Kind(1, -1));
+    pump(&clock, &mut [&mut a], "an open row", |c| {
+        c[0].room().unwrap().setup.slots[1].kind == SlotKind::Human
+    });
+    press_menu(&mut b, MenuHit::Multiplayer);
+    b.netform.code = code;
+    press_net(&mut b, NetHit::Join);
+    pump(&clock, &mut [&mut a, &mut b], "the join", |c| {
+        c.iter()
+            .all(|c| c.room().is_some_and(|v| v.members.len() == 2))
+    });
+    press_room(&mut b, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "ready", |c| {
+        c[0].room()
+            .unwrap()
+            .members
+            .iter()
+            .all(|m| m.ready || m.row == 0)
+    });
+    press_room(&mut a, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "ticks", |c| {
+        c.iter().all(|c| tick_of(c) > 20)
+    });
+    (rt, relay, clock, a, b)
+}
+
+fn tick_of(c: &Client) -> i32 {
+    c.session.as_ref().map_or(0, |s| s.play.game.world.tick)
+}
+
+/// Bea's window keeps drawing frames (an update every millisecond or so)
+/// for `ms` milliseconds; Ann's draws none from the start of it, and is
+/// updated only by the network pump when `pumped` (at the times the pump
+/// asks for), else not at all. Ann's ticks run meanwhile, and whether Bea
+/// was told that Ann left.
+fn ann_draws_no_frames(
+    clock: &Clock,
+    a: &mut Client,
+    b: &mut Client,
+    pumped: bool,
+    ms: u64,
+) -> (i32, bool) {
+    let mut p = Pump::default();
+    let start = clock.now();
+    p.drew(start);
+    let mut wake = start;
+    let ticks = tick_of(a);
+    let mut updates = 0;
+    while clock.now() - start < ms as i64 {
+        let now = clock.now();
+        b.update(now);
+        if pumped && now >= wake {
+            if p.between_frames(a, now) {
+                updates += 1;
+            }
+            wake = now + p.wait_ms(a, now).expect("a network link") as i64;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    if pumped {
+        assert!(updates > 50, "the pump updated Ann {updates} times");
+    }
+    let left = notice(b, |t| t.starts_with("Ann left the game"));
+    (tick_of(a) - ticks, left)
+}
+
+/// The M9 exit run's first game: a window that draws no frames (covered
+/// by a screenshot overlay) lost its game, as the relay closed its silent
+/// connection. With the network pump it plays on for several of the
+/// relay's silence limits: the relay hears it, its ticks run, and both
+/// games keep the same hashes.
+#[test]
+fn a_network_game_plays_on_while_its_window_draws_no_frames() {
+    let (_rt, relay, clock, mut a, mut b) = short_silence_game(51);
+    // While Ann's frames come, the pump leaves Ann's updates to them.
+    let mut p = Pump::default();
+    for _ in 0..50 {
+        let now = clock.now();
+        a.update(now);
+        p.drew(now);
+        b.update(now);
+        assert!(!p.between_frames(&mut a, now + 2), "frames are coming");
+        let wait = p.wait_ms(&a, now).expect("a network link");
+        assert!((1..=STALE_MS as u64).contains(&wait), "{wait}");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let ran = tick_of(&b);
+    let (ticks, left) = ann_draws_no_frames(&clock, &mut a, &mut b, true, 4 * SHORT_SILENCE_MS);
+    assert!(!left, "the relay kept Ann's connection");
+    assert!(a.net.as_ref().is_some_and(|n| n.closed.is_none()));
+    // Some 250 ticks at the fastest network speed in 4 s; a fifth at
+    // least, on a loaded machine.
+    assert!(ticks > 50, "Ann ran {ticks} ticks");
+    assert!(tick_of(&b) > ran + 50, "Bea's game went on");
+    // Both games agree: Ann's frames came, and the state hashes match.
+    let mut hashes = [BTreeMap::new(), BTreeMap::new()];
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let at = tick_of(&a).max(tick_of(&b)) + 5;
+    while hashes.iter().any(|h| h.len() < 20) {
+        for (k, c) in [&mut a, &mut b].into_iter().enumerate() {
+            c.update(clock.now());
+            if tick_of(c) >= at {
+                keep_hash(&mut hashes[k], c);
+            }
+        }
+        assert!(Instant::now() < deadline, "the games stalled");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let both: Vec<_> = hashes[0]
+        .iter()
+        .filter(|(t, _)| hashes[1].contains_key(t))
+        .collect();
+    assert!(both.len() > 10, "{} ticks in common", both.len());
+    for (t, h) in both {
+        assert_eq!(Some(h), hashes[1].get(t), "tick {t}");
+    }
+    relay.stop();
+}
+
+/// The control of the test above: without the pump, the same window loses
+/// its game once the relay's silence limit passes.
+#[test]
+fn a_window_that_draws_no_frames_and_is_not_pumped_loses_its_game() {
+    let (_rt, relay, clock, mut a, mut b) = short_silence_game(52);
+    let (ticks, left) = ann_draws_no_frames(&clock, &mut a, &mut b, false, 4 * SHORT_SILENCE_MS);
+    assert_eq!(ticks, 0);
+    assert!(left, "the relay closed Ann's silent connection");
     relay.stop();
 }
 

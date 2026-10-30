@@ -348,7 +348,11 @@ impl Peer {
             }
         }
         let s = self.session.as_mut().expect("a session");
-        if !self.signalled && s.phase() == Phase::Running && !self.direct.is_empty() {
+        if !self.signalled
+            && s.phase() == Phase::Running
+            && !s.catching_up()
+            && !self.direct.is_empty()
+        {
             // The signals that would set the links up; the hub remembers
             // the pairs.
             self.signalled = true;
@@ -481,6 +485,14 @@ struct Plan {
     direct: Vec<(u8, u8)>,
     /// Slots whose lockstep messages take this long to the hub.
     lag: Vec<(u8, u64)>,
+    /// A slot cut off for good once it has run this many ticks, before
+    /// the victim is.
+    gone: Option<(u8, u32)>,
+    /// A slot cut off for good once the rejoined peer plays and has run
+    /// this many ticks.
+    leaves: Option<(u8, u32)>,
+    /// The rejoined peer signals the victim's direct links again (N7).
+    relink: bool,
 }
 
 struct Played {
@@ -535,6 +547,8 @@ fn play(plan: &Plan) -> Played {
     let mut lost: Option<Peer> = None;
     let mut cut_at = None;
     let mut last_cut = None;
+    let mut gone = false;
+    let mut left = false;
     // Virtual milliseconds: the ticks at their period, three times over.
     let deadline = 3 * u64::from(plan.ticks) * u64::from(TICK_MS) + 10_000;
     loop {
@@ -570,7 +584,23 @@ fn play(plan: &Plan) -> Played {
         if let Some(b) = back.as_mut() {
             b.run(&mut net);
         }
-        if cut_at.is_none() && peers[v].ran() >= plan.kill_at {
+        if let Some((g, at)) = plan.gone
+            && !gone
+            && peers[usize::from(g)].ran() >= at
+        {
+            let c = peers[usize::from(g)].conn.take().expect("a connection");
+            net.kill(c);
+            gone = true;
+        }
+        if let Some((l, at)) = plan.leaves
+            && !left
+            && back.as_ref().is_some_and(|b| b.playing() && b.ran() >= at)
+        {
+            let c = peers[usize::from(l)].conn.take().expect("a connection");
+            net.kill(c);
+            left = true;
+        }
+        if cut_at.is_none() && (plan.gone.is_none() || gone) && peers[v].ran() >= plan.kill_at {
             at_cut = (
                 net.hub.kept(&code, plan.victim).expect("a game"),
                 peers
@@ -608,7 +638,11 @@ fn play(plan: &Plan) -> Played {
                     rules_hash: b.rules_hash.clone(),
                 },
             );
-            back = Some(Peer::new(b, &map, conn, true, net.t));
+            let mut b = Peer::new(b, &map, conn, true, net.t);
+            if plan.relink {
+                b.direct = peers[v].direct.clone();
+            }
+            back = Some(b);
         }
         let others_done = peers
             .iter()
@@ -623,7 +657,12 @@ fn play(plan: &Plan) -> Played {
                     || (b.playing() && b.ran() >= plan.ticks)
             }
         };
-        if cut_at.is_some() && others_done && back_done && (!plan.cut_back || lost.is_some()) {
+        if cut_at.is_some()
+            && others_done
+            && back_done
+            && (!plan.cut_back || lost.is_some())
+            && (plan.leaves.is_none() || left)
+        {
             break;
         }
         net.advance();
@@ -842,6 +881,9 @@ fn two_persons_drop_and_rejoin_with_identical_hashes() {
         cut_back: false,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
 }
 
@@ -860,6 +902,9 @@ fn a_member_gone_before_the_game_ran_joins_late() {
         cut_back: false,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     let host = &played.peers[0];
     assert_eq!(kept(host, 1), [0], "none of its frames counted");
@@ -883,6 +928,9 @@ fn three_persons_and_a_computer_drop_and_rejoin_with_identical_hashes() {
         cut_back: false,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     assert!(!played.peers[1].served.is_empty(), "slot 1 serves");
     assert!(
@@ -914,6 +962,9 @@ fn past_the_grace_period_the_house_surrenders_on_every_peer_on_one_tick() {
         cut_back: false,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     let survivors = played.survivors(victim);
     assert_eq!(survivors[0].begin.params.grace_ticks, 100);
@@ -976,6 +1027,9 @@ fn a_rejoin_inside_the_grace_period_cancels_the_surrender() {
         cut_back: false,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     // The game ran well past the tick the house would have surrendered on.
     let p = &played.peers[0];
@@ -1000,6 +1054,9 @@ fn a_rejoining_peer_cut_off_before_its_readmission_can_rejoin_again() {
         cut_back: true,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
 }
 
@@ -1018,6 +1075,9 @@ fn a_rejoin_after_the_grace_period_is_too_late() {
         cut_back: false,
         direct: vec![],
         lag: vec![],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     let p = &played.peers[0];
     clean(p);
@@ -1343,6 +1403,9 @@ fn a_drop_with_direct_links_counts_every_frame_a_peer_ran() {
         cut_back: false,
         direct: vec![(0, 1), (0, 2), (1, 2)],
         lag: vec![(victim, 200)],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     let (forwarded, ran) = played.at_cut;
     assert!(
@@ -1393,6 +1456,9 @@ fn a_drop_and_rejoin_over_a_direct_link_keeps_identical_hashes() {
         cut_back: false,
         direct: vec![(0, 1)],
         lag: vec![(1, 200)],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     let (forwarded, ran) = played.at_cut;
     assert!(ran > forwarded, "ran {ran}, forwarded {forwarded}");
@@ -1422,6 +1488,9 @@ fn a_rejoin_while_two_others_play_on_a_direct_link() {
         cut_back: false,
         direct: vec![(1, 2)],
         lag: vec![(2, 150)],
+        gone: None,
+        leaves: None,
+        relink: false,
     });
     let stats = played.net.hub.stats();
     assert_eq!(stats.rounds, 0, "slot 0 had no direct link: {stats:?}");
@@ -1439,4 +1508,128 @@ fn a_rejoin_while_two_others_play_on_a_direct_link() {
         .and_then(|s| s.paths(2))
         .expect("paths");
     assert_eq!(theirs.gated, 0, "{theirs:?}");
+}
+
+/// A game with a lone stretch (the M9 exit run's second game): the victim
+/// drops and rejoins while the slot `plan.leaves` names plays alone, the
+/// rejoined peer plays on, and then that slot leaves for good. Every peer
+/// still in the game takes its drop at the same frame, with no bad
+/// message, and its house surrenders on the same tick everywhere, the
+/// grace period after that frame. The peers left, the rejoined one first.
+fn after_a_lone_stretch(plan: &Plan) -> Played {
+    let played = play(plan);
+    let (l, _) = plan.leaves.expect("a slot that leaves");
+    let v = plan.victim;
+    let back = played.back.as_ref().expect("a rejoin");
+    assert!(back.live() && back.playing(), "{:?}", back.closed);
+    let left: Vec<&Peer> = [back]
+        .into_iter()
+        .chain(played.peers.iter().filter(|p| p.live()))
+        .collect();
+    for p in left.iter().copied().chain(played.peers.iter()) {
+        clean(p);
+    }
+    let grace = back.begin.params.grace_ticks;
+    assert_eq!(grace, 100);
+    // The rejoin came after a stretch in which slot `l` played alone.
+    let from = resumed(back, v);
+    assert_eq!(from.len(), 1);
+    assert!(from[0] > kept(&played.peers[usize::from(l)], v)[0] + 50);
+    let k = kept(back, l);
+    assert_eq!(k.len(), 1, "one drop of slot {l}: {k:?}");
+    assert!(
+        k[0] > from[0],
+        "dropped after the readmission: {k:?} {from:?}"
+    );
+    assert_eq!(played.net.hub.kept(&played.code, l), Some(k[0]));
+    let x = k[0] + grace;
+    for p in &left {
+        assert_eq!(kept(p, l), k, "slot {}", p.slot);
+        assert_eq!(surrenders(p, l), [x], "slot {}", p.slot);
+        let applied = p.ticks[&x]
+            .orders
+            .iter()
+            .find(|a| a.slot == l)
+            .expect("the surrender");
+        assert!(applied.taken, "the simulation takes the surrender");
+        assert!(p.events.contains(&Event::Surrendered { slot: l, tick: x }));
+    }
+    for p in played.survivors(v) {
+        replays(p, &played.map);
+        agree(p, back);
+    }
+    played
+}
+
+#[test]
+fn a_peer_that_played_alone_leaves_and_its_house_surrenders_everywhere() {
+    // Slot 1 is cut off at tick 60 and back 1.5 s later, about 75 ticks
+    // that slot 0 plays alone; then slot 0 leaves.
+    after_a_lone_stretch(&Plan {
+        rows: vec![SlotKind::Human, SlotKind::Human],
+        limits: short_grace(),
+        victim: 1,
+        kill_at: 60,
+        back_after: Some(1_500),
+        ticks: 450,
+        cut_back: false,
+        direct: vec![],
+        lag: vec![],
+        gone: None,
+        leaves: Some((0, 250)),
+        relink: false,
+    });
+}
+
+#[test]
+fn a_peer_left_alone_in_a_game_of_three_leaves_and_its_house_surrenders() {
+    // Slot 2 leaves for good at tick 30 (its house surrenders); slot 1 is
+    // cut off at tick 160 and back 1.5 s later, while slot 0 plays alone;
+    // then slot 0 leaves.
+    let played = after_a_lone_stretch(&Plan {
+        rows: vec![SlotKind::Human, SlotKind::Human, SlotKind::Human],
+        limits: short_grace(),
+        victim: 1,
+        kill_at: 160,
+        back_after: Some(1_500),
+        ticks: 550,
+        cut_back: false,
+        direct: vec![],
+        lag: vec![],
+        gone: Some((2, 30)),
+        leaves: Some((0, 330)),
+        relink: false,
+    });
+    let host = &played.peers[0];
+    let k2 = kept(host, 2);
+    assert_eq!(k2.len(), 1);
+    assert_eq!(surrenders(host, 2), [k2[0] + 100]);
+}
+
+#[test]
+fn a_peer_that_played_alone_and_relinked_leaves_through_a_drop_round() {
+    // As the first, with a direct link between the two that the rejoined
+    // peer sets up again, and slot 0's messages lagging: slot 0's drop
+    // goes through the hub's round (N7), which starts from the frames the
+    // hub forwarded of it.
+    let played = after_a_lone_stretch(&Plan {
+        rows: vec![SlotKind::Human, SlotKind::Human],
+        limits: short_grace(),
+        victim: 1,
+        kill_at: 60,
+        back_after: Some(1_500),
+        ticks: 450,
+        cut_back: false,
+        direct: vec![(0, 1)],
+        lag: vec![(0, 200)],
+        gone: None,
+        leaves: Some((0, 250)),
+        relink: true,
+    });
+    let back = played.back.as_ref().expect("the rejoined peer");
+    assert!(asked(back, 0), "the hub asked the rejoined peer");
+    one_story(back);
+    let stats = played.net.hub.stats();
+    assert_eq!(stats.rounds, 2, "{stats:?}");
+    assert_eq!((stats.held_refused, stats.unanswered), (0, 0), "{stats:?}");
 }
