@@ -2,13 +2,13 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack, shot animation position)
 topic: combat
-revision: 37
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-30
 measurements: []
-requests: [Q-0601, Q-0670, Q-1600, Q-2111]
+requests: [Q-0601, Q-0670, Q-1600, Q-2111, Q-2146]
 supersedes: []
 ---
 
@@ -21,14 +21,17 @@ its weapon slot's muzzle position, its turret displacement and facings, and its 
 special fire points of garrisoned buildings, buildings with pixel muzzle shifts and passengers of
 open-topped transports; the redirected targets of spray-attack firers; and where a turreted
 vehicle's shot animation is drawn, counted from the vehicle's unshifted draw point (Terms), and
-that in our engine no correction moves it against the drawn turret and barrel (claims 11 to 11e).
+that in our engine no correction moves it against the drawn turret and barrel (claims 11 and 11a
+to 11e).
 For the original, the distance between the drawn turret and the animation, the barrel's pixels,
 whether the driving locomotor shifts the draw point and whether a constant one-pixel shift is added
 to the animation stay open.
 The fire point is game state: projectiles normally start there (S-0306 claim 8), so it changes
 flight times and what a projectile passes.
 Claim 1a replaces the committed 0, 0, 0 for an absent elite muzzle position: the elite version of
-a slot takes the same slot's non-elite muzzle position, as imported.
+a slot takes the same slot's non-elite muzzle position, as imported. Claim 1b gives which muzzle
+fields are read: the primary and secondary fields for a turret count of 0 or less, the numbered
+fields for a turret count above 0, with the rule for absent fields on later readings.
 The placement exceptions are owned by S-0306 claim 5, including dropping projectiles, which
 start at the firer's own position rather than its fire point. Disc lasers create no projectile
 (S-0615 claim 12); their rings follow the current slot-0 fire point as S-0615 claim 15 specifies.
@@ -113,8 +116,9 @@ S-0202: R(*a*, *b*). In addition:
      precision, which follows S-0105 F0)
 
 1a. **Absent muzzle positions (Q-2111 question 2).** A non-elite slot (the primary, the secondary or
-   a numbered weapon) whose art data gives no muzzle position has the muzzle position 0, 0, 0. It
-   takes nothing from the other slot or from an alternate muzzle position: where claim 1 applies
+   a numbered weapon) whose art data gives no muzzle position has the muzzle position 0, 0, 0 on the
+   type's first reading (claim 1b for later readings). It takes nothing
+   from the other slot or from an alternate muzzle position: where claim 1 applies
    (claims 5 to 8 can replace it), its fire point is claim 1's with (*F*, *L*, *H*) = (0, 0, 0),
    which is the firer's base point moved by the translation of its frame *M* (claim 1) when its
    turret displacement is 0, so the base point itself when *M* is the flat body rotation of scenario
@@ -131,6 +135,58 @@ S-0202: R(*a*, *b*). In addition:
      negative, is `unmeasured`: part e's firer stands at the surface, where S-0306 claim 8's raise
      gives the same start for a height part of 0 or less.
    - Confidence: high (the forward and lateral parts, the elite rule); medium (the height part)
+
+1b. **Which muzzle fields a type reads (Q-2146).** In each reading of a type's art data, the
+   type's turret count (S-0308 claim 1) decides which family of muzzle-position fields that reading
+   takes:
+   - Turret count above 0: the numbered muzzle fields and their elite forms give the muzzle
+     positions of its numbered weapons and of their elite versions, one field per numbered weapon
+     (S-0308 claim 1). The primary and secondary muzzle fields and their elite forms are not read.
+     In that reading they give numbered weapon 0 or 1 no muzzle position, whether no numbered
+     muzzle field is given or only some are (a value kept from an earlier reading aside, below). On
+     the type's first reading a numbered weapon without its field has 0, 0, 0, and in every reading
+     the elite version of numbered weapon *n* without its elite field has weapon *n*'s muzzle
+     position (claim 1a). The
+     elite primary field plays no part, so it never competes with that fall-back. Only the fields
+     of the numbered weapons up to the type's weapon count are read, so with a weapon count of 0
+     neither family is read.
+   - Turret count 0 or less: the primary and secondary muzzle fields and their elite forms give
+     slots 0 and 1 and their elite versions (claim 1a for absent fields). The numbered muzzle
+     fields are not read, so in that reading they give slot 0 or 1 no muzzle position, whether or
+     not the primary or secondary field is given.
+
+   The turret count that decides is the one the type holds after the rules section of the same
+   type read (S-0007 Terms, *type read*), when that type read reads the art data. Every
+   reading follows one rule for absent fields and for the family it does not read, and claim 1a's
+   defaults are this rule on the type's first reading:
+   - an absent non-elite field of the family that is read leaves the muzzle position the slot
+     already holds: 0, 0, 0 from the type's creation, or a value that an earlier reading gave it
+   - an absent elite field of that family gives the elite version the same slot's non-elite muzzle
+     position as it stands after this reading, whether just read or kept, not a value the elite
+     version held before
+   - the family that is not read leaves the non-elite and elite muzzle positions of its slots as
+     they are.
+
+   So after a later reading that raises the turret count, numbered weapon 0 or 1 without its
+   numbered field keeps a value read earlier from the primary or secondary field, and its elite
+   version, without its elite numbered field, takes that kept value. When a vehicle type's art data
+   is read again is given by S-0007 Terms (*type read*) with S-0004 claim 6. The elite rule is an
+   exception to S-0007 claim 2, under which an art setting that the art section does not set keeps
+   its earlier value (Changes for other specs); the other two rules agree with it.
+   - Backing: `measurable` (scenario P1 part f: runs f1 and f2 for a turret count above 0 with no
+     numbered field and with only the second, run f3 for the elite versions with the elite primary
+     and elite secondary fields given, run f4 for a turret count of 0, run f5 for its elite
+     versions with the elite numbered fields given). That a field that is not read or is absent
+     keeps a value from an earlier reading, and that an absent elite field then takes the kept
+     non-elite value, is `unmeasured`: no scenario here reads a type again with a changed turret
+     count. A turret count
+     above 0 with a weapon count of 0 is `unmeasured`: part f gives its numbered types two weapons.
+     A negative turret count is `unmeasured`: runs f4 and f5 use a turret count of 0.
+   - Confidence: high (which family is read, elite forms included, for a turret count above 0 with
+     no numbered field and with only the second, runs f1 to f3, and for a turret count of 0, runs
+     f4 and f5); medium (a turret count above 0 with only the first numbered field given, which
+     part f does not run, a negative turret count, the rule for a later reading, and a weapon count
+     of 0, which part f does not run)
 
 2. **Burst alternation.** The lateral part of the muzzle position alternates within a burst: shots
    made with an even burst counter (the first, third, … shot of a burst; the counter a shot uses is
@@ -407,7 +463,8 @@ S-0202: R(*a*, *b*). In addition:
       0 or level 6, the two levels P10 checks, has no net horizontal shift of two pixels or more
       from this position; the exact pixel is not rated, since a constant one-pixel shift is open.
       Medium at other heights, `unmeasured` there: no lift enters the horizontal position and no
-      rule in claims 11 to 11b depends on height horizontally, but no capture covers another level.
+      rule in claims 11, 11a and 11b depends on height horizontally, but no capture covers another
+      level.
       Low for the vertical position, which rests on claim 11b's hypothesis, rated low; at levels 0
       and 6 P10 judges the lift above the vehicle's own (claim 11b). Medium for a moving vehicle's
       horizontal position (its vertical position is low, as above), `unmeasured`: no rule in claims
@@ -620,10 +677,10 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 
 | Key (file, section) | Concept | Form | Absent |
 |---|---|---|---|
-| `PrimaryFireFLH`, `SecondaryFireFLH` (art, type image) | muzzle positions (*F*, *L*, *H*) of the primary and secondary slots | three integers, leptons | 0, 0, 0 (claim 1a) |
-| `ElitePrimaryFireFLH`, `EliteSecondaryFireFLH` (art, type image) | muzzle positions of the elite primary and elite secondary slots | three integers, leptons | the muzzle position of the same slot's non-elite version, as imported (claim 1a) |
-| `Weapon`*n*`FLH` (art, type image) | muzzle position of numbered weapon *n* − 1 (claim 1a) | three integers | 0, 0, 0 (claim 1a) |
-| the elite form of `Weapon`*n*`FLH`, the same key with `Elite` in front (art, type image) | muzzle position of the elite version of numbered weapon *n* − 1 | three integers | the muzzle position of numbered weapon *n* − 1, as imported (claim 1a) |
+| `PrimaryFireFLH`, `SecondaryFireFLH` (art, type image) | muzzle positions (*F*, *L*, *H*) of the primary and secondary slots; read only for a type whose turret count is 0 or less (claim 1b) | three integers, leptons | 0, 0, 0 on the type's first reading (claim 1a); on a later reading, the value the slot already holds (claim 1b, `unmeasured`, medium) |
+| `ElitePrimaryFireFLH`, `EliteSecondaryFireFLH` (art, type image) | muzzle positions of the elite primary and elite secondary slots; read only for a type whose turret count is 0 or less (claim 1b) | three integers, leptons | the muzzle position of the same slot's non-elite version as it stands after this reading, also on a later reading (claims 1a and 1b; on a later reading, claim 1b, `unmeasured`, medium) |
+| `Weapon`*n*`FLH` (art, type image) | muzzle position of numbered weapon *n* − 1 (claim 1a); read only for a type whose turret count is above 0 (claim 1b) | three integers | 0, 0, 0 on the type's first reading (claim 1a); on a later reading, the value the slot already holds (claim 1b, `unmeasured`, medium) |
+| the elite form of `Weapon`*n*`FLH`, the same key with `Elite` in front (art, type image) | muzzle position of the elite version of numbered weapon *n* − 1; read only for a type whose turret count is above 0 (claim 1b) | three integers | the muzzle position of numbered weapon *n* − 1 as it stands after this reading, also on a later reading (claims 1a and 1b; on a later reading, claim 1b, `unmeasured`, medium) |
 | `TurretOffset` (art, type image) | turret displacement *δ* | integer, leptons | 0 |
 | `AlternateFLH` followed by 0 to 4 (art, type image) | alternate muzzle positions, also used as mind-control link anchors (S-0601 claim 17) | three integers, leptons | 0, 0, 0 |
 | `MuzzleFlash` followed by 0, 1, … (art, building image) | garrison muzzle points | two integers, pixels | (0, 0) |
@@ -721,6 +778,34 @@ recorder capability is a proposed harness addition for the user, not a request t
   frame *M* being the flat body rotation of P1, with no translation), and the height S-0306 claim 8
   gives for a fire point at the surface. Falsified by a start at the other slot's F1, at an
   alternate muzzle position's or at any *x* and *y* other than the vehicle's own.
+- Part f (which muzzle fields are read; claim 1b, Q-2146): every muzzle field given in this part
+  has distinct non-zero forward and lateral parts and a height part of at least 40 leptons. With
+  the body at facings 0 and 16384, record the start positions of each weapon's shots, as in part
+  e. Run f1: a copy of part e's numbered-weapon test type (turret count above 0, two numbered
+  weapons, no turret displacement, non-elite) whose art gives primary and secondary muzzle fields
+  and no numbered muzzle field. It fires its second weapon with part d's passenger, and its first
+  weapon with a passenger whose mode index is 0 (S-0308 claim 6). Run f2: f1's type
+  with the second numbered muzzle field added. Run f3: f2's type with part d's elite rules (elite
+  from the start, elite numbered weapons of their own) and an elite primary and an elite secondary
+  muzzle field, but no elite numbered muzzle field. Run f4: part e's first two test types, with a
+  turret count of 0 in the test rules, each with the first and second numbered muzzle fields
+  added. Run f5: f4's types with part d's elite rules (elite from the start, elite weapons of
+  their own), each with the first and second elite numbered muzzle fields added too, and no elite
+  primary or elite secondary muzzle field. In f5 the first type's elite primary weapon has a
+  warhead whose versus value against part e's target's armour class is zero and its elite
+  secondary's is not, and it fires at part e's target, so that S-0308 table P gives slot 1. The
+  second type's elite weapons have ordinary versus values against that target, so that table P's
+  last row gives slot 0. In f3 the passenger's mode index chooses the elite numbered weapon, as
+  it chooses the numbered weapon in f1 (S-0308 claim 6).
+  Expected: f1: both weapons' shots start at the vehicle's own *x* and *y*, as in part e. f2: the
+  second weapon's shots start at F1 of the second numbered field, and the first weapon's at the
+  vehicle's own *x* and *y*. f3: the same starts as f2 for the elite versions. f4: the same starts
+  as in part e, keeping part e's turret count of 0. f5: the same starts as in part e for the elite
+  versions, recorded for the elite secondary's shots of the first type and the elite primary's
+  shots of the second, so that a numbered elite field being read would show.
+  Falsified if: in f1, f2 or f3 a shot starts at F1 of the primary, secondary, elite primary or
+  elite secondary field; in f4 a shot starts at F1 of a numbered field; in f5 a shot starts at F1
+  of a numbered or elite numbered field.
 - Runs: one full burst per facing/transform combination; no random draw decides the start shift.
 
 **P2. Burst alternation.**
@@ -1062,13 +1147,28 @@ recorder capability is a proposed harness addition for the user, not a request t
   P10 reports every turret step and body facing left with no readable capture; claims 11 and
   11a are rated only for the steps read.
 
+## Changes for other specs
+
+- **S-0006, open question 3 (art-related keys and reset-on-override).** S-0313 claim 1b gives the
+  later-reading rule for the muzzle-position fields of a vehicle type's art data: an absent field
+  of the family that is read keeps the value the slot already holds, an absent elite field takes
+  the slot's non-elite value as it stands after that reading, and the family that is not read
+  leaves its slots as they are (`unmeasured`, medium). S-0006's question can point to it for
+  these keys.
+- **S-0007, claim 2 (earlier values kept).** Its list of exceptions (claims 9, 11, 22, 25 and 34)
+  should add S-0313 claim 1b's elite rule: on a later reading of a vehicle type's art data, an
+  absent elite muzzle field of the family that is read gives the elite version the same slot's
+  non-elite muzzle position as it stands after that reading, not the elite value read earlier
+  (`unmeasured`, medium, in S-0313 claim 1b). An absent non-elite field of that family, and both
+  fields of the family that is not read, keep their earlier values, as claim 2 already gives.
+
 ## Open questions
 
 - (Outside Q-2111.) Which muzzle position an elite object uses for a slot whose elite version holds
   no weapon (S-0308 claim 2): the elite slot's own, as claim 1a gives it, or the non-elite slot's.
 - (Q-1600 question 1, claims 11 and 11a.) Whether the original's driving locomotor shifts a
   vehicle's draw point. This decides how far question 1's answer holds for the original: every
-  position in claims 11 to 11e and P10 is counted from the vehicle's unshifted draw point. A
+  position in claims 11 and 11a to 11e and P10 is counted from the vehicle's unshifted draw point. A
   capture that compared the drawn body with S-0105's prediction from the unshifted draw point
   would settle it.
 - (Claim 11b.) Whether the original's drawing lift is S-0409 F2's lift. F2 lifts whole levels
