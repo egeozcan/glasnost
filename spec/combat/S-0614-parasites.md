@@ -2,11 +2,11 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 12
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-30
 measurements: []
 requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032]
 supersedes: []
@@ -204,20 +204,22 @@ addition:
      (the cloak rule, the organic firing rule)
 
 9. **Rocking and effects of a drone parasite.** Each delivery to a host that is not infantry rocks
-   the host's body with a strength of 1.5. F2 gives intended sideways presentation, not an
-   established exact reconstruction of the original rocking point. The side is drawn: one draw from the
-   scenario random stream with range 0 … 1, 1 meaning one side and 0 the other (Formulas F2). The
-   draw happens after the effects are created and before the hit. The visible effects are a
-   game-wide spark effect at the host's position (creating it takes no draw, S-0616 claim 1) and one animation from the weapon's animation list:
-   the entry indexed directly by the host's 8-direction (S-0204). An empty list makes no animation.
-   No modulo reduction is performed. Nonempty lists shorter than eight entries have unestablished
-   results (Open questions). The rocking is
-   presentation, computed in floating point by the original (Formulas F2). The draw is not
-   presentation: it advances the scenario random stream, so it must be made exactly once per
-   delivery to a non-infantry host, in this order.
-   - Backing: `measurable` (P8 for ranged choices; P1 for rocking and effects)
-   - Confidence: high (one draw per delivery and its place); low (whether creating the spark effect
-     or the animation also draws from the stream, Open questions)
+   the host's body with the strength of F2, which this spec owns, pushed from the point of S-0113 F3
+   (S-0113 claim 13 gives the push). The side is drawn: one draw from the scenario random stream
+   with range 0 … 1, 1 meaning one side and 0 the other (S-0113 F3). The draw happens after the
+   effects are created and before the hit. The visible effects are a game-wide spark effect at the
+   host's position (creating it takes no draw, S-0616 claim 1) and one animation from the weapon's
+   animation list: the entry indexed directly by the host's 8-direction (S-0204). An empty list
+   makes no animation. No modulo reduction is performed. Nonempty lists shorter than eight entries
+   have unestablished results (Open questions). The rocking is computed in floating point, and
+   S-0113 claims 9 and 19 give how it reaches game state, at their confidence: the rocking can
+   destroy a host (S-0113 claim 9). The draw advances the scenario random stream, so it must be made
+   exactly once per delivery to a non-infantry host, in this order.
+   - Backing: `measurable` (P8 for ranged choices; P1 for rocking and effects; S-0113 scenarios
+     RK3 and RK8 for how rocking reaches game state: the rolling-over hit and the fire point)
+   - Confidence: high (one draw per delivery and its place); medium (that the rocking can destroy
+     a host: S-0113 RK3 rolls a body over with area pushes, not drone deliveries); low (whether
+     creating the spark effect or the animation also draws from the stream, Open questions)
 
 10. **A grappling parasite's cycle.** A grappling parasite does not use its weapon's rate of fire.
     In each of its host's turns it first restarts the host's hold timer (claim 7) and checks the
@@ -247,13 +249,18 @@ addition:
     not established here. Raw draw counts follow S-0202 claim 4, including rejection and
     single-valued ranges.
 
-    The rocking of the host during the push phases is presentation: its tilt angle is
-    sin(*k* × (±π/10)) × π/4 at frame *k* of the push, in floating point, and 0 during the grab and
-    at the strike. Wake animations are created at the start of each push.
+    During the push phases the parasite sets the host's roll directly, in each of the host's turns
+    after the phase's first, at the push's phase frame *k*, and sets it to 0 in the grab's first
+    turn, in the turn in which a push phase ends and at the strike: S-0113 claim 14 gives which turn
+    writes which *k* (0 to 9, none from 10), the cadence and the sign of each push, from that push's
+    own way draw, and S-0113 F4 the value and its rounding. Wake animations are created at the start
+    of each push.
     - Backing: `measurable` (P6 for timing, hits and the no-escape outcome; P8 for ranged choices),
       `unmeasured` (the absence of a separate attacking house, for the same reason as claim 6)
     - Confidence: high (no use of the rate of fire, the draw count per strike); medium (the exact
-      tick counts 30, 69 and 40, which depend on how the phase counters are stepped, and additional effect-creation choices)
+      tick counts 30, 69 and 40, which depend on how the phase counters are stepped, and additional
+      effect-creation choices); medium for the roll value and cadence, which follow S-0113 claim
+      14's frame count *k*; high for the roll's sign
 
 11. **Culling.** At a strike, when the warhead has the cull flag and the host's health colour
     (S-0111, claim 5) is red with health above 0, or yellow while the grappling parasite is elite
@@ -326,13 +333,16 @@ addition:
 
     When the search gives no cell, the host-cell test fails or the placement fails, the parasite is
     removed silently. Once out, the parasite's target and destination are cleared unless it has
-    attack-move memory (S-0213, Terms), it falls back to rest (S-0215, claim 13), and it is held
-    for 3 × *R* ticks, *R* being its primary weapon's rate of fire (claim 8, Formulas F1). In either case the host's hold ends and the host's body stops
-    rocking.
-    - Backing: `measurable` (scenarios P4 and P9)
+    attack-move memory (S-0213, Terms), it falls back to rest (S-0215, claim 13), and it is held for
+    3 × *R* ticks, *R* being its primary weapon's rate of fire (claim 8, Formulas F1). In either
+    case the host's hold ends. A grappling parasite's own rocking of the host stops: it sets the
+    host's roll to 0 on leaving (S-0113 claim 14). A roll rate from a push is not changed by the
+    grappling parasite, so it goes on stepping and shows once the parasite stops writing the roll.
+    - Backing: `measurable` (scenarios P4 and P9; S-0113 RK6 part b for the roll at a release)
     - Confidence: high (the candidate cells, the search on the host's mobility, the 3 × *R* hold),
-      medium (the host-cell test, and that the host's own occupancy always sends a drone parasite to
-      the search)
+      medium (the host-cell test, that the host's own occupancy always sends a drone parasite to
+      the search, and the roll set to 0 on leaving with the push's rate going on, until S-0113
+      RK6 part b records it)
 
 14. **After coming out.** A parasite that has come out (claims 4, 13 or 15) is an ordinary unit
     again. It may fire its latching weapon again as soon as the firing rules allow: after claim 13,
@@ -589,16 +599,13 @@ arithmetic and multiplication wraps as S-0205 claim 1. Negative rate-of-fire or 
 lengths are outside the established claims. With *R* = 0 a delivery happens in every host turn.
 The hold intervals describe the state after renewal, not actions earlier in that tick.
 
-**F2, rocking point (presentation).** θ is the host's facing as an angle, *s* = +2 when the draw
-gives 0 and −2 when it gives 1:
+**F2, drone rocking strength.** This spec owns the strength of a drone delivery's push:
 
-> rock point = host position + *s* leptons along the direction perpendicular to θ, in the map plane
->
 > strength = 1.5
 
-This is an intended presentation formula. The original computes the rocking point using
-floating-point trigonometry and truncation toward zero to whole leptons; its exact angle is
-not established here. Presentation may use the formula above without changing the ranged choice.
+The push point is S-0113 F3's: about 2 leptons to the host's left when the side draw gives 0 and
+about 2 leptons to its right when it gives 1, with floating-point trigonometry and truncation
+toward zero to whole leptons.
 
 **F3, grappling cycle timing.** *g* is the host's first turn after latching (the grab's first tick):
 
@@ -636,14 +643,14 @@ Same precision and rounding as S-0311 F3.
 | Height limit for a latching shot | 2 levels (208) | leptons | Claim 5 |
 | Hold after coming out of a living host | 3 × the weapon's rate of fire | ticks | Claim 13 |
 | Suppression set by curtain protection, unloading or consumption | 50 | ticks | Claim 12 |
-| Drone rock displacement | 2 | leptons | Claim 9, presentation |
-| Drone rock strength | 1.5 | (rocking units) | Claim 9, presentation |
+| Drone rock displacement | 2 | leptons | Claim 9, S-0113 F3 |
+| Drone rock strength | 1.5 | (rocking units) | F2 (owner); claim 9, S-0113 claim 13 |
 | Grab phase | 10 frames × 3 ticks | ticks | Claim 10 |
 | Push phase | 10 frames × 4 ticks | ticks | Claim 10 |
 | First strike after the grab starts | 69 | ticks | Claim 10, F3 |
 | Strike period | 40 | ticks | Claim 10, F3 |
 | Splash effects per strike | 3 | effects | Claim 10 |
-| Push tilt | sin(*k* × π/10) × π/4 | radians | Claim 10, presentation |
+| Push roll | as S-0113 F4 | radians | Claim 10, S-0113 claim 14 |
 | Exit quarter turn | 16383 | 16-bit facing units | F4 |
 | Failed-latch facing | 0 (map north) | facing | Claim 4 |
 
@@ -669,9 +676,9 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 
 | Phase | Each turn | When the phase ends | Draws at the end |
 |---|---|---|---|
-| grab (starts at latching) | host held; host tilt 0 | a push phase starts in the same tick | 1 (range 0 … 1: push way), then six wake-displacement choices (claim 10) |
-| push (either way) | host held; host tilt per Constants | the strike happens in the next tick | none |
-| strike (one tick) | host tilt 0; three splash effects; cull test (F6) | cull: the parasite leaves, not held afterwards (claim 11); otherwise the hit, then, when the host still has the parasite, a push phase starts in the same tick | 3 × (range 0 … 1, range 0 … *n* − 1) before the test; 1 (range 0 … 1) and six wake-displacement choices after a hit that leaves the attachment intact |
+| grab (starts at latching) | host held | a push phase starts in the same tick | 1 (range 0 … 1: push way), then six wake-displacement choices (claim 10) |
+| push (either way) | host held; host roll per Constants | the strike happens in the next tick | none |
+| strike (one tick) | host roll 0; three splash effects; cull test (F6) | cull: the parasite leaves, not held afterwards (claim 11); otherwise the hit, then, when the host still has the parasite, a push phase starts in the same tick | 3 × (range 0 … 1, range 0 … *n* − 1) before the test; 1 (range 0 … 1) and six wake-displacement choices after a hit that leaves the attachment intact |
 
 **Ordering consequences.**
 - A parasite acts late in its host's turn (claim 18), after due healing, behaviour processing
@@ -773,32 +780,30 @@ A bench or arena adaptation should record ticks, health, positions, targets, exp
 state; these are requested observables, not a claim that the existing harness records them already.
 For every part, a result different from its stated expectation falsifies that part.
 
-- **P1, latch, deliveries and targeting (claims 1, 3, 6, 7, 9, 17).** Place a drone-parasite
-  test unit owned by A, a moving vehicle of enemy B, and a second A vehicle within weapon reach.
-  Order the parasite to attack B's vehicle, then the second A vehicle to attack its host.
-  Record launch, attachment and health-change ticks,
-  effects, movement and attack targets. Expected: disappearance at launch, attachment to the
-  original target even when it has moved away from the detonation, first delivery on the next
-  host turn, then F1; no detonation area hit on a nearby bystander. The host can attack the
-  second A vehicle but never its own parasite, and the second A vehicle still targets the host.
-  Named map variant: make the host infantry and latchable with a nonzero versus value.
-  Expected: the infantry delivery ignores defences
-  and kills at first delivery, whereas ordinary non-infantry damage follows S-0302. Give the
-  drone's primary weapon distinct rookie and elite damage and cadence; expected the rank's
-  primary slot, without a firing-bonus multiplication. Set paralysis length shorter than,
-  equal to and longer than rate of fire, plus zero rate of fire. Record hold state and move
-  attempts between deliveries: expected F1 and cessation of hold on release. Do not infer the
-  hold's starting tick from movement that occurred earlier in that same tick.
-  For the no-escape marker, use a named transport-host variant carrying passengers whose
-  ordinary lethal-hit control permits escape under S-0312. Kill it by a parasite delivery:
-  expected no escaping passengers. Repeat the lethal-delivery comparison in P6 with culling
-  disabled. An escaping passenger falsifies the marker claim.
-  For facing effects, give the delivery animation list eight visually distinct test entries,
-  then an empty list. Repeat for all eight host directions: expected the corresponding entry,
-  or no delivery animation for the empty list, with the spark effect unchanged.
-  During attachment, deliver a nonlethal area hit that reaches the host and record both units'
-  health: expected no damage to the off-map parasite. Record the parasite's target throughout
-  attachment: expected none, even while other enemies enter range.
+- **P1, latch, deliveries and targeting (claims 1, 3, 6, 7, 9, 17).** Place a drone-parasite test
+  unit owned by A, a moving vehicle of enemy B, and a second A vehicle within weapon reach. Order
+  the parasite to attack B's vehicle, then the second A vehicle to attack its host. Record launch,
+  attachment and health-change ticks, the host's roll and pitch per tick, effects, movement and
+  attack targets. Expected: disappearance at launch, attachment to the original target even when it
+  has moved away from the detonation, first delivery on the next host turn, then F1; no detonation
+  area hit on a nearby bystander. The host can attack the second A vehicle but never its own
+  parasite, and the second A vehicle still targets the host. Named map variant: make the host
+  infantry and latchable with a nonzero versus value. Expected: the infantry delivery ignores
+  defences and kills at first delivery, whereas ordinary non-infantry damage follows S-0302. Give
+  the drone's primary weapon distinct rookie and elite damage and cadence; expected the rank's
+  primary slot, without a firing-bonus multiplication. Set paralysis length shorter than, equal to
+  and longer than rate of fire, plus zero rate of fire. Record hold state and move attempts between
+  deliveries: expected F1 and cessation of hold on release. Do not infer the hold's starting tick
+  from movement that occurred earlier in that same tick. For the no-escape marker, use a named
+  transport-host variant carrying passengers whose ordinary lethal-hit control permits escape under
+  S-0312. Kill it by a parasite delivery: expected no escaping passengers. Repeat the
+  lethal-delivery comparison in P6 with culling disabled. An escaping passenger falsifies the marker
+  claim. For facing effects, give the delivery animation list eight visually distinct test entries,
+  then an empty list. Repeat for all eight host directions: expected the corresponding entry, or no
+  delivery animation for the empty list, with the spark effect unchanged. During attachment, deliver
+  a nonlethal area hit that reaches the host and record both units' health: expected no damage to
+  the off-map parasite. Record the parasite's target throughout attachment: expected none, even
+  while other enemies enter range.
 - **P2, legality (claims 2, 5).** Order two A drones at one B tank in one tick. Record every shot.
   Expected: once the first fires, the second check refuses for 20 ticks, and refuses while an
   attachment exists. Named map variant: slow the latching projectile enough that it remains in
@@ -817,7 +822,7 @@ For every part, a result different from its stated expectation falsifies that pa
 - **P4, living-host exit (claims 7, 12, 13).** Put an unsuppressed drone in a tank, then apply
   a sonic hit, healing hit or paid repair step. Record exit cell, facing, hold and host rocking.
   Expected: sonic release per claim 13 and F4; healing and repair silently remove a non-naval
-  parasite; the host's hold and rocking end. Repeat sonic release for all eight host directions,
+  parasite; the host's hold ends. Repeat sonic release for all eight host directions,
   with blocked candidate cells and with no qualifying nearby cell: expected host-mobility
   search, or silent removal on failure. Repeat with a naval parasite for the side candidate
   and its living-host suppression exemption. Named map variants: a latchable airborne host
@@ -846,21 +851,22 @@ For every part, a result different from its stated expectation falsifies that pa
   exit, hence non-naval removal. Enter an ordinary transport with an infected unit: expected
   host-loss release, not the passenger-unloading path. Test a ship killed by damage separately
   and record whether release waits until removal; this tests the sinking open question.
-- **P6, grapple and cull (claims 7, 10, 11, 16).** Order a grappling-parasite test unit to
-  attack an enemy naval host on open water. Record health, phase changes, rocking, wake and splash counts and experience.
-  Expected: first strike at F3's exact tick, later strikes 40 ticks apart, uninterrupted hold,
-  three wakes at each push start, three splashes at each strike, and push tilt following
-  claim 10's phase-frame formula with zero tilt during grab and strike. Record local loss
-  announcements too: expected the ordinary local unit-lost gating, not an unconditional sound. A one-tick discrepancy
-  falsifies the proposed timing, rather than being accepted as tolerance. At red health the
-  next eligible strike culls, releases without a hold and starts sinking without health loss.
-  Named variants: different weapon rate of fire (no cadence change), cull flag off (ordinary
-  hit), elite parasite with yellow host (cull), untrainable parasite (no cull experience),
-  differing house-cost factors, allied and unscored hosts. Expected: F5 without victim-rank,
-  alliance or unscored filtering, and no ordinary kill credit or score from culling.
-  In a named map variant, set paralysis length to zero so an amphibious host can follow a
-  route onto dry terrain while carrying a grappling parasite. Expected: release at the first
-  host turn that finds a non-water cell, without a post-exit hold. Named long-lived hosts allow the phase test to finish before culling.
+- **P6, grapple and cull (claims 7, 10, 11, 16).** Order a grappling-parasite test unit to attack an
+  enemy naval host on open water. Record health, phase changes, the host's roll and pitch per tick,
+  wake and splash counts and experience. Expected: first strike at F3's exact tick, later strikes 40
+  ticks apart, uninterrupted hold, three wakes at each push start, three splashes at each strike,
+  and push roll following S-0113 claim 14 and F4, with the sign of each push's own way draw, and
+  zero roll at the strike. Record local loss announcements too: expected the ordinary local
+  unit-lost gating, not an unconditional sound. A one-tick discrepancy falsifies the proposed
+  timing, rather than being accepted as tolerance. At red health the next eligible strike culls,
+  releases without a hold and starts sinking without health loss. Named variants: different weapon
+  rate of fire (no cadence change), cull flag off (ordinary hit), elite parasite with yellow host
+  (cull), untrainable parasite (no cull experience), differing house-cost factors, allied and
+  unscored hosts. Expected: F5 without victim-rank, alliance or unscored filtering, and no ordinary
+  kill credit or score from culling. In a named map variant, set paralysis length to zero so an
+  amphibious host can follow a route onto dry terrain while carrying a grappling parasite. Expected:
+  release at the first host turn that finds a non-water cell, without a post-exit hold. Named
+  long-lived hosts allow the phase test to finish before culling.
 - **P7, teleport and replacement (claim 12).** Infect a unit using the teleporting locomotor
   with a drone parasite, then order a jump; record the old and new positions and release tick.
   Expected: exit at the old position before departure. Separately record a teleporting
@@ -1033,5 +1039,4 @@ For every part, a result different from its stated expectation falsifies that pa
   amphibious host on water or a beach (a host in the cell of a building's exit, for example).
 - How a visceroid-type host interacts with a parasite (the original reads the attachment there; not
   traced).
-- The absent-key default of the spark effect, and exact drone rocking geometry beyond the
-  intended sideways displacement of F2.
+- The absent-key default of the spark effect.
