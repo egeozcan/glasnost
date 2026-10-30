@@ -690,79 +690,32 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     if !v.lt(chance) {
         return;
     }
-    let Some(crew_type) = crew_type(w, id) else {
+    // spec: S-0312 claim 13 and F4 (the crew type, with F4's percent draw when it takes one, armed by claim 6's second choice)
+    let armed = crate::combat::survivors::armed(w, id);
+    let Some(crew_type) = crate::combat::survivors::crew_type(w, o.owner, armed) else {
         return;
     };
-    // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed)
-    place_survivor(w, crew_type, o.owner, o.pos, true);
-}
-
-/// The crew or survivor type of F4 (S-0312), with its draw.
-fn crew_type(w: &mut World, id: ObjectId) -> Option<u32> {
-    let rules = w.rules_arc();
-    let o = w.obj(id)?.clone();
-    let g = &rules.combat.general;
-    let _ = &o;
-    // Sides are not part of the simulation's rules data yet (S-0004 claim 9): every house counts as without a side, giving the technician of F4's first row.
-    // spec: S-0312 F4 (a country that belongs to no side: the game-wide technician, no draw)
-    g.technician
-}
-
-/// Creates and places a crew or survivor infantry unit (S-0312 claims 13
-/// and 18), with its creation and health draws.
-// spec: S-0312 claims 13 and 18 (five standing positions of S-0208; cells of 256 leptons; lowest health 5)
-fn place_survivor(
-    w: &mut World,
-    ty: u32,
-    owner: Option<crate::world::HouseId>,
-    at: Pos,
-    crew: bool,
-) {
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    let rules = w.rules_arc();
-    let half = rules.quirks.ranged_draw_half_span;
-    let id = crate::objects::create(w, Kind::Infantry, ty, owner);
-    let c = at.cell();
-    let free = (0u8..5).find(|&p| {
-        // spec: S-0208 table P (five standing positions)
-        w.cells
-            .occ(c, crate::world::Layer::Ground)
-            .is_some_and(|o| !o.taken(p))
-    });
-    let Some(p) = free else {
-        // spec: S-0312 claims 13 and 18 (one that cannot be placed never enters play and takes no health draw; the creation draw is already taken)
-        w.objects.remove(&id);
+    // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed; health R(5, trunc(S / 2)))
+    let s = rules
+        .unit(Kind::Infantry, crew_type)
+        .map_or(0, |u| u.strength);
+    let top = s / 2; // spec: S-0312 claim 13 (crew health R(5, trunc(S / 2)))
+    let Some(cid) =
+        crate::combat::survivors::place_infantry(w, crew_type, o.owner, o.pos.cell(), top)
+    else {
         return;
     };
-    let (u, v) = crate::walk::standing_point(p);
-    let z = w.surface_at(256 * c.x + u, 256 * c.y + v);
-    crate::objects::place(w, id, Pos::new(256 * c.x + u, 256 * c.y + v, z), 0);
-    let s = rules.unit(Kind::Infantry, ty).map_or(0, |u| u.strength);
-    // spec: S-0312 claim 13 (crew health R(5, trunc(S / 2))); claim 18 (survivor health R(5, S))
-    let top = if crew { s / 2 } else { s };
-    let h = w.rng.ranged(5, top, half);
-    if let Some(ob) = w.obj_mut(id) {
-        ob.health = h;
-        ob.combat.expected_health = h;
-    }
-    // spec: S-0312 claim 12 (a scatter request with no threat point, forced, not move-anywhere)
-    crate::scatter::request(
-        w,
-        id,
-        crate::scatter::ScatterRequest {
-            threat: None,
-            forced: true,
-            anywhere: false,
-        },
-    );
+    let stale = rules.quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let tick = w.tick;
-    let human = owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
-    if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0312 claim 25 (a player house: a crew on guard, a survivor on move; the neutral or special house: hunt)
-        let b = match (human, crew) {
-            (true, true) => crate::rules::Behaviour::Guard,
-            (true, false) => crate::rules::Behaviour::Move,
-            (false, _) => crate::rules::Behaviour::Hunt,
+    let human = o
+        .owner
+        .is_none_or(|h| w.houses.get(usize::from(h.0)).is_some_and(|x| x.human));
+    if let Some(ob) = w.obj_mut(cid) {
+        // spec: S-0312 claim 25 (a crew: guard for a player house, human or AI; hunt for the neutral or special house)
+        let b = if human {
+            crate::rules::Behaviour::Guard
+        } else {
+            crate::rules::Behaviour::Hunt
         };
         ob.beh.force(b, tick, stale);
     }
@@ -865,8 +818,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0312 claim 19 (f) and S-0616 claim 1 (one destruction smoke system: smoke-kind entries only, Q-1400 answered; an exploding or sold building keeps it emitting until its removal, any other one marks it at once by claim 4)
     crate::emitters::destruction_smoke(w, id);
     // spec: S-0312 claim 19 (g) and claim 24 (absorbed passengers come out, or die, before the survivors)
-    crate::structures::absorb::destroyed(w, id, hit);
-    survivors(w, id, hit);
+    let used = crate::structures::absorb::destroyed(w, id, hit);
+    survivors(w, id, hit, used);
     // spec: S-0312 claim 21 (only the type's explodes flag counts, or the sale's behaviour at the destruction: the building awaits removal with 0 health)
     let selling = o.beh.seen() == Some(crate::rules::Behaviour::Selling);
     if tc.explodes || selling {
@@ -888,37 +841,37 @@ pub fn removal_turn(w: &mut World, id: ObjectId) {
     }
     // What the second round reads of the building, taken before it leaves play.
     let refund = crate::seams::building_refund(w, id);
+    let src = crate::combat::survivors::source(w, id);
     // spec: S-0312 claim 21 (the building leaves play and ceases to occupy its foundation cells before any second-round survivor enters play; it has left the update order before the second round)
     leave_play(w, id);
     if w.rules().quirks.building_removal_second_round {
         // spec: S-0312 claim 21 (a second round of claims 18 and 19 (g), C worked out afresh by F5; absorbed passengers are already out)
-        second_round(w, refund);
+        if let Some(src) = src {
+            // spec: S-0312 claim 21 (the second round starts at the first foundation cell: no absorbed passenger comes out now)
+            crate::combat::survivors::destruction_round(w, &src, refund, 0);
+        }
     }
     // Passengers still inside die (claim 21): claim 24 has already let every absorbed passenger out or killed it in claim 19 (g), so none is left here (`absorb::destroyed`).
     // Rubble and crate of claim 20 are then placed: not modelled.
 }
 
-/// The second round of a building's removal (S-0312 claim 21), after it
-/// has left play: claim 18's survivors and claim 19 (g)'s smudge steps,
-/// which need C > 0. As for the first round, C = 0 until sides exist (see
-/// `survivors`), so the round takes no draw.
-fn second_round(_w: &mut World, refund: Option<i32>) {
-    // spec: S-0312 claim 21 (C afresh by F5; C = 0: nothing in claim 18 happens, and no smudge step of claim 19 (g))
-    let _ = refund;
-}
-
-/// Survivors of a destroyed building (S-0312 claim 18). The count C of F5
-/// needs the owner's side, which the simulation's rules do not carry yet
-/// (an owner whose side is not 0, 1 or 2 gives C = 0), and the building's
-/// refund K (S-0408 claim 1, `seams::building_refund`); the chance needs
-/// the owner's game not to be over (S-0414, `seams::game_over`). Until
-/// sides and M5a exist, C = 0 and no survivor is released.
-fn survivors(w: &mut World, id: ObjectId, hit: &Hit) {
-    let Some(o) = w.obj(id) else { return };
-    // spec: S-0312 F5 (C = min(max(trunc(K / q), 1), 5) with K the refund; C = 0 for an owner without a side, so here C = 0)
-    let _refund = crate::seams::building_refund(w, id);
-    let _over = o.owner.is_some_and(|h| crate::seams::game_over(w, h));
-    let _ = hit;
+/// Survivors of a destroyed building (S-0312 claims 18 and 19 (g)), after
+/// its absorbed passengers, which used the first `used` foundation cells
+/// (claim 24). Killing damage that ignores defences leaves it without crew
+/// (F5), which claim 21's second round reads again.
+fn survivors(w: &mut World, id: ObjectId, hit: &Hit, used: usize) {
+    if hit.ignore_defences
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0312 claim 18 and F5 (killing damage that ignores defences: the building has no crew)
+        ob.combat.no_crew = true;
+    }
+    let Some(src) = crate::combat::survivors::source(w, id) else {
+        return;
+    };
+    // spec: S-0312 F5 (K: the type's refund for its owner as it stands now, S-0408 claim 1)
+    let refund = crate::seams::building_refund(w, id);
+    crate::combat::survivors::destruction_round(w, &src, refund, used);
 }
 
 /// A destroyed terrain object (S-0302 claim 20).

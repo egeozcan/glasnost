@@ -1881,6 +1881,8 @@ fn building_rules(
         // spec: S-0518 Import mapping (Overpowerable absent: no)
         overpowerable: b(bt.overpowerable),
         helipad: b(bt.helipad),
+        // spec: S-0312 Import mapping (Crewed: the default is left to the type specs, which give none for buildings; Q-2135, interim: absent is no)
+        crewed: b(bt.crewed),
         artillary: b(bt.artillary),
         can_be_occupied: b(bt.can_be_occupied),
         can_occupy_fire: b(bt.can_occupy_fire),

@@ -34,5 +34,6 @@ pub mod range;
 pub mod shotanim;
 pub mod shrapnel;
 pub mod state;
+pub mod survivors;
 pub mod veterancy;
 pub mod weapon;

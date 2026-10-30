@@ -862,13 +862,17 @@ fn place_released(w: &mut World, b: ObjectId, p: ObjectId, c: CellXY) -> bool {
 /// A destroyed absorbing building's passengers (S-0312 claim 24, S-0605
 /// claim 14), at claim 19 (g) before the survivors: front first, one per
 /// foundation cell in S-0302's order; one not placed dies, credited to the
-/// building's charge planter. With no crew all die.
-pub fn destroyed(w: &mut World, b: ObjectId, hit: &Hit) {
+/// building's charge planter. With no crew all die. Returns the number of
+/// foundation cells the passengers used, one each whether placed or not,
+/// after which claim 18's survivors start.
+pub fn destroyed(w: &mut World, b: ObjectId, hit: &Hit) -> usize {
     let list = passengers(w, b);
     if list.is_empty() {
-        return;
+        return 0;
     }
-    let Some(bo) = w.obj(b).cloned() else { return };
+    let Some(bo) = w.obj(b).cloned() else {
+        return 0;
+    };
     let cells = crate::combat::damage::foundation_order(bo.pos.cell(), bo.foundation);
     let planter = bo.combat.charge_planter.filter(|&x| w.obj(x).is_some());
     let credit = Hit {
@@ -881,8 +885,8 @@ pub fn destroyed(w: &mut World, b: ObjectId, hit: &Hit) {
         ignore_defences: false,
         no_escape: false,
     };
-    // spec: S-0312 claim 24 and F5 (no crew: killing damage that ignores defences; the map setting is not modelled)
-    let no_crew = hit.ignore_defences;
+    // spec: S-0312 claim 24 and F5 (no crew: killing damage that ignores defences, or the building's no-crew mark; no map sets it, Q-2131)
+    let no_crew = hit.ignore_defences || bo.combat.no_crew;
     for (i, &p) in list.iter().enumerate() {
         let placed = !no_crew
             // spec: S-0312 claim 24 and Edge cases (beyond the last cell: not placed)
@@ -895,6 +899,8 @@ pub fn destroyed(w: &mut World, b: ObjectId, hit: &Hit) {
             crate::combat::death::passenger_death(w, p, &credit);
         }
     }
+    // spec: S-0312 claim 24 (each passenger uses the next cell whether or not the previous one could be placed; the survivors start after the last cell used)
+    list.len()
 }
 
 /// A sold absorbing building's passengers (S-0408 claim 8, S-0605 claim

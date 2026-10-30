@@ -2728,6 +2728,9 @@ pub struct BuildingType {
     /// `Helipad` (S-0312 claim 17).
     #[serde(default)]
     pub helipad: Option<bool>,
+    /// `Crewed` (S-0312 claim 18 and F5; S-0408 claim 7).
+    #[serde(default)]
+    pub crewed: Option<bool>,
     /// `Artillary` (S-0309 claim 18).
     #[serde(default)]
     pub artillary: Option<bool>,

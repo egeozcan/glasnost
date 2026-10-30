@@ -723,8 +723,9 @@ fn release_occupants(w: &mut World, id: ObjectId) {
     crate::structures::absorb::sold(w, id);
     // spec: S-0408 claim 9 and S-0508 claim 13 (a sold garrisoned building puts out its occupants after the absorbed passengers and before the sale survivors: no hunting, with the inside fallback)
     crate::structures::garrison::sold(w, id);
-    // spec: S-0408 claim 7 (C attempts, C of S-0312 F5; an owner without a side gives C = 0, as for a destroyed building)
-    w.note("S-0408 claims 7 to 9: sale survivors need sides (S-0312 F5 gives C = 0 without one); absorbed passengers (S-0605) and the garrison (S-0508) are put out");
+    // spec: S-0408 claims 7 and 9 (the sale survivors last: C attempts, C of S-0312 F5)
+    crate::combat::survivors::sold(w, id);
+    w.note("S-0408 claims 7 to 9: the release step put out the absorbed passengers (S-0605), the garrison (S-0508) and the sale survivors (S-0312 F5's count)");
 }
 
 /// The end of a sale (S-0408 claim 6; S-0415 claims 9 to 11).

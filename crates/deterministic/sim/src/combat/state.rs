@@ -123,6 +123,12 @@ pub struct CombatState {
     /// Never cleared.
     #[serde(default)]
     pub captured: bool,
+    /// A building has no crew (S-0312 F5): its killing damage ignored
+    /// defences (claims 18 and 21). The map entry's no-crew flag would set
+    /// it too; it is not imported (Q-2131). Read by the second survivor
+    /// round of claim 21.
+    #[serde(default)]
+    pub no_crew: bool,
     /// A building's computer-repair map flag (S-0314 claim 13, S-0009
     /// claim 40).
     #[serde(default)]
@@ -206,6 +212,7 @@ impl CombatState {
             last_shot_target: None,
             hostile_hit: false,
             captured: false,
+            no_crew: false,
             computer_repair: false,
             fire_emitter: None,
             spark_emitter: None,

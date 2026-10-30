@@ -258,6 +258,7 @@ const BUILDING_COMBAT: &[Row] = &[
     ("leave_rubble", "LeaveRubble", Bool, "S-0312"),
     ("overpowerable", "Overpowerable", Bool, "S-0518, S-0308"),
     ("helipad", "Helipad", Bool, "S-0312"),
+    ("crewed", "Crewed", Bool, "S-0312, S-0408"),
     ("artillary", "Artillary", Bool, "S-0309"),
     ("max_number_occupants", "MaxNumberOccupants", Int, "S-0313"),
     (
