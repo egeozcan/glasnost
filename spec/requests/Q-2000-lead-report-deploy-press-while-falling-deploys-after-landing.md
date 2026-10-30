@@ -1,9 +1,9 @@
 ---
 id: Q-2000
 title: The lead's play report against S-0213's deploy rule and S-0522 claim 17: a deploy press on falling paratroopers deploys them after landing
-status: open
+status: answered
 related: [S-0213, S-0214, S-0522, S-0107, S-0215]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need
