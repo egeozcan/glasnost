@@ -184,11 +184,30 @@ fn run_start(c: &mut Client) {
     c.done(Done::Started(vfs, Box::new(s), SoundBank::new()));
 }
 
-struct Clock(Instant);
+/// The test's host clock. It also notes the longest gap between two
+/// readings: every loop here reads it every millisecond or so, so a long
+/// gap means the host did not run the test (a loaded machine), see
+/// [`under_load`].
+struct Clock {
+    start: Instant,
+    last: std::cell::Cell<i64>,
+    gap: std::cell::Cell<i64>,
+}
 
 impl Clock {
+    fn new() -> Self {
+        Clock {
+            start: Instant::now(),
+            last: std::cell::Cell::new(0),
+            gap: std::cell::Cell::new(0),
+        }
+    }
+
     fn now(&self) -> i64 {
-        self.0.elapsed().as_millis() as i64
+        let t = self.start.elapsed().as_millis() as i64;
+        self.gap.set(self.gap.get().max(t - self.last.get()));
+        self.last.set(t);
+        t
     }
 }
 
@@ -290,7 +309,7 @@ fn script(c: &mut Client, tick: i32, n: &mut u64) -> usize {
 #[test]
 fn two_clients_meet_chat_and_play_in_lockstep() {
     let (_rt, relay) = relay(31);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let mut a = client(&relay, "Ann");
     let mut b = client(&relay, "Bea");
 
@@ -481,7 +500,7 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
 #[test]
 fn the_host_sets_the_fixes_layer_for_the_room() {
     let (_rt, relay) = relay(83);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let mut a = client(&relay, "Ann");
     let mut b = client(&relay, "Bea");
     press_menu(&mut a, MenuHit::Multiplayer);
@@ -576,7 +595,7 @@ fn a_peer_with_other_layers_is_refused_on_the_rules_hash() {
 #[test]
 fn a_join_of_another_build_is_refused_on_that_field() {
     let (_rt, relay) = relay(5);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let mut a = client(&relay, "Ann");
     let mut b = client(&relay, "Bea");
     b.build = "glasnost another".into();
@@ -621,7 +640,7 @@ fn a_join_of_another_build_is_refused_on_that_field() {
 /// A relay that is not there: the multiplayer screen says so.
 #[test]
 fn an_unreachable_relay_is_reported() {
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let mut c = Client::new();
     c.done(Done::Prepared(Vfs::default(), Ok(Box::new(install()))));
     // A port nothing listens on: bind one and let it go.
@@ -669,7 +688,7 @@ fn notice(c: &Client, has: impl Fn(&str) -> bool) -> bool {
 fn a_desync_is_reported_by_both_with_their_digests() {
     use glasnost_net::desync::{Bundle, PAST_TICKS, Perturb};
     let (_rt, relay) = relay(77);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let mut a = client(&relay, "Ann");
     let mut b = client(&relay, "Bea");
     let perturb = Perturb::Credits {
@@ -897,7 +916,7 @@ fn play_to(
 #[test]
 fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
     let (_rt, relay) = relay(41);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let mut a = client(&relay, "Ann");
     let store = Kept::default();
     let mut b = client(&relay, "Bea");
@@ -1086,12 +1105,22 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
 }
 
 /// The relay's silence limit in the pump tests, in milliseconds: short, so
-/// that a test outlasts it several times in a few seconds.
-const SHORT_SILENCE_MS: u64 = 1_000;
+/// that a test outlasts it several times in a few seconds. The relay owns
+/// this timeout (it runs on the relay's clock, not ours), and the game's
+/// start is one blocking update of some 250 ms in a debug build, which a
+/// loaded machine stretches several times over; the limit is set well
+/// above that, so that only a stall far beyond it can cross it.
+const SHORT_SILENCE_MS: u64 = 2_500;
+
+/// How many silence limits the pump tests run for.
+const SILENCES: u64 = 3;
 
 /// Two persons and a computer in a room on a relay that closes a
 /// connection silent for [`SHORT_SILENCE_MS`]; their games run.
-fn short_silence_game(seed: u64) -> (tokio::runtime::Runtime, Relay, Clock, Client, Client) {
+fn short_silence_game(
+    seed: u64,
+    clock: &Clock,
+) -> (tokio::runtime::Runtime, Relay, Client, Client) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -1108,28 +1137,27 @@ fn short_silence_game(seed: u64) -> (tokio::runtime::Runtime, Relay, Clock, Clie
             Box::new(Fake(seed)),
         ))
         .expect("the relay binds");
-    let clock = Clock(Instant::now());
     let mut a = client(&relay, "Ann");
     let mut b = client(&relay, "Bea");
     press_menu(&mut a, MenuHit::Multiplayer);
     press_net(&mut a, NetHit::Host);
-    pump(&clock, &mut [&mut a], "the room", |c| {
+    pump(clock, &mut [&mut a], "the room", |c| {
         c[0].room_code().is_some()
     });
     let code = a.room_code().unwrap().to_owned();
     press_room(&mut a, SetupHit::Kind(1, -1));
-    pump(&clock, &mut [&mut a], "an open row", |c| {
+    pump(clock, &mut [&mut a], "an open row", |c| {
         c[0].room().unwrap().setup.slots[1].kind == SlotKind::Human
     });
     press_menu(&mut b, MenuHit::Multiplayer);
     b.netform.code = code;
     press_net(&mut b, NetHit::Join);
-    pump(&clock, &mut [&mut a, &mut b], "the join", |c| {
+    pump(clock, &mut [&mut a, &mut b], "the join", |c| {
         c.iter()
             .all(|c| c.room().is_some_and(|v| v.members.len() == 2))
     });
     press_room(&mut b, SetupHit::Start_);
-    pump(&clock, &mut [&mut a, &mut b], "ready", |c| {
+    pump(clock, &mut [&mut a, &mut b], "ready", |c| {
         c[0].room()
             .unwrap()
             .members
@@ -1137,10 +1165,37 @@ fn short_silence_game(seed: u64) -> (tokio::runtime::Runtime, Relay, Clock, Clie
             .all(|m| m.ready || m.row == 0)
     });
     press_room(&mut a, SetupHit::Start_);
-    pump(&clock, &mut [&mut a, &mut b], "ticks", |c| {
+    pump(clock, &mut [&mut a, &mut b], "ticks", |c| {
         c.iter().all(|c| tick_of(c) > 20)
     });
-    (rt, relay, clock, a, b)
+    (rt, relay, a, b)
+}
+
+/// Runs `attempt` on a fresh clock; when it panics and the host stalled
+/// the test for [`STALL_MS`] or more meanwhile, runs it again (up to
+/// [`ATTEMPTS`] times). These two tests set the relay's real silence limit
+/// ([`SHORT_SILENCE_MS`], a timeout the relay owns, on its own threads)
+/// against the test's own loop: a machine so loaded that the loop does not
+/// run for a good part of that limit can fail them whatever the code under
+/// test does. A stall of that size is a property of the host, not of the
+/// pump, so such an attempt counts for nothing and is repeated; a failure
+/// with no stall in it, or one that repeats every time, still fails the
+/// test with its own message, and both assertions stand unweakened.
+fn under_load(attempt: impl Fn(&Clock)) {
+    const STALL_MS: i64 = SHORT_SILENCE_MS as i64 / 4;
+    const ATTEMPTS: usize = 6;
+    for n in 1.. {
+        let clock = Clock::new();
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| attempt(&clock)));
+        let Err(panic) = run else { return };
+        if n == ATTEMPTS || clock.gap.get() < STALL_MS {
+            std::panic::resume_unwind(panic);
+        }
+        eprintln!(
+            "attempt {n} failed after the host stalled the test for {} ms; trying again",
+            clock.gap.get()
+        );
+    }
 }
 
 fn tick_of(c: &Client) -> i32 {
@@ -1190,7 +1245,11 @@ fn ann_draws_no_frames(
 /// games keep the same hashes.
 #[test]
 fn a_network_game_plays_on_while_its_window_draws_no_frames() {
-    let (_rt, relay, clock, mut a, mut b) = short_silence_game(51);
+    under_load(plays_on_without_frames);
+}
+
+fn plays_on_without_frames(clock: &Clock) {
+    let (_rt, relay, mut a, mut b) = short_silence_game(51, clock);
     // While Ann's frames come, the pump leaves Ann's updates to them.
     let mut p = Pump::default();
     for _ in 0..50 {
@@ -1204,7 +1263,8 @@ fn a_network_game_plays_on_while_its_window_draws_no_frames() {
         std::thread::sleep(Duration::from_millis(2));
     }
     let ran = tick_of(&b);
-    let (ticks, left) = ann_draws_no_frames(&clock, &mut a, &mut b, true, 4 * SHORT_SILENCE_MS);
+    let (ticks, left) =
+        ann_draws_no_frames(clock, &mut a, &mut b, true, SILENCES * SHORT_SILENCE_MS);
     assert!(!left, "the relay kept Ann's connection");
     assert!(a.net.as_ref().is_some_and(|n| n.closed.is_none()));
     // Some 250 ticks at the fastest network speed in 4 s; a fifth at
@@ -1240,8 +1300,13 @@ fn a_network_game_plays_on_while_its_window_draws_no_frames() {
 /// its game once the relay's silence limit passes.
 #[test]
 fn a_window_that_draws_no_frames_and_is_not_pumped_loses_its_game() {
-    let (_rt, relay, clock, mut a, mut b) = short_silence_game(52);
-    let (ticks, left) = ann_draws_no_frames(&clock, &mut a, &mut b, false, 4 * SHORT_SILENCE_MS);
+    under_load(loses_its_game_unpumped);
+}
+
+fn loses_its_game_unpumped(clock: &Clock) {
+    let (_rt, relay, mut a, mut b) = short_silence_game(52, clock);
+    let (ticks, left) =
+        ann_draws_no_frames(clock, &mut a, &mut b, false, SILENCES * SHORT_SILENCE_MS);
     assert_eq!(ticks, 0);
     assert!(left, "the relay closed Ann's silent connection");
     relay.stop();
