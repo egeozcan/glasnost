@@ -2,13 +2,13 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 20
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0191, Q-0196]
+requests: [Q-0191, Q-0196, Q-2172]
 supersedes: []
 ---
 
@@ -37,7 +37,8 @@ release, without retry; no eligible releasing factory instead leaves the item do
 Refusal cues remain S-0411 claim 12's and S-0701 claim 24's: the busy-building-line
 refusal and refused placement request distinct announcements, neither the game-wide
 refusal sound. These pointers do not add cues to actions whose feedback those specs
-leave unresolved.
+leave unresolved. A click that claim 16's test refuses at issue plays no sound (claim 16,
+*At issue*).
 
 ## Terms
 
@@ -86,8 +87,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
   make it, are judged only at a recheck (claim 12), when the set is worked out again. Between two
   rechecks the offer does not change, even when (a) or (b) stops or starts holding. Whether an
   offered type is at limit is judged from the current counts at every moment (claims 9 and 13): an
-  offered type at limit cannot be ordered to start or queue an item. A build order requesting
-  resume of its held item is exempt from that issue-time limit test (claim 13), and its own icon
+  offered type at limit cannot start or queue an item (claims 13 and 16). A build order
+  requesting resume of its held item is exempt from the issue-time limit test (claim 16, *At
+  issue*), and its own icon
   shows its item state rather than darkening (S-0411 claim 3).
 - **Being sold, queued to be sold.** A building is *being sold* while its current behaviour (S-0215,
   Terms) is *selling*, that is, during its sale (glossary, *sale*). It is *queued to be sold* while
@@ -179,6 +181,12 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    transport, a type that needed it for the refinery group (claim 8 (b)) stays offered until the
    next recheck. Whether an offered type is at limit, by contrast, follows the current counts at
    every moment: a type at limit is offered but an order to start or queue it is refused (claim 13).
+   The original's one exception is a dock-bound aircraft type at its own build limit while the
+   house has room on its pads: its interface gives the order, and applying it starts nothing (claim
+   16, *At issue*; medium, `measurable`: T12 run 8 part c, as claim 16 rates it) unless the type's
+   build-limit answer has changed by then (medium, `unmeasured`: no scenario here removes an owned
+   object of the type between an order's issue and its application). Our engine refuses that order
+   when issued (claim 13).
    A held-item resume is exempt from this issue-time limit test; its own icon shows its item state
    rather than darkening (S-0411 claims 3 and 4). The neutral and special houses build nothing.
    - Backing: `measurable` (scenarios T1 and T2; build-limit exclusion from the offer-factory
@@ -439,14 +447,25 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       since the original's own list may hold more events (Open question 1).
 
 13. **Build orders follow the offer.** In the original the offer is made by the local player's
-    interface: a build order to start or queue an item is issued only for an offered type that is
-    not at limit; a request to resume its held item is exempt from that issue-time limit test
-    (S-0411 claim 4). In both cases
+    interface: a build order to start or queue an item is issued only for an offered type that
+    claim 16's test, made at issue, does not refuse (claim 16, *At issue*). For an idle line and
+    a type that is not a dock-bound aircraft, that test refuses exactly when claim 9's answer is
+    at limit or refused. A request to resume its held item is exempt from that issue-time limit
+    test (S-0411 claim 4). In both cases
     the build order itself checks only the factory conditions and the build limit when it is applied
     (S-0404, claim 3). In our engine the offer of claims 1 to 12 is worked out for every player
     house, AI houses included. Every build order requires an offered type (in its house's taken-up
-    set, claim 1) when issued. An order to start or queue an item also requires that the type is
-    not at limit (claim 9); an order requesting resume of its held item is exempt from that test,
+    set, claim 1) when issued. An order to start or queue an item also requires, when it is
+    issued, that the type is not at limit (claim 9's answer, as S-0404 claim 10 has it) and that
+    claim 16's test does not refuse it. So our engine gives no order for a dock-bound aircraft
+    type at its own build limit, which the original's interface gives and S-0404 claim 3 then
+    refuses unless the type's build-limit answer has changed by the time it is applied (claim 16,
+    *At issue*). The production outcomes differ only when that answer changes between issue and
+    application, for example when an owned object of the type is removed in between: the original's
+    order can then start an item, where our engine gave none (medium, `unmeasured`: no scenario here
+    removes an owned object of the type between an order's issue and its application). This is a
+    design rule with no switch: it keeps one issue-time rule for every order.
+    An order requesting resume of its held item is exempt from both tests,
     and from the busy building-line test of S-0411 claim 4. Resume remains subject to S-0404
     claim 3's factory and build-limit application tests. The application tests for starting or
     queuing are also S-0404 claim 3's and claim 16's. A
@@ -472,7 +491,12 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       recheck; S-0411 S4 b2 for held-item resume at and above the infantry limit; S-0404 P9 for
       cancellation issue and application timing; S-0411 S9 for cancellation order and
       intermediate queued starts, S10 for suppressed-type legality and absence of removal
-      orders; T14 run 7 and S-0404 P8 for the separate permanent-removal refund) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
+      orders; T14 run 7 and S-0404 P8 for the separate permanent-removal refund; the issue-time
+      test of claim 16 for dock-bound aircraft types by T12 run 8) for the local player's
+      behaviour. For other types the issue-time test with copies in the line is `measurable` by T12
+      runs 1 and 2: a refusal at issue gives no order and no sound, where an order refused when
+      applied plays S-0404 claim 3's refusal sound. The rule for our AI houses, and our engine's
+      refusal at issue of a dock-bound type at its own limit, are `unmeasured`, rules
       of our engine; the sentence on the original's
       computer-controlled houses is `unmeasured` too: a scenario cannot force a bystander computer
       player to try a given type (its choices come from its own build logic, and the glossary
@@ -480,8 +504,12 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       player simply never choosing that type. It is a note for AI designers and decides no rule of
       this spec.
     - Confidence: high (the local player, except the following medium-confidence cases); medium
-      (that a type refused since the last recheck can be ordered, and the permanent-removal refund
-      distinction); low (the original's computer-controlled houses, not observed: see Backing)
+      (that a type refused since the last recheck can be ordered, the permanent-removal refund
+      distinction, the issue-time test being claim 16's and its agreement with claim 9's answer
+      for an idle line, the issue-time test with copies in the line for types other than
+      dock-bound aircraft, the original's order starting an item when the build-limit answer
+      changes between issue and application); low (the original's computer-controlled houses,
+      not observed: see Backing)
 
 14. **Secret labs at game start.** During the game-start setup, under the conditions of the table
     below, every secret lab on the map, whoever owns it, is given the secret type, or none, that the
@@ -545,14 +573,61 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     eligibility and claim 9's build-limit answer with the production allowance, though it does
     not repeat this claim's queue-time test or the full tech-tree test. With no other item of
     that type in production, a copy at its positive limit therefore cannot start.
-    - Backing: `measurable` (scenario T12, runs 1 to 7; pad-total changes also by
-      S-0501 AC18). The list-only switch-off alternative is `unmeasured`, a design rule
+    - **At issue.** The local player's interface makes this same test, with the line's copies as
+      they are at that moment, before it gives any order to start or queue an item, whether the line
+      is idle or not. When the test refuses, no order is given: this is S-0411 claim 4's row for a
+      type at its build limit. Such a click plays no sound: neither the build sound nor the start
+      announcement, and not the game-wide refusal sound either (medium, `measurable`: T12 runs 1, 2
+      and 8 a). A click that S-0411 claim 4's busy-line row refuses gets S-0411 claim 12's
+      busy-line announcement before this test is made. So S-0404 claim 3's refusal sound for this
+      test, and S-0701 claim 24's cue for it, can follow only an order that passed the test at issue
+      and fails it when applied, which needs a count to change in between (for example the pad total
+      falling): for the local player a request refused by this test is silent (medium, from the
+      silence at issue). A request to resume a held item is exempt (claim 13). For an idle line the
+      line holds no copies, so for a dock-bound aircraft type *D* is then the house's present count
+      of the listed types, and the order is refused when that count is *T* or more. An aircraft in
+      flight is on the map, so it counts in *D* like one standing on its pad. A house whose listed
+      aircraft are all out, leaving every pad empty, therefore cannot order another while their
+      number is *T* or more. When an order is applied, the test is made again only for a copy queued
+      behind an item (S-0404 claim 3). The local player's input gives no second order before the
+      first is applied: S-0213 claim 1 takes at most one input event per cycle and applies a tick's
+      orders at its order boundary, and S-0411 claim 4 gives at most one order per left click. So
+      each order is tested at issue with the line as the orders before it left it. A dock-bound
+      aircraft type at its own build limit with *D* < *T* is given its order, which S-0404 claim 3's
+      factory test then refuses, since that test includes claim 9's build-limit answer (medium,
+      `measurable`: T12 run 8 part c), unless that answer has changed by the time the order is
+      applied (medium, `unmeasured`: no scenario here removes an owned object of the type between an
+      order's issue and its application). A house can still own more listed aircraft than its pad
+      total, for example when the total falls (a helipad building removed or captured). A
+      returning armed dock-bound aircraft that then finds no free place on a dock building of
+      its dock types crashes; it does not wait, circle or land elsewhere (S-0501 claim 46, with
+      that claim's backing and rating). Q-2172 asks for a switch if the original lets the
+      over-building happen.
+      By this claim it does not: the original makes claim 16's test at issue, as above (medium,
+      `measurable`: T12 run 8, not yet run), so our engine's refusal at issue is the original's
+      behaviour and no switch is needed. If run 8 shows the original starting the item, this answer
+      and the switch question are reopened.
+    - Backing: `measurable` (scenario T12, runs 1 to 8; pad-total changes also by
+      S-0501 AC18; the issue-time test for dock-bound aircraft types by run 8, its idle-line
+      case with every listed aircraft in flight by run 8 a, and the order for a dock-bound type
+      at its own limit by run 8 c; the silence of a click refused at issue by runs 1, 2 and 8 a).
+      That no second order is given before the first is applied follows from S-0213 claim 1 and
+      S-0411 claim 4, and that the refusal sound for this test can follow only a changed count
+      follows from the silence at issue. The order's start after the type's build-limit answer
+      changes between issue and application is `unmeasured`: no scenario here removes an owned
+      object of the type between an order's issue and its application.
+      The list-only switch-off alternative is `unmeasured`, a design rule
       rather than an observable rule of the original. F3's build-limit sum overflow is
       `unmeasured`: the scenarios cannot practically create enough owned or released
       objects to overflow those counts
     - Confidence: high (absent docking-place count, pad-total placement and removal),
       medium (ownership transfer, queue tests and the application-time limit on a queued
-      start; T12 run 6)
+      start; T12 run 6; the issue-time test, its refusal with no order and the count of
+      aircraft in flight; no second order before the first is applied; the order for a
+      dock-bound type at its own limit; its start when the build-limit answer changes between
+      issue and application; the silence of a click refused at issue, and the refusal sound only
+      after a changed count; a house owning more listed aircraft than its pad total after the
+      total falls)
 
 17. **Several new offers at one recheck (Q-0191).** For newly admitted types of one kind,
     admission follows increasing registration index. This applies to buildings across both
@@ -600,8 +675,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 > off, an infantry type follows the rule for the other types: for *L* > 0 it is allowed when *O* < *L*
 > or *P* = 1, at limit otherwise.
 
-> **F3. Queue-time refusal** (claim 16). With *Q* the number of copies of the type in the line
-> (item and queue): *L* > 0: refused when *O* + *Q* ≥ *L*. *L* ≤ 0: refused when *L* = −2³¹ or
+> **F3. Queue-time refusal** (claim 16; also made at issue, with *Q* as the line holds it then,
+> 0 for an idle line). With *Q* the number of copies of the type in the line (item and queue):
+> *L* > 0: refused when *O* + *Q* ≥ *L*. *L* ≤ 0: refused when *L* = −2³¹ or
 > *E* + *Q* ≥ −*L*.
 > Dock-bound aircraft type: with *D* the sum defined in claim 16 and *T* the house's pad total,
 > refused when *D* ≥ *T*; *L*, *O* and *E* play no part (with
@@ -632,6 +708,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 |---|---|---|
 | Building not on the map, or owned by another house | Building put on the map (placement, deploy, capture) | present count up; recheck needed, claim 12 (a) |
 | Building on the map, owned by the house | Building leaves the map or changes owner | present count down for the old owner; recheck needed, claim 12 (b) |
+| any | The local player's interface would give an order to start or queue an item | claim 16's test is made with the line's copies at that moment; when it refuses, no order is given (claim 16, *At issue*) |
 | any | Item starts | owned count up unless its type has the don't-score or insignificant flag (Terms); queue-time limit also counts the item (claim 16) |
 | any | Unit released by a factory | ever-built count up unless its type has the don't-score flag; insignificant alone does not exclude it (claim 10); recheck needed, claim 12 (f) |
 | any | Spy infiltrates a tech-lab building | stolen-tech flag set (claim 6); recheck needed, claim 12 (h) |
@@ -688,7 +765,8 @@ after the placement order is applied, while the building is still in its constru
   present objects and line copies when that type is absent from the list. This is the same
   switch as S-0501's, not a second capacity rule.
 - `quirks.dock_bound_aircraft_ignores_limit` (default original; owned here): claim 16. Off: a dock-bound aircraft
-  type is refused at queue time when either the dock test (*D* ≥ *T*) or the build-limit test of
+  type is refused by claim 16's test, at issue and at queue time, when either the dock test
+  (*D* ≥ *T*) or the build-limit test of
   any other type (F3: *O* + *Q* ≥ *L*; for *L* ≤ 0, *L* = −2³¹ or *E* + *Q* ≥ −*L*) refuses it.
 - `quirks.infantry_limit_exception_exact` (default original): claim 9. Off: an infantry type is allowed
   while an item of it is in production whenever the owned count is *L* or more, as for the other
@@ -1084,14 +1162,18 @@ of the scenarios.
 **T12. Queue-time limit.**
 - Setup: a test vehicle type with *L* = 2; start one and try to queue a second; second run with
   *L* = 3.
-- Observable: the queue count on the icon and the refusal sound.
-- Expected: run 1 refused; run 2 accepted, a third queued copy refused.
+- Observable: the queue count on the icon, the orders given (a sidebar recorder) and every
+  sound at each click.
+- Expected: run 1's second copy refused at issue, with no order and no sound (claim 16, *At
+  issue*). In run 2 the second copy is accepted, and a third queued copy is refused in the same
+  way.
 - Falsified if: run 1 accepts the second copy, or run 2 refuses the second copy or accepts the
-  third.
+  third, or a refused click gives an order or plays a sound.
 - Run 3 (dock-bound aircraft on the pad list): dock buildings giving *T* = 2 docks in all; two test
   aircraft types, both on the pad aircraft list: *A*, dock-bound with a build limit of 1, and *B*,
   with no limit. The house owns one *B* on the map and queues two copies of *A*.
-  Expected: the first copy starts (the line is idle, so the queue-time test is not run); the second,
+  Expected: the first copy starts (at issue the line is idle, so *D* = 1 present *B* < *T*, and
+  the test is not made again when the order is applied to the idle line); the second,
   queued behind it, is refused (*D* = 1 present *B* + 1 copy in the line = 2 = *T*); with *T* = 3 the second copy is accepted, although *A*'s owned
   count is then 1 and its limit 1, so the build limit plainly plays no part.
   Falsified if: the second copy is accepted with *T* = 2, or refused with *T* = 3, or the first copy
@@ -1118,13 +1200,46 @@ of the scenarios.
   nothing to the pad total. Use a listed dock-bound test type with no binding build limit,
   no present aircraft and enough credits. Start one item, then try to queue a second before
   release. Record queue acceptance with the sidebar recorder and scripted input.
-  Expected: absent counts give *T* = 2 and *D* = 1, so the second copy is accepted,
-  explicit zero gives *T* = 0 and the queue request is refused. A different queue result
-  with factory eligibility satisfied falsifies the default or the capacity accounting.
+  Expected: absent counts give *T* = 2: the start is given (*D* = 0) and the second copy is
+  accepted (*D* = 1). Explicit zero gives *T* = 0: the start itself gives no order at issue
+  (*D* = 0 = *T*, claim 16, *At issue*), so nothing starts and nothing can be queued. A
+  different result with factory eligibility satisfied falsifies the default or the capacity
+  accounting.
   S-0501 AC18 additionally tests placement, capture and removal changes in the pad total.
   Replay run 4 in our engine with the list-only switch off: its second copy must instead
   be refused, because the unlisted *A* item then raises *D* to 2. That replay tests the
   design alternative, not the oracle.
+- Run 8 (the test at issue, Q-2172, claim 16 *At issue*): use the common setup and speed index 2, a
+  sidebar recorder that logs the orders given, the icon's queue count and every sound, and scripted
+  input. Give the house test helipad buildings with explicit docking-place counts giving *T* = 2, a
+  separate eligible aircraft factory with a free contact place that adds nothing to the pad total, a
+  listed dock-bound armed test type *B* with no binding build limit, enough credits, and two *B*
+  standing on the pads. Place an enemy test building far enough away that both *B* are still in
+  flight when the clicks below are made.
+  - a: order both *B* to attack the building. When both have left their pads and are in
+    flight, click the *B* icon once. Expected: no order is given, no sound plays and nothing starts
+    (*D* = 2 = *T*). Falsified if: an order is given, a sound plays or an item starts.
+  - b: as part a in a fresh game with *T* = 3 (a third test helipad building, one place).
+    Expected: the click gives an order and an item starts (*D* = 2 < 3). Then click again before
+    any *B* returns: no order (*D* = 2 + 1 copy = 3). Falsified if: the first click gives no
+    order, or the second gives one. This part is the control: if its first click gives no
+    order, part a is inconclusive.
+  - c: a fresh game with *T* = 4 (one-place test helipad buildings), the two *B* and a second
+    listed dock-bound test type *A* whose build limit is 1, with one *A* standing on a pad. Send
+    both *B* to attack as in part a and, while they fly, click the *A* icon. Expected: an order
+    is given (*D* = 3 < 4) and nothing starts (claim 9's answer for *A* is at limit, so S-0404
+    claim 3's factory test refuses it). Falsified if: no order is given, or an item of *A*
+    starts.
+  - d (the icon, for the S-0411 claim 3 entry of Changes for other specs): in parts a and b,
+    record on every tick whether the *B* icon is drawn darkened. For the ticks on which the
+    *B* icon does not hold its own line's item (all of part a, and part b before its first
+    click), expected: darkened exactly while *D* ≥ *T* (part a while both *B* fly), and lit
+    while *D* < *T* (part b). Falsified if, on such a tick, the icon is lit with *D* ≥ *T*, or
+    darkened with *D* < *T*. On the ticks on which the icon holds its own line's item (part b
+    from its first click), expected: not darkened, though claim 16's test then refuses *B*,
+    since S-0411 claim 3 never darkens such an icon. Falsified if it is darkened on such a
+    tick, whatever else holds. A tick of the first kind is inconclusive when another cause of
+    S-0411 claim 3 darkens the icon on it.
 
 **T13. Captured prerequisite and override buildings (claims 3 and 15).**
 - Setup: three test types: type 1 needs a test building *X* as a prerequisite; type 2 has a tech
@@ -1287,9 +1402,62 @@ Backing).
 
 ## Changes for other specs
 
-None. S-0004 claim 13 and scenario I1 already agree with claim 8 (d): failed lookup
-creates no type in either setting, and an invalid prerequisite remains unmet with
-`quirks.prerequisite_names_dropped` off.
+- S-0411 claim 4: the row for a type at its build limit is claim 16's test made at issue (claim 16,
+  *At issue*). For a dock-bound aircraft type it gives no order while *D* ≥ *T*, whatever the type's
+  own build limit (medium, `measurable`: T12 run 8 parts a and b), and while *D* < *T* the original
+  gives the build order even for such a type at its own limit, which S-0404 claim 3 then refuses
+  (medium, `measurable`: T12 run 8 part c; our engine gives none, claim 13) unless the type's
+  build-limit answer has changed by the time it is applied (medium, `unmeasured`, as claim 16 rates
+  it). For any other type it is claim 9's at limit when the line is idle, and claim 16's count with
+  the line's copies otherwise (medium, `measurable`: T12 runs 1 and 2). The sentences saying that
+  the build-limit cause of darkening is covered by a row that gives no order need that exception.
+  Its sentence "The same holds for the click on a lit aircraft icon while every dock is taken: the
+  order is given and ignored" holds only while *D* < *T*: while *D* ≥ *T* the click gives no order,
+  and the icon is darkened unless it holds its own line's item (medium, `measurable`: T12 run 8
+  parts a, b and d).
+- S-0411 claim 3: in the original an icon is also darkened while claim 16's test, made as at issue,
+  refuses its type, as well as while claim 9's answer is at limit (medium; `measurable` for
+  dock-bound aircraft types: T12 run 8 part d; `unmeasured` for other types with copies in the line:
+  no scenario here records that icon's darkening). So an aircraft icon of a dock-bound listed type
+  is darkened while *D* ≥ *T*, and the sentence that an aircraft icon stays lit while every dock is
+  taken holds only while *D* < *T*. S-0411 claim 3's rule that an icon holding its own line's item
+  is never darkened is unchanged and covers this cause too (medium, `measurable`: T12 run 8 part d,
+  part b from its first click). Its scenario S3's aircraft run then needs *D* < *T*, for example
+  docks taken by aircraft of types that are not on the pad list.
+- S-0404 claim 10: both rows for starting or queuing a build order also require, when the
+  order is issued, that claim 16's test does not refuse it (claim 13), besides the type being
+  offered and not at its build limit. A dock-bound aircraft type at its own build limit
+  therefore still has no legal order, in agreement with claim 13 (a design rule of our engine).
+  The original's interface gives one that applying refuses (claim 16, *At issue*; medium,
+  `measurable`: T12 run 8 part c) unless the type's build-limit answer has changed by then (medium,
+  `unmeasured`, as claim 16 rates it).
+  The capacity test at issue is the original's too (medium, `measurable`: T12 run 8 parts a
+  and b).
+- S-0404 scenario P3 (k): its setup cannot be made. Its two requests in one tick cannot both come
+  from the local player's input (claim 16, *At issue*, from S-0213 claim 1 and S-0411 claim 4,
+  medium as claim 16 rates it), and each later request is tested at issue with the line as the
+  earlier one left it (medium, `measurable`: T12 run 8 part b's second click). The issue-time count
+  then equals the count its application would make, so a request that would fail claim 16's
+  queue-time test when applied is refused at issue and gives no order, at any build limit. The part
+  needs a fixture in which a count changes between a request's issue and its application, or it
+  should be withdrawn.
+- S-0404 claim 3: its sentence that a queue request refused at application by claim 16's
+  queue-time test requests the game-wide refusal sound holds only for an order that passed
+  claim 16's test at issue and fails it when applied, after a count has changed in between. A
+  local player's click that the test refuses at issue gives no order and plays no sound (claim
+  16, *At issue*; medium, `measurable`: T12 runs 1, 2 and 8 a).
+- S-0701 claim 24: its refusal sound for a production request refused at its build limit as it
+  is applied comes, for claim 16's test, only after such a change. Its sentence that a click on
+  an item at its build limit gives no order and plays no click sound and no announcement also
+  covers a click that claim 16's test refuses at issue, a dock-bound aircraft type's included
+  (medium, `measurable`: T12 runs 1, 2 and 8 a, as claim 16 rates it).
+- S-0501 claim 30: in the original the house-wide capacity test is also made when an order is
+  issued (claim 16, *At issue*; medium, `measurable`: T12 run 8 parts a and b), so it refuses
+  the start of an aircraft on an idle line as well as a queued copy. Only the test made when
+  the order is applied is limited to a queued copy (as S-0501 claim 30 and claim 16 rate it).
+- S-0004: none. Claim 13 and scenario I1 already agree with claim 8 (d): failed lookup
+  creates no type in either setting, and an invalid prerequisite remains unmet with
+  `quirks.prerequisite_names_dropped` off.
 
 ## Open questions
 
