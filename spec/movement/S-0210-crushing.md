@@ -2,13 +2,13 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 29
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0020, Q-0036, Q-0684, Q-2005]
+requests: [Q-0020, Q-0036, Q-0684, Q-2005, Q-2114]
 supersedes: []
 ---
 
@@ -78,7 +78,8 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
   vehicle (claim 11). In the original it has no effect either.
 - **Auto-crush threshold.** A game-wide imported house skill level that a computer-controlled house
   of the original must reach before its crushers make the crush response. Only the original's rule
-  uses it (claim 11); AI houses of our engine never do.
+  uses it (claim 11). In our engine AI houses never do, while the neutral and special houses and
+  test-only computer-controlled player houses still do (claim 11).
 - **Crush-slowdown state.** A yes/no state of a vehicle, set by the events of claim 9 and ended by
   crushing an overlay (claim 8).
 - **Body tilt.** A presentation value of a vehicle: the rate per tick at which its drawn body rocks
@@ -150,10 +151,19 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
      and for the reference point of a building; high for the arrival-report ordering
 
 4. **The outcome.** A crushed object is removed from the game on the same tick. It takes no damage,
-   no warhead is applied, it shows no death sequence and leaves no corpse or death animation. The
+   no warhead is applied, it shows no death sequence and leaves no corpse. A crushed infantry
+   unit, building or aircraft shows no death animation either. A crushed vehicle shows the
+   explosion and destruction animations of a killed vehicle, chosen as S-0312 claim 9 gives for
+   one: an entry of each of its type's two lists by one list pick each, explosion first, each
+   only when its list is not empty, with that claim's last-entry rule. So
+   its crush takes none, one or two list-pick draws from the scenario random stream. It shows
+   them whatever its type's sinking or death-frame properties: a crushed vehicle never sinks
+   instead (S-0312 claim 10). These picks come before the timer draws of the objects that held
+   the vehicle as their target (S-0309 claim 27). The
    kill is credited to the crusher (as for any kill: score and veterancy belong to their specs), and
    the crushed type's crush sound plays at the crusher's position. Removing it ends whatever it
    controlled as on any removal (for example units it held under mind control are released).
+   Every object that holds it as its target drops it during the crush (S-0309 claim 27).
 
    Actually crushing at least one such object makes a cloaked or cloaking crusher start
    uncloaking on that tick, including when the victim is infantry rather than a vehicle
@@ -161,12 +171,24 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    per victim; repeated causes while already uncloaking do not restart it or repeat the sound
    (S-0516 claims 7 and 15). Empty passage does not cause this uncloak.
    - Backing: `measurable` (scenario K1, part a for removal, damage, kill credit and the crush
-     sound, part k for the release of mind-controlled units; K14 for the crushing-triggered
-     uncloak and its exclusions). The position of the sound is
+     sound, part k for the release of mind-controlled units, part m for a crushed vehicle's
+     animations and their picks, part i for a crushed building's lack of a death animation; K14
+     for the crushing-triggered uncloak and its exclusions). `unmeasured`: a crushed aircraft's
+     lack of a death animation, since no part crushes a landed aircraft; a crushed vehicle's
+     animations whatever its sinking or death-frame properties, since no part crushes a vessel
+     on water or a type with death frames; and the order of a vehicle's picks against its
+     holders' timer draws, since no part of K1 has a holder of the crushed vehicle. The holders'
+     drop is S-0309 claim 27's, with its backing there. The position of the sound is
      `unmeasured`: a capture shows that the sound plays, but the crusher and the crushed object are
      less than 128 leptons apart, too close for the difference in position to be heard.
    - Confidence: high for removal without damage, medium for the kill credit, the release of
-     controlled units and the sound position; high for the crushing-triggered uncloak
+     controlled units and the sound position; high for the crushing-triggered uncloak; high for a
+     crushed vehicle's animation picks and their draws (part m; S-0312 claim 9 rates the picks
+     high), medium for its animations whatever its sinking or death-frame properties and for the
+     order of its picks against its holders' draws; high for no death animation of an infantry
+     victim (part a), medium for a building (part i) and for an aircraft; the holders' drop at
+     S-0309 claim 27's levels for a crushed object (high for infantry and vehicle holders, medium
+     for building and aircraft holders)
 
 5. **A vehicle thief is not crushed by its quarry.** When the object to be crushed is an infantry unit
    of a vehicle-thief type whose destination is the crusher itself, and the crusher is not a train,
@@ -440,7 +462,8 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       the exception above does not.
     - Backing: `measurable` (scenarios K7, K13 and K15; K13 for the disguise condition and its
       distinction from crushing along an ordered route; K15 for a berserk crusher, with K15 c
-      deciding the alliance condition once a route for it is named). The crush response under a
+      deciding the alliance condition once a route for it is named, K15 e for a berserk-friendly
+      attacker). The crush response under a
       computer-controlled owner:
       cases 1, 2 and 4 (the table row), 8 for the range condition, 15 and 16 for the range in force
       and its absent-key default (F2), 17 (the neutral and special houses' skill-level
@@ -458,7 +481,9 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       4 and 18), for the range condition (cases 8, 15 and 16), for the owner's row (cases 1 and 4,
       medium for the neutral and special houses of case 17, which rest on S-0412 claim 5) and for
       the disguise condition (K13 part a); the attacker's being crushable keeps
-      claim 2's ratings (medium for "not falling"); medium for the meaning of the
+      claim 2's ratings (medium for "not falling"); high that a berserk crusher makes the
+      response (K15 parts a and d), medium that a berserk-friendly attacker plays no part (K15
+      part e); medium for the meaning of the
       move-destination condition; low for the omni-crusher variant as a whole and
       for its opportunity-target exception; low for the original's attack-target variant
 
@@ -613,9 +638,11 @@ Ordering stated as consequences:
   crush slowdown (claim 9) is a separate event that can have happened earlier on the track.
 - On a tick on which a crusher reaches a cell centre that holds both a crushable overlay and
   crushable units, the overlay and the units are all crushed on that tick. The body tilt that claim 6 requires to be level includes the overlay's change of claim 8, so a crusher that is level just before and crushes a vehicle there pitches back, not forward (scenario K8 part c). The draws of F3 for the neighbouring walls are taken from the scenario random stream on that
-  same tick, in the direction order of F3; the random-state recorder shows them (K4 part c). This
-  spec states no order between them and any draws that the removal of the units may take (Open
-  questions).
+  same tick, in the direction order of F3; the random-state recorder shows them (K4 part c). The
+  removal of the units takes draws of its own: a crushed vehicle's animation picks (claim 4) and
+  the timer draws of the objects that held a removed unit (S-0309 claim 27), each unit's draws
+  before the next unit's in the listing order. This spec states no order between those and the
+  draws of F3 (Open questions).
 - When a vehicle thief takes the crusher over at a cell centre (claim 5), the house that each other
   object of that cell layer is judged against follows the cell layer's listing order (S-0209 claim
   13: the non-building that entered the cell layer most recently first, buildings last). An object
@@ -773,6 +800,16 @@ type of index 0" means the overlay type with registration index 0 in the data in
     trigger has it take control of one of the human player's vehicles before the crusher sets off.
   - (l) the same route as (a), walked instead by an infantry unit of the human player of a stock
     type; it and the victim are unarmed (override if needed), so that neither fires.
+  - (m) as (f), the crusher and the victim unarmed (override if needed) so that no object holds
+    the victim as its target, with the victim's type given, through the override section, an
+    explosion list of four distinct test animations and a destruction-animation list of two
+    others, all told apart on screen; and a second run with the victim's type also given the
+    explodes flag and unlimited ammunition. The six test animations take no creation draw of
+    their own under S-0202 claim 10's table: their types give no random rate, are not bouncing
+    types, and their start events make no particle, smudge, chain reaction or other animation
+    (the victim's cell holds no resource). Each run has a control run with both lists empty, on
+    the same seed. The random-state recorder (S-0202) records the scenario stream's
+    draws in the crush tick.
 - *Procedure:* order the crusher (or the test vehicle, or in (l) the infantry) to a cell beyond the
   victim and let it drive (in (l), walk) through each cell's centre. In (i), order it through each building's
   cells. In (c) to (e), (g), (h) and (i) a run in which the crusher does not drive into the
@@ -782,10 +819,11 @@ type of index 0" means the overlay type with registration index 0 in the data in
 - *Observable:* which victims disappear, their health on the last tick before they disappear, the
   presence of a death animation or corpse, the crusher house's kill count, in (a) and (c) whether a
   crush sound starts on the tick the victim disappears (screen and audio capture; the victim type of
-  (a) is given a crush sound through the override section if it has none in the data in force), and
-  in (k) the owner of the controlled vehicle.
+  (a) is given a crush sound through the override section if it has none in the data in force),
+  in (k) the owner of the controlled vehicle, and in (m) which animations appear at the victim's
+  position on the crush tick.
 - *Runs:* 1 each; (l) up to 5, stopping at the first run in which the infantry walks into the
-  victim's cell.
+  victim's cell; (m) 5 per run setting, each with its control run.
 - *Expected:*
   - (a) is crushed: its health is unchanged up to the tick it disappears, no death sequence or corpse
     appears, the kill counts for the crusher's house, and its type's crush sound starts on that
@@ -793,17 +831,26 @@ type of index 0" means the overlay type with registration index 0 in the data in
     sound plays as it passes (c). In (d) nothing is crushed by either vehicle.
   - (e) the veteran crushes the infantry, the rookie does not.
   - (f) the vehicle is crushed. (g) and (h) it is not.
-  - (i) the one-cell building is crushed when the crusher reaches its cell's centre; the two-by-two
-    building is not crushed in any of its cells.
+  - (i) the one-cell building is crushed when the crusher reaches its cell's centre and shows no
+    death animation; the two-by-two building is not crushed in any of its cells.
   - (j) the deployed infantry is not crushed, the undeployed one is.
   - (k) the controller is crushed and the controlled vehicle returns to the human player on the same
     tick.
   - (l) the victim is not removed.
+  - (m) on the crush tick one animation of the explosion list and then one of the
+    destruction-animation list appear at the victim's position. The crush tick has two draws
+    more than in its control run: a list pick over the explosion list's four entries and then
+    one over the destruction list's two (S-0202 claim 6). The animations are the entries those
+    picks give; with the explodes flag, the last explosion entry, its pick still taken.
 - *Falsified if:* (b) or (c) is crushed, (a) loses health first, leaves a corpse or is removed with
   no crush sound, a vehicle in (d)
   crushes, the veteran in (e) does not crush or the rookie does, (f) survives or (g) or (h) is crushed,
   the one-cell building in (i) survives or the two-by-two one is crushed, (j) shows a different
-  pattern, in (k) the vehicle stays with the enemy, or the victim in (l) disappears.
+  pattern, in (k) the vehicle stays with the enemy, the victim in (l) disappears, or in (m) an
+  animation is missing, another entry appears than the draws give, the two picks are missing
+  or come in the other order, or the crush tick has a draw that neither its control run nor
+  these two picks account for. With the fixture's animations, S-0202 claim 10 gives them no
+  creation draw, so such a draw is a discrepancy to report.
 
 **Scenario K2: the moment of crushing, the radius, the warning and falling units (claims 2, 3, 7).**
 - *Setup:*
@@ -1022,7 +1069,8 @@ cell-centre crushing.
   - (6) as (5), the infantry at one and a half times the crush range, within weapon range,
   - (7) armed crusher, human-owned, its type given the auto-crush flag through the override section,
     the player-auto-crush rule off, ordered by the human player to attack the infantry at half the crush
-    range,
+    range; the infantry is armed and fires back on its own, so that its return fire can hit the
+    crusher,
   - (8) as (1), with the crush range set to 2.0 cells through the override section and the infantry
     at the centre standing position of the cell two cells from the crusher's cell along a map axis,
     the crusher at its cell centre, both on flat ground, so that *d* = *R* = 512 (F2),
@@ -1340,7 +1388,9 @@ cell-centre crushing.
   - (c) as (a), the gas firer owned by the crusher's own house. These setups name no route that
     makes a computer-owned unit deploy (S-0011 has no deploy-order action), so part c is run
     only once such a route is named,
-  - (d) as (a), the computer house at the easiest difficulty.
+  - (d) as (a), the computer house at the easiest difficulty,
+  - (e) as (a), the gas firer's type given the berserk-friendly flag through the override
+    section.
 - *Procedure:* the human player orders the gas firer to deploy, so that it fires its area weapon,
   and the recorder records 300 ticks: for the crusher on every tick
   its position, berserk state, target, destination and its current and queued behaviours; every
@@ -1356,9 +1406,9 @@ cell-centre crushing.
   leaves play with no damage event. Its target is not the gas firer at that hit. (b) it goes
   berserk but does not drive at the gas firer because of the hit. (c) it does not go berserk (S-0302
   claim 10) and does not drive at its own house's unit. (d) it goes berserk, the hit queues
-  *hunt*, not *move*, and it does not drive at the gas firer because of the hit.
-- *Falsified if:* (a) the destination is a cell, or *hunt* stays queued, or the crusher takes the
-  gas firer as its target at the hit, or never drives at it; (b), (c) or (d) the crusher's
+  *hunt*, not *move*, and it does not drive at the gas firer because of the hit. (e) as (a).
+- *Falsified if:* (a) or (e) the destination is a cell, or *hunt* stays queued, or the crusher
+  takes the gas firer as its target at the hit, or never drives at it; (b), (c) or (d) the crusher's
   destination names the gas firer after a hit.
 
 ## Changes for other specs
@@ -1371,6 +1421,9 @@ cell-centre crushing.
   S-0516 claim 36 should name the crush response to a hit (claim 11; S-0215 claim 39), and CS15 (c)
   should have the disguiser hit the crusher, as K13 part a here does, with no response expected
   while the disguise fools the crusher's house and a response with detector coverage.
+
+- **For S-0309 (Q-2114).** No change needed: S-0309 claim 27 gives the holders' drop and the
+  order of their draws, after the crushed vehicle's animation picks of claim 4 here.
 
 ## Open questions
 
@@ -1385,10 +1438,11 @@ cell-centre crushing.
 - Whether a train harms objects of the cell layer that are neither units nor buildings, such as a
   terrain object (claim 10): the test of claim 2 is stated for units and buildings only, so this
   spec gives no outcome for them.
-- Whether the removal of a crushed unit takes draws from the scenario random stream of its own (for
-  example through effects that it ends, such as claim 4's release of controlled units) was not
-  established, so the position of such draws relative to those of F3 on the same tick is not
-  specified. K4 part c shows only F3's draws, on a map where no unit is crushed.
+- The removal of a crushed unit takes a vehicle's animation picks (claim 4) and its holders'
+  timer draws (S-0309 claim 27). Whether it takes other draws, for example through effects that
+  it ends, such as claim 4's release of controlled units, was not examined, and the position of
+  the removal's draws relative to those of F3 on the same tick is not specified. K4 part c shows
+  only F3's draws, on a map where no unit is crushed.
 - What makes a fortress in the M-0011 games hold the drone that it drives over as its
   target is not established. The crush response sets only the destination, and a berserk hit
   sets off no retaliation (S-0302 claim 10). One candidate is a search that the fortress makes
