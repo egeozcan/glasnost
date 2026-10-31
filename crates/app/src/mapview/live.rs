@@ -674,22 +674,17 @@ pub fn draws_rocking(w: &World, o: &Object) -> bool {
     })
 }
 
-/// [`attitude`] with the view's rocking (`super::rocking`) in tick
-/// `shown`: a sinking vehicle's roll, and its lean when it was rocked as it
-/// began to sink (S-0504 claim 15); a vehicle that rocks and does not sink
-/// is drawn with its pitch and roll (S-0303 claim 20, S-0106 claim 9).
-pub fn attitude_with(
-    w: &World,
-    o: &Object,
-    rocking: &super::rocking::Rocking,
-    shown: i32,
-) -> Attitude {
-    let angles = rocking.angles(o.id, shown);
+/// [`attitude`] with the view's rocking (`super::rocking`): a sinking
+/// vehicle's roll, and its lean when it was rocked as it began to sink
+/// (S-0504 claim 15, S-0113 claim 5); a vehicle that rocks and does not
+/// sink is drawn with its pitch and roll (S-0113 claim 18, S-0106 claim 9).
+pub fn attitude_with(w: &World, o: &Object, rocking: &super::rocking::Rocking) -> Attitude {
+    let angles = rocking.angles(o.id);
     match attitude(w, o) {
         Attitude::Sinking { pitch, drawn, .. } => Attitude::Sinking {
             // spec: S-0504 claim 15 (Starting value: the lean steps from the rocked pitch the vehicle had when sinking began)
             pitch: rocking.lean(o.id).map_or(pitch, |p| p.0),
-            // spec: S-0504 claim 15 (the roll is left free: a rocking hit during descent rolls the hull) and claim 16 (drawn as S-0106 claim 9's rocking)
+            // spec: S-0113 claim 5 (a sinking body's roll takes table R's roll step: a push during descent rolls the hull) and S-0504 claim 16 (drawn as S-0106 claim 9's rocking)
             roll: angles.map_or(0, |(_, r)| r.to_bits()),
             drawn,
         },
@@ -2254,9 +2249,9 @@ impl Live {
         let now = self.shown_tick();
         let at = |p: glasnost_sim::world::Pos| project_lifted(p.x, p.y, p.z);
         let effects = std::mem::take(&mut self.world.effects);
-        // spec: S-0303 claim 20 and S-0614 claims 9 and 10 (the tick's rocking sets its bodies' rates); the angles move once per game tick, not per drawn frame (S-0504 claim 16)
-        self.rocking.take(&self.world, &effects, now);
+        // spec: S-0113 claim 19 and State and ordering (the rocking step is the first part of a body's turn, once per game tick and not per drawn frame; the tick's pushes then set the rates, which show from the next step)
         self.rocking.advance(&self.world);
+        self.rocking.take(&self.world, &effects);
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -2860,7 +2855,7 @@ impl Live {
             shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
-            attitude: attitude_with(w, o, &self.rocking, self.shown_tick()),
+            attitude: attitude_with(w, o, &self.rocking),
             // spec: S-0104 claim 13 (Deactivated voxel vehicles) and S-0405 claims 13 and 20
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
             // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)

@@ -1,25 +1,32 @@
-//! Tests of the view's body rocking (S-0303 claim 20, S-0614 claims 9 and
-//! 10, S-0210 claim 12, S-0504 claim 15) on synthetic data: every type name
-//! and number is made up. The interim rules under test are ours (Q-2081).
+//! Tests of the view's body rocking (S-0113) on synthetic data: every type
+//! name and number is made up.
 
-use std::f64::consts::{FRAC_PI_4, PI};
-
+use glasnost_num::{F32, F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Decimal, Locomotor, WarheadType};
 use glasnost_sim::combat::area::{self, Detonation};
+use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::rules::Kind as SimKind;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{ObjectId, Pos, World};
+use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
 use super::build::Attitude;
 use super::live::attitude_with;
 use super::rocking::{
-    Body, DRONE_STRENGTH, FORWARD_LIMIT, Rocking, SIDEWAYS_LIMIT, SLOWED_FORWARD_LIMIT, drawn,
-    strength,
+    Push, Rocking, SLOWED_PITCH_LIMIT, USUAL_LIMIT, area_strength, axis_step, drawn, push_rates,
 };
 use super::sinking_tests::images;
 
 const SIZE: i32 = 24;
+const RZ: Rounding = Rounding::TowardZero;
+
+fn single(v: f32) -> F32 {
+    F32(v.to_bits())
+}
+
+fn real(v: F32) -> f64 {
+    f64::from(f32::from_bits(v.0))
+}
 
 fn ruleset(weight: Option<&str>) -> Ruleset {
     let mut r = testkit::combat_ruleset();
@@ -38,9 +45,9 @@ fn ruleset(weight: Option<&str>) -> Ruleset {
     r
 }
 
-/// A world with one vehicle facing map north (facing 0) at the centre.
-fn world(weight: Option<&str>) -> (World, ObjectId) {
-    let mut w = testkit::game_with(&ruleset(weight), SIZE, 3);
+/// A world of `r` with one vehicle facing map north (facing 0) at the centre.
+fn world_of(r: &Ruleset) -> (World, ObjectId) {
+    let mut w = testkit::game_with(r, SIZE, 3);
     let cart = testkit::spawn(
         &mut w,
         SimKind::Vehicle,
@@ -52,9 +59,12 @@ fn world(weight: Option<&str>) -> (World, ObjectId) {
     (w, cart)
 }
 
-/// Sets off a rocking detonation of `damage` at `point`, then lets the
-/// view take the tick's events and move one tick, as `Live::after_tick`
-/// does after the game's tick.
+fn world(weight: Option<&str>) -> (World, ObjectId) {
+    world_of(&ruleset(weight))
+}
+
+/// Sets off a rocking detonation of `damage` at `point` with no source
+/// object, then runs one tick for the view.
 fn blast(w: &mut World, rocking: &mut Rocking, point: Pos, damage: i32) {
     let warhead = w
         .rules()
@@ -78,12 +88,13 @@ fn blast(w: &mut World, rocking: &mut Rocking, point: Pos, damage: i32) {
     tick(w, rocking);
 }
 
-/// One game tick for the view: its events taken, then one step.
+/// One game tick for the view, as `Live::take_effects` runs it: the
+/// bodies step in the new tick, then the tick's reports set the rates.
 fn tick(w: &mut World, rocking: &mut Rocking) {
     let effects = std::mem::take(&mut w.effects);
     w.tick += 1;
-    rocking.take(w, &effects, w.tick - 1);
     rocking.advance(w);
+    rocking.take(w, &effects);
 }
 
 fn offset(w: &World, id: ObjectId, dx: i32, dy: i32) -> Pos {
@@ -91,160 +102,599 @@ fn offset(w: &World, id: ObjectId, dx: i32, dy: i32) -> Pos {
     Pos::new(p.x + dx, p.y + dy, p.z)
 }
 
-// spec: S-0303 claim 20 (strength min(D × 0.01, 4.0), exceeding 0.3 from D = 31, capped at 4.0 from D = 400)
-#[test]
-fn the_strength_of_a_damage_amount() {
-    assert!(strength(31) > 0.3);
-    assert!(strength(30) <= 0.3);
-    assert_eq!(strength(400), 4.0);
-    assert_eq!(strength(5000), strength(400));
-    assert_eq!(strength(100), 1.0);
+fn overload(w: &mut World, id: ObjectId, level: i32, draw: i32) {
+    w.effects.push(Effect::OverloadRock {
+        controller: id,
+        level,
+        draw,
+    });
 }
 
-// spec: S-0504 Terms (a positive pitch lowers the bow; the roll about x, S-0105's Rx lifting the left, +y, side); S-0303 claim 20 (pushed away from the point); design: Q-2081 question 1 (the push's direction relative to the body splits the rates)
+// spec: S-0113 Constants (usual limit π/4, crush-slowdown pitch limit π/10, single-precision constants)
 #[test]
-fn a_blast_lifts_the_side_it_comes_from() {
-    // Map north is −y; the body faces north (facing 0), so its right is +x.
-    let cases = [
-        ("ahead", (0, -200), (-1, 0)),
-        ("behind", (0, 200), (1, 0)),
-        ("on its left", (-200, 0), (0, 1)),
-        ("on its right", (200, 0), (0, -1)),
-    ];
-    for (name, (dx, dy), (pitch, roll)) in cases {
-        let (mut w, cart) = world(None);
-        let mut rocking = Rocking::default();
-        let point = offset(&w, cart, dx, dy);
-        blast(&mut w, &mut rocking, point, 200);
-        tick(&mut w, &mut rocking);
-        let b = rocking.body(cart).unwrap();
-        let sign = |v: f64| {
-            if v.abs() < 1e-9 { 0 } else { v.signum() as i32 }
-        };
-        assert_eq!(
-            (sign(b.pitch), sign(b.roll)),
-            (pitch, roll),
-            "a blast {name}"
-        );
-    }
-}
-
-// spec: S-0303 claim 20 (scaled by the type's weight; S-0504 claim 11: absent, 1.0); design: Q-2081 question 3 (interim: divided, so a heavier hull rocks less)
-#[test]
-fn a_heavier_hull_rocks_less() {
-    let peak = |weight: Option<&str>| {
-        let (mut w, cart) = world(weight);
-        let mut rocking = Rocking::default();
-        let point = offset(&w, cart, 0, 200);
-        blast(&mut w, &mut rocking, point, 200);
-        let mut peak = 0.0f64;
-        for _ in 0..40 {
-            tick(&mut w, &mut rocking);
-            peak = peak.max(rocking.body(cart).map_or(0.0, |b| b.pitch.abs()));
-        }
-        peak
-    };
-    let (none, one, heavy, zero) = (
-        peak(None),
-        peak(Some("1")),
-        peak(Some("4")),
-        peak(Some("0")),
+fn the_limits_are_single_constants() {
+    assert_eq!(USUAL_LIMIT.0, std::f32::consts::FRAC_PI_4.to_bits());
+    assert_eq!(
+        SLOWED_PITCH_LIMIT.0,
+        ((std::f64::consts::PI / 10.0) as f32).to_bits()
     );
-    assert_eq!(none, one, "an absent weight is 1.0");
-    assert!(heavy < one / 2.0, "{heavy} against {one}");
-    assert_eq!(zero, one, "a weight that is not positive scales as 1.0");
 }
 
-// spec: S-0210 claim 12 (π/4 forward, π/10 while crush-slowed; at the limit the angle stays and the rate becomes level; the sideways limit unchanged); design: Q-2081 question 4 (sideways π/4)
+// spec: S-0113 State and ordering (the simulated table of a push from level: peak, step of the peak, step at which the angle is level again), table R, claims 7 and 8
 #[test]
-fn the_angles_stop_at_their_limits() {
-    for (slowed, limit) in [(false, FORWARD_LIMIT), (true, SLOWED_FORWARD_LIMIT)] {
-        let mut b = Body::default();
-        // A strong push ahead on a very light body.
-        b.push(0, 0, 4.0, 0.1);
-        let mut reached = false;
-        for _ in 0..20 {
-            b.step(limit, false);
-            assert!(b.pitch.abs() <= limit + 1e-12);
-            if b.pitch == limit {
-                reached = true;
+fn a_push_from_level_follows_the_table() {
+    // (roll, starting rate, peak, tolerance of the peak's digits, step of
+    // the peak, level at step); the peak of the first row is π/4, held.
+    let rows: [(bool, f32, f64, f64, i32, i32); 10] = [
+        (true, 0.05, std::f64::consts::FRAC_PI_4, 0.0, 23, 41),
+        (true, -0.05, -0.65, 0.005, 25, 42),
+        (true, 0.03, 0.354, 0.0005, 19, 32),
+        (true, -0.03, -0.24, 0.005, 15, 26),
+        (true, 0.015, 0.125, 0.0005, 11, 19),
+        (true, -0.015, -0.064, 0.0005, 8, 14),
+        (false, 0.02, 0.095, 0.0005, 6, 13),
+        (false, -0.05, -0.275, 0.0005, 10, 21),
+        (false, 0.025, 0.13, 0.005, 7, 15),
+        (false, -0.025, -0.075, 0.0005, 5, 11),
+    ];
+    for (roll, rate, peak, tolerance, peak_step, level_step) in rows {
+        let (mut a, mut r) = (F32::ZERO, single(rate));
+        let (mut best, mut best_step) = (0.0f64, 0);
+        let mut level = None;
+        for step in 1..=60 {
+            (a, r) = axis_step(a, r, USUAL_LIMIT, roll, true, RZ);
+            if step == 1 {
+                assert_eq!(a, single(rate), "the first angle is the pushed rate");
+            }
+            if real(a).abs() > best.abs() {
+                (best, best_step) = (real(a), step);
+            }
+            if a == F32::ZERO && r == F32::ZERO {
+                level = Some(step);
                 break;
             }
         }
-        assert!(reached, "slowed {slowed}: the limit is reached");
-        assert!(
-            b.pitch_rate.abs() > 0.0,
-            "the spring then pulls the level rate back"
-        );
-        assert!(b.pitch_rate < 0.0, "towards level");
-        assert!(drawn(b.pitch) as f64 <= limit);
+        let name = format!("{} {rate}", if roll { "roll" } else { "pitch" });
+        if tolerance == 0.0 {
+            assert_eq!(best, real(USUAL_LIMIT), "{name}: held at the limit");
+        } else {
+            assert!((best - peak).abs() <= tolerance, "{name}: peak {best}");
+        }
+        assert_eq!(best_step, peak_step, "{name}: step of the peak");
+        assert_eq!(level, Some(level_step), "{name}: level again");
     }
-    // The sideways angle keeps its own limit while the forward one is slowed.
-    let mut b = Body::default();
-    b.push(0, 16384, 4.0, 0.1);
-    b.step(SLOWED_FORWARD_LIMIT, false);
-    assert_eq!(b.roll, SIDEWAYS_LIMIT);
-    const { assert!(SIDEWAYS_LIMIT > SLOWED_FORWARD_LIMIT) };
 }
 
-// spec: S-0210 claim 12 (while crush-slowed the forward angle is limited to π/10, whatever rocks it)
+// spec: S-0113 claim 6 (a body held at its limit stays there for that one step only: the pull acts in the same step) and claim 7
 #[test]
-fn a_crush_slowed_vehicle_pitches_at_most_a_tenth_of_pi() {
-    let (mut w, cart) = world(Some("0.2"));
-    w.obj_mut(cart).unwrap().crush_slowdown = true;
+fn a_body_is_held_at_its_limit_for_one_step() {
+    let (mut a, mut r) = (F32::ZERO, single(0.05));
+    let mut held = Vec::new();
+    for step in 1..=30 {
+        (a, r) = axis_step(a, r, USUAL_LIMIT, true, true, RZ);
+        if a == USUAL_LIMIT {
+            held.push(step);
+            assert!(real(r) < 0.0, "pulled back in the same step");
+        }
+    }
+    assert_eq!(held, [23]);
+    // The crush-slowdown pitch limit holds the same way.
+    let (a, r) = axis_step(
+        single(0.3),
+        single(0.05),
+        SLOWED_PITCH_LIMIT,
+        false,
+        true,
+        RZ,
+    );
+    assert_eq!(a, SLOWED_PITCH_LIMIT);
+    assert!(real(r) < 0.0);
+    let (a, _) = axis_step(
+        single(-0.3),
+        single(-0.05),
+        SLOWED_PITCH_LIMIT,
+        false,
+        true,
+        RZ,
+    );
+    assert_eq!(a.0, SLOWED_PITCH_LIMIT.0 ^ 0x8000_0000);
+}
+
+// spec: S-0113 claim 15 and Edge cases (quirks.rocking_limit_escape: on, an angle at its limit is not held at the next step; off, held whatever the angle before the step); claim 9 (past the edge the pull is away from level)
+#[test]
+fn an_angle_at_its_limit_escapes_only_with_the_switch_on() {
+    let push = single(0.05);
+    let (on, r_on) = axis_step(USUAL_LIMIT, push, USUAL_LIMIT, true, true, RZ);
+    assert!(real(on) > real(USUAL_LIMIT), "escaped");
+    assert!(real(r_on) > 0.0);
+    let (off, r_off) = axis_step(USUAL_LIMIT, push, USUAL_LIMIT, true, false, RZ);
+    assert_eq!(off, USUAL_LIMIT);
+    assert!(real(r_off) < 0.0, "held and pulled back");
+    // Beyond its limit an angle is not held again until it comes back.
+    let (a, _) = axis_step(single(1.0), single(0.01), USUAL_LIMIT, true, false, RZ);
+    assert_eq!(a, USUAL_LIMIT, "off: held from beyond the limit");
+    let (a, _) = axis_step(single(1.0), single(0.01), USUAL_LIMIT, true, true, RZ);
+    assert!(real(a) > 1.0, "on: not held");
+    // Past the edge (π/2) the pull is away from level.
+    let (_, r) = axis_step(single(1.6), single(0.01), USUAL_LIMIT, true, true, RZ);
+    assert!(real(r) > 0.01);
+    let (_, r) = axis_step(single(-1.6), single(-0.01), USUAL_LIMIT, false, true, RZ);
+    assert!(real(r) < -0.01);
+}
+
+/// Pulses an overload on the cart every tick for `ticks` ticks and gives
+/// the largest roll seen and whether the body was dropped.
+fn rolled_by_pulses(escape: bool, ticks: i32) -> (f64, bool) {
+    let mut r = ruleset(None);
+    r.globals.quirks.rocking_limit_escape = escape;
+    let (mut w, cart) = world_of(&r);
+    let mut rocking = Rocking::default();
+    let mut most = 0.0f64;
+    for _ in 0..ticks {
+        overload(&mut w, cart, 2, 80);
+        tick(&mut w, &mut rocking);
+        // After a drop the tick's pulse starts a new body from level.
+        let roll = rocking.body(cart).map_or(0.0, |b| real(b.roll));
+        if most > std::f64::consts::FRAC_PI_2 && roll == 0.0 {
+            return (most, true);
+        }
+        most = most.max(roll);
+    }
+    (most, false)
+}
+
+// spec: S-0113 claim 15 and Edge cases (quirks.rocking_limit_escape on: repeated pushes carry the roll past its limit and over; off: held at ±L); claim 9 (beyond ±π the body is destroyed; our view drops it, a seam)
+#[test]
+fn repeated_pushes_roll_a_body_over_only_with_the_escape() {
+    let (most, dropped) = rolled_by_pulses(true, 200);
+    assert!(most > std::f64::consts::FRAC_PI_2, "past the edge: {most}");
+    assert!(dropped, "rolled over");
+    let (most, dropped) = rolled_by_pulses(false, 200);
+    assert_eq!(most, real(USUAL_LIMIT), "held at π/4");
+    assert!(!dropped);
+}
+
+fn push(
+    body: (i64, i64, i64),
+    from: (i64, i64, i64),
+    facing: u16,
+    weight: F64,
+) -> Option<(F32, F32)> {
+    push_rates(
+        &Push {
+            body,
+            from,
+            strength: single(1.0),
+            half: false,
+            weight,
+            facing,
+        },
+        true,
+        true,
+        RZ,
+    )
+}
+
+fn one() -> F64 {
+    F64::from_i64(1, RZ)
+}
+
+// spec: S-0113 claim 1 and F1 (the end or side of the body nearer the push point rises, at every facing: positive pitch lowers the bow, positive roll raises the left side); Terms
+#[test]
+fn a_push_lifts_the_nearer_end_or_side_at_every_facing() {
+    let b = (6000, 6000, 0);
+    // Facing 0 heads map north (−y), 16384 east; each eighth turn
+    // clockwise.
+    let headings: [(u16, (i64, i64)); 4] = [
+        (0, (0, -200)),
+        (8192, (141, -141)),
+        (16384, (200, 0)),
+        (40960, (-141, 141)),
+    ];
+    for (facing, (hx, hy)) in headings {
+        // The right is a quarter turn clockwise of the heading.
+        let (rx, ry) = (-hy, hx);
+        let cases = [
+            ("ahead", (hx, hy), -1, 0),
+            ("behind", (-hx, -hy), 1, 0),
+            ("on its right", (rx, ry), 0, -1),
+            ("on its left", (-rx, -ry), 0, 1),
+        ];
+        for (name, (dx, dy), pitch, roll) in cases {
+            let (p, r) = push(b, (b.0 + dx, b.1 + dy, 0), facing, one()).unwrap();
+            let sign = |v: F32, other: F32| {
+                let (v, o) = (real(v), real(other));
+                if v.abs() <= o.abs() / 10.0 {
+                    0
+                } else {
+                    v.signum() as i32
+                }
+            };
+            assert_eq!(
+                (sign(p, r), sign(r, p)),
+                (pitch, roll),
+                "facing {facing}, a push {name}: {p:?} {r:?}"
+            );
+        }
+    }
+    // k = (0.04 − 200 × 2.5 × 10⁻⁵) × 1 = 0.035 from behind at facing 0.
+    let (p, _) = push(b, (b.0, b.1 + 200, 0), 0, one()).unwrap();
+    assert!((real(p) - 0.035).abs() < 1e-5, "{p:?}");
+}
+
+// spec: S-0113 claims 1 and 11 (h = ½ for an area push and a drone delivery: the pitch rate halved, the roll rate not)
+#[test]
+fn the_pitch_factor_halves_only_the_pitch() {
+    let b = (6000, 6000, 0);
+    let rates = |half: bool, q: (i64, i64, i64)| {
+        push_rates(
+            &Push {
+                body: b,
+                from: q,
+                strength: single(1.0),
+                half,
+                weight: one(),
+                facing: 0,
+            },
+            true,
+            true,
+            RZ,
+        )
+        .unwrap()
+    };
+    let behind = (b.0, b.1 + 200, 0);
+    let side = (b.0 + 200, b.1, 0);
+    assert_eq!(
+        real(rates(true, behind).0),
+        real(rates(false, behind).0) / 2.0
+    );
+    assert_eq!(rates(true, side).1, rates(false, side).1);
+}
+
+// spec: S-0113 claim 3 and F1 (k = (0.04 − 2.5 × 10⁻⁵ d) × s / W, capped at 0.05; nothing below 0.01 or at the body's own position); Edge cases (weight of 0 gives the cap, a negative weight nothing within the reach)
+#[test]
+fn strength_distance_and_weight_set_the_magnitude() {
+    let b = (6000, 6000, 0);
+    let behind = (b.0, b.1 + 200, 0);
+    let w = |v: i64| F64::from_i64(v, RZ);
+    let (light, _) = push(b, behind, 0, one()).unwrap();
+    let (heavy, _) = push(b, behind, 0, w(2)).unwrap();
+    assert!(
+        (real(heavy) - real(light) / 2.0).abs() < 1e-6,
+        "the weight divides"
+    );
+    let (zero, _) = push(b, behind, 0, F64::ZERO).unwrap();
+    assert!((real(zero) - 0.05).abs() < 1e-6, "weight 0: the cap");
+    assert_eq!(push(b, behind, 0, w(-1)), None, "negative weight: nothing");
+    assert_eq!(push(b, b, 0, one()), None, "the body's own position");
+    // 0.04 − 2.5 × 10⁻⁵ d falls below 0.01 a little beyond d = 1200.
+    assert!(push(b, (b.0, b.1 + 1100, 0), 0, one()).is_some());
+    assert_eq!(push(b, (b.0, b.1 + 1300, 0), 0, one()), None, "k < 0.01");
+    // A strength of 4 at 200 leptons is capped at 0.05.
+    let capped = push_rates(
+        &Push {
+            body: b,
+            from: behind,
+            strength: single(4.0),
+            half: false,
+            weight: one(),
+            facing: 0,
+        },
+        true,
+        true,
+        RZ,
+    )
+    .unwrap();
+    assert!((real(capped.0) - 0.05).abs() < 1e-6);
+}
+
+// spec: S-0113 claim 4 (a push from straight above or below sets both rates to 0) and Edge cases (a rate of exactly 0 snaps the angle level: one step levels a rocking body)
+#[test]
+fn a_push_from_straight_above_levels_the_body() {
+    let b = (6000, 6000, 0);
+    assert_eq!(
+        push(b, (b.0, b.1, 300), 0, one()),
+        Some((F32::ZERO, F32::ZERO))
+    );
+    assert_eq!(
+        push(b, (b.0, b.1, -300), 0, one()),
+        Some((F32::ZERO, F32::ZERO))
+    );
+    assert_eq!(
+        axis_step(single(0.4), F32::ZERO, USUAL_LIMIT, true, true, RZ),
+        (F32::ZERO, F32::ZERO)
+    );
+}
+
+// spec: S-0113 F2 (s = RZ₂₄(min(RZ₅₃(D × 0.01), 4.0)))
+#[test]
+fn the_area_strength_of_a_damage_amount() {
+    assert_eq!(area_strength(50, RZ), single(0.5));
+    assert_eq!(area_strength(100, RZ), single(1.0));
+    assert_eq!(area_strength(400, RZ), single(4.0));
+    assert_eq!(area_strength(5000, RZ), single(4.0));
+    assert!((real(area_strength(73, RZ)) - 0.73).abs() < 1e-6);
+}
+
+// spec: S-0113 claim 2 (a push replaces both rates and the angles keep their values; of several before one turn only the last counts) and claim 17 (an overload replaces the roll rate only); State and ordering (a push shows from the next step: the first angle is the pushed rate)
+#[test]
+fn the_last_push_before_a_turn_counts() {
+    let (mut w, cart) = world(None);
+    let mut rocking = Rocking::default();
+    overload(&mut w, cart, 1, 10);
+    overload(&mut w, cart, 2, 90);
+    tick(&mut w, &mut rocking);
+    let b = rocking.body(cart).unwrap();
+    assert_eq!(b.roll_rate, single(0.03), "the last pulse's rate");
+    assert_eq!(b.roll, F32::ZERO, "it shows from the next step");
+    tick(&mut w, &mut rocking);
+    let b = rocking.body(cart).unwrap();
+    assert_eq!(b.roll, single(0.03), "the first angle is the pushed rate");
+    // A push from behind replaces both rates and leaves the roll angle.
+    let point = offset(&w, cart, 0, 300);
+    let before = rocking.body(cart).unwrap();
+    blast(&mut w, &mut rocking, point, 400);
+    let after = rocking.body(cart).unwrap();
+    assert!(real(after.pitch_rate) > 0.0);
+    assert!(
+        real(after.roll_rate).abs() < 1e-9,
+        "a push from straight behind has no roll: {after:?}"
+    );
+    let (stepped, _) = axis_step(before.roll, before.roll_rate, USUAL_LIMIT, true, true, RZ);
+    assert_eq!(after.roll, stepped, "the angle keeps its value");
+}
+
+// spec: S-0601 F4 and S-0113 claim 17 (an overload pulse sets the roll rate: 0.015 at level 1, 0.03 from level 2, negative for a draw below 50; unscaled by the weight; the pitch left alone)
+#[test]
+fn an_overload_pulse_sets_the_roll_rate() {
+    for (level, draw, rate) in [
+        (1, 49, -0.015f32),
+        (1, 50, 0.015),
+        (2, 0, -0.03),
+        (5, 100, 0.03),
+    ] {
+        let (mut w, cart) = world(Some("4"));
+        let mut rocking = Rocking::default();
+        overload(&mut w, cart, level, draw);
+        tick(&mut w, &mut rocking);
+        let b = rocking.body(cart).unwrap();
+        assert_eq!(b.roll_rate, single(rate), "level {level}, draw {draw}");
+        assert_eq!((b.pitch, b.pitch_rate), (F32::ZERO, F32::ZERO));
+    }
+}
+
+// spec: S-0113 claim 6 (the pitch limit π/10 in S-0210's crush-slowdown state) and Edge cases (quirks.rocking_limit_escape off: held at the limit under repeated pushes)
+#[test]
+fn a_crush_slowed_body_pitches_at_most_a_tenth_of_pi() {
+    let most = |slowed: bool| {
+        let mut r = ruleset(Some("0.2"));
+        r.globals.quirks.rocking_limit_escape = false;
+        let (mut w, cart) = world_of(&r);
+        w.obj_mut(cart).unwrap().crush_slowdown = slowed;
+        let mut rocking = Rocking::default();
+        let mut most = 0.0f64;
+        for _ in 0..60 {
+            let point = offset(&w, cart, 0, 200);
+            blast(&mut w, &mut rocking, point, 400);
+            most = most.max(rocking.body(cart).map_or(0.0, |b| real(b.pitch)));
+        }
+        most
+    };
+    assert_eq!(most(true), real(SLOWED_PITCH_LIMIT));
+    assert!(most(false) > real(SLOWED_PITCH_LIMIT));
+}
+
+// spec: S-0113 claim 13 and F3 (a drone delivery: a draw of 0 puts the point to the host's left, so its left side rises, a positive roll; a draw of 1 the other way; h = ½, S-0614 F2's strength)
+#[test]
+fn a_drone_rocks_its_host_to_the_drawn_side() {
+    for (side, positive) in [(0, true), (1, false)] {
+        let (mut w, cart) = world(None);
+        let mut rocking = Rocking::default();
+        w.effects.push(Effect::DroneRock { host: cart, side });
+        tick(&mut w, &mut rocking);
+        let b = rocking.body(cart).unwrap();
+        assert_eq!(real(b.roll_rate) > 0.0, positive, "side {side}: {b:?}");
+        assert!(real(b.roll_rate).abs() >= 0.01);
+        assert!(real(b.pitch_rate).abs() < real(b.roll_rate).abs());
+    }
+}
+
+fn squid_world() -> (World, ObjectId, ObjectId) {
+    let mut r = ruleset(None);
+    let mut squid = r.sim.vehicles.get("CART").unwrap().clone();
+    squid.combat.naval = Some(true);
+    squid.combat.organic = Some(true);
+    r.sim.vehicles.insert("SQUID".into(), squid);
+    r.registries
+        .get_mut("vehicles")
+        .expect("registry")
+        .push("SQUID".into());
+    let (mut w, cart) = world_of(&r);
+    let squid = testkit::spawn(
+        &mut w,
+        SimKind::Vehicle,
+        "SQUID",
+        1,
+        testkit::mid(SIZE, 3, 3),
+        0,
+    );
+    w.obj_mut(cart).unwrap().parasite = Some(glasnost_sim::parasite::ParasiteState {
+        attached: Some(squid),
+        ..Default::default()
+    });
+    (w, cart, squid)
+}
+
+// spec: S-0113 claim 14 and F4 (a push phase writes no roll in turn 1, k = 0 in turns 2 and 3, each k from 1 to 9 in 4 turns, 0 in turn 40; σ = +1 for a way draw of 0; roll = RZ₂₄(sinT(k σ π/10) × π/4); the roll set to 0 at each strike and when the parasite leaves; the pitch unaffected)
+#[test]
+fn a_grappling_parasite_writes_its_hosts_roll() {
+    for (way, sign) in [(0, 1.0f64), (1, -1.0)] {
+        let (mut w, cart, _) = squid_world();
+        let mut rocking = Rocking::default();
+        tick(&mut w, &mut rocking);
+        w.effects.push(Effect::GrapplePush { host: cart, way });
+        tick(&mut w, &mut rocking);
+        assert_eq!(rocking.body(cart), None, "turn 1: no roll written");
+        for turn in 2..=45 {
+            tick(&mut w, &mut rocking);
+            let b = rocking.body(cart);
+            let k = turn / 4;
+            if turn >= 40 {
+                assert!(b.is_none_or(|b| b.roll == F32::ZERO), "turn {turn}: ended");
+                continue;
+            }
+            let b = b.unwrap_or_else(|| panic!("turn {turn}: written"));
+            let want = (f64::from(k) * sign * std::f64::consts::PI / 10.0).sin()
+                * std::f64::consts::FRAC_PI_4;
+            assert!(
+                (real(b.roll) - want).abs() < 1e-3,
+                "way {way}, turn {turn}: {b:?}"
+            );
+            assert_eq!(b.pitch, F32::ZERO);
+            assert_eq!(b.roll_rate, F32::ZERO, "the rate is never changed");
+        }
+    }
+    // A strike sets the roll to 0; the parasite's leaving too.
+    let (mut w, cart, _) = squid_world();
+    let mut rocking = Rocking::default();
+    tick(&mut w, &mut rocking);
+    w.effects.push(Effect::GrapplePush { host: cart, way: 0 });
+    for _ in 0..10 {
+        tick(&mut w, &mut rocking);
+    }
+    assert!(real(rocking.body(cart).unwrap().roll) > 0.1);
+    w.effects.push(Effect::GrapplePush { host: cart, way: 1 });
+    tick(&mut w, &mut rocking);
+    assert_eq!(rocking.body(cart).unwrap().roll, F32::ZERO, "struck");
+    for _ in 0..10 {
+        tick(&mut w, &mut rocking);
+    }
+    assert!(
+        real(rocking.body(cart).unwrap().roll) < -0.1,
+        "the next push's own draw"
+    );
+    w.obj_mut(cart).unwrap().parasite = None;
+    tick(&mut w, &mut rocking);
+    assert!(
+        rocking.body(cart).is_none_or(|b| b.roll == F32::ZERO),
+        "left"
+    );
+}
+
+// spec: S-0113 claim 14 (a roll rate from a push keeps stepping underneath the parasite's writes, from its last value, and shows once it stops writing)
+#[test]
+fn a_rate_steps_under_the_parasites_roll() {
+    let (mut w, cart, _) = squid_world();
+    let mut rocking = Rocking::default();
+    tick(&mut w, &mut rocking);
+    w.effects.push(Effect::GrapplePush { host: cart, way: 0 });
+    for _ in 0..8 {
+        tick(&mut w, &mut rocking);
+    }
+    let written = rocking.body(cart).unwrap().roll;
+    overload(&mut w, cart, 1, 80);
+    tick(&mut w, &mut rocking);
+    tick(&mut w, &mut rocking);
+    let b = rocking.body(cart).unwrap();
+    assert_eq!(
+        b.roll, written,
+        "the drawn roll is the parasite's (same frame)"
+    );
+    assert!(b.roll_rate != F32::ZERO, "the rate steps underneath");
+}
+
+// spec: S-0113 claim 5 and table S (no rocking step during a superweapon warp from the first pending update through the arrival effects; again in arrival hold)
+#[test]
+fn a_warped_body_holds_its_angles() {
+    use glasnost_sim::superweapons::warp::{Member, Stage};
+    for (stage, moves) in [
+        (Stage::Pending, false),
+        (Stage::Away, false),
+        (Stage::Placed, false),
+        (Stage::Hold(0), true),
+    ] {
+        let (mut w, cart) = world(None);
+        let mut rocking = Rocking::default();
+        overload(&mut w, cart, 2, 80);
+        tick(&mut w, &mut rocking);
+        tick(&mut w, &mut rocking);
+        let before = rocking.body(cart).unwrap();
+        let landing = w.obj(cart).unwrap().pos;
+        w.obj_mut(cart).unwrap().sw.warp = Some(Member {
+            stage,
+            house: HouseId(0),
+            landing,
+            redirected: false,
+            fell_back: false,
+            refused: false,
+            entry_ok: true,
+        });
+        tick(&mut w, &mut rocking);
+        let after = rocking.body(cart).unwrap();
+        assert_eq!(after != before, moves, "{stage:?}");
+    }
+}
+
+// spec: S-0113 claim 5 and table S (sinking: the pitch rate is left as it is, the roll takes table R's roll step, so a push during the descent rolls the hull); S-0504 claim 15 (the lean starts from the pitch left over from rocking) and F4
+#[test]
+fn a_sinking_body_leans_from_its_rocked_pitch_and_rolls() {
+    let (mut w, cart) = world(None);
     let mut rocking = Rocking::default();
     let point = offset(&w, cart, 0, 200);
     blast(&mut w, &mut rocking, point, 400);
-    // The hit's own tick takes the body to the limit, where the rate is
-    // made level before the spring pulls it back.
+    for _ in 0..3 {
+        tick(&mut w, &mut rocking);
+    }
+    let rocked = rocking.body(cart).unwrap();
+    assert!(real(rocked.pitch) > 0.04, "rocked bow down: {rocked:?}");
+    glasnost_sim::naval::start_sinking(&mut w, cart);
+    tick(&mut w, &mut rocking);
     assert_eq!(
-        rocking.body(cart).unwrap().pitch,
-        PI / 10.0,
-        "held at the limit"
+        rocking.lean(cart),
+        Some(rocked.pitch),
+        "the lean starts from the rocked pitch"
     );
-    let mut peak = 0.0f64;
-    for _ in 0..40 {
+    assert_eq!(
+        rocking.body(cart).unwrap().pitch_rate,
+        rocked.pitch_rate,
+        "the pitch rate is left as it is"
+    );
+    for _ in 0..5 {
+        let before = rocking.lean(cart).unwrap();
+        assert!(!glasnost_sim::naval::sinking_turn(&mut w, cart));
         tick(&mut w, &mut rocking);
-        peak = peak.max(rocking.body(cart).map_or(0.0, |b| b.pitch.abs()));
+        let lean = w.obj(cart).unwrap().naval.as_ref().unwrap().lean.unwrap();
+        let expect = glasnost_sim::naval::pitch_step(before, lean, w.rules().mode);
+        assert_eq!(rocking.lean(cart), Some(expect), "one F4 step per descent");
+        let Attitude::Sinking { pitch, .. } = attitude_with(&w, w.obj(cart).unwrap(), &rocking)
+        else {
+            panic!("sinking")
+        };
+        assert_eq!(
+            Some(F32(pitch)),
+            rocking.lean(cart),
+            "drawn from the view's lean"
+        );
     }
-    assert!(peak <= PI / 10.0, "never past it: {peak}");
-}
-
-// design: Q-2081 question 2 (interim: a damped return to level within about two seconds of game time); S-0106 Terms (below 0.005 radians a body does not rock)
-#[test]
-fn a_rocked_body_comes_back_to_level() {
-    let (mut w, cart) = world(None);
-    let mut rocking = Rocking::default();
-    let point = offset(&w, cart, 150, 150);
+    // A push from the left during descent rolls the hull.
+    let point = offset(&w, cart, -200, 0);
     blast(&mut w, &mut rocking, point, 400);
-    let mut crossed = false;
-    let mut last_sign = 0.0;
-    let mut ticks = 0;
-    while rocking.body(cart).is_some() {
-        let b = rocking.body(cart).unwrap();
-        if last_sign != 0.0 && b.pitch.signum() != last_sign {
-            crossed = true;
-        }
-        if b.pitch.abs() > 0.01 {
-            last_sign = b.pitch.signum();
-        }
-        tick(&mut w, &mut rocking);
-        ticks += 1;
-        assert!(ticks < 120, "settles");
-    }
-    assert!(crossed, "it swings through level");
-    assert!((40..=90).contains(&ticks), "{ticks} ticks");
-    assert!(rocking.is_empty());
-    assert_eq!(rocking.angles(cart, w.tick), None, "drawn level");
+    tick(&mut w, &mut rocking);
+    let b = rocking.body(cart).unwrap();
+    assert!(real(b.roll) > 0.0, "the nearer side rises: {b:?}");
+    let Attitude::Sinking { roll, .. } = attitude_with(&w, w.obj(cart).unwrap(), &rocking) else {
+        panic!("sinking")
+    };
+    assert!(f32::from_bits(roll) > 0.0, "the roll is drawn");
 }
 
-// spec: S-0504 claim 16 (the angles advance once per game tick, not once per drawn frame)
+// spec: S-0113 claim 19 and State and ordering (one rocking step per game tick, not per drawn frame)
 #[test]
 fn the_angles_do_not_depend_on_the_frame_rate() {
     let run = |frames_per_tick: usize| {
         let (mut w, cart) = world(None);
         let mut rocking = Rocking::default();
-        let point = offset(&w, cart, 0, 200);
+        let point = offset(&w, cart, 150, 200);
         blast(&mut w, &mut rocking, point, 300);
         let mut seen = Vec::new();
         for _ in 0..30 {
@@ -252,7 +702,7 @@ fn the_angles_do_not_depend_on_the_frame_rate() {
             for _ in 0..frames_per_tick {
                 // A redraw without a tick moves nothing.
                 rocking.advance(&w);
-                seen.push(rocking.angles(cart, w.tick - 1));
+                seen.push(rocking.body(cart));
             }
             seen.dedup();
         }
@@ -261,67 +711,75 @@ fn the_angles_do_not_depend_on_the_frame_rate() {
     assert_eq!(run(1), run(4));
 }
 
-// spec: S-0106 Terms (a pitch or roll of 0.005 radians or more rocks); S-0105 claim 26 (each drawn pair is an image of its own); design: S-0303 claim 20 (the strength's precision is not fixed: the drawn angles are held to that step)
+// spec: S-0113 claim 5 (an angle that comes back into the level band stops there: a body rises, turns and settles, never swinging through level)
 #[test]
-fn drawn_angles_are_held_to_the_rocking_step() {
-    assert_eq!(drawn(0.0049).to_bits(), 0);
-    assert_eq!(drawn(-0.0049).to_bits(), 0, "never a negative zero");
-    assert_eq!(drawn(0.005), glasnost_render::voxel::ROCKING_THRESHOLD);
-    assert_eq!(drawn(0.0123), 0.01);
-    assert!(drawn(FRAC_PI_4) as f64 <= FRAC_PI_4);
-    // A full rock from the cap draws a bounded number of distinct poses.
+fn a_rocked_body_settles_without_swinging_through_level() {
     let (mut w, cart) = world(None);
     let mut rocking = Rocking::default();
-    let point = offset(&w, cart, 90, 200);
+    let point = offset(&w, cart, 150, 150);
     blast(&mut w, &mut rocking, point, 400);
-    let mut poses = std::collections::BTreeSet::new();
-    for _ in 0..120 {
+    let first = {
         tick(&mut w, &mut rocking);
-        if let Some((p, r)) = rocking.angles(cart, w.tick - 1) {
-            poses.insert((p.to_bits(), r.to_bits()));
+        rocking.body(cart).unwrap()
+    };
+    let mut ticks = 0;
+    while let Some(b) = rocking.body(cart) {
+        for (a, a0) in [(b.pitch, first.pitch), (b.roll, first.roll)] {
+            assert!(real(a) * real(a0) >= 0.0, "never through level: {b:?}");
         }
+        tick(&mut w, &mut rocking);
+        ticks += 1;
+        assert!(ticks < 60, "settles");
     }
-    assert!(poses.len() < 120, "{} poses", poses.len());
+    assert!(rocking.is_empty());
+    assert_eq!(rocking.angles(cart), None, "drawn level");
 }
 
-// spec: S-0303 claim 20 and S-0106 claim 9 (a rocking body of the driving locomotor is drawn with its pitch and roll); S-0504 claim 16 (only the driving, ship, hovering and jumpjet locomotors draw it)
+// spec: S-0106 Terms (a pitch or roll of 0.005 radians or more rocks); S-0105 claim 26 (each drawn pair is an image of its own); design: the drawn angles are held to that step
+#[test]
+fn drawn_angles_are_held_to_the_rocking_step() {
+    assert_eq!(drawn(single(0.0049)).to_bits(), 0);
+    assert_eq!(drawn(single(-0.0049)).to_bits(), 0, "never a negative zero");
+    assert_eq!(
+        drawn(single(0.005)),
+        glasnost_render::voxel::ROCKING_THRESHOLD
+    );
+    assert_eq!(drawn(single(0.0123)), 0.01);
+    assert!(drawn(USUAL_LIMIT) <= std::f32::consts::FRAC_PI_4);
+}
+
+// spec: S-0113 claim 18 and S-0106 claim 9 (the driving locomotor draws a body with its pitch and roll; the walking locomotor draws it without them, although its angles still step)
 #[test]
 fn a_rocking_vehicle_is_drawn_rocking() {
     let (mut w, cart) = world(None);
     let mut rocking = Rocking::default();
     assert_eq!(
-        attitude_with(&w, w.obj(cart).unwrap(), &rocking, w.tick),
+        attitude_with(&w, w.obj(cart).unwrap(), &rocking),
         Attitude::None
     );
     let point = offset(&w, cart, 0, 200);
-    blast(&mut w, &mut rocking, point, 300);
+    blast(&mut w, &mut rocking, point, 400);
     tick(&mut w, &mut rocking);
     let Attitude::Rocking { pitch, roll, drawn } =
-        attitude_with(&w, w.obj(cart).unwrap(), &rocking, w.tick - 1)
+        attitude_with(&w, w.obj(cart).unwrap(), &rocking)
     else {
         panic!("rocking")
     };
     assert!(drawn);
-    assert!(f32::from_bits(pitch) > 0.0, "a blast behind lowers the bow");
+    assert!(
+        f32::from_bits(pitch) > 0.0,
+        "a push from behind lowers the bow"
+    );
     assert_eq!(roll, 0);
-    // Under a locomotor that draws no rocking the angles are kept, not drawn.
     let mut r = ruleset(None);
     r.sim.vehicles.get_mut("CART").unwrap().locomotor = Some(Locomotor::Walk);
-    let mut w2 = testkit::game_with(&r, SIZE, 3);
-    let walker = testkit::spawn(
-        &mut w2,
-        SimKind::Vehicle,
-        "CART",
-        0,
-        testkit::mid(SIZE, 0, 0),
-        0,
-    );
+    let (mut w2, walker) = world_of(&r);
     let mut rocking2 = Rocking::default();
     let point = offset(&w2, walker, 0, 200);
-    blast(&mut w2, &mut rocking2, point, 300);
+    blast(&mut w2, &mut rocking2, point, 400);
     tick(&mut w2, &mut rocking2);
     assert!(matches!(
-        attitude_with(&w2, w2.obj(walker).unwrap(), &rocking2, w2.tick - 1),
+        attitude_with(&w2, w2.obj(walker).unwrap(), &rocking2),
         Attitude::Rocking { drawn: false, .. }
     ));
 }
@@ -353,150 +811,4 @@ fn a_rocking_vehicle_has_images_of_its_own_and_keeps_its_shadow() {
     assert_ne!(a[1].0, a[2].0);
     assert_eq!(a[3], a[0], "not drawn by its locomotor: settled");
     assert_eq!(a[4], a[0], "level again");
-}
-
-// spec: S-0504 claim 15 (while sinking the forward rate is not added and the pitch is the lean, which starts from the pitch left over from rocking; the roll is left free and a rocking hit during descent rolls the hull) and F4
-#[test]
-fn a_sinking_vessel_leans_from_its_rocked_pitch_and_rolls_freely() {
-    let (mut w, cart) = world(None);
-    let mut rocking = Rocking::default();
-    let point = offset(&w, cart, 0, 200);
-    blast(&mut w, &mut rocking, point, 200);
-    for _ in 0..3 {
-        tick(&mut w, &mut rocking);
-    }
-    let p0 = rocking.body(cart).unwrap().pitch;
-    assert!(p0 > 0.05, "rocked bow down: {p0}");
-    glasnost_sim::naval::start_sinking(&mut w, cart);
-    tick(&mut w, &mut rocking);
-    let seeded = rocking.lean(cart).expect("the view steps the lean");
-    assert_eq!(
-        seeded.0,
-        (p0 as f32).to_bits(),
-        "the lean starts from the rocked pitch"
-    );
-    // Each descent takes one F4 step from there.
-    let mut expect = seeded;
-    for _ in 0..5 {
-        assert!(!glasnost_sim::naval::sinking_turn(&mut w, cart));
-        tick(&mut w, &mut rocking);
-        let lean = w.obj(cart).unwrap().naval.as_ref().unwrap().lean.unwrap();
-        expect = glasnost_sim::naval::pitch_step(expect, lean, w.rules().mode);
-        assert_eq!(rocking.lean(cart), Some(expect));
-        let Attitude::Sinking { pitch, roll, .. } =
-            attitude_with(&w, w.obj(cart).unwrap(), &rocking, w.tick - 1)
-        else {
-            panic!("sinking")
-        };
-        assert_eq!(pitch, expect.0, "drawn from the view's lean");
-        let _ = roll;
-    }
-    // A blast from the left during descent rolls the hull and leaves the
-    // lean to its steps.
-    let before = rocking.lean(cart).unwrap();
-    let point = offset(&w, cart, -200, 0);
-    blast(&mut w, &mut rocking, point, 300);
-    tick(&mut w, &mut rocking);
-    let lean = w.obj(cart).unwrap().naval.as_ref().unwrap().lean.unwrap();
-    let mode = w.rules().mode;
-    let after = glasnost_sim::naval::pitch_step(
-        glasnost_sim::naval::pitch_step(before, lean, mode),
-        lean,
-        mode,
-    );
-    assert_eq!(rocking.lean(cart), Some(after));
-    let b = rocking.body(cart).unwrap();
-    assert!(b.roll > 0.0, "rolled away from the blast");
-    assert_eq!(b.pitch_rate, 0.0, "no forward rate while sinking");
-    let Attitude::Sinking { pitch, roll, .. } =
-        attitude_with(&w, w.obj(cart).unwrap(), &rocking, w.tick - 1)
-    else {
-        panic!("sinking")
-    };
-    assert_eq!(pitch, after.0);
-    assert!(f32::from_bits(roll) > 0.0, "the roll is drawn");
-}
-
-// spec: S-0614 claim 9 and F2 (a drone's delivery rocks the host sideways with strength 1.5, to the side the draw chose); design: Q-2081 question 6 (+s on the host's right; pushed away from it)
-#[test]
-fn a_drone_rocks_its_host_sideways() {
-    use glasnost_sim::combat::effects::Effect;
-    for (side, sign) in [(0, -1.0), (1, 1.0)] {
-        let (mut w, cart) = world(None);
-        let mut rocking = Rocking::default();
-        w.effects.push(Effect::DroneRock { host: cart, side });
-        tick(&mut w, &mut rocking);
-        let b = rocking.body(cart).unwrap();
-        assert!(b.pitch.abs() < 1e-12, "no pitch");
-        assert_eq!(b.roll.signum(), sign, "side {side}");
-        // The first step's roll is the rate the push set.
-        let mut c = Body::default();
-        c.push(0, 16384, DRONE_STRENGTH, 1.0);
-        assert!((b.roll - sign * c.roll_rate).abs() < 1e-12);
-    }
-}
-
-// spec: S-0614 claim 10 (the push's tilt sin(k × (±π/10)) × π/4 at frame k, 4 ticks a frame, 0 at the strike; only while the host still has its grappling parasite); design: Q-2081 question 7 (the roll; draw 1 positive)
-#[test]
-fn a_squid_rocks_its_host_through_each_push() {
-    use glasnost_sim::combat::effects::Effect;
-    for (way, sign) in [(1, 1.0), (0, -1.0)] {
-        let (w, cart) = world(None);
-        let mut rocking = Rocking::default();
-        let start = 7;
-        rocking.take(&w, &[Effect::GrapplePush { host: cart, way }], start);
-        assert_eq!(rocking.angles(cart, start), None, "0 at the strike");
-        for k in 1..10 {
-            let tilt = (f64::from(k) * sign * PI / 10.0).sin() * FRAC_PI_4;
-            for t in 0..4 {
-                let (pitch, roll) = rocking.angles(cart, start + 4 * k + t).unwrap();
-                assert_eq!(pitch, 0.0);
-                assert_eq!(roll, drawn(tilt), "way {way}, frame {k}");
-            }
-        }
-        assert_eq!(rocking.angles(cart, start + 40), None, "after ten frames");
-        // No parasite holds the host in this scene, so its next tick ends the push.
-        rocking.advance(&w);
-        assert!(rocking.is_empty());
-    }
-}
-
-// spec: S-0601 claim 16 and F4 (an overload pulse sets the controller's sideways rate: 0.015 radians per tick at level 1, 0.03 from level 2, negative for a draw below 50; the nearest single values; set, not scaled by weight; the pitch is left alone)
-#[test]
-fn an_overload_pulse_sets_the_sideways_rate() {
-    use glasnost_sim::combat::effects::Effect;
-    for (level, draw, rate) in [
-        (1, 49, -0.015f32),
-        (1, 50, 0.015),
-        (2, 0, -0.03),
-        (5, 100, 0.03),
-    ] {
-        let (mut w, cart) = world(Some("4"));
-        let mut rocking = Rocking::default();
-        w.effects.push(Effect::OverloadRock {
-            controller: cart,
-            level,
-            draw,
-        });
-        tick(&mut w, &mut rocking);
-        let b = rocking.body(cart).unwrap();
-        assert_eq!(b.roll, f64::from(rate), "level {level}, draw {draw}");
-        assert_eq!((b.pitch, b.pitch_rate), (0.0, 0.0));
-    }
-    // A pulse on a body already rocking replaces its sideways rate only.
-    let (mut w, cart) = world(None);
-    let mut rocking = Rocking::default();
-    let point = offset(&w, cart, 150, 150);
-    blast(&mut w, &mut rocking, point, 200);
-    let before = rocking.body(cart).unwrap();
-    w.effects.push(Effect::OverloadRock {
-        controller: cart,
-        level: 2,
-        draw: 80,
-    });
-    let mut expect = before;
-    expect.roll_rate = f64::from(0.03f32);
-    expect.step(FORWARD_LIMIT, false);
-    tick(&mut w, &mut rocking);
-    assert_eq!(rocking.body(cart), Some(expect));
 }
