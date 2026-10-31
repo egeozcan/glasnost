@@ -35,3 +35,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0007](combat/M-0007-repair-depot-timing.md) | Repair depot timing and contact loss with the depot recorder (Q-1610) | combat | contradicts | local |
 | [M-0014](rendering/M-0014-building-slots-power-off.md) | Building slots after a power-off order next to an ownership change or a pulse's end | rendering | confirms | local |
 | [M-0008](simulation/M-0008-random-streams-recorder.md) | Random streams with the random-state recorder (seeding, ranges, creation, idle draws) | simulation | confirms | local |
+| [M-0004](combat/M-0004-firing-cycle-recorder.md) | Firing cycle with the random-state recorder (delays, bursts, building rounds, draws) | combat | contradicts | local |
