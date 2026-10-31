@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 54
+revision: 57
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-31
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212]
 supersedes: []
 ---
 
@@ -729,19 +729,47 @@ S-0501 claim 20.
     the target was not airborne, else nothing. Being teleported here is the teleporting
     locomotor's own jump (S-0207 claim 20 e). The departure of a superweapon warp member is not such
     a loss (S-0513 claim 39): a projectile in flight towards the member keeps it as its target
-    object, and its target does not become the cell the member stood in. Where it then flies while
-    the member waits to land, and whether it can hit the member, S-0513 leaves open. A steering
+    object, and its target does not become the cell the member stood in. A steering
     projectile without target (Terms, *No target point*, which includes a target whose target point
     is the world origin) climbs (claim 15) and detonates once its height above the surface reaches
     the game-wide missile safety altitude.
     A projectile whose firer leaves the game keeps flying and detonates normally (S-0203 claim 6 d).
+
+    For a projectile whose target object is a departed warp member, every rule of this spec that
+    reads the target's position reads the position the member had at departure until it appears at
+    its landing point (S-0513 claim 39). So a steering
+    projectile steers towards the member's old position, where the steering-distance row of T1 and
+    claim 20 place a detonation, and from its first turn after the member appears it turns towards
+    the landing point. A straight or arcing projectile retains its stored target point *K* (claim
+    9), as for any target, and its flight and detonation remain governed by claim 10 and T1. While
+    the member is off the map it is in no cell, so neither the proximity row of T1 nor the area
+    damage of a detonation (S-0303) finds it: the detonation's ordinary area damage does not reach
+    the member while it is off the map. Once the member has appeared it is found in its landing cell
+    like any object, and its phasing in does not stop a hit (no row of S-0302 claim 8 is for it). A
+    member that its landing check kills (S-0513 claim 37) leaves the game before it appears, so the
+    projectile's target becomes the cell the member stood in at departure, or nothing if it counts
+    as airborne by the next sentence. Where the rules of the projectile's flight and detonation here
+    (T1, T2, claim 20 and the loss above) ask whether the target is airborne, a member between
+    departure and appearance does not fall under S-0307's rule that an object not on the map is
+    neither airborne nor floor-bound. It is counted by its height above the surface beneath its kept
+    position, and as standing on a deck only once its landing check has passed for a landing cell on
+    a deck. So a member that departed from a high-bridge deck counts as airborne from departure
+    until it appears, except once a landing check has passed for a landing cell on a deck
+    (`quirks.warp_deck_departure_airborne`).
     - Backing: `measurable` (scenario P11: run a for the airborne target, run c for the target on
-      the ground, run d for a target that teleports, run e for a firer that leaves the game; P38
-      for a building target whose target point is the world origin). The warp departure sentence
-      is `unmeasured`, as S-0513 claim 39 rates it: no scenario here or in S-0513 fires at a member
-      as it departs
-    - Confidence: high; medium for the target point at the world origin; medium, unmeasured, for
-      the warp departure sentence
+      the ground, run d for a target that teleports, run e for a firer that leaves the game, run f
+      for a projectile that keeps a warp member and turns towards its landing point; P38 for a
+      building target whose target point is the world origin). The other warp parts are
+      `unmeasured`: P11 run f judges post-appearance flight and damage, and it provides no
+      distinguishing expectation for flight while the member is off the map. No part here
+      detonates a projectile near a member then, places a hit before or after the end of a
+      member's phasing in, has the landing check kill a member that a projectile targets, or warps
+      a member from a deck. That S-0307's off-the-map rule does not apply is `unmeasured` as well
+    - Confidence: high; medium for the target point at the world origin; medium for the warp
+      member kept as target, the turn towards its landing point and the hit there (run f), and
+      medium, unmeasured, for the position read while the member is off the map, for the lack of
+      area damage to it then, for the hit while it phases in, for the loss when its landing check
+      kills it, for the deck rule and for the airborne count of a departed member
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
@@ -1942,6 +1970,13 @@ that no fix would change.
   the ground short of it flies on and can detonate away from it. Attackers that keep it as their
   target can then fail to destroy it for the rest of the game. Off: a vehicle that is switched off
   is not led, so the aim point is its reference point.
+- **`quirks.warp_deck_departure_airborne`** (default on). A warp member that departed from a
+  high-bridge deck keeps the deck's height but no longer counts as standing on the deck, so the
+  rules here that ask whether the target is airborne count it as airborne until it appears, except
+  once a landing check has passed for a landing cell on a deck (claim 17). At a landing-check kill,
+  the projectile loses its target according to claim 17's airborne classification (a steering one
+  left without target climbs, claim 15). Off: until it appears, the member counts as standing on
+  the deck it departed from, so it is not airborne and its loss gives the deck cell it stood in.
 
 - **A voxel-flagged projectile without voxel art (departure, a fault of the original).** When a
   projectile type's voxel art is absent or discarded (S-0007 claim 18), the original keeps the
@@ -2500,6 +2535,27 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Falsified if: (a) it dives to the ground, (c) it climbs and detonates at height 500, (b) it
   flies on, (d) it follows the vehicle to its new place, or (e) it vanishes or stops when the
   firer dies.
+- Run f (claim 17, a departed warp member as target):
+  - Setup: a test steering projectile slow enough, at a firer far enough from a vehicle V on open
+    level ground, to be still in flight when V departs; its warhead damages V, and its type's arm
+    time is longer than its whole flight, so that neither arrival row of T1 applies. V has no
+    weapon. The testing house
+    has a warp superweapon ready (S-0513, as its scenario SW12 runs one). The landing point is a
+    level cell several cells from V's cell and off the firer's line to V, with nothing in it, so
+    that the landing check passes at its first try.
+  - Procedure: order the firer to attack V. Once the projectile is in flight, launch the warp with
+    V as its only member and the landing cell as destination. Nothing else attacks or moves V.
+  - Observable: the projectile's position in each turn, its detonation point and tick, V's health
+    in each tick, and the ticks of V's departure and appearance (S-0513 claim 39).
+  - Expected: after V appears, the projectile turns towards V at its landing point and detonates
+    there, and V loses health.
+  - Falsified if: any other outcome, for example the projectile steers to the cell V left and
+    detonates there (its target became that cell, as in run d), it climbs and detonates at the
+    missile safety altitude (it was left without target), or it detonates at the landing point
+    with V's health unchanged.
+  - Void if: the projectile detonates or leaves the map before V appears; the landing check does
+    not pass at its first try or kills an object; the firer makes a second projectile before the
+    first detonates; V is moved, attacked or damaged by anything else.
 
 **P12. Degeneration (claim 18).**
 - Setup: straight test projectile, damage field 20, degenerates flag, warhead 100 % against the
@@ -3458,8 +3514,35 @@ b and 6 a, T1's first row).**
   the record. Claim 6 a says what ends a repeating void shot in general (a change of the firer,
   its target or the target's lead, or for an arcing and inaccurate projectile a scatter whose
   impact point F4 can reach), and this spec does not claim that it applies to that hunter.
+- (Q-2212.) What a detonation does to a departed warp member through the warhead effects that act
+  on the projectile's target object itself rather than through area damage is not established,
+  whether the member is off the map then or phasing in after it appears (claim 17 covers the
+  area damage only). Nor is the distance threshold of claim 20's move onto the target point for
+  a member that departed from a high-bridge deck and counts as airborne (claim 17): the render
+  layer such a member is in until it appears is not established.
 
 ## Changes for other specs
+
+- S-0307 Terms (*airborne*, *floor-bound*): an ordinary object not on the map is neither. Claim
+  17 here gives an exception for a superweapon warp member between its departure and its
+  appearance (S-0513 claim 39), which is off the map then. For the rules of a projectile's flight
+  and detonation that target it (S-0306 T1, T2, claim 20 and claim 17's loss), it is counted by
+  its height above the surface beneath its kept position, so one that departed from a high-bridge
+  deck counts as airborne (`quirks.warp_deck_departure_airborne`). S-0307 Terms should name the
+  exception and point here. Medium, `unmeasured`, as claim 17 rates it.
+
+- S-0513 claim 39 and its Open questions leave open, in the words of the latter: "Where a projectile
+  that keeps a warp member as its target flies while the member waits to land, and whether it can
+  hit the member then or after it appears (claim 39)." Claim 17 here settles it, except for the
+  warhead effects that act on the target object itself, which stay open here (Open questions). Every
+  rule here reads the member's position at departure until it appears. A
+  steering projectile therefore steers to the old position and then turns to the landing point,
+  while a straight or arcing one retains its stored target point. The detonation's ordinary area
+  damage does not reach the member while it is off the map, and phasing in does not stop a hit after
+  it appears. A landing-check kill gives the cell the member stood in at departure, or no target for
+  a member counted as airborne (`quirks.warp_deck_departure_airborne`). S-0513 can point here and
+  drop the open question. For the projectile that keeps the member it can cite scenario P11 run f
+  here: medium, `measurable`. The other parts are medium, `unmeasured`, as claim 17 rates them.
 
 - S-0405 claim 20 (its bullet on a disabled vehicle as a target) and its Open questions on Q-1710
   leave open what sets where M-0005's stall shells land, and why some hunters make a fire attempt
