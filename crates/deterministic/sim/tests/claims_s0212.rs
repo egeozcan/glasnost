@@ -1989,7 +1989,11 @@ fn an_attacker_on_a_deck_takes_its_reach_region_from_the_deck() {
     };
     let (mut w, car, van) = armed_river(&[]);
     on_deck_attacking(&mut w, car, cell(3, 0), van);
-    assert_eq!(regions::reach_in(&w, cell(3, 0), z), Reach::None, "its ground");
+    assert_eq!(
+        regions::reach_in(&w, cell(3, 0), z),
+        Reach::None,
+        "its ground"
+    );
     assert_eq!(
         regions::reach_read(&w, cell(3, 0), z, true),
         regions::reach_in(&w, cell(12, 0), z),
