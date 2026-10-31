@@ -2,11 +2,11 @@
 id: S-0318
 title: Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go)
 topic: combat
-revision: 13
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-31
 measurements: []
 requests: [Q-1714, Q-1825]
 supersedes: []
@@ -21,21 +21,15 @@ detonates, it first launches up to that many *fragments*, each a projectile of t
 and only then does its own area damage. Fragments go first to objects in the cells around the
 burst that the firer's house does not ally (enemy, neutral, civilian and terrain objects alike),
 nearest ring first, each to the object listed first in its cell. Fragments that find
-no such target go to random cells near the burst, whatever stands there. So a shot that detonates once and is not an airburst projectile (S-0306 claim 21), whose
-warhead and fragment warhead each damage a single object, with fragments that do not burst again
-(claim 7), that each detonate once and that are not airburst projectiles, can damage its own target and up to *n* further objects, with the timing
-of claim 5 when the fragments are invisible. Here *n* is the fragment count when
-that is 0 or more; for a negative count it is at most the larger of its magnitude and 3 (claim 2). A fragment carries
-the fragment weapon's damage field unscaled, and the projectile's attacker as its own.
-Against the committed revision 10, this text corrects one behaviour: revision 10 expected every
-fragment hit of a burst in the tick of the burst, but with the update order's removal skip
-(S-0203 claim 10) the bursting projectile's removal and each fragment's own removal cost
-following objects their turns, so the hits of one burst are spread over several ticks (claim 5).
-State and ordering and the scenarios that time the hits (SH1 part a with its readings and its
-second run, SH4, SH6) change with it. Against revision 12, revision 13 changes no behaviour: it
-says which run of SH1 part a decides the fragments' place in the update order, drops the
-S-0525 entry that the committed S-0525 already carries, applies SH1 part a's void rule to SH4
-part a, and states every reading SH1 takes.
+no such target go to random cells near the burst, whatever stands there.
+
+So, under the conditions below, one shot can damage its own target and up to *n* further objects,
+with the timing of claim 5 when the fragments are invisible. The shot detonates once and is not
+an airburst projectile (S-0306 claim 21). Its warhead and its fragment warhead each damage a
+single object. Its fragments do not burst again (claim 7), each detonates once, and none is an
+airburst projectile. Here *n* is the fragment count when that is 0 or more; for a negative count,
+*n* is at most the larger of its magnitude and 3 (claim 2). A fragment carries the fragment
+weapon's damage field unscaled, and the projectile's attacker as its own.
 
 This spec gives the rules that decide how many objects one shot's fragments damage, which bears
 on Q-1714; the count for the pairing that Q-1714 names is open (Open questions). It owns the
@@ -188,7 +182,7 @@ and S-0316; this spec says which fragments make one (claim 8).
      c for disguise, part d for the anti-air and anti-ground rows, part e for aircraft at positive
      listing height). A house counts as allied with itself (glossary *alliance*), so the alliance
      test alone already excludes the attacker; SH2 part a backs the outcome, which is the same
-     under either reading
+     under either reading.
    - Confidence: high for the scan, the first-listed rule, the alliance test and the attacker
      itself; medium for the absence of a visibility test, for disguise, for the anti-air and
      anti-ground rows and for aircraft, until SH8 runs
@@ -255,13 +249,13 @@ and S-0316; this spec says which fragments make one (claim 8).
    decides every case not listed here. With the removal skip off, every such fragment detonates
    in the tick of the burst, in launch order. With a positive arm field, when it detonates
    follows S-0306's arm-time rows, which this spec does not restate.
-   - Backing: `measurable` (scenario SH1 part a, both runs, for the timing; SH4: part a for the damage, part c for the
-     fragment weapon's warhead, part b for the credit to the attacker's house). `unmeasured` for
-     the brightness flag (an invisible fragment draws nothing, and no scenario captures a visible
-     fragment's brightness), for the attacker object as distinct from its house (SH4 part b
-     observes only a house's kill count) and for the speed (an invisible fragment's speed has no
-     effect, and SH7 judges only the horizontal direction); `measurable` for the absence of
-     radiation (scenario SH1 part n, run 4)
+   - Backing: `measurable` (scenario SH1 part a, both runs, for the timing; SH4: part a for the
+     damage, part c for the fragment weapon's warhead, part b for the credit to the attacker's
+     house). `unmeasured` for the brightness flag (an invisible fragment draws nothing, and no
+     scenario captures a visible fragment's brightness), for the attacker object as distinct from
+     its house (SH4 part b observes only a house's kill count) and for the speed (an invisible
+     fragment's speed has no effect, and SH7 judges only the horizontal direction); `measurable` for
+     the absence of radiation (scenario SH1 part n, run 4)
    - Confidence: high for the damage, the warhead and the credit to the attacker's house; medium
      for the place in the update order until SH1 part a runs (its run 1 alone gives the same result
      for a place right after the bursting projectile when that projectile is last; run 2, whose
@@ -961,21 +955,20 @@ with the random-state recorder, except as it says.
 - **Random cell outside the map** (claim 4). Where a fragment aimed at a drawn cell beyond the map
   edge goes is not established.
 - **How many objects one shot damages in Q-1714's pairing.** Claims 1 to 5 bound one burst at
-  1 + *n* objects only for a shot that detonates once and is not an airburst projectile, whose warhead and fragment warhead each
-  damage a single object and whose fragments do not burst again, detonate once and are not
-  airburst projectiles. Whether the fragment side's
-  weapons (SH6 names that side from the files in use) meet those conditions in each veterancy
-  rank, and so what the count is for that pairing, is not established here: SH6 has not been
-  run, and a weapon whose fragments burst again can damage more.
-- **The rest of Q-1714.** Question 2 asks: "Over the first 300 frames, how many shots does each
-  SREF vehicle fire, and how many YTNK vehicles does one SREF shot damage?" The SREF group is the
-  fragment side of SH6 when the files in use give its weapons' projectiles a fragment weapon,
-  which SH6 checks before its run. Claims 1 to 5 bound the second part as the item above says,
-  and the first part stays open. This spec also does not answer, and leaves open, which side fires
-  first and at what distance (question 1), when the stage-raising side reaches its top stage
-  (question 3), and whether one side spreads its fire (question 4). S-0307, S-0609
-  and S-0309 own the rules involved, but none of them states the answer for Q-1714's pairing, and
-  SH6 has not been run.
+  1 + *n* objects only for a shot that detonates once and is not an airburst projectile, whose
+  warhead and fragment warhead each damage a single object and whose fragments do not burst
+  again, detonate once and are not airburst projectiles. Whether either group's weapons (SH6
+  names a fragment side from the files in use) meet those conditions in each veterancy rank, and
+  so what the count is for that pairing, is not established here: SH6 has not been run, and a
+  weapon whose fragments burst again can damage more.
+- **The rest of Q-1714.** This spec answers no question of Q-1714 for its pairing. Claims 1 to 5
+  give the general rule that decides how many objects one shot can damage; how many objects one
+  shot damages in the pairing (question 2, second half) stays open, as the item above says. Also
+  open are how many shots each vehicle of either group fires (question 2, first half), which
+  group fires first and at what distance (question 1), when a stage-raising group reaches its top
+  stage (question 3), and whether one group spreads its fire (question 4). S-0307, S-0609 and
+  S-0309 own the rules involved, but none of them states the answer for Q-1714's pairing, and SH6
+  has not been run.
 
 ## Questions for the project lead
 
