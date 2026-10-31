@@ -168,6 +168,8 @@ pub enum Announcement {
     /// The infiltrator hears, one line: building infiltrated, cash stolen
     /// (S-0510 claim 11).
     BuildingInfCashStolen,
+    /// A superweapon type armed by its icon (S-0512 claim 25).
+    SelectTarget,
 }
 
 impl Announcement {
@@ -208,6 +210,8 @@ impl Announcement {
             Self::NewTechnologyAcquired => "EVA_NewTechnologyAcquired",
             Self::CashStolen => "EVA_CashStolen",
             Self::BuildingInfCashStolen => "EVA_BuildingInfCashStolen",
+            // spec: S-0512 Import mapping (select target, claim 25: the fixed section header)
+            Self::SelectTarget => "EVA_SelectTarget",
         }
     }
 }
@@ -773,6 +777,11 @@ mod tests {
         assert_eq!(
             n.announcement(Announcement::RallySet),
             Some("EVA_NewRallyPointEstablished")
+        );
+        // spec: S-0512 Import mapping (select target, claim 25)
+        assert_eq!(
+            n.announcement(Announcement::SelectTarget),
+            Some("EVA_SelectTarget")
         );
         let mut m = n.clone();
         m.set_announcement(Announcement::UnitSold, "Other");

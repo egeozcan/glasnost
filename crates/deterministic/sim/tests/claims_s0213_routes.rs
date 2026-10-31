@@ -131,7 +131,32 @@ fn click(w: &World, sel: &[ObjectId], c: CellXY) -> RouteClick {
     routes::click(w, A, sel, ClickOn::Cell(c), c, Modifiers::default())
 }
 
-/// spec: S-0213 claim 16a (each object its own route; one click with several objects adds the same point, at the order's place, to each route; a later add at that place reuses the point) and claim 16b (an accepted point is announced; no information message for an ordinary point) and Terms (a first point raises the count)
+/// Whether every step of `id`'s route is committed (S-0213 claim 16c:
+/// being committed belongs to each route).
+fn committed(w: &World, id: ObjectId) -> bool {
+    w.routes.routes[&id].steps.iter().all(|s| s.committed)
+}
+
+/// A plain move order to `c`, outside route mode.
+fn move_to(actor: ObjectId, c: CellXY) -> Order {
+    Order::Behaviour {
+        actor,
+        behaviour: Behaviour::Move,
+        attack_move: false,
+        target: None,
+        dest: Some(Target::Cell(c)),
+    }
+}
+
+fn join(actor: ObjectId, point: u32) -> Order {
+    Order::RouteJoin { actor, point }
+}
+
+fn current(w: &World, id: ObjectId) -> Option<Behaviour> {
+    w.obj(id).unwrap().beh.current
+}
+
+/// spec: S-0213 claim 16a (r60: each object its own route; one click with several objects adds the same point, at the order's place, to each route, the point adds of one tick sharing it; a point add applied in a later tick makes a new point, even at an existing point's place) and claim 16b (an accepted point is announced; no information message for an ordinary point) and Terms (a first point raises the count)
 #[test]
 fn claim_16a_point_adds_share_points_and_build_one_route_each() {
     let mut w = game();
@@ -150,10 +175,13 @@ fn claim_16a_point_adds_share_points_and_build_one_route_each() {
     assert_eq!(steps(&w, b2), vec![p1]);
     assert_eq!(routes::count(&w, A), 2, "a second point raises nothing");
     give(&mut w, vec![add(b2, c2)]);
-    assert_eq!(steps(&w, b2), vec![p1, p2], "the point at c2 is reused");
-    assert_eq!(w.routes.points.len(), 2);
+    let s2 = steps(&w, b2);
+    assert_eq!(s2[0], p1);
+    assert_ne!(s2[1], p2, "a later tick: a new point at c2");
+    assert_eq!(w.routes.points.len(), 3, "two points stand at c2");
+    assert_eq!(routes::point_cell(&w, &w.routes.points[&s2[1]]), c2);
     // spec: S-0213 claim 16c (points added since the last commit are not followed)
-    assert!(w.routes.points.values().all(|p| !p.committed));
+    assert!(!committed(&w, b1) && !committed(&w, b2));
     testkit::run(&mut w, 40);
     assert_eq!(cell(&w, b1), at(0, 0), "uncommitted: no move");
     // The route state is saved and hashed (CLAUDE.md determinism rules).
@@ -174,7 +202,7 @@ fn claim_16c_commit_starts_a_guarding_holder_and_the_route_is_used_up() {
     };
     assert_eq!(w.obj(b1).unwrap().beh.current, Some(Behaviour::Guard));
     give(&mut w, vec![Order::RouteCommit]);
-    assert!(w.routes.points.values().all(|p| p.committed));
+    assert!(committed(&w, b1));
     assert_eq!(steps(&w, b1), vec![p2], "the first point is issued");
     assert_eq!(routes::count(&w, A), 1);
     run_until(&mut w, 400, |w| steps(w, b1).is_empty());
@@ -239,11 +267,21 @@ fn claim_16c_a_loop_cycles_until_an_order_ends_it() {
         }
     }
     assert_eq!(seen, vec![c0, c1, c2, c3, c1, c2]);
+    // spec: S-0213 claim 16c (r60: issuing a loop point moves it to the end, so the route holds the loop's points in the order they will next be issued) and claim 16f (the point issued before the loop, which no other route holds, is deleted)
+    let mut held = steps(&w, b1);
+    let next = held[0];
+    held.sort_unstable();
+    assert_eq!(held, ps[1..].to_vec(), "the point before the loop is gone");
+    assert!(!w.routes.points.contains_key(&ps[0]));
+    let order: Vec<u32> = (0..3)
+        .map(|k| ps[1 + (ps[1..].iter().position(|&p| p == next).unwrap() + k) % 3])
+        .collect();
     assert_eq!(
         steps(&w, b1),
-        ps[1..].to_vec(),
-        "the point before the loop is gone"
+        order,
+        "the next point first, then the loop's order"
     );
+    assert_eq!(w.routes.routes[&b1].loop_from, Some(0));
     assert_eq!(routes::count(&w, A), 1);
     // spec: S-0213 claim 17 (stop names the actor: it ends the route at its application)
     give(&mut w, vec![Order::Stop { actor: b1 }]);
@@ -428,9 +466,11 @@ fn claim_16b_a_join_copies_the_rest_of_a_route() {
                 point: ps[1],
             }],
         );
-        assert_eq!(steps(&w, b2), ps[1..].to_vec());
-        // design (Q-2137): a loop whose first point lies before the joined point loops the whole copy
+        // spec: S-0213 claim 16b (r60, Q-2137: a loop whose first point comes before the joined point: the copy goes on with the loop's points up to the one before the joined point, and its loop is the whole copy, beginning at the joined point)
+        assert_eq!(steps(&w, b2), vec![ps[1], ps[2], ps[0]]);
         assert_eq!(w.routes.routes[&b2].loop_from, Some(0));
+        // spec: S-0213 claim 16b (r60: the copied points are uncommitted until the next commit)
+        assert!(!committed(&w, b2));
         assert_eq!(
             routes::count(&w, A),
             if drift { 1 } else { 2 },
@@ -550,4 +590,258 @@ fn claim_16b_a_deploy_click_is_refused() {
         RouteClick::Ignored
     );
     assert!(steps(&w, m).is_empty());
+}
+
+/// spec: S-0213 claim 16b (r60, Q-2137: a join copies the route of the point's longest holder, the one whose route has held the point for the longest time, not the one with the lowest object number; the copy runs from the joined point to that route's end); Scenario O8 part r (1)
+#[test]
+fn claim_16b_a_join_copies_the_longest_holder() {
+    let mut w = game();
+    // B is created before A: the lower object number.
+    let b = buggy(&mut w, 1, 0);
+    let a = buggy(&mut w, 0, 0);
+    let c = buggy(&mut w, 2, 0);
+    let (p1, p2, p3, p4) = (at(3, 3), at(5, 3), at(7, 3), at(9, 3));
+    let ps = route(&mut w, a, &[p1, p2, p3]);
+    give(&mut w, vec![join(b, ps[1])]);
+    assert_eq!(steps(&w, b), vec![ps[1], ps[2]]);
+    give(&mut w, vec![add(b, p4)]);
+    let q4 = point(&w, p4);
+    assert_eq!(steps(&w, b), vec![ps[1], ps[2], q4]);
+    give(&mut w, vec![join(c, ps[1])]);
+    assert_eq!(steps(&w, c), vec![ps[1], ps[2]], "A's route, not B's");
+}
+
+/// spec: S-0213 claim 16b (r60: of holders given the point in the same tick, the one whose order was applied first counts as the longest holder: for the orders of one click, the first in selection order); Scenario O8 part r (5)
+#[test]
+fn claim_16b_a_join_tie_goes_to_the_first_applied() {
+    for j_first in [true, false] {
+        let mut w = game();
+        let (j, k, l) = (
+            buggy(&mut w, 0, 0),
+            buggy(&mut w, 1, 0),
+            buggy(&mut w, 2, 0),
+        );
+        let (s1, s2, s3) = (at(3, 3), at(5, 5), at(7, 7));
+        let first = if j_first {
+            vec![add(j, s1), add(k, s1)]
+        } else {
+            vec![add(k, s1), add(j, s1)]
+        };
+        give(&mut w, first);
+        let p1 = point(&w, s1);
+        assert_eq!(w.routes.points.len(), 1, "one tick: one shared point");
+        give(&mut w, vec![add(j, s2)]);
+        give(&mut w, vec![add(k, s3)]);
+        let (q2, q3) = (point(&w, s2), point(&w, s3));
+        give(&mut w, vec![join(l, p1)]);
+        let want = if j_first { vec![p1, q2] } else { vec![p1, q3] };
+        assert_eq!(steps(&w, l), want, "j first: {j_first}");
+    }
+}
+
+/// spec: S-0213 claim 16b (r60: a loop whose first point is the joined point or a later one is copied as it is, from the same first point; one whose first point comes before the joined point makes the whole copy a loop entered at the joined point, whatever point its holder is going to) and claim 16f (a point issued before a loop's first point, which no route holds any more, is deleted at once); Scenario O8 part r (2) to (4)
+#[test]
+fn claim_16b_joins_copy_loops() {
+    let mut w = game();
+    let (d, e, f, g, h) = (
+        buggy(&mut w, 0, 0),
+        buggy(&mut w, 1, 0),
+        buggy(&mut w, 2, 0),
+        buggy(&mut w, 3, 0),
+        buggy(&mut w, 4, 0),
+    );
+    // (3) F's route R1 to R4, a loop from R2; G joins R1.
+    let rs = route(&mut w, f, &[at(-9, 9), at(-7, 9), at(-5, 9), at(-3, 9)]);
+    give(&mut w, vec![join(f, rs[1])]);
+    give(&mut w, vec![join(g, rs[0])]);
+    assert_eq!(steps(&w, g), rs);
+    assert_eq!(w.routes.routes[&g].loop_from, Some(1), "the same loop");
+    // (2) D at rest: Q1 to Q4 with a loop from Q2, committed; D starts at once and issues Q1.
+    let (q1, q2, q3, q4) = (at(-2, 4), at(3, 4), at(3, 8), at(-2, 8));
+    let qs = route(&mut w, d, &[q1, q2, q3, q4]);
+    give(&mut w, vec![join(d, qs[1])]);
+    give(&mut w, vec![Order::RouteCommit]);
+    assert_eq!(steps(&w, d), qs[1..].to_vec());
+    assert_eq!(routes::point_in(&w, A, q1), None, "Q1 is deleted");
+    assert!(routes::point_in(&w, A, q2).is_some());
+    give(&mut w, vec![join(e, qs[2])]);
+    assert_eq!(steps(&w, e), vec![qs[2], qs[3], qs[1]]);
+    assert_eq!(w.routes.routes[&e].loop_from, Some(0));
+    // (4) After D has gone round its loop once, H joins Q4.
+    run_until(&mut w, 3000, |w| cell(w, d) == q4);
+    run_until(&mut w, 3000, |w| cell(w, d) == q2);
+    let at_d = steps(&w, d);
+    give(&mut w, vec![join(h, qs[3])]);
+    let i = at_d.iter().position(|&p| p == qs[3]).unwrap();
+    let want: Vec<u32> = at_d[i..].iter().chain(&at_d[..i]).copied().collect();
+    assert_eq!(steps(&w, h), want);
+    assert_eq!(steps(&w, h)[0], qs[3]);
+    assert_eq!(w.routes.routes[&h].loop_from, Some(0), "the whole loop");
+}
+
+/// spec: S-0213 claims 16a and 16c (r60: being committed belongs to each route; a point add applied after a commit at a committed point's place adds a new, uncommitted point, and the actor waits there for the next commit; the routes holding the committed point are not changed); Scenario O8 part s
+#[test]
+fn claim_16c_a_point_add_at_a_committed_points_place_waits() {
+    let mut w = game();
+    let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 0, 2));
+    let (far, p1, y, q1) = (at(-15, -15), at(10, 0), at(10, 6), at(4, 2));
+    give(&mut w, vec![move_to(v, far)]);
+    testkit::run(&mut w, 2);
+    let vs = route(&mut w, v, &[p1, y]);
+    give(&mut w, vec![Order::RouteCommit]);
+    assert!(committed(&w, v));
+    // W at rest heads for Q1.
+    route(&mut w, wv, &[q1]);
+    give(&mut w, vec![Order::RouteCommit]);
+    testkit::run(&mut w, 2);
+    give(&mut w, vec![add(wv, y)]);
+    let ws = steps(&w, wv);
+    assert_eq!(ws.len(), 1);
+    assert_ne!(ws[0], vs[1], "not V's committed point");
+    assert!(!committed(&w, wv), "uncommitted");
+    assert!(committed(&w, v), "V's route unchanged");
+    assert_eq!(steps(&w, v), vs);
+    run_until(&mut w, 600, |w| cell(w, wv) == q1);
+    testkit::run(&mut w, 120);
+    assert_eq!(cell(&w, wv), q1, "waits at Q1 for a commit");
+    give(&mut w, vec![Order::RouteCommit]);
+    run_until(&mut w, 600, |w| cell(w, wv) == y);
+}
+
+/// spec: S-0213 claim 16f (r60, Q-2136: a route point that no route holds any more is deleted at once, whichever way its last holder left it: an order that ends the route, or issuing it from a route without a loop); Scenario O8 part u
+#[test]
+fn claim_16f_points_no_route_holds_are_deleted() {
+    let mut w = game();
+    let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
+    let (far, p1, p2, p3) = (at(-15, 15), at(4, -6), at(8, -6), at(12, -6));
+    give(&mut w, vec![move_to(v, far)]);
+    testkit::run(&mut w, 2);
+    let ps = route(&mut w, v, &[p1, p2, p3]);
+    give(&mut w, vec![Order::RouteCommit]);
+    give(&mut w, vec![join(wv, ps[1])]);
+    give(&mut w, vec![Order::RouteCommit]);
+    assert_eq!(steps(&w, wv), vec![ps[2]], "W starts at once and issues P2");
+    // (1) every marker still stands: V holds them.
+    for c in [p1, p2, p3] {
+        assert!(routes::point_in(&w, A, c).is_some());
+    }
+    // (2) V's route ends by a plain move order.
+    give(&mut w, vec![move_to(v, far)]);
+    assert_eq!(routes::point_in(&w, A, p1), None);
+    assert_eq!(routes::point_in(&w, A, p2), None);
+    assert!(routes::point_in(&w, A, p3).is_some(), "W still holds P3");
+    assert_eq!(
+        click(&w, &[], p2),
+        RouteClick::Ordinary,
+        "nothing to select"
+    );
+    // (3) W issues P3 at P2: no route holds it.
+    run_until(&mut w, 600, |w| steps(w, wv).is_empty());
+    assert_eq!(routes::point_in(&w, A, p3), None);
+}
+
+/// The testkit's ruleset with HUT and the engine's default area-guard
+/// threshold, so that armed vehicles rest in guard (S-0215 claim 15).
+fn guard_ruleset() -> Ruleset {
+    let mut r = ruleset();
+    r.sim.general.iq_guard_area = None;
+    r
+}
+
+/// spec: S-0213 claim 16c (r60: giving up at the commit is a queue of wait with an immediate start, S-0215 claim 7: a ready holder has wait current from the commit until the issued order's behaviour becomes current; each issue at a fall-back to rest is preceded by the same queue of wait); Scenario O8 part t (1), with a vehicle and an infantry unit
+#[test]
+fn claim_16c_a_holder_waits_at_the_commit_and_before_each_issue() {
+    for infantry in [false, true] {
+        let mut w = game_from(&guard_ruleset());
+        let u = if infantry {
+            testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(0, 0), 0)
+        } else {
+            buggy(&mut w, 0, 0)
+        };
+        testkit::run(&mut w, 30);
+        assert_eq!(
+            current(&w, u),
+            Some(Behaviour::Guard),
+            "infantry {infantry}"
+        );
+        let (p1, p2) = (at(4, 0), at(4, 4));
+        route(&mut w, u, &[p1, p2]);
+        give(&mut w, vec![Order::RouteCommit]);
+        assert_eq!(
+            current(&w, u),
+            Some(Behaviour::Wait),
+            "wait current at the commit"
+        );
+        run_until(&mut w, 60, |w| current(w, u) == Some(Behaviour::Move));
+        run_until(&mut w, 1200, |w| cell(w, u) == p1);
+        let mut waited = false;
+        for _ in 0..600 {
+            let heading = w.obj(u).unwrap().dest == Some(Target::Cell(p2));
+            if heading && current(&w, u) == Some(Behaviour::Move) {
+                break;
+            }
+            waited |= current(&w, u) == Some(Behaviour::Wait);
+            testkit::run(&mut w, 1);
+        }
+        assert!(
+            waited,
+            "a tick of wait at P1 before P2 (infantry {infantry})"
+        );
+        run_until(&mut w, 1200, |w| cell(w, u) == p2);
+    }
+}
+
+/// spec: S-0213 claim 16c (r60: the commit applies at its tick's order boundary, so the holder keeps its target in the commit's tick; wait is first current at S-0215 claim 33's drop rule in the next tick, which drops an opportunity target, and the holder makes no shot at it until the issued order's behaviour is current); Scenario O8 part t (2)
+#[test]
+fn claim_16c_the_wait_drops_an_opportunity_target() {
+    // The testkit's combat ruleset (armed CART), resting in guard.
+    let mut r = testkit::combat_ruleset();
+    r.sim.general.iq_guard_area = None;
+    let mut w = game_from(&r);
+    let v = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, at(0, 0), 0);
+    let e = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, at(3, 0), 0);
+    run_until(&mut w, 120, |w| {
+        let o = w.obj(v).unwrap();
+        o.target == Some(Target::Object(e)) && o.combat.opportunity
+    });
+    assert_eq!(current(&w, v), Some(Behaviour::Guard));
+    route(&mut w, v, &[at(-6, 0), at(-6, 6)]);
+    assert_eq!(w.obj(v).unwrap().target, Some(Target::Object(e)));
+    give(&mut w, vec![Order::RouteCommit]);
+    assert_eq!(
+        w.obj(v).unwrap().target,
+        Some(Target::Object(e)),
+        "kept in the commit's tick"
+    );
+    let health = w.obj(e).unwrap().health;
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(v).unwrap().target, None, "dropped in the next tick");
+    while current(&w, v) != Some(Behaviour::Move) {
+        assert_eq!(w.obj(e).unwrap().health, health, "no shot under wait");
+        assert_eq!(current(&w, v), Some(Behaviour::Wait));
+        testkit::run(&mut w, 1);
+    }
+}
+
+/// spec: S-0213 Open questions (r60: which of two points at one place a click on their markers joins or selects is open); design (Q-2166): a click on a cell holding several points takes the lowest numbered one that a selected object's route holds, else the lowest numbered
+#[test]
+fn two_points_at_one_place_a_click_takes_one_the_selection_holds() {
+    let mut w = game();
+    let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
+    let y = at(6, 6);
+    let vs = route(&mut w, v, &[y, at(8, 6), at(10, 6)]);
+    route(&mut w, wv, &[y, at(6, 8), at(6, 10)]);
+    let ws = steps(&w, wv);
+    assert_ne!(vs[0], ws[0]);
+    assert_eq!(
+        click(&w, &[wv], y),
+        RouteClick::Orders(vec![join(wv, ws[0])]),
+        "W's own point: a loop close"
+    );
+    assert_eq!(
+        click(&w, &[v], y),
+        RouteClick::Orders(vec![join(v, vs[0])]),
+        "V's own point"
+    );
+    assert_eq!(click(&w, &[], y), RouteClick::SelectPoint(vs[0].min(ws[0])));
 }

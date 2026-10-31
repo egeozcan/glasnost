@@ -100,6 +100,11 @@ pub enum UiCue {
     BuildingPlaced,
     /// The local player set a building's rally point (S-0701 claim 28).
     RallySet,
+    /// A left click on a superweapon icon of the local player's strip, in
+    /// any icon state (S-0512 claim 25).
+    SuperweaponClick,
+    /// A superweapon icon click armed its type (S-0512 claim 25).
+    SelectTarget,
 }
 
 /// The F7 radar-event kinds that announcements pass through.
@@ -2146,6 +2151,13 @@ impl Audio {
             // spec: S-0701 claim 28 (rally point set: the local player's matching action; no throttle)
             UiCue::RallySet => {
                 self.announce(Announcement::RallySet);
+                None
+            }
+            // spec: S-0512 claim 25 and Import mapping (the game-wide build click entry of S-0701's Import mapping, the one S-0701 claim 24 gives for production clicks)
+            UiCue::SuperweaponClick => screen(self, self.names.gui_build.clone()),
+            // spec: S-0512 claim 25 and Import mapping (the select-target announcement, under S-0701's announcement rules)
+            UiCue::SelectTarget => {
+                self.announce(Announcement::SelectTarget);
                 None
             }
         }

@@ -569,6 +569,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 attack_move,
                 target,
                 dest,
+                committed: false,
+                since: 0,
             };
             crate::routes::apply_point(w, house, actor, step);
         }

@@ -1259,24 +1259,83 @@ fn claim17_a_mixed_selection_deploys_the_landed_at_once_and_the_falling_after_la
     until(&mut w, 200, |w| deployed(w, first));
 }
 
-#[test]
-fn claim17_an_attack_click_while_falling_attacks_after_landing() {
-    // spec: S-0522 claim 17 (an attack click during the fall is taken as an order at once and its target recorded; no shot before landing, S-0203 claim 4 and S-0511 claim 10; the attack after landing); scenario P10 (d), with a target that cannot move (STUCK)
-    let mut w = game(&rules());
-    let p = launch(&mut w);
+/// Drops the first paratrooper of the plain rules over cell (1, 1) and
+/// places an enemy STUCK (a target that cannot move) at (2, 1), within
+/// weapon range of the landing cell. Returns both, the paratrooper
+/// falling.
+fn dropped_with_enemy(w: &mut World) -> (ObjectId, ObjectId) {
+    let p = launch(w);
     let (x, y) = west_of(at(1, 1));
-    hold(&mut w, p, x, y, 0, 3);
-    let first = transport::passengers(&w, p)[0];
-    assert!(paradrop::attempt(&mut w, p));
-    let enemy = spawn(&mut w, "STUCK", BETA, 2, 1);
+    hold(w, p, x, y, 0, 3);
+    let first = transport::passengers(w, p)[0];
+    assert!(paradrop::attempt(w, p));
+    let enemy = spawn(w, "STUCK", BETA, 2, 1);
+    assert!(falling(w, first));
+    (first, enemy)
+}
+
+#[test]
+fn claim17_an_ordinary_click_on_an_enemy_while_falling_gives_a_move_order() {
+    // spec: S-0522 claim 17 (r14, Q-2140: the attack action follows the firing rules, which rule every target illegal for a falling unit, S-0301 claim 9 rank 4; without force-fire the cursor over an enemy offers no attack but the fallback move of S-0214 row I28, no-move; the click gives the move order of table M toward the target at once, not an attack order; no shot before landing; the move is carried out after landing) and S-0214 claim 6 (e) (r64: the falling refusal counts against part (e)); scenario P10 (d), first run, and S-0214 T4 part D
+    let mut w = game(&rules());
+    let (first, enemy) = dropped_with_enemy(&mut w);
     let full = w.obj(enemy).unwrap().health;
-    let click = glasnost_sim::targeting::click(
-        &w,
-        ALPHA,
-        &[first],
-        glasnost_sim::targeting::ClickOn::Object(enemy),
-        glasnost_sim::targeting::Modifiers::default(),
+    let on = glasnost_sim::targeting::ClickOn::Object(enemy);
+    let plain = glasnost_sim::targeting::Modifiers::default();
+    assert_eq!(
+        glasnost_sim::targeting::cursor(&w, ALPHA, &[first], on, plain),
+        glasnost_sim::targeting::Action::NoMove,
+        "no attack cursor during the fall"
     );
+    let click = glasnost_sim::targeting::click(&w, ALPHA, &[first], on, plain);
+    assert!(
+        matches!(
+            click.orders.as_slice(),
+            [glasnost_sim::orders::Order::Behaviour {
+                behaviour: Behaviour::Move,
+                target: None,
+                dest: Some(_),
+                ..
+            }]
+        ),
+        "a move order at once, not an attack order: {:?}",
+        click.orders
+    );
+    issue_all(&mut w, click.orders);
+    step(&mut w);
+    assert!(falling(&w, first));
+    let o = w.obj(first).unwrap();
+    assert!(o.target.is_none(), "no target recorded");
+    assert!(o.dest.is_some(), "a destination by the enemy");
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    while falling(&w, first) {
+        assert_eq!(w.obj(enemy).unwrap().health, full, "no shot in the air");
+        step(&mut w);
+    }
+    // The control: the same click after landing offers attack.
+    assert_eq!(
+        glasnost_sim::targeting::cursor(&w, ALPHA, &[first], on, plain),
+        glasnost_sim::targeting::Action::Attack,
+        "after landing the click offers attack"
+    );
+}
+
+#[test]
+fn claim17_a_force_fire_click_while_falling_attacks_after_landing() {
+    // spec: S-0522 claim 17 (r14: with force-fire held claim 6 (e) does not apply, so an attack click during the fall is taken as an attack order at once and its target recorded; no shot before landing, S-0203 claim 4 and S-0511 claim 10; the attack after landing) and S-0214 claim 6 (e) (force-fire passes part (e)); scenario P10 (d), second run
+    let mut w = game(&rules());
+    let (first, enemy) = dropped_with_enemy(&mut w);
+    let full = w.obj(enemy).unwrap().health;
+    let on = glasnost_sim::targeting::ClickOn::Object(enemy);
+    let force = glasnost_sim::targeting::Modifiers {
+        force_fire: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        glasnost_sim::targeting::cursor(&w, ALPHA, &[first], on, force),
+        glasnost_sim::targeting::Action::Attack
+    );
+    let click = glasnost_sim::targeting::click(&w, ALPHA, &[first], on, force);
     assert!(
         matches!(
             click.orders.as_slice(),

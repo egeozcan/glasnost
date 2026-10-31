@@ -820,6 +820,31 @@ impl Play {
         false
     }
 
+    /// A band box's release with the type-select role held (S-0214 claim
+    /// 32, *held drags*). `inside` are the live box candidates inside the
+    /// box in candidate order, of any house and kind; `pool` is the reach's
+    /// pool (the screen candidates, or every object in creation order).
+    /// Returns whether the release continues as the ordinary release click
+    /// at the final pixel. Silent (S-0701 claim 17).
+    pub fn type_drag(
+        &mut self,
+        inside: &[ObjectId],
+        pool: &[ObjectId],
+        force_select: bool,
+    ) -> bool {
+        // spec: S-0214 claim 32 (held drags: claim 19's empty-box rule still applies)
+        if inside.is_empty() {
+            return self.select_box(inside, force_select);
+        }
+        // spec: S-0214 claim 32 (held drags: claim 19's clearing rule still applies, so without force-select a box with a live candidate clears the old selection)
+        if !force_select {
+            self.clear_selection();
+        }
+        // spec: S-0214 claim 32 (held drags: none of claim 19's candidate tests; every live box candidate inside, whatever its house and kind, stands for its exact type, in candidate order, and adds the own objects of that type that can be selected within the reach, inside the box or not; no deploys-into types) and claim 29 (types in first in-box encounter order)
+        self.expand_types(inside, pool, false);
+        false
+    }
+
     /// Clears the selection; the next type-select tap sets the reach to
     /// *screen* (S-0214 claim 32: every clearing counts, even of an empty
     /// selection).
@@ -1243,6 +1268,10 @@ impl Play {
         let t = match hud::entries(w, self.local, self.shown_tab()).get(n) {
             Some(hud::Entry::Type(t)) => *t,
             Some(hud::Entry::Superweapon(sw)) => {
+                // spec: S-0512 claim 25 (every left click on a superweapon icon of the local player's strip requests the game-wide build click, the input's first request, whatever the icon's state)
+                if button == Button::Left {
+                    self.cues.push(UiCue::SuperweaponClick);
+                }
                 // spec: S-0512 claim 16 (selecting an icon that offers targeting arms that type, by its registration index)
                 if button == Button::Left && charge::offers_targeting(w, self.local, *sw) {
                     let sw = *sw;
@@ -1266,7 +1295,8 @@ impl Play {
                         };
                         // spec: S-0512 claim 25 (selecting an icon that offers targeting and has an aim action empties the selection in that same input and arms the type; arming ends building placement, sell, repair and power mode, the building awaiting placement staying ready in its strip)
                         self.clear_selection();
-                        // Seam (Q-2140): the select-target announcement has no identifier in S-0512's Import mapping, so none is made.
+                        // spec: S-0512 claim 25 (the arming input requests the select-target announcement, after the click sound; no message-list line)
+                        self.cues.push(UiCue::SelectTarget);
                     }
                 }
                 return;
