@@ -969,6 +969,30 @@ fn claim_16_refusal_sound_only_after_a_changed_count() {
     assert!(refusal_sound(&w), "with the refusal sound");
 }
 
+// spec: S-0407 claim 16 *At issue* (T12 run 4, r29: with an explicit docking-place count of 0, T = 0, so the start itself gives no order at issue, D = 0 = T, and nothing starts; control: a count of 1 gives T = 1 and the start is given)
+#[test]
+fn claim_16_explicit_zero_pad_total_gives_no_start_at_issue() {
+    for docks in [0, 1] {
+        let mut r = run_8_rules(None);
+        r.sim
+            .buildings
+            .get_mut("AIRPAD")
+            .unwrap()
+            .econ
+            .number_of_docks = Some(docks);
+        let mut w = game(&r);
+        building(&mut w, "AIRPAD", 0, -8, 0);
+        ready(&mut w);
+        set_credits(&mut w, 0, 100_000);
+        assert_eq!(pad_total(&w, 0), i64::from(docks), "T");
+        let b = t(&w, Kind::Aircraft, "PADB");
+        assert_eq!(click_icon(&mut w, b), docks == 1, "T = {docks}");
+        step(&mut w);
+        assert_eq!(item(&w, 0, b).is_some(), docks == 1, "T = {docks}");
+        assert!(!refusal_sound(&w), "T = {docks}: no sound");
+    }
+}
+
 fn pad_total(w: &World, h: u8) -> i64 {
     w.houses[usize::from(h)].econ.tech.pad_total
 }
