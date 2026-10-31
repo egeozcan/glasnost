@@ -211,6 +211,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         generic_shadow: None,
         berserk: None,
         turret_index: None,
+        walk: Default::default(),
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -299,6 +300,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         generic_shadow: None,
         berserk: None,
         turret_index: None,
+        walk: Default::default(),
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -539,6 +541,55 @@ fn selection_and_orders_flow_through_the_input_rules() {
     let mut foreign = vec![other];
     let r = live.key(house, &mut foreign, KeyCommand::Stop);
     assert_eq!(r.issued, 0);
+}
+
+/// The view counts a vehicle's walk counter from the game's ticks: it
+/// grows in each tick the vehicle is moving (walk rate absent: 1, so every
+/// tick number is a multiple) and holds while the vehicle stands (idle rate
+/// absent: 0). M8 round 6 note 39: before, it stayed 0 and a moving sprite
+/// vehicle showed one picture.
+///
+/// spec: S-0102 claim 22 (walk counter; moving, read as S-0107 Terms' is moving now) and Import
+/// mapping (WalkRate absent 1, IdleRate absent 0)
+#[test]
+fn a_vehicles_walk_counter_runs_while_it_moves() {
+    let (mut live, _) = synthetic_live();
+    let house = HouseId(0);
+    let car = testkit::house_objects(&live.world, 0)
+        .into_iter()
+        .find(|&id| {
+            live.world
+                .obj(id)
+                .is_some_and(|o| o.kind == glasnost_sim::rules::Kind::Vehicle)
+        })
+        .expect("the scenario gives the house a vehicle");
+    while live.world.tick < 4 {
+        live.step();
+    }
+    assert_eq!(live.walk(car).counter, 0);
+    let mut selection = vec![car];
+    let start = live.world.obj(car).unwrap().pos.cell();
+    let to = glasnost_map::CellXY::new(start.x + 4, start.y);
+    let r = live.click(
+        house,
+        &mut selection,
+        ClickOn::Cell(to),
+        Modifiers::default(),
+    );
+    assert_eq!(r.issued, 1);
+    let mut moving_ticks = 0;
+    let mut seen_moving = false;
+    for _ in 0..200 {
+        live.step();
+        let w = live.walk(car);
+        if w.moving {
+            moving_ticks += 1;
+            seen_moving = true;
+        }
+        assert_eq!(w.counter, moving_ticks);
+    }
+    assert!(seen_moving, "the vehicle moved");
+    assert!(!live.walk(car).moving, "the vehicle arrived and stands");
 }
 
 /// Drawing reads the game and never changes it (CONTRIBUTING.md: rendering
@@ -1687,6 +1738,7 @@ fn considered_aircraft_defaults_by_kind() {
             generic_shadow: None,
             berserk: None,
             turret_index: None,
+            walk: Default::default(),
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         let s = entries[0]
@@ -1782,6 +1834,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         generic_shadow: None,
         berserk: None,
         turret_index: None,
+        walk: Default::default(),
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1982,6 +2035,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             generic_shadow: None,
             berserk: None,
             turret_index: None,
+            walk: Default::default(),
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -2083,6 +2137,7 @@ fn multi_turret_draws_the_models_of_the_selected_index() {
             generic_shadow: None,
             berserk: None,
             turret_index: index,
+            walk: Default::default(),
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let sizes: Vec<(u32, u32)> = entries[0]
@@ -2275,6 +2330,7 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
             generic_shadow: None,
             berserk: None,
             turret_index: index,
+            walk: Default::default(),
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let (shadows, lit): (Vec<Item>, Vec<Item>) = entries[0]
@@ -2668,6 +2724,7 @@ fn aircraft_attitude_is_drawn() {
         generic_shadow: None,
         berserk: None,
         turret_index: None,
+        walk: Default::default(),
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -2822,6 +2879,7 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             generic_shadow: None,
             berserk: None,
             turret_index: None,
+            walk: Default::default(),
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -3592,6 +3650,7 @@ fn protection_curtain_vehicle_rows() {
                 generic_shadow: None,
                 berserk: None,
                 turret_index: None,
+                walk: Default::default(),
             };
             let look = Look {
                 kind: ProtectKind::Curtain,
@@ -4712,6 +4771,7 @@ fn plain_mobile(kind: Kind) -> Mobile {
         generic_shadow: None,
         berserk: None,
         turret_index: None,
+        walk: Default::default(),
     }
 }
 

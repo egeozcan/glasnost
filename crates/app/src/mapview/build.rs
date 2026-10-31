@@ -312,7 +312,6 @@ mod notes {
             copy[1]
         )
     }
-    pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
@@ -894,6 +893,11 @@ pub fn wanted_files(
             add_art(kind, i);
         }
     }
+    // spec: S-0112 claim 4 (an ore or gem cell draws the body of its tiberium's run at its cell
+    // position, not its stored type: a map that stores one type for all its ore needs the run's
+    // other bodies); S-0401 claims 9, 11 and 15 (resource spreads to new cells and mines make it in
+    // play)
+    tiberium_run_files(import, &mut out);
     out.insert(upper(VPL_FILE));
     // spec: S-0102 claim 31 (the shared building companion depth image)
     out.insert(upper(COMPANION_FILE));
@@ -918,6 +922,44 @@ pub fn wanted_files(
     // spec: S-0103 claim 13 (the sidebar icon palette)
     out.insert(upper(glasnost_render::palette::ICON_PALETTE_FILE));
     out
+}
+
+/// Each tiberium's image run, in tiberium list order, from the image
+/// numbers its rules layers gave (S-0112 claim 10).
+fn tiberium_runs(import: &Import) -> Vec<Option<Run>> {
+    let q = OverlayQuirks::default();
+    let Some(list) = import.outcome.registries.get(&Kind::Tiberiums) else {
+        return Vec::new();
+    };
+    list.iter()
+        .map(|t| {
+            let mut run = None;
+            if let Some(k) = t.keys.get(&b"Image"[..]) {
+                for e in &k.history {
+                    if let glasnost_convert::layers::What::Set(v) = &e.what
+                        && let Some(v) = value::integer(v)
+                    {
+                        run = apply_image(run, v, &q);
+                    }
+                }
+            }
+            run
+        })
+        .collect()
+}
+
+/// The sprites of every overlay type in every tiberium's run, flat and
+/// sloped (S-0112 claim 4: an ore or gem cell's body is the run's type at
+/// its cell position, whatever type the cell stores; S-0112 Terms).
+fn tiberium_run_files(import: &Import, out: &mut BTreeSet<Vec<u8>>) {
+    for run in tiberium_runs(import).into_iter().flatten() {
+        // spec: S-0112 Terms (a run: F flat positions from P, then S sloped ones)
+        for p in run.p..run.p + run.f + run.s {
+            if let Ok(p) = usize::try_from(p) {
+                art_files(import, Kind::Overlays, p, out);
+            }
+        }
+    }
 }
 
 /// The files of one type's art: sprite, voxel models with their motion
@@ -955,6 +997,11 @@ pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
         }
         if kind == Kind::Buildings {
             slot_files(import, &art, idx, &mut out);
+        }
+        // spec: S-0520 claim 3 (a crate placed during play is an overlay of its cell and is drawn:
+        // the crate types' sprites, which a skirmish map's own crates never bring, S-0009 claim 12)
+        if kind == Kind::Overlays && rule_bool(import, kind, idx, b"Crate", false) {
+            art_files(import, kind, idx, &mut out);
         }
     }
     // spec: S-0102 claim 31 (the shared building companion depth image)
@@ -1197,8 +1244,6 @@ struct Builder<'a> {
     options: &'a Options,
     p: Painter,
     built: Built,
-    /// Whether the builder draws the live game's objects ([`Painter::mobiles`]).
-    live: bool,
     /// The running slot animations of the live building being drawn
     /// (S-0108), in place of the set-up slots at their first image frame.
     live_slots: Option<Vec<LiveSlot>>,
@@ -1395,7 +1440,6 @@ pub fn build_parts_with(
         options: inputs.options,
         p: Painter::new(art, canvas),
         built: Built::default(),
-        live: false,
         live_slots: None,
     };
     b.light_cells();
@@ -1865,25 +1909,7 @@ impl<'a> Builder<'a> {
     /// Each tiberium's image run, in tiberium list order, from the image
     /// numbers its rules layers gave (S-0112 claim 10).
     fn tiberium_runs(&self) -> Vec<Option<Run>> {
-        let q = OverlayQuirks::default();
-        let Some(list) = self.import.outcome.registries.get(&Kind::Tiberiums) else {
-            return Vec::new();
-        };
-        list.iter()
-            .map(|t| {
-                let mut run = None;
-                if let Some(k) = t.keys.get(&b"Image"[..]) {
-                    for e in &k.history {
-                        if let glasnost_convert::layers::What::Set(v) = &e.what
-                            && let Some(v) = value::integer(v)
-                        {
-                            run = apply_image(run, v, &q);
-                        }
-                    }
-                }
-                run
-            })
-            .collect()
+        tiberium_runs(self.import)
     }
 
     /// Overlays and their shadows (S-0112 claims 1 to 9; S-0102 claims 12,
@@ -4098,6 +4124,7 @@ impl<'a> Builder<'a> {
             berserk: None,
             // spec: S-0105 claim 43 and S3 (the index a vehicle is created with: no tick has run)
             turret_index: creation_turret_index(self.rules, self.import, kind, i),
+            walk: Default::default(),
         };
         Some(self.mobile(&m))
     }
@@ -4444,19 +4471,20 @@ impl<'a> Builder<'a> {
         let d = sprite_vehicle_facing_part(facings, m.body, &ViewQuirks::default());
         // spec: S-0102 Import mapping (IdleRate absent: 0)
         let idle_rate = rule_int(self.import, k, i, b"IdleRate", 0);
-        // spec: S-0102 claim 22 (frame table: the walk counter w is 0 and nothing fires or dies; the
-        // standing-pose state is on from creation until a movement step starts and again once it
-        // ends, so the row d never applies to a vehicle that is not part-way through a step)
-        let frame = if idle_rate != 0 {
-            walk_start + d * walk_frames
-        } else if standing_frames > 0 {
-            stand_start + d * standing_frames
-        } else {
-            walk_start + d * walk_frames
-        };
-        if self.live {
-            self.note(notes::LIVE_SPRITE_VEHICLE);
-        }
+        // spec: S-0102 claim 22 (frame table: nothing fires or dies; the standing-pose state is on
+        // from creation until a movement step starts and again once it ends, so the row d never
+        // applies to a vehicle that is not part-way through a step)
+        let frame = sprite_vehicle_frame(
+            SpriteVehicleRows {
+                walk_start,
+                walk_frames,
+                stand_start,
+                standing_frames,
+            },
+            d,
+            m.walk,
+            idle_rate,
+        );
         let Ok(frame) = usize::try_from(frame) else {
             return Vec::new();
         };
@@ -5064,8 +5092,11 @@ impl<'a> Builder<'a> {
             ));
         }
         let mut placed = Vec::new();
-        // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
-        let body_frame = 0;
+        // spec: S-0105 claim 16 (f_b = ν mod F_body, ν the walk-animation counter: the view's walk
+        // counter of S-0102 claim 22, design Q-2176; a body without a motion file has one frame)
+        let body_frame = self.voxel_model(&body_file).map_or(0, |b| {
+            voxel::body_frame(m.walk.counter, b.frame_count() as u32)
+        });
         // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state as drawn:
         // claim 12's alternative body while no spawned aircraft is docked)
         // spec: S-0105 claims 26, 41, 42 (a rocket body's key: heading, frame and pitch class; a flying body's: flight drawing heading, frame, pitch presence and bank state; neither has a ramp state)
@@ -5474,6 +5505,10 @@ pub struct Mobile {
     /// turret table entry can hold, is kept, and neither draws a numbered
     /// turret or barrel (claim 12).
     pub turret_index: Option<i32>,
+    /// For a vehicle: its walk counter and whether it is moving in the
+    /// shown tick (S-0102 claim 22, S-0105 claim 16), as the view keeps
+    /// them ([`super::walk`]); counter 0 and standing without a game state.
+    pub walk: super::walk::Walk,
 }
 
 /// The selected turret index of a vehicle (S-0105 claim 43, state table
@@ -5927,7 +5962,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let entries = mobiles.iter().map(|m| b.mobile(m)).collect();
@@ -5964,7 +5998,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let start = b.built.scene.items.len();
@@ -6004,7 +6037,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let out = list.iter().map(|a| b.live_anim(a)).collect();
@@ -6042,7 +6074,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let out = list.iter().map(|d| b.live_particle(d)).collect();
@@ -6080,7 +6111,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let out = list.iter().map(|d| b.live_projectile(d)).collect();
@@ -6118,7 +6148,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let out = list.iter().map(|d| b.live_piece(d)).collect();
@@ -6168,7 +6197,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let out = b.target_line_items(start, end, phase);
@@ -6231,7 +6259,6 @@ impl Painter {
                 scene: std::mem::take(scene),
                 ..Default::default()
             },
-            live: true,
             live_slots: None,
         };
         let mut out = Vec::new();
@@ -6469,5 +6496,55 @@ mod shadow_tests {
         let fourth = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[a], None);
         assert_eq!(fourth, first);
         assert_eq!((third, scene.images.len()), (second, n));
+    }
+}
+
+/// The walking and standing rows of a vehicle drawn as a sprite (S-0102
+/// claim 22 and Import mapping): *S*<sub>w</sub>, *F*<sub>w</sub>,
+/// *S*<sub>s</sub>, *F*<sub>s</sub>.
+#[derive(Clone, Copy, Debug)]
+pub struct SpriteVehicleRows {
+    /// The walking start frame *S*<sub>w</sub>.
+    pub walk_start: i32,
+    /// The walking frame count *F*<sub>w</sub>.
+    pub walk_frames: i32,
+    /// The standing start frame *S*<sub>s</sub>.
+    pub stand_start: i32,
+    /// The standing frame count *F*<sub>s</sub>.
+    pub standing_frames: i32,
+}
+
+/// The image frame of a vehicle drawn as a sprite that neither fires nor
+/// dies (S-0102 claim 22's frame table): the moving row while it moves or
+/// its type's idle rate is not 0, with its walk counter *w*; else the
+/// standing row, or the walking start of its facing part `d`.
+pub fn sprite_vehicle_frame(
+    rows: SpriteVehicleRows,
+    d: i32,
+    walk: super::walk::Walk,
+    idle_rate: i32,
+) -> i32 {
+    let SpriteVehicleRows {
+        walk_start,
+        walk_frames,
+        stand_start,
+        standing_frames,
+    } = rows;
+    if walk.moving || idle_rate != 0 {
+        // spec: S-0102 claim 22 (moving, or the idle rate not 0: S_w + d·F_w + (w mod F_w))
+        let w = i64::from(walk.counter);
+        // design: a walking frame count of 0 (w mod 0 undefined) adds nothing
+        let step = if walk_frames > 0 {
+            w.rem_euclid(i64::from(walk_frames)) as i32
+        } else {
+            0
+        };
+        walk_start + d * walk_frames + step
+    } else if standing_frames > 0 {
+        // spec: S-0102 claim 22 (F_s > 0: S_s + d·F_s)
+        stand_start + d * standing_frames
+    } else {
+        // spec: S-0102 claim 22 (otherwise: S_w + d·F_w)
+        walk_start + d * walk_frames
     }
 }

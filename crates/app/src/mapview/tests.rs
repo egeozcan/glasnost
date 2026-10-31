@@ -2086,3 +2086,99 @@ fn game_files_hold_aircraft_voxels() {
     assert!(files.contains(&b"JET.VXL"[..]));
     assert!(files.contains(&b"JET.HVA"[..]));
 }
+
+/// A map that stores one overlay type for all its ore still draws each ore
+/// cell with the body its tiberium's run gives the cell position, so the
+/// map's files hold every body of every run (M8 round 6 note 38: most ore
+/// cells drew nothing, as only the stored type's sprite was read).
+///
+/// spec: S-0112 claim 4 (the body is the run's type at P + ((x·y) mod F), whatever type the cell
+/// stores; the image frame is the data value), Terms (a run: F flat then S sloped positions from P),
+/// claim 10 (image number 1: P 102, F 12, S 8)
+#[test]
+fn a_maps_ore_reads_every_body_of_its_run() {
+    // Overlay types 0 … 129; 102 … 121 carry the tiberium flag. Each of 100 … 129 has its own
+    // sprite, whose frames are (i − 98) pixels wide, so the drawn body tells its type.
+    let mut list = String::from("[OverlayTypes]\n");
+    for i in 0..130 {
+        list.push_str(&format!("{i}=OV{i}\n"));
+    }
+    let mut rules = RULES.replace("[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n", &list);
+    rules.push_str("[Tiberiums]\n0=RUBIES\n[RUBIES]\nImage=1\n");
+    for i in 102..122 {
+        rules.push_str(&format!("[OV{i}]\nTiberium=yes\n"));
+    }
+    let (mut import, catalogue, mut assets) = context_with(&rules);
+    let mut pool = Assets::default();
+    for i in 100..130usize {
+        let file = format!("ov{i}.shp");
+        import
+            .arts
+            .insert((Kind::Overlays, i), art_of(&format!("OV{i}"), &file));
+        pool.insert(
+            file.as_bytes(),
+            shp((40, 10), 24, (i as u32 - 98, 2), (4, 4)),
+        );
+    }
+    // Ore stored as type 102 in cell (5, 9), stage 3: (5 · 9) mod 12 = 9 picks type 111.
+    let m = MapText {
+        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n".into(),
+        terrain: Some(record_bytes(&[rec(0, 0, 0)])),
+        overlay: Some(overlay_stream(255, &[(5, 9, 102)])),
+        overlay_data: Some(overlay_stream(0, &[(5, 9, 3)])),
+        ..Default::default()
+    };
+    let doc = Document::parse(m.text().as_bytes(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let wanted = super::build::wanted_files(&map, &map.cells, &import, &catalogue, &|_| true);
+    let ov = |i: usize| format!("OV{i}.SHP").into_bytes();
+    for i in 102..122 {
+        assert!(wanted.contains(&ov(i)), "the run's type {i}");
+    }
+    for i in [100, 101, 122, 129] {
+        assert!(!wanted.contains(&ov(i)), "type {i} lies outside the run");
+    }
+    // Built from the files read, the cell draws type 111's frame 3.
+    for name in &wanted {
+        if let Some(b) = pool.get(name) {
+            assets.insert(name, b.to_vec());
+        }
+    }
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let b = build(
+        &map,
+        &import,
+        &catalogue,
+        &palettes,
+        &assets,
+        &Options::default(),
+    );
+    let bodies: Vec<Item> = items_of(&b, "overlay")
+        .into_iter()
+        .filter(|i| i.paint != Paint::Shadow)
+        .collect();
+    assert_eq!(bodies.len(), 1);
+    let image = &b.scene.images[bodies[0].image as usize];
+    assert_eq!(image.width(), 111 - 98);
+    assert_eq!(image.pixels()[0], 4);
+}
+
+/// A crate placed during play is drawn, though a skirmish map's own crates
+/// never bring their sprites: a live game reads the crate types' sprites.
+///
+/// spec: S-0520 claim 3 (play places a crate overlay in a cell and redraws it); S-0009 claim 12
+/// (the map's crate overlays never appear in skirmish)
+#[test]
+fn game_files_hold_crate_sprites() {
+    let (import, _, _) = context();
+    let files = super::build::game_files(&import);
+    assert!(files.contains(&b"CRATEX.SHP"[..]));
+    assert!(!files.contains(&b"FENCEX.SHP"[..]));
+}

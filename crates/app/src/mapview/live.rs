@@ -455,6 +455,12 @@ pub struct Live {
     /// tick, until the angles and rates move into the game state (claim 19,
     /// a seam, docs/m8-claims/intake53-S-0107-S-0108-S-0113.md).
     rocking: super::rocking::Rocking,
+    /// The vehicles' walk counters (S-0102 claim 22, S-0105 claim 16): the
+    /// view's own, moved once per game tick.
+    walks: super::walk::Counters,
+    /// Each vehicle type's walk and idle rates (S-0102 Import mapping), by
+    /// the simulation's vehicle type index.
+    walk_rates: Vec<super::walk::Rates>,
 }
 
 /// A running slot animation of a building (S-0108 Terms), played by
@@ -929,6 +935,20 @@ impl Live {
                 )
             })
             .collect();
+        // spec: S-0102 Import mapping (WalkRate, IdleRate of the vehicle type: 1 and 0 when absent)
+        let walk_rates = rules
+            .vehicles
+            .iter()
+            .map(|v| {
+                let d = super::walk::Rates::default();
+                find_type(inputs.import, Kind::Vehicles, v.name.as_bytes()).map_or(d, |i| {
+                    super::walk::Rates {
+                        walk: rule_int(inputs.import, Kind::Vehicles, i, b"WalkRate", d.walk),
+                        idle: rule_int(inputs.import, Kind::Vehicles, i, b"IdleRate", d.idle),
+                    }
+                })
+            })
+            .collect();
         let mut types = BTreeMap::new();
         let mut undrawn = BTreeSet::new();
         for o in world.objects.values() {
@@ -1180,6 +1200,8 @@ impl Live {
             special_events: Vec::new(),
             depot_events: Vec::new(),
             rocking: Default::default(),
+            walks: Default::default(),
+            walk_rates,
             setup_charges: BTreeMap::new(),
         };
         // spec: S-0108 claim 11 (a building placed during the game's set-up opens during the set-up: the record it meets is the one the set-up left, before the first tick's house updates grant it)
@@ -1306,6 +1328,12 @@ impl Live {
     /// The bodies that rock (S-0113; the view's copy until claim 19 is built).
     pub fn rocking(&self) -> &super::rocking::Rocking {
         &self.rocking
+    }
+
+    /// The walk counter of vehicle `id` and whether it moved in the shown
+    /// tick, as the view keeps them (S-0102 claim 22).
+    pub fn walk(&self, id: ObjectId) -> super::walk::Walk {
+        self.walks.of(id)
     }
 
     /// The ground layer.
@@ -2253,6 +2281,8 @@ impl Live {
         // spec: S-0113 claim 19 and State and ordering (the rocking step is the first part of a body's turn, once per game tick and not per drawn frame; the tick's pushes then set the rates, which show from the next step)
         self.rocking.advance(&self.world);
         self.rocking.take(&self.world, &effects);
+        // spec: S-0102 claim 22 (the walk counter grows in a tick, once per game tick and not per drawn frame)
+        self.walks.advance(&self.world, &self.walk_rates);
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -2850,9 +2880,11 @@ impl Live {
             anim: o.combat.anim_frame as u32,
             infantry,
             object: sim_code(id),
-            // spec: S-0402 claim 5a, F8 (ν: the walk-animation counter of S-0105 claim 16). The
-            // simulation does not model that counter yet, so 0, as for the body's HVA frame.
-            harvesting: super::harvesting::of(w, id, 0),
+            // spec: S-0402 claim 5a, F8 (ν: the walk-animation counter of S-0105 claim 16, the
+            // view's walk counter of S-0102 claim 22, design Q-2176)
+            harvesting: super::harvesting::of(w, id, self.walks.of(id).counter as i32),
+            // spec: S-0102 claim 22, S-0105 claim 16 (the walk counter and the moving state of the shown tick)
+            walk: self.walks.of(id),
             shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),

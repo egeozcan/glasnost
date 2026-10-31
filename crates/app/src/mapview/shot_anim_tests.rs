@@ -182,6 +182,7 @@ fn mobile(w: &World, a: ObjectId, cart: usize) -> Mobile {
         generic_shadow: None,
         berserk: None,
         turret_index: None,
+        walk: Default::default(),
     }
 }
 
