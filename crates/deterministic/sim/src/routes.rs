@@ -1182,14 +1182,29 @@ pub fn click(
             }),
             // spec: S-0213 claim 16b (a route-mode click that would order a detonate adds no point: when claim 16d's tests pass, the detonate order is sent at the release, as outside route mode, with no route-mode message)
             Order::Detonate { .. } => out.push(o),
-            // spec: S-0213 claim 16b (revision 84, Q-2192 question 3: a click on a cell that sets a factory's rally point sends that order directly, adds no point and takes effect when applied; it meets claim 16d's release-time tests and is sent at the release)
+            // spec: S-0213 claim 16b (revision 84, Q-2192 question 3: a click on a cell that sets a factory's rally point sends that order directly, adds no point and takes effect when applied; revision 87: so does a building's *move* on an object, the guard-spot order of S-0214 table M part 3, which then acts as claim 20 says; each meets claim 16d's release-time tests and is sent at the release)
             Order::GuardSpot { actor, .. }
-                if matches!(on, ClickOn::Cell(_))
-                    && w.obj(actor).is_some_and(|x| x.kind == Kind::Building) =>
+                if w.obj(actor).is_some_and(|x| x.kind == Kind::Building) =>
             {
                 out.push(o)
             }
-            // design (Q-2227): a building's other actions on an object (the primary mark, an absorber's unload, a rally point set on an object) are not sent and add no point (S-0213 claim 16b leaves open which give behaviour orders and which send their orders directly)
+            // spec: S-0213 claim 16b (revision 87: a building's deploy action is not refused in route mode; its primary order, claim 13, when the building is factory-marked, is sent directly with no point, at the release after claim 16d's tests)
+            Order::Primary { actor } if w.obj(actor).is_some_and(|x| x.kind == Kind::Building) => {
+                out.push(o)
+            }
+            // spec: S-0213 claim 16b (revision 87: a building is given its deploy action only by a click on the building itself, and each behaviour order *unload* that the action gives names the building itself as its target, so it has the building's own place and is a point add there; its points are issued as claim 16d says) and Changes for other specs (S-0214 table M part 3, deploy row)
+            Order::Deploy { actor } if w.obj(actor).is_some_and(|x| x.kind == Kind::Building) => {
+                let target = Some(Target::Object(actor));
+                out.push(Order::RoutePoint {
+                    actor,
+                    behaviour: Behaviour::Unload,
+                    attack_move: false,
+                    target,
+                    dest: None,
+                    place: target,
+                })
+            }
+            // spec: S-0213 claim 16b (an action that S-0214 gives no order for gives none here either and adds no point; the clicks of S-0214 give no other order kinds)
             _ => {}
         }
     }

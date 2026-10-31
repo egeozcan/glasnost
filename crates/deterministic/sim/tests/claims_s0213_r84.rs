@@ -1,17 +1,18 @@
-//! Claim tests for S-0213 revision 84 (human orders: route points' recorded
+//! Claim tests for S-0213 revisions 84 and 87 (human orders: route points' recorded
 //! orders and places, attack moves in a loop, a loop that ends early, and
 //! aircraft and building holders) on synthetic data: invented types, no
 //! game data.
 
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{BuildingType, LocomotionClass, Locomotor, UnitType};
+use glasnost_rules::sim::{BuildingType, Decimal, LocomotionClass, Locomotor, UnitType};
 use glasnost_sim::air;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::routes::{self, RouteClick, RouteNote};
 use glasnost_sim::rules::{Behaviour, Kind};
-use glasnost_sim::targeting::{ClickOn, Modifiers};
+use glasnost_sim::structures::absorb;
+use glasnost_sim::targeting::{self, ClickOn, Modifiers};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
@@ -27,6 +28,7 @@ const A: HouseId = HouseId(0);
 /// - DEPOT: a 3 × 3 repair building whose cells let vehicles through;
 /// - TRUCK: an unarmed wheeled vehicle;
 /// - HELI: an unarmed flying aircraft with no dock that may land anywhere;
+/// - BIO: a 2 × 2 infantry absorber for three;
 /// - the engine's default area-guard threshold, so that armed objects rest
 ///   in guard (S-0215 claim 15).
 fn ruleset() -> Ruleset {
@@ -41,6 +43,7 @@ fn ruleset() -> Ruleset {
     push("buildings", "DEPOT");
     push("vehicles", "TRUCK");
     push("aircraft", "HELI");
+    push("buildings", "BIO");
     let s = &mut r.sim;
     let mut sam = s.buildings["TOWER"].clone();
     sam.sam = Some(true);
@@ -64,6 +67,17 @@ fn ruleset() -> Ruleset {
             foundation: Some([3, 3]),
             unit_repair: Some(true),
             number_impassable_rows: Some(0),
+            ..Default::default()
+        },
+    );
+    s.buildings.insert(
+        "BIO".into(),
+        BuildingType {
+            strength: Some(800),
+            foundation: Some([2, 2]),
+            infantry_absorb: Some(true),
+            passengers: Some(3),
+            size_limit: Some(Decimal("1".into())),
             ..Default::default()
         },
     );
@@ -747,6 +761,92 @@ fn claim_16b_a_rally_point_click_is_sent_directly() {
         routes::click(&w, A, &[f], ClickOn::Cell(c), Modifiers::default()),
         RouteClick::Refused("MSG:PlannerMaximum")
     );
+}
+
+/// spec: S-0213 claim 16b (revision 87, Q-2192 question 3: a building's *move* on an object sends the guard-spot order of S-0214 table M part 3 directly, with no point, chosen around the object's cell for a factory of vehicles, and it then acts as claim 20 says; a building's deploy action is not refused in route mode, and its primary order, when the building is factory-marked, is sent directly with no point; each meets claim 16d's release-time tests)
+#[test]
+fn claim_16b_a_buildings_move_on_an_object_and_primary_are_sent_directly() {
+    let mut w = game();
+    let f1 = put(&mut w, Kind::Building, "FAC", 0, 0, 0);
+    let f2 = put(&mut w, Kind::Building, "FAC", 0, 6, 0);
+    let v = put(&mut w, Kind::Vehicle, "TRUCK", 0, 0, 8);
+    testkit::run(&mut w, 2);
+    // A move on an own object (force-move): the guard spot, a cell around the object's cell.
+    let fm = Modifiers {
+        force_move: true,
+        ..Modifiers::default()
+    };
+    let got = routes::click(&w, A, &[f1], ClickOn::Object(v), fm);
+    let RouteClick::Orders(os) = got else {
+        panic!("the guard-spot order: {got:?}")
+    };
+    assert!(matches!(
+        os.as_slice(),
+        [Order::GuardSpot { actor, spot: Target::Cell(_) }] if *actor == f1
+    ));
+    give(&mut w, os);
+    assert!(w.obj(f1).unwrap().guard_spot.is_some(), "claim 20: set");
+    assert!(w.routes.points.is_empty(), "no point");
+    assert!(steps(&w, f1).is_empty());
+    // The deploy action on a factory that is not the primary one: the primary order.
+    let other = if w.obj(f1).unwrap().econ.building.primary {
+        f2
+    } else {
+        f1
+    };
+    assert!(!w.obj(other).unwrap().econ.building.primary);
+    let got = routes::click(
+        &w,
+        A,
+        &[other],
+        ClickOn::Object(other),
+        Modifiers::default(),
+    );
+    let RouteClick::Orders(os) = got else {
+        panic!("the primary order, not refused: {got:?}")
+    };
+    assert!(matches!(os.as_slice(), [Order::Primary { actor }] if *actor == other));
+    give(&mut w, os);
+    assert!(w.obj(other).unwrap().econ.building.primary, "made primary");
+    assert!(w.routes.points.is_empty(), "no point");
+    assert!(notes(&w).is_empty());
+    // The release-time holder-limit test applies to both.
+    w.routes.counts.insert(A, routes::HOLDER_LIMIT);
+    assert_eq!(
+        routes::click(&w, A, &[f1], ClickOn::Object(v), fm),
+        RouteClick::Refused("MSG:PlannerMaximum")
+    );
+}
+
+/// spec: S-0213 claim 16b (revision 87: a building is given its deploy action only by a click on the building itself; each behaviour order *unload* that the action gives names the building itself as its target, so it has the building's own place and is a point add there; its points are issued as claim 16d says) and Changes for other specs (S-0214 table M part 3, deploy row)
+#[test]
+fn claim_16b_a_buildings_unload_is_a_point_at_its_own_place() {
+    let mut w = game();
+    let bio = put(&mut w, Kind::Building, "BIO", 0, 0, 0);
+    let u = put(&mut w, Kind::Infantry, "WALKER", 0, 4, 0);
+    testkit::run(&mut w, 2);
+    // The ordinary click that sends the walker in.
+    let os = targeting::click(&w, A, &[u], ClickOn::Object(bio), Modifiers::default()).orders;
+    give(&mut w, os);
+    run_until(&mut w, 900, |w| absorb::absorbed_in(w, u) == Some(bio));
+    let got = routes::click(&w, A, &[bio], ClickOn::Object(bio), Modifiers::default());
+    let RouteClick::Orders(os) = got else {
+        panic!("a point add: {got:?}")
+    };
+    let me = Some(Target::Object(bio));
+    assert!(matches!(
+        os.as_slice(),
+        [Order::RoutePoint { actor, behaviour: Behaviour::Unload, target, dest: None, place, .. }]
+            if *actor == bio && *target == me && *place == me
+    ));
+    give(&mut w, os);
+    let ps = steps(&w, bio);
+    assert_eq!(ps.len(), 1, "a point at the building's own place");
+    assert_eq!(absorb::count(&w, bio), 1, "not unloaded at the add");
+    // The commit starts it from guard: it issues the unload, which lets the passenger out.
+    give(&mut w, vec![Order::RouteCommit]);
+    assert!(steps(&w, bio).is_empty(), "the point issued");
+    run_until(&mut w, 900, |w| absorb::count(w, bio) == 0);
 }
 
 /// spec: S-0213 claim 16d, When the tests are made (revision 84, Q-2193: the click areas here are those of every point of every house, drawn for the player or not: a press inside the click area of a point the player cannot see is not tested for kind) and Edge cases (quirks.hidden_point_refuses_click off: such a point plays no part in a press, which counts as one outside every click area and meets the kind test); Scenario O8 part h's third game
