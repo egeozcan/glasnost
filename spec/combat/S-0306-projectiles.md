@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 53
+revision: 54
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -726,14 +726,22 @@ S-0501 claim 20.
 
 17. **Losing the target.** When the target object leaves the game, or becomes untargetable (for
     example by being teleported), the projectile's target becomes the cell the target stood in if
-    the target was not airborne, else nothing. A steering projectile without target (Terms, *No
-    target point*, which includes a target whose target point is the world origin) climbs (claim 15)
-    and detonates once its height above the surface reaches the game-wide missile safety altitude.
+    the target was not airborne, else nothing. Being teleported here is the teleporting
+    locomotor's own jump (S-0207 claim 20 e). The departure of a superweapon warp member is not such
+    a loss (S-0513 claim 39): a projectile in flight towards the member keeps it as its target
+    object, and its target does not become the cell the member stood in. Where it then flies while
+    the member waits to land, and whether it can hit the member, S-0513 leaves open. A steering
+    projectile without target (Terms, *No target point*, which includes a target whose target point
+    is the world origin) climbs (claim 15) and detonates once its height above the surface reaches
+    the game-wide missile safety altitude.
     A projectile whose firer leaves the game keeps flying and detonates normally (S-0203 claim 6 d).
     - Backing: `measurable` (scenario P11: run a for the airborne target, run c for the target on
       the ground, run d for a target that teleports, run e for a firer that leaves the game; P38
-      for a building target whose target point is the world origin)
-    - Confidence: high; medium for the target point at the world origin
+      for a building target whose target point is the world origin). The warp departure sentence
+      is `unmeasured`, as S-0513 claim 39 rates it: no scenario here or in S-0513 fires at a member
+      as it departs
+    - Confidence: high; medium for the target point at the world origin; medium, unmeasured, for
+      the warp departure sentence
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
