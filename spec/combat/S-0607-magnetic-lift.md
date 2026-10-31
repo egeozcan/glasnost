@@ -2,15 +2,15 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 18
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-29
+approved-on: 2026-10-31
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
 Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
-Q-1343, Q-1344, Q-1522, Q-2035, Q-2113]
+Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151]
 supersedes: []
 ---
 
@@ -185,7 +185,13 @@ New terms:
    - the grip is made, and the unit is given the lifter as its destination. Its jumpjet movement
      turns this at once into a fixed movement point, and its order-level destination becomes the
      cell of that point, not the lifter (claim 7),
-   - the unit is deselected,
+   - the unit is deselected. While it is seized it cannot be selected at all: a click on it, a
+     band box around it and its control group's command all pass it over, also while it falls
+     after its grip has ended (claims 13 and 15), and it can be selected again only once it is no
+     longer seized (claim 20). With `quirks.lift_standin_stays_seized` at its default, a unit
+     seized with the driving, walking, ship or teleporting stand-in, which claim 24 never
+     restores, and a unit seized with the drop-pod stand-in, which gets its own locomotor back
+     at touchdown but stays seized, are never selectable again (claim 24),
    - it breaks off a contact with a building,
    - it queues *guard*.
 
@@ -193,9 +199,26 @@ New terms:
    same tick in which the new unit is seized.
    - In the original it also stops being a team member. The original's team system is outside
      this spec's implementation scope.
-   - Backing: `measurable` (scenario L2, including contact and cleanup variants). Team removal is
-     `unmeasured` here: it concerns the original's out-of-scope team system.
-   - Confidence: high (stop, guard, grip, destination, deselection); medium (contact)
+   - Backing: `measurable` (scenario L2, including contact and cleanup variants; scenario L18
+     for the control group's refusal during the grip and for the unit being selectable after
+     restoration). That the refusal lasts until the unit is no longer seized, and not only until
+     its set-down, is `unmeasured`: L18 makes no probe between the set-down and restoration. Team
+     removal is `unmeasured` here: it concerns the original's out-of-scope team system. The
+     click and band-box refusals during the grip, and the click refusal during the fall, are
+     `unmeasured`: L18's click and band box can falsify them, by selecting the victim, but
+     cannot confirm them, since nothing L18 records shows that the click pointed at the gripped
+     or falling victim or that the box took it in (S-0214 claim 19 claims no reference point
+     for a lifted or falling state). The control group's command does not depend on a screen
+     point. The control group's refusal during the fall is `unmeasured`: L18 presses the group
+     key only during the grip. The selection refusal for a unit seized with another stand-in
+     than the jumpjet is `unmeasured`: no scenario here tries to select such a unit.
+   - Confidence: high (stop, guard, grip, destination, deselection; for the jumpjet stand-in,
+     the control group's refusal during the grip); medium (the unit being selectable after
+     restoration, which is a selection click's outcome and so is rated as S-0214 claim 12 rates
+     selection clicks; contact, the click and band-box refusals during the grip, the
+     selection refusal during the fall, the control group's refusal during the fall, the refusal
+     lasting until the unit is no longer seized,
+     the selection refusal with another stand-in)
 
 6. **Seized units of computer-controlled houses.** When the seized unit belongs to a
    computer-controlled house that is not a passive house, it queues *hunt* instead. A
@@ -291,12 +314,137 @@ New terms:
 
 9. **Orders and destinations.** A seized unit ignores every new destination, from orders, approach
    steps or any other rule.
-   - A rule that gives a gripped unit *no* destination is the exception. That ends its grip
-     without a drop, and the unit is set down where it is, at whatever height. Claim 13's jumpjet
-     stop applies to it, so when that stop finds a cell the unit flies to the found point and
-     descends and lands there. Claim 13's design rule for no cell does not apply: here the grip
+   - A rule that gives a gripped unit *no* destination while it has one (an effective clear in
+     S-0502 claim 24's sense) is the exception. That ends its grip without a drop, and the
+     unit is set down where it is, at whatever height. Claim 13's jumpjet stop applies to it,
+     so when that stop finds a cell the unit flies to the found point and descends and lands
+     there. Claim 13's design rule for no cell does not apply: here the grip
      has already ended when the stop runs, and S-0502 claim 17's self-destruction, with its
      quirk switch and its lack of credit, applies unchanged.
+   - **A gripped unit with no destination.** A gripped vehicle that has no destination gets
+     none again from such a rule: the assignment leaves its destination unchanged, so it is not
+     the exception, and the grip holds. Its grip then ends only by another event of claim 12.
+     This holds whatever its stand-in: what ends the grip is a change of the unit's own
+     destination to none, which its movement does not bear on. For the jumpjet stand-in it is
+     also S-0502 claim 24's rule for an unchanged destination.
+   - **A balloon-hover type.** S-0502 claim 28's retention is tested for a seized vehicle as for
+     any other, before a seized unit's refusals. So when a rule would give a gripped vehicle of
+     a balloon-hover type no destination while it holds both a destination and a target, and a
+     row of that claim holds, the assignment is rejected: it is not the exception, the grip
+     holds, the destination is kept, and the unit's behaviour becomes *attack* as that claim
+     says. *Attack* processing then takes the approach step (S-0215 claims 23 and 37 part a),
+     with the outcomes below. The step's drop and its failed search clear the target before
+     they give no destination, so S-0502 claim 28 cannot retain the destination there, and
+     part e's clearing is no assignment at all. How a gripped unit comes to hold a target is
+     given below.
+   - **The approach step (Q-2151).** A gripped unit takes S-0215 claim 37's approach step as any
+     actor does, also when its target is its own lifter (that claim's part c). The step's
+     outcomes for it:
+     - **A drop** (part d: the target dropped, with the destination) gives the unit no
+       destination. While the unit has one, this is the exception above: in that step its
+       grip ends, the unit is set down where it is, its own target is cleared and the lifter
+       keeps its target (claim 12).
+     - **Part e's clearing** (the destination too far from the target) is not the exception and
+       not an effective clear. Unlike part d's drop, which assigns the unit an empty
+       destination, part e removes the destination directly: it is not an assignment of an
+       empty destination, as S-0502 claim 24 says of the factory ascent report's direct
+       discard. So that claim's effective-clear rule, with its reroute (S-0502 claim 17), does
+       not apply, and neither does this claim's exception. Part e removes the destination and
+       nothing else: the grip holds, whatever the unit's stand-in, since the removal is not a
+       change by assignment and so not this claim's exception. With the jumpjet stand-in, unless
+       the seize's search found no cell (claim 7), the jumpjet movement keeps its movement point
+       and commitment (claim 7), so the unit is still pulled in and dropped on arrival (claim 8)
+       or by another event of claim 12. How a unit with
+       another stand-in then moves is open (Open questions). When that grip ends, a drop still runs
+       claim 13's jumpjet stop, which the stop on dropping gives directly, but a set-down does not,
+       since its assignment of no destination is then redundant (claim 13).
+     - **Part f.** A gripped unit in the air goes on to part f even when part e keeps its
+       destination (S-0215 claim 37 part e). A destination that part f gives (a searched cell,
+       an approach destination or the target itself) is ignored, as above, and an approach
+       destination it takes still leaves the vehicle's approach destinations (S-0215 claim 37
+       part f). A failed search that drops the target and
+       finds no nearby cell (S-0307 claim 17) gives no destination. While the unit still has
+       its destination this is the exception, as for a drop. After part e's clearing, in the
+       same step or a later one, it is a redundant assignment and the grip holds.
+     - So once part e has cleared a gripped unit's destination, no later drop or failed search
+       ends its grip.
+   - **How a gripped unit comes to hold a target.** The step needs a target (S-0215 claim 37 part
+     c). The seize leaves the unit with none (claim 5), its S-0309 searches find it no new target
+     (claim 20), it never retaliates, since its firing check answers *illegal* (claim 10) and
+     retaliation needs another answer (S-0309 claim 18), and it cannot be selected (claim 5), so
+     no order given after the seize reaches it. These can still give it a target:
+     - **An order given in the seize's tick.** An order given to it in the tick of its seize,
+       while it was still selectable, is applied after every object's update of that tick (S-0213
+       claim 1), so after the seize. That order is applied as to any unit: it sets what S-0213
+       table T3 gives that order, subject to this claim's destination rules, and queues the
+       behaviour that table gives it, if any (a stop queues none, S-0213 claim 8). A
+       destination it gives is ignored, as above. An order that gives the unit no destination
+       (for example an attack order, whose destination becomes nothing, S-0213 claim 21) is this
+       claim's exception instead: while the unit has its destination, it ends the grip and
+       the unit is set down where it is. For a balloon-hover type that assignment can be rejected
+       instead (above), since the order sets the target first (S-0502 claim 28).
+     - **An attack-move memory.** The seize does not remove an attack-move memory the unit holds
+       (S-0213 claim 6): it is not a behaviour order. S-0309 claim 23 part a applies to it in the
+       grip at each expiry of the unit's targeting timer, as to any object, and governs what the
+       memory does there. The range searches of that part find no new target in the grip (claim 20),
+       so a memory that holds only a target can make the memory's target the unit's target again,
+       and a memory with a destination finds the unit no target of its own. A target the unit
+       already holds, though (from the seize-tick order or the charging scan below), is kept by
+       that part's search when the unit is not engaged: the unit then queues *attack* with an
+       immediate start and counts as engaged (S-0309 claim 23 part a). Once that *attack* is
+       current, its processing takes the approach step (S-0215 claims 23 and 37 part a), with
+       the outcomes above. When the unit is engaged, that part's engaged rows apply as for any
+       object. While the unit's behaviour is *guard* and it still holds the grip's destination, a
+       target the memory gives does not lead to the approach step: *guard* processing does not
+       take the step (S-0215 claim 37 part a), a destination that processing gives is ignored,
+       as above, and the per-tick rule of S-0215 claim 37 part a needs a unit with no
+       destination.
+     - **A gripped unit with no destination.** A gripped unit can be left with no destination
+       while its grip holds: after part e's clearing (above), or in claim 23's no-cell case. Such
+       a unit meets S-0215 claim 37 part a's per-tick rule as any unit does, in every behaviour,
+       *guard* included: on a tick on which it holds a target whose cell it cannot reach, it
+       takes the approach step, with the outcomes above for a unit with no destination, and it
+       drops the target when that part's conditions for a drop hold.
+     - **The charging scan in *guard*.** S-0518 claim 14's charging scan makes no firing check,
+       and neither it nor *guard* processing makes an exception for a seized unit. So a gripped
+       unit in *guard* that has no target and charges buildings (S-0518 claim 14) runs the scan
+       as any unit does, over the cells next to the cell it is over. A found building of its own
+       house becomes its target, its charging mark is set and *attack* is queued without an
+       immediate start (S-0215 claim 24). Whether that *attack* becomes current in the grip turns
+       on S-0215 claim 11. Once it is current, its processing takes the approach step (S-0215
+       claims 23 and 37 part a), with the outcomes above.
+     - **A fall-back to rest in the grip.** *Guard* processing itself gives no fall-back to rest
+       (S-0215 claim 24). Neither the damage response nor the fall-back makes an exception for
+       a seized unit, though. So when *guard* has the no-threat property but not the zombie
+       property (rules data) and the gripped unit survives damage from a known attacker, it
+       falls back to rest at once
+       (S-0215 claim 16). The effects of S-0215 claims 13 and 15 and of S-0309 claim 23 part b
+       apply to it as to any vehicle, the grip's destination counting as its destination. It
+       does not get its own locomotor back there, since it is neither set down nor freed
+       (claim 20). The outcome depends on its attack-move memory:
+       - **A memory that holds only a target.** The attack move is resumed: *attack* is queued
+         with an immediate start, and the memory's target becomes the unit's target. Once
+         *attack* is current, its processing takes the approach step (S-0215 claims 23 and 37
+         part a), with the outcomes above.
+       - **A memory that holds a destination.** *Move* is queued with an immediate start, and
+         the memory's destination is ignored, as above.
+       - **No memory.** The unit queues *move* without an immediate start (S-0215 claim 15,
+         row 3, for the grip's destination).
+
+       *Move* processing does not take the approach step (S-0215 claim 37 part a), and neither
+       does the per-tick rule while the grip's destination is held.
+
+     Outside the original's team system, which is out of this spec's scope, the ways traced here
+     by which a gripped unit takes the approach step are six: the order given in the seize's
+     tick; when *guard* has the no-threat property but not the zombie property, a
+     damage-triggered fall-back that resumes a memory holding only a target; for a unit that
+     charges buildings, the charging scan in *guard* once its queued *attack* is current; for a
+     unit with a memory that holds a destination and that already holds a target, the *attack*
+     that the memory's search queues with an immediate start; for a balloon-hover type that
+     holds a target, a rejected assignment of no destination; and, for a gripped unit with no
+     destination that holds a target, S-0215 claim 37 part a's per-tick rule (above). Our
+     engine follows the same rules, and the outcomes above govern any way by which a gripped
+     unit holds a target. The count describes the ways traced here and binds nothing.
    - **No cell found, with `quirks.jumpjet_no_cell_self_destruct` off (design).** The unit is
      not destroyed, and it never comes down onto a cell that the stop's search has just
      rejected:
@@ -311,12 +459,65 @@ New terms:
        set-down unit, at the end of its first turn that comes after the stop.
      - With the switch on the unit is destroyed, and none of this arises.
    - With the jumpjet stand-in, its own locomotor does not return until claim 20 allows it; other stand-ins follow claims 23 and 24.
-   - Backing: `unmeasured`: the destination refusals and the no-destination exception are traced,
-     but deselection prevents a fresh player order, and no ordinary order reaching this state
-     has been established. Scenario L9 part a is a conditional protocol, not established backing.
+   - Backing: `unmeasured`: a seized unit cannot be selected (claim 5), so only an order given in
+     the seize's own tick reaches it, and no scenario here times an order to that tick: a
+     recorder cannot see in which tick an input was taken (S-0213 claim 1). So the destination
+     refusals and the no-destination exception have no scenario that reaches them. Scenario L9
+     part a is a conditional protocol, not established backing: it cannot tell which of its
+     clicks was taken in the seize's own tick, so an order that reaches the unit can falsify
+     the seize-tick order bullet but cannot confirm it.
      The switch-off rule for no cell is `unmeasured`: it is a design rule, and the original has
      only the switch-on behaviour.
-   - Confidence: high (ignored destinations); medium (the no-destination exception)
+     The approach-step outcomes (the drop, part e's clearing and the hold after it, the ignored
+     part f destinations, the failed search with no nearby cell), the redundant no-destination
+     rule, the hold after part e and after a redundant assignment whatever the stand-in, and the
+     order applied after the seize are `unmeasured` for the same reason: each
+     needs a gripped unit that takes the approach step, which no scenario here makes it take.
+     The seize-tick order cannot be timed, and whether the step is then taken in the grip also
+     turns on when that order's behaviour becomes current (S-0215 claim 11), which no scenario
+     here establishes. The damage-triggered fall-back in the grip, with its three outcomes, is
+     `unmeasured`: no scenario here gives *guard* the no-threat property and damages a gripped
+     unit. The ways traced to the approach step outside the team system are `unmeasured`: no
+     scenario here reaches any of them, as this backing gives for each. The charging
+     scan in the grip is `unmeasured`: no scenario here grips a unit that charges buildings
+     next to a building of its own house. The *attack* that a memory with a destination queues
+     for a target the unit already holds is `unmeasured`: it needs a gripped unit that holds a
+     target from the seize-tick order or the charging scan, which no scenario here gives it. The
+     balloon-hover retention in the grip, the order in which the step's drop and its failed
+     search clear the target and then give no destination (so that S-0502 claim 28 cannot keep
+     the destination there), part e's direct removal and its difference from part d are
+     `unmeasured` for the same reason as the approach-step outcomes: each needs a gripped
+     unit that holds a target, which no scenario here gives it. The per-tick rule for a gripped
+     unit with no destination is `unmeasured` for the same reason, and because no scenario here
+     leaves a gripped unit with no destination. What tells part d from part e
+     is stated as behaviour: part d's drop gives the empty destination as any order does, and
+     part e's clearing removes it without an assignment, so only part d is an effective clear
+     (S-0502 claim 24). That the
+     seize keeps an attack-move memory, the target the memory gives in the grip, and that this
+     target does not lead to the approach step while the unit is in *guard* and holds the grip's
+     destination, are `measurable`
+     through conditional scenario L18 part b, when its victim's target changes in the grip and
+     *guard* lacks the no-threat property or has it with the zombie property. In the grip the
+     unit's S-0309 searches find no new target (claim 20), and the charging scan finds only a
+     building of the unit's own house, so a target there that becomes the bystander's object comes
+     from the memory. The target the victim holds after restoration is a check only: an
+     ordinary *guard* search can also find that object (S-0309 claim 8), so it cannot confirm
+     the kept memory, though a restored victim that never holds it, when no fall-back in the
+     grip removed the memory, falsifies it. The
+     rest of the paragraph on how a
+     gripped unit comes to hold a target cites claims 5, 10 and 20 and S-0309 claim 18, and is
+     backed there.
+   - Confidence: medium (ignored destinations, the no-destination exception, the redundant
+     no-destination rule, the approach step's drop, part e's clearing and the ignored part f
+     destinations, the failed search with no nearby cell, the order applied after the seize,
+     the damage-triggered fall-back in the grip and its three outcomes, the charging scan in the
+     grip, the *attack* a memory with a destination queues for a held target, the ways traced to
+     the approach step outside the team system, the per-tick rule for a gripped unit with no
+     destination, the balloon-hover retention in the grip, the order
+     of the step's target and destination clearing, part e's direct removal and its difference from
+     part d, the hold after part e and after a redundant assignment whatever the stand-in, the
+     attack-move memory kept by the seize, the target it gives in the grip and that this target does
+     not lead to the approach step in *guard* while the grip's destination is held)
 
 10. **No firing.** A seized unit gets *illegal* for every weapon and target, at S-0301 claim 9's
     rank 4 (a reason about the firer's state). This lasts from the seize until it gets its own
@@ -426,10 +627,42 @@ New terms:
         cleared, its target is cleared, it breaks off any contact and it is deselected.
       - This is not a crash start in the sense of S-0312 claim 16: its passengers stay in, and no
         tumbling draws are taken.
-    - **Height 0 or less:** the unit is set down and its destination becomes none.
-    - **The jumpjet stop in both cases.** Clearing the destination is an effective order-level
-      clear (S-0502 claim 24), so in the same update S-0502 claim 17's stopped-movement rule
-      runs on the unit's jumpjet movement, with these results for a seized unit:
+    - **Height 0 or less:** the unit is set down and its destination becomes none, except as
+      below for a balloon-hover type.
+    - **The jumpjet stop.** In the same update S-0502 claim 17's stopped-movement rule runs on
+      the unit's jumpjet movement:
+      - **On a drop it always runs.** Besides assigning the unit no destination, the stop on
+        dropping gives its jumpjet movement a direct instruction to stop. That instruction is not
+        a destination assignment, so S-0502 claim 24's rule for redundant assignments does not
+        bear on it: the stop runs whether or not the unit still had a destination.
+      - **On a set-down it runs only through the destination's clearing.** A set-down gives no
+        direct instruction: it only assigns the unit no destination. That runs the stop only when
+        it is an effective order-level clear (S-0502 claim 24), which it is whenever the unit
+        still has a destination, except as below for a balloon-hover type. A set-down unit that
+        already has none takes no stop: the assignment is redundant, and its jumpjet movement
+        keeps its movement point and its movement commitment. With the jumpjet stand-in, a
+        gripped unit is left with no destination only by S-0215 claim 37 part e's clearing in the
+        grip (claim 9). It is then, unless the seize's search found no cell (claim 7), a set-down
+        unit that is still moving (below), and its kept point is the one its pull was heading to
+        (claim 7). Claim 23's no-cell case also leaves a
+        gripped unit with no destination, but with the teleporting stand-in: that unit has no
+        jumpjet movement, so this stop does not bear on it, and it stays where it is (claim 23).
+      - **A balloon-hover type.** A set-down gives the unit no destination only after its grip
+        has ended, so a rejection of that assignment keeps no grip (unlike claim 9's rejection
+        in the grip). A set-down vehicle of a balloon-hover type that still holds a destination
+        and a target, when a row of S-0502 claim 28 holds, has the set-down's assignment
+        rejected under that claim. It then keeps its destination, movement point and
+        commitment, takes no stop, and its behaviour becomes *attack* as that claim says. It is
+        then a set-down unit that is still moving (below).
+      - **A dropped balloon-hover vehicle.** The stop on dropping gives the unit no destination
+        while it still holds its target, and S-0502 claim 28 can reject that assignment as
+        above. It then clears the target and gives the unit no destination again, which that
+        claim cannot reject. So a dropped one still ends with no destination and takes the
+        direct stop. As with S-0502 claim 28's stop, the target's clearing does not undo the
+        rejection's change of behaviour: a dropped one whose assignment made while it held its
+        target was rejected has *attack* current with no target, and *attack* processing with
+        no target falls back to rest (S-0215 claim 23).
+      The stop's results for a seized unit:
       - **Not moving.** If the jumpjet movement is not *moving*, nothing of that rule happens.
         A gripped unit is not moving only when the seize's movement-point search found no cell
         (claim 7); it is then still grounded, so its grip ends with a set-down, not a drop.
@@ -487,11 +720,22 @@ New terms:
       unit before its first jumpjet update, or keep a point in another cell over a cell with
       an allowance, is not established; a run that does not reach those conditions is
       inconclusive. The no-cell rule is `unmeasured`: it is a design choice, and the original
-      cannot be observed past it.
+      cannot be observed past it. That the stop runs on a drop and on a set-down from an
+      effective clearing is backed with the drop and the set-down above. That a drop runs it
+      whatever the destination, and that a set-down after part e's clearing takes none, are
+      `unmeasured`: both differ from the backed cases only for a gripped unit that part e has
+      left with no destination, which needs a gripped unit that takes the approach step (claim
+      9's backing gives why no scenario here sets that up). The balloon-hover set-down and drop,
+      the drop's two assignments and its *attack* left current, are `unmeasured`: the
+      balloon-hover cases need a gripped unit that holds a target (claim 9's backing). The
+      order of the drop's assignments, the first while the target is held and the second after
+      its clearing, is `unmeasured` with them.
     - Confidence: high (drop, set-down, which stop runs, that the original fails with no cell,
       take-off and kept commitment of a still-moving set-down unit, the zero-speed look-ahead),
       medium (the found point's lack of effect on where the unit falls, which rests on the
-      detour and zero speed)
+      detour and zero speed; that a drop runs the stop with no destination left; that a set-down
+      with no destination left takes none; the direct instruction on a drop; the balloon-hover
+      set-down and drop, with the drop's two assignments, their order and its *attack* left current)
 
 14. **A dropper that leaves play.** When a dropper leaves play before its dropped unit lands, the
     unit no longer has a dropper, but keeps its dropper house. Credit under claims 16 to 18 then
@@ -677,13 +921,19 @@ New terms:
       by itself restore a unit whose jumpjet movement still has a movement commitment (claim
       13's still-moving set-down). That unit takes off and flies to its point first (S-0502
       claims 5 and 24), and is restored at the end of the turn in which the commitment ends.
-    - **Before restoration.** Until it is restored, the unit's searches for a target find none:
-      its firing check answers *illegal* (claim 10) at S-0309 table C's firing-check row, so a
-      *hunt* processing in the grip, in the fall or earlier in the touchdown turn finds nothing.
+    - **Before restoration.** Until it is restored, the unit's S-0309 searches for a target find
+      it no new target: its firing check answers *illegal* (claim 10) at S-0309 table C's
+      firing-check row, so a *hunt* processing in the grip, in the fall or earlier in the
+      touchdown turn takes no new target. Keeping a target the unit already holds, and an
+      attack-move memory, follow S-0309 claim 23 as claim 9 gives. S-0518 claim 14's charging scan
+      makes no firing check and still runs in *guard* (claim 9).
     - **After restoration.** Restoration queues and starts no behaviour of its own, apart from
       the gatherer's *harvest* above. A unit in *hunt* keeps it and is an ordinary hunter from
       its next *hunt* processing (S-0215 claim 27): it searches, takes targets, fires and
-      approaches them under the combat specs. It can be seized again (claim 3).
+      approaches them under the combat specs. It can be seized again (claim 3). Restoration does
+      not itself remove an attack-move memory: a memory the seize kept (claim 9) and that no
+      fall-back in the grip removed (S-0309 claim 23 part b) is still held, and acts as S-0309
+      claim 23 gives for any object.
     - **The first order after touchdown.** A move order given in any tick after a clear-cell
       touchdown meets a restored unit, so it moves the unit with its own locomotor.
     - **Readiness while seized.** Wherever S-0215 claim 11 asks whether a vehicle is moving on
@@ -692,7 +942,12 @@ New terms:
       and *hovering*). This holds also for a unit that was driving on a temporary locomotor of
       its own when it was seized: the driving locomotor's moving test no longer applies.
     - Backing: `measurable` (scenarios L3 and L11) for restoration, its timing, the behaviour and
-      house independence and the first order. That a kept movement commitment delays
+      house independence and the first order. That restoration does not itself remove an
+      attack-move memory is `unmeasured`: L18 part b's target after restoration can falsify it
+      but cannot confirm it, since an ordinary *guard* search can find the same object (claim
+      9's backing), and its part in the grip shows only that the seize kept the memory.
+      The charging scan before restoration is claim 9's, `unmeasured` there. That a kept
+      movement commitment delays
       restoration is `measurable` through conditional scenario L3 run b (S-0502 claims 5 and
       24); whether ordinary play reaches that case is not established. The being-erased case
       is `unmeasured`: it needs an erasure that starts before a set-down unit's first test,
@@ -704,8 +959,11 @@ New terms:
     - Confidence: high (restoration conditions, no restoration while committed, the
       route-independent switch-off design rule and its height boundary), medium (the test at
       the end of every turn whatever the behaviour and house, restoration in the touchdown
-      turn, no target before restoration, an ordinary hunter after restoration, the set-down
-      tick of a height-0 grip end), low (units being erased)
+      turn, no target found by an S-0309 search before restoration, the charging scan still
+      running before it, an ordinary hunter after restoration, the
+      set-down tick of a height-0 grip end, the kept attack-move memory through restoration),
+      low (units being
+      erased)
 
 ### The magnetic wave
 
@@ -1149,10 +1407,13 @@ Life of a seized unit:
 
 | State | Event | Next state | Effect |
 |---|---|---|---|
-| ordinary | eligible seizing hit (claims 1 to 5) | gripped (seized) | stops, guard, deselected, movement point fixed (claim 7) |
+| ordinary | eligible seizing hit (claims 1 to 5) | gripped (seized) | stops, guard, deselected and unselectable while seized, movement point fixed (claim 7) |
 | gripped | arrives at its movement point (claim 8) | dropped if height ≥ 1 lepton, otherwise set down | release over that cell, normally beside the lifter |
 | gripped | grip ends at height ≥ 1 (claim 12) | dropped | crashing mark, dropper recorded |
-| gripped | grip ends at height ≤ 0, or no destination (claims 9, 12) | set down | destination none |
+| gripped | grip ends at height ≤ 0, or no destination while it had one (claims 9, 12) | set down | destination none, except for a balloon-hover type (claim 13) |
+| gripped, balloon-hover type holding a destination and a target | grip ends at height ≤ 0 and a row of S-0502 claim 28 holds (claim 13) | set down, movement commitment kept | the set-down's assignment is rejected after the grip has ended; destination, point and commitment kept; *attack* current |
+| gripped | its approach step clears its destination for being too far from its target (claim 9) | gripped, no destination | grip holds, any stand-in; with the jumpjet stand-in its movement point and commitment are kept, so the pull goes on unless the seize's search found no cell (claims 7 and 9); a later rule giving no destination changes nothing |
+| gripped, balloon-hover type holding a destination and a target | a rule gives it no destination and a row of S-0502 claim 28 holds (claim 9) | gripped | destination kept; *attack* current as that claim says |
 | dropped | not over its cell centre | dropped | flies to the cell centre (claim 15) |
 | dropped | fall ends, cell clear (claim 17) | descending, then set down at touchdown | survives |
 | dropped | fall ends, blocked on water (claim 17) | sinking | death credited to the dropper |
@@ -1163,7 +1424,7 @@ Life of a seized unit:
 | gripped with the teleporting stand-in | jump (claim 23) | set down, seized | grip ends; the jump clears the lifter's target |
 | gripped with another ground stand-in | its own rules remove its destination (claim 23) | set down, seized | grip ends; the lifter keeps its target |
 | gripped with the drop-pod stand-in | the seize, in our engine (touchdown in the original) (claim 23) | set down, seized, own locomotor back | grip ends; the lifter's target is cleared |
-| seized with another stand-in | any restoration test (claim 24) | stays seized | never restored; a drop-pod stand-in ends at its touchdown but the unit stays seized |
+| seized with another stand-in | any restoration test (claim 24) | stays seized | the driving, walking, ship or teleporting stand-in is never restored; with the drop-pod stand-in the unit gets its own locomotor back at touchdown but stays seized |
 
 **Ordering consequences.**
 - One hit can drop the old gripped unit and seize the new one in the same tick (claim 5).
@@ -1480,8 +1741,9 @@ establish a qualifying condition; a run lacking the required observations is inc
     as the loss of operation/removal. A retained grip or target, or release only when the wave
     subsequently disappears, falsifies claim 12.
 - **L9 Refusals and the building attack (claims 2, 9, 10, 11).**
-  - Part a is conditional: try a pre-existing control group or queued move/stop order to the
-    friendly victim. Record whether an order actually reaches destination handling after the
+  - Part a is conditional: give the friendly victim move or stop orders, one click after
+    another, while the seizing projectile flies, so that one may be given in the seize's own
+    tick (claim 9). Record whether an order actually reaches destination handling after the
     seize. If one does, a non-empty destination must be ignored; clearing it must unlink
     without a crash drop and allow ordinary descent. Horizontal movement from its own move
     order, or a crash drop on destination clearing, falsifies claim 9. Deselection blocking the
@@ -1512,11 +1774,12 @@ establish a qualifying condition; a run lacking the required observations is inc
   - Part g: seize a deployable vehicle and, separately, a loaded transport. A clear-cell
     touchdown restores the unit in the same tick (claim 20), so try deploy, undeploy and
     unload through the harness while it is gripped at height 0, or while it is set down and
-    still committed (L3 run b's route). Whether any order reaches a seized unit is open (Open
-    questions), so this part is conditional. When an order reaches the unit, record whether
-    each starts. Expect the ordinary result for a grounded unit; a refusal explained only by
-    the seized state falsifies claim 10's last bullet. When no order reaches the unit, the
-    part is inconclusive and confirms nothing.
+    still committed (L3 run b's route). Whether any order reaches a seized unit gripped at
+    height 0 or set down is open (Open questions; claim 9's order given in the seize's own tick
+    is not one of these), so this part is conditional. When an order reaches the unit, record
+    whether each starts. Expect the ordinary result for a grounded unit; a refusal explained only by
+    the seized state falsifies claim 10's last bullet. When no order reaches the unit, the part is
+    inconclusive and confirms nothing.
   - Part e: named L9 map data supplies a slow seizing projectile. Launch it at an immune
     target while a grip exists, after any wave refusal has ended; expect release of the old
     victim without seizure of the immune one. Repeat with the firer destroyed, seized, or
@@ -1568,7 +1831,9 @@ establish a qualifying condition; a run lacking the required observations is inc
     on in the tick after the drop to a cell beyond its weapon's range of the vehicle and
     outside the vehicle's sight. Leave the vehicle alone for 600 ticks. Record per tick its
     seized and set-down state, current and queued behaviour, target, position, and every fire
-    event. A run in which the first lifter fires at the vehicle again is void.
+    event. A run in which the first lifter fires at the vehicle again is void. In every run of
+    this part, a vehicle that holds an attack-move memory makes the run void, since that memory
+    can give it a target before restoration (claim 9).
     - Run 1, second lifter withdrawn as the first, no armed object of the human house in the
       vehicle's reach, and an unarmed vehicle of the human house placed 10 cells from the
       vehicle's touchdown cell as the human's nearest object: record the full 600 ticks, and
@@ -1589,9 +1854,9 @@ establish a qualifying condition; a run lacking the required observations is inc
       whether the enemy destroys it first; such a run is void for the first-shot tick.
     - Control: a human-owned vehicle of the same type, dropped beside it in *guard* (part c).
       Expect restoration in its touchdown tick too, and in run 2 the ordinary *guard* response.
-    - Falsified by: a vehicle still seized after its touchdown tick, any shot or target before
-      restoration, a different restoration tick for the hunter and the guard control, or a
-      behaviour other than *hunt* at the first shot.
+    - Falsified by, outside a run made void by an attack-move memory: a vehicle still seized
+      after its touchdown tick, any shot or target before restoration, a different restoration tick
+      for the hunter and the guard control, or a behaviour other than *hunt* at the first shot.
   - Part f (units being erased; conditional): drop a vehicle over clear land and have an
     eraser lock onto it at touchdown, then remove the eraser before the erasure completes.
     Record per tick its seized state and its being-erased state. Expected: still seized while
@@ -1669,13 +1934,19 @@ establish a qualifying condition; a run lacking the required observations is inc
     - Falsified by: a lift, a drop or impact damage; a driving grip ended by arrival in a cell
       alone; a teleporting grip that survives the jump, or a second jump; a lifter target kept
       after the jump; or, in a qualifying depot run, a grip that survives the exact stop.
-  - Part c. After part b's grip has ended, leave the victim alone for well over 100 ticks, then
-    give it two move orders a few ticks apart, and let enemies come into its range. Repeat with
-    walking, ship and drop-pod warheads; use navigable water for the ship variant.
-    - Expected: with driving, walking, ship and teleporting, no order is ever accepted, it never fires and a
-      second seizing hit does not seize it again; with drop-pod, the original's descent near the
-      lifter is recorded (its path and timing have no expected result here), its own locomotor
-      returns at touchdown, and it still ignores orders and never fires.
+  - Part c. After part b's grip has ended, leave the victim alone until its wave has ended
+    (claim 21) and, with the drop-pod warhead, it has touched down. Then try to give it two move
+    orders at different ticks, and let enemies come into its range. A seized unit cannot be
+    selected (claim 5), so record for each attempt whether an order reaches the victim's
+    destination handling. Repeat with walking, ship and drop-pod warheads; use navigable water
+    for the ship variant.
+    - Expected: with driving, walking, ship and teleporting, no order that reaches it is
+      accepted, it never fires and a second seizing hit does not seize it again; with drop-pod,
+      the original's descent near the lifter is recorded (its path and timing have no expected
+      result here), its own locomotor returns at touchdown, and it still ignores any order that
+      reaches it and never fires. When no order reaches the victim, as when the attempts find
+      it unselectable, the order part is inconclusive and confirms nothing; the firing and
+      re-seizing parts still stand.
     - Drop-pod grip: record per tick the lifter's target, its shots and refusal state and its
       wave from the seize until well after touchdown. Expected: during the descent the lifter
       keeps the victim as its target, does not fire at it, and its wave stays alive; in the
@@ -1828,6 +2099,68 @@ establish a qualifying condition; a run lacking the required observations is inc
     tick, while the lifter's target is the gripped unit and no order is given, or by a target
     drop on a tick before the release while the gripped unit's cell can be reached. The release
     events of claim 12, arrival among them, are not drops.
+- **L18 Selecting a seized unit (claim 5), and its attack-move memory (claims 9 and 20).** A
+  purpose-made flat map of clear land. The human house owns the lifter, the victim and a second
+  vehicle of its own, as the common setup says. *Emptying the selection* is a right-button click
+  on the battlefield with no scroll drag and no tool mode armed (S-0214 claim 26): it clears the
+  selection and gives no order.
+  - Part a. Before the seize, put the victim and the second vehicle in one control group. Select
+    the lifter alone and force-fire it at the victim. Then, before the shot seizes the victim,
+    press the control group's select key, so that the victim and the second vehicle are
+    selected and the lifter is not. A run whose seize comes before that key press is
+    inconclusive for the deselection in the seize's tick.
+    - During the grip, one after another: empty the selection and click on the victim; drag a
+      band box that covers both the victim and the second vehicle; empty the selection and press
+      the control group's select key. Let the victim arrive (claim 8); empty the selection and
+      click on it while it falls (claim 15). After it has landed and is restored (claim 20),
+      empty the selection and click on it once more. So no click on the victim is made with an
+      object selected.
+    - Record on every tick the selection, whether the victim is seized, its flight state and
+      every order given. For each input, record when it was made and whether the victim was
+      seized then. An input that changes the selection (the group key's press, which selects at
+      least the second vehicle into an empty selection, and the click after restoration) also
+      shows the tick in which it was applied. An input that changes nothing
+      leaves no trace of its tick, so it is placed only by when it was made.
+    - Expected: the victim leaves the selection in the tick of its seize. While it is seized no
+      input selects it: the click selects nothing, and the band box and the group key leave it
+      out of the selection (the box may also select the lifter). The click and the band box
+      during the grip, and the click during the fall, are checks only, since nothing recorded
+      shows that the click pointed at the victim or that the box took it in; the group key is
+      not. After restoration the click selects it. Falsified by a
+      seized victim in the selection after its seize's tick, falling or not, or by a restored
+      victim that the click does not select.
+    - A grip probe made when the victim is no longer seized is void, and so is any probe that
+      gives an order; the run is inconclusive for that input. A run whose fall click is made
+      after the restoration is inconclusive for the fall.
+  - Part b, a separate run. The bystander has an object visible to the human house, at a
+    distance kept local that is beyond the victim's reach (S-0309 claim 23), and no enemy object
+    comes within the victim's reach during the run.
+    - Select the victim alone and give it an attack-move order on that object (S-0214 claim 5:
+      use a victim whose type is eligible). Then select the lifter alone and force-fire it at
+      the victim so that it is seized. A run in which the victim's target comes within its reach
+      before the seize is void, and so is a run in which the victim takes a building of its own
+      house as its target (claim 9's charging scan). Give the victim no further order.
+    - Record on every tick the victim's target, its current and queued behaviour, whether it is
+      seized, its flight state and every order given, until it holds the bystander's object as
+      its target after restoration, or for a length kept local.
+    - Expected: from the seize, the victim's target is nothing or the bystander's object. After
+      restoration it comes to hold the bystander's object as its target, in *guard*, or in
+      *attack* if a fall-back to rest resumed the attack move (S-0309 claim 23 part b). This
+      after-restoration target is a check only: an ordinary *guard* search can find the object
+      too (S-0309 claim 8), so it does not confirm the kept memory. Falsified by a restored
+      victim that never holds that object as its target, in a run that lasts at least one full
+      targeting interval of the victim after restoration (S-0309) and in which no fall-back in
+      the grip removed the memory; a shorter run is inconclusive.
+    - Conditional, when the victim's target becomes the bystander's object in the grip, and
+      *guard* lacks the no-threat property, or has it with the zombie property, in the rules data
+      used (S-0215 claim 16; a test rules
+      file may clear it, as a test value): its behaviour stays *guard* while it is gripped, and
+      it is not set down before arrival (claim 8) by a drop of its target. Falsified by
+      *attack* current in the grip, or by a grip that ends before arrival with the victim's
+      target dropped. A run with no such change in the grip is inconclusive for this part.
+      When *guard* has the no-threat property but not the zombie property, a run in which the
+      victim survives damage from a known attacker while gripped is void for this part (claim
+      9's fall-back in the grip).
 
 ## Open questions
 
@@ -1844,8 +2177,8 @@ establish a qualifying condition; a run lacking the required observations is inc
 - Whether the cell of claim 7's movement point, where a gripped unit is set down, can be a cell
   with a tree or other terrain object, or a rock cell (Q-2113). Scenario L17 records each
   landing cell by role.
-- Whether any player order can reach a gripped unit after it is deselected, which would exercise
-  claim 9's no-destination exception. Our engine follows claim 9 if one does.
+- How a gripped unit with a stand-in other than the jumpjet moves after the approach step's
+  part e has cleared its destination. That its grip holds is claim 9's.
 - How the factory-contact protection of claim 3 can be reached in play.
 - Whether a squared sum that wraps negative in F3 is reachable on a playable map. F3 gives its
   result if it is.
@@ -1860,9 +2193,10 @@ establish a qualifying condition; a run lacking the required observations is inc
 - Whether ordinary play can release a seized unit before its first jumpjet update, or keep a
   found point in another cell while its own cell holds another object (claim 13). The
   outcomes are stated; scenario L3 runs b and f are inconclusive until a run reaches them.
-- Deploying, undeploying and unloading while seized (claim 10's last bullet) rest on the absence
-  of any seized-state test, not on a traced refusal. Low confidence until scenario L9 part g
-  gets an order through to a seized unit; whether the harness or the player can do so is open.
+- Deploying, undeploying and unloading while seized (claim 10's last bullet) are allowed because
+  no seized-state test refuses them; no refusal is claimed. Low confidence until scenario L9 part g
+  gets an order through to a seized unit gripped at height 0 or set down; whether the harness
+  or the player can do so is open.
 - Whether any state other than erasure and the leaving stage keeps claim 20's test from being
   made at the end of a turn: a deactivated or paralysed vehicle (S-0215 Terms, S-0214), or a
   unit phasing in after a chrono move. Claim 20 states the test for every other turn.
@@ -1880,6 +2214,18 @@ establish a qualifying condition; a run lacking the required observations is inc
   drop still runs for a lifter whose gripped unit is its target: the empty approach step gives
   no destination, and an unreachable gripped unit out of range, minimum range included, is
   dropped as target while the grip stays (claim 11).
+- **S-0215, claim 37, parts c and e (Q-2151).** Part c's last sentence could point to claim 9
+  here for the step's drop and failed search, which end a grip while the gripped unit has a
+  destination. Part e could say that its clearing removes the destination directly, not by an
+  assignment of an empty destination, so it is no effective clear in S-0502 claim 24's sense
+  and no jumpjet stop follows it (claim 9).
+- **S-0502, claims 24 and 28.** Claim 24's direct destination discards could list S-0215 claim
+  37 part e's clearing beside the factory ascent report's. Claim 28 could say that its
+  retention applies to a seized vehicle too, before the seized unit's destination refusals
+  (S-0607 claims 9 and 13).
+- **S-0214, Terms, *Can be selected*.** A seized unit (S-0607 Terms) cannot be selected by any
+  selecting input until it is no longer seized (claim 5). The term could list it among the
+  exclusions.
 - **S-0215, claim 13, first row (temporary locomotor).** The row gives a unit its own locomotor
   back when it falls back to rest. For a seized unit's temporary jumpjet locomotor, the same
   test is also made at the end of each of the unit's turns (S-0203), after its movement and
