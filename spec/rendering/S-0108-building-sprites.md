@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 102
+revision: 106
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-10-31
 measurements: [M-0007, M-0014]
-requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890, Q-2001]
+requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890, Q-2001, Q-2186]
 supersedes: []
 ---
 
@@ -28,6 +28,8 @@ own passes afresh (claim 25); that the stage, not the image frame, is what carri
 types' start fields differ is unmeasured and rated medium there. Claims 26 to 28 answer Q-1772,
 and claim 28's building placed switched off by the map answers Q-1890. The superweapon slots of
 a building whose owner's record of the type is not granted (claims 11 and 18) answer Q-2001.
+The tick in which a slot that an ownership change resumes first advances (claim 26) answers
+Q-2186.
 Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
@@ -591,7 +593,8 @@ Skirmish only; network games and campaigns are out of scope.
     before the tick leave the slots frozen when the building's turn comes after both, since its
     reaction is then the last event.
 
-    Claim 28 applies these rules to a building that the map places switched off.
+    Claim 28 applies these rules to a building that the map places switched off. Claim 26 gives
+    the tick in which a slot that an ownership change resumes first advances.
     - Backing: `measurable` (B7 for freeze/light/effect flags and super-low-power transitions, B11
       for disable/re-enable while unpowered and, in its pulse run, for a pulse ending on a building
       still switched off, B22 part g for a building never powered, B22 parts (a), (e) and (k) for
@@ -646,7 +649,8 @@ Skirmish only; network games and campaigns are out of scope.
       the cycles of *t* − 2, *e* − 4, *e* − 3, *e*, *e* + 1, *e* + 2 and *e* + 5, the switch-off
       order in the tick of a pulse's end among them, and for the end state after the change
       with the order in the cycle of *t* − 1 (the slots on their ordinary schedule and the building
-      enabled while switched off, M-0014); medium for the hold from an order in the
+      enabled while switched off, M-0014), as far as M-0014's end-of-tick lists of buildings,
+      vehicles and infantry show removals; medium for the hold from an order in the
       cycle of *t* − 1 (`unmeasured`, above); medium for the other
       cases of several in
       one tick, the switch-off order in the tick of an ownership change (`unmeasured`, above)
@@ -1175,8 +1179,72 @@ Skirmish only; network games and campaigns are out of scope.
       building that is already manned, where it changes nothing unless a slot was frozen at the
       time, for example by a power loss or by disabling. A resumed slot advances at its first
       eligible update (S-0109 claim 23): its clock ran while it was held, so this is normally its
-      first update after the change, on the tick of the change or the next. A slot that was already
-      playing before the change is not affected by it.
+      first update after the change. A slot that was already playing before the change is not
+      affected by it.
+    - **Tick of the first advance (Q-2186).** The resume takes effect at once, at the point of the
+      tick where the ownership change is made, and each slot takes its update in its own turn
+      (S-0109 claim 5). Subject to S-0109 claim 23's eligibility conditions (the first-update
+      exclusion and any loop delay) and to S-0203 claim 10's missed turns, a resumed slot whose
+      clock is due first advances in the tick of the change when its turn in that tick follows
+      the change. Otherwise it advances at its next eligible update, which with no missed turn is
+      its turn in the next tick:
+      - A change made before the turn pass, such as a polled trigger's action (S-0203 row 1),
+        comes before every slot's turn: the first advance is in the tick of the change.
+      - A change made during an object's turn comes between turns. An engineer's capture is made
+        in the engineer's own turn, at the end of its walking step (S-0509 claims 1 and 8); the
+        takeover of a vehicle-like building in the arriving unit's turn (S-0509 claim 17); a
+        mind-control takeover or release of such a building in the turn that makes it (S-0601
+        claims 6 and 9). A slot whose animation stands after that object in the update order
+        (S-0203 claim 3) first advances in the tick of the change, and one that stands before it
+        in the next tick. For a civilian garrison building of such a type, the change of owner to
+        its first occupant's house and the return of the empty building to the civilian house are
+        both made in that building's own turn (S-0508 claims 7 and 8), which comes before its
+        slots, since a building starts its slots after it has entered play: the first advance is
+        then in the tick of the change.
+
+      A slot's animation enters play when the slot is started. A slot started at the building's
+      placement by the map enters play during that placement, after the building itself and
+      after every infantry unit the map places. Hence, for a building the map places and an
+      engineer's capture:
+      - An engineer that the map places stands before the building's slots, since the map's
+        infantry enter play before its buildings, whatever the order of the map's entries
+        (S-0203 claim 3). The slots first advance in the tick of the capture.
+      - An engineer that entered play after the slots stands after them: one trained or one that
+        left a transport that is not open-topped during the game, or one that entered play again
+        for any other reason. The slots first advance in the tick after the capture.
+      - A skirmish player's starting engineer also stands after the slots. The starting units
+        enter play after every object the map places (S-0203 claim 3), and the slots of a
+        building the map places enter play during its placement, so before them. The slots first
+        advance in the tick after such an engineer's capture.
+
+      M-0014's timeline, with the first advance in the tick after each capture, fits an engineer
+      that stands after the slots. The record does not say how its engineers entered play. B22
+      part (p) decides between an engineer the map places and one trained during the game.
+
+      The answer depends only on that order of entering play, not on the house, the building
+      type or anything drawn. A counting removal earlier in the tick's turn pass can still cost a
+      slot its turn (S-0203 claim 10). The
+      engineer's own removal in its turn (S-0509 claim 10) costs only the object directly after
+      it. With an engineer the map places, that is never one of the captured building's slots,
+      since the building itself stands between the engineer and its slots. This order follows
+      S-0203's existing update-order rules. This claim adds no switch.
+      - Backing: `measured` by M-0014 (its run with the switch-off order in the cycle of tick
+        *t* − 2, one run) for a polled trigger's change resuming slots frozen by a switch-off:
+        they advance in the tick of the change. `measurable` (B22 part (p)) for an engineer's
+        capture, with an engineer the map places and with one that enters play during the game.
+        `unmeasured` for a starting engineer's capture, the takeover of a vehicle-like building,
+        the mind-control cases and the garrison takeover and return: no scenario here sets one up
+        on a building whose slots are held.
+      - Confidence: high for the trigger's change, as far as M-0014's end-of-tick lists of
+        buildings, vehicles and infantry show removals; medium for an engineer's capture, at the
+        level of the resume timing above, until B22 part (p) runs, for those two engineers; low
+        for a starting engineer's capture (`unmeasured`), since S-0203 claim 3 does not yet place
+        a building's slots against the starting units (Changes for other specs) and rates the
+        place of other game-start animations low; low for the takeover of a vehicle-like building
+        (`unmeasured`), since the arrival it rests on is S-0509 claim 17's, rated low
+        there; medium for the mind-control takeover and release and for the garrison takeover and
+        return (`unmeasured`), whose changes S-0601 claims 6 and 9 and S-0508 claims 7 and 8
+        give.
     - **Afterwards.** The change of owner can change the building's in-operation result, its
       powered state in claim 13's sense. Claims 13 and 14 then apply to that change in the
       building's next update, as for any other change of powered state. A building that was not
@@ -1197,7 +1265,8 @@ Skirmish only; network games and campaigns are out of scope.
       created with held, the slots that keep playing, the *guard* order unfreezing nothing, and the
       buildings created by code 125, including their slots starting in the tick of the trigger
       action, but not their not being disabled at placement (below); part (i) for the *turret* slot's per-tick frame winning over the hold; parts (b) and
-      (c) for the resume at the first and at a later ownership change, and part (k) for the resume
+      (c) for the resume at the first and at a later ownership change (part (p) for its tick), and
+      part (k) for the resume
       from a held frame other than the first; part (d) for the damage swap; part (e) for the
       pulse; part (f) for a type that needs power, captured into houses with ample and with short power,
       including the short-power capture being no change of powered state. `unmeasured`: a produced building of such a type
@@ -2384,6 +2453,10 @@ expected numbers are computed from the type's own fields at measurement time.
     the logic of tick F is an order in the cycle of tick F − 1. This is derived from S-0203
     claim 7 and S-0405 claim 7, and M-0014 is consistent with it: there a human's power drain
     from such an order falls in tick F, and the light goes out in tick F.
+    For part (p), the map's building list places T7 and T8 for the neutral house, in view, and
+    the map's infantry list places an engineer for the player's house (S-0009 claim 27). A
+    second engineer of the player's enters play during the game, after T8's slots: one the
+    player trains, or one that leaves a transport that is not open-topped (S-0203 claim 3).
   - Procedure and parts:
     - (a) Record from the first drawn frame of play for at least 30 ticks, before any capture,
       and log the tick on which the trigger action creates T3 and P3.
@@ -2428,13 +2501,18 @@ expected numbers are computed from the type's own fields at measurement time.
       fix *e*. In three further runs with the same seed and the same earlier inputs, the player
       gives the power-off order for W8 in the cycle of tick *e* − 3, of tick *e* and of tick
       *e* + 2, one per run. Record at least 30 ticks after *e* + 2.
+    - (p) At least 30 ticks after the first tick, capture T7 with the engineer the map places and
+      T8 with the engineer that entered play later, in different ticks. Log the tick of each
+      ownership change and the tick and the way in which the second engineer entered play. Run
+      it a second time with the map's building list written before its infantry list in the
+      map file.
     - Remove all named test files afterwards.
   - Observable: per tick, for each test building and each of its four test slots (R: its running
     *active* slot; U1: its *turret* slot and turret facing; F: its free units; T3 also its body
     image frame), whether the slot is drawn, its
     variant and image frame and whether it changed, the owner, and the health condition (W7 and W8:
     also whether the building is switched on and whether its light shows; in the runs of
-    parts (l) to (o), also each object that left play in the tick), from a screen
+    parts (l) to (p), also each object that left play in the tick), from a screen
     capture that keeps every drawn frame or a read-only recorder's tick-labelled log. A tick
     named in the expected results is the tick at whose end the state is recorded; a screen
     capture shows that state in the next drawn frame (S-0201 claim 6).
@@ -2443,7 +2521,7 @@ expected numbers are computed from the type's own fields at measurement time.
     (a)'s record. Part (j) shares that run, which lasts at least 300 ticks after the first tick.
     Parts (d), (e), (g) and (k) take one run each, part (f) two, and part (h) up to five attempts, as its expected result says.
     Parts (l) and (m) share one run. Part (n) takes a recording run and one order run, and part
-    (o) a recording run and three order runs.
+    (o) a recording run and three order runs. Part (p) takes two runs.
   - Expected:
     - (a) On T1, T2, T4, T5 and P1 the *idle* and *active-1* slots show their first image frame
       on every tick, and *active-2* and *active-3* advance every 3 ticks. On T3 all four slots
@@ -2517,6 +2595,13 @@ expected numbers are computed from the type's own fields at measurement time.
       end of the record: the part does not judge the
       frame they show at the end of tick *e*. With the order in tick *e* + 2, they show no new
       frame after the end of tick *e* + 2, to the end of the record.
+    - (p) In both runs T7's *idle* and *active-1* advance to the frame after the held one in the
+      tick of T7's ownership change. T8's show the held frame at the end of the tick of T8's
+      change and advance to the frame after it in the next tick. Then, while no object leaves
+      play, both go on advancing every 3 ticks, with no restart; *active-2* and *active-3* go on
+      without a break. Their clocks are
+      due after the hold, and the art has no loop delay, so this is their first turn after the
+      change (claim 26).
   - Falsified if: an unmanned map-placed building's *freeze-unpowered* slot advances or is not
     drawn before any capture, damage or pulse, or its *active-2* or *active-3* holds; T3 holds,
     its slots first appear on a later tick than the one on which the action creates it, or one of
@@ -2539,12 +2624,18 @@ expected numbers are computed from the type's own fields at measurement time.
     (o), the order in
     tick *e* − 3 leaves them advancing before the end of tick *e* − 2 or held at the end of tick
     *e* + 1, or the order in tick *e* or in tick *e* + 2 leaves them advancing after the end of
-    that tick.
+    that tick; or, in part (p), T7's held slots first advance after the tick of its change, or T8's
+    in the tick of its change or after the next one, or a slot of T7 or T8 does not advance every
+    3 ticks within that change's window.
   - Validity: a counting removal can cost a slot its turn (S-0109 claim 5, S-0203 claim 10). A
     run of parts (l) to (o) in whose record any object leaves play in a tick that a timing
     expectation of the part names is void for that expectation and is repeated. Those parts'
     inputs put no removal near those ticks (their captures and pulse hit come well before), so
-    none is expected.
+    none is expected. For part (p), a change's window is the tick of the change and the 7 ticks
+    after it. A run of part (p) in whose record an object other than the capturing engineer
+    leaves play in a tick of a change's window is void for that change and is repeated. The
+    capturing engineer's own removal costs only the object after it (S-0509 claim 10), which is
+    not one of the captured building's slots in either case, so it does not void the run.
 - **B23 (claims 11 and 18, a record that is not granted; Q-2001).**
   - Setup: a tiny skirmish map, stock data, the common game speed and settings, superweapons on.
     Two houses: the human player's house P and one computer player's house C, neither defeated in
@@ -2676,6 +2767,15 @@ specified here.
   second unit. Its scenario H13 could add a part in which trigger action code 125 creates the
   free-unit building for a computer player's house, logging the tick of the action and of the unit's
   appearance. S-0215's term needs no change: it names no case.
+- **S-0203 claim 3, slot animations of a building the map places (Q-2186).** Claim 3 says that an
+  object of one kind never stands between two map-placed objects of another kind. A building's
+  slot animations that its placement by the map starts (claim 11 here) enter play during that
+  placement, after the building, so they stand between it and the next building the map places.
+  The sentence should say that it speaks of map-placed objects only, and that the animations a
+  map-placed building starts at its placement enter play after that building. Its starting-units
+  sentence should add that in a skirmish the players' starting units also enter play after these
+  slot animations, so a starting engineer stands after the slots of every building the map
+  places (claim 26 here, low, `unmeasured`).
 - **S-0515 scenario TB3 part (c), setup (noticed for Q-1772).** Part (c) has the test map give
   the derrick to H from the start. If H is the human player's house, S-0009 claim 27 drops that
   map-listed structure in skirmish, so the part has no derrick to read. Give it to a computer
