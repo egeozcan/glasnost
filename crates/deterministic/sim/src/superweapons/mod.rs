@@ -925,6 +925,15 @@ pub fn being_erased(w: &World, id: ObjectId) -> bool {
             .is_some_and(|m| m.leaving())
 }
 
+/// Whether an object is in the leaving stage of a superweapon warp (S-0513
+/// Terms and claim 39), without the temporal beam's erasure that
+/// [`being_erased`] also covers.
+pub fn warp_leaving(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| o.sw.warp.as_ref())
+        .is_some_and(|m| m.leaving())
+}
+
 /// Whether an object has a warp pending or is in its leaving stage (S-0513
 /// claims 22 and 34).
 pub fn warp_pending_or_leaving(w: &World, id: ObjectId) -> bool {

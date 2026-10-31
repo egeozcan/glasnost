@@ -995,6 +995,11 @@ pub fn turn(w: &mut World, id: ObjectId) {
         return;
     }
     // spec: S-0306 claim 17 (a lost target object: its cell if it was not airborne, else nothing)
+    // A superweapon warp member's departure does not take the member from a
+    // projectile (S-0513 claim 39); where the projectile flies while the
+    // member waits to land is open there. Interim (Q-2212): the projectile's
+    // own update finds its target object off the map and goes on with no
+    // target object, as for any other off-map object.
     if let Some(Target::Object(t)) = pr.target
         && w.obj(t).is_none_or(|o| !o.on_map)
     {

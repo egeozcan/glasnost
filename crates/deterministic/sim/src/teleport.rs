@@ -796,9 +796,14 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
 }
 
 /// Every object that has `id` as its target drops it, and a projectile
-/// aimed at it retargets (S-0207 claim 20 e, S-0306 claim 17): at a jump,
-/// and at a superweapon warp's departure (S-0513 claim 39).
+/// aimed at it retargets (S-0207 claim 20 e, S-0306 claim 17), at the
+/// teleporting locomotor's own jump. These drops are not S-0309 claim 27's
+/// or claim 28's, so no holder takes the timer draw over 4 to 8 ticks,
+/// whatever its timer shows (S-0513 claim 39, Changes for S-0207 claim 20
+/// e). A superweapon warp's departure is not such a jump and calls nothing
+/// here (S-0513 claim 39).
 pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
+    // spec: S-0513 claim 39 and S-0309 claim 27 (the own jump's drops take no targeting-timer draw: the reset belongs to claim 27's and claim 28's drops only)
     let Some(pos) = w.obj(id).map(|o| o.pos) else {
         return;
     };

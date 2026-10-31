@@ -331,20 +331,6 @@ fn claim36_infantry_keeps_its_position_within_the_cell() {
     );
 }
 
-#[test]
-fn claim39_targeters_drop_the_member_at_departure() {
-    // spec: S-0513 claim 39 (at departure, every object targeting it drops it, S-0207 claim 20 e)
-    let mut w = game(&rules());
-    chrono(&mut w);
-    let a = spawn(&mut w, "CART", ALPHA, 0, 0);
-    let x = spawn(&mut w, "CART", BETA, 0, 6);
-    let tl = warp(&mut w, at(0, 0), at(5, 5));
-    run_through(&mut w, tl + 61);
-    w.obj_mut(x).unwrap().target = Some(Target::Object(a));
-    run_through(&mut w, tl + 62);
-    assert_ne!(w.obj(x).unwrap().target, Some(Target::Object(a)));
-}
-
 // --- Claim 37 ------------------------------------------------------------------
 
 #[test]

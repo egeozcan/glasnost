@@ -446,6 +446,13 @@ pub fn check(
         // spec: S-0608 claim 3 (Precedence relevant to drain: the draining-weapon refusals (b) and (c) follow the held-temporal-target, hidden-target, absence-of-weapon and power-sensitive-weapon answers and precede the berserk-warhead target refusals, projectile eligibility, the conditional magnetic-wave refusal, the other weapon's live-effect refusal and the empty-spawner rearming; their order among reasons that all answer illegal is not observable)
         return Answer::Illegal;
     }
+    // spec: S-0513 claim 39 and its Changes for S-0301 (a target in the leaving stage of a superweapon warp: illegal unless the asking weapon is a temporal weapon; rank 4, after every other rank-4 reason except the spawner-weapon answers, the other weapon's live-effect impossible, every row of S-0306 claim 23 and the magnetic-beam rearming against another target, which it outranks, and ahead of ranks 5 and 7 to 16; the earlier projectile and berserk rows also answer illegal, so their order before it is not observable)
+    if let Some(Target::Object(x)) = target
+        && crate::superweapons::warp_leaving(w, x)
+        && !r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
+    {
+        return Answer::Illegal;
+    }
     // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)
     if crate::parasite::held_spawner(w, firer, weapon) {
         return Answer::Impossible;

@@ -458,10 +458,12 @@ fn depart(w: &mut World, id: ObjectId, m: Member) {
     // unresolved (S-0513 claim 39; S-0614 claim 12, P7). So neither
     // `parasite::host_jumps` nor `objects::take_inside` (which releases it,
     // S-0614 claim 15) is used.
-    // spec: S-0513 claim 39 (every object targeting it drops it as in S-0207 claim 20 e)
-    crate::teleport::targeters_drop(w, id);
+    // The departure drops nobody's target: no `teleport::targeters_drop`
+    // (S-0207 claim 20 e's jump is not this departure) and no
+    // `combat::held::holders_drop` (S-0309 claim 27 does not apply to it).
+    // spec: S-0513 claim 39 (departure clears no holder's target, takes no holder timer draw over 4 to 8 ticks whatever its timer shows, reverts no holder with an override in effect, S-0215 claim 10, and leaves a projectile in flight towards the member aimed at it, S-0306 claim 17)
     lift_off(w, id);
-    // spec: S-0513 claim 39 and T2 (it leaves the map; being erased ends; phasing in; the landing check)
+    // spec: S-0513 claim 39 and T2 (it disappears from its old position and is off the map until it appears; being erased ends; phasing in; the landing check)
     set_member(
         w,
         id,
