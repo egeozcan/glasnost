@@ -1148,6 +1148,7 @@ fn a_gained_construction_yard_cancels_the_placement_in_progress() {
         new: Some(glasnost_sim::world::HouseId(new)),
         pos: glasnost_sim::world::Pos::default(),
         announce: true,
+        after_slots: true,
     };
     // A construction yard gained by another house, or another building gained by the local one: nothing.
     p.effects = vec![captured(&p, "YARD", 1 - p.local.0)];

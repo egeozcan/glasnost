@@ -187,6 +187,9 @@ fn pixels(scene: &Scene, code: u32, size: u32) -> Vec<u8> {
 enum Act {
     /// An engineer of Alpha's captures it, ordered by a click on it.
     Capture,
+    /// The same, with the engineer standing before the building in the
+    /// update order, as an engineer the map places does (S-0108 claim 26).
+    CaptureByEarlierEngineer,
     /// It is damaged to 1 health point.
     Damage,
     /// It loses 1 health point: no damage frame (S-0108 F3).
@@ -369,6 +372,11 @@ fn scenario_with(keys: &str, tech: bool, act: Act, quirks: ViewQuirks) -> Seen {
     let mut held = Vec::new();
     match act {
         Act::Capture => capture(&mut live, engineer, b),
+        Act::CaptureByEarlierEngineer => {
+            live.world.update.order.retain(|&x| x != engineer);
+            live.world.update.order.insert(0, engineer);
+            capture(&mut live, engineer, b);
+        }
         Act::SwitchOffThenCapture => {
             // Two more ticks, so that the slot is held at a frame other than its first and its last.
             live.step();
@@ -479,6 +487,26 @@ fn slot_frames(s: &Seen) -> BTreeSet<u8> {
             px[0]
         })
         .collect()
+}
+
+/// spec: S-0108 claim 26 (Q-2186: a held slot first advances in the tick of the capture when the
+/// engineer stands before the building's slots in the update order, as one the map places does,
+/// and in the next tick when it stands after them, as one trained during the game or a starting
+/// one does): the capture by the earlier engineer runs one tick ahead of the other
+#[test]
+fn a_capture_by_an_engineer_before_the_slots_releases_them_one_tick_earlier() {
+    let late = scenario(true, true, Act::Capture);
+    let early = scenario(true, true, Act::CaptureByEarlierEngineer);
+    assert_ne!(early.slots, late.slots, "the two timelines differ");
+    // The capture by the earlier engineer is one tick ahead: its timeline, from the second
+    // redraw on, is the other's shifted by one.
+    assert_eq!(
+        early.slots[..5],
+        late.slots[1..],
+        "{:?} {:?}",
+        early.slots,
+        late.slots
+    );
 }
 
 /// spec: S-0108 claim 11 (a building placed during the set-up starts its idle and active slots) and

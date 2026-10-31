@@ -541,3 +541,44 @@ fn claim_1_a_walking_engineer_captures() {
     assert!(engineer::lost_to_capture(&w, B));
     assert!(w.triggers.variables[0], "the entry raises");
 }
+
+// spec: S-0108 claim 26 (Q-2186: a change made in the turn of an object that stands before the building in the update order comes before the building's slots' turns, one made by an object after it, after them; a trigger's change and the occupation rules' come before; with no actor, the announcing causes come after)
+#[test]
+fn s0108_claim_26_the_change_says_whether_it_follows_the_slots() {
+    let after_slots = |w: &World| {
+        w.effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Captured { after_slots, .. } => Some(*after_slots),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    // An engineer that entered play before the building (a map's engineer).
+    let mut w = game();
+    let early = put(&mut w, Kind::Infantry, "ENGI", 0, 5, 5);
+    let b = put(&mut w, Kind::Building, "TARGET", 1, 0, 0);
+    // One that entered after it (a trained or a starting engineer).
+    let late = put(&mut w, Kind::Infantry, "ENGI", 0, 6, 6);
+    w.effects.clear();
+    ownership::change_by(&mut w, b, Some(A), Cause::Capture, Some(early));
+    assert_eq!(after_slots(&w), [false], "an engineer before the building");
+    w.effects.clear();
+    ownership::change_by(&mut w, b, Some(B), Cause::Capture, Some(late));
+    assert_eq!(after_slots(&w), [true], "an engineer after the building");
+    // A trigger's change, the occupation rules' and an actorless capture.
+    for (cause, expect) in [
+        (Cause::Trigger, false),
+        (Cause::Occupation, false),
+        (Cause::Capture, true),
+    ] {
+        w.effects.clear();
+        let to = if w.obj(b).unwrap().owner == Some(A) {
+            B
+        } else {
+            A
+        };
+        ownership::change(&mut w, b, Some(to), cause);
+        assert_eq!(after_slots(&w), [expect], "{cause:?}");
+    }
+}

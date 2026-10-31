@@ -48,6 +48,20 @@ const FOLLOW_DISTANCE: i32 = 63;
 /// A building changes owner to `new` (no effect when it is its owner
 /// already).
 pub fn change(w: &mut World, b: ObjectId, new: Option<HouseId>, cause: Cause) {
+    change_by(w, b, new, cause, None);
+}
+
+/// As [`change`], made in the turn of `actor` (the capturing engineer, the
+/// arriving unit, the controller), so that the change can say whether the
+/// building's slot animations take their turns before it (S-0108 claim 26,
+/// Q-2186). `None` for a change not made in an object's turn.
+pub fn change_by(
+    w: &mut World,
+    b: ObjectId,
+    new: Option<HouseId>,
+    cause: Cause,
+    actor: Option<ObjectId>,
+) {
     let Some(o) = w.obj(b) else { return };
     let old = o.owner;
     // spec: S-0509 Terms (a building ownership change has no effect when the new house is the old one)
@@ -74,6 +88,22 @@ pub fn change(w: &mut World, b: ObjectId, new: Option<HouseId>, cause: Cause) {
         // spec: S-0509 claim 12 and S-0506 claim 13 (a missile silo's spawner clears its slots when the building changes house)
         crate::spawn::owner_changed(w, b);
     }
+    // spec: S-0108 claim 26 (the slots of a building the map places stand directly after the building in the update order: a change made in the turn of an object that stands after the building comes after the slots' turns of its tick, one made in the turn of an object before it, or before the turn pass, comes before them; the building's own turn, the occupation rules, is before its slots)
+    let after_slots = match actor {
+        Some(a) => {
+            let order = &w.update.order;
+            match (
+                order.iter().position(|&x| x == a),
+                order.iter().position(|&x| x == b),
+            ) {
+                (Some(pa), Some(pb)) => pa > pb,
+                // design: Q-2186 (an actor or building not in the update order: the announcing causes act after the slots, as before)
+                _ => cause.announces(),
+            }
+        }
+        // design: Q-2186 (no actor given: the announcing causes act after the slots, a trigger's and the occupation rules' change before them)
+        None => cause.announces(),
+    };
     w.effects.push(Effect::Captured {
         building: b,
         of,
@@ -82,6 +112,7 @@ pub fn change(w: &mut World, b: ObjectId, new: Option<HouseId>, cause: Cause) {
         pos,
         // spec: S-0509 claim 12 (an engineer capture, a vehicle-like takeover and the mind-control takeover and release of a building request an announcement; a trigger and the occupation rules do not)
         announce: cause.announces(),
+        after_slots,
     });
 }
 
