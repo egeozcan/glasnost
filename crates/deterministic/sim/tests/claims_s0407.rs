@@ -693,7 +693,7 @@ fn claim_14_no_draws() {
     }
 }
 
-// spec: S-0407 claim 16 (T12 runs 1 and 2: the queue-time limit counts the item twice)
+// spec: S-0407 claim 16 (T12 runs 1 and 2: the queue-time limit counts the item twice; *At issue*: the refused copy is refused when issued, so no order is given)
 #[test]
 fn claim_16_queue_limit() {
     for (limit, accepted) in [(2, 0), (3, 1)] {
@@ -706,9 +706,16 @@ fn claim_16_queue_limit() {
         let tank = t(&w, Kind::Vehicle, "TANK");
         assert!(issue(&mut w, 0, Order::Build { what: tank }));
         step(&mut w);
-        issue(&mut w, 0, Order::Build { what: tank });
+        assert_eq!(
+            issue(&mut w, 0, Order::Build { what: tank }),
+            accepted == 1,
+            "L = {limit}: the second copy at issue"
+        );
         step(&mut w);
-        issue(&mut w, 0, Order::Build { what: tank });
+        assert!(
+            !issue(&mut w, 0, Order::Build { what: tank }),
+            "L = {limit}: the last copy is refused at issue"
+        );
         step(&mut w);
         assert_eq!(
             line(&w, 0, tank).unwrap().queue.len(),
@@ -759,61 +766,200 @@ fn claim_16_dock_bound() {
     }
 }
 
-// spec: S-0404 claim 3 (an idle line starts an aircraft item when a switched-on factory has a free dock: a docking place empty or no aircraft in contact; with every docking place taken the order is ignored, even as a request to queue) and S-0407 claim 16 with S-0501 claim 30 (the house-wide pad capacity, D ≥ T, refuses only a copy queued behind an item). The lead's play note 35 (A4 round 6): a pad-bound aircraft in flight holds no contact, so its pad is a free dock and a new copy starts although the house already has as many pad aircraft as pads.
-#[test]
-fn claim_16_pad_capacity_is_tested_only_at_queue_time() {
-    for docked in [false, true] {
-        let mut r = ruleset();
-        let pad = r.sim.buildings.get_mut("AIRPAD").unwrap();
-        pad.helipad = Some(true);
-        pad.econ.number_of_docks = Some(1);
-        r.registries
-            .get_mut("aircraft")
-            .unwrap()
-            .push("PADA".into());
+/// A ruleset for T12 run 8: one-place test helipads (`AIRPAD`, one docking
+/// place each) and a listed dock-bound armed type `PADB` with no binding
+/// build limit; with `a_limit`, a second listed dock-bound type `PADA` with
+/// that build limit.
+fn run_8_rules(a_limit: Option<i32>) -> Ruleset {
+    let mut r = ruleset();
+    let pad = r.sim.buildings.get_mut("AIRPAD").unwrap();
+    pad.helipad = Some(true);
+    pad.econ.number_of_docks = Some(1);
+    let mut list = Vec::new();
+    let mut types = vec![("PADB", None)];
+    if let Some(l) = a_limit {
+        types.push(("PADA", Some(l)));
+    }
+    for (n, limit) in types {
+        r.registries.get_mut("aircraft").unwrap().push(n.into());
         let mut a = r.sim.aircraft["PLANE"].clone();
         a.econ.airport_bound = Some(true);
-        r.sim.aircraft.insert("PADA".into(), a);
-        r.sim.general.economy.pad_aircraft = Some(vec!["PADA".into()]);
-        let mut w = game(&r);
-        let k = building(&mut w, "AIRPAD", 0, 0, 0);
-        let flyer = testkit::spawn(
+        a.econ.build_limit = limit;
+        r.sim.aircraft.insert(n.into(), a);
+        list.push(n.into());
+    }
+    r.sim.general.economy.pad_aircraft = Some(list);
+    r
+}
+
+/// T12 run 8's game: `pads` one-place helipads, `flying` PADB in flight
+/// (no contact with a pad) and `docked` PADA standing on a pad (in contact).
+fn run_8_game(r: &Ruleset, pads: i32, flying: usize, docked: usize) -> World {
+    let mut w = game(r);
+    let ks: Vec<_> = (0..pads)
+        .map(|i| building(&mut w, "AIRPAD", 0, -8 + 4 * i, 0))
+        .collect();
+    for i in 0..flying {
+        testkit::spawn(
+            &mut w,
+            Kind::Aircraft,
+            "PADB",
+            0,
+            testkit::mid(SIZE, 6, 4 + 2 * i as i32),
+            0,
+        );
+    }
+    let mut on_pad = Vec::new();
+    for i in 0..docked {
+        on_pad.push(testkit::spawn(
             &mut w,
             Kind::Aircraft,
             "PADA",
             0,
-            testkit::mid(SIZE, 6, 6),
+            testkit::mid(SIZE, -6, 6 + 2 * i as i32),
             0,
+        ));
+    }
+    ready(&mut w);
+    set_credits(&mut w, 0, 100_000);
+    for (i, a) in on_pad.into_iter().enumerate() {
+        w.obj_mut(a).unwrap().contact = Some(ks[i]);
+    }
+    assert_eq!(pad_total(&w, 0), i64::from(pads), "T");
+    w
+}
+
+/// A left click on the icon of `ty` as the local player, with the order it
+/// gives issued (S-0411 claim 4): whether an order was given.
+fn click_icon(w: &mut World, ty: TypeRef) -> bool {
+    use glasnost_sim::econ::sidebar::{self, Click, ClickOutcome};
+    match sidebar::click(w, H, ty, Click::Left, false) {
+        ClickOutcome::Order(o) => {
+            assert!(issue(w, 0, o.clone()), "an order the click gives is legal: {o:?}");
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Whether the tick's effects hold S-0404 claim 3's refusal sound for a
+/// production request (S-0701 claim 24).
+fn refusal_sound(w: &World) -> bool {
+    w.effects.iter().any(|e| {
+        matches!(
+            e,
+            glasnost_sim::combat::effects::Effect::Sound {
+                sound: glasnost_sim::combat::effects::Sound::QueueRefused,
+                ..
+            }
+        )
+    })
+}
+
+fn helipads(w: &World) -> Vec<glasnost_sim::world::ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.kind == Kind::Building)
+        .map(|o| o.id)
+        .collect()
+}
+
+// spec: S-0407 claim 16 *At issue* and F3 (T12 run 8 part a, Q-2172: an aircraft in flight is on the map and counts in D like one on its pad; with both listed aircraft out and every pad empty, D = 2 = T, so the click on the icon gives no order, plays no sound and starts nothing) and claim 13 (every build order is refused when issued while claim 16's test refuses it). The lead's play note 35 (M8 A4 round 6): pad aircraft could be bought while the others flew.
+#[test]
+fn claim_16_pad_capacity_is_tested_at_issue_with_the_aircraft_in_flight() {
+    let r = run_8_rules(None);
+    let mut w = run_8_game(&r, 2, 2, 0);
+    let b = t(&w, Kind::Aircraft, "PADB");
+    assert!(!click_icon(&mut w, b), "no order: D = 2 = T");
+    assert!(
+        !issue(&mut w, 0, Order::Build { what: b }),
+        "the build order itself is refused when issued (claim 13), for every house"
+    );
+    step(&mut w);
+    assert!(line(&w, 0, b).is_none(), "nothing starts");
+    assert!(!refusal_sound(&w), "no sound");
+}
+
+// spec: S-0407 claim 16 *At issue* and F3 (T12 run 8 part b, the control: with T = 3 and both listed aircraft in flight, D = 2 < 3, the first click gives an order and the item starts; a second click before any returns gives none, D = 2 + 1 copy = 3; no sound)
+#[test]
+fn claim_16_at_issue_counts_the_line_copy() {
+    let r = run_8_rules(None);
+    let mut w = run_8_game(&r, 3, 2, 0);
+    let b = t(&w, Kind::Aircraft, "PADB");
+    assert!(click_icon(&mut w, b), "the first click gives an order");
+    step(&mut w);
+    assert_eq!(item(&w, 0, b).map(|i| i.t), Some(b), "the item starts");
+    assert!(!click_icon(&mut w, b), "the second click gives no order");
+    step(&mut w);
+    assert_eq!(line(&w, 0, b).unwrap().queue.len(), 0);
+    assert!(!refusal_sound(&w), "a click refused at issue is silent");
+}
+
+// spec: S-0407 claim 13 (our engine gives no order for a dock-bound aircraft type at its own build limit, which the original's interface gives and S-0404 claim 3 then refuses: a design rule with no switch) and claim 16 *At issue* (T12 run 8 part c: T = 4, D = 3 < 4; control: the same type below its own limit is given its order and starts)
+#[test]
+fn claim_13_no_order_for_a_dock_bound_type_at_its_own_limit() {
+    for limit in [1, 2] {
+        let r = run_8_rules(Some(limit));
+        let mut w = run_8_game(&r, 4, 2, 1);
+        let a = t(&w, Kind::Aircraft, "PADA");
+        let at_limit = limit == 1;
+        assert_eq!(tech::at_limit(&w, H, a), at_limit, "L = {limit}");
+        assert_eq!(
+            click_icon(&mut w, a),
+            !at_limit,
+            "L = {limit}: an order only below its own limit (D = 3 < T = 4 either way)"
         );
-        ready(&mut w);
-        set_credits(&mut w, 0, 100_000);
+        step(&mut w);
+        assert_eq!(item(&w, 0, a).is_some(), !at_limit, "L = {limit}");
+    }
+}
+
+// spec: S-0407 claim 16 *At issue* (for an idle line the line holds no copies, so D is the house's present count of the listed types: refused when that count is T or more, a pad aircraft in contact with its pad and one in flight alike) and S-0404 claim 3 (an order that passed the test at issue starts the item on the idle line)
+#[test]
+fn claim_16_idle_line_counts_present_aircraft_in_flight_or_docked() {
+    for docked in [false, true] {
+        let r = run_8_rules(None);
+        let mut w = run_8_game(&r, 1, 1, 0);
+        let k = helipads(&w)[0];
+        let flyer = w
+            .objects
+            .values()
+            .find(|o| o.kind == Kind::Aircraft)
+            .unwrap()
+            .id;
         if docked {
             w.obj_mut(flyer).unwrap().contact = Some(k);
         }
-        assert_eq!(pad_total(&w, 0), 1, "T = 1");
-        let a = t(&w, Kind::Aircraft, "PADA");
-        issue(&mut w, 0, Order::Build { what: a });
+        let b = t(&w, Kind::Aircraft, "PADB");
+        assert!(!click_icon(&mut w, b), "docked {docked}: D = 1 = T");
         step(&mut w);
-        if docked {
-            assert!(
-                line(&w, 0, a).is_none(),
-                "every docking place taken: the order is ignored"
-            );
-            continue;
-        }
-        assert_eq!(
-            item(&w, 0, a).map(|i| i.t),
-            Some(a),
-            "D = 1 ≥ T = 1, yet the idle line starts the item: the pad is a free dock"
-        );
-        issue(&mut w, 0, Order::Build { what: a });
+        assert!(line(&w, 0, b).is_none(), "docked {docked}");
+        // Control: with the aircraft gone, D = 0 < T and the order starts the item.
+        objects::remove(&mut w, flyer);
+        assert!(click_icon(&mut w, b), "docked {docked}: D = 0");
         step(&mut w);
-        assert_eq!(
-            line(&w, 0, a).unwrap().queue.len(),
-            0,
-            "the queued copy is refused by the pad capacity"
-        );
+        assert_eq!(item(&w, 0, b).map(|i| i.t), Some(b), "docked {docked}");
     }
+}
+
+// spec: S-0404 claim 3 and S-0701 claim 24 (the refusal sound for claim 16's test follows only an order that passed the test at issue and fails it when applied, after a count changed in between; here the pad total falls between issue and application) and S-0407 claim 16 *At issue*
+#[test]
+fn claim_16_refusal_sound_only_after_a_changed_count() {
+    let r = run_8_rules(None);
+    let mut w = run_8_game(&r, 2, 0, 0);
+    let b = t(&w, Kind::Aircraft, "PADB");
+    assert!(click_icon(&mut w, b));
+    step(&mut w);
+    assert!(item(&w, 0, b).is_some());
+    // The queued copy passes at issue (D = 1 < 2); a pad is removed before
+    // the order is applied, so T = 1 and the copy fails when applied.
+    assert!(click_icon(&mut w, b), "D = 1 < T = 2 at issue");
+    let pad = helipads(&w)[0];
+    objects::remove(&mut w, pad);
+    assert_eq!(pad_total(&w, 0), 1);
+    step(&mut w);
+    assert_eq!(line(&w, 0, b).unwrap().queue.len(), 0, "refused when applied");
+    assert!(refusal_sound(&w), "with the refusal sound");
 }
 
 fn pad_total(w: &World, h: u8) -> i64 {

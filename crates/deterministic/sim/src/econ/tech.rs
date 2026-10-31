@@ -1120,6 +1120,25 @@ pub fn at_limit(w: &World, house: HouseId, t: TypeRef) -> bool {
     limit_answer(w, house, t, true) == Answer::AtLimit
 }
 
+/// The test made when an order to start or queue an item is issued (S-0407
+/// claims 13 and 16, *At issue*): the type is at limit (claim 9's answer,
+/// [`at_limit`]), or claim 16's test refuses it with the line's copies as
+/// they are at that moment, none for an idle line ([`queue_refused`]). For a
+/// dock-bound aircraft type that is the house-wide pad capacity *D* ≥ *T*,
+/// so an aircraft in flight counts like one on its pad. A resume of a held
+/// item is exempt; the caller tests that first.
+pub fn refused_at_issue(w: &World, house: HouseId, t: TypeRef) -> bool {
+    // spec: S-0407 claim 13 (our engine: not at limit by claim 9's answer when issued, also for a dock-bound aircraft type at its own limit; a design rule with no switch)
+    at_limit(w, house, t)
+        // spec: S-0407 claim 16 *At issue* and F3 (the same test made at issue, with Q the line's copies then, 0 for an idle line; a dock-bound aircraft: D, present listed aircraft in flight or on a pad plus line copies, refused when D ≥ T)
+        || queue_refused(
+            w,
+            house,
+            t,
+            crate::econ::production::copies_in_line(w, house, t),
+        )
+}
+
 /// Whether a factory building *could make* `t` (S-0404 Terms, revision 3):
 /// the factory conditions and the build-limit answer with the allowance
 /// for an item in production (S-0407 claim 9), not the full tech tree. The

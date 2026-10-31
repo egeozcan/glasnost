@@ -100,8 +100,8 @@ pub fn click(w: &World, house: HouseId, t: TypeRef, button: Click, shift: bool) 
                 // spec: S-0411 claim 4 row 6 (a building or defence whose line has an item: refused)
                 return ClickOutcome::Refused;
             }
-            if tech::at_limit(w, house, t) {
-                // spec: S-0411 claim 4 row 7 (at its build limit: no order)
+            if tech::refused_at_issue(w, house, t) {
+                // spec: S-0411 claim 4 row 7 (at its build limit: no order) and S-0407 claim 16 *At issue* (that row is claim 16's test made at issue, with the line's copies then; the click gives no order and plays no sound)
                 return ClickOutcome::Nothing;
             }
             // spec: S-0411 claim 4 last row (a build order that starts or queues)
@@ -147,8 +147,8 @@ pub fn legal(w: &World, house: HouseId, order: &Order) -> bool {
             if icon_item(w, house, what).is_some_and(|i| i.hold != Hold::None && !i.done()) {
                 return true;
             }
-            // spec: S-0407 claim 13 (not at limit when issued)
-            if tech::at_limit(w, house, what) {
+            // spec: S-0407 claim 13 (not at limit when issued, and claim 16's test does not refuse it then)
+            if tech::refused_at_issue(w, house, what) {
                 return false;
             }
             // spec: S-0411 claim 6 (a building or defence line with an item takes no starting or queuing build order)
