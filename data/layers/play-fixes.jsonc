@@ -112,6 +112,14 @@
       // cells, block each other one step short of them and give up the move.
       // Answers: the scenario "harvesters" of docs/m8-claims/c7-pathing.md.
       "harvest_cell_shared": false,
+      // S-0108 claims 11 and 18 and Edge cases (quirks.ungranted_super_reads_clock off): a
+      // superweapon building's slots count a record that is not granted as not charged, so its
+      // grand opening starts super-1 and the charge check waits for the grant. On (the
+      // original), a building that opens with a record never granted, as at most set-up
+      // placements, "shows the charged super-3 although nothing has charged" (the spec's own
+      // quirk text: a visible glitch). Presentation only: the slots play on the cosmetic stream
+      // and change no simulation state.
+      "ungranted_super_reads_clock": false,
     },
   },
 }

@@ -1768,6 +1768,20 @@ pub struct Quirks {
     // spec: S-0109 claim 3, F1 and Edge cases
     #[serde(default = "on")]
     pub anim_random_rate_collapse: bool,
+    /// An unlinked rocking angle is held at its limit only when the angle before the step was
+    /// below it, so repeated pushes can carry a body past its limit and over; off: an unlinked
+    /// angle that is not past the edge is held at its limit whenever the new angle would pass it.
+    /// Read by the client's rocking (the sim keeps no rocking state yet).
+    // spec: S-0113 claim 15 and Edge cases (quirks.rocking_limit_escape, default on)
+    #[serde(default = "on")]
+    pub rocking_limit_escape: bool,
+    /// A superweapon building's slots read the owner's record clock whether or not the record is
+    /// granted, so a record never granted reads 0 and the grand opening shows the charged
+    /// *super-3*; off: a record that is not granted counts as not charged (*super-1* at the
+    /// opening, and the charge check waits for the grant).
+    // spec: S-0108 claims 11 and 18, Edge cases (quirks.ungranted_super_reads_clock, default on)
+    #[serde(default = "on")]
+    pub ungranted_super_reads_clock: bool,
     /// A behaviour queued during deploying or undeploying is replaced by *guard* at completion; off: completion starts the pending behaviour, or *guard* if none is pending. Not implemented yet (wave 2).
     // spec: S-0517 claim 8 and Edge cases
     #[serde(default = "on")]
@@ -2567,6 +2581,8 @@ impl Default for Quirks {
             deploy_stall_zero_delay: true,
             anim_fast_rate_freezes: true,
             anim_random_rate_collapse: true,
+            rocking_limit_escape: true,
+            ungranted_super_reads_clock: true,
             deploy_transition_discards_orders: true,
             prism_count_survives_dropped_shot: true,
             prism_modifier_reread_scale: true,
@@ -3756,6 +3772,11 @@ impl Quirks {
             ("deploy_stall_zero_delay", self.deploy_stall_zero_delay),
             ("anim_fast_rate_freezes", self.anim_fast_rate_freezes),
             ("anim_random_rate_collapse", self.anim_random_rate_collapse),
+            ("rocking_limit_escape", self.rocking_limit_escape),
+            (
+                "ungranted_super_reads_clock",
+                self.ungranted_super_reads_clock,
+            ),
             (
                 "deploy_transition_discards_orders",
                 self.deploy_transition_discards_orders,

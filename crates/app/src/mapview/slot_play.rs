@@ -243,8 +243,10 @@ pub struct State {
     /// It is being sold (claim 18: the charge cycle is not checked then).
     pub selling: bool,
     /// The remaining charge in ticks of its owner's record of its type's
-    /// first superweapon (S-0512 F2), when that record is granted (claims
-    /// 11 and 18).
+    /// first superweapon (S-0512 F2), read whether or not the record is
+    /// granted with `quirks.ungranted_super_reads_clock` on and only when it
+    /// is granted with the switch off (claims 11 and 18); `None` when there
+    /// is no record to read.
     pub charge_remaining: Option<i32>,
     /// That remaining charge in game minutes (F6).
     pub charge_minutes: Option<glasnost_num::F64>,
@@ -670,7 +672,7 @@ impl<A> Slots<A> {
         }
         if kind.superweapon {
             // spec: S-0108 claim 11 (a building with a superweapon: super-3 when the weapon's remaining charge time is below 15 ticks, otherwise super-1; both allow occupied variants)
-            // design: a record that is not granted at the opening (S-0512 claim 2 grants it at the house's next recheck) counts as not charged, so super-1 starts, as S-0108 scenario B6 expects of a building that completes; Q-2001 asks
+            // spec: S-0108 claim 11 and Edge cases (quirks.ungranted_super_reads_clock: on, a record not granted is read by its clock, never granted reads 0 and gives super-3; off, it counts as not charged and gives super-1; the caller leaves charge_remaining empty then)
             let charged = st.charge_remaining.is_some_and(|r| r < CHARGED_TICKS);
             let slot = if charged { Slot::Super3 } else { Slot::Super1 };
             self.start_occupied(slot, defs, st, mk);
@@ -693,7 +695,7 @@ impl<A> Slots<A> {
         if !tc.le(F64::from_i64(CHARGE_CYCLE_CUTOFF, Rounding::TowardZero)) {
             return;
         }
-        // design: no granted record, no remaining charge to compare: the cycle waits (Q-2001)
+        // spec: S-0108 claim 18 (quirks.ungranted_super_reads_clock off: while the record is not granted there is no t_r and the check waits for the grant; on, the caller reads the clock whatever the grant)
         let Some(tr) = st.charge_minutes else {
             return;
         };
@@ -1830,7 +1832,7 @@ mod tests {
     }
 
     /// A completed building whose owner's record has `r` ticks of charge
-    /// left (`None`: not granted), with the F6 minutes.
+    /// left (`None`: no reading), with the F6 minutes.
     fn charging(r: Option<i32>) -> State {
         State {
             charge_remaining: r,
@@ -1865,7 +1867,8 @@ mod tests {
             ..charging(Some(900))
         };
         assert_eq!(open(&sw(), &occupied).last().unwrap(), "U1G");
-        // design (Q-2001): a record that is not granted counts as not charged.
+        // No reading (quirks.ungranted_super_reads_clock off and the record not granted): not
+        // charged.
         assert_eq!(open(&sw(), &charging(None)).last().unwrap(), "U1");
         // A refinery with a superweapon: its fill-level slot and the superweapon slot.
         let refinery = TypeKind {
@@ -1965,7 +1968,7 @@ mod tests {
         s.update(&at, &d, &charging(Some(100_000)), &mut Maker);
         s.update(&at, &d, &charging(Some(0)), &mut Maker);
         assert!(s.runs(Slot::Super2));
-        // No granted record: the cycle waits (Q-2001).
+        // No reading (the switch off and the record not granted): the cycle waits (claim 18).
         let mut s = Slots::default();
         s.update(&kind, &d, &charging(None), &mut Maker);
         s.update(&kind, &d, &charging(None), &mut Maker);

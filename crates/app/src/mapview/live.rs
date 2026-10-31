@@ -438,6 +438,9 @@ pub struct Live {
     /// Each building type's slot definitions, by import registration
     /// index, read when the type is first drawn.
     slot_defs: BTreeMap<usize, slot_play::Defs>,
+    /// The set-up superweapon buildings' charge readings at the end of the
+    /// set-up (S-0108 claim 11), used at their grand opening.
+    setup_charges: BTreeMap<ObjectId, Option<i32>>,
     /// Each building type's charged-animation time (S-0108 claim 18), by
     /// the simulation's type index, read from the import at the start.
     charged_anim_times: Vec<Option<glasnost_num::F64>>,
@@ -736,6 +739,23 @@ pub fn charged_anim_time(
         .as_str()?;
     // spec: S-0108 F6 (t_c is the single-precision field widened exactly to binary64); S-0003 claim 7 (a single-precision field's value)
     glasnost_num::decimal::parse(text, glasnost_num::decimal::Field::Single, mode).ok()
+}
+
+/// The remaining charge in ticks that building `o`'s superweapon slots read
+/// at tick `now` from its owner's record of its first superweapon
+/// `first_sw` (S-0108 claims 11 and 18, S-0512 F2); `None` when there is no
+/// reading (no superweapon or no owner, or, with
+/// `quirks.ungranted_super_reads_clock` off, a record that is not granted).
+pub fn charge_reading(w: &World, o: &Object, first_sw: Option<u32>, now: i32) -> Option<i32> {
+    let reads_ungranted = w.rules().quirks.ungranted_super_reads_clock;
+    let (sw, h) = first_sw.zip(o.owner)?;
+    match glasnost_sim::superweapons::record(w, h, sw) {
+        // spec: S-0108 claims 11 and 18 (quirks.ungranted_super_reads_clock on: the clock is read whether or not the record is granted; off: a record that is not granted counts as not charged)
+        Some(rec) if rec.granted || reads_ungranted => Some(rec.remaining(now)),
+        Some(_) => None,
+        // spec: S-0108 claim 11 (each house holds one record of each type from its creation, S-0512 claim 1; a record never granted and never reset reads 0); the simulation allocates a house's records when it first writes one
+        None => reads_ungranted.then_some(0),
+    }
 }
 
 /// The bytes of a type name as our rules format writes it (bytes 128 to 255
@@ -1164,7 +1184,28 @@ impl Live {
             special_events: Vec::new(),
             depot_events: Vec::new(),
             rocking: Default::default(),
+            setup_charges: BTreeMap::new(),
         };
+        // spec: S-0108 claim 11 (a building placed during the game's set-up opens during the set-up: the record it meets is the one the set-up left, before the first tick's house updates grant it)
+        live.setup_charges = live
+            .building_ids
+            .values()
+            .filter_map(|id| live.world.obj(*id))
+            .filter_map(|o| {
+                let first_sw = live
+                    .rules
+                    .superweapons
+                    .building_sw
+                    .get(o.type_index as usize)
+                    .and_then(|s| s[0]);
+                first_sw.map(|_| {
+                    (
+                        o.id,
+                        charge_reading(&live.world, o, first_sw, live.world.tick),
+                    )
+                })
+            })
+            .collect();
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
         if !live.setup.sandbox {
@@ -1464,12 +1505,11 @@ impl Live {
                         .copied()
                         .flatten(),
                 };
-                // spec: S-0108 claims 11 and 18 (the weapon's remaining charge time: the owner's record of the type's first superweapon, S-0512 F2, in the tick the picture shows)
-                let charge_remaining = first_sw
-                    .zip(o.owner)
-                    .and_then(|(sw, h)| glasnost_sim::superweapons::record(w, h, sw))
-                    .filter(|rec| rec.granted)
-                    .map(|rec| rec.remaining(now));
+                // spec: S-0108 claim 11 (a set-up building's grand opening is during the set-up, so it meets the record as the set-up left it)
+                let charge_remaining = match self.setup_charges.get(&o.id) {
+                    Some(c) if !self.slot_anims.contains_key(&o.id) => *c,
+                    _ => charge_reading(w, o, first_sw, now),
+                };
                 let sizes: Vec<glasnost_num::F64> =
                     glasnost_sim::structures::absorb::passengers(w, o.id)
                         .iter()
