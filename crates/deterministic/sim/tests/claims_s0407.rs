@@ -759,6 +759,63 @@ fn claim_16_dock_bound() {
     }
 }
 
+// spec: S-0404 claim 3 (an idle line starts an aircraft item when a switched-on factory has a free dock: a docking place empty or no aircraft in contact; with every docking place taken the order is ignored, even as a request to queue) and S-0407 claim 16 with S-0501 claim 30 (the house-wide pad capacity, D ≥ T, refuses only a copy queued behind an item). The lead's play note 35 (A4 round 6): a pad-bound aircraft in flight holds no contact, so its pad is a free dock and a new copy starts although the house already has as many pad aircraft as pads.
+#[test]
+fn claim_16_pad_capacity_is_tested_only_at_queue_time() {
+    for docked in [false, true] {
+        let mut r = ruleset();
+        let pad = r.sim.buildings.get_mut("AIRPAD").unwrap();
+        pad.helipad = Some(true);
+        pad.econ.number_of_docks = Some(1);
+        r.registries
+            .get_mut("aircraft")
+            .unwrap()
+            .push("PADA".into());
+        let mut a = r.sim.aircraft["PLANE"].clone();
+        a.econ.airport_bound = Some(true);
+        r.sim.aircraft.insert("PADA".into(), a);
+        r.sim.general.economy.pad_aircraft = Some(vec!["PADA".into()]);
+        let mut w = game(&r);
+        let k = building(&mut w, "AIRPAD", 0, 0, 0);
+        let flyer = testkit::spawn(
+            &mut w,
+            Kind::Aircraft,
+            "PADA",
+            0,
+            testkit::mid(SIZE, 6, 6),
+            0,
+        );
+        ready(&mut w);
+        set_credits(&mut w, 0, 100_000);
+        if docked {
+            w.obj_mut(flyer).unwrap().contact = Some(k);
+        }
+        assert_eq!(pad_total(&w, 0), 1, "T = 1");
+        let a = t(&w, Kind::Aircraft, "PADA");
+        issue(&mut w, 0, Order::Build { what: a });
+        step(&mut w);
+        if docked {
+            assert!(
+                line(&w, 0, a).is_none(),
+                "every docking place taken: the order is ignored"
+            );
+            continue;
+        }
+        assert_eq!(
+            item(&w, 0, a).map(|i| i.t),
+            Some(a),
+            "D = 1 ≥ T = 1, yet the idle line starts the item: the pad is a free dock"
+        );
+        issue(&mut w, 0, Order::Build { what: a });
+        step(&mut w);
+        assert_eq!(
+            line(&w, 0, a).unwrap().queue.len(),
+            0,
+            "the queued copy is refused by the pad capacity"
+        );
+    }
+}
+
 fn pad_total(w: &World, h: u8) -> i64 {
     w.houses[usize::from(h)].econ.tech.pad_total
 }
