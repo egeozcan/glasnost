@@ -447,6 +447,10 @@ pub fn check(
         return Answer::Illegal;
     }
     // spec: S-0513 claim 39 and its Changes for S-0301 (a target in the leaving stage of a superweapon warp: illegal unless the asking weapon is a temporal weapon; rank 4, after every other rank-4 reason except the spawner-weapon answers, the other weapon's live-effect impossible, every row of S-0306 claim 23 and the magnetic-beam rearming against another target, which it outranks, and ahead of ranks 5 and 7 to 16; the earlier projectile and berserk rows also answer illegal, so their order before it is not observable)
+    // A member that a temporal beam holds gets the same answer: not settled by the
+    // spec, interim Q-2213. The sinking, falling, deploy-transition, seized-firer and
+    // S-0517 magnetic-beam refusals below also answer illegal, so their place after
+    // this reason is not observable.
     if let Some(Target::Object(x)) = target
         && crate::superweapons::warp_leaving(w, x)
         && !r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
