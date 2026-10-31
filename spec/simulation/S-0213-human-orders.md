@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 60
+revision: 74
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166]
 supersedes: []
 ---
 
@@ -92,7 +92,8 @@ Terms).
 - **Route mode, planned route, route holder.** Route mode is the input mode, entered by holding
   the route-mode key, in which clicks build a *planned route* (a list of places, each with an
   action) for the selected objects instead of ordering them at once (claim 16). An object whose
-  planned route holds at least one point, being built or being followed, is a *route holder*. A
+  planned route holds at least one point, being built or being followed, is a *route holder*
+  (which objects can become one, and by which presses, is claim 16d's). A
   *route point* is one place of a planned route; it belongs to the house and can be shared by
   several routes (claim 16a). It is deleted once no route holds it (claim 16f). An object has a
   *route record* from its first route point until it is removed from play, even while its route
@@ -143,7 +144,7 @@ Terms).
    object can act on an order is therefore the tick after the one in which the order was issued.
    All orders issued in the same tick are applied together, in the order of claim 3.
    Orders issued for a selection use S-0214's selection order (Terms), not chronological
-   selection history.
+   selection history; a route-mode press on a point uses claim 16b's list instead (claim 2).
    - **Which tick an input belongs to.** In a single-player game the player's input is taken once
      per unfrozen cycle, before that cycle's tick (S-0201, Terms, *Cycle*), and not while the game waits
      between ticks. Each unfrozen cycle takes at most one input event from the player's waiting inputs, in
@@ -172,7 +173,10 @@ Terms).
    while it is full is dropped silently and never applied. The list is emptied when the orders
    are applied (claim 1), so the limit applies to the orders issued during one tick. A click
    that orders a selection issues one order per selected object, in S-0214's selection order
-   (Terms), so when more than 128 objects are selected only the first 128 are ordered. The key commands of
+   (Terms), so when more than 128 objects are selected only the first 128 are ordered. A
+   route-mode press on a point is the exception: its orders go to the objects of claim 16b's
+   list (*Who gets a press's orders*), in that list's order, so when the list is longer than
+   128 only its first 128 objects are ordered. The key commands of
    table T2 are limited in the same way: once the list is full, every further order of the
    command is dropped. Since an unfrozen cycle takes at most one input event (claim 1), the orders that the player's
    input issues in one tick all come from a single click or key command. The list holds the orders of
@@ -186,7 +190,8 @@ Terms).
      orders, so this is a rule of our engine, not a claim about the original.
    - Backing: `measurable` (Scenario O2)
    - Confidence: medium (the limit is certain; that no other limit on selection size applies
-     first is not)
+     first is not); medium for a press on a point ordering the first 128 objects of claim 16b's
+     list, which is `unmeasured`: no scenario here gives such a list more than 128 objects
    - Quirk: `quirks.pending_order_limit` (default: the YR limit of 128). With the switch
      off, no house's pending list has a limit.
 
@@ -788,31 +793,40 @@ Terms).
     When a unit falls back to rest while following a route, S-0215 claim 13 specifies when the
     order for the next route point takes effect. Issuing that action is not an immediate
     destination assignment within the fall-back.
-    A route-mode click is refused when the house's route-holder count (Terms) plus the number of
-    selected objects whose routes hold no point would be more than 128 (Formulas), when a
-    selected object cannot take part in a route (claim 16d), or when it is a click on an existing
-    point that the selection can neither join nor close a loop at (claim 16b). A refused click
-    adds no route point.
-    A point join does not raise the count (claim 16f), so joins can give a house more than 128
-    route holders, as far as studied (low).
+    A route-mode press outside every point's click area is refused when a selected object
+    cannot take part in a route (claim 16d). A press on an existing point is refused when the
+    selection can neither join nor close a loop at it (claim 16b). A click that claim 16d tests
+    for the holder limit is also refused when the house's route-holder count (Terms) plus the
+    number of selected objects whose routes hold no point would be more than 128 (Formulas). A
+    click that takes a point (a join or a loop close), a selecting click, a band box's release
+    and a tool click are not tested for it (claim 16d). A refused click adds no route point.
+    Since a press that takes a point is not tested for the holder limit, joins can give a house
+    more than 128 route holders. A point join also does not raise the count (claim 16f), as far
+    as studied (low).
     The refusal gives a message and the game-wide refusal sound. Multiple route-mode refusal
     notices before the next tick completes share one message-and-sound cue, but completing a
     tick permits a new cue: a refused click made seconds later in the same running game is not
     silent because of an earlier refusal (S-0701 claim 24). Claim 25 specifies the message's
     imported text, lifetime and shared display capacity.
     - Backing: `measurable` (Scenario O8, including its repeated-refusal test, and part o for
-      more than 128 holders by joins)
+      a join that is not tested for the holder limit and gives more than 128 holders)
     The same-tick duplicate-notice limit is `unmeasured`: no setup here creates multiple
     independent route refusals before one tick completes. The reset's observable consequence
     on later clicks is tested by O8.
     - Confidence: high for repeated cues after completed ticks and for the limit of 128 on the
-      count plus new objects; low for more than 128 holders by joins. Claims 16a to 16f carry
-      their own ratings.
+      count plus new objects at a click that adds a point; medium for a join not tested for the
+      limit and so giving more than 128 holders; low for a join not raising the count. Claims
+      16a to 16h carry their own ratings.
 
 16a. **Route orders and who owns a route, Q-1986 question 1.** Every selected object has its
     own planned route: a list of route points, followed in order. Point adds stop at 16 points
-    (claim 16b). A join cannot take a route past 16 points: only an object whose route is empty
-    joins, and it copies part of a route of at most 16 points (claim 16b). A route point is a
+    (claim 16b). A join can take a route past 16 points only when the route it copies is already
+    longer, or when the copy is added after points of the joining object's own. A selected
+    object that joins has no points of its own unless it has lost the pressed point before its
+    order is applied (claim 16b, *Who gets a press's orders*). So a route first passes 16 points
+    through a copy added after an object's own points: one that a press gives an object that is
+    not selected, or a selected object that has lost the point. A join of a route so lengthened
+    can pass 16 points too. A route point is a
     place on the map that belongs to the house (claim 16b gives the place of each point add), so
     one click with several objects selected adds the same point to each of their routes whose
     orders have that place. Point adds share a point only when they are applied in the same
@@ -822,29 +836,47 @@ Terms).
     | Order kind | Names | Effect when applied |
     |---|---|---|
     | Point add | one actor; the behaviour, target and destination that the click gave it | Adds a point at the order's place (claim 16b) to the end of the actor's route, subject to claim 16b |
-    | Point join | one actor; an existing route point of the house | Gives the actor, whose route is empty, a copy of that point and the points after it in the route of one of its holders (claim 16b), or closes a loop when the point is already in the actor's route (claim 16c) |
+    | Point join | one actor; an existing route point of the house | Gives the actor a copy of that point and the points after it in the route of one of its holders (claim 16b), added after the actor's own points (a selected actor has none unless it has lost the point before the order is applied, claim 16b), or closes a loop when, at the order's application, the point is in the actor's route (claim 16c) |
     | Commit | the issuing house only | Commits every point of the house's routes and starts the holders that can start (claim 16c) |
     | Point delete | one route point | Removes the point from every route that holds it (claim 16e) |
 
     A point-add order is the ordinary behaviour order of claim 5 marked as a route point, one per
     eligible selected object and click, in S-0214's selection order. A click on an existing
-    point that claim 16b's point-click test accepts sends point-join orders instead. Releasing
+    point that claim 16b's point-click test accepts sends point-join orders instead, to the
+    objects that claim 16b lists (*Who gets a press's orders*). Releasing
     the key sends one commit order for the local player's house.
     - Backing: `measurable` (Scenario O8, parts c and d, for shared points and per-object
       routes, part s for a later point add at an existing point's place, and part e for the 16
       points of point adds). The division into order kinds is
       `unmeasured` as such: only its consequences
       cross the lockstep stream observably, and those are claims 16b to 16e.
-    - Confidence: high for one route per object and the 16-point limit of point adds; medium
-      for shared points, for a later point add making a new point, and for joins never passing
-      16 points
+    - Confidence: high for one route per object and the 16-point limit of point adds on a route
+      that point adds have filled; medium for shared points, for a later point add making a new
+      point, and for a selected object that joins with no points of its own passing 16 points
+      only when the route it copies is already longer; low for a selected object that has lost
+      the pressed point joining after its own points, and for a route first passing 16 points
+      through a copy added after an object's own points (claim 16b's ratings)
 
 16b. **What a route point stands for, Q-1986 question 2.** A route-mode click over an object
     or a cell stands for the action that the same click would order outside route mode under
     S-0214 for each selected object: *move* to a cell, *attack* on an enemy object, *enter* a
     transport or building, *capture*, *area guard* and the rest. The deploy action is
-    refused in route mode. What a route-mode click that would order a detonate (claim 11) does
-    has not been studied. The point stands at the order's *place*: the place of the target that
+    refused in route mode (S-0214 row I22 gives an in-place deployer no deploy order in route mode).
+    Of the actions that a click gives a selected vehicle or infantry unit, every one that orders
+    something, except the detonate (claim 11), gives a behaviour order, which route mode turns into
+    a point add. An action that S-0214 gives no order for gives none here either and adds no point.
+    A click that selects or toggles the selection
+    gives the unit no action (S-0214 claim 3), so it adds no point. Claim 16h's tool clicks are
+    not counted among those actions, and what a click gives an aircraft or building is not
+    studied here (Open questions).
+    A route-mode click that would order a detonate adds no point. It meets claim 16d's tests as
+    an ordinary route-mode click does: the kind test when the button is pressed outside every
+    click area, and the same-route-state and holder-limit tests when it is released. When all
+    pass, the detonate order is sent at the release, as outside route mode, with no route-mode
+    message, and that order ends the carrier's route when it is applied (claim 17). When one
+    refuses, the click is refused with the message that claim 16d gives, and no detonate order
+    is sent.
+    The point stands at the order's *place*: the place of the target that
     the click gave the order, or of its destination when the order names no target (S-0214
     claims 10 and 11). So a *move* click whose destination is a cell found by the nearby-cell
     search of S-0214 claim 11 puts the point on the found cell, not on the clicked one. For each
@@ -857,15 +889,19 @@ Terms).
     cell action. So the recorded action decides only the terminating and continual refusals
     below, and claim 13 classifies an object point anew when the point is issued.
     S-0214's *patrol* action (row GC3) is the action for a cell that holds a route point when
-    force-move and force-fire are held. How it meets the join and loop-close test of
-    *Clicks on existing points* below has not been studied (Open questions).
+    force-move and force-fire are held. A press inside a point's click area is taken by the
+    point first, whatever keys are held (*Clicks on existing points* below), so the patrol
+    action is given only by a click on the cell outside every click area, or inside one that the
+    press neither takes nor refuses. That click is an ordinary point add with the *patrol*
+    action. *Patrol* is neither terminating nor continual, so later points can be added.
     A point add is refused, when the order is applied, in each of these cases:
     - the route's last point is *terminating*: its action is *enter*, *capture* or *eaten*,
       after which the holder has left the map or the route cannot go on.
     - the route's last point is *continual*: its action is *guard*, *attack* on a cell, or
       *area guard* on a cell or with no target, which never finishes by itself.
     - the route has a loop (claim 16c).
-    - the route already holds 16 points.
+    - the route already holds 16 points (a longer route is not refused for its length: *Who
+      gets a press's orders* below).
 
     *Clicks on existing points.* With objects selected, a route-mode click on the marker of an
     existing route point of the house is not a point add. It is refused, with the invalid-point
@@ -873,18 +909,151 @@ Terms).
     a *route record* meets one of these conditions:
     - its route has a loop.
     - the point is not in its route.
-    - the point is its route's last point or the one before it.
+    - the point is its route's last point or the one before it (its first place in the
+      route, *A point that a route holds twice* below).
 
     An object gets a route record with its first route point, and keeps it, even once its route
-    is empty, until it is removed from play (low). Otherwise the click closes a loop (claim 16c)
-    for the selected objects whose routes hold the point, and joins the point for the others.
-    With claim 16d's same-route-state rule, a selection with routes can only close a loop, and
-    only objects with no route record join. While the cursor is over a point that this test
+    is empty, until it is removed from play (low). Otherwise the click is accepted, and its
+    orders go to the objects that *Who gets a press's orders* below lists. As the routes stand at
+    the click, the orders close a loop (claim 16c) for the selected objects whose routes hold the
+    point and join it for the others: a selected object with a route is listed only to close a
+    loop, and only a selected object with no route record joins. What each order does is decided
+    when it is applied, though, and a selected holder can lose the point before then (*Who gets
+    a press's orders*). A press on a point is not tested for the same route state (claim 16d),
+    so one press can close a loop for some selected objects and join the point for the others.
+    While the cursor is over a point that this test
     would refuse, the point is not highlighted as a click target. The test is made at the
     click, so a refused click sends no order.
     - Quirk: `quirks.spent_route_blocks_join` (default: original). With the switch off, an
       object whose route is empty is tested as one with no route record, so an object that
       has used up, lost or emptied its route can join a point again.
+
+    *Who gets a press's orders.* A press on a point that the point-click test accepts, with
+    objects selected, sends one order for each object of a list made by going through the
+    selection in S-0214's selection order. A selected object with no route record, or with an
+    empty route, is listed itself. For a selected object whose route holds points, every object
+    whose route holds that route's last point is listed, the selected object among them, in the
+    order in which they were given that point, whether they are selected or not. An object
+    already listed is not listed again. The orders are applied in the list's order, each on the
+    routes as the earlier ones left them. They are issued in the list's order too, so the
+    pending-list limit (claim 2) drops the orders of the objects after the first 128 in the list.
+
+    Whether an order closes a loop or joins is decided when it is applied, for every object of
+    the list, selected or not: it closes a loop (claim 16c) when the actor's route then holds the
+    point that the order acts on (*Click areas* below), and joins that point otherwise. Neither
+    is tested then for the point-click test's refusals. A selected object's route mostly stands
+    at its order's application as at the click, so its order does what the test found. But a
+    selected holder's route can change first: for example, the holder can issue the pressed
+    point (claim 16c) in the tick in which the press's orders are applied, since they are
+    applied after every object's update (claim 1). Claim 16f deletes the pressed point once no
+    route holds it, and the order then acts on a later-made point of the house at the place, if
+    any. When the holder's route still holds the point that the order acts on, at a later place
+    (*A point that a route holds twice* below) or as a later-made point at the place, the order
+    closes a loop there with no test, so the loop can begin at the route's last point or the one
+    before it and hold fewer than 3 points (low). When its route does not hold that point, the
+    order joins it: the holder is given the copy that *Joins* below gives a joining holder,
+    added after the points it still holds, as for an object that is not selected below, so its
+    route can pass 16 points (low). If no point of the house is left at the place, the order
+    does nothing (*Click areas* below) (low).
+
+    So an object that is not selected also gets an order when its route holds the last point of
+    a selected object's route. The point-click test is not made for an object that is not
+    selected:
+    - when its route holds the pressed point, the press closes a loop there for it (claim 16c),
+      from the pressed point's first place in its route to its route's last point. This holds
+      even when the pressed point is that last point or the one before it, and the new loop
+      replaces any loop its route already has (low).
+    - when its route does not hold the pressed point, it is given the copy that *Joins* below
+      gives a joining holder, added after its own points, whatever their number, so its route
+      can pass 16 points. Its route then has the copy's loop in place of any loop it had, or no
+      loop when the copy has none. The loop begins at the first point of its route that is the
+      copied loop's first point. When that is the joined point, which its own points do not
+      hold, the loop is the copy's own, also when its own points hold other points of the
+      copied loop. When the copied loop begins at a later point that its own points also hold,
+      the loop begins at that own point and has as many points as the copied loop, so it ends
+      before its route's last point (low). How a holder goes round such a loop is not studied
+      (Open questions).
+    - a route that holds more than 16 points is not refused a point add for its length: the
+      length refusal above is made only at 16 points (low).
+    - Quirk: `quirks.press_copy_ignores_route_state` (default: original). With the switch off,
+      a join that a press gives any object of its list, selected or not, does nothing when the
+      copy would take its route past 16 points, and the copy's loop always begins in the copy,
+      at the copied loop's first point.
+
+    *A point that a route holds twice.* The copy that an object that is not selected is given
+    can make its route hold one point at two places: part w (8) gives W the route P₂, P₃, P₁,
+    P₂, P₃, where P₂ and P₃ each stand twice. A join that copies such a route copies both
+    places. Wherever a rule takes a point's place in a route, the place is the point's first one
+    in that route:
+    - the point-click test's last point and the one before it, so a press on a point that is a
+      route's last point and also stands earlier in it is not refused for that route as one on
+      its last point.
+    - a loop that a press closes, which runs from the pressed point's first place to the route's
+      last point, the later places included.
+    - a join's copy, which runs from the joined point's first place in the copied route to its
+      end, the later places included. Whether the copied loop's first point comes before the
+      joined point is judged against that first place (*Joins* below), and the copy's loop
+      begins at the first place, in the joining holder's route, of the point that *Joins* and
+      *Who gets a press's orders* say it begins at.
+    - the action recorded for the holder at the point, which the refusals above and the holder's
+      issue of the point read: the action recorded at the point's earliest place still in the
+      route.
+    - the point that a point delete selects next (claim 16e): the one after the deleted point's
+      first place in its longest holder's route.
+
+    A point delete (claim 16e) removes the point from every place in every route that holds it.
+    Whether a route holds a point, and which point is its last, do not depend on how often the
+    route holds it. Our engine follows the same rules. Every case here is `unmeasured`: no
+    scenario here makes a press, join or delete on a route that holds a point twice, and part
+    w (8)'s routes hold the joined point once, so its first place is its only one.
+
+    *Click areas, Q-2138 question 3.* A press is inside a point's *click area* when the cursor is
+    in a square of 16 by 16 screen pixels around the screen position of the point's place: from
+    8 pixels left of and above that position to 7 pixels right of and below it. The point's cell
+    plays no part. Of the points drawn for the player (claim 16g) whose click areas hold the
+    cursor, the earliest-made one is the candidate. It is highlighted, and a press takes it, only
+    when it is a point of the player's own house that the point-click test above accepts for the
+    selection. Otherwise no point is highlighted, and no later-made point under it is considered.
+    A press that takes no highlighted point is tested against the earliest-made point of any
+    house, drawn or not, whose click area holds the cursor. When the point-click test refuses
+    that point for the selection, the press is refused with the invalid-point message.
+    Otherwise, and when no click area holds the cursor, the press is an ordinary route-mode
+    click (claim 16d). With nothing selected, or only objects with no route record, the test
+    accepts every point.
+    The orders that a press on a point sends name the point by its place. When applied, they act
+    on the house's earliest-made point at that place. If no point of the house is at that place
+    when such an order is applied, the order does nothing.
+    - Quirk: `quirks.hidden_point_refuses_click` (default: original). With the switch off, a
+      press that takes no highlighted point is tested only against points drawn for the player
+      (claim 16g), so a point that the player cannot see never refuses a press.
+
+    *Two points at one place, Q-2166.* Several points of one house can stand at one place (claim
+    16a): in the routes of different objects, or twice in one route. They have the same click
+    area, so the earliest-made of them is the candidate, whatever the selected objects' routes
+    hold, and the point-click test is made for that point alone:
+    - a selection whose routes hold the earliest-made point is tested for it as above, and when
+      the test accepts it, the press closes a loop there, also when a selected route holds a
+      later-made point at the same place (unless the route changes before the order is applied,
+      *Who gets a press's orders*).
+    - a selection with no route record joins the earliest-made point, copying its longest
+      holder's route (*Joins*, below).
+    - a selection with a route record whose routes do not hold the earliest-made point is
+      refused with the invalid-point message, even when they hold a later-made point there.
+      Such an object can still add a point at that place by a click on the place's cell outside
+      the click area, which makes a further point there.
+    - with nothing selected, the press selects the earliest-made point (claim 16e), and the
+      delete key then removes that one.
+
+    The markers of such points are drawn in the order the points were made, so the later-made
+    marker lies over the earlier-made one. Which marker lies on top plays no part in which point
+    a press takes.
+    - Quirk: `quirks.stacked_point_takes_earliest` (default: original). With the switch off, the
+      candidate where several points of the house stand at one place, with objects selected, is
+      the earliest-made of them that a selected object's route holds, else the earliest-made
+      one. The highlight and the point-click test use that point, under the same test as above.
+      The press's orders name that point itself, not its place: when applied they act on it, and
+      an order whose point has gone does nothing. With nothing selected, the candidate is the
+      earliest-made one, as in the original.
 
     *Joins.* A joining holder does not get an action of its own from the click. The join gives
     it a copy of the route of the point's longest holder: of the objects whose routes hold the
@@ -892,7 +1061,7 @@ Terms).
     the point add or join that gave it the point). Of holders given the point in the same tick,
     the one whose order was applied first counts as the longest holder: for the orders of one
     click, the first in S-0214's selection order (claim 16a). The copy runs from the joined
-    point to the
+    point's first place in that route (*A point that a route holds twice*) to the
     end of that route as it then stands, with the actions recorded there for that holder.
     - If that route has no loop, the copy has none.
     - If its loop's first point (as that route then stands, claim 16c) is the joined point or a
@@ -903,15 +1072,26 @@ Terms).
       joined point. Its loop is then the whole copy, beginning at the joined point: the joining
       holder goes round the same loop, entered at the joined point.
 
+    One press can join some objects and close a loop for others (claim 16c): its orders are
+    applied in the order of its list (*Who gets a press's orders*), each on the routes as the
+    earlier ones left them. A joining holder copies the route of the joined point's longest
+    holder as that route stands when the join is applied. When the press also closes that
+    longest holder's loop, a joining holder listed before it copies the route before the loop
+    is closed, so its copy has no loop, and one listed after it copies the closed loop. When the
+    press does not close the longest holder's loop, the copy is that holder's route as it
+    stands, whatever loops the press closes for others.
+
     A holder that is going round a loop has its points in the order it will next issue them
     (claim 16c), so the copy starts at the joined point and holds the whole loop, whatever point
     that holder is going to. A holder that has already issued a point of a route without a loop
     no longer holds it (claim 16c), so it is never the one copied. The copied points are
-    uncommitted until the next commit (claim 16c). The joining holder's own route is empty, so
-    it has no last point and no loop, and the copy holds at most 16 points: the four refusals
-    above never apply to a join. The checks of claim 16d are made at the click, so they apply to
-    a join too. The joining holder issues each copied point under S-0215 claim 13, as any holder
-    does. For a point whose place is an object's, that claim classifies the action anew as an
+    uncommitted until the next commit (claim 16c). A join is not tested for the four refusals
+    above, whatever the joining holder's route holds: the copy is added after its own points.
+    A selected joining holder has none, unless it has lost the pressed point before its order
+    is applied (*Who gets a press's orders*). Nor do claim 16d's tests: a press that takes a
+    point is not tested for kind, route state or the holder limit (claim 16d). The joining holder
+    issues each copied point under S-0215 claim 13, as any holder does. For a point whose place
+    is an object's, that claim classifies the action anew as an
     ordinary object click for the joining holder when it issues the point.
 
     A refusal leaves the route unchanged. For the local player's own orders it shows a message,
@@ -923,7 +1103,51 @@ Terms).
     the messages depend on the local player.
     - Backing: `measurable` (Scenario O8, parts a, b, e, f and l, parts n and r for joins, with
       part r (5) for holders given the point in the same tick, and part q for the order's place,
-      the clicks on existing points and the route record kept).
+      the clicks on existing points and the route record kept, part v for the detonate, the
+      moment it is sent and its refusal by the holder limit, part w for the click area, the
+      patrol action, a press for a mixed selection in both selection orders,
+      and parts w (6) and (7) for the point that a press takes, selects, deletes, joins or
+      closes a loop at among points at one place, and for a further point added there by a
+      click outside the click area, part w (8) for the orders a press gives objects that are
+      not selected, a loop closed and a copy added after a route's own points that hold points of
+      the copied loop other than the joined point, and part h for presses on points of other
+      houses). For an object that is not selected, a copy that takes its route past 16 points, a
+      point add to a route of more than 16 points, the copy's loop replacing a loop its route had
+      or leaving it none, and a loop that begins at one of its own points are `unmeasured`: no
+      scenario here gives an object that is not selected such a route. A selected holder whose
+      route has changed before its order is applied, and that order's join after the
+      holder's own points, its loop closed with no test at a later place or a later-made point,
+      or its doing nothing, are `unmeasured`: no scenario here has a selected holder issue the
+      pressed point in the tick in which the press's orders are applied. That the choice between a
+      loop close and a join is made when each order is applied, rather than at the click, is
+      `unmeasured` as a rule for the same reason: in every run here a selected object's route holds
+      the pressed point at its order's application exactly when it held it at the click. A loop
+      closed for an object that is not selected at
+      its route's last point or the one before it, or over a loop its route already has, is
+      `unmeasured`: no scenario here gives such an object a route that the point-click test
+      would refuse. The list's order is tested only where the selected object is the first
+      to have been given its route's last point (part w (8)). That the pending-list limit drops
+      the orders of the objects after the first 128 in the list is `unmeasured`: no scenario
+      here gives a press's list more than 128 objects. That a click that selects or
+      toggles the selection adds no point is `measurable` (part x, steps (2) and (4), where the
+      click selects and no new marker appears). An order that finds no point of
+      its house at its place is `unmeasured`: it needs the point to go between the press and the
+      order's application, which no scenario here sets up. That an order acts on the earliest-made
+      point at its place when applied, rather than
+      on the point the press took, is `unmeasured` too: in every run here the point that the
+      press takes is still the earliest-made one at its place when the order is applied, so both
+      readings give the same result. Which of two markers at one place lies on top is
+      `unmeasured`: no scenario here records the drawing, and it decides nothing that the runs
+      observe. That every click action of a vehicle or infantry unit that orders something,
+      other than the detonate, gives a behaviour order, and that an action S-0214 gives no
+      order for adds no point, are `unmeasured` as a whole: the scenarios here run only some
+      of those actions in route mode. That the detonate click's route-state test is made at the
+      release is `unmeasured`: the test can refuse it only with a selection of more than one
+      object, and no scenario here gives such a selection the detonate action.
+      The precedence among click areas that overlap is `unmeasured` for points at different
+      places, for a point of an allied house over one of the player's own, and for a point not
+      drawn for the player against a drawn one: no scenario here sets such an overlap up, since
+      part w uses points at one place and part h a single point of another house.
       The copied points' being uncommitted until the next commit is `unmeasured`: parts n and r
       release the key after the join, so the commit follows at once and no run shows a joining
       holder waiting at a copied point before a commit
@@ -933,7 +1157,36 @@ Terms).
       of the point-click test, and for the holder that a join copies (holders given the point
       in the same tick included) and what the copy holds and loops; medium for the copied
       points' being uncommitted until the next commit; low for
-      the route record kept once the route is empty, and for the hover highlight
+      the route record kept once the route is empty, for the hover highlight, for which point a
+      press takes where click areas overlap (the unmeasured branches above included), for
+      presses on points of other houses. Medium for the point that a press takes among points at
+      one place, in each case of *Two points at one place*, for the further point added there by
+      a click outside the click area, and for the later-made marker drawn on top; medium
+      for an order that finds no point at its place doing nothing, and for an order's acting on
+      the earliest-made point at its place rather than on the point the press took. Medium for
+      one press that closes a loop and joins, the detonate sent at the release after claim 16d's
+      tests and refused with no order when one of them refuses (its route-state test included),
+      every other click action of a vehicle or infantry unit that orders something giving a
+      behaviour order, and an action that S-0214 gives no order for adding no point, the
+      click area, and the patrol action's point add and its being neither terminating nor
+      continual. Medium for a click that selects or toggles the selection adding no point (no
+      object gets an order, S-0214 claim 3). Medium for the objects listed by a press on a point
+      and the list's order, and for the pending-list limit dropping the orders after the first
+      128 in the list (unmeasured). Low
+      for each outcome for an object that is not selected: the loop closed (at its last point
+      or the one before it, or over an existing loop, included) and the copy added after its own
+      points with the copy's loop (past 16 points, in place of a loop it had, and beginning at
+      one of its own points, included), and for a route of more than 16 points taking a point
+      add. Medium for the choice between a loop close and a join being made when each order is
+      applied (unmeasured), as a rule. Low for each outcome for a selected holder whose route
+      has changed before its order is applied: the join after its own points (past 16 points
+      included), the loop closed with no test at a later place or a later-made point at the
+      place, and the order that does nothing. Medium for the first-place rule of *A
+      point that a route holds twice* and for a point
+      delete removing every place (unmeasured), as rules; routes that hold a point twice come
+      about only through the low outcomes above, which bound how often they apply, not the
+      rules. Low for the action read at a point held twice and for the point a delete selects
+      next on such a route (unmeasured)
 
 16c. **Commit, following and loops, Q-1986 question 3.** Points added since the last commit are
     not followed: a holder whose route reaches them falls back to rest there and waits for a
@@ -981,14 +1234,21 @@ Terms).
     the selection's routes closes a loop from that point to the route's end. The loop's points
     are then issued in turn, the first loop point again after the last, until the holder gets an
     order outside route mode (claim 17). Points before the loop's first point are issued once.
-    Closing a loop shows an information message to the local player (Import mapping). A click
-    on a route's last point or the one before it is refused (claim 16b), so a loop made by
-    input holds at least 3 points.
+    Closing a loop shows an information message to the local player (Import mapping). A press
+    that would close a loop on a selected object's own route at that route's last point or the
+    one before it is refused (claim 16b), so a loop that a press closes on a selected object's
+    own route holds at least 3 points, unless that route changes between the click and the
+    order's application (claim 16b, *Who gets a press's orders*). Shorter loops come about only
+    through claim 16b's rules for a press's list. A press closes a loop for an object that is not
+    selected even at its route's last point or the one before it. A selected object that joins
+    copies the joined point's longest holder's loop (claim 16b, *Joins*), which can be such a
+    shorter loop, so a selected object that joins can get a loop of fewer than 3 points.
     Holders that share a point appear to start that point's action together, each waiting in
     place until the others have reached the point before it. That synchronisation's exact rule
     has not been settled (Open questions).
     - Backing: `measurable` (Scenario O8, steps 1 and 2, parts b, c and g, part q for the
-      3-point minimum, part s for a point add at a committed point's place, part t for the
+      3-point minimum of a loop that a press closes on a selected object's own route, part s
+      for a point add at a committed point's place, part t for the
       *wait* at the commit and at P₁ for the *wait* before a fall-back's issue, part t (2) for the
       target kept in the commit's tick and dropped in the next, with no shot at it from the next
       tick on, and part r (4)
@@ -996,9 +1256,16 @@ Terms).
       itself leaves the holder's destination, and a target that is not an opportunity target,
       unchanged, and that the firing step can still fire at such a target, are `unmeasured`:
       part t's V has no destination, and no scenario here gives a holder in *guard* a target that
-      is not an opportunity target
-    - Confidence: high for looping by input; medium for the 3-point minimum, for the start at
-      commit and its behaviour condition, for the *wait* at the commit and at a fall-back's
+      is not an opportunity target. That a selected object that joins can get a copied loop of
+      fewer than 3 points is `unmeasured`: no scenario here gives a point's longest holder such
+      a loop. A selected object's route that changes between the click and the order's
+      application is claim 16b's `unmeasured` part
+    - Confidence: high for looping by input; medium for the 3-point minimum of a loop that a
+      press closes on a selected object's own route that is unchanged since the click; low for
+      a shorter loop closed on a selected object's route that has changed by then (claim 16b's
+      low rule), and for a selected object that joins
+      getting a copied loop of fewer than 3 points (from claim 16b's low rules); medium for the
+      start at commit and its behaviour condition, for the *wait* at the commit and at a fall-back's
       issue, for the opportunity target kept in the commit's tick and dropped in the next, with no
       shot at it from the next tick on,
       for the commit's leaving the destination and any other target unchanged and the firing at
@@ -1007,10 +1274,14 @@ Terms).
       and a point add at a committed point's place, for the holder keeping its last action and
       for points before the loop; low for synchronisation
 
-16d. **Who can take part, Q-1986 question 5.** Only vehicles and infantry can hold a route.
+16d. **Who can take part, Q-1986 question 5.** At a route-mode press outside every point's
+    click area, only vehicles and infantry can take part: such a press is refused when an
+    aircraft, a building or an object of any other kind is selected. A press inside a click area
+    is not tested for kind (below).
     The rule is fixed for each kind of object and no imported key changes it. A route-mode
     click is refused, with a message for each case (Import mapping), when:
-    - a selected object is an aircraft, or a building, or of any other kind.
+    - the press is outside every point's click area and a selected object is an aircraft, or a
+      building, or of any other kind.
     - the selected objects are not all in the same route state: either none of them holds a
       route, or all hold routes that end at the same point.
     - the click is on an existing route point that the selection can neither join nor close a
@@ -1023,17 +1294,64 @@ Terms).
     Harvesters, unit-controlling vehicles and deployed infantry are vehicles or infantry and are
     not refused for their kind. Objects carried inside a transport cannot be selected (S-0214),
     so they never meet the check. No owner check is made beyond S-0214's selection rules.
+
+    *When the tests are made, Q-2138 question 4.* The kind test is made when the button is
+    pressed, for every route-mode press on the battlefield with the cursor outside every click
+    area (claim 16b), and only for battlefield presses: key commands and clicks on the sidebar or
+    the command bar are not tested for kind (claim 16h). It is made whatever the click would
+    do: give an order, select another object, start a band box or nothing. A refused press
+    ends the click: the selection is kept, and no order,
+    point or band box follows. So with a building selected, a click on bare ground or on another
+    object to select it is refused in route mode. With nothing selected, no object is tested.
+    When several selected objects fail the kind test, the message is that of the first of them
+    in S-0214's selection order. The same-route-state and holder-limit tests are made when the
+    button is released, for every click except one that selects, toggles the selection or does
+    nothing, the release of a band box that selects objects, and a click with a tool of claim
+    16h. So a press refused for kind never also gets their messages, and a selecting click is
+    never refused by them. A click whose ordinary action is a detonate is not among those
+    exceptions: it meets both release-time tests, and its order is sent only when both pass
+    (claim 16b).
+    A press inside a click area is not tested for kind. A press that takes a point meets only
+    the point-click test, so its message is never given with another refusal of this claim, and
+    its join and loop-close orders are not tested for route state or the holder limit either.
+    So in the original a selected aircraft or building with no route record joins a point as a
+    vehicle does and gets a route (low: only the missing kind refusal is observed, Backing). A
+    press inside a click area that is an ordinary click is not refused for kind either. What either
+    then gives such an object has not been studied (Open questions).
+    - Quirk: `quirks.click_area_skips_kind_test` (default: original). With the switch off, every
+      route-mode battlefield press with objects selected meets the kind test first, inside a
+      click area or not, so no aircraft or building gets a route point.
     - Backing: `measurable` (Scenario O8, part d, part q for clicks on existing points, and game
-      B step 3 for the two refusals together)
-    - Confidence: high for the kind rule; medium for the same-route-state rule and for the
-      message given when it and the holder limit both refuse
+      B step 3 for the two refusals together, part x for the kind test at the press, the clicks
+      that skip the other two tests, the message among several kind failures, the presses
+      inside click areas and a sidebar click not tested for kind, part w (5) for a press that
+      takes a point with a selection of mixed route states, part o for a press that takes a
+      point at more than the holder limit, and part v for a detonate click refused by the holder
+      limit; its route-state test is claim 16b's `unmeasured` part). That an aircraft or
+      building with no route record joins a point and gets a route is `unmeasured`: part x (5)
+      shows only that the press is not refused for kind, an ignored press would give the same
+      result, and no scenario here observes the route such an object would get.
+      That the same-route-state and holder-limit tests are made at the release rather than at
+      the press is `unmeasured`: no scenario here changes the selection's route state or the
+      house's route-holder count between a press and its release, so every run gives the same
+      result for either moment
+    - Confidence: high for the kind rule at presses outside click areas. Medium for each of
+      these: the same-route-state rule; the message given when it and the holder limit both
+      refuse; the kind test made at the press and only at battlefield presses; the clicks that
+      skip the other two tests; the first failing object's message; a press inside a click area
+      not tested for kind; a press that takes a point not tested for route state or the holder
+      limit; the release as the moment of the same-route-state and holder-limit tests; a
+      detonate click meeting both release-time tests. Low for
+      an aircraft or building with no route record joining a point and getting a route. What
+      such an object then does with that route is not claimed here (Open questions)
 
 16e. **Deleting and extending, Q-1986 question 4.** A click, in route mode and with no object
     selected, on an existing route point selects that point and shows an information message.
     With objects selected, the same click joins the point, closes a loop or is refused instead
     (claims 16b and 16c). The delete key
     then sends a point-delete order for the selected point, which removes it from every route
-    holding it. Selecting any object, or a short right-click, clears the point selection.
+    holding it. Selecting any object, or a short right click (claim 16h), clears the point
+    selection.
     When a deleted point lay
     inside a loop and the loop is left with fewer than 3 points, the loop is cancelled and the
     remaining points form an ordinary route. A route can be extended: holding the key again with
@@ -1041,9 +1359,29 @@ Terms).
     route is being followed, under the checks of claims 16b and 16d. Releasing the key commits
     again. A holder still busy with an earlier point is not interrupted and later reaches the
     new points (claim 16c).
+    *The delete key, Q-2139 question 5.* The delete key sends the point-delete order whenever a
+    point is selected, whether or not the route-mode key is held. Otherwise it does what it does
+    outside route mode. A click can select a point only while the route-mode key is held and no
+    object is selected. Releasing the key clears the point selection, and so does any selection of
+    an object (claim 16h), by any means. The one exception is a point delete applied after the
+    release, below. Where several points of the house stand at one place, the click selects the
+    earliest-made of them (claim 16b, Q-2166). When a point-delete order of the local player's house
+    is applied, the point after the deleted one in the route of its longest holder (claim 16b),
+    going round a loop, becomes the selected point, if there is one. So repeated presses delete the
+    following points in turn. A point delete applied after the key's release selects that next point
+    too, and a later press of the delete key then deletes it, with route mode off and no marker
+    drawn.
+    - Quirk: `quirks.delete_selects_after_release` (default: original). With the switch off, a
+      point delete applied while the route-mode key is not held selects no point.
     - Backing: `measurable` (Scenario O8, part g, and part i for the loop cancelled below
-      3 points)
-    - Confidence: medium; low for the loop cancelled below 3 points
+      3 points, part z for the delete key, and part w (6) for the point selected and deleted
+      among points at one place). A point delete applied after the key's release
+      is `unmeasured`: one player's inputs are taken one per cycle (claim 1), so a delete pressed
+      before the release is applied before the release is taken, and no scenario here applies a
+      point delete in a later tick than the one it is issued in
+    - Confidence: medium; low for the loop cancelled below 3 points, for which holder's route
+      gives the next point when several hold the deleted one, and for a point delete applied
+      after the release
 
 16f. **When an object stops holding a route, Q-1986 question 6.** An object whose route still
     holds at least one point stops being a route holder, and lowers its house's route-holder
@@ -1061,8 +1399,9 @@ Terms).
     new when it is selected for a route-mode click (claim 16). So deletions can leave a house
     refused at the limit with fewer than 128 route holders.
     A point join that gives an object its first points does not raise the count, as far as
-    studied (low), and the end of that route lowers it like any other, never below 0. So joins
-    can give a house more than 128 route holders (claim 16).
+    studied (low), and the end of that route lowers it like any other, never below 0. So after
+    joins the count can be lower than the number of route holders, and a later click that adds
+    a point is tested against that lower count (claim 16).
     A route point that no route holds any more is deleted at once, whichever way its last holder
     left it: by an order that removes the route (claim 17), by issuing it from a route without a
     loop or before a loop's first point (claim 16c), by a point delete (claim 16e) or by the
@@ -1077,7 +1416,8 @@ Terms).
     - Backing: `measurable` (Scenario O8: step 4 for removal by an order, part j for the used-up
       route and the moment it ends, part k for destruction and its deleted points, part m for
       the last point deleted and the order, destruction and new selection after it, part p for a
-      new route on top, part o for joins, and part u for points that no route holds)
+      new route on top, part o for a join's effect on the count, and part u for points that no
+      route holds)
     - Confidence: high for removal by an order; medium for the used-up route and its moment,
       for destruction, for the count kept after the last point is deleted, and for the deletion
       of points that no route holds; low for joins
@@ -1091,6 +1431,84 @@ Terms).
     - Backing: `measurable` (Scenario O8, part h)
     - Confidence: high for the drawing while the key is held; medium for allied houses; low for
       the look
+
+16h. **Other input while the key is held, Q-2139.** Apart from the clicks of claims 16b to 16e
+    and the commands of table T2, route mode leaves the player's input as it is outside route
+    mode, with these rules.
+    - *Selection, questions 1 and 3.* Clicks that select, band boxes, the control-group commands
+      (claim 22, S-0214 claim 33) and the type-select role (S-0214 claim 32) act as outside
+      route mode, after the press test of claim 16d (a band box starts with a press).
+      Selecting, while the key is held, an object whose route holds a point also selects every
+      other object whose route holds that route's last point. They are added to the selection
+      right after that object, before any further object the same input selects (a band box, a
+      group key), in the order in which they were given that point, any already selected being
+      left where it is. S-0214's selection order (Terms) follows from that order of addition.
+      The objects selected in this way add
+      none of their own: an object that holds the last point of such an object's route, but not that
+      of the route first selected, is not selected. While any object is selected, no point is
+      selected (claim 16e), so selecting a group clears the point selection.
+    - *Tools, question 2.* The sidebar, the command bar and the tool modes act as outside route
+      mode: arming a superweapon (S-0512 claim 25), the sell, repair, power and beacon modes,
+      and picking a finished building to place. A battlefield press with a tool active first
+      meets route mode's press rules: a press that takes a point (claim 16b) does that and
+      nothing else, and claim 16d's kind test follows. A click that passes them does what the
+      tool does outside route mode: it launches the superweapon, sells, repairs or switches
+      power, places the building, or places a beacon. That order is sent at once and adds no
+      route point, and the release-time tests of claim 16d are not made for it.
+    - *Right clicks and the tool modes.* Route mode is not one of the modes that S-0214 claim 28
+      lists, and that claim's route-editing mode is not route mode: no input of the original
+      starts route-editing, and our engine has no such mode (Changes for other specs). A
+      battlefield right click while the key is held acts as outside route mode
+      (S-0214 claims 27 and 28): it ends an armed tool mode, or clears the selection when no tool
+      mode is armed. It never ends route mode. Whether a right-button gesture is a click or a
+      scroll drag is S-0214 claim 27's rule: in our engine a drag starts only beyond 8 pixels
+      on an axis, and the original's bound is that claim's. A right click
+      made while the key is held and no object is selected also clears the point selection
+      (claim 16e), but only when its release is less than 4 screen pixels from its press on
+      each axis. That 4 is a bound of its own, apart from the drag bound: in the original it does
+      not follow the host's drag settings (`unmeasured`, below), and our engine keeps it. It
+      equals the metric of 4 that S-0214 claim 27 sets for our engine, but the drag starts only
+      beyond twice that metric. So in our engine a right click whose release is 4 to 8 pixels
+      from its press on an axis acts as a right click of S-0214 claim 28, as above, but keeps
+      the point selection. Route mode and the tool modes do not exclude each other: entering
+      route mode keeps an armed tool mode, and arming, using or ending a tool mode leaves route
+      mode on.
+    - *End of route mode, question 4.* Route mode ends, with the commit of claim 16c, when the
+      route-mode key's release reaches the game, when the command bar's route-mode button is
+      turned off, and when the local player's house is defeated, after which it cannot be
+      entered again. In our engine, route mode also ends, with the commit, when the game window
+      loses focus or the options menu is opened while route mode is on. No other event ends it.
+      This is a design rule of our engine, where the original is not settled: whether a release
+      made while the window lacks focus, or while the options menu is open, reaches the
+      original's game has not been established (Open questions).
+    - Backing: `measurable` (Scenario O8, part y for the selection, an accepted band box and the
+      other holders it selects, with a third holder that tells one round of selection from
+      several, the tools, the right clicks
+      and the tool modes kept with route mode, and part z for the key's release, the original's
+      case of a focus loss or the options menu, and the command bar's button). The end at
+      defeat is `unmeasured`: no scenario here defeats a house while its player holds the key.
+      That no input of the original starts route-editing is `unmeasured`: the absence of such
+      an input cannot be shown by a run. The beacon mode's click is `unmeasured`: no scenario
+      here places a beacon. The end at a focus loss or at the
+      options menu, and our engine's having no route-editing mode, are design rules and need no
+      backing. That the original's bound of 4 for the short right click does not follow the
+      host's drag settings is `unmeasured`: part y (5) runs on one host, and no scenario here
+      changes the host's drag settings. The order in which the other holders of a last point are
+      added to the selection is `unmeasured`: part y records which objects are selected, not
+      their order, and no run here makes an outcome depend on that order
+    - Confidence: medium for selection acting as usual, an accepted band box included, the
+      selection of the other holders of a last point, by a click or a band box, and the order in
+      which they are added (unmeasured), the cleared point selection, the tools and their
+      orders sent at once (the beacon mode's included), and the end at the key's release, with
+      no event other than those listed ending route mode; medium
+      for a right click acting as outside route mode and never ending it, the point selection
+      cleared by a right click under 4 pixels and kept by one of 4 pixels or more, the original's
+      bound of 4 not following the host's drag settings (unmeasured), the tool modes
+      and route mode not excluding each other, and no input of the original starting
+      route-editing. Where the original's click ends and its drag begins is S-0214 claim
+      27's, and this claim asserts no bound for it. Low for
+      the command bar's button and the defeat. That the original's route mode also ends at a
+      focus loss or at the options menu, as our engine's design rule has it, is low
 
 17. **Every order to an actor ends its route.** Any order that names an actor, apart from the
     route-mode orders themselves, removes that actor's planned route. This happens when the order
@@ -1520,12 +1938,13 @@ Terms).
 > ticks; the sum and the comparison are exact integer operations. (Claim 19. Open questions name
 > one further cause for which a cheer is refused.)
 
-> A route-mode click is refused by the route-holder limit exactly when \(C+S>128\), where \(C\)
-> is the house's route-holder count (Terms) and \(S\) is the number of selected objects whose
-> routes hold no point. These are exact integer counts. In the original \(C\) can differ from the
-> number of route holders, and an object whose last point was deleted is counted in both \(C\)
-> and \(S\) (claim 16f). (Claim 16, which also refuses a click when a selected object cannot
-> take part in a route.)
+> A route-mode click that claim 16d tests for the holder limit (not one that takes a point,
+> selects, releases a band box or uses a tool) is refused by it exactly when \(C+S>128\),
+> where \(C\) is the house's route-holder count (Terms) and \(S\) is the number of selected
+> objects whose routes hold no point. These are exact integer counts. In the original \(C\) can
+> differ from the number of route holders, and an object whose last point was deleted is
+> counted in both \(C\) and \(S\) (claim 16f). (Claim 16, which also refuses a press outside
+> every point's click area when a selected object cannot take part in a route.)
 
 > Group destinations (claim 7). For the *n* members with positions *p*ᵢ = (*x*ᵢ, *y*ᵢ, *z*ᵢ) in
 > leptons: centre *c* = (trunc(Σ*x*ᵢ / *n*), trunc(Σ*y*ᵢ / *n*), trunc(Σ*z*ᵢ / *n*)), integer sums
@@ -1561,8 +1980,8 @@ pixels. No floating-point arithmetic is used.
 | Pending-list capacity | 128 | orders | Claim 2 |
 | Initial last-cheer tick | −100 | ticks | Claim 19 |
 | Route-holder limit per house | 128 | route-holder count plus new objects | Claim 16 |
-| Route points per planned route | 16 | points | Claims 16a and 16b |
-| Fewest points in a loop made by input | 3 | points | Claims 16b and 16c |
+| Route length at which a point add is refused | 16 | points | Claims 16a and 16b: only at exactly 16; a longer route (claim 16b's copy) is not refused for its length |
+| Fewest points in a loop that a press closes on a selected object's own route, unless that route changes between the click and the order's application | 3 | points | Claims 16b and 16c |
 | Fewest loop points kept after a deletion | 3 | points | Claim 16e |
 | Order delay | 1 | ticks | Claim 1: issued in tick *N*, first acted on in tick *N* + 1 |
 | Input events taken per unfrozen cycle | at most 1 | events | Claim 1; frozen cycles take none |
@@ -1789,6 +2208,33 @@ only when they actually assign a destination.
 - **Route-holder count drift** (claim 16f): `quirks.route_holder_count_drift`, default: original.
   A deletion that empties a route leaves the count raised, and a join that begins a route does
   not raise it. With it off, the count is always the number of the house's route holders.
+- **Hidden points refuse presses** (claim 16b): `quirks.hidden_point_refuses_click`, default:
+  original. A press that takes no highlighted point is tested against points of every house, so
+  a holder's press at another house's unseen point is refused. With it off, only points drawn
+  for the player are tested.
+- **Click areas skip the kind test** (claim 16d): `quirks.click_area_skips_kind_test`, default:
+  original. A press inside a click area is not tested for kind, so an aircraft or building can
+  join a point. With it off, every route-mode battlefield press with objects selected is tested
+  for kind.
+- **Point selection after the release** (claim 16e): `quirks.delete_selects_after_release`,
+  default: original. A point delete applied after the key's release selects the next point,
+  which the delete key then deletes unseen. With it off, such a delete selects no point.
+- For the two switches above (click areas, point selection), the original side is the rule
+  that claims 16d and 16e state, at their ratings there. What an aircraft or building does
+  after it joins a point stays open (Open questions).
+- **Stacked points take the earliest-made** (claim 16b, *Two points at one place*):
+  `quirks.stacked_point_takes_earliest`, default: original. Where several points of the house
+  stand at one place, a press takes the earliest-made of them, so a selection whose routes hold
+  only a later-made one is refused on its marker. With it off, the press takes the
+  earliest-made point that a selected object's route holds, else the earliest-made one, and its
+  orders name that point itself. The original side is claim 16b's rule, at its rating there.
+- **A press's copy ignores the route's state** (claim 16b):
+  `quirks.press_copy_ignores_route_state`, default: original. The copy that a press gives an
+  object that is not selected, or a selected object that has lost the pressed point, can take
+  its route past 16 points, and its loop can begin at one of the object's own points and end
+  before the route's last point. With it off, a press's join does nothing when the copy would
+  take the route past 16 points, and the copy's loop always begins in the copy. The original
+  side is claim 16b's rule, at its low rating there.
 - **Blocked arrow events** (claim 23): `quirks.blocked_arrow_events`, default: original.
   Discarded releases can leave scrolling active after the key is let go.
   The alternative accepts view-arrow events during the block; it grants no unit orders.
@@ -2204,7 +2650,7 @@ Q-1753).**
   first game accepts one at or before tick *R* − 100, or two accepted cheers of one game are *R*
   or fewer ticks apart.
 
-**Scenario O8: route mode (claims 8, 16 to 16g and 17).**
+**Scenario O8: route mode (claims 8, 16 to 16h and 17).**
 - *Setup:* game A: one vehicle of the player's on open ground and 128 infantry of the player's,
   all selectable. Game B, a fresh game: 130 infantry of the player's, all selectable, and no other
   unit of the player's, with a cell P₁ 30 cells away from them and a cell P₂ 10 cells beyond
@@ -2282,6 +2728,17 @@ Q-1753).**
     not allied, A lays out a route and keeps the key held. Expected: B sees A's route only while
     B holds its own route-mode key, C never sees it. A sees nothing of the route once its key is
     released.
+    In a second network game of three humans, A and C not allied, A gives a vehicle a plain move
+    order to a far cell and, while it moves, routes it through far cells P and Q and releases.
+    The vehicle is busy, so the commit does not interrupt it and its route keeps P until it
+    comes to rest (claim 16c). C's press below is made while A's vehicle is still on its plain
+    move; if it has come to rest first, repeat the game with a farther cell. C gives one of its
+    vehicles a route through two other far cells, selects that vehicle and, holding the
+    key, presses with scripted input at the screen
+    position of P's place, found from the camera position (claim 16b). Expected: refused with
+    the invalid-point text, though C sees no marker there. With a vehicle of C's that has not
+    held a route point selected instead, the same press adds a point for it. Falsified if the
+    first press is accepted, or the second refused.
   - *(i) Loop cancelled:* route V through P₁, P₂, P₃, click P₁ again and release. After V's first
     round, deselect V, hold the key, click P₂, press delete and release. Expected: V visits each
     remaining point at most once more and then stays. In a second run, loop V through P₁ to P₄
@@ -2322,14 +2779,18 @@ Q-1753).**
     release. Expected: W goes to P₂ and then to P₃, and with the key held W's route line runs
     through P₂ and P₃. W stopping at P₂ falsifies the copied route of claim 16b. W must be a
     vehicle that has never held a route point in the game (claim 16b, route record).
-  - *(o) Joins and the count:* game B again, with a cell P₃ 10 cells beyond P₂. Select one
-    infantry unit X alone, hold the key, click P₁, P₂ and P₃ and release. Select 127 others, hold
-    the key, click P₂ and release. Expected: accepted (1 + 127). The 127 start for P₂ and keep P₃
-    in their routes. Then select the last 2, hold the key, click P₂ and release. Expected under
-    claim 16f: accepted (1 + 2), and all 130 go to P₂ and then to P₃. A refusal with the
-    route-holder-limit text (128 + 2) means a join raises the count, which falsifies claim 16f's
-    join sentence. A click made after X has reached P₁ (and so issued P₂, which then has no
-    holder left and is deleted) is void.
+  - *(o) Joins and the count:* game B again, with a cell P₃ 10 cells beyond P₂ and a far cell
+    P₄ away from all three. Select one infantry unit X alone, hold the key, click P₁, P₂ and P₃
+    and release. Select 128 others, hold the key, press P₂'s marker and release. Expected:
+    accepted, though 1 + 128 is more than 128, because a press that takes a point is not tested
+    for the holder limit (claim 16d). The 128 start for P₂ and keep P₃ in their routes, so the
+    house has 129 route holders. A refusal with the route-holder-limit text falsifies that
+    exemption. Then select the last infantry unit Y alone, hold the key, click P₄ and release.
+    Expected under claim 16f: accepted (1 + 1), and Y goes to P₄. A refusal with the
+    route-holder-limit text (129 + 1) means a join raises the count, which falsifies claim 16f's
+    join sentence. Record the tick of Y's click and the tick each of the 129 reaches P₂. A click
+    by Y made after any of the 129 has reached P₂ is void: at P₂ that holder issues its last
+    point, P₃, so its route is used up and the count is lowered (claim 16f).
   - *(p) A new route on top:* game A again. Route the vehicle V through P₁ and P₂ and release,
     with P₁ far away. While V walks to P₁, deselect it, hold the key, click P₂, press delete and
     release, so that V's route is empty. After V has come to rest at P₁, select it, hold the key,
@@ -2445,6 +2906,173 @@ Q-1753).**
     way to P₃, hold the key with nothing selected. Expected: no marker at P₃, since W issued it
     at P₂. A marker left at P₁ or P₂ in (2), or at P₃ in (3), falsifies the deletion of points
     that no route holds.
+  - *(v) Detonate in route mode (claims 16b and 16d):* a fresh game, with an own vehicle V on
+    which the player's own bomb-planting infantry has planted a bomb, as in Scenario O6, and a
+    far cell P₁. A named test rules file lets the player set off that kind of bomb and gives the
+    bomb a timer longer than the run (a test value), so the bomb cannot go off by its own timer.
+    (1) Select only V, hold the key, click P₁, then press the mouse button on V itself, keep the
+    button down for 2 seconds and release it, and keep holding the key for 5 seconds more.
+    Record the recorder's order log with each order's issue tick, the ticks of the button's
+    press and release on V, and the tick at which the bomb goes off. Expected: a detonate order
+    for V is logged as issued in the tick of the button's release, not of its press, and is
+    applied while the key is still held. The bomb goes off in the tick the order is applied,
+    with no route-mode message, and no marker is drawn at V's place. Falsified if no detonate
+    order is logged before the key's release, if one is logged as issued in the press's tick or
+    any tick before the button's release, if the bomb goes off in another tick than the one the
+    order is applied in, or if a marker is drawn at V's place.
+    (2) A fresh game as game B, with the same test rules file, V and the planter added, and the
+    bomb planted on V before route mode is used. Do the first part of game B's step 3 (the 128
+    infantry routed through P₁ and P₂), so that 128 infantry hold routes made by point adds.
+    Before any of them reaches P₁, select only V, which holds no route, hold the key, click V
+    itself and release the key. Expected: refused with the route-holder-limit text (128 + 1),
+    no detonate order is logged and the bomb does not go off. A detonate order logged, or the
+    bomb going off, falsifies the holder-limit test of a detonate click at its release. A run in
+    which any of the 128 has reached P₁ (and so issued P₂) before the click on V is void.
+  - *(w) Click areas and the patrol action (claim 16b):* a fresh game on open flat ground, with
+    vehicles V, W, X, Y, U, Z, T, S, E, F, G and H of the player's that have not held a route
+    point, all
+    able to fire, and cells P₁, P₂, P₃ and P₄ far from them and from each other. The scripted
+    input places the cursor at exact screen pixels, measured from the screen position of P₂'s
+    centre, which the camera position gives. Give V a plain move order to a far cell and, while
+    it moves, select V, hold the key, click P₁, P₂ and P₃ and release. In each step below, select
+    only the named vehicle without the key, then hold the key, make the press and release the
+    key. (1) W, at 7 pixels right of and 7 below P₂'s position, X, at 8 left of and 8 above it,
+    E, at 8 left of it and level with it, and F, at 8 straight above it. Expected: each joins,
+    so it goes to P₂ and then P₃. (2) Y, at 8 pixels right of P₂'s position, U, at 8
+    below it, G, at 9 left of it and level with it, and H, at 9 straight above it, all on P₂'s
+    cell. Expected: each adds a point, so it goes to P₂'s cell and stays there, never going on
+    to P₃. (3) Z, with force-move and force-fire held, at P₂'s position. Expected: a join, as in
+    (1). (4) T, with force-move and force-fire
+    held, at 20 pixels left of P₂'s position and level with it, a place on P₂'s cell
+    outside the click area and beyond (2)'s presses, then, with force-move and force-fire let go,
+    a click on P₄. Expected: T's
+    route line ends at P₄, through a point at P₂'s cell, and after
+    the release T is in *patrol* on its way to that point. (5) V's and S's types are test copies
+    whose primary weapons do positive damage (test values, S-0214's selection order, Terms). In
+    a second game, set up V's route as above, select V and then S with a toggle-select click
+    (S-0214 claim 3) without the key, hold the key, press P₁'s marker and release. Expected: the
+    loop-made text, V goes round P₁, P₂ and P₃, and S, the newer and so first, goes to P₁, P₂
+    and P₃ and comes to rest there. In a third game, select S and then V, with the same press.
+    Expected: V goes round the loop as before, and S goes to P₁ and round the same loop. (6) In
+    a fourth game, give V and W plain move orders to far cells and,
+    while they move, route V through P₁ and P₂. Select W alone, hold the key, click a corner of
+    P₁'s cell outside the click area, and release: W's route is a second point at P₁'s place.
+    With nothing selected, hold the key, press P₁'s marker, press delete and release. Expected:
+    V's route line no longer passes P₁, W's still ends at P₁'s cell. In a fifth game, make the
+    two points in the other order: W first, by the same corner click, and then V, by a click on
+    another corner of P₁'s cell outside the click area and a click on P₂. The same press and
+    delete. Expected: W's point is deleted, so W shows no route line, and V's line still runs
+    from P₁'s cell to P₂. The point made later deleted in either game falsifies the earliest-made
+    point's selection. (7) In a sixth game, give V, W and S plain move orders to far cells and,
+    while they move, route V through P₁, P₂ and P₃. Select W alone, hold the key, click a corner
+    of P₁'s cell outside the click area, then P₄ and then a far cell P₅, and release: W's route
+    starts with a second point at P₁'s place. While all three still move: (i) select W alone,
+    hold the key, press P₁'s marker and release. Expected: the invalid-point text, and no
+    loop-made text. (ii) Select V alone, hold the key, click a corner of P₁'s cell outside the
+    click area (a fourth point of V's route, at P₁'s place, whose marker is drawn last), then
+    press P₁'s marker and release. Expected: the loop-made text, and V later goes round P₁, P₂,
+    P₃ and the fourth point. A refusal falsifies, since it means the press took a later-made
+    point (W's, or V's fourth).
+    (iii) Select S alone, hold the key, press P₁'s marker and release. Expected: S later goes
+    to P₁ and then to P₂, as V's route does. S going on towards P₄ falsifies, and so does the
+    loop-made text in (i). (8) In a seventh game, give V, W and X plain move orders to far
+    cells and, while they move, route V through P₁, P₂ and P₃. While all three still move,
+    select W alone, hold the key, press P₂'s marker and release (W joins: its route is P₂ and
+    P₃), then select X alone, hold the key, press P₁'s marker and release (X joins: its route is
+    P₁, P₂ and P₃). Select V alone without the key, so that W and X stay unselected (claim 16h),
+    hold the key, press P₁'s marker and release. Expected: the loop-made text, V and X later go
+    round P₁, P₂ and P₃, and W goes to P₂ and P₃ and then round P₁, P₂ and P₃. W or X coming to
+    rest at P₃ falsifies the orders for objects that are not selected, and W coming to rest
+    after a second visit to P₃ falsifies the list's order. Falsified if any expectation fails:
+    a join at 8 right or 8 below, at 9 left or at 9 above, or a point add at 7 right and 7 below,
+    at 8 left and above, at 8 left or at 8 above, falsifies the click area.
+  - *(x) When the tests are made (claim 16d):* a fresh game, with an own building B, an own
+    aircraft A at rest on the ground, vehicles V and W and an infantry unit I of the player's
+    that have not held a route point, and a far cell P₁. Give V a plain move order to a far cell
+    and, while it moves, select V, hold the key, click P₁ and release. (1) Select B, hold the
+    key and click W, then bare ground, then drag a band box over W and I. Expected: the
+    building-in-selection text for each, B still the only selection, and no box drawn. With B
+    still selected and the key held, click the sidebar's sell button. Expected: sell mode is
+    armed, with no building-in-selection text; disarm it. (2) With
+    nothing selected, hold the key and click W. Expected: W selected, with no message and no new
+    marker. (3)
+    B's and A's types are test copies whose primary weapons do positive damage (test values,
+    S-0214's selection order, Terms). Select B and then A with a toggle-select click (S-0214
+    claim 3), hold the key and click bare ground. Expected: the aircraft-in-selection text only,
+    since A, the newer, comes first. Repeat with A selected first: the building-in-selection
+    text only. Repeat both with a second test copy of B's type that has no primary weapon:
+    the aircraft-in-selection text only, in both orders. (4) Select W, hold the key and click V
+    to select it.
+    Expected: V becomes the selection, with no incompatible-selection text and no new marker.
+    (5) Select A alone,
+    hold the key, press P₁'s marker and release. Expected: no aircraft-in-selection text. Record
+    whether A moves towards P₁ after the release. Falsified if any expectation fails. An
+    aircraft-in-selection text in (5) falsifies the press inside a click area untested for kind.
+  - *(y) Selection and tools (claim 16h):* a fresh game, with vehicles V and X of one type, W of
+    another and Z of a third, none of which has held a route point, V in control group 1 (claim 22),
+    cells P₁, P₂ and P₃ far from them, an own building that can be sold, an own damaged building, an
+    own building that uses power, a finished building ready to place and a charged superweapon of
+    the player's whose icon offers targeting. X stands in view. Give V and W plain move orders to
+    far cells, and Z one to a farther cell. While they move: select V alone, hold the key, click P₁
+    and P₂ and release. Select W alone, hold the key, press P₂'s marker and release (W joins, its
+    route is P₂). Select W alone, hold the key, click P₃ and release (W's route is P₂ and P₃).
+    Select Z alone, hold the key, press P₃'s marker and release (Z joins, its route is P₃). (1) With
+    nothing selected, hold the key and click V. Expected: V and W selected, since W holds V's last
+    point, and Z not selected, since Z holds W's last point but not V's. Z selected too falsifies
+    the single round of selection. Release, deselect, hold the key and click W. Expected: W and Z
+    selected, since Z holds P₃, and V not. Release, deselect and click V without the key: V alone
+    selected. Deselect, hold the key and drag a band box over V and X, with W and Z outside it.
+    Expected: V, X and W selected, Z not, with no incompatible-selection text, though V holds a
+    route and X does not: the box selects as outside route mode, selecting V also selects W, and the
+    box's release is not tested for route state. Release. (2) With nothing selected, hold the key
+    and press group key 1. Expected: V and W selected, Z not. Release, select X alone without the
+    key, hold the key and tap the type-select role. Expected: V, X and W selected, Z not. (3)
+    Release, deselect, hold the key, press P₃'s marker (the point-selected text), press group key 1,
+    wait 1 second, press delete and release. Expected: W's route line still ends at P₃. (4) Select
+    V, hold the key and, with it held, click the building that can be sold in sell mode, the damaged
+    building in repair mode and the power-using building in power mode, and place the finished
+    building on a free cell. Expected: each takes effect at once, before the release, and no marker
+    appears. Then arm the superweapon, which empties the selection (S-0512 claim 25), and press P₁'s
+    marker. Expected: the point-selected text and no launch. Then click a far cell: the superweapon
+    is launched at once. Release. Falsified if any expectation fails, or V's route line changed in
+    (4).
+    (5) While V and W are still on their plain moves (else repeat the set-up in a fresh game),
+    arm sell mode, then hold the key: the route markers are drawn and sell mode stays armed.
+    Right-click bare ground with scripted input, press and release at one screen position.
+    Expected: sell mode ends, no building is sold, and the markers are still drawn. Arm sell
+    mode again while the key is held: the markers are still drawn. Release the key: sell mode
+    stays armed; disarm it. With nothing selected, hold the key and press P₃'s marker (the
+    point-selected text). Right-click with press and release 4 screen pixels apart on one axis,
+    then press delete. Expected: P₃ is deleted (W's route line ends at P₂). Press P₂'s marker,
+    right-click with press and release 3 screen pixels apart on one axis, then press delete.
+    Expected: no point is deleted. Press P₂'s marker again, right-click with press and release
+    at one position, then press delete. Expected: no point is deleted. Record for each right
+    click whether the view scrolled: a run in which the 3- or 4-pixel right click scrolled the
+    view (a drag on that host, S-0214 claim 27) is void for that right click. Each marker is
+    pressed at its screen position found from the camera position (as in part h). Release.
+    Falsified if a right click ends route mode or leaves sell mode armed, if arming or ending
+    sell mode ends route mode or route mode ends sell mode, if the 4-pixel right click clears
+    the point selection, or if the 3-pixel or one-position right click leaves it.
+  - *(z) The delete key and the end of route mode (claims 16e and 16h):* a fresh game, with a
+    vehicle V of the player's that has not held a route point and far cells P₁ to P₈. Give V a
+    plain move order to a far cell and, while it moves, select V, hold the key, click P₁ to P₆
+    and release. (1) Deselect V, hold the key, press P₂'s marker, press delete, wait 1 second,
+    press delete again and release. Hold the key with nothing selected. Expected: markers at P₁,
+    P₄, P₅ and P₆ only. Release. (2) Press delete with the key released, then hold the key.
+    Expected: no further marker gone. (3) By scripted input, hold the key with nothing selected,
+    press P₄'s marker, then press delete and release the key within the same wait between two
+    ticks (Scenario O9). Wait 1 second, press delete, then hold the key. Expected: markers at P₁,
+    P₅ and P₆ only: the delete is applied in its own tick before the release is taken (claim 1),
+    and the release clears the point selection it gave. (4) Select V, hold the key, switch to
+    another window, let the key go there and return. Then click P₇. Record whether the markers
+    are still drawn and whether the click adds P₇ to V's route or gives V a move order. This
+    settles the original's open case of claim 16h, either way; our engine ends route mode at
+    the window change. (5) As (4), but open the options menu while holding the key, let the key
+    go there and close the menu, with the same records. (6) If the command
+    bar shows a route-mode button, select V, click the button, click P₈ and click the button
+    again. Expected: markers drawn from the first click on the button to the second, and P₈
+    added and committed at the second. Falsified if any of steps 1 to 3 fails, or the button
+    does not end route mode with a commit.
 
 **Scenario O9: one input event per cycle (claims 1 and 3).**
 - *Setup:* one vehicle of the player's, selected, moving towards a far cell *A*. Game speed 6
@@ -2986,7 +3614,6 @@ extension is a design rule and has no oracle measurement.
 
 ## Open questions
 
-- Route points (claim 16b): what a route-mode click that would order a detonate does.
 - Q-0391's three input-acceptance questions are answered by claim 23 and O22.
   S-0101 claims 14 and 15 already own displacement and retained scrolling.
   S-0201 claim 14 owns the initial block and claim 11 the chrono-flash block.
@@ -3036,17 +3663,23 @@ extension is a design rule and has no oracle measurement.
   message.
 - Whether leaving the map for a time ends a route by itself (claim 16f), the part of Q-1986
   question 6 left open, and whether an owner change keeps it (S-0215 claim 13, Open questions).
-- Which of two points at one place (claim 16a) a click on their markers selects, joins or
-  closes a loop at (claims 16b and 16e). The click area of a marker is Q-2138's question.
+- Whether, in the original, a release of the route-mode key made while the game window lacks
+  focus, or while the options menu is open, reaches the game, so that route mode ends then, or
+  whether route mode stays on until the key is pressed and released in the game (claim 16h,
+  O8 z). Our engine's rule (route mode ends with the commit at either event) does not depend
+  on the answer.
+- How the command bar's route-mode button behaves: whether it stays on until clicked again, and
+  how it is shown (claim 16h).
+- What an aircraft or building does with a route it got by a join, or with a point add from a
+  press inside a click area (claim 16d). Which orders an ordinary click inside a click area
+  gives an aircraft or building, and whether any of them is not a behaviour order, as the
+  detonate is for vehicles and infantry, has not been studied (claim 16b, Q-2138 question 1).
+- How a holder goes round a loop that ends before its route's last point, which a press on a
+  point can give an object that is not selected, or a selected holder that has lost the pressed
+  point (claim 16b, *Who gets a press's orders*).
 - Whether a point join raises the route-holder count: claim 16f states that it does not, at
   low confidence (O8 o).
 - Whether a point whose place is an object's moves with the object (claim 16b). It appears to.
-- Which message a route-mode click gets when two kind refusals of claim 16d apply together (an
-  aircraft and a building selected), or a kind refusal and the same-route-state refusal.
-- Whether a route-mode click on a point's marker with force-move and force-fire held is a join
-  or loop close (claim 16b) or a point add with S-0214's *patrol* action (row GC3).
-- Which message a click gets when claim 16b's point-click test and another refusal of claim 16d
-  both apply to it.
 - The look of route markers and lines (claim 16g) and the alliance direction that lets a house
   see another's routes; which sound a refused point add or a refused route-mode key command
   plays, and what an accepted point add plays when the route-point sound is absent.
@@ -3107,6 +3740,42 @@ extension is a design rule and has no oracle measurement.
   fall-back that issues a route point, also when memory survives. That sentence should read
   that the fall-back leaves the refreshed destination and target alone, and changes the slots
   only by the queue of *wait* that precedes the issue (S-0213 claim 16c).
+
+- **S-0214, claim 3.** Its route-mode sentence covers command clicks. In route mode a click that
+  selects, toggles the selection or falls back to *select* is also refused, with the
+  aircraft-in-selection, building-in-selection or other-kind-in-selection text, when a selected
+  object cannot take part in a route and the press is outside every point's click area (S-0213
+  claim 16d, medium). S-0214 may say so, pointing to that claim. The sentence's "adds route points
+  instead of creating orders" also has exceptions: a click whose ordinary action is a detonate
+  adds no route point and sends the detonate order at the button's release, when claim 16d's
+  tests pass (S-0213 claim 16b, medium), and a sell, repair, power, placement, beacon or
+  superweapon tool click on the battlefield is sent at once and adds no route point (S-0213
+  claim 16h, medium). Our engine follows S-0213 for these clicks. Its refusals also have
+  exceptions: a press that takes a point is not tested for route state or the route-holder
+  limit, and a press inside a point's click area is not tested for kind (S-0213 claims 16b and
+  16d, at their ratings there). S-0214 claim 3 should name these exceptions, pointing to those
+  claims.
+- **S-0214, claims 32 and 33, and selection by click and band box.** While the route-mode key is
+  held, selecting an object whose route holds a point also selects the other objects whose
+  routes hold that route's last point (S-0213 claim 16h, medium). S-0214 may point to it.
+- **S-0214, claim 28, and Scenario T20.** The route-editing mode that the claim lists is not route
+  mode (S-0213 claim 16): no input of the original starts route-editing (S-0213 claim 16h,
+  `unmeasured`, medium), and our engine has no such mode. The claim should drop it from the
+  modes that a right click cancels and from the modes that exclude one another, and T20 should
+  drop its route-editing case. It may add that a right click while the route-mode key is held
+  acts as the claim says and does not end route mode, that a short one also clears a selected
+  route point, and that route mode and the claim's modes do not exclude one another (S-0213
+  claim 16h, medium).
+- **S-0214, claim 27.** Route mode's short right click, which clears a selected route point, has
+  a bound of its own: its release must be less than 4 screen pixels from its press on each axis.
+  The bound is measurable on one host (S-0213 claim 16h, medium, O8 y (5)). In the original it
+  does not follow the host's drag settings (S-0213 claim 16h, `unmeasured`, medium), and our
+  engine keeps it. It is not claim 27's drag bound, and claim 27 need
+  not change: it may point to S-0213 claim 16h for that bound.
+
+- **S-0512, claim 25.** It leaves open whether arming a superweapon ends route mode. Arming it
+  leaves route mode on (S-0213 claim 16h, medium, Scenario O8 part y (4)). S-0512 may close that
+  open question, pointing to S-0213 claim 16h.
 
 ## Questions for the project lead
 
