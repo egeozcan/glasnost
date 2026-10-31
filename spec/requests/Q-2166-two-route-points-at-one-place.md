@@ -1,9 +1,9 @@
 ---
 id: Q-2166
 title: Which of two route points at one place a route-mode click selects, joins or closes a loop at
-status: open
+status: answered
 related: [S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
