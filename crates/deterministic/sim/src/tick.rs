@@ -352,6 +352,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
             // spec: S-0518 claim 6 (a recruited supporter's beam comes in its own turn)
             crate::linked::supporter_turn(w, id);
         }
+        // spec: S-0301 claim 10 (a building's refill, in its own turn after its own firing in that tick: after behaviour processing with both attempts of a paired firing, and after its animation-delayed shot)
+        crate::combat::fire::building_refill(w, id);
         // spec: S-0518 claims 12 and 13 (a building's charger list and overpowered state, in its own turn)
         crate::linked::building_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)

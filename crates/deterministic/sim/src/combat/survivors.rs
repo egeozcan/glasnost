@@ -162,37 +162,18 @@ fn survivor_type(w: &mut World, src: &Source) -> Option<u32> {
     crew_type(w, src.owner, src.armed)
 }
 
-/// Creates an infantry unit of type `ty` for `owner` (S-0202 claim 10's
-/// creation draw, whether or not it is then placed) and puts it on the
-/// first free standing position of cell `c` in the order of S-0208's table
-/// P (Q-2132), facing map north, with health R(5, `top`) and the scatter
-/// request of claim 12. `None` when no position is free: the unit never
-/// enters play and takes no health draw.
-// spec: S-0312 claims 13 and 18 (five standing positions of S-0208; cells of 256 leptons; lowest health 5)
-pub(crate) fn place_infantry(
-    w: &mut World,
-    ty: u32,
-    owner: Option<HouseId>,
-    c: CellXY,
-    top: i32,
-) -> Option<ObjectId> {
+/// Puts a created crew or survivor `id` down at `pos` in `layer` (S-0312
+/// claims 13 and 18): facing map north, health R(5, `top`) and the scatter
+/// request of claim 12.
+// spec: S-0312 claims 13 and 18 (lowest health 5)
+pub(crate) fn put_infantry(w: &mut World, id: ObjectId, pos: Pos, layer: Layer, top: i32) {
     let half = w.rules().quirks.ranged_draw_half_span;
-    let id = crate::objects::create(w, Kind::Infantry, ty, owner);
-    // spec: S-0312 claims 13 and 18 (a free standing position of the cell; which one is not given: the first free one in table P order, Q-2132)
-    let free = (0u8..5).find(|&p| {
-        // spec: S-0208 table P (five standing positions)
-        w.cells.occ(c, Layer::Ground).is_some_and(|o| !o.taken(p))
-    });
-    let Some(p) = free else {
-        // spec: S-0312 claims 13 and 18 (one that cannot be placed never enters play and takes no health draw; the creation draw is already taken)
-        w.objects.remove(&id);
-        return None;
-    };
-    let (u, v) = crate::walk::standing_point(p);
-    let z = w.surface_at(256 * c.x + u, 256 * c.y + v);
+    if let Some(o) = w.obj_mut(id) {
+        o.layer = layer;
+    }
     // spec: S-0312 claim 13 (it faces map north)
-    crate::objects::place(w, id, Pos::new(256 * c.x + u, 256 * c.y + v, z), 0);
-    // spec: S-0312 claims 13 and 18 (health a ranged draw over 5 to its top)
+    crate::objects::place(w, id, pos, 0);
+    // spec: S-0312 claims 13 and 18 (health a ranged draw over 5 to its top, only for one placed)
     let h = w.rng.ranged(5, top, half);
     if let Some(ob) = w.obj_mut(id) {
         ob.health = h;
@@ -208,6 +189,36 @@ pub(crate) fn place_infantry(
             anywhere: false,
         },
     );
+}
+
+/// A destruction survivor of type `ty` for `owner` in foundation cell `c`
+/// (S-0312 claim 18): S-0202 claim 10's creation draw whether or not it is
+/// then placed, then its standing position as for an absorbed infantry
+/// passenger (claim 24): the centre class, S-0208 claim 3's table on the
+/// ground record with its R(0, 3) unless the first row refuses the cell.
+/// The chosen position is kept: no entry test. `None` when the table gives
+/// no position: the unit never enters play and takes no health draw.
+fn place_survivor(
+    w: &mut World,
+    ty: u32,
+    owner: Option<HouseId>,
+    c: CellXY,
+    top: i32,
+) -> Option<ObjectId> {
+    let id = crate::objects::create(w, Kind::Infantry, ty, owner);
+    // spec: S-0312 claims 18 and 24 (the desired point 36 leptons from the cell centre along y: the centre class; S-0208 claim 3 on the ground record, R(0, 3) unless the first row refuses; the building-present flag plays no part)
+    let Some(k) =
+        crate::walk::choose_position(w, c, Layer::Ground, crate::cells::position::CENTRE, false)
+    else {
+        // spec: S-0312 claim 18 (no position: it never enters play and takes no health draw; the creation draw is already taken)
+        w.objects.remove(&id);
+        return None;
+    };
+    let (u, v) = crate::walk::standing_point(k);
+    let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0208 table P (a standing position within the cell)
+    let z = w.surface_at(x, y);
+    // spec: S-0312 claim 18 (the chosen position is kept: no second choice, no further draw and no entry test)
+    put_infantry(w, id, Pos::new(x, y, z), Layer::Ground, top);
     Some(id)
 }
 
@@ -247,12 +258,36 @@ fn survivor_orders(w: &mut World, id: ObjectId, src: &Source) {
 }
 
 /// Whether a foundation cell is clear for movement for claim 19 (g)'s
-/// smudge step: objects in it are ignored, its land type and walls decide
-/// (S-0211). Read as passability category *open* (S-0211 claim 11, which
-/// objects other than terrain objects do not decide; Q-2133).
+/// smudge step: three tests, none of them a passability category.
 fn clear_for_movement(w: &World, c: CellXY) -> bool {
-    // spec: S-0312 claim 19 (g) and S-0211 claim 11 (land type and walls decide, buildings, vehicles and infantry ignored; category 0 open, Q-2133)
-    crate::passability::compute_category(w, c) == crate::passability::category::OPEN
+    let Some(cell) = w.cells.cell(c) else {
+        return false;
+    };
+    let r = w.rules();
+    // spec: S-0312 claim 19 (g) and S-0211 claim 15 (a high-bridge cell reads the bridge-deck record and makes no test 3; every other cell the ground record)
+    let deck = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    let layer = if deck { Layer::Deck } else { Layer::Ground };
+    // spec: S-0312 claim 19 (g) test 1 (the object-present flag of that record fails it; infantry positions, terrain marks and the vehicle-present and building-present flags are ignored)
+    if w.cells.occ(c, layer).is_some_and(|o| o.others > 0) {
+        return false;
+    }
+    // spec: S-0312 claim 19 (g) test 2 (an overlay type with the wall flag fails it)
+    if cell.overlay != glasnost_map::NO_OVERLAY
+        && r.overlays
+            .get(usize::from(cell.overlay))
+            .is_some_and(|o| o.wall)
+    {
+        return false;
+    }
+    // spec: S-0312 claim 19 (g) test 3 (the tracked class's multiplier M(ℓ, track) of the cell's land type exactly 0 fails it, not merely below S-0211's 0.01; not made on a high-bridge cell)
+    if !deck
+        && r.multiplier(cell.land, glasnost_rules::sim::LocomotionClass::Track)
+            .to_f64()
+            .eq_num(glasnost_num::F64::ZERO)
+    {
+        return false;
+    }
+    true
 }
 
 /// One survivor round of a destroyed building (S-0312 claims 18 and 19
@@ -284,7 +319,7 @@ pub fn destruction_round(w: &mut World, src: &Source, refund: Option<i32>, skip:
             {
                 let top = w.rules().unit(Kind::Infantry, ty).map_or(0, |u| u.strength);
                 // spec: S-0312 claim 18 (the creation draw whether or not it can be placed; health R(5, S); one not placed does not count against C)
-                if let Some(id) = place_infantry(w, ty, src.owner, cell, top) {
+                if let Some(id) = place_survivor(w, ty, src.owner, cell, top) {
                     survivor_orders(w, id, src);
                     released += 1;
                 }

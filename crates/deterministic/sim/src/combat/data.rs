@@ -1453,26 +1453,28 @@ pub fn type_combat(
     }
     // spec: S-0313 claim 1a and Import mapping (revision 37: an absent non-elite muzzle position is 0, 0, 0)
     let mut flh = [[0; 3]; SLOTS];
-    if let Some(v) = &c.weapon_flh {
-        for (i, f) in v.iter().take(SLOTS).enumerate() {
-            flh[i] = *f;
+    // spec: S-0313 claim 1b (revision 42: the turret count decides which family a reading takes; above 0 the numbered fields only, the primary and secondary fields and their elite forms not read)
+    let numbered = turret_count > 0;
+    if numbered {
+        if let Some(v) = &c.weapon_flh {
+            for (i, f) in v.iter().take(SLOTS).enumerate() {
+                flh[i] = *f;
+            }
         }
-    }
-    if c.weapon_flh.is_none() {
-        // A type with numbered slots but no numbered muzzle key reads these
-        // two keys (and the elite pair below) for slots 0 and 1: interim,
-        // Q-2146.
+    } else {
+        // spec: S-0313 claim 1b (turret count 0 or less: the primary and secondary fields give slots 0 and 1; the numbered fields not read)
         flh[0] = c.primary_fire_flh.unwrap_or([0; 3]); // spec: S-0313 claim 1a (an absent primary muzzle position is 0, 0, 0; nothing from the other slot)
         flh[1] = c.secondary_fire_flh.unwrap_or([0; 3]); // spec: S-0313 claim 1a (an absent secondary muzzle position is 0, 0, 0; nothing from the other slot)
     }
-    // spec: S-0313 claim 1a and Import mapping (revision 37: the elite version of a slot with no elite muzzle position takes the same slot's non-elite one, as imported; for numbered weapons, elite weapon n takes weapon n's)
+    // spec: S-0313 claims 1a and 1b and Import mapping (the elite version of a slot with no elite muzzle position takes the same slot's non-elite one, as imported; for numbered weapons, elite weapon n takes weapon n's; the elite primary field plays no part for a turret count above 0)
     let mut elite_flh = flh;
-    if let Some(v) = &c.elite_weapon_flh {
-        for (i, f) in v.iter().take(SLOTS).enumerate() {
-            elite_flh[i] = *f;
+    if numbered {
+        if let Some(v) = &c.elite_weapon_flh {
+            for (i, f) in v.iter().take(SLOTS).enumerate() {
+                elite_flh[i] = *f;
+            }
         }
-    }
-    if c.elite_weapon_flh.is_none() {
+    } else {
         elite_flh[0] = c.elite_primary_fire_flh.unwrap_or(flh[0]);
         elite_flh[1] = c.elite_secondary_fire_flh.unwrap_or(flh[1]);
     }

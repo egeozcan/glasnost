@@ -1665,3 +1665,47 @@ fn claim_1_destruction_smoke_of_a_sold_building() {
     );
     assert_eq!(next, (false, true), "removed in its next turn: marked");
 }
+
+/// spec: S-0301 claim 5 and Terms (revision 58: a matched emitter is alive from the shot until it is let go or its system leaves play, whichever comes first; a fire-particle weapon whose firer keeps its target, stays put and lives fires at the first attempt after both its system has left play and R′ ticks after the shot) and scenario F4 particle part (the second fire firer, a system lifetime L longer than R)
+#[test]
+fn s0301_claim_5_matched_fire_emitter_ends_with_its_system() {
+    let mut r = rules();
+    // BLAZE with a positive lifetime of 45 turns, longer than FLAMER's rate 30.
+    r.sim.particle_systems.get_mut("BLAZE").unwrap().lifetime = Some(45);
+    let (mut w, a, _) = duel(&r, 4);
+    let t = w.obj(a).unwrap().target.unwrap();
+    let ask = |w: &World| check(w, a, w.obj(a).unwrap().target, 0, true);
+    assert!(fire::shot(&mut w, a, 0, t));
+    let sys = w.obj(a).unwrap().combat.fire_emitter.unwrap().system;
+    // Past R′ the system is still in play: its own kind holds the weapon back.
+    w.obj_mut(a).unwrap().combat.rearm_until = 0;
+    assert_eq!(ask(&w), Answer::Rearming, "the emitter is alive");
+    let mut turns = 0;
+    while w.gas.systems.contains_key(&sys) && turns < 2000 {
+        assert_eq!(ask(&w), Answer::Rearming, "alive at turn {turns}");
+        gas::system_turn(&mut w, sys);
+        turns += 1;
+    }
+    assert!(!w.gas.systems.contains_key(&sys), "the system leaves play");
+    assert!(turns >= 45, "not before its lifetime");
+    // The firer kept its target and stood still: the place is empty and the
+    // weapon fires again.
+    assert_eq!(w.obj(a).unwrap().combat.fire_emitter, None);
+    assert_eq!(w.obj(a).unwrap().target, Some(t));
+    assert_eq!(ask(&w), Answer::CanFire);
+    // With a lifetime of 0 or less the system never times out: the weapon
+    // waits for a let-go.
+    let (mut w, a, _) = duel(&rules(), 4);
+    let t = w.obj(a).unwrap().target.unwrap();
+    assert!(fire::shot(&mut w, a, 0, t));
+    let sys = w.obj(a).unwrap().combat.fire_emitter.unwrap().system;
+    w.obj_mut(a).unwrap().combat.rearm_until = 0;
+    for _ in 0..200 {
+        gas::system_turn(&mut w, sys);
+    }
+    assert!(w.gas.systems.contains_key(&sys));
+    assert_eq!(
+        check(&w, a, w.obj(a).unwrap().target, 0, true),
+        Answer::Rearming
+    );
+}

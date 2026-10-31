@@ -1049,7 +1049,7 @@ fn building_shots(w: &mut World, t: ObjectId, n: i32) -> Vec<i32> {
     shots
 }
 
-// spec: S-0301 claim 10 (a building with 3 rounds fires in ticks t, t + 1, t + 2, then rearming until its countdown ends, then out of ammunition)
+// spec: S-0301 claim 10 (a building with 3 rounds fires in ticks t, t + 1, t + 2, then rearming until its countdown ends; at 0 rounds the firing check answers out of ammunition. This drives the firing step alone: revision 58's refill comes in the building's own turn, which claims_s0301_r58 drives)
 #[test]
 fn claim_10_building_with_three_rounds() {
     let (mut w, t, _) = tower_duel(&tower_rules(3));
@@ -1252,7 +1252,7 @@ fn claim_11_reload_frozen_while_moving_without_mobile_fire() {
     }
 }
 
-// spec: S-0301 claim 11 (infantry and buildings never regain ammunition over time)
+// spec: S-0301 claim 11 (revision 58: infantry never regain ammunition; a building regains it only by claim 10's refill, all at once, and the reload fields have no effect on either)
 #[test]
 fn claim_11_infantry_and_buildings_never_reload() {
     let mut r = tower_rules(2);
@@ -1277,7 +1277,8 @@ fn claim_11_infantry_and_buildings_never_reload() {
     }
     testkit::run(&mut w, 60);
     assert_eq!(w.obj(inf).unwrap().combat.ammo, 0);
-    assert_eq!(w.obj(tw).unwrap().combat.ammo, 0);
+    // spec: S-0301 claim 10 (the building's refill to its maximum, not one round per reload)
+    assert_eq!(w.obj(tw).unwrap().combat.ammo, 2);
 }
 
 // ---------------------------------------------------------------------------

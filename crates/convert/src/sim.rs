@@ -654,6 +654,7 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("spyable", "Spyable", Bool),
     ("can_c4", "CanC4", Bool),
     ("repairable", "Repairable", Bool),
+    // spec: S-0301 Import mapping (Hospital and Armory: building booleans, absent no; each exempts the type from claim 10's refill)
     ("hospital", "Hospital", Bool),
     ("armory", "Armory", Bool),
     ("sam", "SAM", Bool),

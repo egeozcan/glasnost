@@ -306,7 +306,29 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
-    let claims: Vec<(CellXY, Layer)> = match w.obj(id) {
+    let claims = held_claims(w, id);
+    for (c, layer) in claims {
+        w.cells.claim_vehicle(c, layer, false);
+    }
+    if let Some(o) = w.obj_mut(id) {
+        if let Some(d) = o.drive.as_mut() {
+            d.claims.clear();
+        }
+        if let Some(h) = o.hover.as_mut() {
+            h.claims.clear();
+        }
+        if let Some(t) = o.teleport.as_mut() {
+            // The released records are no longer held.
+            t.held = None;
+            t.deck_mark = None;
+        }
+    }
+}
+
+/// The vehicle-present claims a vehicle holds, with their record layers:
+/// the ones [`release_claims`] releases.
+pub(crate) fn held_claims(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
+    match w.obj(id) {
         // spec: S-0209 claim 1 and S-0503 claim 13 (a hovering vehicle clears the flags it set)
         Some(o) if o.hover.is_some() => o
             .hover
@@ -323,23 +345,7 @@ pub fn release_claims(w: &mut World, id: ObjectId) {
             .as_ref()
             .map(|d| d.claims.iter().map(|&c| (c, o.layer)).collect())
             .unwrap_or_default(),
-        None => return,
-    };
-    for (c, layer) in claims {
-        w.cells.claim_vehicle(c, layer, false);
-    }
-    if let Some(o) = w.obj_mut(id) {
-        if let Some(d) = o.drive.as_mut() {
-            d.claims.clear();
-        }
-        if let Some(h) = o.hover.as_mut() {
-            h.claims.clear();
-        }
-        if let Some(t) = o.teleport.as_mut() {
-            // The released records are no longer held.
-            t.held = None;
-            t.deck_mark = None;
-        }
+        None => Vec::new(),
     }
 }
 

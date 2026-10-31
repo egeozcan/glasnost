@@ -2345,6 +2345,105 @@ impl Builder<'_> {
         );
     }
 
+    /// An integer triple of one reading's art section, its unread
+    /// components taking `held`'s (S-0003 claim 9, with a warning).
+    fn art_triple_at(
+        &mut self,
+        kind: Kind,
+        t: &TypeRec,
+        image: &[u8],
+        k: &str,
+        held: [i32; 3],
+    ) -> Option<[i32; 3]> {
+        let e = self.art_section(image)?.get(k.as_bytes()).cloned()?;
+        // spec: S-0003 claim 9 (unread components take the value in force's, our engine; the importer warns)
+        let (out, unread) = value::int_tuple_or::<3>(&e.value, held);
+        if unread {
+            self.art_warn(e.line, format!(
+                "{} {} art {k} {:?} has fewer than 3 readable integers; the others keep the value in force (S-0003 claim 9)",
+                kind.key(),
+                show(&t.name),
+                show(&e.value)
+            ));
+        }
+        Some(out)
+    }
+
+    /// The muzzle positions of the weapon slots and their elite versions
+    /// (S-0313 claims 1a and 1b, Import mapping), read at every type read:
+    /// the turret count after that read's rules section decides the family
+    /// the reading takes; written for the family of the last reading.
+    fn muzzle_positions(&mut self, combat: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
+        // spec: S-0313 Import mapping and claim 1a (muzzle positions: three integers of the type's image section; 0, 0, 0 from the type's creation)
+        let mut flh = [FLH_ABSENT; SLOTS];
+        let mut elite = [FLH_ABSENT; SLOTS];
+        let mut given = [false; SLOTS];
+        let mut tc = 0;
+        let images = self.images(kind, index, t);
+        for (&r, image) in t.reads.iter().zip(&images) {
+            // spec: S-0313 claim 1b (the turret count after the same type read's rules section decides the family that reading takes) and S-0308 Import mapping (engine default 0)
+            tc = int_as_of(t, "TurretCount", r, 0);
+            let keys: Vec<(usize, String, String)> = if tc > 0 {
+                // spec: S-0313 claim 1b (turret count above 0: only the numbered fields and their elite forms, up to the weapon count; a weapon count of 0 reads neither family)
+                let n = int_as_of(t, "WeaponCount", r, 0).clamp(0, SLOTS as i32) as usize;
+                (0..n)
+                    .map(|i| {
+                        (
+                            i,
+                            format!("Weapon{}FLH", i + 1),
+                            format!("EliteWeapon{}FLH", i + 1),
+                        )
+                    })
+                    .collect()
+            } else {
+                // spec: S-0313 claim 1b (turret count 0 or less: only the primary and secondary fields and their elite forms, for slots 0 and 1)
+                FLH_KEYS
+                    .iter()
+                    .take(2)
+                    .zip(FLH_KEYS.iter().skip(2))
+                    .enumerate()
+                    .map(|(i, ((_, k), (_, ek)))| (i, (*k).to_owned(), (*ek).to_owned()))
+                    .collect()
+            };
+            for (i, k, ek) in keys {
+                // spec: S-0313 claim 1b (an absent non-elite field keeps the position the slot already holds)
+                if let Some(v) = self.art_triple_at(kind, t, image, &k, flh[i]) {
+                    flh[i] = v;
+                    given[i] = true;
+                }
+                // spec: S-0313 claim 1b (an absent elite field gives the elite version the slot's non-elite position as it stands after this reading, not a value it held before)
+                match self.art_triple_at(kind, t, image, &ek, elite[i]) {
+                    Some(v) => {
+                        elite[i] = v;
+                        given[i] = true;
+                    }
+                    None => elite[i] = flh[i],
+                }
+            }
+            // spec: S-0313 claim 1b (the family that is not read leaves its slots as they are)
+        }
+        let Some(last) = given.iter().rposition(|&g| g) else {
+            return;
+        };
+        if tc > 0 {
+            // spec: S-0313 claim 1b (a turret count above 0: the numbered weapons' positions)
+            Self::put_flh_list(combat, "weapon_flh", &flh[..=last]);
+            Self::put_flh_list(combat, "elite_weapon_flh", &elite[..=last]);
+        } else {
+            // spec: S-0313 claim 1b (a turret count of 0 or less: slots 0 and 1 through the primary and secondary fields)
+            for (i, (field, _)) in FLH_KEYS.iter().take(2).enumerate() {
+                if given[i] {
+                    Self::put_tuple(combat, field, flh[i]);
+                }
+            }
+            for (i, (field, _)) in FLH_KEYS.iter().skip(2).enumerate() {
+                if given[i] {
+                    Self::put_tuple(combat, field, elite[i]);
+                }
+            }
+        }
+    }
+
     /// The combat fields every object type with weapons shares (S-0301 to
     /// S-0315), written into `combat`.
     fn shared_combat(&mut self, combat: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
@@ -2363,31 +2462,7 @@ impl Builder<'_> {
             combat.put("armor", jsonc::string(word));
         }
         self.coefficients(combat, kind, t);
-        // spec: S-0313 Import mapping (muzzle positions: three integers of the type's image section)
-        for (field, k) in FLH_KEYS {
-            if let Some(v) = self.art_tuple::<3>(kind, index, t, k) {
-                Self::put_tuple(combat, field, v);
-            }
-        }
-        // spec: S-0313 Import mapping and claim 1a (revision 37: an absent `Weapon`n`FLH` is 0, 0, 0; an absent elite form takes weapon n − 1's muzzle position as imported)
-        let numbered: Vec<Option<[i32; 3]>> = (1..=SLOTS)
-            .map(|n| self.art_tuple::<3>(kind, index, t, &format!("Weapon{n}FLH")))
-            .collect();
-        let elite: Vec<Option<[i32; 3]>> = (1..=SLOTS)
-            .map(|n| self.art_tuple::<3>(kind, index, t, &format!("EliteWeapon{n}FLH")))
-            .collect();
-        let plain: Vec<[i32; 3]> = numbered.iter().map(|f| f.unwrap_or(FLH_ABSENT)).collect();
-        if let Some(last) = numbered.iter().rposition(Option::is_some) {
-            Self::put_flh_list(combat, "weapon_flh", &plain[..=last]);
-        }
-        if let Some(last) = elite.iter().rposition(Option::is_some) {
-            let list: Vec<[i32; 3]> = elite[..=last]
-                .iter()
-                .zip(&plain)
-                .map(|(e, p)| e.unwrap_or(*p))
-                .collect();
-            Self::put_flh_list(combat, "elite_weapon_flh", &list);
-        }
+        self.muzzle_positions(combat, kind, index, t);
         // spec: S-0601 Import mapping (AlternateFLH0 to AlternateFLH4: integer triples of the type's art section; absent: the zero triple)
         let alt: Vec<Option<[i32; 3]>> = (0..ALTERNATE_FLH)
             .map(|n| self.art_tuple::<3>(kind, index, t, &format!("AlternateFLH{n}")))

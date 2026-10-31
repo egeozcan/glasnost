@@ -1150,6 +1150,43 @@ fn exploding_overlays() {
     }
 }
 
+// spec: S-0303 claim 20 and Observable order (revision 31: the rocking comes after all object hits and before the centre cell's exploding overlay, its nested detonation and the warhead's particle system)
+#[test]
+fn claim_20_rocking_before_the_exploding_overlay() {
+    let mut r = barrel_rules();
+    warhead(&mut r, "ROCKER", |h| {
+        h.rocker = Some(true);
+        h.cell_spread = Some(dec("1"));
+    });
+    // A BOX that survives the hit, so that it is rocked.
+    r.sim.vehicles.get_mut("BOX").unwrap().strength = Some(30000);
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let keg = ov(&w, "KEG");
+    set_overlay(&mut w, at(0, 0), keg, 0);
+    let v = put(&mut w, Kind::Vehicle, "BOX", BETA, 0, 0);
+    w.effects.clear();
+    boom!(
+        w,
+        centre(0, 0),
+        100,
+        Some(wh(&w, "ROCKER")),
+        None,
+        Some(HouseId(ALPHA)),
+    );
+    let rock = w
+        .effects
+        .iter()
+        .position(|e| matches!(e, Effect::Rock { pushed, .. } if pushed.iter().any(|x| x.0 == v)));
+    let barrel = w
+        .effects
+        .iter()
+        .position(|e| matches!(e, Effect::Anim { name, .. } if name == "KegBoom"));
+    let (Some(rock), Some(barrel)) = (rock, barrel) else {
+        panic!("both a rocking and the barrel explosion: {rock:?} {barrel:?}");
+    };
+    assert!(rock < barrel, "the rocking first: {rock} {barrel}");
+}
+
 // spec: S-0303 claim 19 (revision 25, scenario A13 variant d: a chosen barrel debris piece takes its creation draws, S-0317 claim 3, right after the percent draw rᵢ* that chose its entry and before the particle system's percent draw r) and S-0317 claim 3
 #[test]
 fn a13_d_piece_draws_come_before_the_particle_draw() {

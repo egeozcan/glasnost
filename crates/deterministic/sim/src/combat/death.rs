@@ -12,7 +12,7 @@ use crate::combat::effects::{self, Effect};
 use crate::combat::veterancy::{self, Rank, type_combat};
 use crate::infantry::Seq;
 use crate::rules::Kind;
-use crate::world::{ObjectId, Pos, Target, World};
+use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// The nearby point N(Q, r, b) of S-0312 F2, `snap` giving the centre of
 /// its cell.
@@ -671,16 +671,18 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(crew_type) = crate::combat::survivors::crew_type(w, o.owner, armed) else {
         return;
     };
-    // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed; health R(5, trunc(S / 2)))
     let s = rules
         .unit(Kind::Infantry, crew_type)
         .map_or(0, |u| u.strength);
     let top = s / 2; // spec: S-0312 claim 13 (crew health R(5, trunc(S / 2)))
-    let Some(cid) =
-        crate::combat::survivors::place_infantry(w, crew_type, o.owner, o.pos.cell(), top)
-    else {
+    // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed)
+    let cid = crate::objects::create(w, Kind::Infantry, crew_type, o.owner);
+    let Some((pos, layer)) = crew_position(w, id, cid) else {
+        // spec: S-0312 claim 13 (a crew that gets no position, or whose placement is refused, never enters play and takes no health draw)
+        w.objects.remove(&cid);
         return;
     };
+    crate::combat::survivors::put_infantry(w, cid, pos, layer, top);
     let stale = rules.quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let tick = w.tick;
     let human = o
@@ -695,6 +697,61 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
         };
         ob.beh.force(b, tick, stale);
     }
+}
+
+/// Where the crew `cid` of dying vehicle `id` is put down (S-0312 claim
+/// 13), with its cell layer, or `None` when it gets no position or its
+/// entry test does not give *clear*. The vehicle's own place in its cell's
+/// occupancy (its vehicle-present claims and its listing) is set aside for
+/// the choice and the test, so it never refuses its own crew; it is given
+/// back afterwards and released when the vehicle leaves play.
+fn crew_position(w: &mut World, id: ObjectId, cid: ObjectId) -> Option<(Pos, Layer)> {
+    let o = w.obj(id)?.clone();
+    let p = o.pos;
+    let c = p.cell();
+    let surface = w.surface_at(p.x, p.y);
+    let ground_level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    // spec: S-0312 claim 13 (after the dying vehicle has given up its place in the cell's occupancy record)
+    let claims = crate::drive::held_claims(w, id);
+    for &(cc, l) in &claims {
+        w.cells.claim_vehicle(cc, l, false);
+    }
+    let listed = w.cells.list(c, o.layer).iter().position(|&x| x == id);
+    w.cells.leave(c, o.layer, id);
+    let chosen = if p.z == surface {
+        let top = w.rules().quirks.top_position_counts_as_centre;
+        // spec: S-0312 claim 13 and S-0208 claim 2 (the vehicle's exact position is the desired point; its class is S-0208 claim 2's)
+        let class = crate::walk::position_class(p.x.rem_euclid(256), p.y.rem_euclid(256), top);
+        // spec: S-0312 claim 13 (outside the usable area the choice ignores the cell's occupants and takes no draw: the class's own position)
+        let ignore = !w.cells.usable(c);
+        // spec: S-0312 claim 13 (at the surface height: S-0208 claim 3's occupant-aware table on the ground record; only a centre class not refused by the first row takes R(0, 3))
+        crate::walk::choose_position(w, c, Layer::Ground, class, ignore).map(|k| {
+            let (u, v) = crate::walk::standing_point(k);
+            let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0208 table P (a standing position within the cell)
+            (Pos::new(x, y, w.surface_at(x, y)), Layer::Ground)
+        })
+    } else {
+        // spec: S-0312 claim 13 (another height, a bridge deck for example: no choice and no draw, the vehicle's exact position)
+        let layer = if w.high_bridge(c) && p.z > surface {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        };
+        Some((p, layer))
+    };
+    // spec: S-0312 claim 13 and S-0209 Terms (one entry test, an ordinary return placement: S-0209 claim 4's infantry table, no approach direction and no source elevation; only clear accepts the crew, moving blocker included in the refusals)
+    let chosen = chosen.filter(|_| {
+        crate::occupancy::infantry_outcome(w, cid, c, ground_level)
+            == crate::occupancy::Outcome::Clear
+    });
+    if let Some(i) = listed {
+        w.cells.restore(c, o.layer, id, i);
+    }
+    // design: S-0312 claim 13 (the vehicle gives its claims back after its crew's placement, so a vehicle that stays in play keeps them and one that leaves play releases them there; the spec states only the crew's side)
+    for &(cc, l) in &claims {
+        w.cells.claim_vehicle(cc, l, true);
+    }
+    chosen
 }
 
 /// A destroyed building (S-0312 claims 17 to 21).

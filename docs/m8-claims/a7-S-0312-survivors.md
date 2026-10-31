@@ -35,10 +35,10 @@ the survivor divisors were already imported (S-0412); this step reads them.
 
 | question | our choice |
 |---|---|
-| Which free standing position a survivor or crew takes (claims 13 and 18 give none, and no draw) | The first free one in S-0208 table P order, reading the cell's infantry positions only; no draw (Q-2132). The same as the crew used before |
-| What is clear for movement in claim 19 (g)'s smudge step | S-0211 category *open*, from the land type and overlay without the cell's objects (Q-2133) |
-| `Crewed` absent on a building type | No crew (Q-2135) |
-| The map's no-crew flag (F5) | Not read: S-0009 gives no such field (Q-2131). The mark exists and killing damage that ignores defences sets it |
+| Which free standing position a survivor or crew takes (claims 13 and 18 give none, and no draw) | The first free one in S-0208 table P order, reading the cell's infantry positions only; no draw (Q-2132). The same as the crew used before. **Q-2132 answered by S-0312 r51** (claims 13 and 18: S-0208 claim 3's table on the cell's ground record, a centre-class choice that the first row does not refuse taking one R(0, 3) draw), built in [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md) |
+| What is clear for movement in claim 19 (g)'s smudge step | S-0211 category *open*, from the land type and overlay without the cell's objects (Q-2133). **Q-2133 answered by S-0312 r51** (claim 19 (g)'s three tests: the record's object-present flag, a wall overlay, a tracked multiplier of exactly 0), built in [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md) |
+| `Crewed` absent on a building type | No crew (Q-2135). **Q-2135 answered by S-0312 r51**: absent is no for every kind of type, as built |
+| The map's no-crew flag (F5) | Not read: S-0009 gives no such field (Q-2131). The mark exists and killing damage that ignores defences sets it. **Q-2131 answered by S-0312 r51** (claim 18, *No crew*): no field of a map's building entry sets the state, only that killing damage does, as built |
 | What *g*'s charge planter term reads | The building's planter record (claim 18 *Chance*), whether or not the planter is still in the game; the attack order needs the planter in the game and not allied with the owner |
 | Claim 21's second round | Starts at the first foundation cell (no absorbed passenger comes out then); *C* afresh from F5 with the refund as it stands before the building leaves play, so a hit that ignored defences gives *C* = 0 through the no-crew mark |
 | A sale attempt whose type choice gives no type (a missing crew or technician) | The attempt ends with no creation draw, as S-0312's Edge cases give for a destruction |
@@ -58,15 +58,15 @@ step; draws are checked against a replay of the specs' draw lists on a copy of t
 | F5, the side's divisor, the doubled divisor of a building that changed owner, side 2 | tested | `f5_side_divisor_and_changed_owner` |
 | F5, *C* = 0: type without the crewed flag, side outside 0 to 2, country without a side, *q* = 0 | tested | `f5_zero_cases`; through the kill, no survivor and only claim 19 (a)'s draws: `claim_18_no_round_when_c_is_zero` |
 | F5, no crew: killing damage that ignores defences | tested | `claim_18_ignoring_defences_no_crew` |
-| F5, no crew: the map's no-crew flag | seam | the mark is tested (`f5_no_crew_mark`, destruction and sale); no map sets it (Q-2131) |
+| F5, no crew: the map's no-crew flag | tested | the mark is tested (`f5_no_crew_mark`, destruction and sale); no map sets it (Q-2131, answered by S-0312 r51: no map field exists, [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md)) |
 | claim 18, the chance R(0, *g*) per cell while fewer than *C* are out, the type draws, the creation draw, health R(5, S), the scatter request; claim 19 (g)'s smudge step in every cell, also after *C* are out | tested | `claim_18_round_draws_and_cell_order` (*C* = 1, 2, 5; 12 seeds each) |
 | claim 18, *g* with a charge planter and with a changed owner (no percent draw *p* then) | tested | `claim_18_chance_bound` |
 | claim 18, table *Type*: the engineer row (*p* < 25, a building factory that never changed owner) and F4's draw after it for an armed building | tested | `claim_18_engineer_row` (engineer, technician and side crew all seen) |
 | claim 18, a changed owner: F4's draw only; armed by the occupants' fire | tested | `claim_18_changed_owner_and_garrison_armed` |
 | claim 18, no chance once the owner's game is over; the smudge steps go on | tested | `claim_18_owner_defeated` |
 | claim 18, a cell with no free position: the creation draw, no health draw, not counted against *C* | tested | `claim_18_full_cell_and_unclear_cell` |
-| claim 18, which free position | partly | first free in table P order (Q-2132) |
-| claim 19 (g), a cell not clear for movement takes no smudge step | partly | water tested in `claim_18_full_cell_and_unclear_cell`; the other categories follow Q-2133's interim |
+| claim 18, which free position | tested | S-0312 r51 (Q-2132 answered): S-0208 claim 3's table, centre class, one R(0, 3) unless the first row refuses; no entry test. The survivor tests replay the position draw (`replay_round`); [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md) |
+| claim 19 (g), a cell not clear for movement takes no smudge step | tested | S-0312 r51 (Q-2133 answered): `claim_19g_clear_for_movement` (the object-present flag, a wall overlay, a zero and a below-threshold tracked multiplier, the cell's own objects ignored); the high-bridge case is partly, [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md) |
 | claim 19 (g) and claim 26, the smudge itself | seam | smudge types are not modelled: no type fits, no draw (as before) |
 | claim 18, the attack order against an unallied planter; an allied planter gives the ordinary order | tested | `claim_18_attack_order_against_the_planter` |
 | claim 25, survivor orders by owner (*move* for a player house; *hunt* for the neutral and special houses) | tested | `claim_25_survivor_orders_by_owner` |
@@ -74,7 +74,7 @@ step; draws are checked against a replay of the specs' draw lists on a copy of t
 | claim 21, the second round from the first cell with *C* afresh; *C* = 0 after a hit that ignored defences | tested | `claim_21_second_round` |
 | Edge cases, a missing survivor type | tested | `departure_missing_survivor_type` |
 | claim 13 and F4, the crew type for no side, sides 0 to 2 unarmed and armed, a side past 2 unarmed and armed (a discarded draw) | tested | `claim_13_f4_crew_types` |
-| Import mapping, `Crewed` on building types | tested | `crewed_absent_on_a_building_is_no`; default absent = no (Q-2135) |
+| Import mapping, `Crewed` on building types | tested | `crewed_absent_on_a_building_is_no`; default absent = no (Q-2135, answered by S-0312 r51 for every kind of type; the vehicle case: `claim_13_crewed_absent_on_a_vehicle_is_no`, [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md)) |
 | S-0408 claim 7, exactly *C* attempts, the draw order, full strength, facing 0, *move* for any owner | tested | `s0408_claim_7_sale_survivors` (*C* = 1, 2, 5; a player and the neutral house) |
 | S-0408 claim 7, at most one engineer: a second engineer repeats the whole choice | tested | `s0408_claim_7_one_engineer` |
 | S-0408 Edge cases, at most 100 type choices | tested | `s0408_engineer_choice_limit` |
@@ -84,10 +84,12 @@ step; draws are checked against a replay of the specs' draw lists on a copy of t
 
 ## Requests
 
-- **Q-2131**: the map field that leaves a building without crew.
-- **Q-2132**: which free standing position a crew or destruction survivor takes.
-- **Q-2133**: which cells are clear for movement in the smudge step.
-- **Q-2135**: the default of `Crewed` for building types.
+- **Q-2131**: the map field that leaves a building without crew. Answered by S-0312 r51.
+- **Q-2132**: which free standing position a crew or destruction survivor takes. Answered by S-0312 r51.
+- **Q-2133**: which cells are clear for movement in the smudge step. Answered by S-0312 r51.
+- **Q-2135**: the default of `Crewed` for building types. Answered by S-0312 r51.
+
+All four are built in [intake 55a](intake55a-S-0301-S-0312-S-0313-S-0303-S-0318-M-0004.md); their files are the lead's to close.
 
 Q-2134 is unused.
 

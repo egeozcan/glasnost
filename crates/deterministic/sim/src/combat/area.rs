@@ -547,6 +547,10 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         // spec: S-0303 claim 15 (a nullified detonation skips claims 18 to 20)
         return DetonationResult::Nullified;
     }
+    if h.rocker {
+        // spec: S-0303 claim 20 and Observable order (the warhead's rocking takes no draw and is reported to the drawing; it comes after all object hits with their nested detonations, and before the bridge-test draws, the centre-cell exploding overlay and the particle system)
+        rock(w, &det, &h, layer);
+    }
     // spec: S-0303 claim 18 and S-0511 claim 1 (with the game's bridge-destruction setting on, a warhead that damages walls makes destroy attempts on the bridge in the centre cell)
     if crate::econ::setup::bridge_destruction(w) && h.wall {
         crate::bridges::area_attempts(w, centre, p.z, det.damage, warhead);
@@ -556,10 +560,6 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
     if let Some(name) = h.particle.clone() {
         // spec: S-0303 claim 20 and S-0613 claim 4 (a warhead that names a particle system creates it at P at the end of the detonation, owned by the source house, with its first particle)
         crate::gas::warhead_system(w, &name, p, det.house);
-    }
-    if h.rocker {
-        // spec: S-0303 claim 20 (the warhead's rocking is presentation, takes no draw and is reported to the drawing)
-        rock(w, &det, &h, layer);
     }
     if any {
         DetonationResult::Hit
@@ -579,8 +579,9 @@ const ROCKING_REACH: i32 = 3;
 /// The rocking of a warhead with the rocking flag (S-0303 claim 20), as a
 /// presentation event: the objects of `layer` in the 7 × 7 cells around
 /// the centre cell, those of the centre cell pushed away from the source
-/// object when there is one, the others away from *P* and only when the
-/// spread is above 0. Reads only; takes no draw.
+/// object when there is one; the others, and the centre cell's objects
+/// when there is no source object, away from *P* and only when the spread
+/// is above 0. Reads only; takes no draw.
 fn rock(w: &mut World, det: &Detonation, h: &WarheadRules, layer: Layer) {
     // spec: S-0303 claim 20 (only when the rocking strength exceeds 0.3)
     if det.damage < ROCKING_LEAST_DAMAGE {
@@ -595,7 +596,10 @@ fn rock(w: &mut World, det: &Detonation, h: &WarheadRules, layer: Layer) {
     for dy in -ROCKING_REACH..=ROCKING_REACH {
         for dx in -ROCKING_REACH..=ROCKING_REACH {
             let in_centre = dx == 0 && dy == 0;
-            if !in_centre && !spread {
+            // spec: S-0303 claim 20 (pushed from the source object: the centre cell's objects when there is one, whatever S)
+            let from_object = in_centre && from_source.is_some();
+            // spec: S-0303 claim 20 (every other object, the centre cell's included when there is no source object, only when S > 0)
+            if !from_object && !spread {
                 continue;
             }
             let c = CellXY::new(centre.x + dx, centre.y + dy);
@@ -608,11 +612,10 @@ fn rock(w: &mut World, det: &Detonation, h: &WarheadRules, layer: Layer) {
                     continue;
                 }
                 // spec: S-0303 claim 20 (the centre cell's objects away from the source object when there is one, the others away from P)
-                // design: Q-2081 question 5 (interim: a centre-cell object with no source object, or whose source has left play, is pushed away from P)
-                let from = if in_centre {
-                    from_source.unwrap_or(det.point)
-                } else {
-                    det.point
+                // design: Q-2081 question 5 (a source that has left play by the time of the rocking counts as no source object; S-0303 r31 does not separate the two)
+                let from = match from_source {
+                    Some(q) if in_centre => q,
+                    _ => det.point,
                 };
                 pushed.push((id, from));
             }

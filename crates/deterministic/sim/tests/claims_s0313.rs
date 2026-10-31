@@ -802,3 +802,49 @@ fn claim_1a_absent_numbered_muzzle_is_the_zero_triple() {
         assert_eq!(pr.fire_point, p);
     }
 }
+
+// spec: S-0313 claim 1b (revision 42, Q-2146: a turret count above 0 reads no primary or secondary muzzle field and no elite form of them, so with no numbered field numbered weapons 0 and 1 and their elite versions fire from 0, 0, 0)
+#[test]
+fn claim_1b_numbered_type_ignores_the_primary_fields() {
+    let mut r = elite_rules();
+    {
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.turret_count = Some(2);
+        cart.weapon_count = Some(2);
+        cart.combat.weapon_slots = Some(vec!["ZAP".into(), "ZAP2".into()]);
+        cart.combat.elite_weapon_slots = Some(vec!["ZAP3".into(), "ZAP4".into()]);
+        cart.combat.weapon_flh = None;
+        cart.combat.primary_fire_flh = Some([100, 40, 50]);
+        cart.combat.secondary_fire_flh = Some([60, -30, 45]);
+        cart.combat.elite_primary_fire_flh = Some([20, 10, 90]);
+    }
+    for elite in [false, true] {
+        let (mut w, a, _) = scene(&r, Kind::Vehicle, "CART", true);
+        if elite {
+            make_elite(&mut w, a);
+        }
+        pose(&mut w, a, 16384, 16384);
+        let p = w.obj(a).unwrap().pos;
+        for slot in [0, 1] {
+            assert_eq!(
+                shot_from(&mut w, a, slot).0,
+                p,
+                "slot {slot}, elite {elite}"
+            );
+        }
+    }
+    // With a turret count of 0 the same fields are read.
+    {
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.turret_count = Some(0);
+        cart.combat.weapon_slots = None;
+        cart.combat.elite_weapon_slots = None;
+    }
+    let (mut w, a, _) = scene(&r, Kind::Vehicle, "CART", true);
+    pose(&mut w, a, 16384, 16384);
+    let p = w.obj(a).unwrap().pos;
+    assert_eq!(
+        shot_from(&mut w, a, 0).0,
+        Pos::new(p.x + 100, p.y - 40, p.z + 50)
+    );
+}

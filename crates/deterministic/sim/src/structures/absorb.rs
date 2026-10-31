@@ -885,7 +885,7 @@ pub fn destroyed(w: &mut World, b: ObjectId, hit: &Hit) -> usize {
         ignore_defences: false,
         no_escape: false,
     };
-    // spec: S-0312 claim 24 and F5 (no crew: killing damage that ignores defences, or the building's no-crew mark; no map sets it, Q-2131)
+    // spec: S-0312 claims 18 and 24 and F5 (revision 51: the passengers' release tests only the no-crew state, not the crewed flag; that state arises only from killing damage that ignores defences, no map field sets it)
     let no_crew = hit.ignore_defences || bo.combat.no_crew;
     for (i, &p) in list.iter().enumerate() {
         let placed = !no_crew

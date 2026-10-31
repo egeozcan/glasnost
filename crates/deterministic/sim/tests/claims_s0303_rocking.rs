@@ -146,7 +146,7 @@ fn claim_20_rocks_the_detonations_cell_layer() {
     assert_eq!(pushed, [below], "the ground's object only");
 }
 
-// spec: S-0303 claim 20 (the centre cell's objects away from the source object when there is one, the others away from P); design: Q-2081 question 5 (without a source, away from P)
+// spec: S-0303 claim 20 (revision 31: the centre cell's objects away from the source object when there is one; the others, and the centre cell's objects when there is no source object, away from P, when S > 0)
 #[test]
 fn claim_20_pushes_the_centre_from_the_source_and_the_rest_from_p() {
     let mut w = world("1");
@@ -170,15 +170,22 @@ fn claim_20_pushes_the_centre_from_the_source_and_the_rest_from_p() {
     );
 }
 
-// spec: S-0303 claim 20 (the other cells only when S > 0)
+// spec: S-0303 claim 20 (revision 31: with S = 0 only the centre cell's objects are pushed, and only from a source object; with no source object nothing is pushed)
 #[test]
 fn claim_20_without_spread_rocks_only_the_centre_cell() {
     let mut w = world("0");
+    let source = put(&mut w, -2, 0);
     let middle = put(&mut w, 0, 0);
     let _side = put(&mut w, 1, 0);
+    let from = w.obj(source).unwrap().pos;
+    boom(&mut w, 100, Some(source), "ROCK");
+    assert_eq!(
+        rocks(&w)[0].1,
+        [(middle, from)],
+        "the centre cell, from the source"
+    );
     boom(&mut w, 100, None, "ROCK");
-    let pushed: Vec<ObjectId> = rocks(&w)[0].1.iter().map(|p| p.0).collect();
-    assert_eq!(pushed, [middle]);
+    assert!(rocks(&w).is_empty(), "no source and S = 0: nothing rocks");
 }
 
 // spec: S-0303 claim 15 and State and ordering (a nullified detonation has no rocking)
