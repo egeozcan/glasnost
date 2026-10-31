@@ -451,8 +451,9 @@ pub struct Live {
     /// tick reported (S-0108 claim 20): building, active-1 (else idle),
     /// start, damaged variant.
     depot_events: Vec<(ObjectId, bool, bool, bool)>,
-    /// The bodies that rock (S-0303 claim 20, S-0614 claims 9 and 10):
-    /// presentation state, moved once per game tick.
+    /// The bodies that rock (S-0113): the view's copy, moved once per game
+    /// tick, until the angles and rates move into the game state (claim 19,
+    /// a seam, docs/m8-claims/intake53-S-0107-S-0108-S-0113.md).
     rocking: super::rocking::Rocking,
 }
 
@@ -627,7 +628,7 @@ pub fn attitude(w: &World, o: &Object) -> Attitude {
         return Attitude::Sinking {
             // spec: S-0504 claim 15 and F4 (the pitch the simulation steps at each descent)
             pitch: glasnost_sim::naval::pitch(w, o.id).0,
-            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0303 claim 20, is the view's own state, which attitude_with adds; the game state alone gives a level roll)
+            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0113, is the view's copy until claim 19 is built, which attitude_with adds; the game state alone gives a level roll)
             roll: 0,
             drawn,
         };
@@ -1302,7 +1303,7 @@ impl Live {
         self.painter.canvas()
     }
 
-    /// The bodies that rock (presentation state, S-0303 claim 20).
+    /// The bodies that rock (S-0113; the view's copy until claim 19 is built).
     pub fn rocking(&self) -> &super::rocking::Rocking {
         &self.rocking
     }
