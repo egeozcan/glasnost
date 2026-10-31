@@ -2,7 +2,7 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 33
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -10,7 +10,7 @@ approved-on: 2026-10-31
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
 Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
-Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151]
+Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151, Q-2160]
 supersedes: []
 ---
 
@@ -54,7 +54,7 @@ Rules owned elsewhere and not restated here:
   - the approach step: S-0215 claim 37 c and d (claim 11 here for the gripped unit),
   - deployed vehicles: S-0517 claims 9 and 11,
   - cloaking: S-0516 claim 4,
-  - spawners: S-0506 claims 6 and 13,
+  - spawners: S-0506 claims 6 and 13 (claim 20 here gives what follows for a seized spawner),
   - parasites: S-0614 claim 12,
   - crash start of a released slot aircraft: S-0501 claim 36,
   - turning: S-0206 claim 14,
@@ -152,6 +152,37 @@ New terms:
    - Backing: `measurable` (scenario L1)
    - Confidence: high (each condition); medium (the factory-contact condition, whose window is
      short in play)
+   - **A hold starts only with a shot.** The conditions above, and claim 2's, are tested when
+     the lifter's seizing projectile detonates, against that projectile's target. No range test
+     is made then: neither the weapon's range nor its minimum range is tested at the detonation.
+     So a unit that is outside the minimum range when the shot is fired and comes inside it
+     before the projectile detonates, or that is within the weapon's range at the shot and goes
+     beyond it before the detonation, is seized at the detonation when the conditions above hold
+     then. The shot itself needs the firing check, whose range test includes the weapon's
+     minimum range (S-0307 claim 9). So a mobile lifter whose weapon has a minimum range and is
+     not of unlimited range (S-0307 claim 2) does not fire at a unit inside it, and starts no
+     grip on it from there. Before the lifter grips the unit, its approach step against such a
+     target is the ordinary one (S-0215 claim 37 parts d and f): claim 11's exception covers
+     only a gripped unit that is the lifter's target. A unit that arrives at its lifter (claim
+     8) is no longer the lifter's target (claim 12, first row). Once it is restored (claim 20),
+     the lifter can take it as target again, by an order or by a search, and it is then an
+     ordinary target: a later shot can seize it again under this claim.
+     - Backing: `measurable` (scenario L19 part a for the refusal inside the minimum range, the
+       approach step, the cleared target after an arrival and a second seize after an order
+       given once the unit is restored; scenario L19 part e for the seize of a unit that came
+       inside the minimum range during the projectile's flight; scenario L19 part f for the seize
+       of a unit that went beyond the weapon's range during the projectile's flight; scenario L2
+       for the arrival row of claim 12). No range test at the detonation against a landed
+       aircraft target is `unmeasured`: no part of L19 fires at a landed aircraft. A target that
+       the lifter takes again by a search is `unmeasured`: no scenario here gives the lifter a
+       search after an arrival, and the shot that follows meets the same rules as after an
+       order.
+     - Confidence: high for the refusal inside the minimum range, for the cleared target after
+       an arrival, for the second seize after an order, for no minimum-range test at the
+       detonation against a vehicle target (L19 part e) and for no test of the weapon's range at
+       the detonation against a vehicle target (L19 part f); medium for no range test at the
+       detonation against a landed aircraft, for the ordinary approach step before a grip and
+       for a target that the lifter takes again by a search
 
 4. **Resource gatherers already on a temporary locomotor.** A target that is a resource-gathering
    vehicle has a special case when its own locomotor is already temporarily replaced and it is not
@@ -934,6 +965,48 @@ New terms:
       not itself remove an attack-move memory: a memory the seize kept (claim 9) and that no
       fall-back in the grip removed (S-0309 claim 23 part b) is still held, and acts as S-0309
       claim 23 gives for any object.
+    - **A spawner while seized and after restoration (Q-2160).** A seized spawner neither fires
+      (claim 10) nor launches (S-0506 claim 6) from the seize until restoration: in the grip, in the
+      fall and while set down. The seize clears its slots (claim 5), with S-0506 claim 13's
+      effects per slot state: a docked or reloading rocket is removed, a preparing rocket is
+      released and flies on to its aim point, and a rocket that has already left its slot is not
+      affected. A rocket still on the rail vanishes with no detonation while
+      `quirks.rail_missile_vanishes_with_spawner` is on (the default). With it off, it is released
+      as a preparing rocket is (S-0506 claim 13). The spawner is healthy and in play, so each
+      slot the seize empties gets a regeneration countdown of 0 and is refilled at its next pass
+      (S-0506 claim 9), seized or not. A slot that was already empty at the seize keeps its own
+      countdown. Clearing the slots does not change
+      the controller target, and the controller's passes go on while the spawner is seized. With
+      `quirks.spawner_pending_target_survives_idle_clear` on, the seize's own-target clear empties
+      the pending target only when the spawner's own target was not empty and the controller
+      target is not empty (S-0506 claim 25). So, with
+      that switch on, a spawner seized after a shot and before the release of the salvo that shot
+      asked for keeps a target for its controller: its controller target, or a pending target that
+      the controller adopts at a later pass while the spawner is seized (S-0506 claim 5, with the
+      range test made from where the spawner then is). While the controller is idle, each of its
+      passes repeats that range test from where the spawner then is (S-0506 claim 5), so a reset
+      of S-0506 claim 11 can come while the spawner is lifted away. Unless such a reset clears
+      that target, the spawner launches at it once it is restored and not moving, with no new
+      shot.
+      A kept target that leaves play while the spawner is seized is lost as S-0506 claim 25
+      gives for any spawner: a lost pending target is cleared at once, and a lost controller
+      target is cleared, with a reset when no pending target waits (S-0506 claim 11). No launch
+      at a lost target follows restoration.
+      - Backing: `measurable` (scenario L19: part b for the kept controller target and the
+        launch after restoration, and for a kept target that leaves play while the spawner is
+        seized, part d for the kept pending target and an adoption while
+        seized, part c for the on-rail and left-slot rocket outcomes and the refill, part g for
+        the preparing and docked rocket outcomes). No committed S-0506 claim states
+        that the slot clearing keeps the controller target or that the controller's passes go on
+        while the spawner is seized: the kept controller target rests on L19 parts b and d only,
+        and the passes while seized on L19 parts c, d and g only. The rail outcome with
+        `quirks.rail_missile_vanishes_with_spawner` off is `unmeasured` here: the stock game runs
+        only the on side. It is S-0506 claim 13's.
+      - Confidence: high for no fire and no launch while seized, and medium for the rocket
+        outcomes with either switch setting (S-0506 claim 13 rates its list of events medium),
+        the regeneration countdown of a slot already empty at the seize, the refill while seized,
+        the controller's passes while seized, the kept controller or pending target, the
+        launch after restoration with no new shot and the loss of a kept target while seized
     - **The first order after touchdown.** A move order given in any tick after a clear-cell
       touchdown meets a restored unit, so it moves the unit with its own locomotor.
     - **Readiness while seized.** Wherever S-0215 claim 11 asks whether a vehicle is moving on
@@ -2161,6 +2234,87 @@ establish a qualifying condition; a run lacking the required observations is inc
       When *guard* has the no-threat property but not the zombie property, a run in which the
       victim survives damage from a known attacker while gripped is void for this part (claim
       9's fall-back in the grip).
+- **L19 Minimum range and spawners (claims 3 and 20; Q-2160).** A named test rules file gives a
+  test copy of the lifter type a seizing weapon with a non-zero minimum range and none of S-0215
+  claim 37 part h's approaches. It gives a test missile-launcher vehicle one rocket slot, long
+  pause and tilt durations and a size the seize accepts. All of these are test values. Both
+  belong to the human house. Record on every tick, for both: position, the spatial distance from
+  the lifter's range-test source point to the launcher, target, destination, fire events, the
+  seized state and the grip. For the lifter record also each detonation of its seizing projectile
+  with its tick. For the launcher record also its controller target, its pending target, its slot
+  states, each launch and each rocket's position.
+  - (a) The launcher stands inside the minimum range of the lifter, which is ordered to fire at
+    it (force-fire). Expected: no fire event while the distance is below the minimum range, an
+    approach destination for the lifter, and a first shot and a seize once the distance has
+    reached the minimum range. Let the run go on until the grip ends by arrival (claim 8) and
+    the launcher is restored (claim 20), then order the lifter to fire at the launcher again.
+    Expected: the lifter's target is empty after the arrival, and the new order gives a shot,
+    once the distance is at least the minimum range, and a second seize. Falsified by a fire
+    event at a distance below the minimum range at the tick of that fire event, by a seize whose
+    shot was fired at such a distance, by a lifter target kept after the arrival, or by no second
+    seize after a shot at a restored launcher that meets claim 3's conditions.
+  - (b) The launcher force-fires at a named high-health test structure of the human house in
+    range. The lifter's force-fire is timed, varied across runs, so that the seize falls after the
+    controller's adopting pass and before the salvo's release. Count only such runs. Expected in a
+    counted run: no fire event and no launch until restoration; the controller target stays the
+    test structure through the seize unless a reset of S-0506 claim 11 is recorded; after
+    restoration, with no order given, the launcher launches at the test structure once it is not
+    moving. A run in which the launcher fires before its first launch after restoration is
+    inconclusive for this part. Falsified by a launch while seized, by an empty controller target
+    after the seize with no reset recorded, or by no launch after restoration while the kept
+    target is in range. In other counted runs, the human house sells the test structure while
+    the launcher is seized. Expected then: the controller target is empty from the tick the
+    structure leaves play, with a reset recorded, and no launch follows restoration. Falsified
+    by a controller target kept after the structure has left play, or by any launch after
+    restoration with no new fire event.
+  - (c) Time the seize while a rocket is on the rail and, in other runs, after it has left its
+    slot. Expected in a run with the rocket on the rail: the rocket vanishes with no detonation,
+    and its slot, emptied by the seize, is refilled at the controller's next pass, even when the
+    launcher is still seized then. Falsified by any other outcome for that rocket, or by a refill
+    of that slot that waits for restoration or comes later than that pass. Expected in a run
+    after the rocket has left its slot: the rocket flies on and detonates at its aim point, and
+    the seize does not change when the slot, already empty, is refilled: the slot is refilled at
+    the same pass as in a run with no seize. Falsified by a rocket outcome other than that, or by
+    a refill of that slot at a different pass from the no-seize run.
+  - (d) As part b, but with the seize timed after the launcher's fire event and before the
+    controller's adopting pass. Count only such runs. Expected in a counted run: the pending
+    target survives the seize, the controller adopts it at a pass while the launcher is seized
+    (or resets if the test structure is out of range from where the launcher then is, with a
+    reset recorded), and with no reset the launcher launches at the test structure once restored
+    and not moving, with no new fire event. A run in which the launcher fires before that launch
+    is inconclusive for this part. Falsified by an empty pending target after the seize and
+    before the controller's next pass, by an adoption that waits for restoration, or by no
+    launch after restoration with no reset recorded.
+  - (e) A second test copy of the lifter has a seizing weapon whose projectile is slow (its speed
+    a test value), so that it detonates some ticks after the shot. The launcher is ordered to
+    move towards that lifter, and the lifter's force-fire at it is timed, varied across runs, so
+    that the shot falls while the distance is at least the minimum range and the detonation falls
+    after the distance has dropped below it. Count only such runs in which claim 3's conditions
+    and claim 2's hold at the detonation. Expected in a counted run: the launcher is seized at
+    the detonation. Falsified by a counted run with no seize at the detonation.
+  - (f) As part e, with the same slow test projectile, but the launcher is ordered to move away
+    from the lifter, and the force-fire is timed, varied across runs, so that the shot falls
+    while the distance is at most the weapon's range and the detonation falls after the distance
+    has passed it. Count only such runs in which that shot's detonation is recorded and claim 3's
+    conditions and claim 2's hold at it. Expected in a counted run: the launcher is seized at
+    the detonation. Falsified by a counted run with no seize at the detonation.
+  - (g) As part b, with a second test copy of the missile launcher that has two rocket slots (a
+    test value) and otherwise the first copy's test values. The lifter's force-fire is timed,
+    varied across runs, so that the seize falls after the first slot's launch and before the
+    second slot's launch. Count only such runs. Expected in a counted run: the first slot's
+    rocket, preparing at the seize, flies on and detonates at its aim point, and the second
+    slot's object, docked at the seize, is removed with no launch and no detonation. Both slots
+    are empty after the seize and are refilled at the controller's next pass, seized or not.
+    Falsified by a vanished or stopped first rocket, by a launch from the second slot while the
+    launcher is seized, or by a refill of either slot that waits for restoration or comes later
+    than that pass.
+- **L20 Launchers against lifters on side A (Open questions; Q-2160 question 1).** Replay the
+  games of M-0016 in which a lifter group starting on side A meets a missile-launcher group, with
+  the recorder. For each launcher record every tick on which it is seized, gripped, dropped, set
+  down and restored, and every fire event and launch with its tick. For each lifter record every
+  hold start, the spatial distance from its range-test source point to the gripped unit at that
+  start, and the event of claim 12 that ends the hold. No expected value: the record answers the
+  open question.
 
 ## Open questions
 
@@ -2171,6 +2325,10 @@ establish a qualifying condition; a run lacking the required observations is inc
 - Which pixels on the boundary of the wave band are filled (claim 25). The band's interior is
   stated; the edge rule of the original's fill is not pinned down.
 
+- (Q-2160 question 1.) Whether the launchers are seized at all in the games of M-0016 in which a
+  lifter group starting on side A meets a missile-launcher group, and how often a restored
+  launcher is seized again, is not established: M-0016 records outcomes only. Scenario L20
+  records it.
 - (Q-2113 question 3.) What ends each hold in M-0015's games is not settled: M-0015 does not
   record it. Scenario L17 records the release event of every hold; claim 11 expects arrival
   (claim 8) or another event of claim 12.
@@ -2205,6 +2363,11 @@ establish a qualifying condition; a run lacking the required observations is inc
 
 ## Changes for other specs
 
+- **S-0506, claim 13 (Q-2160).** Claim 13's slot clearing does not change the controller target,
+  and the controller's passes go on while the spawner is seized. The pending target then follows
+  claim 25 alone. Claim 13 could say so, and could point to claim 20 here for the launch that can
+  follow restoration with no new shot. Medium, `measurable` (scenario L19 parts b and d here for
+  the kept controller target, parts c and d for the passes while seized).
 - **S-0215, claim 37, part c (the approach step's nothing-to-do case).** Part c makes the step do
   nothing when the actor's target is the object that holds the actor
   with a magnetic beam. By claim 11, and as scenario L17 expects, the step does nothing when the
