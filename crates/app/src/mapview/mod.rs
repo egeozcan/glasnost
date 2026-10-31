@@ -47,3 +47,4 @@ mod tests;
 #[cfg(test)]
 mod turret_index_tests;
 pub mod unload;
+pub mod walk;
