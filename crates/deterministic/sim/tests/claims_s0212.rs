@@ -1680,7 +1680,11 @@ const BRIDGE_ROLE: i32 = 42;
 /// those in `gaps` (S-0211 claim 15: each marks rows 1, 0, −1 and −2 of its
 /// column). A car stands on bank A at (−2, 0).
 fn river(gaps: &[i32]) -> (World, ObjectId) {
-    let mut s = scene();
+    river_in(scene(), gaps)
+}
+
+/// [`river`] built from scene `s`.
+fn river_in(mut s: Scene, gaps: &[i32]) -> (World, ObjectId) {
     for i in 0..=24 {
         let name = format!("OV{i}");
         s.register("overlays", &name);
@@ -1939,6 +1943,74 @@ fn a_deck_is_read_through_its_link() {
         regions::reach_read(&w, cell(4, 0), z, true),
         regions::reach_in(&w, cell(6, 0), z)
     );
+}
+
+/// The river of [`river`] with the combat test rules: the car of house 0
+/// carries the straight-shot `Rifle` (range 4 cells), and an unarmed car of
+/// house 1 stands on bank B at (12, 0).
+fn armed_river(gaps: &[i32]) -> (World, ObjectId, ObjectId) {
+    let mut s = scene();
+    let c = glasnost_sim::testkit::combat_ruleset();
+    s.ruleset.sim.weapons = c.sim.weapons;
+    s.ruleset.sim.projectiles = c.sim.projectiles;
+    s.ruleset.sim.warheads = c.sim.warheads;
+    s.ruleset.sim.vehicles.get_mut(CAR).unwrap().primary = Some("Rifle".into());
+    s.vehicle("TESTVAN", unit_type(WHEEL, 40, 6));
+    s.place_unit(1, "TESTVAN", cell(12, 0), 64);
+    let (w, _) = river_in(s, gaps);
+    let of = |h: u8| {
+        vehicles(&w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().owner == Some(glasnost_sim::world::HouseId(h)))
+            .unwrap()
+    };
+    let (car, van) = (of(0), of(1));
+    (w, car, van)
+}
+
+/// Stands `id` on the deck of bridge cell `c` (S-0307 claim 19: the actor's
+/// layer) and gives it `target`.
+fn on_deck_attacking(w: &mut World, id: ObjectId, c: CellXY, target: ObjectId) {
+    use glasnost_sim::world::{Layer, Pos};
+    let o = w.obj_mut(id).unwrap();
+    o.pos = Pos::centre(c, 416); // spec: S-0307 Constants (bridge deck height, 416 leptons above the terrain)
+    o.layer = Layer::Deck;
+    o.target = Some(Target::Object(target));
+}
+
+// spec: S-0307 claim 19 (the clear-cell test requires the actor's current reach region, determined from its actual cell and its current ground/deck layer; the candidate's region is the ground-layer region; RG18 run c) and S-0212 claim 4 (a bridge cell read for its deck: through the first link within 1 cell; enabled: the first end's reach region). The lead's play note 37 (M8 A4 round 6): units on a high-bridge deck over water dropped an attack on a building off the bridge.
+#[test]
+fn an_attacker_on_a_deck_takes_its_reach_region_from_the_deck() {
+    let z = MovementZone::Normal;
+    let approach = |w: &mut World, id: ObjectId| {
+        glasnost_sim::approach::step(w, id);
+        let o = w.obj(id).unwrap();
+        (o.target, o.dest)
+    };
+    let (mut w, car, van) = armed_river(&[]);
+    on_deck_attacking(&mut w, car, cell(3, 0), van);
+    assert_eq!(regions::reach_in(&w, cell(3, 0), z), Reach::None, "its ground");
+    assert_eq!(
+        regions::reach_read(&w, cell(3, 0), z, true),
+        regions::reach_in(&w, cell(12, 0), z),
+        "its deck: the banks' region, joined by the enabled link"
+    );
+    let got = approach(&mut w, car);
+    assert!(
+        matches!(got, (Some(Target::Object(t)), Some(Target::Cell(c))) if t == van && c.x >= cell(6, 0).x),
+        "the target kept, a firing cell on bank B the destination: {got:?}"
+    );
+    // RG18 run c's control: the regions differ. A gap at x = 3 leaves the
+    // link not enabled, the banks two regions; the deck at (2, 0) reads the
+    // first end's, bank A's, and bank B's candidates are refused.
+    let (mut w, car, van) = armed_river(&[3]);
+    on_deck_attacking(&mut w, car, cell(2, 0), van);
+    assert_ne!(
+        regions::reach_read(&w, cell(2, 0), z, true),
+        regions::reach_in(&w, cell(12, 0), z)
+    );
+    let got = approach(&mut w, car);
+    assert_eq!(got.0, None, "the regions differ: the target is dropped");
 }
 
 // spec: S-0212 claim 13b (coarse end cells of a bridge cell: the lane cells; enabled: the nearer, the second end's on equal distances; not enabled: by the first cell off the bridge going east)
