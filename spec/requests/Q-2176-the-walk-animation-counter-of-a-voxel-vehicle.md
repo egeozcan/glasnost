@@ -1,9 +1,9 @@
 ---
 id: Q-2176
 title: How a voxel vehicle's walk-animation counter advances, and what counts as moving for it
-status: open
+status: answered
 related: [S-0105, S-0102, S-0402, S-0107]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
