@@ -2,13 +2,14 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 24
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742, Q-1560]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490,
+Q-0520, Q-0580, Q-0742, Q-1560, Q-2176]
 supersedes: []
 ---
 
@@ -90,7 +91,7 @@ screen rows.
 | darkening | What a shadow image frame does to each screen pixel it is applied to (claim 26). |
 | smudge | A flat mark on the ground of one or more cells (a crater, a scorch mark and the like), stored per cell with the number of the cell's piece. A smudge that covers several cells is one image; each covered cell knows which piece of it it holds, counted row by row across the smudge's width. |
 | ion-blast wobble | A signed number of screen rows by which a vehicle or infantry unit's sprite is drawn higher while an ion-cannon blast (claim 2) shakes the area around it; 0 at all other times. Which blasts set it, and to what, is not specified here (Open questions). |
-| walk counter | A per-unit integer that the movement of a vehicle advances (claim 22). It picks the walking image frame of a vehicle drawn as a sprite. |
+| walk counter | A per-vehicle integer, 0 when the vehicle is created, that the vehicle's own turn advances (claim 22a). It picks the walking image frame of a vehicle drawn as a sprite (claim 22) and the body frame of a vehicle drawn from a voxel model (*ν* of S-0105 claim 16). |
 | firing counter, death counter | Per-unit integers of a vehicle drawn as a sprite. While one of them is 0 or more it selects the vehicle's firing or death image frames (claim 22). How the death counter runs is in claim 22; which shots start the firing counter is not settled (Open questions). |
 | standing-pose state | A per-unit on/off state of a vehicle drawn as a sprite. It chooses between the rows of claim 22's image-frame table. It is on when the vehicle is created, turns off when the vehicle starts a movement step and on again when the step ends (claim 22). |
 | overlay shadow level *ℓ*<sub>s</sub> | The height level of the cell that holds an overlay, without the 4 levels that a bridge deck adds to *ℓ* (claim 13). It sets the depth bias of the overlay's shadow image frame. |
@@ -764,16 +765,18 @@ screen rows.
       | Vehicle state | Image frame |
       |---|---|
       | firing: its firing counter *c* is 0 or more | *S*<sub>f</sub> + *d*·*F*<sub>f</sub> + ⌊*c*/2⌋ |
-      | moving, or its type's idle rate is not 0 | *S*<sub>w</sub> + *d*·*F*<sub>w</sub> + (*w* mod *F*<sub>w</sub>), *w* its walk counter |
+      | it has movement in progress (S-0107 Terms), or its type's idle rate is not 0 | *S*<sub>w</sub> + *d*·*F*<sub>w</sub> + (*w* mod *F*<sub>w</sub>), *w* its walk counter |
       | dying: its death counter *k* is 0 or more (only for a type with *F*<sub>d</sub> > 0, see below) | *S*<sub>d</sub> + min(⌊*k*/*R*<sub>d</sub>⌋, *F*<sub>d</sub> − 1) |
       | its standing-pose state is off | *d* |
       | *F*<sub>s</sub> > 0 | *S*<sub>s</sub> + *d*·*F*<sub>s</sub> |
       | otherwise | *S*<sub>w</sub> + *d*·*F*<sub>w</sub> |
 
-    - **Walk counter.** A vehicle's walk counter grows by 1 in a tick when it is moving and the
-      tick number (glossary; 0 while the first tick runs) is a multiple of its type's walk rate
-      (ticks), or when it is not moving, its type's idle rate is not 0 and the tick number is a
-      multiple of the idle rate.
+    - **Walk counter.** *w* is the vehicle's walk counter (claim 22a). The walking row tests
+      *has movement in progress*, while the counter advances on *moving now* (claim 22a): a
+      vehicle that still has movement in progress but is not moving now, for example one waiting
+      at a blocked cell, shows the walking row with a counter that its walk rate does not advance,
+      unless test (a)'s hover-attack alternative holds, with all three of its conditions (claim
+      22a).
     - **Death counter.** The death counter is below 0 until the vehicle is destroyed. It is
       started, at 0, only when the vehicle is destroyed and its type's death frame count
       *F*<sub>d</sub> is greater than 0; from then on it grows by 1 per tick until the vehicle is
@@ -794,13 +797,14 @@ screen rows.
       - a vehicle placed by the map shows, from the first drawn frame and before any tick has run,
         the row for *F*<sub>s</sub> > 0 if its type has standing frames and otherwise the last row
         (*S*<sub>w</sub> + *d*·*F*<sub>w</sub>), never the row *d*, unless its type's idle rate is
-        not 0 (then the moving row).
+        not 0 (then the walking row).
       - a vehicle that has ended a move shows the same rows.
-      - the row *d* needs the state off while the vehicle does not count as moving, that is, a
-        vehicle standing still part-way through a movement step with an idle rate of 0, not firing
-        and not dying. No reproducible setup that produces this has been identified (Open questions).
-    - When the firing counter runs, and one further case in which the walk counter grows while the
-      vehicle is in the air, are not settled (Open questions).
+      - the row *d* needs the state off while the vehicle has no movement in progress, its idle
+        rate is 0, and it is neither firing nor dying: a vehicle whose movement ends part-way
+        through a movement step. A vehicle that waits part-way through a move still has movement
+        in progress and shows the walking row (claim 22a). No reproducible setup that ends a
+        vehicle's movement part-way through a step has been identified (Open questions).
+    - When the firing counter runs is not settled (Open questions).
     - A vehicle whose type has a turret and is drawn as a sprite draws its body frame as above and
       a turret image frame ((*t*<sub>32</sub> + 4) mod 32) + 8·*F*<sub>w</sub>, *t*<sub>32</sub>
       being the 32-step facing of its turret facing, combined into one image. Its shadow, the body
@@ -814,11 +818,123 @@ screen rows.
       file. `unmeasured` for the firing row: which shots start the firing counter is not settled
       (Open questions), so no setup can make the row show at a known tick. `unmeasured` for the row
       *d* and for the events of the standing-pose state other than creation and movement steps
-      (change of movement type, superweapon move): no reproducible setup stops a vehicle part-way
-      through a step, so the state cannot be seen off while the vehicle is not moving.
-    - Confidence: high for the facing part and the image-frame formulas, medium for the walk counter, the
-      death counter and the standing-pose state (high that it is on at creation and after a
-      completed step; medium for the other events that turn it on), low for the turret path
+      (change of movement type, superweapon move): no reproducible setup ends a vehicle's
+      movement part-way through a step, so the state cannot be seen off while the vehicle has no
+      movement in progress.
+    - The walking row's test (movement in progress, not moving now) is `measurable` (D48 part b).
+      The hover-attack alternative for counter advancement keeps claim 22a's backing and
+      confidence.
+    - Confidence: high for the facing part and the image-frame formulas, medium for the walking
+      row's test, the death counter and the standing-pose state (high that it is on at creation
+      and after a completed step; medium for the other events that turn it on), low for the
+      turret path
+22a. **The walk counter (Q-2176).** Each vehicle has one walk counter, an integer that is 0 when
+    the vehicle is created. The same counter gives the walking image frame of a vehicle drawn as a
+    sprite (claim 22), the body frame *ν* of a vehicle drawn from a voxel model (S-0105 claim 16)
+    and the harvesting sprite of S-0402. No game rule reads it. It is advanced only in the
+    vehicle's own turn (S-0203), by at most 1 per turn, and never per drawn frame. Nothing sets
+    it back after creation. A vehicle normally has one turn per tick. When S-0203 claim 11 gives
+    it a second turn in a tick (`quirks.update_order_removal_skip` on), the original tests the
+    counter again in that turn with the same tick number, so it can advance by 2 in that tick.
+    Our engine advances it by at most 1 per tick (design rule: only the drawn frames differ).
+    - **No advance.** When the counter is tested (*The advance*, or *Reading time* below for our
+      engine), any of these states prevents the advance, so its counter keeps its value at that
+      test:
+      - it is off the map (glossary), for example inside a transport. This includes a
+        passenger of an open-topped transport: it takes turns while inside (S-0203 claim 3),
+        but its counter keeps its value until it is back on the map.
+      - it is carried: lifted by a carrier aircraft (the aircraft that S-0507 claim 13 sets
+        apart from ordinary unloading). A lifted vehicle is off the map, held by that aircraft as
+        a passenger until it is set down, so this is the case above: its counter keeps its
+        value while it is carried.
+      - it is a dropped object still falling after its fall step (S-0511 claim 10), or a sinking
+        vessel (S-0504 claim 4).
+      - it is melee-linked while its type lacks the keep-acting flag (S-0214 Terms).
+      - it is being erased or phasing in (glossary).
+      - it is *seized* (S-0607), until a restoration clears that state.
+      - it is travelling through a tunnel (S-0208 Terms; the tunnel of S-0212 Terms), from the
+        moment it enters at the entrance until it comes out at the exit.
+      - in our engine, it is a member of a chronosphere warp (glossary *warp group*), from its
+        first pending update through its arrival effects: S-0203 claim 4's engine contract
+        makes the warp update its whole turn there (design rule). In the original the counter
+        is held while the member is being erased or phasing in (above); whether it is tested
+        while the member is pending, before launch, is not established (Open questions).
+    - **The advance.** Otherwise the counter is tested in the vehicle's turn, right after that
+      turn's locomotion advance. With *t* the tick number (glossary; 0 while the first tick
+      runs), *R*<sub>w</sub> the type's walk rate and *R*<sub>i</sub> its idle rate (ticks, Import
+      mapping), the counter grows by 1 when at least one of these holds:
+      - (a) *t* is a multiple of *R*<sub>w</sub>, and either the vehicle is moving now, or all
+        three of these hold: it holds a target, it is not deployed (S-0517), and it is of a
+        hover-attack type (S-0215 Terms).
+      - (b) the vehicle is not moving now, *R*<sub>i</sub> ≠ 0 and *t* is a multiple of
+        *R*<sub>i</sub>.
+      - (c) its type has the deploy-to-land flag (Import mapping) and its height above the surface
+        is above 0. This needs no multiple: such a vehicle's counter grows on every tick it spends
+        in the air, moving or not.
+    - **Moving now** is the answer of the vehicle's locomotor (glossary *moving now*), as its
+      movement spec gives it: S-0207 claim 23 for driving, S-0504 claim 2 for ships, S-0503 Terms
+      for hovering, S-0502 claim 20 for jumpjets. It is read after the locomotion advance of the
+      same turn, and it is not *has movement in progress* (S-0107 Terms). So:
+      - a driving vehicle or ship whose body turns on the spot is moving now, and its counter
+        steps at the walk rate while it turns, also before its first step.
+      - a hovering vehicle turning with its throttle at 0, and a jumpjet turning while grounded
+        or hovering, are not moving now.
+      - a driving vehicle or ship that stands part-way through a move, for example waiting at a
+        blocked cell, is moving now only while its body turns, or while it has a heading point
+        and its progress rate is above 0 (S-0207 claim 23; S-0504 claim 2 for ships).
+        Otherwise, unless (a)'s hover-attack alternative holds (all three of its conditions),
+        only (b) and (c) can advance its counter, and the drawn frame holds.
+      - once a vehicle stops, (a) ends, unless (a)'s hover-attack alternative holds (all three
+        of its conditions), and its counter holds unless (b) or (c) applies, so a voxel
+        vehicle's body frame *ν* stays on the frame it had when it stopped.
+    - **Rates.** The multiples of a rate are those of its absolute value. In the original, a
+      vehicle type with a walk rate of 0 is not valid data: the game stops with a fault in the
+      first turn in which one of its vehicles is moving now, or meets test (a)'s hover-attack
+      alternative, outside the *No advance* states. Our engine treats a walk rate of 0 as 1.
+    - **Leaving and entering play.** A vehicle unloaded from a transport, open-topped or not,
+      goes on from the value its counter had when it entered.
+    - **Saved games.** In the original the counter is saved with the vehicle, so a loaded game
+      goes on from it. Our engine keeps the counter outside the game state: it is not saved and
+      not part of the state hash, and after a load every vehicle's counter starts again at 0.
+      Only the drawn frames differ (design rule, no switch).
+    - **Reading time.** Our engine may test the conditions on the state that the tick leaves
+      instead of right after the vehicle's locomotion advance, with the same tick number. That
+      differs only when something after the vehicle's test in the same tick changes one of
+      them: a later turn, or the vehicle's own restoration at the end of its turn (the seized
+      state of *No advance*), and then only in the drawn frames (design rule).
+    - Backing: `measurable` (D48): parts a and d for the shared counter, its steps on multiples of
+      the walk rate while driving and turning on the spot, and the hold after stopping; part b
+      for a blocked wait; part c for the idle rate; part e for the hold inside a transport of
+      either kind and for unloading; part f for the deploy-to-land flag in the air.
+      `unmeasured`: the other states of *No advance* (no scenario here makes a vehicle fall, sink,
+      become melee-linked, erased, phasing in or seized, be lifted by a carrier aircraft, or travel
+      through a tunnel, or join a chronosphere warp, while its frames are recorded, a carried
+      vehicle's held counter included); the *Moving now* bullets for ships, hovering vehicles and
+      jumpjets (D48 runs a driving vehicle only, so they rest on their movement specs' moving-now
+      answers); the hover-attack case of (a), with the exceptions that the *Moving now* bullets and
+      claim 22's *Walk counter* bullet make for it (no scenario here keeps a vehicle of a
+      hover-attack type that holds a target still: at height 0 such a vehicle takes a nearby cell as
+      its destination, S-0215 claim 23, and while it moves, moving now alone gives the steps); the
+      deployed exception of (a) (no scenario here deploys a hover-attack type); the original's fault
+      at a walk rate of 0, its moment included (the fault must not be provoked on the oracle); the
+      original's saved counter (no scenario here saves and loads a game); the start value of 0 at
+      creation (D48 compares successive frames, so no scenario here fixes the value a vehicle starts
+      from); the multiples of a negative rate (no scenario here sets a negative rate); the
+      original's second test in a second turn of a tick (S-0203 claim 11's second turn is itself
+      `unmeasured`, since a recorder cannot tell a second turn from a first); that no game rule
+      reads it and nothing sets it back (no scenario can show an absence); the design rules, as
+      design choices.
+    - Confidence: high that one counter serves both kinds of vehicle (D48 parts a and d). Medium
+      that it is advanced in the vehicle's own turn, by at most 1 per turn, and never per drawn
+      frame: `unmeasured`, since D48 reads one value per tick, so no scenario here separates the
+      vehicle's turn from other moments of the tick, or a tick from its drawn frames. Medium for
+      the original's
+      second test in a second turn of a tick, for tests (a) to (c) (the hover-attack
+      case of (a) `unmeasured`), moving now as their reading for a driving vehicle, the hold
+      after stopping and the counter kept through a transport of either kind (an
+      open-topped passenger's included), until D48 runs, and
+      medium for every `unmeasured` part listed above. Low for the original's counter while a
+      chronosphere warp member is pending (Open questions)
 23. **Terrain objects.** A terrain object (a tree and the like) stands at the centre of its cell, at
     the terrain surface height there (S-0106). Its draw point is the screen pixel of that position,
     and a terrain object whose type spawns ore is drawn 16 rows higher. It is an animated terrain
@@ -1644,7 +1760,9 @@ S-0007 claim 34's confidence and scenario A25; palette precedence remains S-0103
 | none | none | claim 30 reads no ordering key; the animated and ore-spawning flags below select the drawing and its raise, and destruction is an object's state, not an imported ordering setting | not applicable | body before its own shadow |
 | art, vehicle image | `WalkFrames`, `FiringFrames` | walking and firing frame counts *F*<sub>w</sub>, *F*<sub>f</sub> (claim 22) | integer, image frames | 12; 0 |
 | art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death) (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer: counts and start frames in image frames, *R*<sub>d</sub> in ticks per image frame | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
-| rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
+| rules, vehicle or infantry type | `WalkRate`, `IdleRate` | the walk rate *R*<sub>w</sub> and idle rate *R*<sub>i</sub> of a vehicle's walk counter, whether it is drawn as a sprite or from a voxel model (claim 22a; a walk rate of 0 is used as 1 by our engine) | integer, ticks | 1; 0 |
+| rules, vehicle type | `HoverAttack` | hover-attack type, test (a) of the walk counter (claim 22a; S-0215 owns the flag) | boolean | no |
+| rules, vehicle type | `DeployToLand` | the deploy-to-land flag, test (c) of the walk counter (claim 22a; S-0502 owns the flag) | boolean | no |
 | rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21), or the voxel shadow (claim 18; S-0105 claim 31) | boolean | no |
 | art, vehicle image | `DisableShadowCache`, `DisableVoxelCache` | reuse controls for D23 (d); full mapping and defaults owned by S-0105 | boolean | S-0105 Import mapping |
 | game data file | `OREGATH.SHP` | harvesting sprite depth-tested as a flat reader with the vehicle's *U* − 2 (claim 13); eligibility, frame, anchor, light and before-shadow order are S-0402 claim 5a | sprite file, ordinary asset precedence of S-0005 claim 1 | fixed asset selection; no per-type substitute |
@@ -2726,6 +2844,58 @@ is not a falsifier. B covering A at a qualifying overlap on any later descending
 falsifies repeated re-filing. Repeat with the roles exchanged, one run per variant; absence
 of positive-height overlap after tick *t* makes that run inconclusive, not confirmation.
 
+**D48 — The walk counter of a vehicle (claims 22 and 22a; Q-2176).** A flat map at level 0
+with open ground, the common measurement setup. Test vehicle V: a land vehicle type with driving
+movement, drawn from a named test voxel model whose body motion file has at least 6 frames, each
+distinguishable in the drawn body, and no turret; its walk rate is 3 and its idle rate 0, set
+through the test map's override section. Test vehicle S: the same rules with a named sprite art
+fixture of at least 6 distinguishable walking frames and one facing, whose art entry also gives
+it standing frames (*F*<sub>s</sub> > 0), each distinguishable from every walking frame (a named
+test art entry; claim 22). Record per tick
+the tick number and each one's drawn body frame (V: the motion frame *f*<sub>b</sub>; S: the
+walking frame). Compare successive frames, not an assumed start value.
+  - (a) V stands facing away from a cell 8 cells off; order it there. Expected: the frame steps
+    by one exactly on tick numbers divisible by 3, from the first tick it turns on the spot,
+    through the drive, until the last tick it is moving now; then it holds. Falsified by a step
+    on any other tick, a missing step on a multiple of 3 while it turns or drives, or a step
+    after it has stopped.
+  - (b) As (a), with a second, stationary vehicle of the test house blocking a cell of the route
+    so that V waits before it (the blocker moved off by order later). Expected: no step while V
+    waits without turning; S in the same run shows its walking row, held, while it waits.
+    Falsified by steps while V waits still, or S showing a standing frame while it waits. The
+    run counts only if V and S each drive on to the ordered cell once the blocker has moved off,
+    with no new order: that shows each still had its move in progress while it waited. A run in
+    which either does not is inconclusive. S's standing frames differ from all its walking
+    frames, so every frame of the wait tells the two rows apart.
+  - (c) V standing, with an idle rate of 5 instead. Expected: one step on each tick number
+    divisible by 5, none on others. Falsified by any other pattern.
+  - (d) S in place of V in parts a and c, on the same tick numbers. Record S's frame only on
+    ticks on which it shows its walking row (claim 22): a change from one row to another, as when
+    it stops, is not a step. Expected: the same step ticks as V. Falsified if the sprite and
+    voxel vehicles step on different ticks while S shows its walking row.
+  - (e) V, with an idle rate of 5 as in (c), enters a transport of the test house and is unloaded.
+    Run it twice: with a transport that is not open-topped, and with a test transport type that is
+    open-topped (the flag set through the override section). Record also *t*<sub>in</sub>, the first
+    tick on which V is not drawn, and *t*<sub>out</sub>, the first tick on which it is drawn again.
+    Time the unloading so that exactly 3 tick numbers strictly between *t*<sub>in</sub> and
+    *t*<sub>out</sub> are divisible by 5. A run in which this does not hold is void. Let *d* be the
+    number of frames from V's last drawn frame before *t*<sub>in</sub> to its frame at
+    *t*<sub>out</sub>, counted forwards modulo its frame count. Expected, in both runs: *d* is at
+    most the number of the two ticks *t*<sub>in</sub> and *t*<sub>out</sub> whose tick number is
+    divisible by 3 or by 5 (a step while entering or while being unloaded), so 0 to 2. Falsified by
+    *d* of 3 or more, as the 3 idle-rate steps of a counter that advanced inside would give (V's
+    model has at least 6 frames, so 3 to 5 steps do not wrap to 0 to 2).
+  - (f) A test vehicle type with jumpjet movement and both the simple-deployer flag and the
+    deploy-to-land flag set (a deploy-to-land vehicle, S-0502 Terms), with V's model and rates:
+    its rules keys set through the test map's override section, its art entry naming V's test
+    model.
+    Let it hover in the air for at least 6 ticks, then order it to deploy, so that it lands.
+    Expected: one step on every tick its height above the surface is above 0, moving or not; on
+    the ground, steps only on the tick numbers that test (a) gives (V's idle rate is 0, and test
+    (c) needs a height above 0). Falsified by a missed step in the air, or a step on
+    the ground at another tick. The air part needs no landing: a run whose deploy order does not
+    make it land is inconclusive for the ground part only.
+
 ## Open questions
 
 Q-1560 is fully answered by claim 4 and scenarios D5, D12 and D47. Before this revision
@@ -2785,10 +2955,12 @@ the current owning specs; no requested part owned here remains open.
     *F*<sub>f</sub> > 0 can set it to 2*F*<sub>f</sub> − 1, after which it falls by 1 per tick to
     −1, so the firing image frames would show from the last to the first, each for two ticks; but
     some shots leave it alone, and which ones is not settled. Low confidence.
+  - whether, in the original, the walk counter of a chronosphere warp member is tested while the
+    member is pending, before launch (claim 22a, *No advance*). Our engine holds it from the
+    first pending update (S-0203 claim 4's engine contract). Low confidence.
   - the standing-pose state of a vehicle drawn as a sprite (claim 22): which reproducible setup, if
-    any, leaves a vehicle standing still part-way through a movement step, so that the row *d*
-    shows, and the one event that turns the state on without being identified; and a case in which
-    its walk counter also grows while it is in the air.
+    any, ends a vehicle's movement part-way through a movement step, so that the row *d* shows,
+    and the one event that turns the state on without being identified.
   - the turret path of a vehicle drawn as a sprite (low confidence; D29 (c) gives the turret flag
     to the test type).
   - which cells count as near a bridge for the row of a vehicle drawn as a sprite whose type is
