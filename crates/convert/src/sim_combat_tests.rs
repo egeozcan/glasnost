@@ -845,17 +845,19 @@ fn art_combat_fields() {
                IsAnimDelayedFire=yes\nDelayedFireDelay=6\n";
     let (s, w) = sim(base, "", art);
     let c = &s.vehicles["Cart"];
-    assert_eq!(c.combat.primary_fire_flh, Some([100, -20, 30]));
-    assert_eq!(c.combat.elite_secondary_fire_flh, Some([5, 0, 0]));
-    assert!(warned(
-        &w,
-        "art EliteSecondaryFireFLH \"5\" has fewer than 3 readable integers"
-    ));
+    // spec: S-0313 claim 1b (a turret count above 0 reads only the numbered fields)
+    assert_eq!(c.combat.primary_fire_flh, None);
+    assert_eq!(c.combat.elite_secondary_fire_flh, None);
     assert_eq!(c.combat.weapon_flh, Some(vec![[0, 0, 0], [1, 2, 3]]));
     // A type with the primary and secondary pair keeps no numbered muzzle positions.
     let solo = &s.vehicles["Solo"];
     assert_eq!(solo.combat.weapon_flh, None);
     assert_eq!(solo.combat.primary_fire_flh, Some([100, -20, 30]));
+    assert_eq!(solo.combat.elite_secondary_fire_flh, Some([5, 0, 0]));
+    assert!(warned(
+        &w,
+        "art EliteSecondaryFireFLH \"5\" has fewer than 3 readable integers"
+    ));
     assert_eq!(c.combat.turret_offset, Some(-40));
     assert_eq!(
         (c.firing_frames, c.firing_sync_frames),
@@ -882,25 +884,91 @@ fn art_combat_fields() {
     );
 }
 
-/// spec: S-0313 Import mapping and claim 1a (revision 37: an absent `Weapon`n`FLH` is 0, 0, 0; an absent elite form takes the muzzle position of numbered weapon n − 1 as imported, not 0, 0, 0; an absent `ElitePrimaryFireFLH` or `EliteSecondaryFireFLH` stays absent here and the simulation takes the same slot's non-elite one)
+/// spec: S-0313 Import mapping and claims 1a and 1b (an absent `Weapon`n`FLH` is 0, 0, 0; an absent elite form takes numbered weapon n − 1's muzzle position; for a turret count above 0 the primary field is not read, and the elite primary field plays no part)
 #[test]
 fn absent_elite_muzzle_positions_take_the_non_elite_ones() {
     let base = "[VehicleTypes]\n1=Cart\n[Cart]\nImage=CARTART\nTurretCount=1\nWeaponCount=3\n";
     let art = "[CARTART]\nWeapon1FLH=1,2,3\nWeapon3FLH=4,5,6\nEliteWeapon2FLH=7,8,9\n\
-               PrimaryFireFLH=10,11,12\n";
+               PrimaryFireFLH=10,11,12\nElitePrimaryFireFLH=13,14,15\n";
     let (s, _) = sim(base, "", art);
     let c = &s.vehicles["Cart"].combat;
     assert_eq!(c.weapon_flh, Some(vec![[1, 2, 3], [0, 0, 0], [4, 5, 6]]));
-    // Elite weapon 0 takes weapon 0's; elite weapon 2 is past the list and
-    // takes weapon 2's in the simulation (S-0313 claim 1a).
-    assert_eq!(c.elite_weapon_flh, Some(vec![[1, 2, 3], [7, 8, 9]]));
-    assert_eq!(c.elite_primary_fire_flh, None);
-    // No elite numbered key: no elite list.
+    assert_eq!(
+        c.elite_weapon_flh,
+        Some(vec![[1, 2, 3], [7, 8, 9], [4, 5, 6]])
+    );
+    assert_eq!((c.primary_fire_flh, c.elite_primary_fire_flh), (None, None));
+    // No elite numbered key: each elite version takes its weapon's.
     let art = "[CARTART]\nWeapon2FLH=4,5,6\n";
     let (s, _) = sim(base, "", art);
     let c = &s.vehicles["Cart"].combat;
     assert_eq!(c.weapon_flh, Some(vec![[0, 0, 0], [4, 5, 6]]));
-    assert_eq!(c.elite_weapon_flh, None);
+    assert_eq!(c.elite_weapon_flh, Some(vec![[0, 0, 0], [4, 5, 6]]));
+}
+
+/// spec: S-0313 claim 1b (Q-2146: a turret count above 0 reads only the numbered fields up to the weapon count, so a weapon count of 0 reads neither family; a turret count of 0 or less reads only the primary and secondary fields and their elite forms)
+#[test]
+fn which_muzzle_fields_a_type_reads() {
+    let art = "[CARTART]\nWeapon1FLH=1,1,1\nWeapon2FLH=2,2,2\nEliteWeapon1FLH=3,3,3\n\
+               PrimaryFireFLH=10,11,12\nSecondaryFireFLH=20,21,22\nElitePrimaryFireFLH=13,14,15\n";
+    let get = |rules: &str| {
+        let base = format!("[VehicleTypes]\n1=Cart\n[Cart]\nImage=CARTART\n{rules}");
+        let (s, _) = sim(&base, "", art);
+        let c = s.vehicles["Cart"].combat.clone();
+        (
+            c.weapon_flh,
+            c.elite_weapon_flh,
+            [
+                c.primary_fire_flh,
+                c.secondary_fire_flh,
+                c.elite_primary_fire_flh,
+                c.elite_secondary_fire_flh,
+            ],
+        )
+    };
+    // Weapon count 1: only the first numbered field.
+    assert_eq!(
+        get("TurretCount=2\nWeaponCount=1\n"),
+        (Some(vec![[1, 1, 1]]), Some(vec![[3, 3, 3]]), [None; 4])
+    );
+    // Weapon count 0: neither family.
+    assert_eq!(
+        get("TurretCount=1\nWeaponCount=0\n"),
+        (None, None, [None; 4])
+    );
+    // Turret count 0 or less: the pair only; an absent elite secondary takes the secondary's.
+    for tc in ["0", "-1"] {
+        assert_eq!(
+            get(&format!("TurretCount={tc}\nWeaponCount=2\n")),
+            (
+                None,
+                None,
+                [
+                    Some([10, 11, 12]),
+                    Some([20, 21, 22]),
+                    Some([13, 14, 15]),
+                    Some([20, 21, 22])
+                ]
+            ),
+            "turret count {tc}"
+        );
+    }
+}
+
+/// spec: S-0313 claim 1b (every reading follows one rule: the turret count after that type read's rules section decides; an absent non-elite field keeps the held position, an absent elite field takes the slot's non-elite position as it stands after this reading, the family not read keeps its slots) and S-0007 Terms (a later layer's section is another type read)
+#[test]
+fn a_later_reading_with_a_raised_turret_count() {
+    let base = "[VehicleTypes]\n1=Cart\n[Cart]\nImage=CARTART\nWeaponCount=2\n";
+    let mode = "[Cart]\nTurretCount=1\n";
+    let art = "[CARTART]\nPrimaryFireFLH=10,11,12\nElitePrimaryFireFLH=7,7,7\nWeapon2FLH=4,5,6\n";
+    let (s, _, _) = import(base, mode, "", art, &ImportOptions::default());
+    let c = &s.vehicles["Cart"].combat;
+    // The first reading (turret count 0) gives slot 0 the primary field; the
+    // second (turret count 1) reads no first numbered field, so slot 0 keeps
+    // it, and its elite version takes that kept value, not the elite
+    // primary field's earlier one.
+    assert_eq!(c.weapon_flh, Some(vec![[10, 11, 12], [4, 5, 6]]));
+    assert_eq!(c.elite_weapon_flh, Some(vec![[10, 11, 12], [4, 5, 6]]));
 }
 
 /// spec: S-0301 Import mapping (OpenToppedAnim and AssaultAnim of a weapon: an animation name, none

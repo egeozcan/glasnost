@@ -507,6 +507,33 @@ pub fn reload_turn(w: &mut World, id: ObjectId) {
     }
 }
 
+/// A building's refill in its turn (S-0301 claim 10): after its own firing
+/// in that tick, a building at 0 rounds is set to its type's maximum, unless
+/// the type has the hospital or armory flag. No countdown, no reload field.
+pub fn building_refill(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0301 claim 10 (only a building at 0 rounds is refilled; −1 is never changed)
+    if o.kind != Kind::Building || o.combat.ammo != 0 {
+        return;
+    }
+    let Some(bt) = w
+        .rules
+        .as_deref()
+        .and_then(|r| r.buildings.get(o.type_index as usize))
+    else {
+        return;
+    };
+    // spec: S-0301 claim 10 and Import mapping (no refill for a type with the hospital or the armory flag; absent no)
+    if bt.raw.hospital.unwrap_or(false) || bt.raw.armory.unwrap_or(false) {
+        return;
+    }
+    let max = bt.combat.ammo;
+    // spec: S-0301 claim 10 (set to the type's maximum A: −1 gives unlimited, 0 stays 0; the reload fields play no part)
+    if let Some(ob) = w.obj_mut(id) {
+        ob.combat.ammo = max;
+    }
+}
+
 /// The reload countdown's elapsed time in a warp turn that excludes the
 /// ordinary reload work (S-0203 claim 4, S-0301 claim 11): the countdown
 /// advances one, nothing is granted and nothing is restarted. Not the

@@ -99,7 +99,8 @@ pub fn held(w: &World, id: ObjectId, place: Place) -> Option<ObjectId> {
 /// weapon has is alive on the firer (*rearming*, rank 5).
 pub fn own_effect_alive(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     let wr = w.rules().combat.weapon(weapon);
-    // spec: S-0301 claim 5 (a live effect of any kind whose effect flag the asked weapon has: rearming) and S-0616 Terms (a particle emitter is alive while its place holds it)
+    // spec: S-0301 claim 5 (a live effect of any kind whose effect flag the asked weapon has: rearming) and Terms (revision 58: a matched emitter is alive until it is let go or its system leaves play, whichever comes first, which is while its place holds it)
+    // design: Q-2181 (interim: an emitter that is not matched is alive while its place holds it, as a matched one)
     any_held(w, firer, wr)
 }
 

@@ -256,6 +256,8 @@ fn replay_round(
             && let Some(name) = ty(rr)
         {
             let _creation = rr.raw();
+            // spec: S-0312 claim 18 (revision 51: the centre class's R(0, 3) row draw of S-0208 claim 3; none of these cells is refused by the table's first row)
+            let _row = rr.ranged(0, 3, h);
             if !full.contains(&cell) {
                 let hp = rr.ranged(5, strength(name), h);
                 let _scatter = rr.ranged(0, 4, h);
@@ -552,7 +554,7 @@ fn claim_18_owner_defeated() {
     assert!(new_infantry(&w, after).is_empty());
 }
 
-// spec: S-0312 claim 18 (a survivor for which no standing position is free takes its creation draw, never enters play, takes no health draw and does not count against C) and claim 19 (g) (a foundation cell that is not clear for movement takes no smudge step; its land type decides, Q-2133)
+// spec: S-0312 claim 18 (a survivor for which no standing position is free takes its creation draw, never enters play, takes no health draw and does not count against C) and claim 19 (g) (revision 51: a foundation cell that is not clear for movement takes no smudge step; a full cell is not refused by the first row of S-0208's table O, so it takes the row draw first)
 #[test]
 fn claim_18_full_cell_and_unclear_cell() {
     for seed in 1..=16 {
@@ -781,6 +783,7 @@ fn crew_of(name: &str, side: Option<&str>, ty: &mut dyn FnMut(&mut Rng) -> &'sta
         rr.unit(mode);
         let want = ty(&mut rr);
         rr.raw();
+        rr.ranged(0, 3, h);
         let hp = rr.ranged(5, strength(want) / 2, h);
         rr.ranged(0, 4, h);
         damage::apply(&mut w, id, killing());
@@ -792,7 +795,7 @@ fn crew_of(name: &str, side: Option<&str>, ty: &mut dyn FnMut(&mut Rng) -> &'sta
     }
 }
 
-// spec: S-0312 claim 13 and F4 (the crew type: no side, the technician with no draw; side 0, 1 or 2 unarmed, that side's crew with no draw; armed, a percent draw below 15 the technician, otherwise the side crew; another side, the technician, armed with a discarded percent draw); the draw order chance, type, creation, health
+// spec: S-0312 claim 13 and F4 (the crew type: no side, the technician with no draw; side 0, 1 or 2 unarmed, that side's crew with no draw; armed, a percent draw below 15 the technician, otherwise the side crew; another side, the technician, armed with a discarded percent draw); the draw order chance, type, creation, position (revision 51: R(0, 3) for the centre class), health
 #[test]
 fn claim_13_f4_crew_types() {
     crew_of("VAN", None, &mut |_| "TECH");
@@ -1002,7 +1005,7 @@ fn sale_and_destruction_share_the_count() {
     }
 }
 
-// spec: S-0312 claim 18 and Import mapping (Crewed absent on a building type: no crewed flag, Q-2135's interim; Crewed set: crewed)
+// spec: S-0312 claim 18 and Import mapping (revision 51, Q-2135 answered: Crewed absent means no for every kind of type; Crewed set: crewed)
 #[test]
 fn crewed_absent_on_a_building_is_no() {
     let r = rules();
@@ -1013,7 +1016,7 @@ fn crewed_absent_on_a_building_is_no() {
     }
 }
 
-// spec: S-0312 F5 (C = 0 when the building has no crew: the no-crew mark, set by killing damage that ignores defences or, Q-2131, a map's no-crew flag, which our maps do not carry) and claim 18 and S-0408 claim 7 (no survivors, no smudge steps; a sale releases none)
+// spec: S-0312 F5 (C = 0 when the building has no crew: the no-crew mark, set only by killing damage that ignores defences; revision 51, Q-2131 answered: no map field sets it) and claim 18 and S-0408 claim 7 (no survivors, no smudge steps; a sale releases none)
 #[test]
 fn f5_no_crew_mark() {
     let r = rules();
@@ -1034,5 +1037,101 @@ fn f5_no_crew_mark() {
         }
         assert_eq!(w.rng, rr);
         assert!(new_infantry(&w, after).is_empty());
+    }
+}
+
+// spec: S-0312 claim 19 (g) (revision 51, Q-2133 answered: a foundation cell is clear for movement unless the object-present flag of its record is set, it holds an overlay type with the wall flag, or the tracked class's multiplier of its land type is exactly 0; infantry positions and the vehicle-present flag are ignored, and a multiplier merely below S-0211's 0.01 does not fail it)
+#[test]
+fn claim_19g_clear_for_movement() {
+    use glasnost_rules::sim::{Decimal, LandRow, LandType, OverlayType};
+    let mut r = rules();
+    r.registries
+        .entry("overlays".into())
+        .or_default()
+        .push("FENCE".into());
+    r.sim.overlays.insert(
+        "FENCE".into(),
+        OverlayType {
+            wall: Some(true),
+            ..Default::default()
+        },
+    );
+    let track = |v: &str| LandRow {
+        track: Some(Decimal(v.into())),
+        ..Default::default()
+    };
+    r.sim.land_types.insert(LandType::Water, track("0"));
+    r.sim.land_types.insert(LandType::Rough, track("0.001"));
+    for seed in 1..=8 {
+        let mut w = game(&r, seed);
+        let id = spawn(&mut w, Kind::Building, "BOX", 0, 0, 0);
+        // The owner is defeated, so no survivor chance is drawn and only the
+        // smudge steps of claim 19 (g) remain.
+        w.houses[0].econ.result.defeated = true;
+        let tl = w.obj(id).unwrap().pos.cell();
+        let cells = damage::foundation_order(tl, (3, 3));
+        let ground = glasnost_sim::world::Layer::Ground;
+        // Cell 1: the object-present flag. Cell 2: a wall overlay. Cell 3:
+        // a track multiplier of exactly 0. Cell 4: a track multiplier below
+        // 0.01 but above 0. Cell 5: infantry positions and the
+        // vehicle-present flag, which this test ignores.
+        w.cells.occ_mut(cells[1], ground).unwrap().others = 1;
+        w.cells.grid.get_mut(cells[2]).unwrap().overlay = 0;
+        w.cells.grid.get_mut(cells[3]).unwrap().land = land::WATER;
+        w.cells.grid.get_mut(cells[4]).unwrap().land = land::ROUGH;
+        let soldier = w.rules().index_of(Kind::Infantry, "SOLDIER").unwrap();
+        let filler =
+            glasnost_sim::objects::create(&mut w, Kind::Infantry, soldier, Some(HouseId(1)));
+        for p in 0..5 {
+            w.cells
+                .mark_infantry(cells[5], ground, p, filler, HouseId(1));
+        }
+        w.cells.claim_vehicle(cells[5], ground, true);
+        let after = w.objects.keys().copied().max().unwrap();
+        let mut rr = w.rng.clone();
+        smudge_a(&w, &mut rr);
+        let mut ty = |_: &mut Rng| Some("ACREW");
+        let unclear = [cells[1], cells[2], cells[3]];
+        let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, &[], &unclear);
+        assert!(want.is_empty());
+        assert_eq!(damage::apply(&mut w, id, killing()), HitResult::NowDead);
+        assert_eq!(w.rng, rr, "seed {seed}");
+        assert!(new_infantry(&w, after).is_empty());
+    }
+}
+
+// spec: S-0312 claim 24 and D16 variant f (revision 51: the release of absorbed passengers tests only the no-crew state, not the crewed flag: a building type without the crewed flag releases its absorbed passengers as any other does, and no survivors, C = 0 by F5, so no smudge step of claim 19 (g))
+#[test]
+fn claim_24_release_ignores_the_crewed_flag() {
+    for seed in 1..=8 {
+        let r = rules();
+        let mut w = game(&r, seed);
+        let id = spawn(&mut w, Kind::Building, "PLAIN", 0, 0, 0);
+        let tl = w.obj(id).unwrap().pos.cell();
+        let cells = damage::foundation_order(tl, (3, 3));
+        let mut list = Vec::new();
+        for _ in 0..2 {
+            let p = spawn(&mut w, Kind::Infantry, "SOLDIER", 0, 8, 8);
+            glasnost_sim::objects::take_inside(&mut w, p);
+            w.obj_mut(p).unwrap().structure.absorbed_in = Some(id);
+            list.push(p);
+        }
+        w.obj_mut(id).unwrap().structure.absorbed = list.clone();
+        let after = w.objects.keys().copied().max().unwrap();
+        let h = half(&w);
+        let mut rr = w.rng.clone();
+        smudge_a(&w, &mut rr);
+        // Each passenger: R(0, 3) for the row, then its scatter request.
+        for _ in 0..2 {
+            rr.ranged(0, 3, h);
+            rr.ranged(0, 4, h);
+        }
+        assert_eq!(damage::apply(&mut w, id, killing()), HitResult::NowDead);
+        assert_eq!(w.rng, rr, "seed {seed}");
+        // The list holds the most recent entry first; it comes out first, in
+        // the first cell.
+        assert_eq!(w.obj(list[0]).unwrap().pos.cell(), cells[0]);
+        assert_eq!(w.obj(list[1]).unwrap().pos.cell(), cells[1]);
+        assert!(new_infantry(&w, after).is_empty(), "no survivors");
     }
 }

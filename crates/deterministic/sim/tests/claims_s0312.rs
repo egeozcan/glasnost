@@ -904,7 +904,7 @@ fn crews(w: &World) -> Vec<ObjectId> {
         .collect()
 }
 
-// spec: S-0312 claim 13 and F4 (a crewed vehicle with no passenger capacity: a chance test with one unit-interval value, the crew type with no draw for a house without a side (the technician), the creation draw, then health R(5, trunc(S / 2)); owned by the vehicle's house, facing map north, on guard)
+// spec: S-0312 claim 13 and F4 (a crewed vehicle with no passenger capacity: a chance test with one unit-interval value, the crew type with no draw for a house without a side (the technician), the creation draw, the position draw of a centre class (revision 51), then health R(5, trunc(S / 2)); owned by the vehicle's house, facing map north, on guard)
 #[test]
 fn claim_13_crew_escape_draws() {
     let r = crew_rules();
@@ -915,6 +915,7 @@ fn claim_13_crew_escape_draws() {
     let mut rr = w.rng.clone();
     let _chance = rr.unit(mode);
     let _creation = rr.raw();
+    let _position = rr.ranged(0, 3, h);
     let health = rr.ranged(5, 30, h);
     let before = w.rng.taken();
     kill(&mut w, id);
@@ -965,6 +966,217 @@ fn claim_13_no_crew_cases() {
         assert!(crews(&w).is_empty(), "case {case}");
         assert_eq!(w.rng, before, "case {case}");
     }
+}
+
+/// Kills VICTIM `id` and returns its crews and the stream as it stands.
+fn crew_of(w: &mut World, id: ObjectId) -> (Vec<ObjectId>, Rng) {
+    kill(w, id);
+    (crews(w), w.rng.clone())
+}
+
+/// A world of `r` whose stream has been moved on by `k` raw values, so
+/// that runs of different `k` draw different values.
+fn game_at(r: &Ruleset, k: usize) -> World {
+    let mut w = game(r);
+    for _ in 0..k {
+        w.rng.raw();
+    }
+    w
+}
+
+/// The health a VICTIM's technician crew gets from the stream as it stands:
+/// the chance value, the creation draw, the position draw when `position`,
+/// then R(5, 30).
+fn crew_health(w: &World, position: bool) -> i32 {
+    let h = half(w);
+    let mut rr = w.rng.clone();
+    rr.unit(w.rules().mode);
+    rr.raw();
+    if position {
+        rr.ranged(0, 3, h);
+    }
+    rr.ranged(5, 30, h)
+}
+
+/// Kills VICTIM `id` of a world whose stream stands as in `w0` and checks
+/// that its one crew took the position draw exactly when `position`; over
+/// the runs, `told` counts those whose two predictions differ. Returns the
+/// crew.
+fn crew_drawn(w: &mut World, id: ObjectId, position: bool, told: &mut usize) -> ObjectId {
+    let want = crew_health(w, position);
+    if want != crew_health(w, !position) {
+        *told += 1;
+    }
+    let (crew, _) = crew_of(w, id);
+    assert_eq!(crew.len(), 1);
+    assert_eq!(
+        w.obj(crew[0]).unwrap().health,
+        want,
+        "position draw {position}"
+    );
+    crew[0]
+}
+
+// spec: S-0312 claim 13 (revision 51: the crew is put down at the vehicle's exact position after the vehicle has given up its place in the occupancy record, so the vehicle never refuses its own crew; at the surface height inside the usable area S-0208 claim 3's table gives the standing position, with R(0, 3) for a centre class before the health draw; a side class takes its own position with no draw)
+#[test]
+fn claim_13_crew_standing_position() {
+    let r = crew_rules();
+    let mut told = [0, 0];
+    for k in 0..12 {
+        // The vehicle at its cell centre: the centre class, one ranged draw
+        // over 0 to 3 picks the row of S-0208's table O.
+        let mut w = game_at(&r, k);
+        let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+        let c = w.obj(id).unwrap().pos.cell();
+        let crew = crew_drawn(&mut w, id, true, &mut told[0]);
+        assert_eq!(w.obj(crew).unwrap().pos.cell(), c, "the vehicle's cell");
+        // The vehicle in the right part of its cell: the right class, its
+        // own position, no position draw.
+        let mut w = game_at(&r, k);
+        let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+        {
+            let o = w.obj_mut(id).unwrap();
+            o.pos.x += 70;
+            o.pos.y -= 70;
+        }
+        let c = w.obj(id).unwrap().pos.cell();
+        let crew = crew_drawn(&mut w, id, false, &mut told[1]);
+        let cp = w.obj(crew).unwrap().pos;
+        let (u, v) = glasnost_sim::walk::standing_point(glasnost_sim::cells::position::RIGHT);
+        assert_eq!(
+            (cp.cell(), cp.x.rem_euclid(256), cp.y.rem_euclid(256)),
+            (c, u, v)
+        );
+    }
+    assert!(
+        told.iter().all(|&n| n > 0),
+        "runs that tell the draw apart: {told:?}"
+    );
+}
+
+// spec: S-0312 claim 13 (revision 51: a crew for which the table's first row refuses the cell, another vehicle in it, gets no position: its chance and creation draws are taken, no position draw and no health draw, and it never enters play)
+#[test]
+fn claim_13_crew_with_no_position() {
+    let r = crew_rules();
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+    let c = w.obj(id).unwrap().pos.cell();
+    // Another vehicle's vehicle-present claim on the cell.
+    w.cells
+        .claim_vehicle(c, glasnost_sim::world::Layer::Ground, true);
+    let mut rr = w.rng.clone();
+    rr.unit(w.rules().mode);
+    rr.raw();
+    let (crew, after) = crew_of(&mut w, id);
+    assert!(crew.is_empty());
+    assert_eq!(after.taken(), rr.taken(), "chance and creation only");
+}
+
+// spec: S-0312 claim 13 (revision 51: one entry test, S-0209's ordinary return placement for an infantry mover; only clear accepts the crew, so a cell whose entry outcome is not clear refuses it after the table chose a position: chance, creation and position draws, no health draw); claim 18 (a survivor makes no such test)
+#[test]
+fn claim_13_crew_refused_by_its_entry_test() {
+    let r = crew_rules();
+    let mut w = game(&r);
+    // A building of another house on the vehicle's cell: the table ignores
+    // the building-present flag, the entry test does not give clear.
+    let hut = spawn(&mut w, Kind::Building, "HUT", 1, -1, -1);
+    let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+    let c = w.obj(id).unwrap().pos.cell();
+    assert!(
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .contains(&hut)
+    );
+    let h = half(&w);
+    let mut rr = w.rng.clone();
+    rr.unit(w.rules().mode);
+    rr.raw();
+    rr.ranged(0, 3, h);
+    let (crew, after) = crew_of(&mut w, id);
+    assert!(crew.is_empty(), "refused by the entry test");
+    assert_eq!(after.taken(), rr.taken(), "no health draw");
+}
+
+/// A game of `r` on the testkit's empty map with its local area cut by 2
+/// cells on each side, so that some legal cells lie outside the usable
+/// area, its stream moved on by `k` raw values.
+fn cut_game_at(r: &Ruleset, k: usize) -> World {
+    let mut m = testkit::empty_map(SIZE);
+    let fp = glasnost_map::Footprint::new(SIZE, SIZE, [2, 2, SIZE - 4, SIZE - 4]);
+    let mut cells = glasnost_map::CellGrid::new(fp);
+    let all: Vec<glasnost_map::CellXY> = cells.iter().map(|(c, _)| c).collect();
+    for c in all {
+        if let (Some(dst), Some(src)) = (cells.get_mut(c), m.cells.get(c)) {
+            *dst = *src;
+        }
+    }
+    m.footprint = fp;
+    m.cells = cells;
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-test"));
+    let mut w = glasnost_sim::load::new_game(rules, &m, testkit::catalogue(), &testkit::setup(11))
+        .expect("synthetic test game loads");
+    for _ in 0..k {
+        w.rng.raw();
+    }
+    w
+}
+
+// spec: S-0312 claim 13 (revision 51: in a cell outside the usable area the choice ignores the cell's occupants and takes no draw: the crew stands at its class's own position)
+#[test]
+fn claim_13_crew_outside_the_usable_area() {
+    let r = crew_rules();
+    let mut told = 0;
+    for k in 0..12 {
+        let mut w = cut_game_at(&r, k);
+        let c = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .find(|&c| !w.cells.usable(c))
+            .expect("a cell outside the usable area");
+        let id = testkit::spawn(&mut w, Kind::Vehicle, "VICTIM", 0, c, 0);
+        let crew = crew_drawn(&mut w, id, false, &mut told);
+        let cp = w.obj(crew).unwrap().pos;
+        let (u, v) = glasnost_sim::walk::standing_point(glasnost_sim::cells::position::CENTRE);
+        assert_eq!(
+            (cp.cell(), cp.x.rem_euclid(256), cp.y.rem_euclid(256)),
+            (c, u, v)
+        );
+    }
+    assert!(told > 0);
+}
+
+// spec: S-0312 claim 13 (revision 51: when the height of the vehicle's position differs from the terrain surface there, no position is chosen and no draw taken: the crew is put at the vehicle's exact position)
+#[test]
+fn claim_13_crew_above_the_surface() {
+    let r = crew_rules();
+    let mut told = 0;
+    for k in 0..12 {
+        let mut w = game_at(&r, k);
+        let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+        w.obj_mut(id).unwrap().pos.z += 40;
+        let p = w.obj(id).unwrap().pos;
+        let crew = crew_drawn(&mut w, id, false, &mut told);
+        let cp = w.obj(crew).unwrap().pos;
+        assert_eq!((cp.x, cp.y), (p.x, p.y), "the vehicle's exact position");
+    }
+    assert!(told > 0);
+}
+
+// spec: S-0312 claim 18 and Import mapping (revision 51: the crewed flag absent means no for every kind of type: a vehicle type without it leaves no crew)
+#[test]
+fn claim_13_crewed_absent_on_a_vehicle_is_no() {
+    let mut r = crew_rules();
+    r.sim.vehicles.get_mut("VICTIM").unwrap().crewed = None;
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+    let ti = w.rules().index_of(Kind::Vehicle, "VICTIM").unwrap();
+    assert!(!w.rules().vehicles[ti as usize].vehicle.crewed);
+    let before = w.rng.clone();
+    let (crew, after) = crew_of(&mut w, id);
+    assert!(crew.is_empty());
+    assert_eq!(after, before, "no chance test");
 }
 
 /// The crew's behaviour after the death of a VICTIM of house 0, with house
