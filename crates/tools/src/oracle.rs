@@ -316,8 +316,26 @@ pub struct OracleRecord {
     pub map_file: String,
     /// The map file's sha256, lower-case hex.
     pub map_sha256: String,
-    /// The stock games, in CSV order.
+    /// The stock games, in CSV order, with the rows of a stock replay
+    /// record ([`StockReplay`], M-0016) in place of the archived ones.
     pub games: Vec<Game>,
+    /// The types whose pairings a stock replay record confirms as stock
+    /// for this record (M-0016: SREF and V3), so that they are scored.
+    pub covered: Vec<String>,
+    /// How many of [`OracleRecord::games`] a stock replay record restated.
+    pub restated: usize,
+}
+
+impl OracleRecord {
+    /// Whether a pairing of this record stands as stock and so is scored:
+    /// neither type is one of [`UNCONFIRMED_TYPES`] (M-0017), or a stock
+    /// replay record covers it (M-0016).
+    pub fn scores(&self, pairing: &(String, String)) -> bool {
+        // measure: M-0017 (the pairings without SREF or V3 stand as stock), M-0016 (every row of the SREF and V3 pairings stands as stock, its 48 rows in place)
+        UNCONFIRMED_TYPES
+            .iter()
+            .all(|t| (*t != pairing.0 && *t != pairing.1) || self.covered.iter().any(|c| c == t))
+    }
 }
 
 /// The front matter's `key: value` lines.
@@ -374,6 +392,8 @@ pub fn parse_record(path: &Path, md: &str, csv: &str) -> Result<OracleRecord, St
         map_file,
         map_sha256,
         games,
+        covered: Vec::new(),
+        restated: 0,
     })
 }
 
@@ -446,7 +466,8 @@ pub fn unrecognised_csvs(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Reads every oracle arena record under `dir` (the `measurements/`
-/// folder).
+/// folder), with the rows of every stock replay record there in place
+/// ([`apply_stock_replay`]).
 pub fn load_records(dir: &Path) -> Result<Vec<OracleRecord>, String> {
     let mut out = Vec::new();
     for path in record_files(dir) {
@@ -455,7 +476,259 @@ pub fn load_records(dir: &Path) -> Result<Vec<OracleRecord>, String> {
             .map_err(|e| format!("{}: {e}", path.display()))?;
         out.push(parse_record(&path, &md, &csv)?);
     }
+    if !out.is_empty() {
+        for r in load_stock_replays(dir)? {
+            apply_stock_replay(&mut out, &r)?;
+        }
+    }
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Stock replay records (M-0016)
+
+/// The header of a stock replay record's table of restated rows (measure:
+/// M-0016, Result, *The 48 stock rows*): one line per game whose stock
+/// replay changed its recorded row, naming the game as the oracle arena
+/// records' per-game data do, with its archived and its stock winner and
+/// end frame.
+pub const STOCK_ROWS_HEADER: &str = "| Record | Row | Column | Row side | Seed | Archived winner | Archived end frame | Stock winner | Stock end frame |";
+
+/// The start of the header of a stock replay record's per-pairing table
+/// (measure: M-0016, Result, *Pairings with changed rows, stock*): the
+/// row's wins, the column's wins and `none` with the stock rows in place.
+pub const STOCK_PAIRINGS_HEADER: &str =
+    "| Record | Row | Column | n | Row wins | Column wins | None |";
+
+/// The types whose games a stock replay record replays, by record: every
+/// archived game of M-0001 and M-0003 with one of them on either side
+/// (measure: M-0016, Setup, *Games*). Its restated rows replace the
+/// archived ones and every other row of those pairings stands as stock
+/// (M-0016, Result, *What replaces what*).
+pub const STOCK_REPLAY_TYPES: [(&str, [&str; 2]); 1] = [("M-0016", ["SREF", "V3"])]; // measure: M-0016
+
+/// One restated game of a stock replay record.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StockRow {
+    /// The oracle arena record whose row it replaces (`M-0001`).
+    pub record: String,
+    /// The game, with the archived winner and end frame.
+    pub archived: Game,
+    /// The stock winner and end frame.
+    pub stock: (Winner, i32),
+}
+
+/// One line of a stock replay record's per-pairing table.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StockPairing {
+    /// The oracle arena record (`M-0001`).
+    pub record: String,
+    /// Row and column type.
+    pub pairing: (String, String),
+    /// Its games.
+    pub n: u32,
+    /// Row wins, column wins and `none`, with the stock rows in place.
+    pub counts: [u32; 3],
+}
+
+/// A stock replay record (M-0016): rows that replace an oracle arena
+/// record's archived rows, and the per-pairing lines they give.
+#[derive(Clone, Debug)]
+pub struct StockReplay {
+    /// The record's ID.
+    pub id: String,
+    /// The types it covers ([`STOCK_REPLAY_TYPES`]).
+    pub covers: Vec<String>,
+    /// The restated rows, in table order.
+    pub rows: Vec<StockRow>,
+    /// The per-pairing lines, in table order.
+    pub pairings: Vec<StockPairing>,
+}
+
+/// The cells of each line of the markdown table whose header line starts
+/// with `header`, after its separator line, trimmed; `None` when there is
+/// no such table.
+fn table_rows(md: &str, header: &str) -> Option<Vec<Vec<String>>> {
+    let mut lines = md.lines().skip_while(|l| !l.trim().starts_with(header));
+    lines.next()?;
+    lines.next()?; // the separator line
+    Some(
+        lines
+            .take_while(|l| l.trim_start().starts_with('|'))
+            .map(|l| {
+                l.trim()
+                    .trim_matches('|')
+                    .split('|')
+                    .map(|c| c.trim().to_owned())
+                    .collect()
+            })
+            .collect(),
+    )
+}
+
+fn winner_of(s: &str) -> Result<Winner, String> {
+    match s {
+        "row" => Ok(Winner::Row),
+        "col" => Ok(Winner::Col),
+        "none" => Ok(Winner::None),
+        s => Err(format!("winner {s:?} is not row, col or none")),
+    }
+}
+
+/// Reads a stock replay record from its markdown text: `None` when it has
+/// no table headed [`STOCK_ROWS_HEADER`].
+pub fn parse_stock_replay(md: &str) -> Result<Option<StockReplay>, String> {
+    let Some(rows) = table_rows(md, STOCK_ROWS_HEADER) else {
+        return Ok(None);
+    };
+    let id = front_matter(md)
+        .into_iter()
+        .find(|(k, _)| k == "id")
+        .map(|(_, v)| v)
+        .ok_or("a stock replay record without an id")?;
+    let covers = STOCK_REPLAY_TYPES
+        .iter()
+        .find(|(r, _)| *r == id)
+        .map(|(_, t)| t.iter().map(|x| (*x).to_owned()).collect())
+        .unwrap_or_default();
+    let mut out = StockReplay {
+        id: id.clone(),
+        covers,
+        rows: Vec::new(),
+        pairings: Vec::new(),
+    };
+    for (n, f) in rows.iter().enumerate() {
+        let at = |e: String| format!("{id}: stock row {}: {e}", n + 1);
+        if f.len() < 9 {
+            return Err(at("expected at least 9 cells".into()));
+        }
+        let side = match f[3].as_str() {
+            "A" => Side::A,
+            "B" => Side::B,
+            s => return Err(at(format!("row side {s:?} is not A or B"))),
+        };
+        let num = |s: &str| s.parse::<i32>().map_err(|_| at(format!("number {s:?}")));
+        out.rows.push(StockRow {
+            record: f[0].clone(),
+            archived: Game {
+                row: f[1].clone(),
+                col: f[2].clone(),
+                row_side: side,
+                seed: f[4].parse().map_err(|_| at(format!("seed {:?}", f[4])))?,
+                winner: winner_of(&f[5]).map_err(at)?,
+                end_frame: num(&f[6])?,
+            },
+            stock: (winner_of(&f[7]).map_err(at)?, num(&f[8])?),
+        });
+    }
+    for (n, f) in table_rows(md, STOCK_PAIRINGS_HEADER)
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+    {
+        let at = |e: String| format!("{id}: pairing line {}: {e}", n + 1);
+        if f.len() < 7 {
+            return Err(at("expected at least 7 cells".into()));
+        }
+        let num = |s: &str| s.parse::<u32>().map_err(|_| at(format!("number {s:?}")));
+        out.pairings.push(StockPairing {
+            record: f[0].clone(),
+            pairing: (f[1].clone(), f[2].clone()),
+            n: num(&f[3])?,
+            counts: [num(&f[4])?, num(&f[5])?, num(&f[6])?],
+        });
+    }
+    Ok(Some(out))
+}
+
+/// The `M-*.md` files under `dir` (recursively, outside `local/`), in path
+/// order.
+fn record_paths(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if p.is_dir() {
+                if name != "local" {
+                    walk(&p, out);
+                }
+            } else if name.starts_with("M-") && name.ends_with(".md") {
+                out.push(p);
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    walk(dir, &mut paths);
+    paths.sort();
+    paths
+}
+
+/// Every stock replay record under `dir` (recursively, outside `local/`),
+/// in path order: a `M-*.md` file with a table headed
+/// [`STOCK_ROWS_HEADER`].
+pub fn load_stock_replays(dir: &Path) -> Result<Vec<StockReplay>, String> {
+    let paths = record_paths(dir);
+    let mut out = Vec::new();
+    for p in paths {
+        let md = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        if let Some(r) = parse_stock_replay(&md).map_err(|e| format!("{}: {e}", p.display()))? {
+            out.push(r);
+        }
+    }
+    Ok(out)
+}
+
+/// Puts a stock replay record's rows in place of the archived ones
+/// (measure: M-0016, Result, *What replaces what*: each restated row
+/// replaces the row with the same record, row, column, row side and seed,
+/// its stock winner and end frame in place of the archived ones) and marks
+/// the types it covers as scored in the records it names. A restated row
+/// whose archived winner and end frame are not the record's row is an
+/// error (M-0016, Evidence: they equal M-0001's or M-0003's per-game row).
+pub fn apply_stock_replay(records: &mut [OracleRecord], r: &StockReplay) -> Result<(), String> {
+    for row in &r.rows {
+        let Some(rec) = records.iter_mut().find(|x| x.id == row.record) else {
+            return Err(format!("{}: no oracle arena record {}", r.id, row.record));
+        };
+        let a = &row.archived;
+        let Some(g) = rec.games.iter_mut().find(|g| key(g) == key(a)) else {
+            return Err(format!(
+                "{}: {} has no game {} against {}, side {:?}, seed {}",
+                r.id, row.record, a.row, a.col, a.row_side, a.seed
+            ));
+        };
+        if (g.winner, g.end_frame) != (a.winner, a.end_frame) {
+            return Err(format!(
+                "{}: {} {} against {}, side {:?}, seed {}: the record's row is {} {}, the archived row {} {}",
+                r.id,
+                row.record,
+                a.row,
+                a.col,
+                a.row_side,
+                a.seed,
+                g.winner.text(),
+                g.end_frame,
+                a.winner.text(),
+                a.end_frame
+            ));
+        }
+        // measure: M-0016 (Result, What replaces what: the stock winner and end frame replace the archived ones)
+        (g.winner, g.end_frame) = row.stock;
+        rec.restated += 1;
+    }
+    // measure: M-0016 (Setup: every archived game of M-0001 and M-0003 with SREF or V3 on either side; Result: the other rows of those pairings stand as stock; M-0002 has no game with SREF or V3)
+    let named: Vec<String> = r.rows.iter().map(|x| x.record.clone()).collect();
+    for rec in records.iter_mut().filter(|x| named.contains(&x.id)) {
+        for t in &r.covers {
+            if !rec.covered.contains(t) {
+                rec.covered.push(t.clone());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Finds a record by ID (`M-0001`) or by the start of its file name.
@@ -503,6 +776,124 @@ pub fn check_shape(games: &[Game]) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// Placement records (M-0006)
+
+/// The header of a placement record's table of measured placements
+/// (measure: M-0006, Result, *Units off their stated cells*): a stated cell
+/// and the cell its unit was placed on, as `x,y`.
+pub const PLACED_HEADER: &str = "| Stated cell | Placed on |";
+
+/// The header of a placement record's table of the neutral structures in
+/// play at tick 0 (measure: M-0006, Result, *Map content*): a cell as
+/// `x,y`.
+pub const NEUTRAL_HEADER: &str = "| Cell | Relative to W | Note |";
+
+/// The oracle arena records whose games a placement record's table covers,
+/// by placement record (measure: M-0006, Result, *Units off their stated
+/// cells*: the archived games of M-0001 to M-0003).
+pub const PLACEMENT_RECORDS: [(&str, [&str; 3]); 1] = [("M-0006", ["M-0001", "M-0002", "M-0003"])]; // measure: M-0006
+
+/// A placement record (M-0006): its W, the measured placements and the
+/// cells of the neutral structures, all absolute cells of the record.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Placements {
+    /// The record's ID.
+    pub id: String,
+    /// The oracle arena records it covers ([`PLACEMENT_RECORDS`]).
+    pub covers: Vec<String>,
+    /// The record's W.
+    pub w: CellXY,
+    /// Stated cell and placed cell, in table order.
+    pub moves: Vec<(CellXY, CellXY)>,
+    /// The cells of the neutral structures, in table order.
+    pub neutral: Vec<CellXY>,
+}
+
+fn cell_text(s: &str) -> Option<CellXY> {
+    let (x, y) = s.trim().split_once(',')?;
+    Some(CellXY::new(x.trim().parse().ok()?, y.trim().parse().ok()?))
+}
+
+/// Reads a placement record from its markdown text: `None` when it has no
+/// table headed [`PLACED_HEADER`]. Its W is the `W = (x, y)` of its text.
+pub fn parse_placements(md: &str) -> Result<Option<Placements>, String> {
+    let Some(rows) = table_rows(md, PLACED_HEADER) else {
+        return Ok(None);
+    };
+    let id = front_matter(md)
+        .into_iter()
+        .find(|(k, _)| k == "id")
+        .map(|(_, v)| v)
+        .ok_or("a placement record without an id")?;
+    let w = md
+        .split_once("W = (")
+        .and_then(|(_, rest)| rest.split_once(')'))
+        .and_then(|(c, _)| cell_text(c))
+        .ok_or_else(|| format!("{id}: no W = (x, y) in its text"))?;
+    let covers = PLACEMENT_RECORDS
+        .iter()
+        .find(|(r, _)| *r == id)
+        .map(|(_, t)| t.iter().map(|x| (*x).to_owned()).collect())
+        .unwrap_or_default();
+    let mut moves = Vec::new();
+    for (n, f) in rows.iter().enumerate() {
+        let c = |i: usize| {
+            f.get(i)
+                .and_then(|s| cell_text(s))
+                .ok_or_else(|| format!("{id}: placement line {}: cell {:?}", n + 1, f.get(i)))
+        };
+        moves.push((c(0)?, c(1)?));
+    }
+    let mut neutral = Vec::new();
+    for (n, f) in table_rows(md, NEUTRAL_HEADER)
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+    {
+        neutral.push(
+            f.first()
+                .and_then(|s| cell_text(s))
+                .ok_or_else(|| format!("{id}: neutral line {}: cell {:?}", n + 1, f.first()))?,
+        );
+    }
+    Ok(Some(Placements {
+        id,
+        covers,
+        w,
+        moves,
+        neutral,
+    }))
+}
+
+/// Every placement record under `dir` (recursively, outside `local/`), in
+/// path order.
+pub fn load_placements(dir: &Path) -> Result<Vec<Placements>, String> {
+    let mut out = Vec::new();
+    for p in record_paths(dir) {
+        let md = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        if let Some(r) = parse_placements(&md).map_err(|e| format!("{}: {e}", p.display()))? {
+            out.push(r);
+        }
+    }
+    Ok(out)
+}
+
+/// The measured placements for the games of oracle arena record `record`,
+/// relative to W ([`Ground::placed`]).
+pub fn placed_for(placements: &[Placements], record: &str) -> Vec<(CellXY, CellXY)> {
+    let rel = |w: CellXY, c: CellXY| CellXY::new(c.x - w.x, c.y - w.y);
+    placements
+        .iter()
+        .filter(|p| p.covers.iter().any(|c| c == record))
+        .flat_map(|p| {
+            p.moves
+                .iter()
+                .map(move |&(a, b)| (rel(p.w, a), rel(p.w, b)))
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // The ground and one game
 
 /// What every game of a record shares: the rules, the map, the tiles and
@@ -523,6 +914,10 @@ pub struct Ground {
     /// as the record's houses are; `false` plays them as AI houses of our
     /// engine, which follow the human-controlled rules (glossary *AI house*).
     pub computer: bool,
+    /// Measured placements ([`Placements`]): each stated cell, relative to
+    /// W, with the cell its unit is placed on, relative to W; empty for a
+    /// record that no placement record covers.
+    pub placed: Vec<(CellXY, CellXY)>,
 }
 
 /// The sha256 of `bytes`, lower-case hex.
@@ -593,6 +988,7 @@ pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, 
             w: CellXY::new(i32::from(x), i32::from(y)),
             countries: COUNTRIES.map(str::to_owned),
             computer: true,
+            placed: Vec::new(),
         })
     })
 }
@@ -618,6 +1014,7 @@ pub fn synthetic_ground(size: i32) -> Ground {
         w,
         countries,
         computer: true,
+        placed: Vec::new(),
     }
 }
 
@@ -942,8 +1339,15 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
             }
             // The unit is created first (its creation draws), then its cell is chosen.
             let id = glasnost_sim::objects::create(&mut w, kind, ti, Some(houses[s]));
+            let off = CellXY::new(stated.x - ground.w.x, stated.y - ground.w.y);
+            // measure: M-0006 (Result, Units off their stated cells: a unit stated on one of the cliff cells is placed on the cell the table gives, in every archived game; some placed cells already hold a unit)
+            let measured = ground
+                .placed
+                .iter()
+                .find(|(s, _)| *s == off)
+                .map(|(_, p)| CellXY::new(ground.w.x + p.x, ground.w.y + p.y));
             // measure: M-0001, M-0017 (Setup: a unit that its stated cell does not take is placed on a free neighbouring cell; the test and the order are ours, Q-2096)
-            let cell = placed_cell(&w, id, kind, stated).ok_or_else(|| {
+            let cell = measured.or_else(|| placed_cell(&w, id, kind, stated)).ok_or_else(|| {
                 let why: Vec<String> = std::iter::once(stated)
                     .chain(ring(stated, 1))
                     .map(|c| {
@@ -969,7 +1373,11 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
                     index: i,
                     stated,
                     placed: cell,
-                    why: refusal(&w, id, kind, stated).unwrap_or_default(),
+                    why: if measured.is_some() {
+                        "the placed cell of M-0006".into()
+                    } else {
+                        refusal(&w, id, kind, stated).unwrap_or_default()
+                    },
                 });
             }
             // Our design (Q-1711 question 5, Q-2097): A1's interim in the chosen cell, its centre,
@@ -1591,10 +1999,13 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
     };
     let mut out = String::new();
     let mut grounds: BTreeMap<(String, String), Ground> = BTreeMap::new();
+    let placements = load_placements(&cli.measurements)?;
     let mut ground_of = |r: &OracleRecord| -> Result<Ground, String> {
         let key = (r.map_file.clone(), r.map_sha256.clone());
         if let Some(g) = grounds.get(&key) {
-            return Ok(g.clone());
+            let mut g = g.clone();
+            g.placed = placed_for(&placements, &r.id);
+            return Ok(g);
         }
         let dir = game_dir.ok_or_else(|| {
             format!(
@@ -1607,6 +2018,7 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
         g.computer = !cli.ai_houses;
         eprintln!("loaded {} in {} ms", r.map_file, t0.elapsed().as_millis());
         grounds.insert(key, g.clone());
+        g.placed = placed_for(&placements, &r.id);
         Ok(g)
     };
     if cli.groups {
@@ -1851,8 +2263,12 @@ pub struct PairingComparison {
     pub same: [Option<(Winner, bool)>; 2],
     /// Our games of the pairing (n).
     pub n: usize,
-    /// Whether the pairing stands as stock and is scored ([`confirmed`]).
+    /// Whether the pairing stands as stock and is scored ([`confirmed`],
+    /// or [`OracleRecord::scores`] in [`compare_record`]).
     pub confirmed: bool,
+    /// Whether it is scored only because a stock replay record covers it
+    /// (M-0016: the SREF and V3 pairings, which M-0017 leaves out).
+    pub by_replay: bool,
     /// Games left out of the comparison because the stock game crashed
     /// (each counted once; ours of the same game are left out too).
     pub excluded: usize,
@@ -1932,6 +2348,7 @@ pub fn compare_pairing(
         same,
         n: o.len(),
         confirmed: confirmed(pairing),
+        by_replay: false,
         excluded: 0,
     }
 }
@@ -1945,6 +2362,9 @@ pub struct RecordComparison {
     pub pairings: Vec<PairingComparison>,
     /// Pairings of the record with no game of ours.
     pub missing: Vec<(String, String)>,
+    /// The stock rows a stock replay record put in place of archived ones
+    /// (M-0016), and the types it covers.
+    pub restated: (usize, Vec<String>),
 }
 
 impl RecordComparison {
@@ -1994,6 +2414,7 @@ pub fn compare_record(record: &OracleRecord, ours: &[Game]) -> RecordComparison 
         id: record.id.clone(),
         pairings: Vec::new(),
         missing: Vec::new(),
+        restated: (record.restated, record.covered.clone()),
     };
     let (stock, dead) = usable(record);
     let ours: Vec<Game> = ours
@@ -2005,6 +2426,9 @@ pub fn compare_record(record: &OracleRecord, ours: &[Game]) -> RecordComparison 
         if ours.iter().any(|g| g.row == p.0 && g.col == p.1) {
             let mut c = compare_pairing(&p, &stock, &ours);
             c.excluded = dead.iter().filter(|k| k.0 == p.0 && k.1 == p.1).count();
+            c.confirmed = record.scores(&p);
+            // measure: M-0016 (SREF and V3 pairings scored through its stock rows)
+            c.by_replay = c.confirmed && !confirmed(&p);
             out.pairings.push(c);
         } else {
             out.missing.push(p);
@@ -2079,11 +2503,14 @@ pub fn report(c: &RecordComparison) -> String {
                 if ok { "pass" } else { "fail" }
             ),
         };
-        let notes = if p.excluded == 0 {
+        let mut notes = if p.excluded == 0 {
             String::new()
         } else {
             format!(" [{} crashed stock games left out, M-0017]", p.excluded)
         };
+        if p.by_replay {
+            notes.push_str(" [stock rows of M-0016]");
+        }
         let _ = writeln!(
             s,
             "{:<7} {:<7} {:>2} | {:>2}/{:>2}/{:>2}     {:>2}/{:>2}/{:>2}   | {} | {:<9} / {:<9} | {result}{notes}",
@@ -2126,6 +2553,18 @@ pub fn report(c: &RecordComparison) -> String {
         s,
         "side-wise unanimous stock outcomes of the scored pairings: {all}; reproduced {kept}"
     );
+    if c.restated.0 > 0 {
+        let replay: Vec<&PairingComparison> =
+            scored.iter().copied().filter(|p| p.by_replay).collect();
+        let _ = writeln!(
+            s,
+            "of these, scored through a stock replay ({} rows restated, covering {}, M-0016): {} pairings, failing {}",
+            c.restated.0,
+            c.restated.1.join(", "),
+            replay.len(),
+            count(&replay, &|p| !p.pass()),
+        );
+    }
     let unscored: Vec<&PairingComparison> = c.pairings.iter().filter(|p| !p.confirmed).collect();
     let (all, kept) = sides(&unscored);
     let _ = writeln!(
@@ -2276,6 +2715,8 @@ mod tests {
             map_file: String::new(),
             map_sha256: String::new(),
             games,
+            covered: Vec::new(),
+            restated: 0,
         }
     }
 
@@ -2355,6 +2796,7 @@ mod tests {
             id: "M-test".into(),
             pairings: vec![c],
             missing: Vec::new(),
+            restated: (0, Vec::new()),
         });
         assert!(r.contains("FAIL (side outcome)"), "{r}");
         assert!(r.contains("scored pairings failing: 1 of 1"), "{r}");

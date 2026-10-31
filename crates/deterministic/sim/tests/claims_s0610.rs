@@ -543,6 +543,7 @@ fn m0011_a_berserk_crusher_never_searches_out_a_berserk_friendly_enemy() {
 // spec: S-0210 claim 11 (the attack-target variant of a computer-controlled owner: a crushable target less than the crush range away and no move destination; nothing in it asks the firing check or the berserk state)
 // spec: S-0210 claims 3 and 4 (crushed at the cell centre: removed on the same tick, no damage, the crush sound)
 // spec: S-0610 claims 6 and 8 (the berserk crusher never fires at the berserk-friendly target it holds)
+// spec: S-0309 claim 27 (a crusher that drives over the object it holds drops it in its movement and makes no shot in that tick's firing step)
 // measure: M-0011 (How the drones leave play: no damage event, while a grounded fortress that had the drone as its target stood on its position)
 #[test]
 fn m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it() {
@@ -565,10 +566,10 @@ fn m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it() {
         let gone = w.obj(mite).is_none();
         for e in std::mem::take(&mut w.effects) {
             match e {
-                // A shot in the very tick of the crush, after the mite left
-                // play, is not counted: what the firing check answers for a
-                // target removed earlier in the same turn is open (Q-2006).
-                Effect::Shot { firer, .. } if firer == crusher && !gone => shots += 1,
+                // The crush tick's shot counts too: the crusher drops the
+                // mite inside the crush and fires nothing in that tick's
+                // firing step (S-0309 claim 27, Q-2006).
+                Effect::Shot { firer, .. } if firer == crusher => shots += 1,
                 Effect::Sound {
                     sound: Sound::Crush,
                     ..

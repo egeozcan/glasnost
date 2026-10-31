@@ -1503,18 +1503,23 @@ pub fn teleport_search(w: &mut World, a: ObjectId) {
     search(w, a, SearchKind::Range, SearchContext::Teleport);
 }
 
+/// Whether `t` is within reach of `a` (S-0309 claim 23): the range test of
+/// S-0307 answers yes for it with the weapon `a` would use against it
+/// (S-0308). No target is not within reach.
+pub(crate) fn within_reach(w: &World, a: ObjectId, t: Option<Target>) -> bool {
+    t.is_some_and(|t| {
+        let (_, wp) = would_use(w, a, Some(t));
+        crate::combat::range::in_range(w, a, wp, Some(t), None)
+    })
+}
+
 /// The attack-move searches of S-0309 claim 23 (a).
 fn attack_move_search(w: &mut World, a: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(a).cloned() else { return };
     let tick = w.tick;
     let Some(mem) = o.attack_move else { return };
-    let within = |w: &World, t: Option<Target>| -> bool {
-        t.is_some_and(|t| {
-            let (_, wp) = would_use(w, a, Some(t));
-            crate::combat::range::in_range(w, a, wp, Some(t), None)
-        })
-    };
+    let within = |w: &World, t: Option<Target>| -> bool { within_reach(w, a, t) };
     match mem {
         AttackMoveMemory::Dest(_) => {
             if o.combat.engaged && within(w, o.target) {

@@ -39,6 +39,8 @@ struct Seen {
     dropped: bool,
     /// Height above the surface (S-0607 claim 13).
     above: i32,
+    /// Disabled by the control-centre rule (S-0405 claim 13; M-0005).
+    disabled: bool,
 }
 
 fn seen(w: &World, id: ObjectId) -> Option<Seen> {
@@ -56,6 +58,7 @@ fn seen(w: &World, id: ObjectId) -> Option<Seen> {
         set_down: o.lift.set_down,
         dropped: o.lift.dropped,
         above: glasnost_sim::jump::height_above(w, id),
+        disabled: glasnost_sim::econ::power::unit_disabled(w, id),
     })
 }
 
@@ -344,6 +347,12 @@ pub fn trace(
                                 (b.seized, b.set_down, b.dropped),
                                 (n.seized, n.set_down, n.dropped)
                             ));
+                        }
+                        if b.disabled != n.disabled {
+                            parts.push(format!("disabled {} -> {}", b.disabled, n.disabled));
+                        }
+                        if b.cell != n.cell {
+                            parts.push(format!("cell {:?} -> {:?}", b.cell, n.cell));
                         }
                         if b.z != n.z && (b.z - n.z).abs() > 8 {
                             parts.push(format!("z {} -> {}", b.z, n.z));

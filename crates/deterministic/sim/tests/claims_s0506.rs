@@ -2417,3 +2417,91 @@ fn claim_19_flight_detonation_carries_the_depth_adjustment() {
         "{anims:?} at {at:?}"
     );
 }
+
+/// The rules with a ground anti-air vehicle FLAK: a driving vehicle whose
+/// weapon Flak (range 12 cells, damage 1) fires a projectile that can hit
+/// flying objects. RKA is made too strong for that weapon to destroy.
+fn flak_rules() -> Ruleset {
+    let mut r = rules();
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("FLAK".into());
+    let s = &mut r.sim;
+    s.aircraft.get_mut("RKA").unwrap().strength = Some(100_000);
+    s.projectiles.insert(
+        "FlakShell".into(),
+        glasnost_rules::sim::ProjectileType {
+            aa: Some(true),
+            inviso: Some(true),
+            ..Default::default()
+        },
+    );
+    s.weapons.insert(
+        "Flak".into(),
+        WeaponType {
+            damage: Some(1),
+            rof: Some(30),
+            range: dec("12"),
+            projectile: Some("FlakShell".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
+    s.vehicles.insert(
+        "FLAK".into(),
+        UnitType {
+            strength: Some(400),
+            speed: Some(6),
+            rot: Some(5),
+            locomotion_class: Some(LocomotionClass::Wheel),
+            locomotor: Some(Locomotor::Drive),
+            primary: Some("Flak".into()),
+            ..Default::default()
+        },
+    );
+    r
+}
+
+// spec: S-0309 claim 27 (playtest note 36: a missile removed at its detonation, S-0506 claim 19, is dropped by every holder, a ground anti-air vehicle on guard included, inside the removal, with the timer draw; the holder then searches again)
+#[test]
+fn a_detonated_missile_is_dropped_by_a_ground_anti_air_holder() {
+    let r = flak_rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let flak = spawn_at(&mut w, "FLAK", 1, 8, 4, 0);
+    let x = controller(&w, lna).slots[0].object.unwrap();
+    spawn::shot(&mut w, lna, Target::Object(victim));
+    assert!(testkit_run_until(&mut w, 300, |w| phase_of(w, x) == Some(Phase::Cruise)));
+    // The anti-air vehicle holds the missile, with more than 10 ticks on its timer, until the missile detonates.
+    let mut detonated = false;
+    for _ in 0..600 {
+        let tick = w.tick;
+        {
+            let o = w.obj_mut(flak).unwrap();
+            o.target = Some(Target::Object(x));
+            o.targeting_timer = tick + 50;
+        }
+        w.effects.clear();
+        testkit::run(&mut w, 1);
+        if w.obj(x).is_none() {
+            detonated = detonation_point(&w).is_some();
+            break;
+        }
+    }
+    assert!(detonated, "the missile detonated and left play");
+    let o = w.obj(flak).unwrap();
+    assert_ne!(o.target, Some(Target::Object(x)), "the holder dropped it");
+    let left = o.targeting_timer - w.tick;
+    assert!(
+        (0..=8).contains(&left),
+        "the drop's timer draw: {left} left"
+    );
+    // It searches again: the enemy launcher within its weapon's reach becomes its target.
+    assert!(
+        testkit_run_until(&mut w, 60, |w| w.obj(flak).unwrap().target
+            == Some(Target::Object(lna))),
+        "the anti-air vehicle searched again"
+    );
+}

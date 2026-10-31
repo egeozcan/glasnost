@@ -157,6 +157,11 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
             }
             continue;
         }
+        if ob.kind == Kind::Vehicle {
+            // spec: S-0210 claim 4 (a crushed vehicle shows a killed vehicle's explosion and destruction animations, S-0312 claim 9's picks, whatever its sinking or death-frame properties; an infantry unit, building or aircraft shows none)
+            // spec: S-0309 claim 27 and S-0210 claim 4 (its picks come before its holders' timer draws, which its removal takes)
+            crate::combat::death::vehicle_animations(w, x, &ob);
+        }
         // spec: S-0210 claim 4 (removed on the same tick, no damage)
         crate::objects::remove(w, x);
         // spec: S-0210 claim 4 (the crushed type's crush sound plays at the crusher's position)

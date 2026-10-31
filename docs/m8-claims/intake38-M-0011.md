@@ -69,16 +69,17 @@ answer should be enough for the drones to leave play as the record has them.
 |---|---|---|
 | S-0302 claim 10 (a further berserk hit sets the remaining time anew, longer or shorter) | tested | `m0011_a_further_berserk_hit_sets_the_time_anew_longer_or_shorter` (`claims_s0610.rs`): a long hit, then a short one that shortens the time, then a long one that lengthens it again |
 | S-0610 claims 6 and 8, S-0309 table C *firing check* (a berserk crusher's search never takes a berserk-friendly enemy, even one it could crush) | tested | `m0011_a_berserk_crusher_never_searches_out_a_berserk_friendly_enemy` |
-| S-0210 claims 3, 4 and 11, the attack-target variant (a berserk computer-controlled crusher holding a berserk-friendly crushable target drives over it: removed, no damage, the crush sound, no shot at it before the crush) | tested | `m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it`. The test leaves out the shot fired in the crush tick (Q-2006) |
+| S-0210 claims 3, 4 and 11, the attack-target variant (a berserk computer-controlled crusher holding a berserk-friendly crushable target drives over it: removed, no damage, the crush sound, no shot at it before the crush) | tested | `m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it`. Since intake 52b the test counts the crush tick too, and the crusher fires nothing there (S-0309 claim 27, Q-2006; [intake 52b ledger](intake52b-S-0309-S-0405-M-0005-M-0006-M-0016.md)) |
 | S-0210 claim 11, the automatic choice of the first list (occasions, which enemy, berserk interplay) | answered, built | Q-2005, answered by S-0210 r29 and S-0215 r88 claim 39: the choice is now the *crush response* to a hit, built in intake 52a ([ledger](intake52a-S-0210-S-0215-S-0216.md)) |
-| what a ground unit does with a held target that has just left play | request | Q-2006 (below); the built rules meanwhile |
+| what a ground unit does with a held target that has just left play | built in intake 52b | Q-2006 (below), answered by S-0309 r51 claims 27 and 28, built and tested in [intake 52b](intake52b-S-0309-S-0405-M-0005-M-0006-M-0016.md) |
 
 **Side finding (Q-2006).** In the third test the crusher crushes its held target at the cell
 centre. In the same tick, its firing step still holds the removed object as its target. Our firing
 check treats a target that is no longer in play as no target and answers *can fire*, so the
 crusher fires one shot. No spec says what a unit does with a held target that has just left play,
 or what the firing check answers for it. We filed **Q-2006** and changed nothing. No arena game
-reaches this today.
+reaches this today. S-0309 r51 claim 27 answers Q-2006: every holder drops the object inside
+the crush and fires nothing at it in that tick (intake 52b).
 
 ## Tool
 

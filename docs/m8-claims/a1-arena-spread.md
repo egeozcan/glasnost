@@ -109,16 +109,16 @@ pairings, before this step, with what our games show:
 
 | rank | record, pairing | ours (all six seeds of each side) | candidate cause |
 |---|---|---|---|
-| 1 | M-0001 LTNK against ROBO | the ROBO are disabled (no shots) and the LTNK destroy all of them in every game; in the stock games a seed-dependent part survives | Q-1710 |
+| 1 | M-0001 LTNK against ROBO | the ROBO are disabled (no shots) and the LTNK destroy all of them in every game; in the stock games a seed-dependent part survives | Q-1710; answered by S-0405 r47 and M-0005 (as built, intake 52b); the stock stall is open, Q-2157 and Q-2158 |
 | 2 | M-0001 YTNK against SREF | YTNK win by the first sample at full value; the SREF fire few shots; the front column of YTNK all take equal damage | Q-1714; since M8 A3 intake 6 S-0318's shrapnel fragments answer it in part and the pairing passes (ours 9/3 against stock 8/4) |
-| 3 | M-0001 MIND against E2 | the column side wins every game | the open mind-control item of *Arena mode (M7b)*; Q-1713 for E2 on side A |
-| 4 | M-0001 YTNK against E2 | side B ends `none` in every game | Q-1713 |
+| 3 | M-0001 MIND against E2 | the column side wins every game | the open mind-control item of *Arena mode (M7b)*; Q-1713 for E2 on side A (M-0006: no stock unit stood on a cliff cell, intake 52b) |
+| 4 | M-0001 YTNK against E2 | side B ends `none` in every game | Q-1713 (M-0006: no stock unit stood on a cliff cell, intake 52b) |
 | 5 | M-0001 TELE against BFRT | the BFRT take no target and fire no shot in 6080 frames; the TELE fire thousands of shots at one BFRT with no effect; both shares stay 1 | Q-1712; answered in part by M-0015 (M8 A3 intake 40, [ledger](intake40-M-0015.md)): in ours every fortress is seized at tick 1, dropped and set down unhurt, and then stays seized for good (in *hunt* it never falls back to rest, so S-0607 claim 20 never restores it), so it is never held again and never fires; in the stock games the fortresses are held again 52 to 56 times, fire at the Magnetrons and crush them; what restores them is open, Q-2035 |
 | 6 | M-0003 MGTK against APOC | the MGTK side wins every game; the APOC stop firing at a disguised MGTK | S-0309 claim 25 (g), built at this step: the pairing now passes, see (d) |
 | 7 | M-0001 CAOS against BFRT | always `none`, the CAOS group untouched | Q-1712; answered in part by M-0011 (M8 A3 intake 38, [ledger](intake38-M-0011.md)): in the stock games the berserk fortresses crush the drones, in ours they never take a drone as target, so no drone leaves play; the rule that would let them choose one is open, Q-2005. **Answered** by S-0210 r29 and S-0215 r88 claim 39 (the crush response to a hit), built in M8 A3 intake 52a ([ledger](intake52a-S-0210-S-0215-S-0216.md)): ours now 0/8/4 against the stock 0/7/5, the drones crushed |
-| 8 | M-0002 INIT against E2 | INIT on side A: the five INIT on the cliff cells survive, always `none` | Q-1713 |
-| 9 | M-0003 ROBO against APOC | as rank 1: disabled ROBO, all destroyed | Q-1710 |
-| 10 | M-0003 ROBO against HTNK | as rank 1 | Q-1710 |
+| 8 | M-0002 INIT against E2 | INIT on side A: the five INIT on the cliff cells survive, always `none` | Q-1713; M-0006 shows no stock unit on a cliff cell, and since intake 52b the arena places those units on M-0006's cells |
+| 9 | M-0003 ROBO against APOC | as rank 1: disabled ROBO, all destroyed | Q-1710 (answered, as rank 1); Q-2157 |
+| 10 | M-0003 ROBO against HTNK | as rank 1 | Q-1710 (answered, as rank 1) |
 
 Next in the ranking: M-0001 CAOS against E2 and MIND against E1 (the CAOS and mind-control items of
 *Arena mode (M7b)*). M-0003 MGTK against TTNK ranks fourth by shortfall but passes every test.
@@ -152,8 +152,8 @@ added (a corpse is an ordinary animation), so the save and AI formats stay as th
 
 | request | gap | interim |
 |---|---|---|
-| [Q-1710](../../spec/requests/Q-1710-hunters-and-disabled-vehicles.md) | which disabled vehicles a hunting group leaves alone (ROBO pairings) | the built rules |
-| [Q-1711](../../spec/requests/Q-1711-variation-at-the-start-of-an-arena-game.md) | what varies from seed to seed before first contact (first move, search and shot, facings, the infantry standing point, paths, whether the harness used the map's entries) | answered in part by S-0216 (questions 2 and 3), built at M8 step A3 intake 21, [intake 21 ledger](intake21-S-0216.md); question 5 open, so the oracle arena keeps the records' *Setup* as read, infantry at the cell's centre point |
+| [Q-1710](../../spec/requests/Q-1710-hunters-and-disabled-vehicles.md) | which disabled vehicles a hunting group leaves alone (ROBO pairings) | answered by S-0405 r47 (claims 13 and 20) and M-0005, both as built, M8 step A3 intake 52b, [intake 52b ledger](intake52b-S-0309-S-0405-M-0005-M-0006-M-0016.md); the stock stall is open, Q-2157 and Q-2158 |
+| [Q-1711](../../spec/requests/Q-1711-variation-at-the-start-of-an-arena-game.md) | what varies from seed to seed before first contact (first move, search and shot, facings, the infantry standing point, paths, whether the harness used the map's entries) | answered in part by S-0216 (questions 2 and 3), built at M8 step A3 intake 21, [intake 21 ledger](intake21-S-0216.md); question 5 open, so the oracle arena keeps the records' *Setup* as read, infantry at the cell's centre point; M-0006 settles only that the units are in play at tick 0, and gives the cells of the units stated on the cliff cells, which the arena uses since intake 52b ([intake 52b ledger](intake52b-S-0309-S-0405-M-0005-M-0006-M-0016.md)) |
 | [Q-1712](../../spec/requests/Q-1712-battle-fortress-group-in-the-arena.md) | what a BFRT group without passengers does (TELE and CAOS against BFRT) | the built rules |
 | [Q-1713](../../spec/requests/Q-1713-infantry-on-cliff-cells-after-q1502.md) | how the games with infantry on the cliff cells end, after Q-1502 | answered in part by S-0216 claim 6 (questions 2 and 3, already as built), M8 step A3 intake 21, [intake 21 ledger](intake21-S-0216.md); question 1 open: S-0309 revision 21 and S-0208 revision 34 as built |
 | [Q-1714](../../spec/requests/Q-1714-ytnk-against-sref-opening.md) | how YTNK against SREF unfolds | answered in part by S-0318 (shrapnel fragments), built at M8 step A3 intake 6: the pairing passes, [intake 6 ledger](intake6-S-0318-S-0314-S-0108-S-0701.md) |
