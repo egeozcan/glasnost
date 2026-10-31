@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 58
+revision: 63
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-31
 measurements: [M-0004]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181]
 supersedes: []
 ---
 
@@ -80,21 +80,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Effect weapon.** A weapon whose shot keeps a lasting effect attached to the firer: a sonic wave,
   a spark-particle or fire-particle emitter, or a railgun particle trail (each an imported weapon
   flag). A sonic wave is *alive* from the shot until it ends (the combat and rendering specs own its
-  duration). A particle emitter's weapon flag sets its emitter place, and the place sets the let-go
-  events (S-0616 claim 1): an emitter in the fire place is let go on a retarget to a target not
-  within reach (what counts as within reach is S-0616 claim 1's; the measurement in F4 reads it as
-  the weapon's range), a move order or death. An emitter in the spark or railgun place is not let go
-  by anything the firer does. When the system leaves play, and what a let-go does to it, are set by
-  the behaviour kind of its system's type (S-0616 claim 22): a fire-kind system leaves play as
-  S-0613 claim 17 and S-0616 claim 22 give, and a spark-kind or railgun-kind system ends by its own
-  counter or line. An emitter whose system kind matches its place is called *matched*. A matched
-  emitter is *alive* from the shot until it is let go or its system leaves play, whichever comes
-  first. When an emitter that is not matched stops being alive is not stated (claim 5, Open
-  questions). A matched spark or railgun emitter is alive until its system leaves play. That is by
-  the system's own counter or line, except for a spark system whose type's spark-turns field is 0 or
-  less: S-0616 claim 20 treats it as bad data and marks it in its first turn (in the original its
-  counter never marks it, so its emitter stays alive until the owner's removal, a positive lifetime
-  or the trigger action ends the system).
+  duration). A particle emitter's weapon flag sets its *emitter place* (fire, spark or railgun,
+  S-0616 Terms), and the behaviour kind of its system's type sets its *kind*. An emitter whose kind
+  matches its place is called *matched*. Every emitter, matched or not, is *alive* while its place
+  holds it. Claim 5's place-and-kind rule gives what marks its system and when its place is freed.
 - **Disc laser weapon.** A weapon with the imported disc-laser flag (S-0203, Terms).
 - **Magnetic-beam weapon.** A weapon with the imported magnetic-beam flag. Its shot can make a
   *magnetic wave* attached to the firer (S-0607 claim 21). The firer's *held target* is its
@@ -303,8 +292,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    factor and none of the bonuses of claims 6 and 7 (the berserk halving of claim 8 still applies).
    It outranks the in-burst delay and is outranked by a building's 1-tick delay (claim 2's order).
 
-   A firer has at most one live effect of each kind (one sonic wave, one spark emitter, one fire
-   emitter, one railgun trail), whichever of its weapons started it. Each weapon of a firer has an
+   A firer has at most one sonic wave and one emitter in each of its fire, spark and railgun places
+   (Terms), whichever of its weapons started it. Each weapon of a firer has an
    *other weapon*: for the weapon in slot 0 it is the weapon in slot 1, and for a weapon in any
    other slot it is the weapon in slot 0 (S-0308 numbers the slots). The firing check (claim 9)
    answers as follows for the asked weapon:
@@ -326,17 +315,58 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    With just one effect flag, an effect weapon fires again at the first attempt that is both at
    least *R*′ ticks after the shot and after the effect has ended, where *R*′ is *R* (trunc(*R* / 2)
    for a berserk firer, claim 8), and no draw is taken for its delay. For a sonic weapon the effect
-   ends when the wave does, so the interval is max(*R*′, the wave's lifetime). For a matched
-   particle emitter it ends when the emitter's life ends (Terms). For a matched emitter (Terms): a
+   ends when the wave does, so the interval is max(*R*′, the wave's lifetime). For a particle
+   emitter it ends when its place is freed (the place-and-kind rule below). For a matched emitter: a
    spark-particle or railgun weapon fires again once its emitter's system has left play. So does a
    fire-particle weapon, when its firer keeps its target, stays put and lives: it fires at the first
    attempt after both its emitter's system has left play and *R*′ ticks after the shot. When the
-   system leaves play is S-0613 claim 17's and S-0616 claim 22's. When a weapon whose emitter is not
-   matched (a fire-particle weapon whose system type is of the spark kind, for example) fires again
-   is not stated (Open questions): the let-go events follow its place (S-0616 claim 1) and the
-   system's end follows its kind (S-0616 claim 22), and no measurement covers the pairing. For a
-   building that holds more than 1 round, *R*′ is 1 instead (0 if berserk, claim 8), so the
-   live-effect gate can still hold it back (claim 10).
+   system leaves play is S-0613 claim 17's and S-0616 claim 22's. For a building that holds more
+   than 1 round, *R*′ is 1 instead (0 if berserk, claim 8), so the live-effect gate can still hold
+   it back (claim 10).
+
+   **Place-and-kind rule** (every particle emitter, matched or not, Q-2181). The gate follows the
+   place, and the kind of the system that the place holds decides what marks that system:
+   - **Marks.** Each kind keeps its own marks (S-0616 claim 22, the column for a system with an
+     owner object): a spark system when its counter *K* runs out (S-0616 claim 15), a railgun
+     system after its line (S-0616 claim 17), and a fire system by its own turn when its owner is
+     no longer alive (S-0616 claim 10). Every kind is also marked by a positive lifetime (S-0613
+     claim 17), the trigger action that marks systems (S-0616 claim 1) and its owner's removal
+     (S-0616 claim 4). In addition, a let-go of the fire place marks the system that place holds,
+     whatever its kind. The fire place's let-go events are a retarget to a target not within
+     reach, a move order and the firer's death (S-0616 claim 1: what counts as within reach is its
+     own, and the measurement in F4 reads it as the weapon's range). The spark and railgun places
+     have no let-go events. So a fire-kind system held in the spark or railgun place is not marked
+     by its own turn while its owner is alive and on the map.
+   - **Freeing.** The fire place is freed at the first of its let-go events and its system's
+     leaving play. The spark and railgun places are freed only when their system leaves play. A
+     marked system leaves play in its first turn in which it holds no particle (S-0613 claim 17).
+   - **Spark-turns field of 0 or less.** A spark system of such a type makes no burst. In the
+     original its counter never marks it, so only the other marks above end it: held in the fire
+     place, a let-go marks it, and since it holds no particle it leaves play at its next turn. Under
+     S-0616 claim 20's fix, our engine marks it in its first turn, whoever made it and whatever
+     place holds it, so it frees its place after that turn, and a later let-go finds the place free.
+
+   For an emitter that is not matched, with the system's type of lifetime 0 or less, no trigger
+   action and the firer alive on the map, the rule gives:
+   - **Fire flag, spark-kind or railgun-kind system.** The weapon fires again at its first attempt
+     that is both at least *R*′ ticks after its previous shot and made after the earlier of these
+     two: a let-go event of the fire place (a retarget to a target not within reach, a move order),
+     or its system leaving play (a spark system once its counter has run out and it holds no
+     particle, a railgun system after its line once it holds no particle, S-0616 claims 15, 17 and
+     22). A let-go marks the spark or railgun system, so it then leaves play in its first turn in
+     which it holds no particle, even with its counter not run out (S-0613 claim 17).
+   - **Spark or railgun flag, spark-kind or railgun-kind system.** No let-go event frees the place.
+     The weapon fires again at its first attempt that is both at least *R*′ ticks after its
+     previous shot and made after its system has left play by its own counter or line.
+   - **Spark or railgun flag, fire-kind system.** No let-go event frees the place, and the system is
+     not marked by its own turn while its owner is alive and on the map. So the weapon does not fire
+     again while the firer lives on the map, whatever orders it gets, unless a positive lifetime
+     (S-0613 claim 17) or the trigger action that marks systems (S-0616 claim 1) ends the system.
+     The fire system goes on making its flames as S-0616 claims 10 and 11 give.
+   For a system of another kind (smoke, gas or none) in any place, the same rule applies with that
+   kind's end (S-0616 claim 22, S-0613 claim 17). No switch: the original's result follows from
+   the data, and our engine keeps it. A firer that leaves the map without being removed (into a
+   transport) is not covered here (S-0616 claim 4 leaves that case open).
 
    A magnetic wave shares the sonic wave's single slot, so a live magnetic wave also counts as a
    live sonic effect: it blocks a sonic weapon of the same firer (*rearming* for the sonic weapon's
@@ -354,7 +384,15 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      refire waits beyond it); `measurable` (scenario F14's no-draw part for the missing draw,
      which M-0004 does not separate from the background draws; scenario F4, with its
      multi-flag, burst and building parts; S-0607 scenarios L9 and L10 for magnetic firing,
-     grip independence and wave creation)
+     grip independence and wave creation; scenario F4's unmatched part for the refire of a weapon
+     whose emitter is not matched, Q-2181, its second run, u1 against u8, for a let-go's mark of a
+     spark-kind system in the fire place, and u3 and u4 for a move order in the spark and railgun
+     places); `unmeasured` for the smoke, gas and no-kind cases of that refire (no scenario here
+     sets such a type up), and for four parts of the place-and-kind rule whose reasons the
+     Confidence line gives: a retarget's effect on the spark and railgun places, a let-go's mark of
+     a railgun-kind system, the
+     fire place's freeing at the let-go itself rather than when its marked system leaves play, and
+     the original's let-go end of a spark system with a spark-turns field of 0 or less
    - Confidence: high (the bare rate of a fire-particle weapon, *rearming* for an effect weapon's
      own kind, the any-flag gate and particle-emitter creation order, and the magnetic conditional
      gate and absence of a general own-wave block), medium (the bare rate of the sonic,
@@ -366,7 +404,30 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      for its system to leave play: M-0004 measured a fire weapon of stock data refiring after much
      more than *R* under one attack order, which fits the system lifetime but recorded neither the
      system nor whether the firer kept its target and stood still); low for the shared slot of
-     magnetic and sonic waves (a firer needs both weapons, so test data must supply the case)
+     magnetic and sonic waves (a firer needs both weapons, so test data must supply the case).
+     For the place-and-kind rule, matched or not: high that the gate follows the place, that a move
+     order frees neither the spark nor the railgun place (scenario F4's unmatched part, second run,
+     u3 and u4), and that a fire-kind system held there is not marked by its own turn while its
+     owner is alive and on the map (its first run, u3 and u4); medium, `unmeasured`, that a
+     retarget to a target not within reach frees neither of those places either (no scenario here
+     gives a firer in those places such a retarget; it rests on S-0616 claim 1's let-go events,
+     rated medium there); high for each kind's own marks
+     and for the releases by the system's own end in the three pairings listed, which rest on
+     S-0616 claims 10, 15, 17 and 22, claim 4 for removal and S-0613 claim 17 (all rated high
+     there); medium for the release by a let-go event in the first pairing, and medium that a
+     let-go of the fire place marks the system it holds whatever its kind, both resting on S-0616
+     claim 1's let-go events (rated medium there; scenario F4's unmatched part, second run, u1
+     against u8, for a spark-kind system); medium, `unmeasured`, for that mark of a railgun-kind
+     system (its own line marks it in its first turn, so a let-go's mark would show only before
+     that turn, which no scenario here sets up; it rests on the same let-go events); medium,
+     `unmeasured`, that the fire place is freed at the let-go itself rather than when its marked
+     system leaves play (no scenario here records whether that system still holds a particle at
+     the firer's first attempt after the let-go, so both readings give the same shot ticks; it
+     rests on the same let-go events); medium, `unmeasured`, that a let-go ends a spark system held
+     in the fire place whose type's spark-turns field is 0 or less in the original (no scenario
+     here sets such a type in the fire place; it rests on the same let-go events); our engine's
+     first-turn mark of such a system as S-0616 claim 20 rates it; medium for the smoke, gas and
+     no-kind cases, which rest on those kinds' end rules
 
 6. **Veteran factor.** If the firer is veteran and its type has the veteran rate-of-fire ability,
    or it is elite and its type has the veteran or the elite rate-of-fire ability, the delay is
@@ -1493,6 +1554,38 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   has left play or never shoots a second time, if the first fire firer shoots a second time with
   its target kept, or if the second fire firer shoots again before its system has left play or
   does not shoot again after it.
+- Unmatched part (Q-2181): the particle part's setup, with six firers whose weapon's system type is
+  of a kind that does not match its flag, each type with a lifetime of 0 or less and a rate-of-fire
+  field shorter than the system's life: (u1) fire flag, spark-kind type with a spark-turns field of
+  1 or more; (u2) fire flag, railgun-kind type; (u3) spark flag, fire-kind type; (u4) railgun flag,
+  fire-kind type; (u5) spark flag, railgun-kind type; (u6) railgun flag, spark-kind type with a
+  spark-turns field of 1 or more. A seventh firer (u7) is u3 with a positive lifetime. Each keeps
+  its target and stays put for a run of a test length. Record shot ticks and the tick at which each
+  system leaves play (S-0616 scenario P1). In a second run, give u1's type a spark-turns field large
+  enough that a system of that type made at u1's first shot is still in play when u1's new attack
+  order below is given (a test value), and a spark chance field of 0 (S-0616 claim 15, F10). The
+  second run's Expected needs u1's and u8's systems to hold no particle before their last counter
+  turn: the Void line makes a run in which either bursts before that turn void, so in a counted
+  run neither does. Add u8, a copy of that u1 that is given no order and that makes its first shot
+  in the same tick as u1 or earlier. After the first shot of u1, of u3 and of u4, give each a move
+  order to a neighbouring cell from which the target stays in range, then a new attack order on
+  the same target, both while u8's system is still in play, and record the same.
+  - Expected: u1, u2, u5 and u6 shoot again at the first attempt after their system has left
+    play, and not earlier. u3 and u4 shoot once only. u7 shoots again at the first attempt after
+    its system has left play. In the second run, u1 shoots again at its first attempt after the new
+    attack order that is at least *R*′ ticks after its first shot, before u8's system has left play
+    (the move order let u1's system go), and u3 and u4 shoot no second time. u1's first spark
+    system leaves play in its first turn after the move order (the let-go marked it, and in a
+    counted run it held no particle, see Void), while u8's system stays in play until its counter
+    has run out.
+  - Falsified if: in the first run, u1, u2, u5 or u6 shoots before its system has left play or
+    never shoots a second time, u3 or u4 shoots a second time, or u7 does not shoot again after its
+    system has left play; in the second run, u1 does not shoot again before u8's system has left
+    play, u3 or u4 shoots again, u1's first system stays in play after its first turn following the
+    move order, or u8's system leaves play before its counter has run out.
+  - Void: a run in which a firer is removed, leaves the map or is destroyed, or a trigger action
+    marks a system. A second run in which u1's or u8's system bursts before its last counter turn
+    is void.
 - Multi-flag part: use S-0616 scenario P22 part a's named test rules with all three
   particle-effect flags on one weapon, one named system type and a durable enemy vehicle
   in range. Keep the firer stationary and all other gates satisfied, at speed index 2,
@@ -2326,6 +2419,90 @@ is absent (the control).
   the first *out of ammunition* answer". This changes what case (e) tests: an attack that is
   refused for lack of ammunition from its first attempt, not a building that runs out after a
   shot.
+- **S-0616 (approved, revision 20), claims 1, 20 and 22 and scenario P1: an effect weapon's
+  emitter by place and kind.** Where these sentences say "fire emitter", "spark emitter" or
+  "railgun emitter" for a let-go or an end, they mean the place that holds the system, not the
+  system's kind. S-0301 claim 5's place-and-kind rule is the complete rule, and Terms points to it:
+  - (a) Marks. Each kind keeps its own marks of claim 22's first column: a spark system when *K*
+    runs out (claim 15), or in its first turn when the spark-turns field is 0 or less (claim 20's
+    fix), a railgun system after its line (claim 17), and a fire system by its own turn when its
+    owner is no longer alive (claim 10). Every kind is also marked by a positive lifetime, claim
+    1's trigger action and the owner's removal (claim 4). In addition, a let-go of the fire place
+    marks whatever system the fire place holds, whatever its kind.
+  - (b) Freeing. The fire place is freed by its let-go events or by its system leaving play. The
+    spark and railgun places are freed only by their system leaving play.
+  - (c) Creation. The creation sentences name the place too: the system made for the fire or spark
+    place takes the shot's target object, and its target point is that object's position at the
+    shot (the world origin when the shot has none). The system made for the railgun place takes no
+    target object at its creation, and its target point is F14's end point. This holds whatever
+    the system's kind. So a railgun-kind system held in the fire or spark place makes its line
+    (claim 17) to that fire-or-spark target point, not to F14's end point. The sentences:
+    claim 1's table, effect-weapon row, fourth column (its "fire and spark" part and its "railgun:
+    the beam's end point (F14), fixed at the shot" part), claim 1's
+    Effect weapons row text ("For fire and spark emitters the creator
+    passes the shot's target object" and "For a railgun emitter it passes no target object") and
+    F14's first sentence ("at the shot that makes a railgun emitter"). No wording changes: read
+    "fire", "spark" and "railgun" there as the place.
+  - Claim 1, Effect weapons row text: replace "A fire emitter is marked and let go when" with "The
+    system held in the fire place, whatever its kind, is marked and let go when", and replace "A
+    spark or railgun emitter is not let go by any of these; it is marked only by claim 4's owner
+    removal, and otherwise ends by its own counter or line (claim 22)." with "A system held in the
+    spark or railgun place is not let go by any of these, whatever its kind. It ends by the marks
+    of its own kind, owner removal (claim 4), a positive lifetime or the trigger action (claim
+    22)."
+  - Claim 1, Confidence line: replace "the three events that let a fire emitter go" with "the three
+    events that let the system held in the fire place go".
+  - Claim 20, spark-turns bullet (the original's behaviour): replace "It ends only by its owner's
+    removal (claim 4), a positive lifetime or the trigger action of claim 1. Neither a move order,
+    nor a new target, nor the firer's death lets a spark emitter go (claim 1), so in the original
+    the firer's spark place stays held" with "It ends only by its owner's removal (claim 4), a
+    positive lifetime, the trigger action of claim 1 or, while it is held in the fire place, a
+    let-go of that place (claim 1): the let-go marks it, and since it makes no burst it holds no
+    particle and leaves play in its next turn (claim 22). Neither a move order, nor a new target,
+    nor the firer's death lets a system held in the spark place go (claim 1), so in the original a
+    spark place that holds such a system stays held". The engine fix in that bullet is unchanged:
+    it marks every spark system of such a type in its first turn, whoever made it and whatever
+    place holds it, so after that turn a let-go of the fire place finds the place free.
+  - Claim 22's table, fire row, first column: replace "or lets the emitter go (claim 1)" with "or,
+    while it is held in the fire place, when that place is let go (claim 1). Held in the spark or
+    railgun place, it is not marked by its own turn while its owner is alive and on the map".
+  - Claim 22's table, spark row, first column: replace "Marked when *K* runs out (claim 15) or the
+    owner is removed" with "Marked when *K* runs out (claim 15), when the owner is removed or,
+    while it is held in the fire place, when that place is let go (claim 1)".
+  - Claim 22's table, railgun row, first column: replace "Marked after its line (claim 17) or when
+    the owner is removed." with "Marked after its line (claim 17), when the owner is removed or,
+    while it is held in the fire place, when that place is let go (claim 1)."
+  - Claim 22, the sentence after the table: replace "but owner removal, a positive lifetime or a
+    trigger mark could still end it" with "but owner removal, a positive lifetime, a trigger mark
+    or, while it is held in the fire place, a let-go of that place could still end it".
+  - Scenario P1, Falsified: replace "by a fire emitter let go at a tick other than claim 1 gives"
+    with "by the system held in the fire place let go at a tick other than claim 1 gives".
+  - Levels. Each kind's own marks and the place's freeing when its system leaves play: as S-0616
+    rates them (high: claims 10, 15, 17 and 22, claim 4 for removal, and claim 20's fix and the
+    original's spark-turns behaviour); a fire-kind system in the spark or railgun place not marked
+    by its own turn while its owner is alive and on the map: high. A move order frees neither the
+    spark nor the railgun place: high. A retarget to a target not within reach frees neither of
+    them: medium, resting on claim 1's let-go events (rated medium there). A let-go's mark of the
+    system in the fire place, whatever its kind: medium, resting on claim 1's let-go events (rated
+    medium there). The fire place's freeing at the let-go itself rather than when its marked system
+    leaves play: medium. The original's let-go end of a spark system with a spark-turns field of 0
+    or less held in the fire place: medium. The creation reading (c): high for a matched emitter, as
+    S-0616 rates claim 1 and F14, and medium for a system whose kind does not match its place.
+  - Backing. `measurable` (S-0301 scenario F4, unmatched part: u3 and u4 for the fire-kind system in
+    the spark or railgun place, u5 and u6 for the spark and railgun places' freeing, the second
+    run's u1 against u8 for a let-go's mark of a spark-kind system and its u3 and u4 for a move
+    order in the spark and railgun places). `unmeasured` for a retarget in the spark and railgun
+    places (no scenario here gives a firer in those places a retarget to a target not within reach),
+    for a let-go's mark of a railgun-kind system (its own line marks it in its first turn, so a
+    let-go's mark would show only before that turn, which no scenario here sets up), for the fire
+    place's freeing at the let-go itself (no scenario here records whether the marked system still
+    holds a particle at the firer's first attempt after the let-go, so both readings give the same
+    shot ticks), for the spark-turns case in the fire place (no scenario here sets such a type in
+    the fire place) and for the creation reading (c) when the kind does not match the place (no
+    scenario here records the line or target point of a railgun-kind system held in the fire or
+    spark place). Each kind's own marks, the freeing when the system leaves play and the creation
+    reading for a matched emitter: as S-0616 backs them (its scenarios P1, P4, P8, P11, P12, P14 and
+    P22). Claim 20's fix: a design decision (S-0616 claim 20).
 
 ## Open questions
 
@@ -2354,10 +2531,6 @@ is absent (the control).
   claim 7).
 - Claim 24 (g): which of the two dot phases a given tick shows, and from which end the dots are
   counted, is not stated (low confidence); only the period and the swap every tick are.
-- Claim 5: when a weapon whose emitter is not matched (Terms) fires again. Its place gives the
-  let-go events (S-0616 claim 1) and its system's kind gives when the system leaves play (S-0616
-  claim 22); whether the weapon fires at the first of the two, or only when the system has left
-  play, is not stated. Scenario F4's particle part uses matched emitters only.
 - Claim 15: why every attempt of a stock tank given the spray flag and a burst-3 cannon was
   reported with no projectile in M-0004 is not known (reading those attempts as void shots is an
   inference). The same tank's shots with the same cannon and no spray flag were made. Until it is
