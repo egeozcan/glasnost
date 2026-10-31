@@ -1637,6 +1637,19 @@ A person plays a skirmish against our AI from the main menu to the end screen, n
   - *Type select* (S-0214 claim 32): a release of the type-select key at most 500 ms after its press (`session::TYPE_SELECT_TAP_MS`) is a tap: `PlayState::type_tap` adds the selection's types (`targeting::tap_types`, with DeploysInto) from the screen candidates (`targeting::tap_candidate`), or across the map, by the reach (`play::Reach`, reset by `sel_reset` after an addition or clearing). Tests `claim_32_*`, `claims_s0214_tap.rs`.
   - *Control groups* (S-0214 claim 33, F9; S-0213 claim 22): Ctrl+digit makes, Shift+digit adds the group to the selection, Alt+digit centres on it, the digit selects; a select less than 800 ms after the last (`session::GROUP_REPEAT_MS`) centres the view on `targeting::group_centre`. `PlayState.groups` maps each member to its `GroupMark` (number and the house that made it). The bindings are fixed for now. Quirks `group_center_keeps_extra_selection` and `group_kept_on_owner_change`. Tests `claim_33_*`, `control_group_keys_make_add_select_and_centre`.
   - *Arming from an icon* (S-0512 claim 25) clears the selection; *falling* is no longer part of S-0214's *movable* and *able to fire* (S-0522 claim 17), and claim 6 (e) asks `combat::check::check_ignoring_fall`.
+- **Route mode, held type-select drags and icon sounds (M8 A3 intake 54, [intake54-S-0213-S-0214-S-0512-S-0522.md](m8-claims/intake54-S-0213-S-0214-S-0512-S-0522.md)).**
+  - *Route points* (S-0213 r60 claims 16a to 16f):
+    - Only point adds applied in the same tick share a point (`RoutePoint.made`).
+    - Being committed belongs to each step (`Step.committed`).
+    - A join copies the longest holder's route, the smallest `Step.since` from `RouteWorld.stamp`. A loop that starts before the joined point is rotated, so the copy is the whole loop. The copied steps are uncommitted.
+    - The commit and each fall-back issue start with `routes::wait`, a queue of *wait* with an immediate start.
+    - Issuing a loop point moves it to the end of the route (`Route.next` is gone).
+    - `drop_orphans` runs after every issue.
+    - Two points at one place: `routes::point_for` picks the lowest-numbered point a selected route holds, else the lowest-numbered (interim rule, Q-2166).
+    - Save format 89, AI game format 51.
+  - *Falling* (S-0214 r64 claim 6 (e), S-0522 r14 claim 17): `check_ignoring_fall` is gone. Claim 6 (e) asks `combat::check::check` again, so during the fall an ordinary click on an enemy gives a move order and force-fire gives an attack order.
+  - *Held type-select drags* (S-0214 r64 claim 32): `Play::type_drag` seeds every in-box candidate's type, of any house or kind, and adds own selectable objects of those types from the reach's pool (`Session::type_pool`). It adds no deploys-into types, and claim 19's clearing and empty-box rules still apply.
+  - *Icon sounds* (S-0512 r21 claim 25): `Play::cameo_click` pushes `UiCue::SuperweaponClick` (the build click) on every left click, then `UiCue::SelectTarget` (`EVA_SelectTarget`) when it arms.
 - **Superweapons (S-0512, S-0513, S-0410).**
   - `glasnost_ui::hud::entries` puts the house's granted superweapons first in the second tab (`hud::SW_TAB`, S-0004 claim 11). They sort by charge time, with ties per `quirks.sidebar_tie_newest_first`; display names are not read, so they compare equal.
   - A superweapon icon is the type's sidebar image cut to 24 bytes plus `.shp`, with `XXICON.SHP` when that file is missing (S-0007 claim 31). It shows the F3 charge stage as the build-clock veil, "On hold" while suspended, "Ready", and "Charging" or "Active" for drain-mode types (S-0512 claim 16). A ready superweapon in its flash window flashes its tab (claim 17).
