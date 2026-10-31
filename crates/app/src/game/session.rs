@@ -1073,28 +1073,18 @@ impl Session {
             Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
                 let end = band::limit(p, self.map_rect());
                 let inside = self.box_candidates(start, end);
-                let (before, spoken) = (self.play.selection.clone(), self.play.selected.len());
+                let click = if self.type_select.held {
+                    // spec: S-0214 claims 29 and 32 (a held drag expands the types of every in-box candidate, of any house and kind, in first in-box encounter order, each type in the pool's order, matching objects outside the box included; it reads the reach the last tap left and does not change it) and S-0701 claim 17 (silent)
+                    let pool = self.type_pool(self.type_select.reach == Reach::Map);
+                    self.play.type_drag(&inside, &pool, mods.force_select)
+                } else {
+                    self.play.select_box(&inside, mods.force_select)
+                };
                 // spec: S-0214 claim 19 (an unmodified box without a live candidate continues as the ordinary release click at the final pixel)
-                if self.play.select_box(&inside, mods.force_select) {
+                if click {
                     let (cell, object) = self.under(end);
                     self.play.click_map(b, object, cell, mods);
                     self.show_markers();
-                } else if self.type_select.held {
-                    // spec: S-0214 claims 19 and 29 (a type-select drag expands the types of its in-box candidates in the order of first in-box encounter, each type in the pool's order, matching candidates outside the box included; the box still replaces the selection or, with force-select, adds to it) and S-0701 claim 17 (silent)
-                    self.play.selected.truncate(spoken);
-                    let seeds: Vec<ObjectId> = inside
-                        .iter()
-                        .copied()
-                        .filter(|id| self.play.selection.contains(id))
-                        .collect();
-                    self.play.selection = if mods.force_select {
-                        before
-                    } else {
-                        Vec::new()
-                    };
-                    // spec: S-0214 claims 29 and 32 (the drag reads the reach the last tap left and does not change it)
-                    let pool = self.type_pool(self.type_select.reach == Reach::Map);
-                    self.play.expand_types(&seeds, &pool, false);
                 }
             }
             Some(HudHit::Map)

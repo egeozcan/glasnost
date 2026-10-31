@@ -1111,10 +1111,9 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
     let e = mods.force_fire || infiltrator_entry(w, actor, t) || {
         let (slot, x) = weapon::would_use(w, actor, Some(Target::Object(t)));
         // Without a weapon there is no firing rule to rule the target illegal.
-        // spec: S-0214 claim 6 (e) (other reasons for not firing at this moment do not count) and Terms (falling is part of neither movable nor able to fire; S-0522 claim 17: an attack click during the fall gives an attack order at once): the falling firer's refusal of S-0301 claim 9 rank 4 is not asked
+        // spec: S-0214 claim 6 (e) (other reasons for not firing at this moment do not count; the falling firer's refusal of S-0301 claim 9 rank 4 is a firing rule, so a falling actor fails (e) unless force-fire or the infiltrator exception) and S-0522 claim 17 (an ordinary click over an enemy during the fall gives the move of table M, a force-fire click an attack order)
         x.is_none()
-            || check::check_ignoring_fall(w, actor, Some(Target::Object(t)), slot)
-                != Answer::Illegal
+            || check::check(w, actor, Some(Target::Object(t)), slot, false) != Answer::Illegal
     };
     a && b && c && d && e
 }

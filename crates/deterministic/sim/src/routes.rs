@@ -50,8 +50,9 @@ pub struct RoutePoint {
     /// The cell of the place when the point was made, for a place object
     /// that is gone.
     pub cell: CellXY,
-    /// Committed (claim 16c): only committed points are followed.
-    pub committed: bool,
+    /// The tick of the point add that made it: only point adds applied in
+    /// that tick share it (claim 16a).
+    pub made: i32,
 }
 
 /// One point of a holder's route, with the action the click gave that
@@ -68,6 +69,12 @@ pub struct Step {
     pub target: Option<Target>,
     /// Its destination.
     pub dest: Option<Target>,
+    /// Committed (claim 16c): being committed belongs to each route, and
+    /// only committed points are followed.
+    pub committed: bool,
+    /// When the route was given the point: the application stamp of the
+    /// point add or join that gave it (claim 16b's longest holder).
+    pub since: u64,
 }
 
 /// An object's route and route record (S-0213 claims 16a to 16c). The
@@ -77,14 +84,12 @@ pub struct Step {
 pub struct Route {
     /// The house whose orders built it.
     pub house: HouseId,
-    /// The points still to issue, in order.
+    /// The points still to issue, in the order they will next be issued
+    /// (claim 16c).
     pub steps: Vec<Step>,
     /// The loop's first step, when the route has a loop: the steps from it
     /// to the end repeat.
     pub loop_from: Option<usize>,
-    /// Within a loop whose earlier points are all issued, the step to issue
-    /// next.
-    pub next: usize,
 }
 
 /// The route state of the world (S-0213 claims 16 to 16f).
@@ -99,6 +104,9 @@ pub struct RouteWorld {
     /// The route-holder count of each house under
     /// `quirks.route_holder_count_drift` (S-0213 Terms).
     pub counts: BTreeMap<HouseId, u32>,
+    /// The next application stamp of a point add or join, in application
+    /// order (claim 16b: the longest holder).
+    pub stamp: u64,
 }
 
 /// What a route-mode click does (S-0213 claim 16).
@@ -235,6 +243,27 @@ pub fn point_in(w: &World, house: HouseId, cell: CellXY) -> Option<u32> {
         .map(|(&n, _)| n)
 }
 
+/// The house's point a route-mode click by `selection` in `cell` takes:
+/// with objects selected, the lowest numbered point in the cell that a
+/// selected object's route holds, else [`point_in`]'s.
+pub fn point_for(w: &World, house: HouseId, cell: CellXY, selection: &[ObjectId]) -> Option<u32> {
+    // design (Q-2166): two points can stand at one place (S-0213 claim 16a); a click takes the one a selected route holds, else the lowest numbered
+    let held = |n: u32| {
+        selection.iter().any(|id| {
+            w.routes
+                .routes
+                .get(id)
+                .is_some_and(|r| r.steps.iter().any(|s| s.point == n))
+        })
+    };
+    w.routes
+        .points
+        .iter()
+        .find(|&(&n, p)| p.house == house && point_cell(w, p) == cell && held(n))
+        .map(|(&n, _)| n)
+        .or_else(|| point_in(w, house, cell))
+}
+
 /// Deletes every point that no route holds any more.
 fn drop_orphans(w: &mut World) {
     let held: std::collections::BTreeSet<u32> = w
@@ -243,7 +272,7 @@ fn drop_orphans(w: &mut World) {
         .values()
         .flat_map(|r| r.steps.iter().map(|s| s.point))
         .collect();
-    // spec: S-0213 claim 16f (a point that no route holds any more is deleted); design (Q-2136): after any end of holding, not only destruction
+    // spec: S-0213 claim 16f (a route point that no route holds any more is deleted at once, whichever way its last holder left it: an order removing the route, issuing it from a route without a loop or before a loop's first point, a point delete, or the holder's destruction)
     w.routes.points.retain(|n, _| held.contains(n));
 }
 
@@ -257,7 +286,6 @@ fn end(w: &mut World, id: ObjectId) {
     let held = !r.steps.is_empty();
     r.steps.clear();
     r.loop_from = None;
-    r.next = 0;
     if held {
         // spec: S-0213 claim 16f (an object whose route still holds a point stops being a route holder and lowers the count by 1 at once)
         lower(w, house);
@@ -346,12 +374,13 @@ pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
             return;
         }
     }
-    // spec: S-0213 claim 16a (a later point add at a point's place reuses it instead of making a second point there)
+    let tick = w.tick;
+    // spec: S-0213 claim 16a (point adds share a point only when they are applied in the same tick: a later point add makes a new point, even at an existing point's place)
     let existing = w
         .routes
         .points
         .iter()
-        .find(|(_, p)| p.house == house && p.place == at)
+        .find(|(_, p)| p.house == house && p.place == at && p.made == tick)
         .map(|(&n, _)| n);
     let point = match existing {
         Some(n) => n,
@@ -364,18 +393,18 @@ pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
                     house,
                     place: at,
                     cell,
-                    // spec: S-0213 claim 16c (points added since the last commit are not followed)
-                    committed: false,
+                    made: tick,
                 },
             );
             n
         }
     };
+    let since = w.routes.stamp;
+    w.routes.stamp = since.wrapping_add(1);
     let r = w.routes.routes.entry(actor).or_insert(Route {
         house,
         steps: Vec::new(),
         loop_from: None,
-        next: 0,
     });
     let first = r.steps.is_empty();
     r.house = house;
@@ -388,7 +417,13 @@ pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
     } else {
         None
     };
-    r.steps.push(Step { point, ..step });
+    r.steps.push(Step {
+        point,
+        // spec: S-0213 claim 16c (points added since the last commit are not followed)
+        committed: false,
+        since,
+        ..step
+    });
     if first {
         // spec: S-0213 Terms (applying a point add to an object whose route holds no point raises the count by 1)
         *w.routes.counts.entry(house).or_insert(0) += 1;
@@ -410,7 +445,6 @@ pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32) {
         // spec: S-0213 claims 16b and 16c (a click on a point already in the route closes a loop from it to the route's end; refused for a route with a loop and for its last two points)
         if r.loop_from.is_none() && i + MIN_LOOP <= r.steps.len() {
             r.loop_from = Some(i);
-            r.next = 0;
             // spec: S-0213 claim 16c (closing a loop shows an information message)
             note(w, house, RouteNote::Looped);
         }
@@ -419,21 +453,44 @@ pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32) {
     if holds(w, actor) {
         return;
     }
-    // design (Q-2137): the copied route is that of the point's holder of the house with the lowest object number, other than the actor
-    let Some((_, src)) = w.routes.routes.iter().find(|(id, r)| {
-        **id != actor && r.house == house && r.steps.iter().any(|s| s.point == point)
-    }) else {
+    // spec: S-0213 claim 16b (the join copies the route of the point's longest holder: of the routes holding the point when the join is applied, the one given it earliest by a point add or join; of holders given it in the same tick, the one whose order was applied first)
+    let src = w
+        .routes
+        .routes
+        .iter()
+        .filter(|&(&id, r)| id != actor && r.house == house)
+        .filter_map(|(_, r)| {
+            let i = r.steps.iter().position(|s| s.point == point)?;
+            Some((r.steps[i].since, i, r))
+        })
+        .min_by_key(|&(since, _, _)| since);
+    let Some((_, i, src)) = src else {
         return;
     };
-    let i = src.steps.iter().position(|s| s.point == point).unwrap_or(0);
-    let steps: Vec<Step> = src.steps[i..].to_vec();
-    // spec: S-0213 claim 16b (the copy keeps that route's loop if it has one); design (Q-2137): a loop starting before the joined point loops the whole copy
-    let loop_from = src.loop_from.map(|l| l.saturating_sub(i));
+    // spec: S-0213 claim 16b (the copy runs from the joined point to the end of that route as it then stands, with the actions recorded there for that holder)
+    let mut steps: Vec<Step> = src.steps[i..].to_vec();
+    let loop_from = match src.loop_from {
+        // spec: S-0213 claim 16b (that route has no loop: the copy has none)
+        None => None,
+        // spec: S-0213 claim 16b (its loop's first point is the joined point or a later one: the copy has the same loop, from the same first point)
+        Some(l) if l >= i => Some(l - i),
+        // spec: S-0213 claim 16b (its loop's first point comes before the joined point: the copy goes on with the loop's points from its first point up to the one before the joined point, and its loop is the whole copy)
+        Some(l) => {
+            steps.extend_from_slice(&src.steps[l..i]);
+            Some(0)
+        }
+    };
+    let since = w.routes.stamp;
+    w.routes.stamp = since.wrapping_add(1);
+    for s in &mut steps {
+        // spec: S-0213 claim 16b (the copied points are uncommitted until the next commit)
+        s.committed = false;
+        s.since = since;
+    }
     let copy = Route {
         house,
         steps,
         loop_from,
-        next: 0,
     };
     w.routes.routes.insert(actor, copy);
     // spec: S-0213 claim 16f (a point join that gives an object its first points does not raise the count, under quirks.route_holder_count_drift)
@@ -448,17 +505,15 @@ pub fn apply_commit(w: &mut World, house: HouseId) {
         .routes
         .iter()
         .filter(|(_, r)| r.house == house)
-        .filter(|(_, r)| {
-            next_step(r)
-                .and_then(|s| w.routes.points.get(&s.point))
-                .is_some_and(|p| !p.committed)
-        })
+        .filter(|(_, r)| next_step(r).is_some_and(|s| !s.committed))
         .map(|(&id, _)| id)
         .collect();
-    // spec: S-0213 claim 16c (when a commit is applied, every point of the house's routes becomes committed)
-    for p in w.routes.points.values_mut() {
-        if p.house == house {
-            p.committed = true;
+    // spec: S-0213 claim 16c (when a commit is applied, every point of the house's routes becomes committed; being committed belongs to each route, not to the place)
+    for r in w.routes.routes.values_mut() {
+        if r.house == house {
+            for s in &mut r.steps {
+                s.committed = true;
+            }
         }
     }
     for id in waiting {
@@ -469,11 +524,28 @@ pub fn apply_commit(w: &mut World, house: HouseId) {
             attack_move: false,
             target: o.target,
             dest: o.dest,
+            committed: false,
+            since: 0,
         };
-        // spec: S-0213 claim 16c (a holder whose route could not run before the commit starts at once if its current behaviour is guard or continual: it gives up that behaviour and issues its next point, which takes effect at the next order boundary; any other holder is not interrupted)
+        // spec: S-0213 claim 16c (a holder whose route could not run before the commit starts at once if its current behaviour is guard or continual: it gives up that behaviour and waits, and issues its next point, which takes effect at the next order boundary; any other holder is not interrupted)
         if o.beh.current.is_some() && continual(&current) {
+            wait(w, id);
             issue_next(w, id);
         }
+    }
+}
+
+/// Gives up the holder's behaviour before a route point's issue (S-0213
+/// claim 16c): a queue of *wait* with an immediate start. The target and
+/// destination are left as they are.
+fn wait(w: &mut World, id: ObjectId) {
+    let t = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let ready = crate::process::ready(w, id);
+    if let Some(o) = w.obj_mut(id) {
+        // spec: S-0213 claim 16c (giving up is a queue of wait with an immediate start, S-0215 claim 7, at the commit and before each fall-back's issue; the commit does not change the target or destination)
+        o.beh
+            .queue_and_start(Some(Behaviour::Wait), ready, t, stale);
     }
 }
 
@@ -484,12 +556,8 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
         return;
     }
     for r in w.routes.routes.values_mut() {
-        let before = r.steps.len();
-        let mut k = 0;
-        let mut kept = Vec::with_capacity(before);
+        let mut kept = Vec::with_capacity(r.steps.len());
         let mut loop_from = r.loop_from;
-        let mut next = r.next;
-        let _ = before;
         for (i, s) in r.steps.drain(..).enumerate() {
             if s.point == point {
                 if let Some(l) = loop_from
@@ -497,13 +565,9 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
                 {
                     loop_from = Some(l - 1);
                 }
-                if next > k {
-                    next -= 1;
-                }
                 continue;
             }
             kept.push(s);
-            k += 1;
         }
         r.steps = kept;
         if let Some(l) = loop_from
@@ -513,22 +577,15 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
             loop_from = None;
         }
         r.loop_from = loop_from;
-        r.next = if r.loop_from.is_some() && next < r.steps.len() {
-            next
-        } else {
-            0
-        };
     }
     // spec: S-0213 claim 16f (deleting a route's last remaining point ends holding but does not lower the count, under quirks.route_holder_count_drift; off, the count is the holders')
     w.routes.points.remove(&point);
 }
 
-/// The step a route issues next, if any.
+/// The step a route issues next, if any: its first (S-0213 claim 16c, the
+/// route holds its points in the order they will next be issued).
 fn next_step(r: &Route) -> Option<&Step> {
-    match r.loop_from {
-        Some(0) => r.steps.get(r.next),
-        _ => r.steps.first(),
-    }
+    r.steps.first()
 }
 
 /// Whether the object follows a route whose next point is committed
@@ -538,22 +595,24 @@ pub fn follows(w: &World, id: ObjectId) -> bool {
         .routes
         .get(&id)
         .and_then(next_step)
-        .and_then(|s| w.routes.points.get(&s.point))
-        .is_some_and(|p| p.committed)
+        .is_some_and(|s| s.committed)
 }
 
 /// The route row of the fall-back to rest (S-0215 claim 13): a holder
-/// whose next point is committed issues its action as an order.
+/// whose next point is committed gives up its behaviour and issues the
+/// point's action as an order.
 pub fn fall_back(w: &mut World, id: ObjectId) {
     // spec: S-0215 claim 13 (it follows a route and is not in a patrol that has already begun: it issues the action of the next route point as an order; not an immediate destination assignment) and S-0213 claim 16c (uncommitted points are not followed: the holder waits for a commit)
     if follows(w, id) {
+        // spec: S-0213 claim 16c and Changes for other specs (S-0215 claim 13: each issue at a fall-back is preceded by the queue of wait with an immediate start, so a ready holder's rest table finds wait current and queues no guard)
+        wait(w, id);
         issue_next(w, id);
     }
 }
 
 /// Issues the next point of the object's route (S-0213 claim 16c): a point
 /// outside a loop is taken off the front, so a route without a loop is used
-/// up when its last point is issued; a loop's points are issued in turn.
+/// up when its last point is issued; a loop's point moves to the end.
 fn issue_next(w: &mut World, id: ObjectId) {
     let Some(owner) = w.obj(id).and_then(|o| o.owner) else {
         return;
@@ -561,34 +620,25 @@ fn issue_next(w: &mut World, id: ObjectId) {
     let Some(r) = w.routes.routes.get_mut(&id) else {
         return;
     };
+    if r.steps.is_empty() {
+        return;
+    }
     let house = r.house;
-    let step = match r.loop_from {
-        Some(0) => {
-            let Some(s) = r.steps.get(r.next).cloned() else {
-                return;
-            };
-            // spec: S-0213 claim 16c (the loop's points are issued in turn, the first loop point again after the last)
-            r.next = (r.next + 1) % r.steps.len();
-            s
-        }
-        l => {
-            if r.steps.is_empty() {
-                return;
-            }
-            // spec: S-0213 claim 16c (issuing a point takes it off the front of the route; points before the loop are issued once)
-            r.loop_from = l.map(|l| l - 1);
-            r.steps.remove(0)
-        }
-    };
+    let step = r.steps.remove(0);
+    match r.loop_from {
+        // spec: S-0213 claim 16c (issuing a point of a loop moves it to the end of the route, so a looping holder's route holds its points in the order it will next issue them)
+        Some(0) => r.steps.push(step.clone()),
+        // spec: S-0213 claim 16c (issuing a point takes it off the front of the route; points before the loop's first point are issued once)
+        l => r.loop_from = l.map(|l| l - 1),
+    }
     let used_up = r.steps.is_empty();
     if used_up {
         // spec: S-0213 claim 16f (a route without a loop is used up when its last point is issued: the holder stops holding and lowers the count then)
         lower(w, house);
     }
     let order = point_order(w, owner, id, &step);
-    if used_up {
-        drop_orphans(w);
-    }
+    // spec: S-0213 claim 16f (a point issued from a route without a loop or before a loop's first point that no route holds any more is deleted at once)
+    drop_orphans(w);
     if let Some(o) = order {
         // spec: S-0215 claim 13 (the route point issues an order through the ordinary order timing of S-0213 claim 1) and S-0213 claim 17 (orders a route issues for its points do not end it)
         orders::issue(w, owner, Order::Routed(Box::new(o)));
@@ -663,7 +713,7 @@ pub fn click(
     cell: CellXY,
     mods: Modifiers,
 ) -> RouteClick {
-    let marker = point_in(w, house, cell);
+    let marker = point_for(w, house, cell, selection);
     if selection.is_empty() {
         // spec: S-0213 claim 16e (with no object selected, a click on an existing route point selects it and shows an information message)
         return marker.map_or(RouteClick::Ordinary, RouteClick::SelectPoint);

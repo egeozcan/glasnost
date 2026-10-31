@@ -807,6 +807,15 @@ fn sw_start(kind: &str, extra: &[(&str, &str)], list_position: bool) -> Play {
 /// Gives the local house a powered missile silo and charges its record
 /// fully; returns the silo.
 fn ready_silo(p: &mut Play) -> ObjectId {
+    let silo = granted_silo(p);
+    charge::set_charge(&mut p.game.world, p.local, 0, 100);
+    step_until(p, 10, |p| charge::offers_targeting(p.world(), p.local, 0));
+    silo
+}
+
+/// Gives the local house a powered missile silo whose record is granted
+/// and still charging; returns the silo.
+fn granted_silo(p: &mut Play) -> ObjectId {
     step_until(p, 10, |p| p.world().tick >= 4);
     let mcv = *own(p, Kind::Vehicle).first().expect("a base unit");
     let c = p.world().obj(mcv).unwrap().pos.cell();
@@ -830,8 +839,6 @@ fn ready_silo(p: &mut Play) -> ObjectId {
     step_until(p, 10, |p| {
         charge::get(p.world(), p.local, 0).is_some_and(|r| r.granted)
     });
-    charge::set_charge(&mut p.game.world, p.local, 0, 100);
-    step_until(p, 10, |p| charge::offers_targeting(p.world(), p.local, 0));
     silo
 }
 
@@ -890,15 +897,53 @@ fn a_superweapon_icon_without_an_aim_action_fires_at_cell_zero() {
     // spec: S-0512 claim 25 (an icon with no aim action fires at once and changes nothing else: the selection stays)
     p.selection = own(&p, Kind::Vehicle);
     let kept = p.selection.clone();
+    p.cues.clear();
     p.cameo_click(n, Button::Left, false);
     assert_eq!(p.selection, kept);
     assert_eq!(p.tool, Tool::Select, "no aiming");
+    // spec: S-0512 claim 25 (the no-aim input requests the click sound but no select-target announcement)
+    assert_eq!(p.cues, vec![UiCue::SuperweaponClick]);
     assert_eq!(
         fired(&p),
         vec![Order::FireSuperweapon {
             sw: 0,
             cell: CellXY::new(0, 0)
         }]
+    );
+}
+
+/// spec: S-0512 claim 25 (every left click on a superweapon icon requests the build click first, whatever the icon's state; the arming input then requests the select-target announcement; an icon that does not offer targeting changes nothing but the click sound request)
+#[test]
+fn s0512_claim_25_icon_clicks_request_the_click_then_the_announcement() {
+    let mut p = sw_start("MultiMissile", &[], true);
+    granted_silo(&mut p);
+    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let n = entries
+        .iter()
+        .position(|e| *e == hud::Entry::Superweapon(0))
+        .expect("the silo's superweapon in the 2nd tab");
+    p.tab = hud::SW_TAB;
+    // A charging icon: the click sound only, no arming, no selection change.
+    assert!(!charge::offers_targeting(p.world(), p.local, 0));
+    p.selection = own(&p, Kind::Vehicle);
+    let kept = p.selection.clone();
+    p.cues.clear();
+    p.cameo_click(n, Button::Left, false);
+    assert_eq!(p.cues, vec![UiCue::SuperweaponClick]);
+    assert_eq!(p.tool, Tool::Select);
+    assert_eq!(p.selection, kept);
+    // A ready icon with an aim action: the click, then the announcement.
+    charge::set_charge(&mut p.game.world, p.local, 0, 100);
+    step_until(&mut p, 10, |p| {
+        charge::offers_targeting(p.world(), p.local, 0)
+    });
+    p.cues.clear();
+    p.cameo_click(n, Button::Left, false);
+    assert!(matches!(p.tool, Tool::Superweapon { sw: 0, .. }));
+    assert_eq!(
+        p.cues,
+        vec![UiCue::SuperweaponClick, UiCue::SelectTarget],
+        "the click sound is the input's first request"
     );
 }
 
@@ -1427,6 +1472,88 @@ fn claim_32_a_single_foreign_object_is_removed_first() {
     tap(&mut p, &[], Reach::Screen);
     assert!(p.selection.is_empty());
     assert_eq!(said(&p), "MSG:NothingSelected");
+}
+
+/// spec: S-0214 claim 32 (held drags: no claim 19 candidate tests; every live box candidate inside, of any house and kind, buildings included, stands for its exact type and adds the own objects of that type that can be selected within the reach, inside the box or not; a deactivated vehicle and a building that is not vehicle-like join; no deploys-into types; claim 19's clearing and empty-box rules still apply; silent) and claim 29 (types in first in-box encounter order, within a type the pool's order)
+#[test]
+fn claim_32_a_held_drag_seeds_every_candidate_in_the_box() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let (mcv, g1, n1, g2, n2) = (m[0], m[1], m[2], m[3], m[4]);
+    let far = own_gunr(&mut p, 9);
+    let theirs = their_gunr(&mut p);
+    let at = p.world().obj(mcv).unwrap().pos.cell();
+    let local = p.local.0;
+    let w = &mut p.game.world;
+    let pw1 = testkit::spawn(
+        w,
+        Kind::Building,
+        "POWR",
+        local,
+        CellXY::new(at.x + 4, at.y - 6),
+        0,
+    );
+    let pw2 = testkit::spawn(
+        w,
+        Kind::Building,
+        "POWR",
+        local,
+        CellXY::new(at.x - 6, at.y - 6),
+        0,
+    );
+    let yard = testkit::spawn(
+        w,
+        Kind::Building,
+        "YARD",
+        local,
+        CellXY::new(at.x - 6, at.y + 8),
+        0,
+    );
+    let map: Vec<ObjectId> = p.world().objects.keys().copied().collect();
+    // An enemy GUNR alone in the box: the player's own GUNRs across the
+    // reach, none of theirs; the old selection is cleared.
+    p.selection = vec![n1];
+    p.selected.clear();
+    assert!(!p.type_drag(&[theirs], &map, false));
+    assert_eq!(p.selection, added_in_order(&p, &[], &[g1, g2, far]));
+    assert!(p.selected.is_empty(), "the drag is silent");
+    assert!(p.sel_reset);
+    // The screen reach: GUNRs outside the box but on the screen join, the
+    // one off the screen does not.
+    p.type_drag(&[theirs], &[g1, theirs, g2], false);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[g1, g2]));
+    // A deactivated own GUNR in the box joins with the others of its type.
+    p.game
+        .world
+        .obj_mut(g2)
+        .unwrap()
+        .econ
+        .building
+        .unit_disabled = true;
+    assert!(!targeting::box_eligible(p.world(), p.local, &[], g2));
+    p.type_drag(&[g2], &map, false);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[g1, g2, far]));
+    // A building that is not vehicle-like seeds its type: both plants.
+    p.type_drag(&[pw2], &map, false);
+    assert_eq!(p.selection, added_in_order(&p, &[], &[pw1, pw2]));
+    // The base unit seeds its own type only, not the yard it deploys into.
+    p.type_drag(&[mcv], &map, false);
+    assert_eq!(p.selection, vec![mcv]);
+    assert!(!p.selection.contains(&yard));
+    // Types in first in-box encounter order; force-select keeps the old
+    // selection and adds.
+    p.selection = vec![pw1];
+    p.type_drag(&[n2, theirs, n1], &map, true);
+    assert_eq!(
+        p.selection,
+        added_in_order(&p, &[pw1], &[n1, n2, g1, g2, far])
+    );
+    // The empty box keeps claim 19's rule: unmodified, the release click
+    // (the quirk's default); with force-select, nothing.
+    let before = p.selection.clone();
+    assert!(p.type_drag(&[], &map, false));
+    assert!(!p.type_drag(&[], &map, true));
+    assert_eq!(p.selection, before);
 }
 
 /// spec: S-0415 claim 6 (the deployed building takes over the deploying

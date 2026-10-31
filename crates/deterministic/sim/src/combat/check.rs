@@ -327,28 +327,6 @@ pub fn check(
     slot: usize,
     with_range: bool,
 ) -> Answer {
-    check_with(w, firer, target, slot, with_range, false)
-}
-
-/// [`check`] without the range test as the click's attack rule asks it
-/// (S-0214 claim 6 (e)): a falling firer is judged as a landed one.
-pub fn check_ignoring_fall(
-    w: &World,
-    firer: ObjectId,
-    target: Option<Target>,
-    slot: usize,
-) -> Answer {
-    check_with(w, firer, target, slot, false, true)
-}
-
-fn check_with(
-    w: &World,
-    firer: ObjectId,
-    target: Option<Target>,
-    slot: usize,
-    with_range: bool,
-    ignore_fall: bool,
-) -> Answer {
     let Some(o) = w.obj(firer) else {
         return Answer::Impossible;
     };
@@ -481,7 +459,7 @@ fn check_with(
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0511 claim 10 (a falling firer: illegal)
-    if !ignore_fall && crate::fall::falling(w, firer) {
+    if crate::fall::falling(w, firer) {
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0517 claim 11 (a vehicle in a deploy or undeploy transition: illegal for every weapon and target; higher-ranked refusals win)

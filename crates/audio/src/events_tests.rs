@@ -1105,6 +1105,32 @@ fn rally_point_set_is_announced() {
     assert!(a.mixer().speaking());
 }
 
+// spec: S-0512 claim 25 and Import mapping (a superweapon icon click: the game-wide build click; arming: the select-target announcement, with no interface sound of its own)
+#[test]
+fn superweapon_icon_cues() {
+    let w = world();
+    let mut a = audio(&w, &["Click"]);
+    add_voices(&mut a, &strings(&["Aim0", "Aim1", "Aim2"]));
+    let mut s = SpeechCatalog::default();
+    s.insert(Line {
+        name: "Aim".into(),
+        samples: strings(&["Aim0", "Aim1", "Aim2"]).try_into().unwrap(),
+        ..Line::default()
+    });
+    a.set_speech(s);
+    let mut n = SoundNames::default();
+    n.gui_build = Some("Click".into());
+    n.set_announcement(Announcement::SelectTarget, "Aim");
+    a.set_names(n);
+    assert!(a.cue(UiCue::SuperweaponClick).is_some());
+    assert_eq!(heard(&mut a, 1000), ["Click"]);
+    assert!(!a.mixer().speaking());
+    a.mixer_mut().clear();
+    assert_eq!(a.cue(UiCue::SelectTarget), None);
+    assert!(heard(&mut a, 2000).is_empty());
+    assert!(a.mixer().speaking());
+}
+
 /// Adds announcement files of four frames for `samples` (S-0701 claim 34:
 /// the eight-character name plus `.wav`, apart from the sample bank).
 fn add_voices(a: &mut Audio, samples: &[String]) {
