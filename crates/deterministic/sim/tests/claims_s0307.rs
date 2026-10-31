@@ -123,10 +123,19 @@ fn set_level(w: &mut World, c: CellXY, level: i8) {
     w.cells.grid.get_mut(c).unwrap().level = level;
 }
 
-/// Marks a cell as a high-bridge cell (with a bridge deck).
+/// Marks a cell as a high-bridge cell (with a bridge deck), with an enabled
+/// bridge link along cell x from the cell west of it to the cell east of
+/// it, so that its deck reads the reach region of the open ground round it
+/// (S-0212 claim 4, enabled: the first end's; S-0307 claim 19, revision 20).
 fn set_deck(w: &mut World, c: CellXY) {
     let i = w.cells.idx(c).unwrap();
     w.cells.deck[i] = true;
+    w.cells.links.push(glasnost_sim::cells::BridgeLink {
+        first: CellXY::new(c.x - 1, c.y),
+        second: CellXY::new(c.x + 1, c.y),
+        along_x: true,
+        enabled: true,
+    });
 }
 
 /// Places a high-bridge overlay (index 24) in `c`, which gives the cell the

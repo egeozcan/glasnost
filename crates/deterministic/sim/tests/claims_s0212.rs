@@ -1684,7 +1684,12 @@ fn river(gaps: &[i32]) -> (World, ObjectId) {
 }
 
 /// [`river`] built from scene `s`.
-fn river_in(mut s: Scene, gaps: &[i32]) -> (World, ObjectId) {
+fn river_in(s: Scene, gaps: &[i32]) -> (World, ObjectId) {
+    river_in_with(s, gaps, &[])
+}
+
+/// [`river_in`] with the cells of `clear` left open ground, not rock.
+fn river_in_with(mut s: Scene, gaps: &[i32], clear: &[CellXY]) -> (World, ObjectId) {
     for i in 0..=24 {
         let name = format!("OV{i}");
         s.register("overlays", &name);
@@ -1715,7 +1720,7 @@ fn river_in(mut s: Scene, gaps: &[i32]) -> (World, ObjectId) {
     }
     s.catalogue.roles.bridge = BRIDGE_ROLE;
     for c in all_cells(&s) {
-        if (cell(1, 0).x..=cell(5, 0).x).contains(&c.x) {
+        if (cell(1, 0).x..=cell(5, 0).x).contains(&c.x) && !clear.contains(&c) {
             rock(&mut s, c, 0);
         }
     }
@@ -1949,15 +1954,30 @@ fn a_deck_is_read_through_its_link() {
 /// carries the straight-shot `Rifle` (range 4 cells), and an unarmed car of
 /// house 1 stands on bank B at (12, 0).
 fn armed_river(gaps: &[i32]) -> (World, ObjectId, ObjectId) {
+    armed_river_with(gaps, &[], None, cell(12, 0))
+}
+
+/// [`armed_river`] with the cells of `clear` left open ground, the Rifle's
+/// range set to `range` cells when given, and the van at `van_at`.
+fn armed_river_with(
+    gaps: &[i32],
+    clear: &[CellXY],
+    range: Option<&str>,
+    van_at: CellXY,
+) -> (World, ObjectId, ObjectId) {
     let mut s = scene();
     let c = glasnost_sim::testkit::combat_ruleset();
     s.ruleset.sim.weapons = c.sim.weapons;
     s.ruleset.sim.projectiles = c.sim.projectiles;
     s.ruleset.sim.warheads = c.sim.warheads;
+    if let Some(r) = range {
+        s.ruleset.sim.weapons.get_mut("Rifle").unwrap().range =
+            Some(glasnost_rules::sim::Decimal(r.into()));
+    }
     s.ruleset.sim.vehicles.get_mut(CAR).unwrap().primary = Some("Rifle".into());
     s.vehicle("TESTVAN", unit_type(WHEEL, 40, 6));
-    s.place_unit(1, "TESTVAN", cell(12, 0), 64);
-    let (w, _) = river_in(s, gaps);
+    s.place_unit(1, "TESTVAN", van_at, 64);
+    let (w, _) = river_in_with(s, gaps, clear);
     let of = |h: u8| {
         vehicles(&w)
             .into_iter()
@@ -2015,6 +2035,187 @@ fn an_attacker_on_a_deck_takes_its_reach_region_from_the_deck() {
     );
     let got = approach(&mut w, car);
     assert_eq!(got.0, None, "the regions differ: the target is dropped");
+}
+
+/// Stands `id` on the deck of bridge cell `c`, as [`on_deck_attacking`]
+/// does, without a target.
+fn on_deck(w: &mut World, id: ObjectId, c: CellXY) {
+    use glasnost_sim::world::{Layer, Pos};
+    let o = w.obj_mut(id).unwrap();
+    o.pos = Pos::centre(c, 416); // spec: S-0307 Constants (bridge deck height, 416 leptons above the terrain)
+    o.layer = Layer::Deck;
+}
+
+/// Stands `id` on the ground of `c` with `target`.
+fn on_ground_attacking(w: &mut World, id: ObjectId, c: CellXY, target: ObjectId) {
+    use glasnost_sim::world::{Layer, Pos};
+    let o = w.obj_mut(id).unwrap();
+    o.pos = Pos::centre(c, 0);
+    o.layer = Layer::Ground;
+    o.target = Some(Target::Object(target));
+}
+
+// spec: S-0307 claim 19 (revision 20, Q-2171, a deck over water: the candidate's reach region is read for its deck, S-0212 claim 4, when its cell carries a high bridge; an attacker on the deck, read for its deck too, or on a bank qualifies a deck cell when the two reads agree; RG18 run e). The lead's play note 37 (M8 A4 round 6): units on a deck dropped an attack on a target on the same deck.
+#[test]
+fn deck_candidates_are_read_for_their_deck() {
+    let z = MovementZone::Normal;
+    let approach = |w: &mut World, id: ObjectId| {
+        glasnost_sim::approach::step(w, id);
+        let o = w.obj(id).unwrap();
+        (o.target, o.dest)
+    };
+    // Run e: the van in the middle of the deck, the Rifle's range 1 cell,
+    // so that every primary passing the range test is a deck cell; the car
+    // on the same deck, 2 cells away.
+    let (mut w, car, van) = armed_river_with(&[], &[], Some("1"), cell(3, 0));
+    on_deck(&mut w, van, cell(3, 0));
+    on_deck_attacking(&mut w, car, cell(1, 0), van);
+    assert_eq!(
+        regions::reach_in(&w, cell(3, 0), z),
+        Reach::None,
+        "the water under the deck"
+    );
+    let got = approach(&mut w, car);
+    assert!(
+        matches!(got, (Some(Target::Object(t)), Some(Target::Cell(c))) if t == van && w.high_bridge(c)),
+        "the target kept, a deck primary the destination: {got:?}"
+    );
+    // Repeated with the car on a bank cell next to the bridge's first end.
+    let (mut w, car, van) = armed_river_with(&[], &[], Some("1"), cell(3, 0));
+    on_deck(&mut w, van, cell(3, 0));
+    on_ground_attacking(&mut w, car, cell(-1, 0), van);
+    assert_eq!(
+        regions::reach_in(&w, cell(-1, 0), z),
+        regions::reach_read(&w, cell(3, 0), z, true),
+        "the bank lies in the region the deck read gives"
+    );
+    let got = approach(&mut w, car);
+    assert!(
+        matches!(got, (Some(Target::Object(t)), Some(Target::Cell(c))) if t == van && w.high_bridge(c)),
+        "from the bank too: {got:?}"
+    );
+}
+
+// spec: S-0307 claim 19 (revision 20, a deck over other ground: an attacker on the ground under the bridge qualifies a high-bridge cell only when its region is the deck's, whatever the region of the cell's ground; RG18 run c, second part)
+#[test]
+fn a_deck_over_other_ground_is_read_for_its_deck() {
+    let z = MovementZone::Normal;
+    // Open ground under the deck at x = 2 to 4, walled in by rock: a reach
+    // region of its own, not the banks'.
+    let island = [cell(2, 0), cell(3, 0), cell(4, 0)];
+    let (mut w, car, van) = armed_river_with(&[], &island, Some("1"), cell(4, 0));
+    on_deck(&mut w, van, cell(4, 0));
+    on_ground_attacking(&mut w, car, cell(2, 0), van);
+    let ground = regions::reach_in(&w, cell(3, 0), z);
+    assert!(matches!(ground, Reach::Region(_)), "{ground:?}");
+    assert_eq!(regions::reach_in(&w, cell(2, 0), z), ground);
+    assert_ne!(ground, regions::reach_read(&w, cell(3, 0), z, true));
+    glasnost_sim::approach::step(&mut w, car);
+    let o = w.obj(car).unwrap();
+    assert!(
+        !matches!(o.dest, Some(Target::Cell(c)) if w.high_bridge(c)),
+        "no deck cell chosen, as a ground read would choose: {:?}",
+        o.dest
+    );
+    assert_eq!(
+        o.target, None,
+        "every primary is a deck cell: the target is dropped"
+    );
+}
+
+// spec: S-0215 claim 37 (a1) (revision 91, Q-2171 question 4: the per-tick test is S-0212 claim 6's comparison; the actor's cell read for its deck when it is on a bridge deck, the target's cell whenever that cell carries a high bridge, whichever layer the target is on; B32 h runs 1 to 4)
+#[test]
+fn the_per_tick_reach_test_reads_decks() {
+    use glasnost_sim::approach::reaches;
+    let (mut w, car, van) = armed_river_with(&[], &[], None, cell(5, 0));
+    // Run 1: the actor and the target on one deck.
+    on_deck(&mut w, van, cell(5, 0));
+    on_deck_attacking(&mut w, car, cell(1, 0), van);
+    assert!(reaches(&w, car, cell(5, 0)), "run 1");
+    // Run 4 (control): the actor on the deck, the target's cell beside the
+    // bridge with no bridge over it.
+    assert!(!w.high_bridge(cell(3, 4)));
+    assert!(!reaches(&w, car, cell(3, 4)), "run 4");
+    // Runs 2 and 3: the actor on a bank; the target on the deck, or on the
+    // ground under it (its cell carries a high bridge: read for its deck).
+    on_ground_attacking(&mut w, car, cell(-1, 0), van);
+    assert!(reaches(&w, car, cell(5, 0)), "run 2");
+    let o = w.obj_mut(van).unwrap();
+    o.layer = glasnost_sim::world::Layer::Ground;
+    assert!(reaches(&w, car, cell(5, 0)), "run 3");
+    // The per-tick rule keeps a reachable target and gives no destination.
+    on_deck_attacking(&mut w, car, cell(1, 0), van);
+    glasnost_sim::approach::per_tick(&mut w, car);
+    let o = w.obj(car).unwrap();
+    assert_eq!((o.target, o.dest), (Some(Target::Object(van)), None));
+}
+
+// spec: S-0215 claim 37 (a1) and S-0212 claims 4 and 6 (in the comparison two cells of no reach region count as one region; an off-map cell, a cell of no reach region and a reach region all differ)
+#[test]
+fn the_per_tick_comparison_shares_no_region() {
+    use glasnost_sim::approach::reaches;
+    let (mut w, car, van) = armed_river_with(&[], &[], None, cell(12, 0));
+    let z = MovementZone::Normal;
+    // The actor on rock beside the bridge, the target's cell rock too.
+    on_ground_attacking(&mut w, car, cell(3, 4), van);
+    assert_eq!(regions::reach_in(&w, cell(3, 4), z), Reach::None);
+    assert!(reaches(&w, car, cell(3, 6)), "two cells of no reach region");
+    assert!(
+        !reaches(&w, car, cell(12, 0)),
+        "no reach region and a reach region"
+    );
+}
+
+// spec: S-0215 claim 37 (a1) and S-0212 claim 6 (the exceptions skip the comparison and the target counts as reachable: the actor's cell outside the usable area but a legal cell; in the corridor-disabling state, the actor's cell inside the usable area and the target's a legal cell outside it)
+#[test]
+fn the_per_tick_comparison_exceptions() {
+    use glasnost_sim::approach::reaches;
+    let build = |train: bool| {
+        let mut s = scene();
+        if train {
+            s.ruleset.sim.vehicles.get_mut(CAR).unwrap().is_train = Some(true);
+        }
+        let fp = glasnost_map::Footprint::new(
+            common::SIZE,
+            common::SIZE,
+            [4, 4, common::SIZE - 8, common::SIZE - 8],
+        );
+        let mut grid = glasnost_map::CellGrid::new(fp);
+        for c in all_cells(&s) {
+            if let Some(x) = grid.get_mut(c) {
+                *x = *s.map.cells.get(c).unwrap();
+            }
+        }
+        s.map.footprint = fp;
+        s.map.cells = grid;
+        s.set_cell(cell(3, 0), code_tile(9), 0); // water
+        s.place_unit(0, CAR, cell(0, 0), 64);
+        let mut w = s.build();
+        regions::ensure(&mut w);
+        let off = all_cells(&s)
+            .into_iter()
+            .find(|&c| !w.cells.usable(c) && w.cells.cell(c).is_some())
+            .expect("a legal cell outside the usable area");
+        let id = vehicles(&w)[0];
+        (w, id, off)
+    };
+    let (mut w, id, off) = build(false);
+    let z = MovementZone::Normal;
+    // Inside the usable area: the comparison decides.
+    assert!(!reaches(&w, id, cell(3, 0)), "a reach region and water");
+    assert!(!reaches(&w, id, off), "a reach region and an off-map cell");
+    // The actor outside the usable area: the target counts as reachable,
+    // although the comparison would differ.
+    w.obj_mut(id).unwrap().pos = glasnost_sim::world::Pos::centre(off, 0);
+    assert!(!regions::compare(&w, z, off, false, cell(3, 0), false));
+    assert!(reaches(&w, id, cell(3, 0)), "the second exception");
+    // A train type inside the usable area, the target's cell outside it.
+    let (w, id, off) = build(true);
+    assert!(reaches(&w, id, off), "the third exception");
+    assert!(
+        !reaches(&w, id, cell(3, 0)),
+        "a target cell inside: compared"
+    );
 }
 
 // spec: S-0212 claim 13b (coarse end cells of a bridge cell: the lane cells; enabled: the nearer, the second end's on equal distances; not enabled: by the first cell off the bridge going east)

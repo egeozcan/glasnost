@@ -281,10 +281,13 @@ pub fn reach_read(w: &World, c: CellXY, z: MovementZone, deck: bool) -> Reach {
 }
 
 /// Whether two cells lie in one reach region of a zone, each read for its
-/// deck when its flag says so ([`reach_read`]): two reach regions, equal.
-/// A cell of no reach region, an off-map cell and a deck with no link found
-/// match nothing. S-0307 claim 19's clear-cell test: the actor's region from
-/// its actual cell and its ground/deck layer, the candidate's from its ground.
+/// deck when its flag says so ([`reach_read`]): two reach regions, equal,
+/// or two decks read with no link found (S-0212 claim 4's table: such decks
+/// count as lying in one reach region). A cell of no reach region and an
+/// off-map cell match nothing: the sharing of claim 6's comparison is
+/// [`compare`]'s. S-0307 claim 19's clear-cell test (revision 20): the
+/// actor's region from its actual cell and its ground/deck layer, a
+/// high-bridge candidate's read for its deck.
 pub fn same_region_read(
     w: &World,
     z: MovementZone,
@@ -296,8 +299,27 @@ pub fn same_region_read(
     // spec: S-0307 claim 19 (the actor's current reach region, determined from its actual cell and its current ground/deck layer) and S-0212 claim 4 (a bridge cell read for its deck: through the first bridge link within 1 cell)
     match (reach_read(w, a, z, a_deck), reach_read(w, b, z, b_deck)) {
         (Reach::Region(x), Reach::Region(y)) => x == y,
+        // spec: S-0307 claim 19 (revision 20: a deck read with no link found takes S-0212 claim 4's row, and the same equality decides) and S-0212 claim 4 (such a deck lies in the same reach region as any other deck read with no link found)
+        (Reach::LoneDeck, Reach::LoneDeck) => true,
         _ => false,
     }
+}
+
+/// S-0212 claim 6's comparison of two cells' reach regions for a zone, each
+/// read for its deck when its flag says so: equal reach regions, two cells
+/// of no reach region, two off-map cells or two decks read with no link
+/// found count as one region (claim 4). The path gate and S-0215 claim 37
+/// (a1) make it.
+pub fn compare(
+    w: &World,
+    z: MovementZone,
+    a: CellXY,
+    a_deck: bool,
+    b: CellXY,
+    b_deck: bool,
+) -> bool {
+    // spec: S-0212 claims 4 and 6 (in the comparison two cells of no reach region count as one region, and so do two off-map cells; an off-map cell, a cell of no reach region and a reach region all differ)
+    reach_read(w, a, z, a_deck) == reach_read(w, b, z, b_deck)
 }
 
 /// Whether two cells lie in the same connected region of a movement zone
