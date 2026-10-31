@@ -225,6 +225,16 @@ fn docked_scene(health_at: i32) -> (World, ObjectId, ObjectId) {
     (w, d, v)
 }
 
+/// [`docked_scene`] with a truck that is at full health after its arrival,
+/// so that the settling step finds it *not needed* (claim 6): one at full
+/// health when it is ordered is refused before it arrives (claim 16,
+/// revision 107).
+fn full_scene() -> (World, ObjectId, ObjectId) {
+    let (mut w, d, v) = docked_scene(300);
+    w.obj_mut(v).unwrap().health = 600;
+    (w, d, v)
+}
+
 /// Marks the truck's contact as tethered (docked): the state claim 17's
 /// pad exchange gives, set directly, since a straight approach to a
 /// one-place pad depot never meets that exchange's conditions.
@@ -381,10 +391,11 @@ fn claim_6_done_at_settling_waits_one_step() {
     assert_eq!(sounds(&w, Sound::UnitRepaired), 1);
 }
 
-// spec: S-0314 claim 6 (settling, not needed: a full-health vehicle is sent away at once with no payment and no announcement)
+// spec: S-0314 claim 6 (settling, not needed: a vehicle at full health by the settling step is sent away at once with no payment and no announcement); claim 16 (revision 107: one at full health when it is ordered is refused before it arrives, so the health is set after the arrival)
 #[test]
 fn claim_6_full_health_vehicle_is_sent_away_unpaid() {
-    let (mut w, _d, v) = docked_scene(600);
+    let (mut w, _d, v) = docked_scene(300);
+    w.obj_mut(v).unwrap().health = 600;
     let credits = w.houses[0].credits;
     assert!(run_until(&mut w, 600, |w| contact(w, v).is_none()));
     assert_eq!(w.houses[0].credits, credits);
@@ -420,7 +431,7 @@ fn claim_6_cannot_pay_and_low_funds() {
 #[test]
 fn claim_25_departure_cell_from_the_exit_list() {
     let list = glasnost_sim::econ::release::exit_list(3, 3, false, true);
-    let (mut w, _d, v) = docked_scene(600);
+    let (mut w, _d, v) = full_scene();
     let first = testkit::mid(SIZE, list[0].0, list[0].1);
     let second = testkit::mid(SIZE, list[1].0, list[1].1);
     spawn(&mut w, Kind::Vehicle, "TRUCK", 0, list[0].0, list[0].1);
@@ -433,7 +444,7 @@ fn claim_25_departure_cell_from_the_exit_list() {
 #[test]
 fn claim_25_no_departure_cell_keeps_contact() {
     let list = glasnost_sim::econ::release::exit_list(3, 3, false, true);
-    let (mut w, d, v) = docked_scene(600);
+    let (mut w, d, v) = full_scene();
     let mut blockers = Vec::new();
     for &(a, b) in &list {
         if w.cells.footprint().is_legal(testkit::mid(SIZE, a, b))
@@ -484,7 +495,8 @@ fn claim_6_neutral_vehicle_returns_to_its_guard_spot() {
         .position(|h| h.role == HouseRole::Neutral)
         .unwrap() as u8;
     let d = spawn(&mut w, Kind::Building, "DEPOT", neutral, 0, 0);
-    let v = truck(&mut w, neutral, 6, 1, 600);
+    // Damaged until the depot accepts it (claim 16, revision 107: at full health its repeated request is refused), then at full health, so the settling step sends it away.
+    let v = truck(&mut w, neutral, 6, 1, 300);
     let spot = Target::Cell(testkit::mid(SIZE, 8, 8));
     open(&mut w);
     assert!(depot::request(&mut w, v, d, true));
@@ -497,6 +509,7 @@ fn claim_6_neutral_vehicle_returns_to_its_guard_spot() {
     }
     assert!(run_until(&mut w, 1500, |w| w.obj(d).unwrap().beh.current
         == Some(Behaviour::Repair)));
+    w.obj_mut(v).unwrap().health = 600;
     assert!(run_until(&mut w, 1500, |w| contact(w, v).is_none()));
     assert_eq!(w.obj(v).unwrap().dest, Some(spot));
     assert_eq!(w.obj(v).unwrap().guard_spot, None);
@@ -714,11 +727,23 @@ fn claim_20_same_depot_enter_while_docked() {
     assert!(run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
         != Some(Behaviour::Enter)));
     assert_ne!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
-    let (mut w, d, v) = pad_scene(300);
-    w.obj_mut(v).unwrap().health = 600;
-    assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
-    tick::step(&mut w);
-    assert_eq!(contact(&w, v), None, "full health: contact lost at once");
+    // spec: S-0314 claim 20 (revision 107: released by the order itself, which takes claim 23's full-health case: the order gives no destination and no queued entry, so the order's tick end does not show the contact, whatever the pad flag)
+    for tethered in [true, false] {
+        let (mut w, d, v) = if tethered {
+            pad_scene(300)
+        } else {
+            docked_scene(300)
+        };
+        w.obj_mut(v).unwrap().health = 600;
+        let dest = w.obj(v).unwrap().dest;
+        assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+        tick::step(&mut w);
+        assert_eq!(contact(&w, v), None, "full health: contact lost at once");
+        let o = w.obj(v).unwrap();
+        assert_eq!(o.dest, dest, "full health: the order gives no destination");
+        assert_eq!(o.depot.queued, None, "full health: no queued entry");
+        assert!(depot::link(&w, v).is_none(), "tethered {tethered}");
+    }
 }
 
 // spec: S-0314 claim 21 and Edge cases (quirks.depot_remote_repair on: a docked vehicle ordered away keeps receiving paid steps when it stands still far from the depot)
@@ -809,11 +834,33 @@ fn claim_22_destruction_approaching() {
     assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
 }
 
-/// A docked vehicle carried off its depot (beyond S-0312 claim 17's kill
-/// distance) while asleep, then the depot destroyed.
+/// A vehicle carried off its depot (beyond S-0312 claim 17's kill
+/// distance) after its movement arrival, asleep, docked when `tethered`,
+/// then the depot destroyed.
 fn destroyed_while_docked(r: &Ruleset) -> (World, ObjectId) {
+    destroyed_after_arrival(r, true, false)
+}
+
+/// [`destroyed_while_docked`], tethered or not, and with the vehicle put in
+/// *guard* before the destruction when `guard`, as the measured driving
+/// vehicle of S-0314 claim 17 is.
+fn destroyed_after_arrival(r: &Ruleset, tethered: bool, guard: bool) -> (World, ObjectId) {
     let (mut w, d, v) = scene_at(r, "DEPOT", 300, false);
-    tether(&mut w, v);
+    assert!(
+        depot::link(&w, v).unwrap().arrived,
+        "the movement arrival is kept"
+    );
+    if tethered {
+        tether(&mut w, v);
+    }
+    if guard {
+        let t = w.tick;
+        w.obj_mut(v)
+            .unwrap()
+            .beh
+            .queue_and_start_at_once(Behaviour::Guard, t, false);
+        assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
+    }
     let p = w.obj(v).unwrap().pos;
     objects::place(&mut w, v, Pos::new(p.x + 1024, p.y, p.z), 16384);
     // Placing a unit makes it fall back to rest; the test's carrying is not
@@ -832,7 +879,7 @@ fn claim_22_docked_vehicle_left_asleep() {
     assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
 }
 
-// spec: S-0314 Edge cases (quirks.depot_loss_leaves_sleep off: destruction treats contacts as a sale does: guard)
+// spec: S-0314 Edge cases (quirks.depot_loss_leaves_sleep off: destruction treats contacts as a sale does: guard; revision 107: for every arrived vehicle, docked or not)
 #[test]
 fn quirk_depot_loss_leaves_sleep_off() {
     let mut r = rules();
@@ -840,6 +887,156 @@ fn quirk_depot_loss_leaves_sleep_off() {
     let (w, v) = destroyed_while_docked(&r);
     assert_eq!(contact(&w, v), None);
     assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
+    let (w, v) = destroyed_after_arrival(&r, false, false);
+    assert_eq!(contact(&w, v), None);
+    assert_eq!(
+        w.obj(v).unwrap().beh.current,
+        Some(Behaviour::Guard),
+        "untethered"
+    );
+}
+
+// spec: S-0314 claim 22 (revision 107: the release leaves the current behaviour of a contacted vehicle after its movement arrival in the docking-point cell as it was, docked or not: one in sleep stays in sleep, one in guard stays in guard); Edge cases (quirks.depot_loss_leaves_sleep on)
+#[test]
+fn claim_22_arrived_vehicle_keeps_its_behaviour() {
+    let r = rules();
+    let (w, v) = destroyed_after_arrival(&r, false, false);
+    assert_eq!(contact(&w, v), None);
+    assert!(depot::link(&w, v).is_none());
+    assert_eq!(
+        w.obj(v).unwrap().beh.current,
+        Some(Behaviour::Sleep),
+        "untethered, asleep"
+    );
+    for tethered in [false, true] {
+        let (w, v) = destroyed_after_arrival(&r, tethered, true);
+        assert_eq!(contact(&w, v), None);
+        assert_eq!(
+            w.obj(v).unwrap().beh.current,
+            Some(Behaviour::Guard),
+            "in guard, tethered {tethered}"
+        );
+    }
+}
+
+// spec: S-0314 claim 22 (revision 107: a contacted vehicle before its movement arrival in the docking-point cell loses its target and falls back to guard where it stands, the tether playing no part; the arrival mark is not set before it)
+#[test]
+fn claim_22_destruction_before_arrival_tethered() {
+    for quirk in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.depot_loss_leaves_sleep = quirk;
+        let mut w = game(&r);
+        let d = depot_at(&mut w, "DEPOT");
+        let v = truck(&mut w, 0, 12, 1, 300);
+        open(&mut w);
+        click_enter(&mut w, v, d);
+        tether(&mut w, v);
+        assert!(!depot::link(&w, v).unwrap().arrived, "not yet arrived");
+        damage::apply(&mut w, d, lethal());
+        tick::step(&mut w);
+        assert_eq!(contact(&w, v), None);
+        let o = w.obj(v).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "quirk {quirk}");
+        assert_eq!(o.dest, None, "quirk {quirk}");
+    }
+}
+
+// spec: S-0314 claims 16 and 17 (revision 107: each repeated entry request to a repair depot also asks the vehicle whether it needs repair; a vehicle at full health answers no and the depot refuses, so one without a tether loses its contact and falls back to rest at its first enter processing after the order, before it reaches the docking point: no settling processing, no step and no payment, however often it is ordered; a naval yard with the repair flag is a repair depot too); S-0215 claim 29
+#[test]
+fn claim_16_full_health_refused_at_the_repeated_request() {
+    for name in ["DEPOT", "YARD", "PAD"] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, name);
+        let v = truck(&mut w, 0, 6, 1, 600);
+        open(&mut w);
+        let credits = w.houses[0].credits;
+        for n in 0..3 {
+            assert!(
+                orders::issue(&mut w, ALPHA, enter(v, d)),
+                "{name}: order {n}"
+            );
+            tick::step(&mut w);
+            // The order's tick end: the order took effect (enter queued or current, or the first acceptance's contact).
+            let b = &w.obj(v).unwrap().beh;
+            assert!(
+                b.current == Some(Behaviour::Enter)
+                    || b.queued == Some(Behaviour::Enter)
+                    || contact(&w, v).is_some(),
+                "{name}: the order took effect, order {n}"
+            );
+            assert!(
+                run_until(&mut w, 3, |w| contact(w, v).is_none()
+                    && w.obj(v).unwrap().beh.current == Some(Behaviour::Enter)),
+                "{name}: refused at its first enter processing, order {n}"
+            );
+            assert!(depot::link(&w, v).is_none(), "{name}");
+            assert_ne!(
+                w.obj(v).unwrap().pos.cell(),
+                dock_cell(),
+                "{name}: before the docking point"
+            );
+            // Enter falls back to rest.
+            assert!(
+                run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
+                    != Some(Behaviour::Enter)),
+                "{name}: falls back, order {n}"
+            );
+        }
+        for _ in 0..200 {
+            tick::step(&mut w);
+            assert_eq!(contact(&w, v), None, "{name}");
+            assert_ne!(
+                w.obj(d).unwrap().beh.current,
+                Some(Behaviour::Repair),
+                "{name}: no settling processing"
+            );
+        }
+        assert_eq!(w.houses[0].credits, credits, "{name}: no payment");
+        assert_eq!(sounds(&w, Sound::UnitRepaired), 0, "{name}");
+        // Damaged, the same vehicle is accepted at its repeated request.
+        w.obj_mut(v).unwrap().health = 300;
+        assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+        assert!(run_until(&mut w, 600, |w| w.obj(d).unwrap().beh.current
+            == Some(Behaviour::Repair)));
+    }
+}
+
+// spec: S-0314 claim 16 (revision 107: the depot's permission does not require damage, and its first acceptance makes no damage test) and claim 23 (an enter order on a depot asks for entry at once)
+#[test]
+fn claim_16_first_acceptance_takes_a_full_health_vehicle() {
+    for name in ["DEPOT", "YARD", "PAD"] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, name);
+        let v = truck(&mut w, 0, 6, 1, 600);
+        open(&mut w);
+        assert!(
+            depot::accepts(&w, d, v, true),
+            "{name}: permitted at full health"
+        );
+        depot::order_entered(&mut w, v, Behaviour::Enter, Some(Target::Object(d)));
+        assert_eq!(
+            depot::link(&w, v).map(|l| l.depot),
+            Some(d),
+            "{name}: the first acceptance takes the contact"
+        );
+        assert_eq!(contact(&w, v), Some(d), "{name}");
+    }
+}
+
+// spec: S-0314 claim 16 (revision 107: a tethered vehicle keeps its contact on the full-health refusal, S-0215 claim 29: an existing tether allows entry to continue; without a tether the refusal ends the contact)
+#[test]
+fn claim_16_full_health_refusal_and_the_tether() {
+    let (mut w, d, v) = pad_scene(300);
+    w.obj_mut(v).unwrap().health = 600;
+    let _ = depot::process_enter(&mut w, v);
+    assert_eq!(contact(&w, v), Some(d), "tethered: contact kept");
+    assert!(docked(&w, v));
+    let (mut w, _d, v) = docked_scene(300);
+    w.obj_mut(v).unwrap().health = 600;
+    let _ = depot::process_enter(&mut w, v);
+    assert_eq!(contact(&w, v), None, "untethered: contact lost");
 }
 
 // spec: S-0314 claim 22 (a vehicle destroyed while in contact frees its place; a depot left without any contact returns to guard)
@@ -898,8 +1095,17 @@ fn claim_22_contact_loss_by_phase() {
             "phase {phase}: in repair until the return: {trace:?}"
         );
         match phase {
-            // Waiting and settling never pass through another phase.
-            0 | 1 => assert!(
+            // Waiting: the processing that finds no contact sets the next
+            // one 1 tick later, and the depot is in guard from that tick
+            // (revision 107, claim 6's table), so its last tick in repair is
+            // that processing's.
+            0 => {
+                let (wait, rest) = before.split_last().expect("a waiting processing");
+                assert!(rest.iter().all(|&(_, p)| p == 0), "phase 0: {trace:?}");
+                assert_eq!(wait.0, Some(Behaviour::Repair), "phase 0: {trace:?}");
+            }
+            // Settling never passes through another phase.
+            1 => assert!(
                 before.iter().all(|&(_, p)| p == phase),
                 "phase {phase}: {trace:?}"
             ),
@@ -1934,7 +2140,7 @@ fn claim_21_waiting_refusal_ends_being_settled() {
 #[test]
 fn claim_6_failed_departure_retries_d_apart() {
     let list = glasnost_sim::econ::release::exit_list(3, 3, false, true);
-    let (mut w, d, v) = docked_scene(600);
+    let (mut w, d, v) = full_scene();
     let dd = d_rep(&w);
     let mut blocked = Vec::new();
     for &(a, b) in &list {

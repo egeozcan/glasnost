@@ -275,3 +275,15 @@ rules quirks read only by the client (no simulation code reads them).
 **Version effects.** The layered `sim_rules_hash` changes (the layer file's content is in it), so
 a save, replay, report or room made with the previous layer is refused on the rules hash, as for
 earlier layer changes. Reference files are unaffected.
+
+## Intake 55b (S-0314 r107): the depot-loss switch judged
+
+Ledger: [intake55b-S-0314-S-0202-S-0601-S-0612-S-0614-M-0007-M-0008-M-0014.md](intake55b-S-0314-S-0202-S-0601-S-0612-S-0614-M-0007-M-0008-M-0014.md).
+S-0314 r107 adds no quirk; it widens the text of `depot_loss_leaves_sleep` from a docked vehicle
+to every contacted vehicle after its movement arrival, docked or not, in *sleep* or in *guard*.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `depot_loss_leaves_sleep` | S-0314 claim 22, Edge cases (r107) | rejected (not in the layer) | Condition 2: the quirk text states a vehicle that "neither fires nor reacts until ordered", a vehicle that waits for an order and moves on one, not a stuck unit, a give-up, a unit that never moves again or a glitch; no play note or request names it. Condition 3: the off position gives each arrived contact the sale's run-away notice, a scatter move that can carry a vehicle into or out of a fight, so it changes combat outcomes. Both positions are tested (`quirk_depot_loss_leaves_sleep_off`, tethered and not; `claim_22_arrived_vehicle_keeps_its_behaviour`). |
+
+The layer file is unchanged, so the layered rules hash does not move.

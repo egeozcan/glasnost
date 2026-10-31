@@ -28,9 +28,10 @@ use crate::combat::heal::{self, StepOutcome};
 use crate::rules::{Behaviour, Kind};
 use crate::world::{ObjectId, Pos, Target, World};
 
-/// A vehicle's depot contact (S-0314 claim 17): the place it holds and
+/// A vehicle's depot contact (S-0314 claim 17): the place it holds,
 /// whether the completed entry exchange has tethered it (*docked*) or not
-/// yet (*approaching*, claims 20 to 24).
+/// yet (*approaching*, claims 20 to 24), and whether it has made its
+/// movement arrival in the docking-point cell (claims 17 and 22).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Link {
     /// The depot.
@@ -39,6 +40,10 @@ pub struct Link {
     pub place: u32,
     /// Tethered: docked.
     pub tethered: bool,
+    /// The vehicle has made its movement arrival in this depot's
+    /// docking-point cell since it took this contact (claim 17): what
+    /// claim 22's destruction row tells apart.
+    pub arrived: bool,
 }
 
 /// Whether a vehicle is settled, and where (S-0314 Terms, *Settled
@@ -105,6 +110,8 @@ mod phase {
     pub const SETTLING: i32 = 1;
     // nocite: our own numbering of S-0314 claim 6's three phases, in claim order
     pub const WORKING: i32 = 2;
+    // nocite: our own number for the 1-tick wait of S-0314 claim 6's waiting row with no contact, after the three phases
+    pub const LEAVING: i32 = 3;
 }
 
 /// The settling hold distance (S-0314 claim 21), strict.
@@ -287,6 +294,8 @@ fn permits_but_place(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bo
 /// one contact, so any other is released.
 fn take(w: &mut World, id: ObjectId, k: ObjectId, place: u32) {
     let keep = link(w, id).is_some_and(|l| l.depot == k && l.tethered);
+    // spec: S-0314 claims 17 and 22 (a repeated request that keeps this depot's contact does not undo the movement arrival already made)
+    let arrived = link(w, id).is_some_and(|l| l.depot == k && l.arrived);
     let fresh = link(w, id).is_none_or(|l| l.depot != k);
     let mut to_depot = false;
     if let Some(o) = w.obj_mut(id) {
@@ -295,6 +304,7 @@ fn take(w: &mut World, id: ObjectId, k: ObjectId, place: u32) {
             depot: k,
             place,
             tethered: keep,
+            arrived,
         });
         to_depot = o.dest == Some(Target::Object(k));
     }
@@ -336,6 +346,10 @@ enum Reply {
 fn repeated_request(w: &mut World, id: ObjectId, k: ObjectId) -> Reply {
     // spec: S-0314 claim 17 (the repeated request is not a repeat of claim 16's test: standing on the depot does not refuse it)
     if !permits_but_place(w, k, id, false) {
+        return Reply::Refused;
+    }
+    // spec: S-0314 claims 16 and 17 (revision 107: each repeated entry request to a repair depot also asks the vehicle whether it needs repair; at full health, a health ratio of exactly 1, it answers no and the depot refuses; a naval yard with the repair flag and a type that is also a bunker are repair depots, claim 17's "either")
+    if health_full(w, id) {
         return Reply::Refused;
     }
     // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: the repeated request is also refused when claim 3's eligibility check refuses it)
@@ -664,6 +678,10 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Sleep));
+        if let Some(l) = ob.depot.link.as_mut() {
+            // spec: S-0314 claim 22 (revision 107: destruction tells a contacted vehicle before its movement arrival in the docking-point cell from one after it, docked or not)
+            l.arrived = true;
+        }
     }
     // spec: S-0314 Terms and claim 21 (the movement arrival in the docking-point cell makes the vehicle settled, whatever its state before; a hovering vehicle is switched off, with no draws since its behaviour is then enter)
     settle(w, id);
@@ -733,6 +751,14 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     {
         return d;
     }
+    if w.obj(k).is_some_and(|b| b.beh.progress == phase::LEAVING) {
+        // spec: S-0314 claim 6 (revision 107, the waiting row with no contact: the depot is in guard from the tick its next processing falls due, whether or not special-3 is still running); measure: M-0007 (a loss before the first waiting processing)
+        if let Some(b) = w.obj_mut(k) {
+            b.depot.serviced = None;
+            b.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
+        }
+        return 1;
+    }
     let Some(v) = serviced(w, k) else {
         // spec: S-0314 claims 6 and 22 (a lost contact is met at the processing already scheduled: the loss neither brings it forward nor puts it back; the working phase is processed every tick)
         let stage = w.obj(k).map_or(phase::WAITING, |b| b.beh.progress);
@@ -755,7 +781,14 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             // spec: S-0314 claims 6 and 22 (settling, no contact, special-3 running after this processing's slot changes: the no-contact settling hold, 1 tick later)
             return 1;
         }
-        // spec: S-0314 claims 6 and 22 (in waiting, or settling with no special-3 running, a depot left without any contact returns to guard at that processing, without an animation wait); S-0108 claim 20 (in waiting the depot leaves its repair behaviour)
+        if stage == phase::WAITING {
+            // spec: S-0314 claim 6 (revision 107, waiting, no contact: this processing sets the next one 1 tick later, and the depot is in guard from that tick, whether or not special-3 is still running); claim 22; measure: M-0007 (a loss before the first waiting processing: guard one tick after it)
+            if let Some(b) = w.obj_mut(k) {
+                b.beh.progress = phase::LEAVING;
+            }
+            return 1;
+        }
+        // spec: S-0314 claims 6 and 22 (settling with no special-3 running: a depot left without any contact returns to guard at that processing, without an animation wait)
         if let Some(b) = w.obj_mut(k) {
             b.depot.serviced = None;
             b.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
@@ -1298,28 +1331,29 @@ pub fn selling_processing(w: &mut World, k: ObjectId) {
 
 /// A destroyed depot's contact `v` that survives (S-0314 claim 22; the
 /// contacts within S-0312 claim 17's distance are destroyed): contact is
-/// released without a run-away notice; an approaching vehicle loses its
-/// target and falls back to guard where it stands; a docked one stays in
-/// *sleep* (`quirks.depot_loss_leaves_sleep`).
+/// released without a run-away notice; a vehicle before its movement
+/// arrival in the docking-point cell loses its target and falls back to
+/// guard where it stands; one after that arrival, docked or not, keeps its
+/// behaviour (`quirks.depot_loss_leaves_sleep`).
 pub fn depot_destroyed(w: &mut World, k: ObjectId, v: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(l) = link(w, v).filter(|l| l.depot == k) else {
         return;
     };
-    if l.tethered && !w.rules().quirks.depot_loss_leaves_sleep {
-        // spec: S-0314 Edge cases (quirks.depot_loss_leaves_sleep off: destruction treats contacts as a sale does)
+    if l.arrived && !w.rules().quirks.depot_loss_leaves_sleep {
+        // spec: S-0314 Edge cases (quirks.depot_loss_leaves_sleep off: destruction treats contacts as a sale does; revision 107: the switch covers every behaviour an arrived vehicle keeps)
         run_away(w, k, v);
         release(w, v);
         return;
     }
     release(w, v);
-    if l.tethered {
-        // spec: S-0314 claim 22 (a docked vehicle stays in sleep until it receives an order, quirks.depot_loss_leaves_sleep)
+    if l.arrived {
+        // spec: S-0314 claim 22 (revision 107: the release leaves the current behaviour of a contacted vehicle after its movement arrival as it was, docked or not: sleep stays sleep until an order, guard stays guard; quirks.depot_loss_leaves_sleep)
         return;
     }
     if let Some(ob) = w.obj_mut(v) {
-        // spec: S-0314 claim 22 (an approaching vehicle loses its target and falls back to guard where it stands)
+        // spec: S-0314 claim 22 (a contacted vehicle before its movement arrival in the docking-point cell loses its target and falls back to guard where it stands, tethered or not)
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         ob.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);

@@ -463,6 +463,25 @@ fn an_overload_pulse_sets_the_roll_rate() {
     }
 }
 
+// spec: S-0601 F4 (revision 20: the rate replaces the controller's roll rate, not added to a nonzero one, and is not scaled by the type's weight) and S-0113 claim 17
+#[test]
+fn an_overload_pulse_replaces_a_nonzero_roll_rate() {
+    let (mut w, cart) = world(Some("4"));
+    let mut rocking = Rocking::default();
+    w.effects.push(Effect::DroneRock {
+        host: cart,
+        side: 0,
+    });
+    tick(&mut w, &mut rocking);
+    tick(&mut w, &mut rocking);
+    let before = rocking.body(cart).unwrap();
+    assert!(real(before.roll_rate) > 0.0, "rolling: {before:?}");
+    overload(&mut w, cart, 1, 0);
+    tick(&mut w, &mut rocking);
+    let b = rocking.body(cart).unwrap();
+    assert_eq!(b.roll_rate, single(-0.015), "replaced, unscaled: {b:?}");
+}
+
 // spec: S-0113 claim 6 (the pitch limit π/10 in S-0210's crush-slowdown state) and Edge cases (quirks.rocking_limit_escape off: held at the limit under repeated pushes)
 #[test]
 fn a_crush_slowed_body_pitches_at_most_a_tenth_of_pi() {

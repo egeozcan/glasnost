@@ -9211,7 +9211,7 @@
           "default": true
         },
         "depot_loss_leaves_sleep": {
-          "description": "After its depot is destroyed, a docked vehicle stays asleep and neither fires nor reacts until ordered; off: destruction gives contacts the sale's run-away notice and they switch to guard.",
+          "description": "After its depot is destroyed, a contacted vehicle after its movement arrival in the docking-point cell, docked or not, keeps its behaviour: one in sleep stays asleep and neither fires nor reacts until ordered, one in guard stays in guard; off: destruction gives such contacts the sale's run-away notice and one in sleep switches to guard.",
           "type": "boolean",
           "default": true
         },
