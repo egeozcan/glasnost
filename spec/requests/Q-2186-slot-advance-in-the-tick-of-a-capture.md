@@ -1,9 +1,9 @@
 ---
 id: Q-2186
 title: Whether a building's slots advance in the tick in which a capture re-enables it
-status: open
+status: answered
 related: [S-0108, S-0109, S-0203, S-0509, M-0014]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need
