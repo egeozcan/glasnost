@@ -262,7 +262,16 @@ pub fn selectable(w: &World, id: ObjectId) -> bool {
 /// scenery that appears disguised to `v`.
 pub fn selectable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
     // spec: S-0214 Terms and S-0516 claims 26 and 36 (cloak and scenery selection exclusions)
-    selectable(w, id) && crate::cloak::view::pickable(w, id, v)
+    selectable(w, id) && crate::cloak::view::pickable(w, id, v) && !seized_out(w, id)
+}
+
+/// A seized unit cannot be selected at all while it is seized (S-0607
+/// claim 5, revision 33): a click, a band box and a control group's command
+/// pass it over, also while it falls. It is still found as the clicked
+/// object ([`clickable_by`]): S-0214 Terms, *clicked object*, is unchanged.
+fn seized_out(w: &World, id: ObjectId) -> bool {
+    // spec: S-0607 claim 5 (revision 33: while it is seized it cannot be selected at all, until it is no longer seized, claim 20; never again for a stand-in claim 24 never restores)
+    crate::lift::seized(w, id)
 }
 
 /// Whether a click of house `v` on the object finds it as the clicked
@@ -308,6 +317,7 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
     kind_ok
         && own(w, house, id)
         && selectable(w, id)
+        && !seized_out(w, id)
         && !selection.contains(&id)
         && !tether
         && !deactivated

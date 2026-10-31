@@ -336,6 +336,8 @@ pub fn step(w: &mut World, id: ObjectId) {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.dest = None;
                 }
+                // spec: S-0215 claim 37 (e) and S-0607 claim 9 (revision 33, Q-2151: part e removes the destination directly, not by an assignment of an empty destination: no effective clear in S-0502 claim 24's sense and not claim 9's exception, so a gripped unit's grip holds)
+                crate::lift::destination_removed(w, id);
                 cleared = true;
             }
         }

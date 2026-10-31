@@ -276,10 +276,14 @@ fn claim_23_teleport_no_cell_keeps_the_grip() {
         Some(Answer::Rearming),
         "the gripping lifter refuses other targets (claim 11)"
     );
-    // A later empty assignment is claim 12's event for a gripped unit given no destination.
+    // spec: S-0607 claim 9 (revision 33: a gripped vehicle that has no destination gets none again from such a rule: the assignment leaves its destination unchanged, so it is not the exception, and the grip holds, whatever its stand-in)
     glasnost_sim::econ::assign_destination(&mut w, v, None);
-    assert!(!lift::grips(&w, l, v), "that ends the grip");
-    assert_eq!(w.obj(l).unwrap().target, Some(Target::Object(v)), "kept");
+    run(&mut w, 2);
+    assert!(
+        lift::grips(&w, l, v),
+        "a redundant assignment: the grip holds"
+    );
+    assert_eq!(w.obj(v).unwrap().pos, p, "and it still never jumps");
 }
 
 // spec: S-0607 claims 22 to 24 (revision 7: the grip kept with no destination from the seize survives a save/load round trip with the same state hash)

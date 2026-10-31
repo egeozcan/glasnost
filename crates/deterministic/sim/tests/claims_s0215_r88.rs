@@ -4,9 +4,13 @@
 //! whose target is its own lifter takes the approach step as for any other
 //! target: part d's keep-or-drop table applies to it, and a destination the
 //! step gives it has no effect (S-0607 claim 9). The gripping lifter's own
-//! exception stays (`claims_s0607_r18.rs`). Synthetic data only (the lift
-//! fixture of `lift_common`); no stock value. Ledger:
-//! `docs/m8-claims/intake52a-S-0210-S-0215-S-0216.md`.
+//! exception stays (`claims_s0607_r18.rs`). S-0607 revision 33 (Q-2151,
+//! intake 57) settles the step's outcomes in the grip: part d's drop ends
+//! the grip while the unit has a destination; part e's clearing does not
+//! (`claims_s0607_r33.rs`). Synthetic data only (the lift fixture of
+//! `lift_common`); no stock value. Ledgers:
+//! `docs/m8-claims/intake52a-S-0210-S-0215-S-0216.md` and
+//! `docs/m8-claims/intake57-S-0407-S-0607-S-0307-S-0215-S-0408.md`.
 //!
 //! The step is called directly (`approach::step`, as the hunt and area
 //! guard processing call it, S-0215 claims 26 and 27): the hunt's own
@@ -43,8 +47,7 @@ fn hunting_its_lifter(human: bool) -> (World, ObjectId, ObjectId) {
 }
 
 // spec: S-0215 claim 37 (c) (revision 88: a seized unit whose target is its lifter takes the step as for any target) and (d) (hunt, may not approach, human-controlled owner: the target is dropped, target and destination cleared at once) with S-0607 claim 9 (a rule that gives a gripped unit no destination ends its grip without a drop; still seized) and claim 12 (that row leaves the lifter's target as it was)
-// Interim rule under request Q-2151 (does a cleared destination end the grip here?): as built, yes.
-// Flip this test when Q-2151 is answered otherwise.
+// spec: S-0607 claim 9 (revision 33, Q-2151: a drop, part d, gives the unit no destination; while it has one this is the exception: its grip ends, it is set down where it is, its own target is cleared and the lifter keeps its target)
 #[test]
 fn a_seized_unit_hunting_its_lifter_drops_it_and_the_grip_ends() {
     let (mut w, l, v) = hunting_its_lifter(true);
@@ -63,7 +66,7 @@ fn a_seized_unit_hunting_its_lifter_drops_it_and_the_grip_ends() {
     );
 }
 
-// spec: S-0215 claim 37 (c) (revision 88) and (d) (hunt with a computer-controlled owner keeps the target), (e) (the grip's destination, the lifter's cell, lies farther from the lifter than m × r′ of the unarmed unit: cleared) and (f) with S-0307 claim 17 (the search drops the target and gives a nearby cell); S-0607 claim 9 (that destination has no effect: the grip's destination comes back and the grip holds)
+// spec: S-0215 claim 37 (c) (revision 88) and (d) (hunt with a computer-controlled owner keeps the target), (e) (the grip's destination, the lifter's cell, lies farther from the lifter than m × r′ of the unarmed unit: cleared) and (f) with S-0307 claim 17 (the search drops the target and gives a nearby cell); S-0607 claim 9 (revision 33, Q-2151: part e's clearing is a direct removal, not the exception: the grip holds and the unit keeps no destination; part f's destination is ignored)
 #[test]
 fn a_computer_seized_unit_hunting_its_lifter_is_given_a_cell_that_has_no_effect() {
     let (mut w, l, v) = hunting_its_lifter(false);
@@ -78,5 +81,9 @@ fn a_computer_seized_unit_hunting_its_lifter_is_given_a_cell_that_has_no_effect(
     );
     run(&mut w, 1);
     assert!(lift::grips(&w, l, v), "the grip holds");
-    assert_eq!(w.obj(v).unwrap().dest, dest, "the grip's destination");
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        None,
+        "part e removed the destination; part f's is ignored"
+    );
 }

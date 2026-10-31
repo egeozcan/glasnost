@@ -811,7 +811,10 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
         l.dropper = dropper;
         l.dropper_house = house;
         l.set_down = false;
+        l.grip_without_dest = false;
     });
+    // spec: S-0607 claim 13 (revision 33, a dropped balloon-hover vehicle: the stop on dropping first gives it no destination while it still holds its target, which S-0502 claim 28 can reject, making attack current; it then clears the target and gives no destination again, which that claim cannot reject, so it still ends with none and the direct stop; the target's clearing does not undo the change of behaviour)
+    let _ = crate::jump::clear_rejected(w, x);
     if let Some(o) = w.obj_mut(x) {
         // spec: S-0607 claim 13 (the stop on dropping: its destination becomes none, its route is cleared and its target is cleared)
         o.dest = None;
@@ -824,7 +827,7 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
     // spec: S-0607 claim 13 (the stop on dropping: it is deselected)
     w.effects
         .push(crate::combat::effects::Effect::Dropped { unit: x });
-    // spec: S-0607 claim 13 (revision 5: clearing the destination is an effective order-level clear, so in the same update S-0502 claim 17's stopped-movement rule runs on its jumpjet movement; a grip ended by its lifter takes the design rule for no cell: no self-destruction, it falls as claim 15 says)
+    // spec: S-0607 claim 13 (revision 33: on a drop the stop always runs: the stop on dropping gives its jumpjet movement a direct instruction to stop, not a destination assignment, so it runs whether or not the unit still had a destination; S-0502 claim 17's stopped-movement rule in the same update; a grip ended by its lifter takes the design rule for no cell: no self-destruction, it falls as claim 15 says)
     crate::jump::lift_release_stop(w, x, true);
     // spec: S-0607 claim 15 (to its cell centre first when it is not exactly over it)
     let detour = crate::jump::lift_dropped(w, x);
@@ -857,13 +860,18 @@ fn start_fall(w: &mut World, x: ObjectId) {
 /// off) keeps hovering, set down and seized. Otherwise it descends and
 /// lands from above the surface, or stays where it is.
 fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
+    // spec: S-0607 claim 13 (revision 33: a set-down unit that already has no destination, left so by part e's clearing in the grip, claim 9, takes no stop: the assignment is redundant)
+    let effective = w.obj(x).is_some_and(|o| !o.lift.grip_without_dest);
     upd(w, x, |l| {
         l.set_down = true;
         l.dropped = false;
         l.detour = false;
         l.rate = None;
+        l.grip_without_dest = false;
     });
-    if let Some(o) = w.obj_mut(x) {
+    // spec: S-0607 claim 13 (revision 33, a balloon-hover type: the set-down's assignment of no destination, made after the grip has ended, is rejected under S-0502 claim 28 when the vehicle still holds a destination and a target and a row holds; it keeps its destination, movement point and commitment, takes no stop, and attack becomes current: a set-down unit still moving)
+    let rejected = effective && crate::jump::clear_rejected(w, x);
+    if !rejected && let Some(o) = w.obj_mut(x) {
         // spec: S-0607 claims 9 and 13 (set down: its destination becomes none)
         o.dest = None;
     }
@@ -872,8 +880,10 @@ fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
         return;
     }
     let was_moving = crate::jump::moving(w, x);
-    // spec: S-0607 claim 13 (revision 5, the jumpjet stop in both cases: an effective order-level clear runs S-0502 claim 17's stopped-movement rule in the same update) and claim 9 (the no-destination exception: the grip has already ended when the stop runs, so S-0502 claim 17's self-destruction applies unchanged, with its quirk switch and no credit)
-    crate::jump::lift_release_stop(w, x, lifter_ended);
+    if effective && !rejected {
+        // spec: S-0607 claim 13 (revision 33: on a set-down the stop runs only through the destination's clearing, an effective order-level clear, S-0502 claim 24, which runs S-0502 claim 17's stopped-movement rule in the same update) and claim 9 (the no-destination exception: the grip has already ended when the stop runs, so S-0502 claim 17's self-destruction applies unchanged, with its quirk switch and no credit)
+        crate::jump::lift_release_stop(w, x, lifter_ended);
+    }
     if w.obj(x).is_none_or(damage::dead) {
         return;
     }
@@ -1014,12 +1024,24 @@ pub fn removing(w: &mut World, id: ObjectId) {
 /// The steering of a seized unit before its jumpjet update (S-0607 claims
 /// 7 and 9): a gripped unit keeps the movement point fixed at the seize
 /// and the cell of that point as its destination; any other destination is
-/// ignored; no destination ends the grip without a drop. A seized unit
-/// that is not gripped keeps no destination.
+/// ignored; no destination given while it had one ends the grip without a
+/// drop. A gripped unit left with no destination by a direct removal
+/// ([`destination_removed`]) keeps none, and its grip holds. A seized unit
+/// that is not gripped keeps no destination, apart from one a balloon-hover
+/// set-down kept (claim 13): the destination its locomotor still holds.
 pub fn steer(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let dest = o.dest;
+    let without = o.lift.grip_without_dest;
     match lifter_of(w, id) {
+        Some(l) if w.obj(l).is_some() && without => {
+            if dest.is_some()
+                && let Some(ob) = w.obj_mut(id)
+            {
+                // spec: S-0607 claim 9 (revision 33, Q-2151: a seized unit ignores every new destination; after part e's clearing a gripped unit has none, and a later rule giving it none is a redundant assignment: the grip holds, its jumpjet movement keeping its movement point and commitment, claim 7)
+                ob.dest = None;
+            }
+        }
         Some(l) if w.obj(l).is_some() => {
             match dest {
                 None => {
@@ -1045,6 +1067,11 @@ pub fn steer(w: &mut World, id: ObjectId) {
             // spec: S-0607 claim 7 (the movement point is fixed at the seize and not refreshed while the grip lasts: when the lifter moves, the gripped unit keeps flying to it)
         }
         _ => {
+            // spec: S-0607 claim 13 (revision 33: a set-down balloon-hover vehicle whose set-down assignment S-0502 claim 28 rejected keeps its destination, movement point and commitment; its locomotor still holds that destination)
+            let kept = dest.is_some() && dest == crate::jump::lift_order(w, id);
+            if kept {
+                return;
+            }
             if dest.is_some() {
                 // spec: S-0607 claim 9 (a seized unit ignores every new destination)
                 if let Some(ob) = w.obj_mut(id) {
@@ -1053,6 +1080,18 @@ pub fn steer(w: &mut World, id: ObjectId) {
             }
             crate::jump::forget_order(w, id);
         }
+    }
+}
+
+/// A rule removes a unit's destination directly, not by assigning it an
+/// empty one (S-0215 claim 37 part e's clearing; S-0607 claim 9, revision
+/// 33, Q-2151): for a gripped unit that is no effective clear and not claim
+/// 9's exception. Its grip holds, whatever its stand-in, and it keeps no
+/// destination until another event of claim 12 ends the grip.
+pub fn destination_removed(w: &mut World, id: ObjectId) {
+    // spec: S-0607 claim 9 (revision 33: part e removes the destination and nothing else: the grip holds, whatever the unit's stand-in, since the removal is not a change by assignment; with the jumpjet stand-in the movement keeps its point and commitment, claim 7)
+    if lifter_of(w, id).is_some_and(|l| w.obj(l).is_some()) {
+        upd(w, id, |l| l.grip_without_dest = true);
     }
 }
 
@@ -1111,17 +1150,20 @@ pub fn enforce(w: &mut World, id: ObjectId) {
 }
 
 /// A unit is given no destination by an assignment (S-0607 claims 9, 12
-/// and 23): for a unit gripped with a stand-in that is claim 12's event,
-/// also when its teleporting stand-in found no landing cell at the seize.
+/// and 23): for a unit gripped with a stand-in that had a destination that
+/// is claim 12's event. A gripped unit with none (its teleporting stand-in
+/// found no landing cell at the seize, or part e's clearing) gets none
+/// again: the assignment is redundant and its grip holds.
 pub fn given_no_destination(w: &mut World, id: ObjectId) {
-    // spec: S-0607 claim 12 (the row for a gripped unit given no destination, claim 9) and claim 23 (revision 7: the grip with no destination from the seize lasts until another event of claim 12)
-    upd(w, id, |l| l.grip_without_dest = false);
+    // spec: S-0607 claim 12 (the row for a gripped unit given no destination, claim 9) and claim 9 (revision 33: a gripped vehicle that has no destination gets none again from such a rule; the assignment leaves its destination unchanged, so it is not the exception and the grip holds, whatever its stand-in) and claim 23 (the grip with no destination from the seize lasts until another event of claim 12)
     enforce(w, id);
 }
 
 /// Whether a seized unit refuses a destination given to it (S-0607 claim
 /// 9, `econ::assign_destination`): a non-empty one is ignored; an empty
-/// one is let through, so a gripped unit is set down by [`steer`].
+/// one is let through, so a gripped unit that had a destination is set down
+/// by [`steer`]. S-0502 claim 28's balloon-hover retention is the callers'
+/// (`jump::clear_rejected`), tested before this (claim 9, revision 33).
 pub fn refuses_destination(w: &World, id: ObjectId, dest: Option<Target>) -> bool {
     // spec: S-0607 claim 9 (a seized unit ignores every new destination; no destination is the exception)
     seized(w, id) && dest.is_some()
