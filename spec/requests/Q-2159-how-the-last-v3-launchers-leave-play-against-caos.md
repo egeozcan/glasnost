@@ -3,7 +3,7 @@ id: Q-2159
 title: How do the last V3 launchers leave play in CAOS against V3?
 status: open
 related: [S-0610, S-0302, S-0309, S-0506]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
