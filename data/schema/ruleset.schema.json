@@ -8950,6 +8950,11 @@
           "type": "boolean",
           "default": true
         },
+        "click_area_skips_kind_test": {
+          "description": "A route-mode press inside a point's click area is not tested for\nkind, so a selected aircraft or building can join a point (the\noriginal). Off: every route-mode battlefield press with objects\nselected meets the kind test first.",
+          "type": "boolean",
+          "default": true
+        },
         "cliff_back_case_sets": {
           "description": "Behind a cliff, row 1 of claim 5 becomes rock whatever its land type.",
           "type": "boolean",
@@ -9162,6 +9167,11 @@
         },
         "delay_kill_whole_cell_spread": {
           "description": "The delayed-kill countdown divides by the spread's whole cells, so a spread below one cell gives 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "delete_selects_after_release": {
+          "description": "A point delete applied after the route-mode key's release selects\nthe next point, which the delete key then deletes unseen (the\noriginal). Off: a point delete applied while the key is not held\nselects no point.",
           "type": "boolean",
           "default": true
         },
@@ -9652,6 +9662,11 @@
         },
         "height_block_cell": {
           "description": "The height block tests the displaced cell and the step directions of table T2.",
+          "type": "boolean",
+          "default": true
+        },
+        "hidden_point_refuses_click": {
+          "description": "A route-mode press that takes no highlighted point is tested against\nthe earliest-made point of any house whose click area holds the\ncursor, drawn or not, so a point the player cannot see can refuse\nthe press (the original). Off: only points drawn for the player are\ntested, and a point not drawn plays no part in a press.",
           "type": "boolean",
           "default": true
         },
@@ -10180,6 +10195,11 @@
           "type": "boolean",
           "default": true
         },
+        "press_copy_ignores_route_state": {
+          "description": "The copy a press's join gives an object can take its route past 16\npoints, and its loop can begin at one of the object's own points\nand end before the route's last point (the original). Off: such a\njoin does nothing when the copy would take the route past 16\npoints, and the copy's loop always begins in the copy.",
+          "type": "boolean",
+          "default": true
+        },
         "prism_count_survives_dropped_shot": {
           "description": "A dropped or projectile-less delayed master shot keeps the support count, so the next shot gets the kept bonus on top of new supporters, with no beams for the kept part; off: the count becomes 0 whenever the delayed shot comes, fired or not.",
           "type": "boolean",
@@ -10687,6 +10707,11 @@
         },
         "spy_theft_unbacked_gain": {
           "description": "A spy's thief gains the computed amount even when the victim pays less or the amount is negative; off: the amount is clamped to between 0 and the victim's balance.",
+          "type": "boolean",
+          "default": true
+        },
+        "stacked_point_takes_earliest": {
+          "description": "Where several points of the house stand at one place, a press takes\nthe earliest-made of them, and its orders name the place (the\noriginal). Off: with objects selected, the press takes the\nearliest-made one a selected route holds, else the earliest-made,\nand its orders name that point itself.",
           "type": "boolean",
           "default": true
         },

@@ -1729,7 +1729,7 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     }
     let mv = movable(w, house, actor);
     let rally = rally_capable(w, actor);
-    // spec: S-0214 table GC row GC3 (force-move and force-fire: area guard). Seam: its patrol on a cell that holds a route point is not given, as patrol processing is not built (S-0215); Q-2138 question 2
+    // spec: S-0214 table GC row GC3 (force-move and force-fire: area guard). Seam: its patrol on a cell that holds a route point (S-0213 claim 16b, r74, Q-2138 question 2 answered: an ordinary point add with the patrol action, given only outside every click area or inside one the press neither takes nor refuses) is not given, as patrol processing is not built (S-0215)
     if mods.force_move
         && mods.force_fire
         && mv

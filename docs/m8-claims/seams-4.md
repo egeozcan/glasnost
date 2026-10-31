@@ -39,7 +39,7 @@ every tick 1 to 300 on both peers. Checked with 8 busy loops running: 6 of 6 run
 | S-0312 (sweep 3 *Left*, survivors F4, F5) | claim 18 | Closed by A7 (`a7-S-0312-survivors.md`); sweep 3's reason no longer holds. |
 | S-0312 | F5 no-crew map flag, claim 18 free position, claim 19 (g) cell categories | Open Q-2131, Q-2132, Q-2133. |
 | S-0312 | claim 19 (g) and claim 26, the smudge | Smudge types are not modelled. |
-| S-0214, S-0215 | GC3 patrol on a route point; claim 13 patrol begun and the approach row | Patrol processing (S-0215) is not built; Q-2138. |
+| S-0214, S-0215 | GC3 patrol on a route point; claim 13 patrol begun and the approach row | Patrol processing (S-0215) is not built; Q-2138. Intake 56: Q-2138 question 2 answered by S-0213 r74 claim 16b (the patrol is an ordinary point add, given only where the press takes no point); the seam stays while patrol is not built. |
 | S-0213 | claim 16g look, claim 22 group bindings, route-mode texts and sound | Our art; no string table; spec's Open question. |
 | S-0410 | radar miniature arrow in route mode | The radar takes no command clicks yet. |
 | S-0214, S-0512 | claim 32 drag pool, claim 25 announcement, Terms group numbers | Q-2140; maps and teams load no group numbers. |

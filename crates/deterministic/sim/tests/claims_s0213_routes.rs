@@ -8,7 +8,7 @@ use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::BuildingType;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::orders::{self, Order};
-use glasnost_sim::routes::{self, HOLDER_LIMIT, RouteClick, RouteNote};
+use glasnost_sim::routes::{self, HOLDER_LIMIT, Press, RouteClick, RouteNote};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::save;
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
@@ -127,8 +127,16 @@ fn run_until(w: &mut World, limit: i32, done: impl Fn(&World) -> bool) {
     assert!(done(w), "not done after {limit} ticks");
 }
 
+/// An ordinary route-mode click's release on cell `c` (S-0213 claims 16b
+/// and 16d): one outside every click area.
 fn click(w: &World, sel: &[ObjectId], c: CellXY) -> RouteClick {
-    routes::click(w, A, sel, ClickOn::Cell(c), c, Modifiers::default())
+    routes::click(w, A, sel, ClickOn::Cell(c), Modifiers::default())
+}
+
+/// A route-mode press by Alpha with `sel` with the cursor in the click
+/// areas of `under` (S-0213 claim 16b, *Click areas*).
+fn press(w: &World, sel: &[ObjectId], under: &[u32]) -> Press {
+    routes::press(w, A, sel, under)
 }
 
 /// Whether every step of `id`'s route is committed (S-0213 claim 16c:
@@ -148,8 +156,21 @@ fn move_to(actor: ObjectId, c: CellXY) -> Order {
     }
 }
 
-fn join(actor: ObjectId, point: u32) -> Order {
-    Order::RouteJoin { actor, point }
+/// A press's join order for `point`, named by its place (S-0213 claim
+/// 16b, *Click areas*).
+fn join(w: &World, actor: ObjectId, point: u32) -> Order {
+    let place = w.routes.points[&point].place;
+    Order::RouteJoin {
+        actor,
+        point,
+        place,
+    }
+}
+
+/// Gives one join order (see [`join`]).
+fn give_join(w: &mut World, actor: ObjectId, point: u32) {
+    let o = join(w, actor, point);
+    give(w, vec![o]);
 }
 
 fn current(w: &World, id: ObjectId) -> Option<Behaviour> {
@@ -245,13 +266,7 @@ fn claim_16c_a_loop_cycles_until_an_order_ends_it() {
     let b1 = buggy(&mut w, 0, 0);
     let (c0, c1, c2, c3) = (at(0, 3), at(4, 3), at(4, 7), at(0, 7));
     let ps = route(&mut w, b1, &[c0, c1, c2, c3]);
-    give(
-        &mut w,
-        vec![Order::RouteJoin {
-            actor: b1,
-            point: ps[1],
-        }],
-    );
+    give_join(&mut w, b1, ps[1]);
     assert_eq!(notes(&w), vec![RouteNote::Looped]);
     assert_eq!(w.routes.routes[&b1].loop_from, Some(1));
     give(&mut w, vec![Order::RouteCommit]);
@@ -366,13 +381,7 @@ fn claim_16b_refusals_when_a_point_add_is_applied() {
     );
     // A loop.
     let ps = route(&mut w, b3, &[at(2, 8), at(4, 8), at(6, 8)]);
-    give(
-        &mut w,
-        vec![Order::RouteJoin {
-            actor: b3,
-            point: ps[0],
-        }],
-    );
+    give_join(&mut w, b3, ps[0]);
     give(&mut w, vec![add(b3, at(8, 8))]);
     assert_eq!(notes(&w), vec![RouteNote::Refused("MSG:PostLoop")]);
     assert_eq!(steps(&w, b3).len(), 3);
@@ -386,7 +395,7 @@ fn claim_16b_refusals_when_a_point_add_is_applied() {
     assert_eq!(steps(&w, b4).len(), routes::MAX_POINTS);
 }
 
-/// spec: S-0213 claim 16b (clicks on existing points: refused with the invalid-point message when a selected object with a route record lacks the point, has it last or one before last, or has a loop; otherwise joins or loop closes), claim 16d (kinds, the same-route-state rule before the holder limit) and claim 16 (the holder limit: count plus new objects more than 128) and claim 16e (no selection: a click on a point selects it)
+/// spec: S-0213 claim 16b, Click areas (a press inside a point's click area is tested by the point-click test: refused with the invalid-point message when a selected object with a route record lacks the point, has it last or one before last, or has a loop; otherwise the press takes it and sends joins named by the point's place), claim 16d (the kind test at a press outside every click area; the same-route-state test before the holder limit at the release) and claim 16 (the holder limit: count plus new objects more than 128) and claim 16e (no selection: a press takes the point to select it)
 #[test]
 fn claim_16b_and_16d_click_tests() {
     let mut w = game();
@@ -394,34 +403,38 @@ fn claim_16b_and_16d_click_tests() {
     let hut = testkit::spawn(&mut w, Kind::Building, "HUT", 0, at(-6, -6), 0);
     let cs = [at(3, 3), at(5, 3), at(7, 3)];
     let ps = route(&mut w, b1, &cs);
-    let refused = RouteClick::Refused("MSG:PlanningModeInvalidNodeX");
-    assert_eq!(click(&w, &[b1], cs[2]), refused, "the last point");
-    assert_eq!(click(&w, &[b1], cs[1]), refused, "the one before");
+    assert_eq!(press(&w, &[b1], &[ps[2]]), Press::Refused, "the last point");
+    assert_eq!(press(&w, &[b1], &[ps[1]]), Press::Refused, "the one before");
+    assert_eq!(press(&w, &[b1], &[ps[0]]), Press::Take(ps[0]));
     assert_eq!(
-        click(&w, &[b1], cs[0]),
-        RouteClick::Orders(vec![Order::RouteJoin {
-            actor: b1,
-            point: ps[0]
-        }])
+        routes::press_orders(&w, A, &[b1], ps[0]),
+        vec![join(&w, b1, ps[0])]
     );
     assert_eq!(
-        click(&w, &[b2], cs[2]),
-        RouteClick::Orders(vec![Order::RouteJoin {
-            actor: b2,
-            point: ps[2]
-        }]),
+        press(&w, &[b2], &[ps[2]]),
+        Press::Take(ps[2]),
         "no route record: a join"
     );
+    // spec: S-0213 claim 16d (a press that takes a point meets only the point-click test: a selection of mixed route states is not refused for it)
+    assert_eq!(press(&w, &[b1, b2], &[ps[0]]), Press::Take(ps[0]));
+    // spec: S-0213 claim 16b, Click areas (with no click area under the cursor the press is an ordinary route-mode click)
+    assert_eq!(press(&w, &[b1], &[]), Press::Ordinary);
     assert_eq!(
         click(&w, &[b1, b2], at(9, 9)),
         RouteClick::Refused("MSG:PlanningModeHeteroSel")
     );
+    // spec: S-0213 claim 16d, When the tests are made (the kind test is made at the press outside every click area, with the message of the first failing object in selection order; none with nothing selected)
     assert_eq!(
-        click(&w, &[b2, hut], at(9, 9)),
-        RouteClick::Refused("MSG:PlanningModeNoBuildings")
+        routes::press_kind_refusal(&w, A, &[b2, hut], &[]),
+        Some("MSG:PlanningModeNoBuildings")
     );
-    // spec: S-0213 claim 16e (with nothing selected a click on a point selects it; elsewhere it is an ordinary click)
-    assert_eq!(click(&w, &[], cs[1]), RouteClick::SelectPoint(ps[1]));
+    assert_eq!(routes::press_kind_refusal(&w, A, &[b2], &[]), None);
+    assert_eq!(routes::press_kind_refusal(&w, A, &[], &[]), None);
+    // spec: S-0213 claim 16d (a press inside a click area is not tested for kind)
+    assert_eq!(routes::press_kind_refusal(&w, A, &[hut], &[ps[0]]), None);
+    // spec: S-0213 claim 16e (with nothing selected a press takes the point under it, to select it; elsewhere it is an ordinary click)
+    assert_eq!(press(&w, &[], &[ps[1]]), Press::Take(ps[1]));
+    assert_eq!(press(&w, &[], &[]), Press::Ordinary);
     assert_eq!(click(&w, &[], at(9, 9)), RouteClick::Ordinary);
     // A plain point add.
     assert!(matches!(
@@ -438,6 +451,8 @@ fn claim_16b_and_16d_click_tests() {
         matches!(click(&w, &[b1], at(9, 9)), RouteClick::Orders(_)),
         "no new object"
     );
+    // spec: S-0213 claim 16d (a press that takes a point is not tested for the holder limit)
+    assert_eq!(press(&w, &[b2], &[ps[2]]), Press::Take(ps[2]));
     // spec: S-0213 claim 16d (both refusals: only the incompatible-selection message)
     assert_eq!(
         click(&w, &[b1, b2], at(9, 9)),
@@ -452,20 +467,8 @@ fn claim_16b_a_join_copies_the_rest_of_a_route() {
         let mut w = game_quirks(true, drift);
         let (b1, b2) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
         let ps = route(&mut w, b1, &[at(3, 3), at(5, 3), at(7, 3)]);
-        give(
-            &mut w,
-            vec![Order::RouteJoin {
-                actor: b1,
-                point: ps[0],
-            }],
-        );
-        give(
-            &mut w,
-            vec![Order::RouteJoin {
-                actor: b2,
-                point: ps[1],
-            }],
-        );
+        give_join(&mut w, b1, ps[0]);
+        give_join(&mut w, b2, ps[1]);
         // spec: S-0213 claim 16b (r60, Q-2137: a loop whose first point comes before the joined point: the copy goes on with the loop's points up to the one before the joined point, and its loop is the whole copy, beginning at the joined point)
         assert_eq!(steps(&w, b2), vec![ps[1], ps[2], ps[0]]);
         assert_eq!(w.routes.routes[&b2].loop_from, Some(0));
@@ -486,13 +489,7 @@ fn claim_16e_a_point_delete_and_the_count() {
         let mut w = game_quirks(true, drift);
         let (b1, b2) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
         let ps = route(&mut w, b1, &[at(3, 3), at(5, 3), at(7, 3), at(9, 3)]);
-        give(
-            &mut w,
-            vec![Order::RouteJoin {
-                actor: b1,
-                point: ps[0],
-            }],
-        );
+        give_join(&mut w, b1, ps[0]);
         give(&mut w, vec![Order::RouteDelete { point: ps[1] }]);
         assert_eq!(steps(&w, b1), vec![ps[0], ps[2], ps[3]]);
         assert_eq!(w.routes.routes[&b1].loop_from, Some(0), "3 points: kept");
@@ -543,17 +540,11 @@ fn claim_16b_spent_route_blocks_join_both_ways() {
         assert!(steps(&w, b1).is_empty());
         let cs = [at(5, 5), at(7, 5), at(9, 5)];
         let ps = route(&mut w, b2, &cs);
-        let got = click(&w, &[b1], cs[0]);
+        let got = press(&w, &[b1], &[ps[0]]);
         if blocks {
-            assert_eq!(got, RouteClick::Refused("MSG:PlanningModeInvalidNodeX"));
+            assert_eq!(got, Press::Refused);
         } else {
-            assert_eq!(
-                got,
-                RouteClick::Orders(vec![Order::RouteJoin {
-                    actor: b1,
-                    point: ps[0]
-                }])
-            );
+            assert_eq!(got, Press::Take(ps[0]));
         }
     }
 }
@@ -579,14 +570,7 @@ fn claim_16b_a_deploy_click_is_refused() {
     assert_eq!(shown, Action::Deploy);
     assert_eq!(targeting::in_route_mode(shown), Action::NoDeploy);
     assert_eq!(
-        routes::click(
-            &w,
-            A,
-            &[m],
-            ClickOn::Object(m),
-            at(0, 0),
-            Modifiers::default()
-        ),
+        routes::click(&w, A, &[m], ClickOn::Object(m), Modifiers::default()),
         RouteClick::Ignored
     );
     assert!(steps(&w, m).is_empty());
@@ -602,12 +586,12 @@ fn claim_16b_a_join_copies_the_longest_holder() {
     let c = buggy(&mut w, 2, 0);
     let (p1, p2, p3, p4) = (at(3, 3), at(5, 3), at(7, 3), at(9, 3));
     let ps = route(&mut w, a, &[p1, p2, p3]);
-    give(&mut w, vec![join(b, ps[1])]);
+    give_join(&mut w, b, ps[1]);
     assert_eq!(steps(&w, b), vec![ps[1], ps[2]]);
     give(&mut w, vec![add(b, p4)]);
     let q4 = point(&w, p4);
     assert_eq!(steps(&w, b), vec![ps[1], ps[2], q4]);
-    give(&mut w, vec![join(c, ps[1])]);
+    give_join(&mut w, c, ps[1]);
     assert_eq!(steps(&w, c), vec![ps[1], ps[2]], "A's route, not B's");
 }
 
@@ -633,7 +617,7 @@ fn claim_16b_a_join_tie_goes_to_the_first_applied() {
         give(&mut w, vec![add(j, s2)]);
         give(&mut w, vec![add(k, s3)]);
         let (q2, q3) = (point(&w, s2), point(&w, s3));
-        give(&mut w, vec![join(l, p1)]);
+        give_join(&mut w, l, p1);
         let want = if j_first { vec![p1, q2] } else { vec![p1, q3] };
         assert_eq!(steps(&w, l), want, "j first: {j_first}");
     }
@@ -652,19 +636,19 @@ fn claim_16b_joins_copy_loops() {
     );
     // (3) F's route R1 to R4, a loop from R2; G joins R1.
     let rs = route(&mut w, f, &[at(-9, 9), at(-7, 9), at(-5, 9), at(-3, 9)]);
-    give(&mut w, vec![join(f, rs[1])]);
-    give(&mut w, vec![join(g, rs[0])]);
+    give_join(&mut w, f, rs[1]);
+    give_join(&mut w, g, rs[0]);
     assert_eq!(steps(&w, g), rs);
     assert_eq!(w.routes.routes[&g].loop_from, Some(1), "the same loop");
     // (2) D at rest: Q1 to Q4 with a loop from Q2, committed; D starts at once and issues Q1.
     let (q1, q2, q3, q4) = (at(-2, 4), at(3, 4), at(3, 8), at(-2, 8));
     let qs = route(&mut w, d, &[q1, q2, q3, q4]);
-    give(&mut w, vec![join(d, qs[1])]);
+    give_join(&mut w, d, qs[1]);
     give(&mut w, vec![Order::RouteCommit]);
     assert_eq!(steps(&w, d), qs[1..].to_vec());
     assert_eq!(routes::point_in(&w, A, q1), None, "Q1 is deleted");
     assert!(routes::point_in(&w, A, q2).is_some());
-    give(&mut w, vec![join(e, qs[2])]);
+    give_join(&mut w, e, qs[2]);
     assert_eq!(steps(&w, e), vec![qs[2], qs[3], qs[1]]);
     assert_eq!(w.routes.routes[&e].loop_from, Some(0));
     // spec: S-0213 claim 16b (the copied points are uncommitted until the next commit)
@@ -681,7 +665,7 @@ fn claim_16b_joins_copy_loops() {
     run_until(&mut w, 3000, |w| cell(w, d) == q4);
     run_until(&mut w, 3000, |w| cell(w, d) == q2);
     let at_d = steps(&w, d);
-    give(&mut w, vec![join(h, qs[3])]);
+    give_join(&mut w, h, qs[3]);
     let i = at_d.iter().position(|&p| p == qs[3]).unwrap();
     let want: Vec<u32> = at_d[i..].iter().chain(&at_d[..i]).copied().collect();
     assert_eq!(steps(&w, h), want);
@@ -728,7 +712,7 @@ fn claim_16f_points_no_route_holds_are_deleted() {
     testkit::run(&mut w, 2);
     let ps = route(&mut w, v, &[p1, p2, p3]);
     give(&mut w, vec![Order::RouteCommit]);
-    give(&mut w, vec![join(wv, ps[1])]);
+    give_join(&mut w, wv, ps[1]);
     give(&mut w, vec![Order::RouteCommit]);
     assert_eq!(steps(&w, wv), vec![ps[2]], "W starts at once and issues P2");
     // (1) every marker still stands: V holds them.
@@ -741,8 +725,8 @@ fn claim_16f_points_no_route_holds_are_deleted() {
     assert_eq!(routes::point_in(&w, A, p2), None);
     assert!(routes::point_in(&w, A, p3).is_some(), "W still holds P3");
     assert_eq!(
-        click(&w, &[], p2),
-        RouteClick::Ordinary,
+        press(&w, &[], &[ps[1]]),
+        Press::Ordinary,
         "nothing to select"
     );
     // (3) W issues P3 at P2: no route holds it.
@@ -833,25 +817,268 @@ fn claim_16c_the_wait_drops_an_opportunity_target() {
     }
 }
 
-/// spec: S-0213 Open questions (r60: which of two points at one place a click on their markers joins or selects is open); design (Q-2166): a click on a cell holding several points takes the lowest numbered one that a selected object's route holds, else the lowest numbered
+/// spec: S-0213 claim 16b, Two points at one place (r74, Q-2166: the earliest-made point is the candidate whatever the selected routes hold; a selection whose routes hold only a later-made one is refused; with nothing selected the press takes the earliest-made) and Edge cases (quirks.stacked_point_takes_earliest off: with objects selected, the earliest-made point that a selected route holds, else the earliest-made); Scenario O8 part w (6)
 #[test]
-fn two_points_at_one_place_a_click_takes_one_the_selection_holds() {
+fn claim_16b_two_points_at_one_place_both_ways() {
+    for earliest in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.stacked_point_takes_earliest = earliest;
+        let mut w = game_from(&r);
+        let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
+        let y = at(6, 6);
+        let vs = route(&mut w, v, &[y, at(8, 6), at(10, 6)]);
+        route(&mut w, wv, &[y, at(6, 8), at(6, 10)]);
+        let ws = steps(&w, wv);
+        assert!(vs[0] < ws[0], "V's point is the earlier made");
+        let under = [ws[0], vs[0]];
+        assert_eq!(press(&w, &[v], &under), Press::Take(vs[0]), "V's own point");
+        let want = if earliest {
+            Press::Refused
+        } else {
+            Press::Take(ws[0])
+        };
+        assert_eq!(press(&w, &[wv], &under), want, "earliest {earliest}");
+        assert_eq!(
+            press(&w, &[], &under),
+            Press::Take(vs[0]),
+            "nothing selected"
+        );
+    }
+}
+
+/// spec: S-0213 claim 16b, Click areas (the orders a press sends name the point by its place; when applied they act on the house's earliest-made point at that place, and do nothing when no point of the house is there) and Edge cases (quirks.stacked_point_takes_earliest off: they act on the point they name, and do nothing when it has gone)
+#[test]
+fn claim_16b_a_press_order_acts_on_the_earliest_point_at_its_place() {
+    for earliest in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.stacked_point_takes_earliest = earliest;
+        let mut w = game_from(&r);
+        let (v, wv, x) = (
+            buggy(&mut w, 0, 0),
+            buggy(&mut w, 1, 0),
+            buggy(&mut w, 2, 0),
+        );
+        let y = at(6, 6);
+        let vs = route(&mut w, v, &[y, at(8, 6), at(10, 6)]);
+        let ws = route(&mut w, wv, &[y, at(6, 8), at(6, 10)]);
+        let ws0 = steps(&w, wv)[0];
+        assert_ne!(ws[0], ws0);
+        // An order naming W's later-made point at Y: with the quirk on it acts on V's.
+        give_join(&mut w, x, ws0);
+        let want = if earliest {
+            vec![vs[0], vs[1], vs[2]]
+        } else {
+            steps(&w, wv)
+        };
+        assert_eq!(steps(&w, x), want, "earliest {earliest}");
+        // Once no point of the house stands at the place, the order does nothing.
+        let o = join(&w, x, ws0);
+        give(
+            &mut w,
+            vec![Order::Stop { actor: v }, Order::Stop { actor: wv }],
+        );
+        give(&mut w, vec![Order::Stop { actor: x }]);
+        give(&mut w, vec![o]);
+        assert!(steps(&w, x).is_empty());
+    }
+}
+
+/// [`game`] with one of intake 56's route quirks set (S-0213 Edge cases).
+fn game_with_quirk(set: impl FnOnce(&mut glasnost_rules::quirks::Quirks)) -> World {
+    let mut r = ruleset();
+    set(&mut r.globals.quirks);
+    game_from(&r)
+}
+
+/// spec: S-0213 claim 16b, Click areas (a square of 16 by 16 screen pixels around the screen position of the point's place: from 8 left of and above it to 7 right of and below it); Scenario O8 part w (1) and (2)
+#[test]
+fn claim_16b_the_click_area_is_a_16_pixel_square() {
+    // (1) joins: 7 right and 7 below, 8 left and 8 above, 8 left level, 8 straight above.
+    for (dx, dy) in [(7, 7), (-8, -8), (-8, 0), (0, -8), (0, 0)] {
+        assert!(routes::in_click_area(dx, dy), "({dx}, {dy}) inside");
+    }
+    // (2) point adds: 8 right, 8 below, 9 left level, 9 straight above.
+    for (dx, dy) in [(8, 0), (0, 8), (-9, 0), (0, -9)] {
+        assert!(!routes::in_click_area(dx, dy), "({dx}, {dy}) outside");
+    }
+}
+
+/// spec: S-0213 claim 16b, Click areas (a press that takes no highlighted point is tested against the earliest-made point of any house, drawn or not, whose click area holds the cursor) and Edge cases (quirks.hidden_point_refuses_click off: only points drawn for the player are tested, so an unseen point never refuses a press)
+#[test]
+fn claim_16b_a_hidden_point_refuses_a_press_both_ways() {
+    for hidden in [true, false] {
+        let mut w = game_with_quirk(|q| q.hidden_point_refuses_click = hidden);
+        let b1 = buggy(&mut w, 0, 0);
+        route(&mut w, b1, &[at(3, 3), at(5, 3)]);
+        // Beta, not allied with Alpha, makes a point at another place.
+        let enemy = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, at(0, 6), 0);
+        assert!(orders::issue(&mut w, HouseId(1), add(enemy, at(8, 8))));
+        testkit::run(&mut w, 1);
+        let theirs = routes::point_in(&w, HouseId(1), at(8, 8)).expect("Beta's point");
+        assert!(!routes::drawn_for(&w, A, &w.routes.points[&theirs]));
+        let want = if hidden {
+            Press::Refused
+        } else {
+            Press::Ordinary
+        };
+        assert_eq!(press(&w, &[b1], &[theirs]), want, "hidden {hidden}");
+        // A selection with no route record accepts every point: an ordinary click.
+        let b2 = buggy(&mut w, 1, 0);
+        assert_eq!(press(&w, &[b2], &[theirs]), Press::Ordinary);
+        // spec: S-0213 claim 16b, Click areas (a point of another house is never the candidate a press takes)
+        assert_eq!(press(&w, &[], &[theirs]), Press::Ordinary);
+    }
+}
+
+/// spec: S-0213 claim 16d, When the tests are made (a press inside a click area is not tested for kind, so a selected building is not refused there) and Edge cases (quirks.click_area_skips_kind_test off: every route-mode battlefield press with objects selected meets the kind test first); Scenario O8 part x (5)
+#[test]
+fn claim_16d_a_click_area_skips_the_kind_test_both_ways() {
+    for skips in [true, false] {
+        let mut w = game_with_quirk(|q| q.click_area_skips_kind_test = skips);
+        let b1 = buggy(&mut w, 0, 0);
+        let hut = testkit::spawn(&mut w, Kind::Building, "HUT", 0, at(-6, -6), 0);
+        let ps = route(&mut w, b1, &[at(3, 3), at(5, 3), at(7, 3)]);
+        let got = routes::press_kind_refusal(&w, A, &[hut], &[ps[0]]);
+        let want = (!skips).then_some("MSG:PlanningModeNoBuildings");
+        assert_eq!(got, want, "skips {skips}");
+        // Outside every click area the kind test is made either way.
+        assert_eq!(
+            routes::press_kind_refusal(&w, A, &[hut], &[]),
+            Some("MSG:PlanningModeNoBuildings")
+        );
+        if skips {
+            // spec: S-0213 claim 16d (a building with no route record then joins the point and gets a route, low); design (Q-2192): what it does with it is not studied
+            assert_eq!(press(&w, &[hut], &[ps[0]]), Press::Take(ps[0]));
+            let os = routes::press_orders(&w, A, &[hut], ps[0]);
+            give(&mut w, os);
+            assert_eq!(steps(&w, hut), ps);
+        }
+    }
+}
+
+/// spec: S-0213 claim 16b, Who gets a press's orders (the selection in selection order; a selected object with no route record or an empty route listed itself; for one whose route holds points, every object whose route holds that route's last point, in the order they were given it, selected or not, each once) and Joins; Scenario O8 part w (8)
+#[test]
+fn claim_16b_a_press_orders_the_holders_of_the_last_point() {
     let mut w = game();
-    let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
-    let y = at(6, 6);
-    let vs = route(&mut w, v, &[y, at(8, 6), at(10, 6)]);
-    route(&mut w, wv, &[y, at(6, 8), at(6, 10)]);
-    let ws = steps(&w, wv);
-    assert_ne!(vs[0], ws[0]);
-    assert_eq!(
-        click(&w, &[wv], y),
-        RouteClick::Orders(vec![join(wv, ws[0])]),
-        "W's own point: a loop close"
+    let (v, wv, x, u) = (
+        buggy(&mut w, 0, 0),
+        buggy(&mut w, 1, 0),
+        buggy(&mut w, 2, 0),
+        buggy(&mut w, 3, 0),
     );
+    let ps = route(&mut w, v, &[at(3, 3), at(6, 3), at(9, 3)]);
+    // W joins P2: its route is P2 and P3; X joins P1: P1, P2 and P3.
+    give_join(&mut w, wv, ps[1]);
+    give_join(&mut w, x, ps[0]);
+    assert_eq!(steps(&w, wv), ps[1..].to_vec());
+    assert_eq!(steps(&w, x), ps);
+    assert_eq!(routes::press_list(&w, A, &[v]), vec![v, wv, x]);
+    assert_eq!(routes::press_list(&w, A, &[u, v]), vec![u, v, wv, x]);
     assert_eq!(
-        click(&w, &[v], y),
-        RouteClick::Orders(vec![join(v, vs[0])]),
-        "V's own point"
+        routes::press_list(&w, A, &[x, v]),
+        vec![v, wv, x],
+        "each once"
     );
-    assert_eq!(click(&w, &[], y), RouteClick::SelectPoint(vs[0].min(ws[0])));
+    // V alone presses P1's marker.
+    assert_eq!(press(&w, &[v], &[ps[0]]), Press::Take(ps[0]));
+    let os = routes::press_orders(&w, A, &[v], ps[0]);
+    assert_eq!(
+        os,
+        vec![join(&w, v, ps[0]), join(&w, wv, ps[0]), join(&w, x, ps[0])]
+    );
+    give(&mut w, os);
+    // V and X close a loop; W, which lacks P1, joins after its own points.
+    assert_eq!(w.routes.routes[&v].loop_from, Some(0));
+    assert_eq!(w.routes.routes[&x].loop_from, Some(0));
+    assert_eq!(steps(&w, wv), vec![ps[1], ps[2], ps[0], ps[1], ps[2]]);
+    assert_eq!(w.routes.routes[&wv].loop_from, Some(2));
+    assert_eq!(w.routes.routes[&wv].loop_to, None);
+    // spec: S-0213 claim 16h (selecting V while the key is held also selects the other holders of its last point, in the order they were given it)
+    assert_eq!(routes::also_selected(&w, v), vec![wv, x]);
+}
+
+/// spec: S-0213 claim 16b, Who gets a press's orders (the copy an object that is not selected is given goes after its own points whatever their number, so its route can pass 16 points; its loop begins at the first point of its route that is the copied loop's first point, and when that is one of its own points the loop has as many points as the copied loop, ending before the route's last point) and Constants (a point add is refused for length only at exactly 16) and Edge cases (quirks.press_copy_ignores_route_state off: the join does nothing past 16 points and the copy's loop begins in the copy)
+#[test]
+fn claim_16b_a_press_copy_ignores_route_state_both_ways() {
+    for ignores in [true, false] {
+        let mut w = game_with_quirk(|q| q.press_copy_ignores_route_state = ignores);
+        let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
+        let cs = [at(3, 3), at(6, 3), at(9, 3), at(9, 6), at(3, 9)];
+        // One tick: V's P1 to P4, and W's P2 (shared) and P5.
+        give(
+            &mut w,
+            vec![
+                add(v, cs[0]),
+                add(v, cs[1]),
+                add(wv, cs[1]),
+                add(v, cs[2]),
+                add(v, cs[3]),
+                add(wv, cs[4]),
+            ],
+        );
+        let p: Vec<u32> = cs.iter().map(|&c| point(&w, c)).collect();
+        assert_eq!(steps(&w, wv), vec![p[1], p[4]]);
+        // V closes a loop at P2: P2, P3 and P4.
+        give_join(&mut w, v, p[1]);
+        assert_eq!(w.routes.routes[&v].loop_from, Some(1));
+        // W, not holding P1, is given V's route from P1.
+        give_join(&mut w, wv, p[0]);
+        let r = &w.routes.routes[&wv];
+        assert_eq!(steps(&w, wv), vec![p[1], p[4], p[0], p[1], p[2], p[3]]);
+        if ignores {
+            assert_eq!((r.loop_from, r.loop_to), (Some(0), Some(3)), "P2, P5, P1");
+        } else {
+            assert_eq!((r.loop_from, r.loop_to), (Some(3), None), "in the copy");
+        }
+        // design (Q-2191): a loop that ends before the route's last point is gone round as any loop: the issued point moves to the loop's end and the points after it are never issued
+        give(&mut w, vec![Order::RouteCommit]);
+        let r = &w.routes.routes[&wv];
+        if ignores {
+            assert_eq!(steps(&w, wv), vec![p[4], p[0], p[1], p[1], p[2], p[3]]);
+            assert_eq!((r.loop_from, r.loop_to), (Some(0), Some(3)));
+        } else {
+            assert_eq!(steps(&w, wv), vec![p[4], p[0], p[1], p[2], p[3]]);
+            assert_eq!((r.loop_from, r.loop_to), (Some(2), None));
+        }
+    }
+    // Past 16 points.
+    for ignores in [true, false] {
+        let mut w = game_with_quirk(|q| q.press_copy_ignores_route_state = ignores);
+        let (v, wv) = (buggy(&mut w, 0, 0), buggy(&mut w, 1, 0));
+        let ps = route(&mut w, v, &[at(3, 14), at(6, 14), at(9, 14)]);
+        let cells: Vec<CellXY> = (0..15).map(|i| at(i - 8, 12)).collect();
+        route(&mut w, wv, &cells);
+        give_join(&mut w, wv, ps[0]);
+        let n = steps(&w, wv).len();
+        assert_eq!(n, if ignores { 18 } else { 15 }, "ignores {ignores}");
+        if ignores {
+            // spec: S-0213 Constants (a route that holds more than 16 points is not refused a point add for its length)
+            give(&mut w, vec![add(wv, at(12, 14))]);
+            assert_eq!(notes(&w), vec![RouteNote::Added { info: None }]);
+            assert_eq!(steps(&w, wv).len(), 19);
+        }
+    }
+}
+
+/// spec: S-0213 claim 16e, The delete key (when a point-delete order of the local player's house is applied, the point after the deleted one in the route of its longest holder, going round a loop, becomes the selected point, if there is one); Scenario O8 part z (1)
+#[test]
+fn claim_16e_a_point_delete_selects_the_next_point() {
+    let mut w = game();
+    let v = buggy(&mut w, 0, 0);
+    let ps = route(
+        &mut w,
+        v,
+        &[at(3, 3), at(5, 3), at(7, 3), at(9, 3), at(9, 6)],
+    );
+    give(&mut w, vec![Order::RouteDelete { point: ps[1] }]);
+    assert_eq!(notes(&w), vec![RouteNote::Selected(ps[2])]);
+    give_join(&mut w, v, ps[2]);
+    // A loop of P3, P4 and P5: after P5 comes P3.
+    give(&mut w, vec![Order::RouteDelete { point: ps[4] }]);
+    assert_eq!(notes(&w), vec![RouteNote::Selected(ps[2])]);
+    assert_eq!(w.routes.routes[&v].loop_from, None, "cancelled below 3");
+    // The route's last point, with no loop: no next point.
+    give(&mut w, vec![Order::RouteDelete { point: ps[3] }]);
+    assert!(notes(&w).is_empty());
+    assert_eq!(steps(&w, v), vec![ps[0], ps[2]]);
 }

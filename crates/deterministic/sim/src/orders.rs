@@ -159,12 +159,16 @@ pub enum Order {
         dest: Option<Target>,
     },
     /// A point join (S-0213 claim 16a): the actor joins an existing route
-    /// point of the house, or closes a loop at it.
+    /// point of the house, or closes a loop at it. A press's orders name
+    /// the point by its place (claim 16b, *Click areas*); under
+    /// `quirks.stacked_point_takes_earliest` off they name the point itself.
     RouteJoin {
         /// The actor.
         actor: ObjectId,
-        /// The route point, by number.
+        /// The route point the press took, by number.
         point: u32,
+        /// That point's place.
+        place: Target,
     },
     /// Commit every route of the issuing house (S-0213 claim 16a). A
     /// house order with no actor.
@@ -574,7 +578,11 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             };
             crate::routes::apply_point(w, house, actor, step);
         }
-        Order::RouteJoin { actor, point } => crate::routes::apply_join(w, house, actor, point),
+        Order::RouteJoin {
+            actor,
+            point,
+            place,
+        } => crate::routes::apply_join(w, house, actor, point, place),
         Order::RouteCommit => crate::routes::apply_commit(w, house),
         Order::RouteDelete { point } => crate::routes::apply_delete(w, house, point),
         Order::Behaviour { .. } | Order::Routed(_) => {}
