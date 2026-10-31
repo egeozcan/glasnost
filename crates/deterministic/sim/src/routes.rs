@@ -10,11 +10,13 @@
 //! points ([`Order::Routed`]). The route row of the fall-back to rest issues
 //! the next committed point ([`fall_back`]).
 //!
-//! The click side ([`click`]) makes the refusals S-0213 makes at the click:
-//! the kinds that cannot take part, the same-route-state rule, the
-//! route-holder limit and the point-click test; the refusals made when a
-//! point add is applied are in [`apply_point`] and announced through
-//! [`Effect::Route`]. State is world-level ([`RouteWorld`]), saved and
+//! The input side follows S-0213 claims 16b and 16d: at a press, the kind
+//! test ([`press_kind_refusal`]) and what the points whose click areas hold
+//! the cursor do ([`press`]: take one, refuse, or leave an ordinary click);
+//! a press that takes a point sends [`press_orders`]; at an ordinary
+//! click's release, the same-route-state rule and the route-holder limit
+//! ([`click`]). The refusals made when a point add is applied are in
+//! [`apply_point`] and announced through [`Effect::Route`]. State is world-level ([`RouteWorld`]), saved and
 //! hashed. The look of points and lines is the client's.
 
 use std::collections::BTreeMap;
@@ -88,8 +90,54 @@ pub struct Route {
     /// (claim 16c).
     pub steps: Vec<Step>,
     /// The loop's first step, when the route has a loop: the steps from it
-    /// to the end repeat.
+    /// to [`Route::loop_to`] repeat.
     pub loop_from: Option<usize>,
+    /// The step after the loop's last, when the loop ends before the
+    /// route's last point (claim 16b: a press's copy whose loop begins at
+    /// one of the object's own points); `None` when the loop runs to the
+    /// route's end.
+    #[serde(default)]
+    pub loop_to: Option<usize>,
+}
+
+impl Route {
+    /// The loop's steps as a range, when the route has a loop.
+    pub fn loop_range(&self) -> Option<std::ops::Range<usize>> {
+        let from = self.loop_from?;
+        Some(from..self.loop_to.unwrap_or(self.steps.len()))
+    }
+
+    /// The point's first place in the route (S-0213 claim 16b, *A point
+    /// that a route holds twice*).
+    pub fn first_place(&self, point: u32) -> Option<usize> {
+        self.steps.iter().position(|s| s.point == point)
+    }
+
+    /// Whether the route holds the point.
+    pub fn holds_point(&self, point: u32) -> bool {
+        self.first_place(point).is_some()
+    }
+
+    /// The route's last point, if any.
+    pub fn last_point(&self) -> Option<u32> {
+        self.steps.last().map(|s| s.point)
+    }
+
+    /// The step recorded for the holder at a point: the one at the point's
+    /// earliest place still in the route (claim 16b).
+    fn action_at(&self, point: u32) -> Option<&Step> {
+        self.steps.iter().find(|s| s.point == point)
+    }
+
+    /// When the route was given the point: the earliest stamp of its
+    /// places (claim 16b, the longest holder).
+    fn given(&self, point: u32) -> Option<u64> {
+        self.steps
+            .iter()
+            .filter(|s| s.point == point)
+            .map(|s| s.since)
+            .min()
+    }
 }
 
 /// The route state of the world (S-0213 claims 16 to 16f).
@@ -109,22 +157,38 @@ pub struct RouteWorld {
     pub stamp: u64,
 }
 
-/// What a route-mode click does (S-0213 claim 16).
+/// What an ordinary route-mode click does at its release (S-0213 claims
+/// 16b and 16d): one that no point's click area takes or refuses.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RouteClick {
-    /// The orders to issue: point adds or point joins.
+    /// The orders to issue: point adds, and a detonate sent as outside
+    /// route mode (claim 16b).
     Orders(Vec<Order>),
     /// Refused, with the string-table label of the message; no order.
     Refused(&'static str),
-    /// With nothing selected, a click on a point selects it (claim 16e).
-    SelectPoint(u32),
-    /// The ordinary click: the selection changes as outside route mode,
-    /// no order is given.
+    /// The ordinary click: one that selects, toggles the selection or does
+    /// nothing outside route mode; the selection changes as there, and no
+    /// order is given.
     Ordinary,
-    /// A click whose ordinary orders are none of them behaviour orders (a
-    /// deploy, a detonate): no order, no point, no message and no selection
-    /// change.
+    /// A click whose orders route mode gives none of (a deploy, or an order
+    /// other than a behaviour order or a detonate): no order, no point, no
+    /// message and no selection change.
     Ignored,
+}
+
+/// What a route-mode press does with the points whose click areas hold the
+/// cursor (S-0213 claim 16b, *Click areas*).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Press {
+    /// The press takes the point: with objects selected it sends
+    /// [`press_orders`], with nothing selected it selects the point (claim
+    /// 16e).
+    Take(u32),
+    /// Refused with the invalid-point message.
+    Refused,
+    /// An ordinary route-mode click (claim 16d): [`click`] at the release,
+    /// or a tool's click.
+    Ordinary,
 }
 
 /// What a route order did, for the local player's messages and sound
@@ -142,6 +206,10 @@ pub enum RouteNote {
     Refused(&'static str),
     /// A loop was closed.
     Looped,
+    /// A point delete was applied, and this point, the one after the
+    /// deleted point in its longest holder's route, becomes the selected
+    /// point (claim 16e).
+    Selected(u32),
 }
 
 /// The step's place.
@@ -232,10 +300,10 @@ fn lower(w: &mut World, house: HouseId) {
     *c = c.saturating_sub(1);
 }
 
-/// The house's point whose marker stands in `cell`, if any; the lowest
-/// numbered one when several do.
+/// The house's earliest-made point whose place's cell is `cell`, if any (a
+/// lookup for tools and tests; a press finds its point by click area,
+/// [`press`]).
 pub fn point_in(w: &World, house: HouseId, cell: CellXY) -> Option<u32> {
-    // design: a click hits a point's marker when it is in the cell the marker stands in (the markers' look is not studied, S-0213 claim 16g)
     w.routes
         .points
         .iter()
@@ -243,25 +311,249 @@ pub fn point_in(w: &World, house: HouseId, cell: CellXY) -> Option<u32> {
         .map(|(&n, _)| n)
 }
 
-/// The house's point a route-mode click by `selection` in `cell` takes:
-/// with objects selected, the lowest numbered point in the cell that a
-/// selected object's route holds, else [`point_in`]'s.
-pub fn point_for(w: &World, house: HouseId, cell: CellXY, selection: &[ObjectId]) -> Option<u32> {
-    // design (Q-2166): two points can stand at one place (S-0213 claim 16a); a click takes the one a selected route holds, else the lowest numbered
-    let held = |n: u32| {
-        selection.iter().any(|id| {
-            w.routes
-                .routes
-                .get(id)
-                .is_some_and(|r| r.steps.iter().any(|s| s.point == n))
-        })
+/// A point's click area holds a screen pixel `(dx, dy)` away from the
+/// screen position of the point's place (S-0213 claim 16b, *Click areas*):
+/// a square of 16 by 16 screen pixels, from 8 left of and above that
+/// position to 7 right of and below it.
+pub fn in_click_area(dx: i32, dy: i32) -> bool {
+    // spec: S-0213 claim 16b, Click areas (from 8 pixels left of and above the place's screen position to 7 pixels right of and below it; the point's cell plays no part)
+    (-8..=7).contains(&dx) && (-8..=7).contains(&dy)
+}
+
+/// Whether the point is drawn for `viewer` (S-0213 claim 16g): one of its
+/// own house's or of a house allied with it.
+pub fn drawn_for(w: &World, viewer: HouseId, p: &RoutePoint) -> bool {
+    // spec: S-0213 claim 16g (drawn for the viewer's own house and for houses allied with it, never for other houses)
+    p.house == viewer || w.allied(Some(viewer), Some(p.house))
+}
+
+/// The point-click test (S-0213 claim 16b, *Clicks on existing points*):
+/// whether the selection can join or close a loop at the point. It refuses
+/// when a selected object with a route record has a loop, lacks the point,
+/// or has it (at its first place) as its route's last point or the one
+/// before it. With nothing selected, or only objects with no route record,
+/// it accepts every point.
+pub fn accepts(w: &World, selection: &[ObjectId], point: u32) -> bool {
+    selection.iter().all(|&id| {
+        if !has_record(w, id) {
+            return true;
+        }
+        let Some(r) = w.routes.routes.get(&id) else {
+            return true;
+        };
+        // spec: S-0213 claim 16b (refused when a selected object with a route record has a loop, lacks the point, or has it as its route's last point or the one before it, at its first place in the route)
+        r.loop_from.is_none() && r.first_place(point).is_some_and(|i| i + 2 < r.steps.len())
+    })
+}
+
+/// The point taken from an ordered list of points whose click areas hold
+/// the cursor (earliest-made first): the earliest-made, or, under
+/// `quirks.stacked_point_takes_earliest` off with objects selected, the
+/// earliest-made one at the first's place that a selected route holds.
+fn pick(w: &World, selection: &[ObjectId], list: &[u32]) -> Option<u32> {
+    let &first = list.first()?;
+    // spec: S-0213 claim 16b, Two points at one place (the earliest-made point is the candidate, whatever the selected routes hold) and Edge cases (quirks.stacked_point_takes_earliest)
+    if w.rules().quirks.stacked_point_takes_earliest || selection.is_empty() {
+        return Some(first);
+    }
+    let Some(f) = w.routes.points.get(&first) else {
+        return Some(first);
     };
-    w.routes
-        .points
+    // spec: S-0213 claim 16b, Two points at one place, quirk off (with objects selected, the earliest-made point of the house at the place that a selected object's route holds, else the earliest-made one)
+    let held = |n: u32| {
+        selection
+            .iter()
+            .any(|id| w.routes.routes.get(id).is_some_and(|r| r.holds_point(n)))
+    };
+    list.iter()
+        .copied()
+        .find(|n| {
+            w.routes
+                .points
+                .get(n)
+                .is_some_and(|p| p.house == f.house && p.place == f.place)
+                && held(*n)
+        })
+        .or(Some(first))
+}
+
+/// The points of `under` that play a part in a press by `house`: all of
+/// them, or under `quirks.hidden_point_refuses_click` off only those drawn
+/// for the player.
+fn tested<'a>(w: &'a World, house: HouseId, under: &'a [u32]) -> impl Iterator<Item = u32> + 'a {
+    // spec: S-0213 claim 16b, Click areas (a press that takes no highlighted point is tested against the earliest-made point of any house, drawn or not) and Edge cases (quirks.hidden_point_refuses_click off: only points drawn for the player)
+    let all = w.rules().quirks.hidden_point_refuses_click;
+    under.iter().copied().filter(move |n| {
+        w.routes
+            .points
+            .get(n)
+            .is_some_and(|p| all || drawn_for(w, house, p))
+    })
+}
+
+/// What a route-mode press by `house` with `selection` does, with `under`
+/// the points of any house whose click areas hold the cursor, in any order
+/// (S-0213 claim 16b, *Click areas* and *Two points at one place*).
+pub fn press(w: &World, house: HouseId, selection: &[ObjectId], under: &[u32]) -> Press {
+    let mut under: Vec<u32> = under
         .iter()
-        .find(|&(&n, p)| p.house == house && point_cell(w, p) == cell && held(n))
-        .map(|(&n, _)| n)
-        .or_else(|| point_in(w, house, cell))
+        .copied()
+        .filter(|n| w.routes.points.contains_key(n))
+        .collect();
+    // spec: S-0213 claim 16b, Click areas (the earliest-made point is the candidate; point numbers are given in the order the points were made)
+    under.sort_unstable();
+    under.dedup();
+    let drawn: Vec<u32> = under
+        .iter()
+        .copied()
+        .filter(|n| drawn_for(w, house, &w.routes.points[n]))
+        .collect();
+    // spec: S-0213 claim 16b, Click areas (of the points drawn for the player whose click areas hold the cursor, the earliest-made one is the candidate; it is highlighted, and a press takes it, only when it is a point of the player's own house that the point-click test accepts; otherwise no later-made point under it is considered)
+    if let Some(c) = pick(w, selection, &drawn)
+        && w.routes.points[&c].house == house
+        && accepts(w, selection, c)
+    {
+        return Press::Take(c);
+    }
+    let rest: Vec<u32> = tested(w, house, &under).collect();
+    // spec: S-0213 claim 16b, Click areas (when the point-click test refuses that point, the press is refused with the invalid-point message; otherwise, and when no click area holds the cursor, the press is an ordinary route-mode click)
+    match pick(w, selection, &rest) {
+        Some(t) if !accepts(w, selection, t) => Press::Refused,
+        _ => Press::Ordinary,
+    }
+}
+
+/// The highlighted point (S-0213 claim 16b): the one a press would take,
+/// if any.
+pub fn highlighted(
+    w: &World,
+    house: HouseId,
+    selection: &[ObjectId],
+    under: &[u32],
+) -> Option<u32> {
+    // spec: S-0213 claim 16b (while the cursor is over a point that the point-click test would refuse, the point is not highlighted as a click target)
+    match press(w, house, selection, under) {
+        Press::Take(p) => Some(p),
+        _ => None,
+    }
+}
+
+/// The kind refusal (S-0213 claim 16d): the message of the first selected
+/// object, in selection order, that is not a vehicle or infantry unit.
+pub fn kind_refusal(w: &World, selection: &[ObjectId]) -> Option<&'static str> {
+    // spec: S-0213 claim 16d (a selected aircraft, building or object of any other kind refuses the press, each with its message; when several fail, the message is that of the first of them in S-0214's selection order)
+    selection
+        .iter()
+        .find_map(|&id| match w.obj(id).map(|o| o.kind) {
+            Some(Kind::Vehicle | Kind::Infantry) => None,
+            Some(Kind::Aircraft) => Some("MSG:PlanningModeNoAircraft"),
+            Some(Kind::Building) => Some("MSG:PlanningModeNoBuildings"),
+            _ => Some("MSG:PlanningModeNoUnknowns"),
+        })
+}
+
+/// The kind test of a route-mode battlefield press (S-0213 claim 16d,
+/// *When the tests are made*): made when the button is pressed, whatever
+/// the click would do, for a press with the cursor outside every point's
+/// click area; under `quirks.click_area_skips_kind_test` off for every
+/// press with objects selected. A refusal ends the click.
+pub fn press_kind_refusal(
+    w: &World,
+    house: HouseId,
+    selection: &[ObjectId],
+    under: &[u32],
+) -> Option<&'static str> {
+    if selection.is_empty() {
+        // spec: S-0213 claim 16d (with nothing selected, no object is tested)
+        return None;
+    }
+    // design (Q-2193): "inside a click area" for the kind test counts the same points as the press's own test (any house's, drawn or not under quirks.hidden_point_refuses_click on)
+    let inside = tested(w, house, under).next().is_some();
+    // spec: S-0213 claim 16d, When the tests are made (a press inside a click area is not tested for kind) and Edge cases (quirks.click_area_skips_kind_test off: every route-mode battlefield press with objects selected meets the kind test first)
+    if inside && w.rules().quirks.click_area_skips_kind_test {
+        return None;
+    }
+    kind_refusal(w, selection)
+}
+
+/// The objects whose routes hold the point, in the order in which they were
+/// given it (S-0213 claim 16b), of `house`.
+fn holders_of(w: &World, house: HouseId, point: u32) -> Vec<ObjectId> {
+    let mut v: Vec<(u64, ObjectId)> = w
+        .routes
+        .routes
+        .iter()
+        .filter(|(_, r)| r.house == house)
+        .filter_map(|(&id, r)| r.given(point).map(|g| (g, id)))
+        .collect();
+    v.sort_unstable();
+    v.into_iter().map(|(_, id)| id).collect()
+}
+
+/// The objects a press on a point sends orders to (S-0213 claim 16b, *Who
+/// gets a press's orders*): the selection in S-0214's selection order, a
+/// selected object with no route record or an empty route itself, and for
+/// one whose route holds points every object whose route holds that
+/// route's last point, in the order in which they were given it, selected
+/// or not; each object once.
+pub fn press_list(w: &World, house: HouseId, selection: &[ObjectId]) -> Vec<ObjectId> {
+    let mut list: Vec<ObjectId> = Vec::new();
+    let put = |list: &mut Vec<ObjectId>, id: ObjectId| {
+        // spec: S-0213 claim 16b, Who gets a press's orders (an object already listed is not listed again)
+        if !list.contains(&id) {
+            list.push(id);
+        }
+    };
+    for &id in selection {
+        let last = w.routes.routes.get(&id).and_then(Route::last_point);
+        match last {
+            // spec: S-0213 claim 16b, Who gets a press's orders (a selected object with no route record, or with an empty route, is listed itself)
+            None => put(&mut list, id),
+            // spec: S-0213 claim 16b, Who gets a press's orders (for a selected object whose route holds points, every object whose route holds that route's last point is listed, the selected object among them, in the order in which they were given that point, whether they are selected or not)
+            Some(p) => {
+                for h in holders_of(w, house, p) {
+                    put(&mut list, h);
+                }
+            }
+        }
+    }
+    list
+}
+
+/// The orders of a press that takes `point` with objects selected (S-0213
+/// claims 2 and 16b): one point join for each object of [`press_list`], in
+/// its order, naming the point by its place.
+pub fn press_orders(w: &World, house: HouseId, selection: &[ObjectId], point: u32) -> Vec<Order> {
+    let Some(p) = w.routes.points.get(&point) else {
+        return Vec::new();
+    };
+    let place = p.place;
+    // spec: S-0213 claims 2 and 16b (the orders are issued in the list's order, so the pending-list limit drops those after the first 128 in the list; they name the point by its place)
+    press_list(w, house, selection)
+        .into_iter()
+        .map(|actor| Order::RouteJoin {
+            actor,
+            point,
+            place,
+        })
+        .collect()
+}
+
+/// The objects that selecting `id` while the route-mode key is held also
+/// selects (S-0213 claim 16h): every other object whose route holds the
+/// last point of `id`'s route, in the order in which they were given it.
+pub fn also_selected(w: &World, id: ObjectId) -> Vec<ObjectId> {
+    let Some(r) = w.routes.routes.get(&id) else {
+        return Vec::new();
+    };
+    let Some(last) = r.last_point() else {
+        return Vec::new();
+    };
+    // spec: S-0213 claim 16h (selecting, while the key is held, an object whose route holds a point also selects every other object whose route holds that route's last point, in the order in which they were given that point)
+    holders_of(w, r.house, last)
+        .into_iter()
+        .filter(|&h| h != id)
+        .collect()
 }
 
 /// Deletes every point that no route holds any more.
@@ -286,6 +578,7 @@ fn end(w: &mut World, id: ObjectId) {
     let held = !r.steps.is_empty();
     r.steps.clear();
     r.loop_from = None;
+    r.loop_to = None;
     if held {
         // spec: S-0213 claim 16f (an object whose route still holds a point stops being a route holder and lowers the count by 1 at once)
         lower(w, house);
@@ -350,21 +643,23 @@ fn note(w: &mut World, house: HouseId, note: RouteNote) {
 /// the actor's route.
 pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
     let Some(o) = w.obj(actor) else { return };
-    // spec: S-0213 claim 16d (only vehicles and infantry can hold a route)
+    // spec: S-0213 claim 16d (outside a click area only vehicles and infantry pass the kind test); design (Q-2192): a point add for an aircraft or building, which only a press inside a click area can send, is dropped (claim 16d leaves what such a press gives them unstudied)
     if !matches!(o.kind, Kind::Vehicle | Kind::Infantry) {
         return;
     }
     let Some(at) = place(&step) else { return };
     let cell = place_cell(w, at).unwrap_or(CellXY::new(0, 0));
     if let Some(r) = w.routes.routes.get(&actor) {
-        // spec: S-0213 claim 16b (a point add is refused, when applied, after a terminating or continual last point, in a loop, or at 16 points; each with its own message)
+        // spec: S-0213 claim 16b, A point that a route holds twice (the action read at the last point is the one recorded at that point's earliest place still in the route)
+        let last = r.last_point().and_then(|p| r.action_at(p));
+        // spec: S-0213 claim 16b (a point add is refused, when applied, after a terminating or continual last point, in a loop, or at 16 points; each with its own message) and Constants (refused only at exactly 16: a longer route, from a press's copy, is not refused for its length)
         let refusal = if r.loop_from.is_some() {
             Some("MSG:PostLoop")
-        } else if r.steps.len() >= MAX_POINTS {
+        } else if r.steps.len() == MAX_POINTS {
             Some("MSG:NodeMaximum")
-        } else if r.steps.last().is_some_and(terminating) {
+        } else if last.is_some_and(terminating) {
             Some("MSG:PostTerminatingCommand")
-        } else if r.steps.last().is_some_and(continual) {
+        } else if last.is_some_and(continual) {
             Some("MSG:PostContinualCommand")
         } else {
             None
@@ -405,6 +700,7 @@ pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
         house,
         steps: Vec::new(),
         loop_from: None,
+        loop_to: None,
     });
     let first = r.steps.is_empty();
     r.house = house;
@@ -432,67 +728,154 @@ pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
     note(w, house, RouteNote::Added { info });
 }
 
-/// Applies a point join (S-0213 claims 16a to 16c): it closes a loop when
-/// the point is in the actor's route, and otherwise gives the actor, whose
-/// route is empty, a copy of a holder's route from the point to its end.
-pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32) {
-    if w.obj(actor).is_none() || !w.routes.points.contains_key(&point) {
-        return;
+/// The point a press's join order acts on when applied (S-0213 claim 16b,
+/// *Click areas*): the house's earliest-made point at the order's place;
+/// under `quirks.stacked_point_takes_earliest` off the point the order
+/// names. `None` when there is none: the order does nothing.
+fn join_point(w: &World, house: HouseId, point: u32, place: Target) -> Option<u32> {
+    if w.rules().quirks.stacked_point_takes_earliest {
+        // spec: S-0213 claim 16b, Click areas (the orders a press sends name the point by its place; when applied they act on the house's earliest-made point at that place, and do nothing when no point of the house is there)
+        w.routes
+            .points
+            .iter()
+            .find(|(_, p)| p.house == house && p.place == place)
+            .map(|(&n, _)| n)
+    } else {
+        // spec: S-0213 claim 16b, Two points at one place, quirk off (the press's orders name the point itself: when applied they act on it, and an order whose point has gone does nothing)
+        w.routes
+            .points
+            .get(&point)
+            .is_some_and(|p| p.house == house)
+            .then_some(point)
     }
-    if let Some(r) = w.routes.routes.get_mut(&actor)
-        && let Some(i) = r.steps.iter().position(|s| s.point == point)
-    {
-        // spec: S-0213 claims 16b and 16c (a click on a point already in the route closes a loop from it to the route's end; refused for a route with a loop and for its last two points)
-        if r.loop_from.is_none() && i + MIN_LOOP <= r.steps.len() {
-            r.loop_from = Some(i);
-            // spec: S-0213 claim 16c (closing a loop shows an information message)
-            note(w, house, RouteNote::Looped);
-        }
-        return;
-    }
-    if holds(w, actor) {
-        return;
-    }
+}
+
+/// A loop as its first step and, when it ends before the route's last
+/// point, the step after its last ([`Route::loop_from`], [`Route::loop_to`]).
+type LoopSpan = (usize, Option<usize>);
+
+/// The copy a join gives (S-0213 claim 16b, *Joins*): the steps of the
+/// point's longest holder's route from the point's first place to its end,
+/// and the copy's loop as a step range within it.
+fn join_copy(
+    w: &World,
+    house: HouseId,
+    actor: ObjectId,
+    point: u32,
+) -> Option<(Vec<Step>, Option<LoopSpan>)> {
     // spec: S-0213 claim 16b (the join copies the route of the point's longest holder: of the routes holding the point when the join is applied, the one given it earliest by a point add or join; of holders given it in the same tick, the one whose order was applied first)
-    let src = w
-        .routes
-        .routes
-        .iter()
-        .filter(|&(&id, r)| id != actor && r.house == house)
-        .filter_map(|(_, r)| {
-            let i = r.steps.iter().position(|s| s.point == point)?;
-            Some((r.steps[i].since, i, r))
-        })
-        .min_by_key(|&(since, _, _)| since);
-    let Some((_, i, src)) = src else {
-        return;
-    };
-    // spec: S-0213 claim 16b (the copy runs from the joined point to the end of that route as it then stands, with the actions recorded there for that holder)
+    let src = holders_of(w, house, point)
+        .into_iter()
+        .find(|&id| id != actor)?;
+    let src = &w.routes.routes[&src];
+    let i = src.first_place(point)?;
+    // spec: S-0213 claim 16b (the copy runs from the joined point's first place in that route to the end of that route as it then stands, with the actions recorded there for that holder)
     let mut steps: Vec<Step> = src.steps[i..].to_vec();
-    let loop_from = match src.loop_from {
+    let lp = match (src.loop_from, src.loop_to) {
         // spec: S-0213 claim 16b (that route has no loop: the copy has none)
-        None => None,
+        (None, _) => None,
         // spec: S-0213 claim 16b (its loop's first point is the joined point or a later one: the copy has the same loop, from the same first point)
-        Some(l) if l >= i => Some(l - i),
-        // spec: S-0213 claim 16b (its loop's first point comes before the joined point: the copy goes on with the loop's points from its first point up to the one before the joined point, and its loop is the whole copy)
-        Some(l) => {
+        (Some(l), to) if l >= i => Some((l - i, to.map(|t| t - i))),
+        // spec: S-0213 claim 16b (its loop's first point comes before the joined point: the copy goes on, after that route's last point, with the loop's points from its first point up to the one before the joined point, and its loop is the whole copy, beginning at the joined point)
+        (Some(l), None) => {
             steps.extend_from_slice(&src.steps[l..i]);
-            Some(0)
+            Some((0, None))
+        }
+        // design (Q-2191): a loop that ends before the route's last point and the joined point after it: the copy runs to the route's end with no loop
+        (Some(_), Some(t)) if i >= t => None,
+        // design (Q-2191): a loop that ends before the route's last point and holds the joined point after its first: the copy is the loop entered at the joined point (the loop's points from it to the loop's last, then from its first up to the one before it), then the points after the loop, and its loop is the loop's points
+        (Some(l), Some(t)) => {
+            let mut c: Vec<Step> = src.steps[i..t].to_vec();
+            c.extend_from_slice(&src.steps[l..i]);
+            c.extend_from_slice(&src.steps[t..]);
+            steps = c;
+            Some((0, Some(t - l)))
         }
     };
+    Some((steps, lp))
+}
+
+/// Applies a point join (S-0213 claims 16a to 16c), deciding when it is
+/// applied: it closes a loop when the actor's route then holds the point
+/// the order acts on, and otherwise adds a copy of the point's longest
+/// holder's route after the actor's own points. Neither is tested for the
+/// point-click test's refusals.
+pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32, place: Target) {
+    if w.obj(actor).is_none() {
+        return;
+    }
+    let Some(point) = join_point(w, house, point, place) else {
+        return;
+    };
+    if let Some(r) = w.routes.routes.get_mut(&actor)
+        && let Some(i) = r.first_place(point)
+    {
+        // spec: S-0213 claims 16b and 16c (it closes a loop when, at the order's application, the point is in the actor's route: from the point's first place to the route's last point, with no test, replacing any loop the route already has)
+        r.loop_from = Some(i);
+        r.loop_to = None;
+        // spec: S-0213 claim 16c (closing a loop shows an information message)
+        note(w, house, RouteNote::Looped);
+        return;
+    }
+    let Some((mut copy, lp)) = join_copy(w, house, actor, point) else {
+        return;
+    };
+    let own: Vec<Step> = w
+        .routes
+        .routes
+        .get(&actor)
+        .map(|r| r.steps.clone())
+        .unwrap_or_default();
+    let n = own.len();
+    let ignores = w.rules().quirks.press_copy_ignores_route_state;
+    // spec: S-0213 claim 16b, Who gets a press's orders, and Edge cases (quirks.press_copy_ignores_route_state off: a join does nothing when the copy would take its route past 16 points)
+    if !ignores && n + copy.len() > MAX_POINTS {
+        return;
+    }
     let since = w.routes.stamp;
     w.routes.stamp = since.wrapping_add(1);
-    for s in &mut steps {
+    for s in &mut copy {
         // spec: S-0213 claim 16b (the copied points are uncommitted until the next commit)
         s.committed = false;
         s.since = since;
     }
-    let copy = Route {
-        house,
-        steps,
-        loop_from,
+    let mut steps = own;
+    // spec: S-0213 claim 16b (the copy is added after the actor's own points, whatever their number; a join is not tested for the point add refusals)
+    steps.extend(copy);
+    let (loop_from, loop_to) = match lp {
+        // spec: S-0213 claim 16b (its route then has the copy's loop in place of any loop it had, or no loop when the copy has none)
+        None => (None, None),
+        Some((cf, ct)) if !ignores => {
+            // spec: S-0213 Edge cases (quirks.press_copy_ignores_route_state off: the copy's loop always begins in the copy, at the copied loop's first point)
+            (Some(n + cf), ct.map(|t| n + t))
+        }
+        Some((cf, ct)) => {
+            let first = steps[n + cf].point;
+            let len = ct.unwrap_or(steps.len() - n) - cf;
+            // spec: S-0213 claim 16b, A point that a route holds twice (the copy's loop begins at the first place, in the joining holder's route, of the copied loop's first point)
+            let j = steps
+                .iter()
+                .position(|s| s.point == first)
+                .unwrap_or(n + cf);
+            if j >= n {
+                // spec: S-0213 claim 16b (when the loop's first point is not one its own points hold, the loop is the copy's own)
+                (Some(j), ct.map(|t| n + t))
+            } else {
+                // spec: S-0213 claim 16b (when the copied loop begins at a later point that its own points also hold, the loop begins at that own point and has as many points as the copied loop, so it ends before its route's last point)
+                (Some(j), Some(j + len))
+            }
+        }
     };
-    w.routes.routes.insert(actor, copy);
+    let r = w.routes.routes.entry(actor).or_insert(Route {
+        house,
+        steps: Vec::new(),
+        loop_from: None,
+        loop_to: None,
+    });
+    r.house = house;
+    r.steps = steps;
+    r.loop_from = loop_from;
+    r.loop_to = loop_to;
     // spec: S-0213 claim 16f (a point join that gives an object its first points does not raise the count, under quirks.route_holder_count_drift)
 }
 
@@ -555,31 +938,55 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
     if w.routes.points.get(&point).is_none_or(|p| p.house != house) {
         return;
     }
+    let next = next_after(w, house, point);
     for r in w.routes.routes.values_mut() {
-        let mut kept = Vec::with_capacity(r.steps.len());
-        let mut loop_from = r.loop_from;
+        let len = r.steps.len();
+        let mut kept = Vec::with_capacity(len);
+        let (mut from, mut to) = (r.loop_from, r.loop_from.map(|_| r.loop_to.unwrap_or(len)));
+        // spec: S-0213 claim 16b, A point that a route holds twice (a point delete removes the point from every place in every route that holds it)
         for (i, s) in r.steps.drain(..).enumerate() {
             if s.point == point {
-                if let Some(l) = loop_from
-                    && i < l
-                {
-                    loop_from = Some(l - 1);
-                }
+                from = from.map(|l| if i < l { l - 1 } else { l });
+                to = to.map(|t| if i < t { t - 1 } else { t });
                 continue;
             }
             kept.push(s);
         }
+        let ends_route = r.loop_to.is_none();
         r.steps = kept;
-        if let Some(l) = loop_from
-            && r.steps.len().saturating_sub(l) < MIN_LOOP
+        if let (Some(l), Some(t)) = (from, to)
+            && t.saturating_sub(l) < MIN_LOOP
         {
             // spec: S-0213 claim 16e (a loop left with fewer than 3 points is cancelled; the remaining points form an ordinary route)
-            loop_from = None;
+            from = None;
         }
-        r.loop_from = loop_from;
+        r.loop_from = from;
+        r.loop_to = match from {
+            Some(_) if !ends_route => to,
+            _ => None,
+        };
     }
     // spec: S-0213 claim 16f (deleting a route's last remaining point ends holding but does not lower the count, under quirks.route_holder_count_drift; off, the count is the holders')
     w.routes.points.remove(&point);
+    if let Some(n) = next.filter(|n| w.routes.points.contains_key(n)) {
+        // spec: S-0213 claim 16e, The delete key (when a point-delete order of the local player's house is applied, the point after the deleted one in the route of its longest holder, going round a loop, becomes the selected point, if there is one)
+        note(w, house, RouteNote::Selected(n));
+    }
+}
+
+/// The point after `point`'s first place in the route of its longest
+/// holder, going round a loop (S-0213 claim 16e and claim 16b, *A point
+/// that a route holds twice*).
+fn next_after(w: &World, house: HouseId, point: u32) -> Option<u32> {
+    let h = holders_of(w, house, point).into_iter().next()?;
+    let r = &w.routes.routes[&h];
+    let i = r.first_place(point)?;
+    let j = match r.loop_range() {
+        // spec: S-0213 claim 16e (going round a loop: after the loop's last point comes its first)
+        Some(l) if l.contains(&i) && i + 1 == l.end => l.start,
+        _ => i + 1,
+    };
+    r.steps.get(j).map(|s| s.point).filter(|&n| n != point)
 }
 
 /// The step a route issues next, if any: its first (S-0213 claim 16c, the
@@ -625,11 +1032,16 @@ fn issue_next(w: &mut World, id: ObjectId) {
     }
     let house = r.house;
     let step = r.steps.remove(0);
-    match r.loop_from {
+    match (r.loop_from, r.loop_to) {
         // spec: S-0213 claim 16c (issuing a point of a loop moves it to the end of the route, so a looping holder's route holds its points in the order it will next issue them)
-        Some(0) => r.steps.push(step.clone()),
+        (Some(0), None) => r.steps.push(step.clone()),
+        // design (Q-2191): a loop that ends before the route's last point (S-0213 claim 16b) is gone round as any loop: the issued point moves to the loop's end, and the points after the loop are never issued
+        (Some(0), Some(t)) => r.steps.insert(t - 1, step.clone()),
         // spec: S-0213 claim 16c (issuing a point takes it off the front of the route; points before the loop's first point are issued once)
-        l => r.loop_from = l.map(|l| l - 1),
+        (l, t) => {
+            r.loop_from = l.map(|l| l - 1);
+            r.loop_to = t.map(|t| t - 1);
+        }
     }
     let used_up = r.steps.is_empty();
     if used_up {
@@ -702,80 +1114,24 @@ fn point_order(w: &World, owner: HouseId, id: ObjectId, step: &Step) -> Option<O
     cell.and_then(cell_action)
 }
 
-/// A route-mode click by `house` with `selection` (S-0213 claims 16 to
-/// 16e): the refusals made at the click, a point selection, or the point
-/// adds or joins to issue.
+/// An ordinary route-mode click by `house` with `selection`, at its release
+/// (S-0213 claims 16b and 16d): one that no point's click area takes or
+/// refuses ([`press`]), past the kind test made at the press
+/// ([`press_kind_refusal`]). A click that selects, toggles the selection or
+/// does nothing is the ordinary click and meets no test here. Any other
+/// meets the same-route-state and holder-limit tests, and then gives its
+/// behaviour orders as point adds and its detonate as it is.
 pub fn click(
     w: &World,
     house: HouseId,
     selection: &[ObjectId],
     on: ClickOn,
-    cell: CellXY,
     mods: Modifiers,
 ) -> RouteClick {
-    let marker = point_for(w, house, cell, selection);
-    if selection.is_empty() {
-        // spec: S-0213 claim 16e (with no object selected, a click on an existing route point selects it and shows an information message)
-        return marker.map_or(RouteClick::Ordinary, RouteClick::SelectPoint);
-    }
-    // The ordinary selecting clicks stay what they are in route mode.
     let plain = targeting::click(w, house, selection, on, mods);
-    if marker.is_none() && plain.orders.is_empty() {
+    // spec: S-0213 claims 16b and 16d (a click that selects or toggles the selection gives the unit no action and adds no point; it is not tested for route state or the holder limit)
+    if selection.is_empty() || plain.orders.is_empty() {
         return RouteClick::Ordinary;
-    }
-    // spec: S-0213 claim 16d (a selected aircraft, building or object of any other kind refuses the click, each with its message)
-    for &id in selection {
-        match w.obj(id).map(|o| o.kind) {
-            Some(Kind::Vehicle | Kind::Infantry) => {}
-            Some(Kind::Aircraft) => return RouteClick::Refused("MSG:PlanningModeNoAircraft"),
-            Some(Kind::Building) => return RouteClick::Refused("MSG:PlanningModeNoBuildings"),
-            _ => return RouteClick::Refused("MSG:PlanningModeNoUnknowns"),
-        }
-    }
-    // spec: S-0213 claim 16d (the selected objects share one route state: none holds a route, or all hold routes that end at the same point)
-    let ends: Vec<Option<u32>> = selection
-        .iter()
-        .map(|&id| {
-            w.routes
-                .routes
-                .get(&id)
-                .and_then(|r| r.steps.last())
-                .map(|s| s.point)
-        })
-        .collect();
-    let same =
-        ends.iter().all(|e| e.is_none()) || ends.iter().all(|e| e.is_some() && *e == ends[0]);
-    // spec: S-0213 claim 16 (refused when the count plus the selected objects whose routes hold no point would be more than 128)
-    let new = selection.iter().filter(|&&id| !holds(w, id)).count();
-    let over = u64::from(count(w, house)) + new as u64 > u64::from(HOLDER_LIMIT);
-    // spec: S-0213 claim 16d (when the selection both mixes route states and would pass the holder limit, only the incompatible-selection message is given)
-    if !same {
-        return RouteClick::Refused("MSG:PlanningModeHeteroSel");
-    }
-    if over {
-        return RouteClick::Refused("MSG:PlannerMaximum");
-    }
-    if let Some(p) = marker {
-        // spec: S-0213 claim 16b (clicks on existing points: refused with the invalid-point message when any selected object with a route record has a loop, lacks the point, or has it as its last point or the one before)
-        for &id in selection {
-            if !has_record(w, id) {
-                continue;
-            }
-            let Some(r) = w.routes.routes.get(&id) else {
-                continue;
-            };
-            let at = r.steps.iter().position(|s| s.point == p);
-            let bad = r.loop_from.is_some() || at.is_none_or(|i| i + 2 >= r.steps.len());
-            if bad {
-                return RouteClick::Refused("MSG:PlanningModeInvalidNodeX");
-            }
-        }
-        // spec: S-0213 claims 16a and 16b (otherwise the click closes a loop for the objects whose routes hold the point and joins the point for the others: point-join orders)
-        let orders = selection
-            .iter()
-            .map(|&actor| Order::RouteJoin { actor, point: p })
-            .collect();
-        return RouteClick::Orders(orders);
     }
     // spec: S-0213 claim 16b and S-0214 table VD row VD1, table I rows v2 and I22 (the deploy action is refused in route mode: no-deploy, no order)
     let deploying: Vec<ObjectId> = selection
@@ -788,27 +1144,47 @@ pub fn click(
         if o.actor().is_some_and(|a| deploying.contains(&a)) {
             continue;
         }
-        // spec: S-0213 claim 16a (a point-add order is the ordinary behaviour order of claim 5 marked as a route point, one per eligible selected object, in selection order); design (Q-2138): orders a click gives that are not behaviour orders, a detonate among them, add no point
-        if let Order::Behaviour {
-            actor,
-            behaviour,
-            attack_move,
-            target,
-            dest,
-        } = o
-        {
-            out.push(Order::RoutePoint {
+        match o {
+            // spec: S-0213 claims 16a and 16b (a point-add order is the ordinary behaviour order of claim 5 marked as a route point, one per eligible selected object, in selection order: every click action of a vehicle or infantry unit that orders something, except the detonate, gives a behaviour order)
+            Order::Behaviour {
                 actor,
                 behaviour,
                 attack_move,
                 target,
                 dest,
-            });
+            } => out.push(Order::RoutePoint {
+                actor,
+                behaviour,
+                attack_move,
+                target,
+                dest,
+            }),
+            // spec: S-0213 claim 16b (a route-mode click that would order a detonate adds no point: when claim 16d's tests pass, the detonate order is sent at the release, as outside route mode, with no route-mode message)
+            Order::Detonate { .. } => out.push(o),
+            // design (Q-2192): an order of another kind a route-mode click could give (S-0213 claim 16b leaves aircraft and buildings unstudied) is not sent and adds no point
+            _ => {}
         }
     }
     if out.is_empty() {
-        // spec: S-0213 claim 16b (the deploy action is refused in route mode: the click gives no order); design (Q-2138): no message, and a detonate likewise
+        // spec: S-0213 claim 16b (the deploy action is refused in route mode: the click gives no order, so it does nothing and meets no test)
         return RouteClick::Ignored;
+    }
+    // spec: S-0213 claim 16d (the selected objects share one route state: none holds a route, or all hold routes that end at the same point)
+    let ends: Vec<Option<u32>> = selection
+        .iter()
+        .map(|&id| w.routes.routes.get(&id).and_then(Route::last_point))
+        .collect();
+    let same =
+        ends.iter().all(|e| e.is_none()) || ends.iter().all(|e| e.is_some() && *e == ends[0]);
+    // spec: S-0213 claim 16 and Formulas (refused when the count plus the selected objects whose routes hold no point would be more than 128)
+    let new = selection.iter().filter(|&&id| !holds(w, id)).count();
+    let over = u64::from(count(w, house)) + new as u64 > u64::from(HOLDER_LIMIT);
+    // spec: S-0213 claim 16d (the same-route-state and holder-limit tests are made at the release; when the selection both mixes route states and would pass the holder limit, only the incompatible-selection message is given)
+    if !same {
+        return RouteClick::Refused("MSG:PlanningModeHeteroSel");
+    }
+    if over {
+        return RouteClick::Refused("MSG:PlannerMaximum");
     }
     RouteClick::Orders(out)
 }

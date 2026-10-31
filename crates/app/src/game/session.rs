@@ -579,6 +579,7 @@ impl Session {
             // spec: S-0201 claim 17, Our engine (a network game is paced at the index in force from the cycle after a speed order is carried out)
             self.speed = self.play.game.world.game_speed;
         }
+        self.route_after_tick();
         let played = lap();
         let effects = self.play.effects.clone();
         // spec: S-0201 claim 15 (in a network game the opener's machine draws no new frame of the battlefield while the options menu is open; the ticks go on) and claim 16 (nor while its window lacks the focus)
@@ -1045,6 +1046,73 @@ impl Session {
         // spec: S-0214 claim 27 (an accepted right-button press in the battlefield anchors a possible scroll drag at that pixel)
         self.right =
             (b == Button::Right && !self.paused && on_map).then(|| band::RightDrag::armed(p));
+        self.route.pressed = None;
+        // design (Q-2193): only a left press is a route-mode press for the kind test and the point tests (S-0213 claim 16d says "every route-mode press on the battlefield" without naming the button); a right press keeps claim 16h's rules
+        if self.route.held && b == Button::Left && !self.paused && on_map {
+            self.route_press(p);
+        }
+    }
+
+    /// A route-mode left press on the battlefield (S-0213 claims 16b, 16d
+    /// and 16h): claim 16d's kind test first, then what the press does with
+    /// the points whose click areas hold the cursor.
+    fn route_press(&mut self, p: Point) {
+        let under = self.points_under(p);
+        let w = &self.play.game.world;
+        let local = self.play.local;
+        let sel = self.play.selection.clone();
+        if let Some(m) = glasnost_sim::routes::press_kind_refusal(w, local, &sel, &under) {
+            // spec: S-0213 claim 16d, When the tests are made (the kind test is made when the button is pressed, whatever the click would do; a refused press ends the click: the selection is kept, and no order, point or band box follows)
+            self.press = None;
+            self.drag = None;
+            self.route_refused(m);
+            return;
+        }
+        let press = glasnost_sim::routes::press(w, local, &sel, &under);
+        if press != glasnost_sim::routes::Press::Ordinary {
+            // spec: S-0213 claim 16h (a press that takes a point does that and nothing else) and claim 16b (a press refused with the invalid-point message gives no order)
+            self.drag = None;
+        }
+        self.route.pressed = Some(press);
+    }
+
+    /// The route points of any house whose click areas hold screen pixel
+    /// `p` (S-0213 claim 16b, *Click areas*), in point order.
+    fn points_under(&self, p: Point) -> Vec<u32> {
+        let (qx, qy) = self.world_point(p);
+        let w = &self.play.game.world;
+        w.routes
+            .points
+            .iter()
+            .filter(|(_, pt)| {
+                let (sx, sy) = place_screen(w, pt);
+                glasnost_sim::routes::in_click_area(qx - sx, qy - sy)
+            })
+            .map(|(&n, _)| n)
+            .collect()
+    }
+
+    /// The window pixel at the screen position of route point `n`'s place
+    /// (S-0213 claim 16b, *Click areas*).
+    pub fn route_point_screen(&self, n: u32) -> Option<Point> {
+        let w = &self.play.game.world;
+        let (sx, sy) = place_screen(w, w.routes.points.get(&n)?);
+        let v = self.view();
+        let m = self.map_rect();
+        Some(Point::new(sx - v.origin.0 + m.x, sy - v.origin.1 + m.y))
+    }
+
+    /// The point a route-mode press at the pointer would take, for its
+    /// highlight (S-0213 claim 16b).
+    fn route_hover(&self) -> Option<u32> {
+        let p = self.pointer.filter(|&p| self.map_rect().contains(p))?;
+        let under = self.points_under(p);
+        glasnost_sim::routes::highlighted(
+            &self.play.game.world,
+            self.play.local,
+            &self.play.selection,
+            &under,
+        )
     }
 
     /// A button went up: a click or the end of a drag.
@@ -1066,6 +1134,29 @@ impl Session {
         }
         let dragged = drag.is_some_and(|d| d.active) && b == Button::Left;
         let scrolled = right.is_some_and(|r| r.scrolling) && b == Button::Right;
+        let pressed = self.route.pressed.take();
+        if let Some(press) = pressed
+            && self.route.held
+            && b == Button::Left
+            && !dragged
+            && self.hud_at(start) == Some(HudHit::Map)
+            && self.route_release(press, p, mods)
+        {
+            self.route_selection_changed();
+            return SessionEvent::None;
+        }
+        // spec: S-0213 claim 16h (a right click made while the key is held and no object is selected clears the point selection, only when its release is less than 4 screen pixels from its press on each axis)
+        let short = (p.x - start.x).abs() < ROUTE_RIGHT_CLICK_BOUND
+            && (p.y - start.y).abs() < ROUTE_RIGHT_CLICK_BOUND;
+        if b == Button::Right
+            && !scrolled
+            && self.route.held
+            && self.play.selection.is_empty()
+            && short
+            && self.hud_at(start) == Some(HudHit::Map)
+        {
+            self.route.point = None;
+        }
         match self.hud_at(start) {
             // spec: S-0214 claim 27 (a scroll drag's release neither clears the selection, nor cancels a targeting mode, nor gives an order)
             // spec: S-0411 claim 10 (a classified right drag and release keep placement mode and the ready item: no cancellation, no refund)
@@ -1087,21 +1178,8 @@ impl Session {
                     self.show_markers();
                 }
             }
-            Some(HudHit::Map)
-                if !dragged
-                    && self.route.held
-                    && b == Button::Left
-                    && self.play.tool == Tool::Select =>
-            {
-                let (cell, object) = self.under(p);
-                self.route_click(object, cell, mods);
-            }
             Some(HudHit::Map) if !dragged => {
                 let (cell, object) = self.under(p);
-                if b == Button::Right {
-                    // spec: S-0213 claim 16e (a short right-click clears the point selection)
-                    self.route.point = None;
-                }
                 match self.type_select_click(b, object, cell, mods) {
                     Some((t, held)) => {
                         // spec: S-0214 claims 12 and 32 (with the role held, select and toggle select act on the clicked object's type as a whole within the reach the last tap left; silent, and the reach is not changed)
@@ -1147,7 +1225,17 @@ impl Session {
             }
             _ => {}
         }
+        self.route_selection_changed();
         SessionEvent::None
+    }
+
+    /// Any selection of an object clears the point selection (S-0213
+    /// claims 16e and 16h).
+    fn route_selection_changed(&mut self) {
+        // spec: S-0213 claim 16e, The delete key (any selection of an object, by any means, clears the point selection) and claim 16h (while any object is selected, no point is selected)
+        if !self.play.selection.is_empty() {
+            self.route.point = None;
+        }
     }
 
     /// The clicked object of a left click whose action is *select* or
@@ -1524,6 +1612,7 @@ impl Session {
             Vec::new()
         };
         self.type_select.reach = self.play.type_tap(&screen, self.type_select.reach);
+        self.route_selection_changed();
     }
 
     /// The type-select role's key is let go without a release, as when
@@ -1592,6 +1681,7 @@ impl Session {
         if let Some((x, y, z)) = centre {
             self.set_centre(project_lifted(x, y, z));
         }
+        self.route_selection_changed();
     }
 
     /// A key command (S-0213 table T2).
@@ -1617,8 +1707,10 @@ impl Session {
     /// held, clicks build routes; released, the routes are committed.
     pub fn route_key(&mut self, down: bool) {
         if down {
-            if !self.paused {
+            // spec: S-0213 claim 16h, End of route mode (after the local player's house is defeated, route mode cannot be entered again)
+            if !self.paused && !self.route.ended {
                 self.route.held = true;
+                self.play.route_held = true;
             }
             return;
         }
@@ -1626,9 +1718,67 @@ impl Session {
             return;
         }
         self.route.held = false;
+        self.play.route_held = false;
+        self.route.pressed = None;
+        // spec: S-0213 claim 16e, The delete key (releasing the key clears the point selection)
+        self.route.point = None;
         // spec: S-0213 claim 16a (releasing the key sends one commit order for the local player's house)
         self.play
             .issue(vec![glasnost_sim::orders::Order::RouteCommit]);
+    }
+
+    /// Route mode after a tick (S-0213 claims 16e and 16h): the local
+    /// house's defeat ends it for good, with the commit, and a point delete
+    /// of the local house selects the point after the deleted one.
+    fn route_after_tick(&mut self) {
+        let w = &self.play.game.world;
+        let local = self.play.local;
+        if !self.route.ended && victory::defeated(w, local) {
+            // spec: S-0213 claim 16h, End of route mode (route mode ends, with the commit, when the local player's house is defeated, after which it cannot be entered again)
+            self.route.ended = true;
+            self.route_key(false);
+        }
+        let mut shown: Vec<&'static str> = Vec::new();
+        for e in &self.play.effects {
+            let glasnost_sim::combat::effects::Effect::Route { house, note } = e else {
+                continue;
+            };
+            if *house != local {
+                continue;
+            }
+            let label = match note {
+                // spec: S-0213 claim 16b (for the local player's own orders a refused point add shows its case's message; an added terminating, continual or 16th point shows that case's message as information)
+                glasnost_sim::routes::RouteNote::Refused(m)
+                | glasnost_sim::routes::RouteNote::Added { info: Some(m) } => *m,
+                // spec: S-0213 claim 16c and Import mapping (closing a loop shows the loop-made information message)
+                glasnost_sim::routes::RouteNote::Looped => "MSG:PlanningModeLoopHelp",
+                _ => continue,
+            };
+            // design: one message per label and tick; the orders of one click each give the note
+            if !shown.contains(&label) {
+                shown.push(label);
+            }
+        }
+        for label in shown {
+            self.play.notice(label);
+        }
+        let w = &self.play.game.world;
+        let quirk = w.rules().quirks.delete_selects_after_release;
+        let next = self.play.effects.iter().rev().find_map(|e| match e {
+            glasnost_sim::combat::effects::Effect::Route {
+                house,
+                note: glasnost_sim::routes::RouteNote::Selected(n),
+            } if *house == local => Some(*n),
+            _ => None,
+        });
+        // spec: S-0213 claim 16e, The delete key (when a point-delete order of the local player's house is applied, the point after the deleted one becomes the selected point; a point delete applied after the key's release selects it too) and Edge cases (quirks.delete_selects_after_release off: one applied while the key is not held selects no point)
+        if let Some(n) = next
+            && self.play.selection.is_empty()
+            && !self.route.ended
+            && (self.route.held || quirk)
+        {
+            self.route.point = Some(n);
+        }
     }
 
     /// Whether the route-mode key is held (S-0213 claim 16).
@@ -1648,7 +1798,7 @@ impl Session {
             return;
         }
         if let Some(point) = self.route.point.take() {
-            // spec: S-0213 claim 16e (the delete key sends a point-delete order for the selected point)
+            // spec: S-0213 claim 16e, The delete key (the delete key sends a point-delete order for the selected point whenever a point is selected, whether or not the route-mode key is held)
             self.play
                 .issue(vec![glasnost_sim::orders::Order::RouteDelete { point }]);
         }
@@ -1667,30 +1817,60 @@ impl Session {
         self.play.cues.push(glasnost_audio::events::UiCue::StripEnd);
     }
 
-    /// A left click on the battlefield in route mode (S-0213 claims 16 to
-    /// 16e).
-    fn route_click(&mut self, object: Option<ObjectId>, cell: CellXY, mods: Modifiers) {
-        let on = self.play.target(object, cell);
-        let w = &self.play.game.world;
-        let sel = self.play.selection.clone();
-        match glasnost_sim::routes::click(w, self.play.local, &sel, on, cell, mods) {
-            glasnost_sim::routes::RouteClick::Orders(o) => {
-                self.play.issue_route_click(o, on, mods);
-                self.show_markers();
+    /// The release of a route-mode left press on the battlefield (S-0213
+    /// claims 16b to 16e and 16h). Returns whether route mode handled it;
+    /// otherwise it is the release as outside route mode: an ordinary
+    /// click that selects, toggles the selection or does nothing, or a
+    /// tool's click.
+    fn route_release(
+        &mut self,
+        press: glasnost_sim::routes::Press,
+        p: Point,
+        mods: Modifiers,
+    ) -> bool {
+        use glasnost_sim::routes::{Press, RouteClick};
+        match press {
+            Press::Take(n) if self.play.selection.is_empty() => {
+                if self.play.game.world.routes.points.contains_key(&n) {
+                    self.route.point = Some(n);
+                    // spec: S-0213 claim 16e (with no object selected, a press that takes a point selects it and shows an information message)
+                    self.play.notice("MSG:PlanningModeDeleteHelp");
+                }
+                true
             }
-            glasnost_sim::routes::RouteClick::Refused(m) => self.route_refused(m),
-            glasnost_sim::routes::RouteClick::SelectPoint(p) => {
-                self.route.point = Some(p);
-                // spec: S-0213 claim 16e (selecting a point shows an information message)
-                self.play.notice("MSG:PlanningModeDeleteHelp");
+            Press::Take(n) => {
+                let w = &self.play.game.world;
+                let sel = self.play.selection.clone();
+                // spec: S-0213 claims 16b and 16d (a press that takes a point sends its join and loop-close orders, which meet no test of claim 16d)
+                let orders = glasnost_sim::routes::press_orders(w, self.play.local, &sel, n);
+                self.play.issue(orders);
+                true
             }
-            glasnost_sim::routes::RouteClick::Ignored => {}
-            glasnost_sim::routes::RouteClick::Ordinary => {
-                let before = self.play.selection.clone();
-                self.play.click_map(Button::Left, object, cell, mods);
-                // spec: S-0213 claim 16e (selecting any object clears the point selection)
-                if self.play.selection.iter().any(|id| !before.contains(id)) {
-                    self.route.point = None;
+            Press::Refused => {
+                // spec: S-0213 claim 16b, Click areas (the point-click test refuses the point: the press is refused with the invalid-point message)
+                self.route_refused("MSG:PlanningModeInvalidNodeX");
+                true
+            }
+            // spec: S-0213 claim 16h (a tool's click that passes the press rules does what the tool does outside route mode, at once; the release-time tests of claim 16d are not made for it)
+            Press::Ordinary if self.play.tool != Tool::Select => false,
+            Press::Ordinary => {
+                let (cell, object) = self.under(p);
+                let on = self.play.target(object, cell);
+                let w = &self.play.game.world;
+                let sel = self.play.selection.clone();
+                match glasnost_sim::routes::click(w, self.play.local, &sel, on, mods) {
+                    RouteClick::Orders(o) => {
+                        self.play.issue_route_click(o, on, mods);
+                        self.show_markers();
+                        true
+                    }
+                    RouteClick::Refused(m) => {
+                        self.route_refused(m);
+                        true
+                    }
+                    RouteClick::Ignored => true,
+                    // spec: S-0213 claim 16h (clicks that select act as outside route mode)
+                    RouteClick::Ordinary => false,
                 }
             }
         }
@@ -1707,6 +1887,8 @@ impl Session {
         if !self.menu_allowed() {
             return false;
         }
+        // spec: S-0213 claim 16h, End of route mode (in our engine route mode ends, with the commit, when the options menu is opened while it is on)
+        self.route_key(false);
         self.paused = true;
         self.menu_speed = self.speed_in_force();
         true
@@ -2025,6 +2207,7 @@ impl Session {
         }
         if self.route.held {
             // spec: S-0213 claim 16g (route points and the routes through them are drawn only while the viewer holds the route-mode key, for the viewer's own house and allied houses; each point with a marker, each holder's route as lines from the holder through its points); design: their look is ours (not studied)
+            let hover = self.route_hover();
             let w = &self.play.game.world;
             let local = self.play.local;
             let at_cell = |c: CellXY| {
@@ -2056,6 +2239,9 @@ impl Session {
                 let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
                 let ink = if self.route.point == Some(n) {
                     ROUTE_SELECTED_INK
+                } else if hover == Some(n) {
+                    // spec: S-0213 claim 16b, Click areas (the candidate is highlighted only when a press would take it)
+                    ROUTE_HOVER_INK
                 } else {
                     ROUTE_POINT_INK
                 };
@@ -2370,13 +2556,17 @@ struct TypeSelect {
 }
 
 /// Route mode's interface state (S-0213 claims 16, 16e and 16g): whether
-/// its key is held, the selected route point, and the tick of the last
-/// refusal cue.
+/// its key is held, the selected route point, the tick of the last
+/// refusal cue, what the left press of the click under way does with the
+/// points under it, and whether the local house's defeat has ended route
+/// mode for good.
 #[derive(Clone, Copy, Debug, Default)]
 struct RouteMode {
     held: bool,
     point: Option<u32>,
     cue_tick: Option<i32>,
+    pressed: Option<glasnost_sim::routes::Press>,
+    ended: bool,
 }
 
 /// What a click with the type-select role held does (S-0214 claim 32).
@@ -2413,6 +2603,15 @@ const ROUTE_POINT_INK: [u8; 4] = [120, 230, 120, 110];
 /// The selected route point's ink (our own look).
 // nocite: our own look of the selected route point, not studied (S-0213 claim 16g)
 const ROUTE_SELECTED_INK: [u8; 4] = [255, 255, 140, 160];
+/// The highlighted route point's ink: the one a press would take (our own
+/// look).
+// nocite: our own look of the highlighted route point, not studied (S-0213 claim 16g)
+const ROUTE_HOVER_INK: [u8; 4] = [255, 255, 255, 200];
+
+/// A right click while the route-mode key is held and nothing is selected
+/// clears the point selection only when its release is less than this many
+/// screen pixels from its press on each axis (S-0213 claim 16h).
+const ROUTE_RIGHT_CLICK_BOUND: i32 = 4; // spec: S-0213 claim 16h (the point selection is cleared only by a right click whose release is less than 4 screen pixels from its press on each axis; a bound of its own, apart from the drag bound)
 
 /// The placement range indicator's ink (our own).
 // nocite: our own colour for the placement range indicator
@@ -2984,4 +3183,23 @@ mod aim_tests {
             }
         }
     }
+}
+
+/// The screen position of a route point's place, in battlefield pixels
+/// (S-0213 claim 16b, *Click areas*): an object's projected position, or
+/// a cell's centre lifted by its level.
+fn place_screen(
+    w: &glasnost_sim::world::World,
+    p: &glasnost_sim::routes::RoutePoint,
+) -> (i32, i32) {
+    if let glasnost_sim::world::Target::Object(id) = p.place
+        && let Some(o) = w.obj(id)
+    {
+        return project_lifted(o.pos.x, o.pos.y, o.pos.z);
+    }
+    let c = glasnost_sim::routes::point_cell(w, p);
+    let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    let (x, y) = glasnost_render::projection::cell_centre(c.x, c.y);
+    let (qx, qy) = project_lifted(x, y, 0);
+    (qx, qy - TERRAIN_LIFT * level)
 }

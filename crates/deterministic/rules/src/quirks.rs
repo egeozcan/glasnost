@@ -463,6 +463,44 @@ pub struct Quirks {
     // spec: S-0213 claim 16f and Edge cases (quirks.route_holder_count_drift, default: original)
     #[serde(default = "on")]
     pub route_holder_count_drift: bool,
+    /// A route-mode press that takes no highlighted point is tested against
+    /// the earliest-made point of any house whose click area holds the
+    /// cursor, drawn or not, so a point the player cannot see can refuse
+    /// the press (the original). Off: only points drawn for the player are
+    /// tested, and a point not drawn plays no part in a press.
+    // spec: S-0213 claim 16b, Click areas, and Edge cases (quirks.hidden_point_refuses_click, default: original)
+    #[serde(default = "on")]
+    pub hidden_point_refuses_click: bool,
+    /// A route-mode press inside a point's click area is not tested for
+    /// kind, so a selected aircraft or building can join a point (the
+    /// original). Off: every route-mode battlefield press with objects
+    /// selected meets the kind test first.
+    // spec: S-0213 claim 16d, When the tests are made, and Edge cases (quirks.click_area_skips_kind_test, default: original)
+    #[serde(default = "on")]
+    pub click_area_skips_kind_test: bool,
+    /// A point delete applied after the route-mode key's release selects
+    /// the next point, which the delete key then deletes unseen (the
+    /// original). Off: a point delete applied while the key is not held
+    /// selects no point.
+    // spec: S-0213 claim 16e, The delete key, and Edge cases (quirks.delete_selects_after_release, default: original)
+    #[serde(default = "on")]
+    pub delete_selects_after_release: bool,
+    /// Where several points of the house stand at one place, a press takes
+    /// the earliest-made of them, and its orders name the place (the
+    /// original). Off: with objects selected, the press takes the
+    /// earliest-made one a selected route holds, else the earliest-made,
+    /// and its orders name that point itself.
+    // spec: S-0213 claim 16b, Two points at one place, and Edge cases (quirks.stacked_point_takes_earliest, default: original)
+    #[serde(default = "on")]
+    pub stacked_point_takes_earliest: bool,
+    /// The copy a press's join gives an object can take its route past 16
+    /// points, and its loop can begin at one of the object's own points
+    /// and end before the route's last point (the original). Off: such a
+    /// join does nothing when the copy would take the route past 16
+    /// points, and the copy's loop always begins in the copy.
+    // spec: S-0213 claim 16b, Who gets a press's orders, and Edge cases (quirks.press_copy_ignores_route_state, default: original)
+    #[serde(default = "on")]
+    pub press_copy_ignores_route_state: bool,
     /// No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off (our design, C7 part 4): a member whose look gives no cell of its own gets the nearest open cell round the common cell, in the common cell's reach region and given to no other member.
     // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
@@ -2264,6 +2302,11 @@ impl Default for Quirks {
             cheer_memory_spans_session: true,
             spent_route_blocks_join: true,
             route_holder_count_drift: true,
+            hidden_point_refuses_click: true,
+            click_area_skips_kind_test: true,
+            delete_selects_after_release: true,
+            stacked_point_takes_earliest: true,
+            press_copy_ignores_route_state: true,
             group_spread_no_detour: true,
             rally_point_shared: true,
             harvest_cell_shared: true,
@@ -2930,6 +2973,26 @@ impl Quirks {
             ),
             ("spent_route_blocks_join", self.spent_route_blocks_join),
             ("route_holder_count_drift", self.route_holder_count_drift),
+            (
+                "hidden_point_refuses_click",
+                self.hidden_point_refuses_click,
+            ),
+            (
+                "click_area_skips_kind_test",
+                self.click_area_skips_kind_test,
+            ),
+            (
+                "delete_selects_after_release",
+                self.delete_selects_after_release,
+            ),
+            (
+                "stacked_point_takes_earliest",
+                self.stacked_point_takes_earliest,
+            ),
+            (
+                "press_copy_ignores_route_state",
+                self.press_copy_ignores_route_state,
+            ),
             ("group_spread_no_detour", self.group_spread_no_detour),
             ("rally_point_shared", self.rally_point_shared),
             ("harvest_cell_shared", self.harvest_cell_shared),

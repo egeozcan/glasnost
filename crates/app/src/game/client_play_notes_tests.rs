@@ -516,3 +516,300 @@ fn the_make_group_key_stands_in_for_ctrl_on_the_web() {
     c.key(Key::Char('j'), false);
     assert_eq!(session(&c).play.group(6), vec![far]);
 }
+
+/// The fixture's rules with `quirks.delete_selects_after_release` set.
+fn route_rules(delete_selects: bool) -> Arc<SimRules> {
+    let mut r = fixture::ruleset();
+    r.globals.quirks.delete_selects_after_release = delete_selects;
+    Arc::new(SimRules::new(&r, "synthetic-skirmish"))
+}
+
+/// A started client past the opening order block with two GUNR, the first
+/// routed through three cells beside it (point adds applied in one tick).
+fn routed(c: &mut Client) -> ([ObjectId; 3], [u32; 3]) {
+    use glasnost_sim::orders::Order;
+    let ids = three_gunrs(c);
+    while glasnost_sim::orders::blocked(session(c).play.world()) {
+        session_mut(c).step();
+    }
+    let at = session(c).play.world().obj(ids[0]).unwrap().pos.cell();
+    let cells = [(0, -3), (3, -3), (3, 0)].map(|(dx, dy)| CellXY::new(at.x + dx, at.y + dy));
+    let adds = cells
+        .iter()
+        .map(|&cell| Order::RoutePoint {
+            actor: ids[0],
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(glasnost_sim::world::Target::Cell(cell)),
+        })
+        .collect();
+    session_mut(c).play.issue(adds);
+    session_mut(c).step();
+    let pts: Vec<u32> = session(c)
+        .play
+        .world()
+        .routes
+        .points
+        .keys()
+        .copied()
+        .collect();
+    assert_eq!(pts.len(), 3);
+    (ids, [pts[0], pts[1], pts[2]])
+}
+
+fn offset(p: Point, dx: i32, dy: i32) -> Point {
+    Point::new(p.x + dx, p.y + dy)
+}
+
+/// The local house's orders so far, from the replay.
+fn route_orders(c: &Client) -> Vec<glasnost_sim::orders::Order> {
+    let s = session(c);
+    s.play
+        .game
+        .replay()
+        .orders
+        .iter()
+        .filter(|(_, h, _)| *h == s.play.local)
+        .map(|(_, _, o)| o.clone())
+        .collect()
+}
+
+/// Route-mode presses on points through the client (S-0213 claims 16b,
+/// 16e and 16h): with nothing selected a press inside a point's click
+/// area selects it, one just outside does not; the delete key deletes it
+/// and the next point becomes the selected one; any selection of an
+/// object, and the key's release, clear the point selection; with a
+/// selection a press on a point sends the press's joins.
+#[test]
+fn route_mode_presses_select_join_and_delete_points() {
+    use glasnost_sim::orders::Order;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let ([a, b, _], [p1, p2, p3]) = routed(&mut c);
+    session_mut(&mut c).play.selection = vec![b];
+    session_mut(&mut c).group_key(5, crate::game::session::GroupCommand::Make);
+    session_mut(&mut c).play.selection.clear();
+    c.key(Key::Char('z'), true);
+    let at2 = session(&c).route_point_screen(p2).expect("on screen");
+    // spec: S-0213 claim 16b, Click areas (8 pixels right of the place's screen position is outside the click area)
+    super::access_tests::click_at(&mut c, offset(at2, 8, 0));
+    assert_eq!(session(&c).route_point(), None);
+    // spec: S-0213 claim 16e (with nothing selected, a press in the click area selects the point)
+    super::access_tests::click_at(&mut c, offset(at2, 7, 7));
+    assert_eq!(session(&c).route_point(), Some(p2));
+    // spec: S-0213 claim 16e, The delete key (the delete key sends a point-delete order; when it is applied the next point of the longest holder's route becomes the selected point)
+    c.key(Key::Delete, true);
+    c.key(Key::Delete, false);
+    assert!(matches!(route_orders(&c).last(), Some(Order::RouteDelete { point }) if *point == p2));
+    session_mut(&mut c).step();
+    assert!(!session(&c).play.world().routes.points.contains_key(&p2));
+    assert_eq!(session(&c).route_point(), Some(p3));
+    // spec: S-0213 claim 16h (any selection of an object clears the point selection)
+    let base = session(&c).route_point_screen(p1).unwrap();
+    super::access_tests::click_at(&mut c, offset(base, -8, -8));
+    assert_eq!(session(&c).route_point(), Some(p1));
+    session_mut(&mut c).clock_ms += 5000;
+    session_mut(&mut c).group_key(5, crate::game::session::GroupCommand::Select);
+    assert_eq!(session(&c).play.selection, vec![b]);
+    assert_eq!(session(&c).route_point(), None);
+    // spec: S-0213 claim 16b, Who gets a press's orders (B, with no route record, presses P1's marker: a join named by the place)
+    let n = route_orders(&c).len();
+    let place = session(&c).play.world().routes.points[&p1].place;
+    super::access_tests::click_at(&mut c, base);
+    assert_eq!(
+        route_orders(&c)[n..].to_vec(),
+        vec![Order::RouteJoin {
+            actor: b,
+            point: p1,
+            place
+        }]
+    );
+    session_mut(&mut c).step();
+    assert_eq!(
+        session(&c).play.world().routes.routes[&b].steps.len(),
+        2,
+        "P1 and P3"
+    );
+    // spec: S-0213 claim 16e, The delete key (releasing the key clears the point selection)
+    session_mut(&mut c).play.selection.clear();
+    super::access_tests::click_at(&mut c, base);
+    assert_eq!(session(&c).route_point(), Some(p1));
+    c.key(Key::Char('z'), false);
+    assert_eq!(session(&c).route_point(), None);
+    let _ = a;
+}
+
+/// A point delete applied after the key's release (S-0213 claim 16e and
+/// Edge cases, `quirks.delete_selects_after_release`): on, it selects the
+/// next point, which the delete key then deletes with route mode off; off,
+/// it selects none.
+#[test]
+fn a_point_delete_after_the_release_selects_the_next_point_both_ways() {
+    use glasnost_sim::orders::Order;
+    for selects in [true, false] {
+        let mut c = client((800, 600), 100);
+        start_by_keyboard_with(&mut c, route_rules(selects));
+        let (_, [_, p2, p3]) = routed(&mut c);
+        session_mut(&mut c).play.selection.clear();
+        c.key(Key::Char('z'), true);
+        let at2 = session(&c).route_point_screen(p2).unwrap();
+        super::access_tests::click_at(&mut c, at2);
+        assert_eq!(session(&c).route_point(), Some(p2));
+        c.key(Key::Delete, true);
+        c.key(Key::Delete, false);
+        // The release comes before the tick that applies the delete.
+        c.key(Key::Char('z'), false);
+        assert_eq!(session(&c).route_point(), None);
+        session_mut(&mut c).step();
+        let want = selects.then_some(p3);
+        assert_eq!(session(&c).route_point(), want, "selects {selects}");
+        if selects {
+            // spec: S-0213 claim 16e, The delete key (the delete key sends the order whenever a point is selected, whether or not the route-mode key is held)
+            c.key(Key::Delete, true);
+            c.key(Key::Delete, false);
+            assert!(
+                matches!(route_orders(&c).last(), Some(Order::RouteDelete { point }) if *point == p3)
+            );
+        }
+    }
+}
+
+/// The kind test at a route-mode press (S-0213 claim 16d, *When the tests
+/// are made*): with a building selected, a press on bare ground is refused
+/// with its message and sound, the selection is kept and no order or band
+/// box follows; a press inside a point's click area is not tested for
+/// kind.
+#[test]
+fn route_mode_tests_kind_at_the_press() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let (_, [p1, _, _]) = routed(&mut c);
+    let s = session_mut(&mut c);
+    let local = s.play.local;
+    let w = &mut s.play.game.world;
+    let t = w
+        .rules()
+        .index_of(Kind::Building, "POWR")
+        .expect("fixture type");
+    let hut = glasnost_sim::objects::create(w, Kind::Building, t, Some(local));
+    let cell = CellXY::new(4, 4);
+    let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
+    glasnost_sim::objects::place(w, hut, glasnost_sim::world::Pos::centre(cell, z), 0);
+    session_mut(&mut c).play.selection = vec![hut];
+    c.key(Key::Char('z'), true);
+    let n = route_orders(&c).len();
+    session_mut(&mut c).play.cues.clear();
+    let ground = offset(session(&c).route_point_screen(p1).unwrap(), 40, 40);
+    super::access_tests::click_at(&mut c, ground);
+    assert_eq!(
+        session(&c).play.cues,
+        vec![glasnost_audio::events::UiCue::StripEnd]
+    );
+    assert_eq!(session(&c).play.selection, vec![hut], "kept");
+    assert_eq!(route_orders(&c).len(), n, "no order");
+    // spec: S-0213 claim 16d (a press inside a click area is not tested for kind: the building joins the point)
+    session_mut(&mut c).step();
+    session_mut(&mut c).play.cues.clear();
+    let at1 = session(&c).route_point_screen(p1).unwrap();
+    super::access_tests::click_at(&mut c, at1);
+    assert!(session(&c).play.cues.is_empty());
+    assert!(matches!(
+        route_orders(&c)[n..],
+        [glasnost_sim::orders::Order::RouteJoin { actor, .. }] if actor == hut
+    ));
+}
+
+/// Right clicks in route mode (S-0213 claim 16h): one whose release is
+/// less than 4 pixels from its press on each axis, made with nothing
+/// selected, clears the point selection; one of 4 pixels keeps it; route
+/// mode stays on. The options menu and the defeat end route mode with the
+/// commit (claim 16h, End of route mode).
+#[test]
+fn route_mode_right_clicks_and_its_end() {
+    use glasnost_sim::orders::Order;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let (_, [p1, _, _]) = routed(&mut c);
+    session_mut(&mut c).play.selection.clear();
+    c.key(Key::Char('z'), true);
+    let at1 = session(&c).route_point_screen(p1).unwrap();
+    super::access_tests::click_at(&mut c, at1);
+    assert_eq!(session(&c).route_point(), Some(p1));
+    let ground = offset(at1, 40, 40);
+    c.pointer_down(Button::Right, ground);
+    c.pointer_up(Button::Right, offset(ground, 4, 0), Modifiers::default());
+    assert_eq!(session(&c).route_point(), Some(p1), "4 pixels: kept");
+    c.pointer_down(Button::Right, ground);
+    c.pointer_up(Button::Right, offset(ground, 3, 3), Modifiers::default());
+    assert_eq!(session(&c).route_point(), None, "3 pixels: cleared");
+    assert!(
+        session(&c).route_held(),
+        "a right click never ends route mode"
+    );
+    // The options menu ends route mode with the commit.
+    let n = route_orders(&c).len();
+    assert!(session_mut(&mut c).open_options());
+    assert!(!session(&c).route_held());
+    assert_eq!(route_orders(&c).len(), n + 1);
+    assert!(matches!(route_orders(&c).last(), Some(Order::RouteCommit)));
+}
+
+/// The local house's defeat ends route mode with the commit, and it
+/// cannot be entered again (S-0213 claim 16h, End of route mode).
+#[test]
+fn route_mode_ends_at_the_defeat() {
+    use glasnost_sim::orders::Order;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    routed(&mut c);
+    c.key(Key::Char('z'), true);
+    assert!(session(&c).route_held());
+    session_mut(&mut c).play.surrender();
+    for _ in 0..4 {
+        session_mut(&mut c).step();
+    }
+    let local = session(&c).play.local;
+    assert!(glasnost_sim::econ::victory::defeated(
+        session(&c).play.world(),
+        local
+    ));
+    assert!(!session(&c).route_held());
+    assert!(matches!(route_orders(&c).last(), Some(Order::RouteCommit)));
+    c.key(Key::Char('z'), false);
+    c.key(Key::Char('z'), true);
+    assert!(!session(&c).route_held(), "not entered again");
+}
+
+/// Selecting a route holder while the key is held also selects the other
+/// holders of its route's last point, one round only (S-0213 claim 16h);
+/// without the key it selects as usual. Scenario O8 part y (2).
+#[test]
+fn selecting_a_holder_in_route_mode_selects_its_last_points_holders() {
+    use glasnost_sim::orders::Order;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let ([a, b, far], [_, p2, _]) = routed(&mut c);
+    let place = session(&c).play.world().routes.points[&p2].place;
+    // B joins P2: its route is P2 and P3, so it holds A's last point.
+    session_mut(&mut c).play.issue(vec![Order::RouteJoin {
+        actor: b,
+        point: p2,
+        place,
+    }]);
+    session_mut(&mut c).step();
+    session_mut(&mut c).play.selection = vec![a];
+    session_mut(&mut c).group_key(6, crate::game::session::GroupCommand::Make);
+    session_mut(&mut c).play.selection = vec![far];
+    session_mut(&mut c).group_key(6, crate::game::session::GroupCommand::Select);
+    assert_eq!(session(&c).play.selection, vec![a], "without the key");
+    session_mut(&mut c).play.selection.clear();
+    session_mut(&mut c).clock_ms += 5000;
+    c.key(Key::Char('z'), true);
+    session_mut(&mut c).group_key(6, crate::game::session::GroupCommand::Select);
+    let mut got = session(&c).play.selection.clone();
+    got.sort();
+    let mut want = vec![a, b];
+    want.sort();
+    assert_eq!(got, want, "with the key");
+}

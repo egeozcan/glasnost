@@ -1658,14 +1658,9 @@ fn an_accepted_route_mode_cell_click_shows_the_move_marker() {
     let cell = p.world().obj(mcv).unwrap().pos.cell();
     let to = CellXY::new(cell.x, cell.y + 2);
     let on = ClickOn::Cell(to);
-    let glasnost_sim::routes::RouteClick::Orders(o) = glasnost_sim::routes::click(
-        p.world(),
-        p.local,
-        &p.selection,
-        on,
-        to,
-        Modifiers::default(),
-    ) else {
+    let glasnost_sim::routes::RouteClick::Orders(o) =
+        glasnost_sim::routes::click(p.world(), p.local, &p.selection, on, Modifiers::default())
+    else {
         panic!("a point add");
     };
     assert!(matches!(o.as_slice(), [Order::RoutePoint { .. }]));

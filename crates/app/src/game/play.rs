@@ -212,6 +212,10 @@ pub struct Play {
     /// The pathing report's ring of snapshots, marks and clicks (M8 A4,
     /// our own diagnostics; nothing of it reaches the simulation).
     pub capture: crate::game::capture::Ring,
+    /// The route-mode key is held (S-0213 claim 16h): selecting a route
+    /// holder then also selects the other holders of its route's last
+    /// point.
+    pub route_held: bool,
 }
 
 fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -266,6 +270,7 @@ impl Play {
             clock_units: 0,
             clock_last: None,
             outbox: None,
+            route_held: false,
         }
     }
 
@@ -758,6 +763,18 @@ impl Play {
             self.sel_reset = true;
         }
         self.selection = r.selection.clone().unwrap_or_else(|| sel.clone());
+        // spec: S-0213 claim 16h (a click that selects while the key is held also selects the other holders of the selected object's last point)
+        if r.selection.is_some() {
+            let new: Vec<ObjectId> = self
+                .selection
+                .iter()
+                .copied()
+                .filter(|id| !sel.contains(id))
+                .collect();
+            for id in new {
+                self.add_holders(id);
+            }
+        }
         // spec: S-0701 claim 28 (rally point set: the local player's matching action, a building's guard-spot order of S-0213 claim 20)
         let w = &self.game.world;
         let rally = r.orders.iter().any(|o| {
@@ -803,13 +820,14 @@ impl Play {
         if !force_select {
             self.clear_selection();
         }
-        let w = &self.game.world;
         let mut first = None;
         // spec: S-0214 claim 29 (successful additions keep the admitted candidate order of claim 25 restricted to the box and claim 19's eligibility, whether the box replaces or adds and whatever the drag direction; no reversal or re-sort at release)
         for &id in candidates {
+            let w = &self.game.world;
             if targeting::box_eligible(w, local, &self.selection, id) {
                 // spec: S-0214 claims 12 and 20 (additions use the selection order; no count limit on the selection)
                 targeting::add_to_selection(w, &mut self.selection, id);
+                self.add_holders(id);
                 first = first.or(Some(id));
             }
         }
@@ -865,7 +883,27 @@ impl Play {
         targeting::add_to_selection(&self.game.world, &mut self.selection, id);
         // spec: S-0214 claim 32 (every addition counts, whatever makes it)
         self.sel_reset = true;
+        self.add_holders(id);
         true
+    }
+
+    /// While the route-mode key is held, selecting `id` also selects every
+    /// other object whose route holds the last point of `id`'s route, in
+    /// the order in which they were given it, each by S-0214 claim 12's
+    /// front/end rule; objects already selected stay where they are, and
+    /// the objects added add none of their own (S-0213 claim 16h).
+    fn add_holders(&mut self, id: ObjectId) {
+        if !self.route_held {
+            return;
+        }
+        let w = &self.game.world;
+        let local = Some(self.local);
+        // spec: S-0213 claim 16h (selecting, while the key is held, an object whose route holds a point also selects every other object whose route holds that route's last point, added right after that object in the order in which they were given that point, any already selected being left where it is; one round only) and claim 16d (objects carried inside a transport cannot be selected, S-0214)
+        for h in glasnost_sim::routes::also_selected(w, id) {
+            if !self.selection.contains(&h) && targeting::selectable_by(w, h, local) {
+                targeting::add_to_selection(w, &mut self.selection, h);
+            }
+        }
     }
 
     /// The type-select role's expansion (S-0214 claims 12, 29 and 32):
