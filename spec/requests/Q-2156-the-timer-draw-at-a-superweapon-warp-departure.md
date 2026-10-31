@@ -1,9 +1,9 @@
 ---
 id: Q-2156
 title: Does a holder take S-0309 claim 27's timer draw when its target leaves the map at a superweapon warp's departure?
-status: open
+status: answered
 related: [S-0309, S-0513, S-0207, S-0215]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
