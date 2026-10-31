@@ -945,6 +945,9 @@ impl Live {
                     super::walk::Rates {
                         walk: rule_int(inputs.import, Kind::Vehicles, i, b"WalkRate", d.walk),
                         idle: rule_int(inputs.import, Kind::Vehicles, i, b"IdleRate", d.idle),
+                        // spec: S-0102 Import mapping (HoverAttack and DeployToLand: boolean, no when absent)
+                        hover_attack: v.raw.hover_attack.unwrap_or(d.hover_attack),
+                        deploy_to_land: v.deploy_to_land,
                     }
                 })
             })

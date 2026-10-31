@@ -544,13 +544,13 @@ fn selection_and_orders_flow_through_the_input_rules() {
 }
 
 /// The view counts a vehicle's walk counter from the game's ticks: it
-/// grows in each tick the vehicle is moving (walk rate absent: 1, so every
-/// tick number is a multiple) and holds while the vehicle stands (idle rate
-/// absent: 0). M8 round 6 note 39: before, it stayed 0 and a moving sprite
-/// vehicle showed one picture.
+/// grows in each tick the vehicle is moving now by its locomotor (walk rate
+/// absent: 1, so every tick number is a multiple) and holds while it is not
+/// (idle rate absent: 0); the walking row follows movement in progress. A
+/// vehicle off the map keeps its value.
 ///
-/// spec: S-0102 claim 22 (walk counter; moving, read as S-0107 Terms' is moving now) and Import
-/// mapping (WalkRate absent 1, IdleRate absent 0)
+/// spec: S-0102 claim 22a (the one walk counter; moving now; the hold after stopping; No advance off the map) and
+/// Import mapping (WalkRate absent 1, IdleRate absent 0)
 #[test]
 fn a_vehicles_walk_counter_runs_while_it_moves() {
     let (mut live, _) = synthetic_live();
@@ -578,18 +578,25 @@ fn a_vehicles_walk_counter_runs_while_it_moves() {
     );
     assert_eq!(r.issued, 1);
     let mut moving_ticks = 0;
-    let mut seen_moving = false;
+    let mut seen_in_progress = false;
     for _ in 0..200 {
         live.step();
-        let w = live.walk(car);
-        if w.moving {
+        if glasnost_sim::occupancy::locomotor_moving_now(&live.world, car) {
             moving_ticks += 1;
-            seen_moving = true;
         }
-        assert_eq!(w.counter, moving_ticks);
+        seen_in_progress |= live.walk(car).in_progress;
+        assert_eq!(live.walk(car).counter, moving_ticks);
     }
-    assert!(seen_moving, "the vehicle moved");
-    assert!(!live.walk(car).moving, "the vehicle arrived and stands");
+    assert!(moving_ticks > 0 && seen_in_progress, "the vehicle moved");
+    assert!(
+        !live.walk(car).in_progress,
+        "the vehicle arrived and stands"
+    );
+    // Off the map (inside a transport): the counter keeps its value.
+    live.world.obj_mut(car).unwrap().on_map = false;
+    assert!(super::walk::held(&live.world, car));
+    live.world.obj_mut(car).unwrap().on_map = true;
+    assert!(!super::walk::held(&live.world, car));
 }
 
 /// Drawing reads the game and never changes it (CONTRIBUTING.md: rendering
