@@ -1002,6 +1002,29 @@ fn claim_16_full_health_refused_at_the_repeated_request() {
     }
 }
 
+// spec: S-0314 claim 16 (revision 107: the depot's permission does not require damage, and its first acceptance makes no damage test) and claim 23 (an enter order on a depot asks for entry at once)
+#[test]
+fn claim_16_first_acceptance_takes_a_full_health_vehicle() {
+    for name in ["DEPOT", "YARD", "PAD"] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, name);
+        let v = truck(&mut w, 0, 6, 1, 600);
+        open(&mut w);
+        assert!(
+            depot::accepts(&w, d, v, true),
+            "{name}: permitted at full health"
+        );
+        depot::order_entered(&mut w, v, Behaviour::Enter, Some(Target::Object(d)));
+        assert_eq!(
+            depot::link(&w, v).map(|l| l.depot),
+            Some(d),
+            "{name}: the first acceptance takes the contact"
+        );
+        assert_eq!(contact(&w, v), Some(d), "{name}");
+    }
+}
+
 // spec: S-0314 claim 16 (revision 107: a tethered vehicle keeps its contact on the full-health refusal, S-0215 claim 29: an existing tether allows entry to continue; without a tether the refusal ends the contact)
 #[test]
 fn claim_16_full_health_refusal_and_the_tether() {
