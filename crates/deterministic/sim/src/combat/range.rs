@@ -500,10 +500,17 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
                 rec.vehicles = rec.vehicles.saturating_sub(1);
             }
         }
-        // spec: S-0307 claims 15 and 19 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, the actor's reach region from its own cell and layer, the candidate's ground-layer region)
+        // spec: S-0307 claims 15 and 19 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, the actor's reach region from its own cell and layer, a deck read through its link by S-0212 claim 4, against the candidate's ground-layer region)
         crate::passability::enterable_by_class(r, w, cell, u.class, u.zone, deck)
             && rec.empty()
-            && crate::regions::same_region(w, u.zone, o.pos.cell(), o.layer, cell, Layer::Ground)
+            && crate::regions::same_region_read(
+                w,
+                u.zone,
+                o.pos.cell(),
+                o.layer == Layer::Deck,
+                cell,
+                false,
+            )
     };
     // The candidate's height (claim 19): a primary at the terrain height of
     // its centre, 416 leptons up on a high bridge; a vehicle's alternative

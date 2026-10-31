@@ -280,11 +280,32 @@ pub fn reach_read(w: &World, c: CellXY, z: MovementZone, deck: bool) -> Reach {
     }
 }
 
+/// Whether two cells lie in one reach region of a zone, each read for its
+/// deck when its flag says so ([`reach_read`]): two reach regions, equal.
+/// A cell of no reach region, an off-map cell and a deck with no link found
+/// match nothing. S-0307 claim 19's clear-cell test: the actor's region from
+/// its actual cell and its ground/deck layer, the candidate's from its ground.
+pub fn same_region_read(
+    w: &World,
+    z: MovementZone,
+    a: CellXY,
+    a_deck: bool,
+    b: CellXY,
+    b_deck: bool,
+) -> bool {
+    // spec: S-0307 claim 19 (the actor's current reach region, determined from its actual cell and its current ground/deck layer) and S-0212 claim 4 (a bridge cell read for its deck: through the first bridge link within 1 cell)
+    match (reach_read(w, a, z, a_deck), reach_read(w, b, z, b_deck)) {
+        (Reach::Region(x), Reach::Region(y)) => x == y,
+        _ => false,
+    }
+}
+
 /// Whether two cells lie in the same connected region of a movement zone
 /// (S-0212 claim 4), the cell layers given for the deck rule of S-0309
 /// claim 7. S-0212 claim 4 reads a deck through a link only where its
-/// claims 6, 14 and 25 say so; every other read, this one included, takes
-/// the cell's own reach region.
+/// claims 6, 14 and 25 say so; this read takes each cell's own reach region
+/// whatever its layer. A rule of another spec that reads a deck uses
+/// [`same_region_read`].
 pub fn same_region(
     w: &World,
     z: MovementZone,
