@@ -3,7 +3,7 @@ id: Q-2192
 title: What an aircraft or building gets from a route-mode press inside a click area
 status: open
 related: [S-0213, S-0215]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-2181
 title: When an effect weapon whose emitter is not matched fires again
-status: open
+status: answered
 related: [S-0301, S-0616, S-0613]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need

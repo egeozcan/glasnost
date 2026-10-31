@@ -1,9 +1,9 @@
 ---
 id: Q-2193
 title: Which points count as inside a click area for the route-mode kind test, and whether right presses meet it
-status: open
+status: answered
 related: [S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need

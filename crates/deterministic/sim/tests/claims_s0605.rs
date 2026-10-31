@@ -1250,6 +1250,50 @@ fn claim_14_sale_releases() {
     assert_eq!(absorb::count(&w, b), 0);
 }
 
+// spec: S-0408 claim 8 (revision 22: the release ignores the type's crewed flag: a building whose type lacks it releases its absorbed passengers as any other does; S-0312's no-crew state never holds at a sale) and claim 7 (revision 22: a type without the crewed flag makes no survivor attempts, C = 0 by S-0312 F5; scenario S6 part e)
+#[test]
+fn a_sale_of_an_uncrewed_type_releases_its_passengers_and_no_survivors() {
+    use glasnost_sim::combat::survivors;
+    for crewed in [false, true] {
+        let mut r = rules();
+        let t = r.sim.buildings.get_mut("BIO").unwrap();
+        t.crewed = Some(crewed);
+        // The refund override (K = 250) and side divisors of 100: a crewed
+        // type's C is positive (S-0312 F5).
+        t.econ.soylent = Some(250);
+        let g = &mut r.sim.general;
+        g.allied_survivor_divisor = Some(100);
+        g.soviet_survivor_divisor = Some(100);
+        g.third_survivor_divisor = Some(100);
+        // House 0's country on side 0, so that F5's divisor applies.
+        r.sides = vec![glasnost_rules::schema::Side {
+            name: "First".into(),
+            members: vec![],
+        }];
+        r.sim.countries.get_mut("Alphaland").unwrap().econ.side = Some("First".into());
+        let mut w = game_on(&r);
+        let b = bio(&mut w, "BIO");
+        let a = fill_one(&mut w, b);
+        let c = fill_one(&mut w, b);
+        let src = survivors::source(&w, b).unwrap();
+        assert!(!src.no_crew, "the no-crew state never holds at a sale");
+        let refund = glasnost_sim::seams::building_refund(&w, b);
+        let n = survivors::count(&w, &src, refund);
+        if crewed {
+            assert!(n > 0, "a crewed type makes attempts: {n}");
+        } else {
+            assert_eq!(n, 0, "no attempts without the crewed flag");
+        }
+        glasnost_sim::econ::sell::sell(&mut w, ALPHA, b);
+        assert!(
+            until(&mut w, 600, |w| w.obj(a).unwrap().on_map
+                && w.obj(c).unwrap().on_map),
+            "crewed {crewed}: the passengers come out"
+        );
+        assert_eq!(absorb::count(&w, b), 0);
+    }
+}
+
 // spec: S-0605 claim 14 and S-0514 claim 12 (erasure deletes the passengers)
 #[test]
 fn claim_14_erasure_deletes() {

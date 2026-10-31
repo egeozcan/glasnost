@@ -2798,9 +2798,7 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         !inside || (disabling && w.cells.cell(goal).is_some() && !w.cells.usable(goal));
     let on_deck = o.layer == Layer::Deck;
     // spec: S-0212 claim 6 (the gate compares the reach regions of the unit's cell, read for its deck when the unit is on a bridge deck, and of the destination, read for its deck when it is a bridge cell, for an aircraft as well)
-    let gate = |w: &World, goal: CellXY| {
-        regions::reach_read(w, from, u.zone, on_deck) == regions::reach_read(w, goal, u.zone, true)
-    };
+    let gate = |w: &World, goal: CellXY| regions::compare(w, u.zone, from, on_deck, goal, true);
     if !gate_skipped && !gate(w, goal) {
         return Search::GateFailed;
     }

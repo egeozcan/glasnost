@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 45
+revision: 54
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158]
 supersedes: []
 ---
 
@@ -124,6 +124,21 @@ has the trigger action that raises one). From S-0307: *airborne*, *floor-bound*,
 - **Shot target, firer's target.** The *shot target* is the object or cell a shot is fired at and
   that its projectile carries. The *firer's target* is the target the firer is currently attacking
   (S-0309, S-0214). They are the same except when the shot target is redirected (claim 3).
+- **A projectile's firer; no firer.** The object that fired the projectile. A projectile *has no
+  firer* when it was made without one, or once its detonation would carry no attacker by S-0302
+  claim 1: its firer was killed or removed from the game while it flies, or started to cloak, as
+  that claim says and rates it. A firer loaded into a closed transport since the shot is still the
+  projectile's firer, as S-0302 claim 1 says and rates it (low). S-0302 claim 1's backing is for
+  the detonation's attacker only, so what each cause does to the flight is rated here, separately.
+  T1's first row rates it in its own cell. Every other rule here that reads whether a projectile
+  has a firer (T1's proximity row, the note below T1, the edge-case entry *Impact with no firer*
+  and the quirk `quirks.owned_shell_ground_pass`) holds at its own level for a projectile made
+  without a firer, for one whose firer is in play outside any transport and has not been killed
+  or started to cloak since the shot, and for one whose firer is a vehicle destroyed while it
+  flies. For a firer killed but kept in play (a death sequence, a delayed kill) or removed by other
+  means it holds at medium, `unmeasured`: no scenario here has such a firer. For a firer that
+  started to cloak, or was loaded into a closed transport, since the shot it holds at low,
+  `unmeasured`, as S-0302 claim 1 rates those two cases: no scenario here has such a firer.
 - **Aim point.** The reference point of the firer's target (no aim shift), moved ahead of a moving
   vehicle by the lead of claim 3.
 - **Impact point** *Q*. The aim point after scatter (claim 4); without scatter, the aim point.
@@ -282,7 +297,9 @@ S-0501 claim 20.
    whose lead-weapon slot is empty does not lead at all. Infantry and aircraft targets are not
    led, whoever the firer is. The stored target point of claim 9 is not led.
    A firer with no current target aims at world position (0, 0, 0) (quirk
-   `quirks.aim_origin_without_target`).
+   `quirks.aim_origin_without_target`). No case is known in skirmish play in which a shot leaves
+   while its firer has no current target, since S-0309 claim 27 drops a destroyed target before
+   the firer's firing step, so the rule matters only if some other path reaches that case.
    - **The speed estimate *u*.** *u* is an integer that the lead formula uses as leptons per tick
      without any conversion. For every vehicle target, whatever its locomotor, it is S-0207's
      speed estimate (claim 18 and F2a there, using F2) formed from that vehicle's own state at the moment the shot is
@@ -307,18 +324,53 @@ S-0501 claim 20.
      target, so the launch still points at that target (quirk `quirks.redirected_shot_aim`). Off:
      the aim point is the reference point of the redirected cell, so the launch direction,
      elevation, scatter and lead of claims 3 to 7 all work towards that cell.
-   - Backing: `measurable` (scenario P2, run c for an aircraft target, run d for *w* = 0, run e
-     for a lead weapon other than the weapon fired, run f for a switching type, run g for a
-     gattling type, runs h and i for the speed estimate at two speed fractions; S-0207 scenario
-     D20 for the estimate itself; P17 for case a, spray attack and area fire; P27 for the aim
-     without a target). The flag-carrier halving is `unmeasured` here as in S-0207 (no skirmish
-     setup is known that makes a vehicle carry a flag). The empty lead-weapon slot is `unmeasured`: such a firer is not *armed* in S-0214's
-     sense (its test is the same slot), so it cannot be ordered to attack, and no case is
-     established in which it fires anyway (automatic targeting by a deploy-fire firer, S-0309,
-     would be the only candidate). The fragment exception is not backed here: it rests on S-0318
-     claim 6.
-   - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target),
-     high for the speed estimate *u*; low for the fragment exception, as S-0318 claim 6 rates it
+   - (b) **A switched-off hovering vehicle.** A hovering vehicle is moving while it has a
+     destination or a heading point (S-0503, Terms). The stop request of a switch-off clears its
+     destination and stored path only when destination and heading point differ as full
+     three-dimensional points, and otherwise leaves them (S-0503 claim 10), and it does not zero the
+     speed fraction (S-0503 claim 4). A switched-off hovering vehicle that remains moving under
+     S-0503 is led by this claim's ordinary moving-vehicle rule: every shot at it is led along its
+     body facing with the speed fraction it holds (quirk `quirks.switched_off_hover_lead`). Whether
+     the switch-off retains its heading point belongs to S-0503, which does not state it, so this
+     claim does not say whether a switched-off vehicle that has stopped travelling is still moving.
+     Whether the targets of M-0005 that never change cell were moving in S-0503's sense is not
+     recorded (Open questions), so this case is not shown to apply to them. Whether and how far a
+     switched-off vehicle travels, and when it reaches or replaces its heading point, are S-0503's
+     (claims 2, 5, 7, 8 and 10); this claim does not state them. Off: a switched-off vehicle is not
+     led. The lead moves only the aim point of this claim, from which the launch direction,
+     elevation and impact point are computed. The projectile keeps no led point: the target point it
+     stores is *K* of claim 9, the target's reference point, so a led shot and an unled one at the
+     same target store the same point, and a led shot shows its lead only in its launch velocity and
+     its flight. Consequences: a lead away from the firer can make an arcing shot void (claim 6 a).
+     Otherwise T1 and T2 determine its detonation and claim 20 its detonation point. A straight or
+     arcing projectile whose firer is still in play outside any transport and has not been killed or
+     started to cloak since the shot is not detonated by the terrain (T1, its first row and note),
+     so a shot that passes below the ground short of the vehicle flies on and can detonate away from
+     it.
+   - Backing: `measurable` (scenario P2, run c for an aircraft target, run d for *w* = 0, run e for
+     a lead weapon other than the weapon fired, run f for a switching type, run g for a gattling
+     type, runs h and i for the speed estimate at two speed fractions; S-0207 scenario D20 for the
+     estimate itself; P17 for case a, spray attack and area fire; P44 part a for case b, including
+     the stored point of a led shot, and part b for a shot that passes below the ground
+     unexploded). M-0005's per-shot aim point, the target's position at its fire
+     event for every detonated projectile, is the point *K* that each projectile stores, which the
+     lead does not move: the record agrees with case (b) and does not test it, since it records
+     neither launch velocities nor heading points. The flag-carrier halving is `unmeasured` here as
+     in S-0207 (no skirmish setup is known that makes a vehicle carry a flag). The empty lead-weapon
+     slot is `unmeasured`: such a firer is not *armed* in S-0214's sense (its test is the same
+     slot), so it cannot be ordered to attack, and no case is established in which it fires anyway
+     (automatic targeting by a deploy-fire firer, S-0309, would be the only candidate). The fragment
+     exception is not backed here: it rests on S-0318 claim 6. The aim without a target is
+     `unmeasured`: under S-0309 claim 27 a target destroyed earlier in the tick is dropped before
+     the firer's firing step, which then fires nothing, so scenario P27 gives no shot with an empty
+     current target, and no scenario here sets up a shot that leaves while the firer holds no
+     current target.
+   - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target, and
+     that no skirmish case reaches it; the switched-off case (b), which applies the ordinary lead to
+     a vehicle that S-0503 counts as moving, at S-0503's medium for its moving test and for claim
+     10; the unled stored point of a led shot), high for the speed estimate *u*; high that a shot of
+     a firer still in play, as above, passes below the ground unexploded, the case of T1's first row
+     that P44 part b tests; low for the fragment exception, as S-0318 claim 6 rates it
 
 4. **Scatter of inaccurate arcing projectiles.** Only a projectile that is both arcing and
    inaccurate scatters at launch. The impact point is the aim point moved by a radius *σ* in a
@@ -350,34 +402,47 @@ S-0501 claim 20.
    own position instead of the fire point; a steering projectile starts at the fire point (raised by
    claim 8 when it is not above the terrain, at claim 8's confidence). A
    fragment of S-0318 is excepted: it starts at the burst point and is aimed at the reference point
-   of its aim point in S-0318's sense (S-0318 claim 6), not at this spec's aim point.
+   of its aim point in S-0318's sense (S-0318 claim 6), not at this spec's aim point. The fire
+   point of claims 5 to 7 is the point before claim 8's raise (claim 8).
    - Backing: `measurable` (scenario P4; its variant g for the aiming facing of a projectile with
      ρ ≠ 0; P21 for a dropping projectile; P9 run a for the start of a steering projectile at the
      fire point). The fragment exception is not backed here: it rests on S-0318 claim 6 (S-0318
      scenario SH7 for the horizontal direction)
-   - Confidence: high (the horizontal start and the direction); medium for the raise in height,
-     as claim 8 rates it; low for the fragment exception, as S-0318 claim 6 rates it
+   - Confidence: high (the horizontal start and the direction); medium for the raise in height
+     and for the unraised fire point of claims 5 to 7, as claim 8 rates them; low for the fragment
+     exception, as S-0318 claim 6 rates it
 
 6. **Launch elevation.** Every projectile except a fragment of S-0318 takes its pitch from the
    first of (a) to (c) that fits its flags (Terms, "Flags and kinds"). (a) to (c) do not apply to a
    fragment: it climbs at S-0318 claim 6's fixed elevation instead, while its
    horizontal direction is claim 5's exception for fragments (S-0318 claims 5 and 6).
-   - (a) **Arcing flag.** The pitch is the solution of F4 for the start speed *s* (claim 2), the planar distance
-     *d*′ to the impact point, the height difference Δ*z* = *Q*.z − *F*.z and gravity. When the
-     impact point is higher than the fire point (Δ*z* > 0) the projectile is always launched at
-     45° (pitch facing 8191; quirk `quirks.uphill_arc_45`), whatever the speed and distance, so such
-     a shot is never void. Otherwise the flatter solution is used, unless the shot is a *lob*: the weapon
-     has the lobber flag, or the reference point of the firer's target is higher above the firer's
-     position than it is far from it horizontally (planar distance *d*₂); a lob takes the
-     steeper solution. The reachability test F3 plays no part in the launch: the shot is void
-     (S-0301 claim 15; the projectile is removed before it enters play) exactly when F4 has no
-     solution, which for Δ*z* ≤ 0 happens when the start speed is too low for the distance (for
-     example with a negative turn-rate field and a small speed field, Edge cases) or at zero
-     planar distance with Δ*z* = 0 (F4). At zero planar distance with Δ*z* < 0 (the impact point
-     exactly below the fire point) F4 has a solution: with a start speed above 0 a lob is launched
-     straight up and the flatter shot straight down or straight up by the test of F4; with a start
-     speed of 0 the angle comes out just short of π, so the projectile is launched horizontally
-     backwards (F4; quirk `quirks.zero_distance_arc`, Edge cases).
+   - (a) **Arcing flag.** The pitch is the solution of F4 for the start speed *s* (claim 2), the
+     planar distance *d*′ to the impact point, the height difference Δ*z* = *Q*.z − *F*.z and
+     gravity. When the impact point is higher than the fire point (Δ*z* > 0) the projectile is
+     always launched at 45° (pitch facing 8191; quirk `quirks.uphill_arc_45`), whatever the speed
+     and distance, so such a shot is never void. Otherwise the flatter solution is used, unless the
+     shot is a *lob*: the weapon has the lobber flag, or the reference point of the firer's target
+     is higher above the firer's position than it is far from it horizontally (planar distance
+     *d*₂); a lob takes the steeper solution. The reachability test F3 plays no part in the launch:
+     the shot is void (S-0301 claim 15; the projectile is removed before it enters play) exactly
+     when F4 has no solution, which for Δ*z* ≤ 0 happens when the start speed is too low for the
+     distance (for example with a negative turn-rate field and a small speed field, Edge cases) or
+     at zero planar distance with Δ*z* = 0 (F4). With ρ = 0 the start speed comes from the distance
+     to the shot target's point (claim 1), but F4 is solved for the distance to the impact point,
+     which includes the lead of claim 3, so a lead away from the firer can leave F4 without a
+     solution and make the shot void. In an ordinary vehicle firing step after the rearm
+     countdown has run out, a void launch leaves that countdown unchanged (S-0301 claim 15,
+     medium). Further attempts remain subject to the firing check: on each later answer *can fire*
+     the firer attempts the shot again (S-0310 claim 9). For a projectile that does not scatter at
+     launch (claim 4), while the firer, its target and the target's lead stay as they are, every
+     such attempt is void and launches no projectile. An arcing and inaccurate projectile takes a
+     new scatter at each attempt, its draws coming before the solution of F4 (claims 4 and 24,
+     scenario P5 run d), so its impact point can differ from attempt to attempt, and an attempt
+     whose scattered impact point F4 can reach launches a projectile. At zero planar distance with
+     Δ*z* < 0 (the impact point exactly below the fire point) F4 has a solution: with a start speed
+     above 0 a lob is launched straight up and the flatter shot straight down or straight up by the
+     test of F4; with a start speed of 0 the angle comes out just short of π, so the projectile is
+     launched horizontally backwards (F4; quirk `quirks.zero_distance_arc`, Edge cases).
    - (b) **No arcing flag, drawn as a voxel model.** Pitch facing 32768 (straight down, Terms) when
      the target's reference point is lower than the firer's, else 16384, one unit below level,
      which table trigonometry turns into exactly the same velocity as level (Terms). The difference
@@ -398,14 +463,23 @@ S-0501 claim 20.
      or (c) points it up. A steering projectile starts pitched the same way, and its flight
      rules turn it (claim 15).
    - Backing: `measurable` (scenario P5, runs a to c for case (a), run f for the arcing flag on a
-     steering type, run d for the void shot and run
-     e for the height-based lob test; P37 for zero planar distance; S-0204 scenario C4 for the exception index 1024 of F13; P4 for cases (b) and (c), its
-     variant f for the building term; P8 runs a and d and P9 run h for case (d)). The fragment
-     exception is not backed here: it rests on S-0318 claims 5 and 6 (S-0318 scenario SH7 for the
-     horizontal direction; the elevation `unmeasured` there)
-   - Confidence: high in case (a) except the height-based lob test and zero planar distance
-     (medium); medium in cases (b) and (c) and (d); low for the fragment exception, which rests
-     on S-0318 claims 5 and 6, where a fragment's launch direction is rated low
+     steering type, run d for the void shot and run e for the height-based lob test; P44 part a for
+     the repeated attempts at a led aim point, with a projectile that is not inaccurate, that create
+     no projectile and leave the rearm countdown unchanged. That these attempts reach the launch and
+     are void, rather than refused by the firing check, is `unmeasured`: P44's recorder does not
+     read the firing check's answer, and no run here tells the two apart. The new scatter of each
+     attempt of an inaccurate one is `unmeasured` as a repetition, since no run repeats a void
+     attempt of an inaccurate projectile, and rests on P5 run d's draws, taken before its shot is
+     found void; P37 for zero planar distance; S-0204 scenario C4 for the exception index 1024 of
+     F13; P4 for cases (b) and (c), its variant f for the building term; P8 runs a and d and P9 run
+     h for case (d)). The fragment exception is not backed here: it rests on S-0318 claims 5 and 6
+     (S-0318 scenario SH7 for the horizontal direction; the elevation `unmeasured` there)
+   - Confidence: high in case (a), except the height-based lob test, zero planar distance, the
+     repeated attempts at a led aim point that create no projectile and leave the countdown
+     unchanged, the reading of them as void launches rather than refusals (`unmeasured`), and the
+     new scatter of each attempt of an inaccurate projectile (medium); medium in cases (b) and (c)
+     and (d); low for the fragment exception, which rests on S-0318 claims 5 and 6, where a
+     fragment's launch direction is rated low
 
 7. **Initial velocity.** The velocity is built with table trigonometry (F1) from the start speed
    *s* of claim 2 (so its length is 1 for a steering or vertical projectile whose firer type has no
@@ -652,14 +726,22 @@ S-0501 claim 20.
 
 17. **Losing the target.** When the target object leaves the game, or becomes untargetable (for
     example by being teleported), the projectile's target becomes the cell the target stood in if
-    the target was not airborne, else nothing. A steering projectile without target (Terms, *No
-    target point*, which includes a target whose target point is the world origin) climbs (claim 15)
-    and detonates once its height above the surface reaches the game-wide missile safety altitude.
+    the target was not airborne, else nothing. Being teleported here is the teleporting
+    locomotor's own jump (S-0207 claim 20 e). The departure of a superweapon warp member is not such
+    a loss (S-0513 claim 39): a projectile in flight towards the member keeps it as its target
+    object, and its target does not become the cell the member stood in. Where it then flies while
+    the member waits to land, and whether it can hit the member, S-0513 leaves open. A steering
+    projectile without target (Terms, *No target point*, which includes a target whose target point
+    is the world origin) climbs (claim 15) and detonates once its height above the surface reaches
+    the game-wide missile safety altitude.
     A projectile whose firer leaves the game keeps flying and detonates normally (S-0203 claim 6 d).
     - Backing: `measurable` (scenario P11: run a for the airborne target, run c for the target on
       the ground, run d for a target that teleports, run e for a firer that leaves the game; P38
-      for a building target whose target point is the world origin)
-    - Confidence: high; medium for the target point at the world origin
+      for a building target whose target point is the world origin). The warp departure sentence
+      is `unmeasured`, as S-0513 claim 39 rates it: no scenario here or in S-0513 fires at a member
+      as it departs
+    - Confidence: high; medium for the target point at the world origin; medium, unmeasured, for
+      the warp departure sentence
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
@@ -682,12 +764,15 @@ S-0501 claim 20.
     - Backing: `measurable` (scenarios P6, P7, P9, P11, P13, P18; P22 to P25 and P29 to P34 for
       single rows, P36 for the speed row; P26 for removal and T2; S-0614 scenario P11 for
       carrier loss, with that spec's unmeasured qualification for other removal causes, and
-      P32 runs f, g, i and j for the open-gate control, firer exception, inactive laser-fence
-      section exception and vehicle-like-building exception of the first row). The rule that the rows of this spec never remove a
-      steering projectile for leaving the map is `unmeasured`: what then happens to such a
-      projectile is not established (Open questions), so no scenario could predict an outcome
+      P32 runs f, g, i and j for the open-gate control, the projectile with a firer, the inactive
+      laser-fence section exception and the vehicle-like-building exception of the first row; P44
+      parts b and c for the first row with and without a firer). The rule that the rows of this spec
+      never remove a steering projectile for leaving the map is `unmeasured`: what then happens to
+      such a projectile is not established (Open questions), so no scenario could predict an outcome
       that would confirm or falsify it.
-    - Confidence: high for the rows marked high in T1; medium for T2
+    - Confidence: high for the rows marked high in T1 and for the high part of its first row,
+      medium and low for the rows and parts that T1 marks so (the proximity row per cause of a
+      lost firer as Terms rates it), and medium for T2
 
 20. **Where it detonates.** The detonation point is the projectile's position after the moves of T1
     and T2, changed by the three rules below, in the order listed. Each rule works on the point that
@@ -1597,10 +1682,10 @@ what happens when several rows apply. Straight and arcing projectiles share ever
 
 | Kind | Condition | Result | Confidence |
 |---|---|---|---|
-| straight, arcing | *P*′ is below the terrain of its cell; or *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell) going up or down; or *P*′ is 0 to 149 leptons above the terrain and its cell holds either an eligible building (not the firer, not an inactive laser-fence section, not a vehicle-like building, not allied with the firer's house) or, with no building present, one of the three wall overlays of S-0307 claim 11 | detonate (z at the deck height going up, 20 below it going down, otherwise unchanged) | medium |
+| straight, arcing | *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell) going up or down; or, only for a projectile that has no firer (Terms; quirk `quirks.owned_shell_ground_pass`), *P*′ is below the terrain of its cell, or *P*′ is 0 to 149 leptons above the terrain and its cell holds either an eligible building (not an inactive laser-fence section, not a vehicle-like building; any house's) or, with no building present, one of the three wall overlays of S-0307 claim 11 | detonate (z at the deck height going up, 20 below it going down; otherwise the point ends at the terrain height of the cell of *P*′, lowered to it from above or raised to it by claim 20 a) | medium; high that only the deck crossings detonate a projectile whose firer is still in play outside any transport and has not been killed or started to cloak since the shot, and that the whole row applies to one whose firer is a vehicle destroyed while it flies (P32 runs a and g, P44 parts b and c); medium, `unmeasured`, for another firer killed but kept in play (a death sequence, a delayed kill) or removed by other means: no scenario here has such a firer; low, `unmeasured`, that the whole row applies when the firer started to cloak since the shot and only the deck crossings when it was loaded into a closed transport since the shot, as S-0302 claim 1 rates those two cases (Terms): no scenario here has such a firer |
 | straight, arcing | the cell of *P*′ is the cell of *K* and *h* < 208 | detonate; "reached" for claim 20 | high |
 | straight, arcing | the cells of *P*′ and *K* hold the same building and *h* < 208 | detonate; "reached" | medium |
-| not steering | the infantry, vehicle, aircraft or building nearest to *P*′ in its cell is at *d*₃ < 128 leptons from *P*′ and is neither the firer nor allied with the firer's house (with no firer, any object counts) | detonate; the position moves onto that object unless inaccurate | medium |
+| not steering | the infantry, vehicle, aircraft or building nearest to *P*′ in its cell is at *d*₃ < 128 leptons from *P*′ and is neither the firer nor allied with the firer's house (with no firer, any object counts) | detonate; the position moves onto that object unless inaccurate | medium for a projectile made without a firer, a living firer in play outside any transport and a vehicle firer destroyed while it flies (P30); for another lost firer, or a firer loaded into a closed transport, as Terms rates it (medium or low, `unmeasured`) |
 | not steering | speed \|*V*\| (after this turn's change of the velocity) < 10 and *h* < 10 | detonate | high |
 | vertical | world height of *P*′ above the detonation altitude, or *h* < 0, or *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell; deck height = terrain height of the cell of *P*′ + 416): going up when *P* is below the deck height and *P*′ at or above it, going down when *P* is at or above it and *P*′ below it | detonate; the outcome is *P*′ with no change of height (no move to the deck height, no 20-lepton drop), then claim 20 as always | medium |
 | steering | half its speed (\|*V*\| after this turn's heading and pitch changes) ≥ its steering distance (Terms; without a target trunc(\|*V*\|), so only a speed below 1) | detonate; the position moves to the target point when *h* > 0, not airburst and a target exists (its target point is not the world origin, Terms) | medium |
@@ -1637,10 +1722,20 @@ average is *C*₀ = 0, *C*ₖ = *C*ₖ₋₁ + *c*ₖ for *k* ≤ 60, *C*ₖ = R
 59/60, multiplied in one step (not × 59 then ÷ 60); the *c*ₖ are integers, so the sums for *k* ≤ 60
 are exact. The row tests 0 ≤ *C*ₖ < 60 on that double, for *k* > 60 only. A dropping projectile ignores the arrival and
 passed-by rows. A row's "detonate" takes effect at once, except for a projectile with the nuclear
-warhead (claim 25), which first waits for an animation. For a straight or arcing projectile over open terrain (away from high bridges) the
-deep-fall row is already covered by the first row (below the terrain), so it shows there only as
-that row; it is observable for a steering or vertical projectile, whose rows otherwise test the
-height at the start of the turn.
+warhead (claim 25), which first waits for an animation. A straight or arcing projectile that has a
+firer is not detonated by the terrain, a building or a wall overlay through the first row: below
+the terrain it flies on, following its velocity and gravity as above it, and detonates by the
+first other row of T1 that applies, with T2 and claim 20 giving the point. The first row's
+confidence cell rates this for each cause by which a projectile can lose its firer (Terms). For
+example, a "reached" row applies when it enters the cell of *K* with *h* < 208, which includes a
+negative *h*, so a shot that passes below the ground short of that cell can still hit there. The
+proximity row applies near an object. The deep-fall row applies where it has sunk 416 leptons below
+the surface, which can lie short of its impact point as well as beyond it, since gravity also pulls
+a straight projectile below its line (claim 10). Claim 20 (a) then raises the point to the
+surface. For a straight or arcing projectile with no firer over open terrain (away from high
+bridges) the deep-fall row is already covered by the first row (below the terrain), so it shows
+there only as that row. The deep-fall row is observable for a steering or vertical projectile,
+whose rows otherwise test the height at the start of the turn.
 
 **T2. Outcome of a turn in which rows apply** (claim 19). The outcome of a turn, the position of
 the detonation or a removal, depends on which rows of T1 apply in it, one or several. The tables
@@ -1704,8 +1799,8 @@ that no fix would change.
   (claim 13). Off: *t* = 256 × min(*q*, 127) (*q*\* near the target), always turning towards the goal.
 - **`quirks.aim_origin_without_target`** (default on). A shot fired while the firer has no current
   target is launched towards world position (0, 0, 0) (claim 3); an invisible projectile still lands
-  on its shot target, other kinds fly off towards the map's corner. Off: the aim point is the shot
-  target's reference point.
+  on its shot target, other kinds fly off towards the map's corner. No case is known in skirmish
+  play that reaches this (claim 3). Off: the aim point is the shot target's reference point.
 - **`quirks.shot_distance_wrap`** (default on). The sum of squares of the shot-speed distance of
   claim 1 is formed in 32-bit integer arithmetic: once the exact sum Δ*x*² + Δ*y*² reaches 2³¹
   (an exact planar distance of about 46341 leptons, some 181 cells), the value used is the sum
@@ -1822,10 +1917,31 @@ that no fix would change.
   point gives the 45° launch of claim 6 a. Reproduced, the importer warns about the combination,
   no switch: a mod that wants the vertical or steering flight with a usable launch removes the
   arcing flag.
-- **Ownerless arcing impact.** An arcing projectile whose firer has left the game detonates in the
-  turn in which it hits the ground, as any other does, at the point of claim 20 (raised to the
-  surface by claim 20 (a)). The projectile type's elasticity field has no observable effect on it,
-  so it is not imported. No switch.
+- **`quirks.owned_shell_ground_pass`** (default on). A straight or arcing projectile that has a
+  firer (Terms; T1's first row rates each cause by which a projectile loses its firer, low for
+  a firer that started to cloak or was loaded) is not detonated by the terrain, by the building
+  band or by the wall overlays of T1's first row. Only that row's deck crossings detonate it. It
+  can fly on below the surface until another row of T1 detonates it (the note below T1), with T2
+  and claim 20 giving the point, and claim 20 (a) raises a detonation point below the surface. An
+  enemy building in its path that does not share a cell with *K* stops it only by the proximity row,
+  a wall only by the line-of-fire row. Off: the first row applies to every straight or arcing
+  projectile as it does to one with no firer, so a shot detonates where it first passes below the
+  terrain or enters the band of a building or wall overlay, except that the firer itself and a
+  building allied with the firer's house do not stop it.
+- **Impact with no firer.** A straight or arcing projectile with no firer detonates in the turn in
+  which it passes below the terrain or enters the band of an eligible building or wall overlay
+  (T1's first row, which rates each cause by which a projectile loses its firer), at the point of
+  claim 20 (raised to the surface by claim 20 (a)). The
+  projectile type's elasticity field has no observable effect on it, so it is not imported. No
+  switch.
+- **`quirks.switched_off_hover_lead`** (default on). A hovering vehicle switched off while it
+  remains moving under S-0503 is led as a moving vehicle for as long as S-0503 counts it as moving
+  (claim 3 b). Shots of a straight or arcing projectile at it are aimed
+  ahead of it along its body facing. An arcing shot at it can be void (claim 6 a). Otherwise T1 and
+  T2 determine their detonation, and with `quirks.owned_shell_ground_pass` a shot that passes below
+  the ground short of it flies on and can detonate away from it. Attackers that keep it as their
+  target can then fail to destroy it for the rest of the game. Off: a vehicle that is switched off
+  is not led, so the aim point is its reference point.
 
 - **A voxel-flagged projectile without voxel art (departure, a fault of the original).** When a
   projectile type's voxel art is absent or discarded (S-0007 claim 18), the original keeps the
@@ -1995,9 +2111,25 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   fires does not count.
 
 **P3. Scatter (claims 4, 9, 24).**
-- Setup: an arcing, inaccurate test weapon firing at a fixed cell 6 cells away (a ground attack
-  on the cell), ballistic scatter set to 512.
-- Observable: detonation points; random-stream draws per shot with the recorder.
+- Setup: an arcing, inaccurate test weapon firing at a fixed cell 14 cells away (a ground attack
+  on the cell) on level ground, its range set to cover that distance, and ballistic scatter
+  set to 512. Its test projectile has a turn-rate field of 0 (ρ = 0), so its shot speed is claim
+  1's, and is not a floater. The test file sets the gravity to a local test value. The fixture
+  keeps every scattered impact point reachable: for every impact point within 512 leptons of the
+  cell's point, F4 has a solution with the start speed of claim 2 for that point. Without claim
+  2's cap the speed of claim 1 alone gives a level reach of about 1.2 *d*, which at 14 cells
+  passes *d* + 512 (0.2 × 3584 is above 512); the test gravity must also keep the cap from
+  binding below that reach. The observer confirms the condition from the recorded planar
+  distance *d*, the test gravity and claims 1 and 2 before a run counts. Variants b, d and e use
+  the same distance.
+- Observable: each projectile's impact point (Terms), which the recorder reads directly when the
+  projectile enters play, as it reads its first velocity. The detonation point is not used for
+  it, since a projectile with a firer flies on below the surface (T1's note). Also the detonation
+  points of the invisible projectiles of (d) and (e), and the random-stream draws per shot with
+  the recorder. If the recorder cannot read the impact point, runs a, b, e and f give no result
+  for their distances. The recorder also logs each fire attempt and whether it creates a
+  projectile, as in P44 part a. A run of a, b or e counts only if the fixture condition is
+  confirmed and every fire attempt creates a projectile; otherwise it is void.
 - Runs: 200 shots; variant b with the flak-scatter flag; variant d with an invisible
   flak-scattering projectile that is straight and not inaccurate (so claim 4 does not apply to
   it); variant e with the same projectile made arcing and inaccurate as well.
@@ -2016,13 +2148,17 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   variant b with a range of 10 cells, fired by a stock vehicle that the test file makes an
   open-topped transport with that weapon, carrying one infantry passenger whose type's primary
   weapon has a range of 7 cells; the target 6 cells away (the range test uses the transport's own
-  range, S-0307 claim 13). The passenger fires from the transport too, so only detonations of the
-  transport weapon's projectile type (recorded, as in P2) count. Runs: 200 shots of the transport
-  weapon, and a control of 200 shots without the passenger.
-  Expected: distances between 0 and 512 × *D* / *R*_W with *R*_W = 7 cells (1792 leptons), so
-  about 30 % of them above 512 × *D* / 2560, the bound of a 10-cell range; the control stays
-  within 512 × *D* / 2560. Falsified if no distance with the passenger exceeds 512 × *D* / 2560
-  (+1), or one exceeds 512 × *D* / 1792 (+1). This ordinary passenger uses slot 0 as its current
+  range, S-0307 claim 13). The passenger fires from the transport too, so only projectiles of the
+  transport weapon's projectile type (recorded, as in P2) count, each by its recorded impact
+  point. Runs: 200 shots of the transport weapon, and a control of 200 shots without the
+  passenger.
+  Expected: distances between 0 and 512 × *D* / *R*_W with *R*_W = 7 cells (1792 leptons), some
+  of them above 512 × *D* / 2560, the bound of a 10-cell range; the control stays within
+  512 × *D* / 2560. Here the scatter radius can pass 0.2 *D*, so an outward impact point can lie
+  beyond the reach of claim 1 and F2 and its attempt is void (claim 6 a): only created
+  projectiles are judged, and the share above 512 × *D* / 2560 is not predicted. Falsified if no
+  distance with the passenger exceeds 512 × *D* / 2560 (+1), or one exceeds 512 × *D* / 1792
+  (+1). This ordinary passenger uses slot 0 as its current
   weapon, so this run does not distinguish current-weapon selection from a primary-only rule.
   The distinguishing multi-weapon and missing-weapon fixtures remain pending in S-0307 RG16.
 
@@ -2560,7 +2696,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Runs: 10 shots (the spray pick is random).
 - Expected: (a) every launch direction is S-0204 F3 from the fire point towards the target vehicle
   (not towards the spray cell), and the projectile detonates in the spray cell only if its path
-  crosses it, otherwise when another row of T1 applies (for example on reaching the ground). (b)
+  crosses it, otherwise when another row of T1 applies (for example the deep-fall row below the
+  ground). (b)
   the launch direction points at the target vehicle, while the first step is *v*(*d*, 10) of the
   distance *d* to the firer's own cell (capped by claim 2), not of the distance to the target.
 - Falsified if: the launch direction points at the spray cell or the firer's cell, or in run b the
@@ -2575,7 +2712,7 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Expected: (a) detonation in the first turn whose new cell is not a water tile; (b) in the turn in
   which the new position is in the target cell, provided the height above the surface at the start
   of that turn is below 208; when it is not, the projectile flies on and detonates by another row
-  (below the terrain, or speed and height).
+  (the deep-fall row once below the terrain, or speed and height).
 - Falsified if: (a) it flies over land, or (b) it detonates in the target cell while its height at
   the start of that turn was 208 or more.
 
@@ -2716,26 +2853,34 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   map edge, the target standing in the last legal row on that edge (so that part of the scatter
   annulus lies outside the legal map).
 - Observable: for each of 100 shots, the explosion animation (count and position), the target's
-  damage, and whether a projectile remains.
+  damage, whether a projectile remains, and the projectile's position and height above the
+  surface at the start of each of its turns (the recorder).
 - Runs: 100 shots.
-- Expected: shots whose impact point lies outside the legal map produce no explosion and no
-  damage and leave no projectile (removal at its position of the start of the turn); every
-  explosion lies inside the legal map; the share of removed shots is about the share of the
-  scatter annulus outside the map.
-- Falsified if: an explosion appears outside the legal map, or every shot explodes.
+- Expected: the outcome of each shot is the one that T1 and T2 give for its recorded positions
+  and heights: a shot that leaves the legal map in a turn in which neither a "reached" row nor the
+  proximity row applies, and that has not detonated before, produces no explosion and no damage
+  and leaves no projectile (removal at its position of the start of that turn); every other shot
+  detonates where T2 and claim 20 place it. The share of removed shots is recorded; it is not
+  predicted from the scatter alone, since a shot whose impact point lies outside the map can be
+  detonated before it leaves the map (T2), and one whose impact point lies inside can still leave
+  it below the ground (T1's note).
+- Falsified if: a shot whose recorded flight T1 and T2 make a removal explodes or does damage, or
+  one that they make a detonation is removed without one.
 
-**P27. Aim without a target (claim 3, `quirks.aim_origin_without_target`).**
+**P27. A target destroyed before the shot (S-0309 claim 27; claim 3's aim without a target).**
 - Setup: a straight, not inaccurate test projectile (not invisible) fired by a turreted vehicle at a
-  vehicle 6 cells away; the target is destroyed by a second, instant weapon in the same tick, so
-  that the recorder shows the firer's current target empty when the shot leaves (the tick is
-  chosen from the recording of a first run). A control run with the target alive. A variant with an
-  invisible projectile.
-- Observable: the first velocity of the shot, the firer's current target, the detonation point.
+  vehicle 6 cells away; the target is destroyed by a second, instant weapon in the same tick in
+  which the turreted vehicle's rearm countdown has run out (the tick is chosen from the recording
+  of a first run). The second weapon's firer belongs to the turreted vehicle's house, and no other
+  object of a house that is not its ally is on the map. A control run with the target alive.
+- Observable: the firer's fire events, its current target in each turn, and the first velocity of
+  any shot it fires in that tick.
 - Runs: 3 each.
-- Expected: with the target empty the launch direction is S-0204 F3 from the fire point towards
-  world position (0, 0, 0) (the control: towards the target); the invisible variant detonates at
-  the shot target's reference point as claim 9 says.
-- Falsified if: the shot with an empty current target is aimed at the shot target.
+- Expected: when the destruction comes earlier in the tick than the firer's turn, the firer holds
+  no target in its turn and fires nothing in that tick (S-0309 claim 27); when its turn comes first,
+  it fires at the live target, its launch direction towards that target (the control: the same).
+  This part therefore does not reach claim 3's aim without a target, which stays `unmeasured`.
+- Falsified if: the firer fires in its turn after the destruction in that tick.
 
 **P28. Zero shot speed (claim 7, `quirks.zero_speed_launch`).**
 - Setup: a weapon with the area-fire flag and a straight, not inaccurate projectile with ρ = 0, a
@@ -2805,10 +2950,11 @@ fire point (S-0313, the fire point's height term in the test file) and check the
     recorded the halved distance trunc(*d*₀ / 2), or checked), or flies on through its second turn.
 
 **P30. Proximity (T1).**
-- Setup: a straight, not inaccurate test projectile (fire point raised as in P7) fired at a cell 8
-  cells away; an enemy vehicle stands on the line 4 cells from the firer, and, on a second run, an
-  allied vehicle instead; a third run with the inaccurate flag and the enemy vehicle; a fourth run
-  with the allied vehicle and the firer destroyed by another weapon after the shot (no firer).
+- Setup: a straight, not inaccurate test projectile (fire point raised as in P7) fired by a test
+  vehicle at a cell 8 cells away; an enemy vehicle stands on the line 4 cells from the firer,
+  and, on a second run, an allied vehicle instead; a third run with the inaccurate flag and the
+  enemy vehicle; a fourth run with the allied vehicle and the firer destroyed by another weapon
+  after the shot (no firer).
 - Observable: the detonation tick and point, the distance from the projectile to the vehicle.
 - Runs: 4 (one of each; no draw decides the outcome).
 - Expected: with the enemy vehicle the projectile detonates in the first turn in which the new
@@ -2844,32 +2990,32 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   the obstacle and accept a crossing only when no other detonation row applies, in particular no
   nearest-object proximity, arrival or same-building row. Use named test-map overrides for the projectile and
   exceptional building types, with no engine add-on and no mods (the named test files of a scenario excepted), at game speed 2.
-- Setup: a straight, not inaccurate test projectile with ρ = 0, fired across a cell holding an enemy
-  building so that it is about 100 leptons above the terrain there (run a) or 200 above it (run b),
-  run c: the building is allied with the firer; run d: a wall segment of the wall overlay in that
-  cell, the projectile 100 above the terrain; run e: an overlay that is not a wall (an ore patch)
-  instead; run f: the building is an enemy gate held open by its owner's vehicle passing through
-  it while the projectile crosses at about 100 above the terrain (the gate is neither laser-fence
-  flagged nor vehicle-like); run g (the firer exception): the
-  firer is a stock defensive building with the test weapon, firing at a vehicle 5 cells away, and
-  the run counts only when the recorded height of the projectile in a turn that ends in the
-  firer's own cells is 0 to 149 above the terrain; run h (the same-building row): an enemy stock
-  building with a foundation of at least 2 × 2 cells as the shot target, the fire point raised so
-  that the projectile enters a cell of the building other than the cell of *K* at 150 to 207
-  leptons above the terrain, with a start-of-turn height below 208 (the run counts only when the
-  recording shows this). Run i: replace run a's building by a map-placed enemy laser-fence
-  section, initially inactive (S-0211 Terms). Run j: replace it by an enemy vehicle-like building
-  (S-0214 Terms). Pair i and j with an otherwise matching ordinary-building control.
+- Setup: a straight, not inaccurate test projectile with ρ = 0, fired by a test vehicle across a
+  cell holding an enemy building so that it is about 100 leptons above the terrain there (run a) or
+  200 above it (run b). Except in runs g and h the firer is destroyed by another weapon after the
+  shot and before the projectile reaches that cell, so that the projectile has no firer (Terms); a
+  run in which the firer survives that long does not count. Run c: the building is allied with the
+  firer's house; run d: a wall segment of the wall overlay in that cell, the projectile 100 above
+  the terrain; run e: an overlay that is not a wall (an ore patch) instead; run f: the building is
+  an enemy gate held open by its owner's vehicle passing through it while the projectile crosses
+  at about 100 above the terrain (the gate is neither laser-fence flagged nor vehicle-like); run g
+  (the projectile with a firer): run a with the firer left alive; run h (the same-building row):
+  an enemy stock building with a foundation of at least 2 × 2 cells as the shot target, the fire
+  point raised so that the projectile enters a cell of the building other than the cell of *K* at
+  150 to 207 leptons above the terrain, with a start-of-turn height below 208 (the run counts only
+  when the recording shows this). Run i: replace run a's building by a map-placed enemy
+  laser-fence section, initially inactive (S-0211 Terms). Run j: replace it by an enemy
+  vehicle-like building (S-0214 Terms). Pair i and j with an otherwise matching ordinary-building
+  control.
 - Observable: the projectile's cell and height per tick, the detonation tick and point.
 - Runs: 1 each.
-- Expected: (a), (d) and (f) detonation in the first turn whose new position lies in that cell and
-  0 to 149 above the terrain. In (b), (c), (e), (i) and (j) the projectile flies over the cell,
-  while the ordinary-building controls detonate. (g) It leaves the firer's cells without detonating.
-  (h) detonation in the first turn whose new position lies in a cell of the building, although it
-  is above the band of the first row and not in the cell of *K*.
-- Falsified if: (a), (d) or (f) flies on, (b), (c), (e), (i) or (j) detonates in that cell, an
-  ordinary-building control flies on, (g) detonates in the firer's cells, or (h) flies on into the
-  cell of *K* before detonating.
+- Expected: (a), (c), (d) and (f) detonation in the first turn whose new position lies in that
+  cell and 0 to 149 above the terrain, at the terrain height there. In (b), (e), (g), (i) and (j)
+  the projectile flies over the cell, while the ordinary-building controls detonate. (h)
+  detonation in the first turn whose new position lies in a cell of the building, although it is
+  above the band of the first row and not in the cell of *K*.
+- Falsified if: (a), (c), (d) or (f) flies on, (b), (e), (g), (i) or (j) detonates in that cell,
+  an ordinary-building control flies on, or (h) flies on into the cell of *K* before detonating.
 
 **P33. Bridge deck crossings (T1).**
 - Setup: a map with a high bridge. Run a: an arcing projectile lobbed over the bridge so that it
@@ -3194,6 +3340,60 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   inconclusive for the height at placement.
 - Runs: 3 of each variant.
 
+**P44. A switched-off hovering target and a projectile with a firer below the ground (claims 3
+b and 6 a, T1's first row).**
+- Setup: a tiny flat map, stock data apart from the named test files, director and mods off, game
+  speed 2. Part a: one test hovering vehicle type that depends on a control centre, of house B,
+  switched off at its first heading-point choice as in S-0405 scenario W8; the recorder reads its
+  heading point, its speed fraction and its body facing in every tick, and the run counts only when
+  a heading point is recorded once it has come to rest. House A has two test vehicles with one test
+  weapon whose arcing projectile is not inaccurate, each ordered to attack it from within range: one
+  standing ahead of it along its body facing, one behind it, with no other object within two cells
+  of the target. The test file sets the hovering type's speed, and the firers' distances are chosen
+  from a first run, so that the lead ℓ of F6 is at least 256 leptons, F4 has no solution for the led
+  point of the firer behind but has one for the vehicle's reference point, and the led point of the
+  firer ahead lies outside the vehicle's cell. The run counts only when the observer confirms all
+  three from the recorded geometry. Part b: a test vehicle with an arcing, inaccurate test weapon,
+  the ballistic scatter set to 512 by the test file, attacking a fixed cell 6 cells away on level
+  open ground (a ground attack on the cell), with level open land for at least 4 cells beyond it,
+  inside the legal map and away from high bridges. Of the flags that T1 reads, its test
+  projectile type has only the arcing and inaccurate flags: it is not steering, ranged, vertical,
+  dropping, level, flak-scattering, invisible, anti-air or subject to cliffs or walls. It keeps
+  the anti-ground flag, so that it can attack the cell. No object other than the firer stands within
+  two cells of the line from the firer to 4 cells beyond the target cell. Part c: part b with the
+  firer destroyed by another weapon after its shot, while the projectile still climbs, the
+  destroying object standing outside that strip; one firer per shot. With these flags and that
+  ground, T1's rows that can apply in parts b and c are the first row, the two "reached" rows,
+  the proximity row, the speed row, the deep-fall row and leaving the map.
+- Observable: each fire attempt and whether it creates a projectile, with the firer's rearm
+  countdown before and after it (a read-only recorder, as in S-0301's scenarios); each projectile's
+  launch velocity, its stored target point, its position and height above the surface in every turn,
+  and its detonation point; the target's damage events.
+- Runs: 1 for part a over at least 10 attempts of each firer; 5 shots each for parts b and c. In
+  parts b and c a shot is set aside, and replaced by another, when its recorded positions,
+  heights and speeds show that a row other than the one its expectation names applies first: its
+  path enters the target cell with a start-of-turn height below 208 (a "reached" row), it comes
+  within 128 leptons of an object in its cell (the proximity row), its speed after a turn is below
+  10 with a start-of-turn height below 10 (the speed row), or it leaves the legal map.
+- Expected: (a) every launch direction lies within 8 facing units of the direction to the point that
+  F6 gives with the recorded speed fraction and body facing, not to the reference point, and every
+  projectile's stored target point is the vehicle's reference point at placement. The firer behind
+  (F4 without a solution for its led point; the observer computes it from the recorded fire point,
+  the start speed of claim 2 and the led point) creates no projectile at any attempt and leaves its
+  countdown unchanged, at each firing step. Each projectile of the firer ahead detonates in the turn
+  and at the point that T1, T2 and claim 20 give for its recorded positions and heights, with T1's
+  first row applying to deck crossings only: in particular it does not detonate in the first turn in
+  which it passes below the terrain unless another row of T1 applies in that turn. (b) Each
+  projectile flies on below the surface and detonates in the first turn in which its height is 416
+  or more below the surface, at the surface there, farther along its flight than the point where it
+  passed below. (c) Each detonates in the first turn in which it is below the terrain, at the
+  surface there.
+- Falsified if: (a) a launch direction lies more than 8 facing units from the led direction, a
+  stored target point differs from the vehicle's reference point at placement, the firer behind
+  creates a projectile or changes its countdown, or a projectile of the firer ahead detonates in
+  another turn or at another point than T1, T2 and claim 20 give, (b) a projectile detonates in the
+  first turn in which it is below the terrain, or (c) one flies on below the terrain.
+
 ## Open questions
 
 - Q-1761 question 2, beyond this spec: this spec answers it for the firing check on every route
@@ -3222,8 +3422,9 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   from S-0212's *deck-entry mark*, which controls movement onto a deck, and from the
   high-bridge-cell test; those marks are not interchangeable.
 - The moving test and the speed fraction of a vehicle target on a locomotor other than the driving
-  one (claim 3, the speed estimate *u*) belong to the specs of those locomotors, which do not yet
-  define them; the formula of *u* itself is the same for every vehicle.
+  and hovering ones (claim 3, the speed estimate *u*) belong to the specs of those locomotors, which
+  do not yet define them; S-0503 defines both for a hovering vehicle (its Terms and claim 4, claim 3
+  b here). The formula of *u* itself is the same for every vehicle.
 - Whether a steering projectile whose new position lies outside the legal map is removed by
   some other part of the game: T1 and T2 say it is not removed by the rows of this spec, which was
   not checked beyond them.
@@ -3232,8 +3433,48 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   imported data (S-0302). P43 records the damage events of its test pairing only.
 - Whether the light-glow image of a projectile (claim 33) follows the projectile while it flies,
   and when it is removed, is not established; scenario P42 part h records it.
+- (Q-2157.) A switched-off hovering vehicle is led only while S-0503 counts it as moving (claim
+  3 b). S-0503 claim 10 does not say whether the stop request of a switch-off leaves the heading
+  point, so whether a switched-off vehicle that has stopped travelling is still led is not settled
+  here. P44 part a records its heading point and speed fraction.
+  M-0005 does not record heading points or launch velocities, and its per-shot aim point is the
+  stored point *K*, which a lead does not move (claim 3 b), so which of its targets were led is not
+  established from that record; scenario P44 part a records it. Which of claims 3 b, 6 a and T1's
+  first row applies to M-0005's hunters also follows from their weapon's flags in the imported data
+  (arcing or straight, inaccurate or not), which this spec does not state.
+- (Q-2158.) M-0005 records its hunters' fire attempts and whether each made a projectile, not the
+  firing check's answer, and not whether an attempt reached the launch. An attempt that reaches the
+  launch is made only on the answer *can fire* (S-0310 claim 9, S-0301 claim 9). M-0005 therefore
+  does not establish the firing check's answer for its hunters' attempts, nor that their targets
+  were inside range and not refused by a minimum range. Which void case of claim 6 a applies to its
+  hunters, if any, follows from their weapon's flags in the imported data (an arcing projectile,
+  inaccurate or not), which this spec does not state. Scenario P44 part a records, with test types,
+  the attempts at a led aim point that F4 cannot reach. It does not tell a void launch from a
+  refusal by the firing check either, so claim 6 a's reading of those attempts as void launches is
+  `unmeasured` (medium).
+- (Q-2158 question 4.) What ends the stall of the hunter of M-0005 that makes projectiles again
+  after a stretch of attempts without one is not established. M-0005 does not record why those
+  attempts made no projectile, so neither the cause of that stall nor what ended it is known from
+  the record. Claim 6 a says what ends a repeating void shot in general (a change of the firer,
+  its target or the target's lead, or for an arcing and inaccurate projectile a scatter whose
+  impact point F4 can reach), and this spec does not claim that it applies to that hunter.
 
 ## Changes for other specs
+
+- S-0405 claim 20 (its bullet on a disabled vehicle as a target) and its Open questions on Q-1710
+  leave open what sets where M-0005's stall shells land, and why some hunters make a fire attempt
+  every tick and no projectile. Claims 3 (b), 6 (a) and T1 here give mechanisms for shots at a
+  switched-off hovering vehicle that S-0503 counts as moving: it is led by the ordinary rule. A
+  led arcing shot can be void, and in an ordinary vehicle firing step after the rearm countdown
+  has run out a void launch leaves that countdown unchanged, so the firer attempts the shot again
+  on each later *can fire*. A straight or arcing projectile whose firer is still in play outside
+  any transport and has not been killed or started to cloak that passes below the ground is not
+  detonated there but flies on, so it can detonate away from the vehicle (T1 and T2 determine its
+  detonation). S-0405 can point
+  here for those rules. Which of them applies to M-0005's hunters follows from their weapon's flags
+  in the imported data, which neither spec states. S-0405's sentence that no targeting or damage
+  rule reads the disabled state stays true: the lead reads the vehicle's moving state (S-0503
+  Terms), not its disabled state. The pointer would be medium, `measurable` by scenario P44 here.
 
 - S-0318 claim 5 places a fragment at the burst point and points to claim 8 here. By claim 8, a
   fragment whose burst point is not above the terrain starts 1 lepton above it, at the same *x*

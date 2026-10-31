@@ -269,6 +269,35 @@ fn building_counts(w: &World, b: ObjectId, master: Option<ObjectId>, c: CellXY) 
     !(master == Some(b) && crate::econ::slaves::unloading_cell(w, b) == Some(c))
 }
 
+/// The cell of an infantry unit's scatter reference point (S-0208 Terms):
+/// its walking target while it has one, else its own position.
+pub fn infantry_centre_cell(w: &World, id: ObjectId) -> Option<CellXY> {
+    let o = w.obj(id)?;
+    // spec: S-0208 Terms (scatter centre cell: the cell of the scatter reference point, the walking target while there is one, else the unit's own position; never a farther destination)
+    Some(
+        o.walk
+            .as_ref()
+            .and_then(|s| s.target)
+            .map_or(o.pos.cell(), |p| p.cell()),
+    )
+}
+
+/// A vehicle's scatter centre cell (S-0207 Terms): its heading point's cell,
+/// else its own.
+pub fn vehicle_centre_cell(w: &World, id: ObjectId) -> Option<CellXY> {
+    let o = w.obj(id)?;
+    // spec: S-0207 Terms (vehicle scatter centre cell: the heading point's cell, else its own) and claim 16 (a drive vehicle's heading point is its track's target from the tick the track begins until it ends; never the move destination as such). The heading point of other locomotors and the tunnel exit have no state in M3.
+    Some(
+        o.drive
+            .as_ref()
+            .and_then(|d| d.track.as_ref())
+            .map(|t| t.target_cell)
+            // spec: S-0207 Terms (the vehicle scatter centre cell: a hovering vehicle's heading point's cell, S-0503 Terms)
+            .or_else(|| crate::hover::heading_cell(w, id))
+            .unwrap_or(o.pos.cell()),
+    )
+}
+
 /// A vehicle, whatever its locomotor, receives a scatter request (S-0207
 /// claim 16). Returns whether it accepted.
 pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
@@ -306,15 +335,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     if a || b || c || d || e || f || g {
         return false;
     }
-    // spec: S-0207 Terms (vehicle scatter centre cell: the heading point's cell, else its own) and claim 16 (a drive vehicle's heading point is its track's target from the tick the track begins until it ends; never the move destination as such). The heading point of other locomotors and the tunnel exit have no state in M3.
-    let centre = o
-        .drive
-        .as_ref()
-        .and_then(|d| d.track.as_ref())
-        .map(|t| t.target_cell)
-        // spec: S-0207 Terms (the vehicle scatter centre cell: a hovering vehicle's heading point's cell, S-0503 Terms)
-        .or_else(|| crate::hover::heading_cell(w, id))
-        .unwrap_or(o.pos.cell());
+    // spec: S-0207 Terms (vehicle scatter centre cell)
+    let centre = vehicle_centre_cell(w, id).unwrap_or(o.pos.cell());
     let Some(threat) = req.threat else {
         // spec: S-0207 claim 16 (no threat point: no draw; the nearby-cell search's cell; behaviours unchanged)
         crate::regions::ensure(w);

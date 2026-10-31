@@ -1,7 +1,7 @@
 ---
 id: Q-2139
 title: The rest of the interface while the route-mode key is held
-status: open
+status: answered
 related: [S-0213, S-0214, S-0512]
 answered-by: [S-0213]
 ---

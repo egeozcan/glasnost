@@ -336,6 +336,8 @@ pub fn step(w: &mut World, id: ObjectId) {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.dest = None;
                 }
+                // spec: S-0215 claim 37 (e) and S-0607 claim 9 (revision 33, Q-2151: part e removes the destination directly, not by an assignment of an empty destination: no effective clear in S-0502 claim 24's sense and not claim 9's exception, so a gripped unit's grip holds)
+                crate::lift::destination_removed(w, id);
                 cleared = true;
             }
         }
@@ -366,10 +368,6 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
     let (Some(t), None) = (o.target, o.dest) else {
         return;
     };
-    // spec: S-0215 claim 37 (a) (the target's cell is not in the actor's reach region for its movement zone; no movement zone reaches every cell)
-    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
-        return;
-    };
     let tc = match t {
         Target::Object(x) => match w.obj(x) {
             Some(x) => x.pos.cell(),
@@ -377,7 +375,7 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
         },
         Target::Cell(c) => c,
     };
-    if crate::regions::same_region(w, u.zone, o.pos.cell(), o.layer, tc, o.layer) {
+    if reaches(w, id, tc) {
         return;
     }
     step(w, id);
@@ -391,6 +389,59 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
+}
+
+/// The cell that stands for the actor in part a1's comparison (S-0215
+/// claim 37 (a1)): the cell of the point its locomotor is moving it towards
+/// while there is one, else its own cell. For infantry that point is its
+/// walking target (its scatter reference point, S-0208 Terms); for a
+/// vehicle its heading point (S-0207 Terms for driving, S-0503 Terms for
+/// hovering). Seam: no locomotor of ours travels through a tunnel (S-0212
+/// Terms), so the tunnel exit's cell never stands for it; the heading
+/// points of other vehicle locomotors have no state, so their own cell does.
+fn a1_cell(w: &World, id: ObjectId) -> Option<glasnost_map::CellXY> {
+    let o = w.obj(id)?;
+    match o.kind {
+        // spec: S-0215 claim 37 (a1) (for a walking infantry unit the point is its walking target, not the end of its walk: its scatter reference point, S-0208 Terms)
+        Kind::Infantry => crate::scatter::infantry_centre_cell(w, id),
+        // spec: S-0215 claim 37 (a1) (for a vehicle its heading point as its movement spec gives it, S-0207 Terms for driving, S-0503 Terms for hovering; its own cell while it has no movement in progress)
+        _ => crate::scatter::vehicle_centre_cell(w, id),
+    }
+}
+
+/// Whether the actor can reach its target's cell `tc` (S-0215 claim 37
+/// (a1), Q-2171 question 4): S-0212 claim 6's comparison made with the actor
+/// in place of the unit and `tc` in place of the destination cell, skipped
+/// in claim 6's exceptions.
+pub fn reaches(w: &World, id: ObjectId, tc: glasnost_map::CellXY) -> bool {
+    let Some(o) = w.obj(id) else { return true };
+    // spec: S-0215 claim 37 (a1) and S-0212 claim 6 (first exception: a type with no movement zone reaches every cell; departure D1, never in our engine)
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return true;
+    };
+    let Some(from) = a1_cell(w, id) else {
+        return true;
+    };
+    let inside = w.cells.usable(from);
+    // spec: S-0215 claim 37 (a1) and S-0212 claim 6 (second exception: the actor's cell outside the usable area but a legal cell)
+    if !inside && w.cells.cell(from).is_some() {
+        return true;
+    }
+    // spec: S-0215 claim 37 (a1) and S-0212 claim 14 (the corridor-disabling state: a train or current behaviour retreat; no unit is a loaner or a team member here)
+    let disabling = u.train || o.beh.seen() == Some(Behaviour::Retreat);
+    // spec: S-0215 claim 37 (a1) and S-0212 claim 6 (third exception: in the corridor-disabling state, the actor's cell inside the usable area and the target's cell a legal cell outside it)
+    if disabling && inside && w.cells.cell(tc).is_some() && !w.cells.usable(tc) {
+        return true;
+    }
+    // spec: S-0215 claim 37 (a1) (the actor's cell read for its deck when it is on a bridge deck, the target's cell whenever it carries a high bridge, whichever layer the target is on; two cells of no reach region, or two off-map cells, count as one region)
+    crate::regions::compare(
+        w,
+        u.zone,
+        from,
+        o.layer == crate::world::Layer::Deck,
+        tc,
+        w.high_bridge(tc),
+    )
 }
 
 /// Whether the actor is draining another object (S-0215 claim 37 (d);

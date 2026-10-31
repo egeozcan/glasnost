@@ -500,7 +500,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
                 rec.vehicles = rec.vehicles.saturating_sub(1);
             }
         }
-        // spec: S-0307 claims 15 and 19 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, the actor's reach region from its own cell and layer, a deck read through its link by S-0212 claim 4, against the candidate's ground-layer region)
+        // spec: S-0307 claims 15 and 19 (revision 20, Q-2171: a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, and the candidate's reach region, read for its deck when its cell carries a high bridge and its own otherwise, the actor's: from its actual cell, read for its deck when it stands on one, S-0212 claim 4)
         crate::passability::enterable_by_class(r, w, cell, u.class, u.zone, deck)
             && rec.empty()
             && crate::regions::same_region_read(
@@ -509,7 +509,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
                 o.pos.cell(),
                 o.layer == Layer::Deck,
                 cell,
-                false,
+                deck,
             )
     };
     // The candidate's height (claim 19): a primary at the terrain height of
