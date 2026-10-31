@@ -1,9 +1,9 @@
 ---
 id: Q-2191
 title: How a holder goes round a loop that ends before its route's last point
-status: open
+status: answered
 related: [S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
