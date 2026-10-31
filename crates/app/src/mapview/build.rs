@@ -6530,8 +6530,8 @@ pub fn sprite_vehicle_frame(
         stand_start,
         standing_frames,
     } = rows;
-    if walk.moving || idle_rate != 0 {
-        // spec: S-0102 claim 22 (moving, or the idle rate not 0: S_w + d·F_w + (w mod F_w))
+    if walk.in_progress || idle_rate != 0 {
+        // spec: S-0102 claim 22 (movement in progress, or the idle rate not 0: S_w + d·F_w + (w mod F_w))
         let w = i64::from(walk.counter);
         // design: a walking frame count of 0 (w mod 0 undefined) adds nothing
         let step = if walk_frames > 0 {

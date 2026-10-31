@@ -108,6 +108,26 @@ pub fn moving_on_tick(w: &World, id: ObjectId) -> bool {
     })
 }
 
+/// Whether a vehicle is *moving now* as its own locomotor's spec answers
+/// it, for the walk counter (S-0102 claim 22a, *Moving now*): S-0207 claim
+/// 23 and S-0504 claim 2 for a driving vehicle or ship, S-0503 Terms for a
+/// hovering one, S-0502 claim 20 for a jumpjet. Another locomotor falls
+/// back to S-0107's [`moving_on_tick`]. Reads state only.
+pub fn locomotor_moving_now(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0102 claim 22a (Moving now: the locomotor's own answer, read after the locomotion advance)
+    if o.hover.is_some() {
+        crate::hover::moving_now(w, id)
+    } else if crate::jump::is_jumpjet(w, id) {
+        crate::jump::moving_now(w, id)
+    } else if o.drive.is_some() {
+        crate::drive::moving_now(w, id)
+    } else {
+        // design: a locomotor claim 22a names no answer for (walking, teleporting, tunnelling) keeps S-0107's is moving now
+        moving_on_tick(w, id)
+    }
+}
+
 /// Whether a unit counts as moving in the sense of S-0212 claim 27: it has a
 /// destination, is turning, or its locomotor reports it moving.
 pub fn counts_as_moving(w: &World, id: ObjectId) -> bool {
