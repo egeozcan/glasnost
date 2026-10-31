@@ -185,6 +185,8 @@ fn margins(r: &mut Ruleset) {
     ward.secondary = None;
     ward.turret_count = Some(1);
     ward.weapon_count = Some(1);
+    // spec: S-0313 claim 1b (a turret count above 0 reads the numbered muzzle fields only: the copy's one numbered weapon fires from GUNR's own primary muzzle position, as it did before revision 42)
+    ward.combat.weapon_flh = ward.combat.primary_fire_flh.map(|f| vec![f]);
     ward.combat.weapon_slots = Some(vec!["Gun".into()]);
     ward.strength = Some(2000);
     ward.tech_level = Some(-1);
@@ -348,6 +350,8 @@ pub fn base_ruleset() -> Ruleset {
     gatv.secondary = None;
     gatv.turret_count = Some(1);
     gatv.weapon_count = Some(6);
+    // spec: S-0313 claim 1b (a turret count above 0 reads the numbered muzzle fields only: each of the six numbered weapons fires from GUNR's own primary muzzle position, as before revision 42)
+    gatv.combat.weapon_flh = gatv.combat.primary_fire_flh.map(|f| vec![f; 6]);
     gatv.cost = Some(900);
     gatv.econ.required_houses = only("Alphaland");
     spin(&mut gatv.combat);
