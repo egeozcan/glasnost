@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 84
+revision: 87
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -885,11 +885,22 @@ Terms).
     behaviour order and so a point add. A click on a cell that sets a factory's rally point, or
     that undeploys a building, sends that order directly: it is not a behaviour order, adds no
     point and takes effect when applied, as outside route mode. It meets claim 16d's
-    release-time tests and is sent at the release, as the detonate below is. Which of a
-    building's other actions on an object give behaviour orders, and which send their orders
-    directly, has not been settled (Open questions). In the original, a click gives an aircraft
-    or a building these actions only by a press inside a click area that the press neither
-    takes nor refuses, since any other press is refused for kind (claim 16d).
+    release-time tests and is sent at the release, as the detonate below is. A building's other
+    actions on an object (S-0214 table M, part 3) go the same two ways. Sent directly, with no
+    point, are: its *move* on an object, which sends the guard-spot order of that table (chosen
+    around the object's cell for a factory of infantry, vehicles or aircraft, naming the object
+    for any other building), which then acts as claim 20 says when it is applied. Also its
+    *detonate*, which sends its detonate order (claim 11), and its *deploy*'s primary order
+    (claim 13) when the building is factory-marked. Each meets claim 16d's release-time tests
+    and is sent at the release, as the clicks above are. In the original, by this spec's reading
+    (low, not S-0214's), a building is given its *deploy* action only by a click on the building
+    itself, and each behaviour order *unload* that the action gives names the building itself as
+    its target. It is not the target-less *unload* of the aircraft above or of S-0214 table M
+    part 2, so it has a place, the building's own, and is a point add there. The points it adds
+    are issued as claim 16d says. The direct sends have no issue step.
+    A building's deploy action is not refused in route mode. In the original, a click gives an
+    aircraft or a building these actions only by a press inside a click area that the press
+    neither takes nor refuses, since any other press is refused for kind (claim 16d).
     A route-mode click that would order a detonate adds no point. It meets claim 16d's tests as
     an ordinary route-mode click does: the kind test when the button is pressed outside every
     click area, and the same-route-state and holder-limit tests when it is released. When all
@@ -1199,8 +1210,9 @@ Terms).
       other than the detonate, gives a behaviour order, and that an action S-0214 gives no
       order for adds no point, are `unmeasured` as a whole: the scenarios here run only some
       of those actions in route mode. So are an aircraft's click actions and a building's
-      *attack* action giving behaviour orders: no scenario here runs them as ordinary clicks in
-      route mode. The rally-point click sent directly is `measurable` (part h's third game). Its
+      *attack* action giving behaviour orders, and a building's other actions on an object going
+      the two ways above: no scenario here runs them as ordinary clicks in route mode. The
+      rally-point click sent directly is `measurable` (part h's third game). Its
       being sent at the release after claim 16d's release-time tests is `unmeasured`: part h's
       third game sets the rally point with tests that pass, so a send at the press would give
       the same record. An aircraft's deploy action adding no point, and an order that names
@@ -1248,7 +1260,13 @@ Terms).
       behaviour order, and an action that S-0214 gives no order for adding no point, the
       rally-point click sent directly at the release, the click area, and the patrol action's
       point add and its being neither terminating nor continual. Low for an aircraft's click
-      actions and a building's *attack* action giving behaviour orders in the same way, an
+      actions and a building's *attack* action giving behaviour orders in the same way, a
+      building's other actions on an object going the two ways of claim 16b (its *unload* orders
+      as point adds at its own place, which takes in its *deploy* action coming only from a
+      click on the building itself and each *unload* naming the building as its target, read
+      from the original with no scenario here giving a selected building the deploy action, its
+      primary, guard-spot and detonate orders sent directly, and its deploy action not refused
+      in route mode), an
       aircraft's deploy action adding no point, and
       the undeploy click sent directly (all unmeasured): which action a click gives an aircraft
       or a building is S-0214 claim 10's mapping, rated low there for both kinds. Medium for an
@@ -2423,8 +2441,7 @@ only when they actually assign a destination.
   which the delete key then deletes unseen. With it off, such a delete selects no point.
 - For the two switches above (click areas, point selection), the original side is the rule
   that claims 16d and 16e state, at their ratings there. What an aircraft or building does
-  after it joins a point is claim 16d's, at its ratings there. Which orders a building's other
-  actions on an object give in route mode stays open (Open questions).
+  after it joins a point is claim 16d's, at its ratings there.
 - **Stacked points take the earliest-made** (claim 16b, *Two points at one place*):
   `quirks.stacked_point_takes_earliest`, default: original. Where several points of the house
   stand at one place, a press takes the earliest-made of them, so a selection whose routes hold
@@ -3939,9 +3956,6 @@ extension is a design rule and has no oracle measurement.
   on the answer.
 - How the command bar's route-mode button behaves: whether it stays on until clicked again, and
   how it is shown (claim 16h).
-- Which of a building's actions on an object, other than *attack*, give behaviour orders in
-  route mode, and so point adds, and which send their orders directly, as the rally-point and
-  undeploy clicks do (claim 16b, Q-2192 question 3).
 - Which point a point delete selects next when the deleted point is the last of its longest
   holder's route and that route's loop ends early (claim 16e).
 - Whether a point join raises the route-holder count: claim 16f states that it does not, at
@@ -4113,6 +4127,14 @@ extension is a design rule and has no oracle measurement.
   does not follow the host's drag settings (S-0213 claim 16h, `unmeasured`, medium), and our
   engine keeps it. It is not claim 27's drag bound, and claim 27 need
   not change: it may point to S-0213 claim 16h for that bound.
+- **S-0214, table M, part 3, deploy row.** A building is given the *deploy* action only by a click
+  on the building itself, and each behaviour order *unload* that the row gives names the
+  building itself as its target (S-0213 claim 16b, low, `unmeasured`: read from the original,
+  no scenario there gives a selected building the deploy action, and the level is capped by
+  S-0214 claim 10's low mapping). Part 2's *unload* row, which names no target and no
+  destination, is unchanged: it is a different order from this one. If S-0214 adopts it, the
+  row names the building as the target of each *unload*, at low, pointing to S-0213 claim 16b,
+  which uses it for the place of a building's route point.
 
 - **S-0512, claim 25.** It leaves open whether arming a superweapon ends route mode. Arming it
   leaves route mode on (S-0213 claim 16h, medium, Scenario O8 part y (4)). S-0512 may close that
