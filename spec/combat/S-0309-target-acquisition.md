@@ -2,13 +2,13 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 51
+revision: 53
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006]
+requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114]
 supersedes: []
 ---
 
@@ -156,6 +156,9 @@ index 1. This is a design rule, not an additional claim about the original.
 - **Appears disguised to a house.** The game-state test of S-0516 claim 35. S-0516 (Terms,
   claim 40) owns the disguise-detector coverage supplied by detector buildings, distinct from
   the sensor coverage used by table C's row "cloak".
+- **Creation order.** The order in which objects came into existence, the object created first
+  coming first. Unlike the update order of S-0203 claim 3, it does not change when an object
+  leaves play and enters play again: an object that leaves a transport keeps its place in it.
 
 ## Behaviour
 
@@ -512,6 +515,14 @@ index 1. This is a design rule, not an additional claim about the original.
      the attacker (S-0615, claim 16). A hunting actor retaliates only when the *hunt* behaviour
      has the retaliate property, which the user's behaviour data sets (S-0215, claim 18 and Import
      mapping), and when the owner rules of S-0215 claim 18 allow it.
+   - it gives up its move: a route search that fails more than 1 cell from its destination
+     (S-0212 claim 23, row 2) also drops the actor's target, and the actor queues the
+     owner-dependent resting behaviour that row gives: *area guard* in the original for a
+     computer-controlled owner, and *guard* for a human-controlled owner and, in our engine, for
+     every player house (Departure D5 there). Queueing it does not by itself change the current
+     behaviour; it becomes current at a permitted start under S-0215 claim 11. The searches of
+     either behaviour are range or area searches, whose airborne scan (claim 9) reaches
+     hovering jumpjets.
    - Backing: `measurable` (scenario A11: part a for the absent distance limit, part b for the
      zone test, part f for the ground-layer restriction, part g for the aircraft pass coming
      first, parts h and i for landed aircraft in both passes and their distance units, part j for
@@ -524,8 +535,18 @@ index 1. This is a design rule, not an additional claim about the original.
      regions, and which deck region S-0212 claim 4 then gives depends on bridge links that no
      scenario of this spec places at will. The no-link deck exception, on both the searcher and
      object sides and for visited area-search cells, is also `unmeasured`: no proposed fixture
-     establishes a bridge cell with no matching link, so A11 does not test that exception
-   - Confidence: medium (the ground-layer restriction, the zone test and the order of the passes),
+     establishes a bridge cell with no matching link, so A11 does not test that exception.
+     The give-up path: part c, run c3, for the target drop at a give-up and the queued *guard* that
+     becomes current after it under a human-controlled owner, and part k, run 4, for a range search
+     of *guard* reaching a hovering jumpjet. The original's *area guard* after a give-up is
+     `unmeasured` here: S-0212 claim 23a can then give a computer-owned unit a new destination, so
+     no fixture here keeps a hovering jumpjet within its search at will
+   - Confidence: high (the ground-layer restriction, for a hunting vehicle whose weapon can hit
+     aircraft, as parts f and k run 1 have), medium (the ground-layer restriction for other
+     searchers, the zone test and the order of the passes),
+     medium (the give-up path: the target drop at the give-up, the queued *guard* becoming
+     current after it, and the reach of
+     claim 9's airborne scan, rated medium there; the original's *area guard* after it),
      high (cells of no reach region), low (the deck read
      of the searcher's own cell and the no-link deck exception)
 
@@ -956,13 +977,29 @@ index 1. This is a design rule, not an additional claim about the original.
     - Backing: `measurable` (scenario A6, part c)
     - Confidence: medium
 
-22. **A blocked approach limits the next search.** When a vehicle's locomotor gives up a move while
-    the vehicle has a target it is not close enough to attack, the vehicle drops the target and
-    gets the limited-scan mark. While it has the mark its area and map-wide searches are range
-    searches; a search that finds nothing clears the mark.
-    - Backing: `measurable` (scenario A11, part c, including the clearing of the mark by a search
-      that finds nothing)
-    - Confidence: low (which situations make a locomotor give up belong to the movement specs)
+22. **A blocked approach limits the next search.** When a route search of a vehicle with the
+    driving locomotor fails and the vehicle does not give its move up, and the vehicle is then
+    standing still and holds a target that is not within reach (claim 23), the vehicle drops the
+    target and gets the limited-scan mark. Giving the move up means here either S-0212 claim 23's
+    row 2 (a failure more than 1 cell from the destination), which drops the target itself
+    (claim 7) and sets no mark, or the give-up of S-0207 claim 15 in front of a stationary
+    friend, which sets no mark either. Every other failure that leaves the vehicle standing
+    still sets it, for example a failure within 1 cell of the destination (S-0212 claim 23,
+    row 3). While the vehicle has the mark, its area and map-wide searches are range searches.
+    A search that finds a target does not clear the mark, nor does the death or removal of the
+    target. Only a search that finds nothing clears it. Vehicles with the hovering or ship
+    locomotor also get the mark at some of their route failures, under conditions that were not
+    examined.
+    - Backing: `measurable` (scenario A11, part c: run c1 for the drop, the mark and its clearing by
+      a search that finds nothing, run c2 for the mark kept through a search that finds a target
+      and through that target's removal). `unmeasured`: the absence of the mark at either
+      give-up, since after a give-up of row 2 the vehicle's searches in *guard* are range searches
+      with the mark or without it, and no run of part c makes the vehicle stop in front of a
+      stationary friend; and the hovering and ship locomotors, which no run of part c uses
+    - Confidence: medium for the drop, the mark and its clearing (run c1), medium for the mark
+      kept (run c2), medium for no mark at either give-up; low for the hovering and ship
+      locomotors (which situations make each locomotor's route search fail belong to the
+      movement specs)
 
 23. **Attack-move searches and resumption.** An object with an attack-move memory (S-0213, claim 6)
     acts on it in two places. A target is *within reach* when the range test of S-0307
@@ -1247,14 +1284,26 @@ index 1. This is a design rule, not an additional claim about the original.
     - No holder asks the firing check about a removed object, so no answer for such a target
       is needed (S-0301 claim 9).
 
+    The objects that go off the map include one that boards a transport, open-topped or not, and
+    one that enters a building. A vehicle that enters a vehicle bunker stays on the map (S-0606
+    claim 7), so its holders keep it. The removals include a dropped unit removed at the end of
+    its fall (S-0607 claim 18) and, taken to end like every other removal, erasure by a trigger,
+    an exit at the map edge and an engineer used up by its action.
+    A projectile already in flight towards the object loses it as S-0306 claim 17 gives for a
+    target that leaves the game or becomes untargetable: its target becomes the cell the object
+    stood in, or nothing if the object was in the air. It never flies on towards the object.
+
     A holder whose targeting timer (S-0215 claim 33) has more than 10 integer ticks left when it
     drops the object resets that timer with one ranged draw from the scenario random stream over
     4 to 8 ticks, both included, as at the phasing-in end of claim 1. With at most 10 ticks left
     no draw is taken. This reset belongs to the drops of this claim and of claim 28. It is not part
-    of a search (Observable ordering). When several holders drop the same object at once, the
-    order of their draws is not established (Open questions).
-    When one crush removes several objects held by different holders, how the draws for the
-    different objects interleave is not established (Open questions).
+    of a search (Observable ordering). When several holders drop the same object at once, they
+    take their draws in creation order (Terms), the holder created first drawing first, whatever
+    their update order (S-0203 claim 3) or their distances from the object.
+    When one crush removes several objects (S-0210 claims 3 and 4), it removes them one at a time
+    in the cell layer's listing order (S-0209 claim 13), and every draw of one removed object
+    comes before those of the next: its own animation picks if it is a vehicle (S-0210 claim 4),
+    then the timer draws of its holders. The draws for different objects never interleave.
 
     When the drop ends an override of the holder (S-0215 claim 10), the revert can make the same
     object the holder's target again, so a destroyed object that stays in play, or an object off the
@@ -1278,9 +1327,21 @@ index 1. This is a design rule, not an additional claim about the original.
       recorder allows that read: it tells a drop by the end of *C*'s turn from one at *A*'s next
       turn. It does not separate a drop inside the action from one later in *C*'s turn. Parts a to
       c otherwise give the same records and fire events under both moments. The
-      off-map target drop is `unmeasured` here: no part of A18 runs a holder whose target boards a
-      transport, and S-0215 scenario B7, case j, backs the revert and the restoration of the saved
-      target, not a drop before it. The movement-before-firing order is `unmeasured` for infantry
+      off-map target drop: part e, for a target that boards a transport that is not open-topped.
+      S-0215 scenario B7, case j, backs the revert and the restoration of the saved target, not a
+      drop before it. `unmeasured`: the other off-map cases (an open-topped transport, a
+      building), the vehicle bunker, the fall's removal and the removals taken to end like the
+      others, since no part of A18 runs them. The order of the timer draws: part d for one
+      holder, part f for several holders of one object (run f1) and for two objects in one cell
+      (run f2), with no vehicle among the removed objects. The order of a removed vehicle's
+      animation picks before its holders' timer draws keeps S-0210 claim 4's `unmeasured` backing:
+      part f's removed objects are infantry units, which take no animation pick, and no part of
+      S-0210 scenario K1 has a holder of the crushed vehicle. The projectile in flight: S-0306 claim
+      17's own backing (its scenario P11, run a for an airborne target removed from the game, run c
+      for a target on the ground destroyed by another weapon), and `unmeasured` for a crushed target
+      and for a projectile whose object goes off the map: no part of A18 or of P11 fires at an
+      object that is then crushed, boards a transport or enters a building. The
+      movement-before-firing order is `unmeasured` for infantry
       and for movement other than a crush: A18 part a separates it only for a crushing vehicle.
       `unmeasured` for a building or aircraft holder (a building's pending delayed shot included),
       and for the second drop at the removal of an object the revert named again: no part of A18
@@ -1294,11 +1355,18 @@ index 1. This is a design rule, not an additional claim about the original.
     - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
       infantry and vehicle holders of an object that is crushed, as in A18 parts a and b, or of an
       infantry unit killed in its death sequence, as in part c); medium (the drop's moment inside
-      the action, until run b1's read is made; the timer draw; the revert of S-0215 B7 case j; and
+      the action, until run b1's read is made; the timer draw; the order of the timer draws, by
+      creation order and per object, part f; the order of a removed vehicle's animation picks
+      before its holders' timer draws, `unmeasured` above; the off-map drop of a target that
+      boards a transport, part e; the revert of S-0215 B7 case j; and
       each `unmeasured` case above: a vehicle or building destroyed by a hit, a building awaiting
-      removal, a sinking or crashing object at its killing hit, the off-map drop, a building or
-      aircraft holder and a building's pending delayed shot, movement before firing outside a
-      crush, and the second drop after a revert); the handling of a restored object that stays off
+      removal, a sinking or crashing object at its killing hit, the other off-map cases, the
+      vehicle bunker, the fall's removal and the removals taken to end like the others, a
+      building or aircraft holder and a building's pending delayed shot, movement before firing
+      outside a crush, and the second drop after a revert); high for the projectile in flight
+      towards an object removed while airborne or destroyed on the ground (S-0306 P11 runs a and
+      c), medium for one whose object is crushed or goes off the map; the handling of a
+      restored object that stays off
       the map or in play after its killing hit is a design rule
 
 28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
@@ -1554,7 +1622,11 @@ between the wall target *W*, the best candidate and no target.
   timer draw (scenario A1, part f). The timer reset at a dropped target (claims 27 and 28) is not
   a search draw: it comes inside the action that destroys, removes, cloaks or buries the object,
   at both cloak moments of claim 28. Its place against the destruction's own draws (S-0312
-  claim 1) is open (Open questions).
+  claim 1) is open (Open questions). At a crush the draws follow claim 27's order: per removed
+  object in the cell layer's listing order, a vehicle's animation picks (S-0210 claim 4) before
+  its holders' timer draws, the holders in creation order. Scenario A18 part f tests the
+  holders' order and the order between removed objects (medium); the animation picks' place
+  before the timer draws keeps S-0210 claim 4's `unmeasured` backing (medium).
   Each part of the search itself is `measurable`:
   - that a search takes no fixed further draw besides the timer draw: scenario A15, part h, case
     i, where a search tick on which nothing else draws advances the stream by exactly the raw
@@ -2461,14 +2533,33 @@ an excluded run. Named test data gives targets enough health to survive through 
   sight range.
 - *Part b:* an infantry unit hunting, with the only enemy on an island it cannot reach: it does not
   pick it, and stays idle. A hovering or amphibious unit picks it.
-- *Part c:* a vehicle in *hunt* (guard range 0 in the test map, so the radius of a range search
-  comes from the weapon's reach, F1) approaching its only enemy target behind a blocked passage,
-  with the target recorder. *Expected:* when the path fails, the vehicle drops the target; its next
-  search is a range search covering only its weapon's reach, which finds nothing, so the recorder
-  shows no target after it; the search after that is a map-wide search again (the empty search
-  cleared the mark) and the recorder shows the far target again. *Falsified if:* the vehicle keeps
-  the target when the path fails, its first search after the drop picks the far target, or no
-  later search ever picks it again.
+- *Part c (claims 7 and 22):* a human-owned vehicle with the driving locomotor in *hunt* (guard
+  range 0 in the test map, so the radius of a range search comes from the weapon's reach, F1)
+  approaching its only enemy target, with the target recorder, its position, destination and
+  current behaviour. Runs:
+  - (c1) a route search fails while the vehicle is within 1 cell of its destination cell and
+    the target is not within its weapon's reach, for example because a map trigger closes the
+    destination cell. *Expected:* at that failure the vehicle drops the target and stays in
+    *hunt*; its next search is a range search covering only its weapon's reach, which finds
+    nothing, so the recorder shows no target after it; the search after that is a map-wide
+    search again (the empty search cleared the mark) and the recorder shows the far target again.
+  - (c2) as c1, with a second enemy placed within the weapon's reach of the place where the
+    vehicle stops, its health low enough for the vehicle to destroy it. *Expected:* the first
+    search after the drop picks the second enemy; after it has left play the next search finds
+    nothing, and only a later search picks the far target again.
+  - (c3) as c1, but the passage is closed while the vehicle is more than 2 cells from its
+    destination, so that the failure gives the move up (S-0212 claim 23, row 2). *Expected:* the
+    vehicle drops the target at that failure and queues *guard*, which becomes current at a
+    permitted start (S-0215 claim 11), on the failure tick or later; after that the vehicle
+    never shows *hunt* again.
+  A run of c1 or c2 decides nothing if, at the failure, the cell ahead of the vehicle holds a
+  unit or building of an allied house (S-0207 claim 15's give-up can then apply), or if its
+  destination is not a cell. *Falsified if:* in c1 or c2 the vehicle keeps the target when the
+  route search fails, in
+  c1 its first search after the drop picks the far target or no later search ever picks it
+  again, in c2 the search right after the second enemy leaves play picks the far target, or in
+  c3 the vehicle keeps the target, *guard* never becomes current, or a behaviour other than
+  *guard* follows *hunt*.
 - *Part d (area search skips other zones, claim 11):* an infantry unit placed with *area guard*, a
   weapon of range 8 cells, and an enemy on an island across water 5 cells away, inside both the area
   radius and the weapon range. *Expected:* the unit never picks it.
@@ -2936,8 +3027,8 @@ files of a scenario excepted). Record each tick, at the end of each object's tur
 allows it and otherwise at the end of the tick: the target of each test object, its fire events
 (tick, weapon and what was aimed at), its rearm countdown, its weapon's facing (its turret's, for
 a turreted type), its targeting timer and the scenario
-random state, and the tick on which the victim is crushed (the crush sound) or takes the killing
-hit. Each part runs 5 times from a fresh game.
+random state, and the tick on which the victim is crushed (the crush sound), takes the killing
+hit or leaves the map. Each part runs 5 times from a fresh game, unless it says otherwise.
 - *Part a (crusher, S-0210 scenario K7 cases 5 and 10):* set up K7 case 5 (computer-owned armed
   crusher in *guard*, which drives over the victim by K7's crushing approach, the victim object
   itself being its destination, and an infantry victim with raised health) and case 10 (human-owned
@@ -2995,18 +3086,65 @@ hit. Each part runs 5 times from a fresh game.
   immediately before the crush is void, so that *A* is the only holder whose drop can take a draw.
   Classify crush ticks by the timer's remaining ticks immediately before the crush, repeating until
   at least five have more than 10 left and five have at most 10 left. This overrides the general
-  count of 5 runs. Predict the scenario-stream draws of each crush tick from the other specs and
-  compare. *Expected:* with more than 10 ticks left, one extra draw over 4 to 8, and the timer then
-  holds the drawn value. With at most 10 left, no extra draw. *Falsified if:* the extra draw is
-  missing or present against these conditions, or in the first group the timer after the crush holds
-  a value outside 4 to 8.
+  count of 5 runs. Give *V*'s type empty explosion and destruction-animation lists in the test
+  map, so that its crush takes no animation pick (S-0210 claim 4). *A* is present in every run,
+  and no control run is used: the added draw is told by its range and by *A*'s timer. The
+  recorder lists the scenario-stream draws taken in *C*'s turn in the crush tick, each with its
+  range, where it allows that read, and otherwise those of the whole crush tick, with *A*'s own
+  draws in its own turn, which the other specs predict, set aside. It also reads *A*'s targeting
+  timer immediately before the crush and at the end of the crush tick. *Expected:* with more
+  than 10 ticks left, the list has exactly one draw over 4 to 8 that no other spec predicts, and
+  *A*'s timer then holds its value. With at most 10 left, the list has no such draw, and *A*'s
+  timer goes on counting down from its value before the crush. Any other unpredicted draw in
+  the list is reported as a discrepancy. *Falsified if:* the draw over 4 to 8 is missing or
+  present against these conditions, or *A*'s timer after the crush differs from that draw's
+  value (first group) or from its countdown (second group).
+- *Part e (a target that boards a transport):* a computer-owned armed vehicle *A* in *guard*,
+  and a human-owned infantry *V* within *A*'s range, next to a transport of the human house that
+  is not open-topped. *V*'s health is raised so that *A* cannot kill it. Once *A* holds *V*, the
+  human player orders *V* into the transport. Record from 30 ticks before the boarding to 30
+  ticks after it. *Expected:* from the tick on which *V* leaves the map, *A* no longer holds *V*
+  and has no fire event at *V* or its cell. *Falsified if:* *A* still holds *V* at the end of
+  that tick, or fires at *V* or its cell after it.
+- *Part f (order of the timer draws, Q-2114):* a human-owned crusher *C* with no weapon, ordered
+  to a cell beyond a cell *X* of a one-cell-wide corridor, and enemy infantry of a crushable type
+  in *X*, unarmed (test map if needed) and with raised health. Two holders *H*1 and *H*2,
+  human-owned armed infantry ordered to
+  attack, with the normal targeting delay given a test value of 100 ticks and weapons that
+  cannot kill the victims. *H*1 is placed by the map, and *H*2 is made later in the run by a map
+  trigger (a reinforcement), so *H*1 was created first. After *H*2 has entered play, *H*1 is
+  ordered into a transport that is not open-topped and out again, so that it enters play again
+  after *H*2 and takes its turn after it (S-0203 claim 3). Only then are both ordered to attack.
+  *H*1 stands farther from *X* than *H*2.
+  - (f1) one victim in *X*, held by both holders.
+  - (f2) two victims in *X*, *V*1 entering *X* after *V*2, so that *V*1 is listed first (S-0209
+    claim 13). *H*1 holds *V*2 and *H*2 holds *V*1.
+  A run decides nothing if either holder's targeting timer has 10 ticks or fewer left
+  immediately before the crush, if the recorded update order does not put *H*2 before *H*1, if
+  the two draws over 4 to 8 in the crush tick give the same value, or if an event shown by its
+  own record to be unrelated to the crush (such as a holder's search in the crush tick) takes a
+  draw over 4 to 8 there. Infantry victims take no animation pick (S-0210 claim 4). Any other
+  draw in the crush tick that the specs do not predict does not void the run: it is reported as
+  a discrepancy. Five valid runs per part. Each holder's timer after the crush
+  holds the value of its own draw, which tells which draw was whose. *Expected:* in f1 *H*1 has
+  the first of the two draws, in f2 *H*2 has it. *Falsified if:* in f1 *H*2 has the first draw
+  (update order or distance order), or in f2 *H*1 has it (the draws ordered by holder, not by
+  removed object).
 
 ## Open questions
 
-- When one crush removes several objects held by different holders (claim 27), the order of the
-  timer draws for the different objects: per object in the order of the crush, or per holder.
-  Low confidence either way, `unmeasured`: scenario A18 part d voids every run with a second
-  holder's draw.
+- Q-2112 question 1: which occasion gives the hunting vehicles of the games that the request
+  cites their hovering-jumpjet targets after their first targets die. Their own map-wide search
+  never finds one (claim 7). The occasions that can are a target picked while the jumpjet was in
+  the ground layer and still held (claim 7), the limited-scan mark after a failed approach
+  (claim 22), and a give-up of the move, after which the search of *area guard* reaches it
+  (claim 7). Which of them operates in those games is not established (low). A re-read of one
+  of those games would decide it: for each hunting vehicle, every change of its behaviour, target
+  and destination with its tick, each route failure and whether it gave the move up, and for
+  each jumpjet its render layer and height on those ticks. S-0215 claim 19's
+  scatter from damage, which the original sends such a hunter whatever the player-scatter
+  setting says, reaches a player-house hunter of our engine only under that setting or the
+  scatter veterancy ability; without them it gives that hunter no new route search.
 - The order in which a cell holds its objects (claim 10): which object the search offers first
   in a shared cell. Scenario A3 shows it; the occupancy specs (S-0209) may already fix it.
 - The airborne order of claim 9 is S-0303's F7 order. What the registration order inside one sector
@@ -3029,7 +3167,8 @@ hit. Each part runs 5 times from a fresh game.
 - Whether a target that one search drops and then picks again counts as an opportunity target
   (claim 24 gives that it does not, because the object is the same as before the search); scenario
   A6, part f, decides it if a disabled firer still searches.
-- The locomotor give-up of claim 22 rests on one reading.
+- The limited-scan mark of claim 22 rests on one reading of the driving locomotor; the hovering
+  and ship locomotors' conditions were not examined.
   Which behaviour a unit is in when its phasing in ends, and so whether the opportunity
   gate of claim 3 passes for a type without the opportunity-fire flag, is not established
   (scenario A1, part f, records it).
@@ -3080,9 +3219,6 @@ hit. Each part runs 5 times from a fresh game.
   that begins with no target fires nothing. Whether the original reaches that aim by some other
   route, for example a shot whose target is supplied apart from the firer's current target, and
   so whether S-0306's quirk can be reached at all, is not established here.
-- The order of the timer draws of claim 27 when several holders drop the same object at once.
-  No order is committed: scenario A18 part d voids the runs in which a second holder's timer has
-  more than 10 ticks left, so no scenario tests it.
 - Q-1761 question 3 (the attack action offered when a person hovers an aircraft, flying or
   landed, with an anti-air-only building selected, with and without force-fire) is order
   legality: S-0214 row B7, which this spec does not change. Row B7 is rated low in S-0214, so
@@ -3141,9 +3277,14 @@ another firer is dropped before the firer's firing step, which then fires nothin
 turn comes first fires at the live target. P27's setup therefore gives no shot with an empty
 current target, and needs another way to reach one, or a restatement.
 
-S-0210 claim 4 and scenario K7: no change needed. Scenario A18 part a here reuses K7 cases 5 and
-10 and records target, fire events and rearm countdown per tick around the crush. Claim 4 could
-point to claim 27 here for what a crusher does with a crushed target.
+S-0210 claim 4 points to claim 27 here for the holders of a crushed object, and gives a crushed
+vehicle's animation picks, which come before its holders' timer draws (claim 27). Scenario A18
+part a here reuses S-0210 K7 cases 5 and 10 and records target, fire events and rearm countdown
+per tick around the crush.
+
+S-0212 claim 23, row 2: the give-up also drops the unit's target, which the row does not say
+(claim 7 here, scenario A11 part c run c3). Claim 22 here sets the limited-scan mark only at
+failures that do not give the move up.
 
 S-0215 claim 33 already includes the charging break-off exception and its backing through
 scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from timer resets.
