@@ -264,6 +264,32 @@ pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::triggers::destruction_raises(w, id, known, extra);
 }
 
+/// A killed vehicle's explosion and destruction animations (S-0312 claim
+/// 9), shown at `o`'s position: also a crushed vehicle's (S-0210 claim 4).
+pub(crate) fn vehicle_animations(w: &mut World, id: ObjectId, o: &crate::world::Object) {
+    let tc = type_combat(w, id).cloned().unwrap_or_default();
+    // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
+    if !tc.explosion.is_empty() {
+        let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;
+        let unlimited = tc.ammo < 0 || o.combat.ammo != 0;
+        let explodes =
+            tc.explodes || veterancy::has_ability(w, id, crate::combat::data::Ability::Explodes);
+        // spec: S-0312 claim 9 (an exploding vehicle with ammunition shows the last entry; the draw is still taken)
+        let pick = if explodes && unlimited {
+            tc.explosion.len() - 1
+        } else {
+            k
+        };
+        let name = tc.explosion[pick].clone();
+        effects::anim(w, &name, o.pos);
+    }
+    if !tc.destroy_anim.is_empty() {
+        let k = w.rng.list_pick(tc.destroy_anim.len() as u32) as usize;
+        let name = tc.destroy_anim[k].clone();
+        effects::anim(w, &name, o.pos);
+    }
+}
+
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(o) = w.obj(id).cloned() else { return };
@@ -312,7 +338,6 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     match o.kind {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {
-            let tc = type_combat(w, id).cloned().unwrap_or_default();
             // spec: S-0312 claim 32 (a killing hit on a vessel already sinking, whether its descent began with a killing hit or a cull)
             let already_sinking = crate::naval::sinking(w, id);
             let crashable = rules
@@ -336,26 +361,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 crate::naval::start_sinking(w, id);
                 return;
             }
-            // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
-            if !tc.explosion.is_empty() {
-                let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;
-                let unlimited = tc.ammo < 0 || o.combat.ammo != 0;
-                let explodes = tc.explodes
-                    || veterancy::has_ability(w, id, crate::combat::data::Ability::Explodes);
-                // spec: S-0312 claim 9 (an exploding vehicle with ammunition shows the last entry; the draw is still taken)
-                let pick = if explodes && unlimited {
-                    tc.explosion.len() - 1
-                } else {
-                    k
-                };
-                let name = tc.explosion[pick].clone();
-                effects::anim(w, &name, o.pos);
-            }
-            if !tc.destroy_anim.is_empty() {
-                let k = w.rng.list_pick(tc.destroy_anim.len() as u32) as usize;
-                let name = tc.destroy_anim[k].clone();
-                effects::anim(w, &name, o.pos);
-            }
+            vehicle_animations(w, id, &o);
             // spec: S-0312 claim 12 (after the vehicle's animations, before the crew, claim 13)
             passengers_of_destroyed_vehicle(w, id, hit, crashable);
             crew(w, id, hit);

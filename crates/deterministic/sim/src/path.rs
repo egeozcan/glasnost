@@ -3136,6 +3136,9 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     // spec: S-0212 claim 23 row 2 and claim 23a (it gives up: its destination is cleared and it queues guard or area guard only, neither move nor a forced start)
                     ob.dest = None;
                     ob.beh.queue(Some(give_up));
+                    // spec: S-0309 claim 7 (giving the move up under S-0212 claim 23 row 2 also drops the actor's target; no limited-scan mark, claim 22)
+                    crate::spawn::clear_own_target(ob);
+                    ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 }
                 if walker {
                     // spec: S-0417 claim 17 (No path: a failed search that passes the gate ends the walking unit's movement in progress in that update, whether or not it keeps its destination; S-0212 claim 23, the sentence after its table)
@@ -3151,6 +3154,22 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     }
                 }
             }
+        }
+    }
+    // spec: S-0309 claim 22 (a route failure of a vehicle with the driving locomotor that does not give the move up, the vehicle standing still after it, S-0212 claim 23: a held target not within reach, claim 23, is dropped and the limited-scan mark set; the hovering and ship locomotors' conditions were not examined, Open questions, so they set none here)
+    if res != Search::Found
+        && !gave_up
+        && o.kind == Kind::Vehicle
+        && crate::lift::current_locomotor(w, id) == Some(Locomotor::Drive)
+    {
+        let held = w.obj(id).and_then(|x| x.target);
+        if held.is_some()
+            && !crate::combat::acquire::within_reach(w, id, held)
+            && let Some(ob) = w.obj_mut(id)
+        {
+            crate::spawn::clear_own_target(ob);
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+            ob.combat.limited_scan = true;
         }
     }
     if res != Search::Found {

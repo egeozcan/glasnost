@@ -50,7 +50,7 @@ pub(crate) fn timer_draw(w: &mut World, id: ObjectId) {
 /// map, stays the restored target; [`turn_start_drop`] and
 /// [`firing_target`] are our engine's rule for it.
 pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
-    // spec: S-0309 claim 27 and Open questions (no exception for the holder's owner or for what covers the cell; the order of several holders' draws is not established: key order, as S-0501 claim 32's aircraft, interim)
+    // spec: S-0309 claim 27 (no exception for the holder's owner or for what covers the cell); claim 27 and Terms (several holders draw in creation order, whatever their update order or distances: object keys are given out in creation order and never reused, so key order is creation order)
     let ids: Vec<ObjectId> = w
         .objects
         .values()
