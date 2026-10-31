@@ -1809,6 +1809,7 @@ fn capture_announcements() {
         new: Some(HouseId(new)),
         pos: at,
         announce,
+        after_slots: announce,
     };
     let mut a = announcing(&w, &[(Announcement::BuildingCaptured, "Capt")]);
     let mut u = Rng::new(1);

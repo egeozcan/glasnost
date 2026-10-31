@@ -229,7 +229,7 @@ fn capture(w: &mut World, engineer: ObjectId, b: ObjectId) -> bool {
     }
     // spec: S-0524 claim 10 and S-0509 claim 8 (the engineer's tag passes on when its chain has the carry-over flag; the relative order of the carry-over and the ownership change is not established: the carry-over is done first)
     crate::mp_triggers::carry_over(w, engineer, b);
-    ownership::change(w, b, new, Cause::Capture);
+    ownership::change_by(w, b, new, Cause::Capture, Some(engineer));
     scatter_standing(w, b);
     used_up(w, engineer);
     true
@@ -284,7 +284,7 @@ pub fn takeover(w: &mut World, unit: ObjectId, b: ObjectId) -> bool {
     // spec: S-0509 claim 17 (neither alliance nor ownership is tested; the unit's type, its spy flag included, plays no part)
     let new = w.obj(unit).and_then(|o| o.owner);
     crate::mp_triggers::carry_over(w, unit, b);
-    ownership::change(w, b, new, Cause::Takeover);
+    ownership::change_by(w, b, new, Cause::Takeover, Some(unit));
     scatter_standing(w, b);
     used_up(w, unit);
     true

@@ -327,6 +327,9 @@ pub enum Effect {
         pos: Pos,
         /// Whether the cause requests an announcement.
         announce: bool,
+        /// Whether the change comes after the turns of the building's slot
+        /// animations in its tick (S-0108 claim 26; Q-2186).
+        after_slots: bool,
     },
     /// A spy infiltrated a building (S-0510 claim 11): the announcement
     /// lines for the infiltrating and the victim house, and the *infiltrated*

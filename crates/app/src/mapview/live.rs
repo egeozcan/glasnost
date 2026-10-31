@@ -453,7 +453,7 @@ pub struct Live {
     depot_events: Vec<(ObjectId, bool, bool, bool)>,
     /// The buildings whose ownership change the last tick reported with an
     /// announcement (S-0509 claim 12): a change in the turn pass, such as an
-    /// engineer's capture, not a trigger's (S-0108 claim 13; Q-2186).
+    /// engineer that stands after the slots, not a trigger's (S-0108 claim 26; Q-2186).
     turn_captures: BTreeSet<ObjectId>,
     /// The bodies that rock (S-0113): the view's copy, moved once per game
     /// tick, until the angles and rates move into the game state (claim 19,
@@ -1572,8 +1572,8 @@ impl Live {
                     switched_off: o.econ.building.switched_off,
                     // spec: S-0108 claim 28 (the not-under-a-pulse row of S-0405 claim 8)
                     pulsed: glasnost_sim::econ::power::under_pulse(w, o.id),
-                    // spec: S-0108 claim 13 (an engineer's capture acts in the turn pass, a trigger's change before any object's turn); design: Q-2186 (the announcing causes of S-0509 claim 12 taken as the turn pass's)
-                    captured_in_turn: turn_captures.contains(&o.id),
+                    // spec: S-0108 claim 26 (Q-2186: a change made in the turn of an object that stands after the building's slots comes after their turns of the tick; one made before the turn pass, or in the turn of an object before the slots, comes before them)
+                    change_after_slots: turn_captures.contains(&o.id),
                     // spec: S-0108 claim 26 (the needs-engineer flag and not manned, S-0515 claim 2)
                     unmanned: power.is_some_and(|p| p.needs_engineer) && !o.econ.building.manned,
                     // spec: S-0108 claim 18 (not checked while the building is being sold)
@@ -2529,10 +2529,13 @@ impl Live {
                 Effect::Captured {
                     building,
                     announce: true,
+                    after_slots,
                     ..
                 } => {
-                    // spec: S-0108 claim 13 (a capture acts in the turn pass); S-0509 claim 12 (the announcing causes)
-                    self.turn_captures.insert(building);
+                    // spec: S-0108 claim 26 (Q-2186: the change comes after the building's slots' turns when the object that made it stands after them in the update order); S-0509 claim 12 (the announcing causes)
+                    if after_slots {
+                        self.turn_captures.insert(building);
+                    }
                     continue;
                 }
                 Effect::Sound { .. }

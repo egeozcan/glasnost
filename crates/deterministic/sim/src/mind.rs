@@ -324,17 +324,24 @@ fn deploying_in_place(w: &World, id: ObjectId) -> bool {
 /// capture or loss announcement (claims 6 and 9), a mobile object through `econ::events::owner_changed` and
 /// S-0506 claim 13's spawner reset. No change when the owner is the same.
 pub fn set_owner(w: &mut World, id: ObjectId, new: Option<HouseId>) {
+    set_owner_by(w, id, new, None);
+}
+
+/// As [`set_owner`], made in the turn of `actor` (S-0108 claim 26: S-0601
+/// claims 6 and 9 make a building's takeover and release in the controller's turn).
+pub fn set_owner_by(w: &mut World, id: ObjectId, new: Option<HouseId>, actor: Option<ObjectId>) {
     let Some(o) = w.obj(id) else { return };
     if o.owner == new {
         return;
     }
     if o.kind == Kind::Building {
         // spec: S-0601 claims 6 and 9 and S-0509 claim 12 (every consumer of a change of owner; the takeover and the release of a building request the capture or loss announcement, at the owner change itself, after the trigger events of claim 5)
-        crate::structures::ownership::change(
+        crate::structures::ownership::change_by(
             w,
             id,
             new,
             crate::structures::ownership::Cause::MindControl,
+            actor,
         );
         return;
     }
@@ -471,7 +478,7 @@ pub fn take(w: &mut World, c: ObjectId, t: ObjectId) -> bool {
     // spec: S-0601 claim 6 (the original owner is its owner at this moment)
     let original = w.obj(t).and_then(|o| o.owner);
     // spec: S-0601 claim 6 (T changes owner to C's house, with every consumer of a change of owner)
-    set_owner(w, t, new);
+    set_owner_by(w, t, new, Some(c));
     if w.obj(t).is_none_or(|o| o.owner != new) {
         // spec: S-0601 claim 7 (the transfer itself failed: the old victim is already released and the new target is not controlled)
         return false;
@@ -657,7 +664,7 @@ pub fn release(w: &mut World, c: ObjectId, v: ObjectId) {
     }
     let changes = w.obj(v).is_some_and(|o| o.owner != rec.original_owner);
     // spec: S-0601 claim 9 (V changes owner back to its recorded original owner, with every consumer)
-    set_owner(w, v, rec.original_owner);
+    set_owner_by(w, v, rec.original_owner, Some(c));
     if changes {
         // spec: S-0601 claim 9 (the ownership change clears target and destination and requests guard)
         release_orders(w, v);
