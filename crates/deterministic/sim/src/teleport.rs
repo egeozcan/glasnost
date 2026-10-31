@@ -801,7 +801,10 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
 /// or claim 28's, so no holder takes the timer draw over 4 to 8 ticks,
 /// whatever its timer shows (S-0513 claim 39, Changes for S-0207 claim 20
 /// e). A superweapon warp's departure is not such a jump and calls nothing
-/// here (S-0513 claim 39).
+/// here (S-0513 claim 39): a projectile aimed at the member keeps it and
+/// reads its position at departure until it appears, and loses it only if
+/// the landing check kills it (S-0306 claim 17, revision 57;
+/// `combat::projectile::target_airborne`).
 pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
     // spec: S-0513 claim 39 and S-0309 claim 27 (the own jump's drops take no targeting-timer draw: the reset belongs to claim 27's and claim 28's drops only)
     let Some(pos) = w.obj(id).map(|o| o.pos) else {

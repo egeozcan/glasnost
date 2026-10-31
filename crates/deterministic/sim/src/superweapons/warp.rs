@@ -94,6 +94,12 @@ impl Member {
             Stage::Blocked | Stage::Away | Stage::Placed | Stage::Hold(_)
         )
     }
+
+    /// Departed and not yet appeared (claim 39): off the map, at the
+    /// position it had at departure.
+    pub fn departed(&self) -> bool {
+        matches!(self.stage, Stage::Blocked | Stage::Away)
+    }
 }
 
 fn member(w: &World, id: ObjectId) -> Option<Member> {
@@ -109,6 +115,26 @@ fn set_member(w: &mut World, id: ObjectId, m: Option<Member>) {
 /// Whether an object is phasing in by a superweapon warp (Terms).
 pub fn phasing(w: &World, id: ObjectId) -> bool {
     member(w, id).is_some_and(|m| m.phasing())
+}
+
+/// Whether an object is a warp member between its departure and its
+/// appearance at its landing point (claim 39). It is off the map then, in
+/// no cell, and keeps the position it had at departure; a projectile aimed
+/// at it keeps it as its target (S-0306 claim 17).
+pub fn departed(w: &World, id: ObjectId) -> bool {
+    member(w, id).is_some_and(|m| m.departed())
+}
+
+/// Whether a departed member's landing check has passed for a landing cell
+/// on a deck, so that S-0306 claim 17 counts it as standing on a deck: from
+/// the pass to its placement. A placement refused after the pass (claim 50)
+/// takes it back to the landing retry and ends this until a check passes
+/// again (our reading; Q-2232).
+pub fn passed_for_deck(w: &World, id: ObjectId) -> bool {
+    // spec: S-0306 claim 17 (standing on a deck only once its landing check has passed for a landing cell on a deck) and S-0513 T2 (check passed: placed on the next update)
+    member(w, id).is_some_and(|m| {
+        m.stage == Stage::Away && crate::teleport::landing_layer(w, m.landing.cell()) == Layer::Deck
+    })
 }
 
 /// Seam: the types that cannot be teleported. An object being erased by a
