@@ -44,5 +44,5 @@ every tick 1 to 300 on both peers. Checked with 8 busy loops running: 6 of 6 run
 | S-0410 | radar miniature arrow in route mode | The radar takes no command clicks yet. |
 | S-0214, S-0512 | claim 32 drag pool, claim 25 announcement, Terms group numbers | Q-2140; maps and teams load no group numbers. |
 | S-0607 | claim 10 seized unit at rest deploys; early-ending turns | As sweep 3: no order route reaches it; design rows. |
-| S-0504, S-0313, S-0303 and others | Rocking rates, fire point | Q-2081 open. |
+| S-0504, S-0313, S-0303 and others | Rocking rates, fire point | Q-2081 answered by S-0113: rates built in intake 53; the fire point and game state stay a seam ([intake53-S-0107-S-0108-S-0113.md](intake53-S-0107-S-0108-S-0113.md)). |
 | c7 pathing | any row | The ledger has no partly or seam rows. |
