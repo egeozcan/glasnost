@@ -238,6 +238,11 @@ pub struct State {
     pub switched_off: bool,
     /// It is under a pulse (claim 28's not-under-a-pulse row).
     pub pulsed: bool,
+    /// Its ownership change of this tick, if any, came in the turn pass: an
+    /// engineer's capture or another cause that the simulation reports with
+    /// an announcement (S-0509 claim 12); `false` for a trigger's change,
+    /// which comes before any object's turn (S-0108 claim 13, S-0203 row 1).
+    pub captured_in_turn: bool,
     /// Its type needs an engineer and it is not manned (claim 26).
     pub unmanned: bool,
     /// It is being sold (claim 18: the charge cycle is not checked then).
@@ -319,6 +324,9 @@ pub struct Slots<A> {
     /// `quirks.enable_unfreezes_unpowered`, as of the tick's
     /// [`Slots::prepare`].
     enable_unfreezes: bool,
+    /// The tick's [`Slots::prepare`] has applied the changes that come
+    /// before the slots play; [`Slots::update`] applies the rest.
+    early_done: bool,
 }
 
 impl<A> Default for Slots<A> {
@@ -335,6 +343,7 @@ impl<A> Default for Slots<A> {
             in_operation: true,
             // spec: S-0108 Edge cases (quirks.enable_unfreezes_unpowered defaults on)
             enable_unfreezes: true,
+            early_done: false,
         }
     }
 }
@@ -358,11 +367,17 @@ impl<A> Slots<A> {
     /// Takes in the building's state at the start of its turn in a tick,
     /// before its slots play and before any start: whether its type needs
     /// power, whether it is in operation, and
-    /// `quirks.enable_unfreezes_unpowered` as `enable_unfreezes`.
+    /// `quirks.enable_unfreezes_unpowered` as `enable_unfreezes`. Then the
+    /// re-enablings that come before the slots' turns in the tick act
+    /// ([`Slots::early_enablings`]).
     pub fn prepare(&mut self, kind: &TypeKind, st: &State, enable_unfreezes: bool) {
         self.needs_power = kind.needs_power;
         self.in_operation = st.in_operation;
         self.enable_unfreezes = enable_unfreezes;
+        if let Some(last) = self.seen {
+            self.early_enablings(kind, st, last);
+        }
+        self.early_done = true;
     }
 
     /// Whether a slot of definition `def` started now starts frozen.
@@ -403,24 +418,42 @@ impl<A> Slots<A> {
         }
     }
 
-    /// The disablings and re-enablings since the last update (claims 13,
-    /// 26 and 28), each acting at once, in their places in the tick
-    /// (claim 13, S-0203): the ownership change and the pulse's start or
-    /// end, then the switch. The building's own reaction to a change of its
-    /// in-operation result follows them ([`Slots::power`]).
-    fn enablings(&mut self, kind: &TypeKind, defs: &Defs, st: &State, last: Seen) {
-        // spec: S-0108 claim 26 (as part of every ownership change of a building whose type needs an engineer it is re-enabled, whether or not it is in operation after the change) and claim 13 (an ownership change of any other building is neither a disabling nor a re-enabling) and claim 28 (an ownership change while switched off: for a type that does not need an engineer the held slots stay held)
-        if last.owner != st.owner && kind.needs_engineer {
+    /// The re-enablings since the last update that come before the slots'
+    /// turns in the tick, and so before the tick's advances (claim 13,
+    /// S-0203; S-0109 claims 5 and 23: a released slot advances at its first
+    /// eligible update): an ownership change by a trigger, which acts before
+    /// any object's turn, and a pulse's end.
+    fn early_enablings(&mut self, kind: &TypeKind, st: &State, last: Seen) {
+        // spec: S-0108 claim 26 (as part of every ownership change of a building whose type needs an engineer it is re-enabled, whether or not it is in operation after the change) and claim 13 (an ownership change of any other building is neither a disabling nor a re-enabling; a polled trigger's action acts before any object's turn, S-0203 row 1) and claim 28 (an ownership change while switched off: for a type that does not need an engineer the held slots stay held)
+        // measure: M-0014 (b22n-tm1: the trigger's change of owner at 300 re-enables W7 and its held slots advance 0 to 1 in 300)
+        if last.owner != st.owner && kind.needs_engineer && !st.captured_in_turn {
             self.enable(st);
         }
-        // design: the ownership change before the pulse's start. S-0108 claim 13 puts a polled trigger's ownership change before the turn pass and a capture and a pulse's start in the turn pass in update order, which the drawing does not see; ours is the trigger's order (pulses do not reach the simulation yet: `econ::power::under_pulse`)
-        // spec: S-0108 claims 13 and 28 (a pulse's start disables the building and its end re-enables it, whatever its power switch)
-        match (last.pulsed, st.pulsed) {
-            (false, true) => self.disable(defs),
-            (true, false) => self.enable(st),
-            _ => {}
+        // spec: S-0108 claims 13 and 28 (a pulse's end re-enables the building whatever its power switch; it acts before the orders of its tick)
+        // measure: M-0014 (e: in the tick in which the pulse's hold reaches 0, 289, W8 is enabled again and its held slots advance 2 to 3 in that tick; b22o-ep1: a switch-off order applied after that tick's turns holds them at 3)
+        if last.pulsed && !st.pulsed {
+            self.enable(st);
+        }
+    }
+
+    /// The disablings and re-enablings since the last update that come
+    /// after the slots' turns: an ownership change in the turn pass (a
+    /// capture), a pulse's start, then the switch, each acting at once, in
+    /// their places in the tick (claim 13, S-0203). The building's own
+    /// reaction to a change of its in-operation result follows them
+    /// ([`Slots::power`]).
+    fn enablings(&mut self, kind: &TypeKind, defs: &Defs, st: &State, last: Seen) {
+        // design: Q-2186. A capture and a pulse's start act in the turn pass in update order (S-0108 claim 13), which the drawing does not see; ours puts both after the slots' turns, the capture first. M-0014's captures at 133 and 134 show their first advance in the next tick (its timeline only). Pulses do not reach the simulation yet (`econ::power::under_pulse`)
+        // spec: S-0108 claim 26 (as part of every ownership change of a building whose type needs an engineer it is re-enabled, whether or not it is in operation after the change)
+        if last.owner != st.owner && kind.needs_engineer && st.captured_in_turn {
+            self.enable(st);
+        }
+        // spec: S-0108 claims 13 and 28 (a pulse's start disables the building, whatever its power switch)
+        if !last.pulsed && st.pulsed {
+            self.disable(defs);
         }
         // spec: S-0108 claim 13 (a power order acts after the turn pass, S-0203 row 8 and claim 7, so after an ownership change and a pulse's start or end of its tick) and claim 28 (switched-on row: switching off disables the building; switching on re-enables it, whether or not it is then in operation)
+        // measure: M-0014 (an order applied before tick F's logic, the cycle of F - 1, holds the advance due in F: b22n-tm1 at 299, b22o-ep3 at 292, b22o-ep6 at 295)
         match (last.switched_off, st.switched_off) {
             (false, true) => self.disable(defs),
             (true, false) => self.enable(st),
@@ -718,8 +751,13 @@ impl<A> Slots<A> {
     pub fn update(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
         let last = self.seen.replace(Seen::of(st));
         if let Some(last) = last {
+            if !self.early_done {
+                // A caller that did not prepare the tick: the early changes act here, first.
+                self.early_enablings(kind, st, last);
+            }
             self.enablings(kind, defs, st, last);
         }
+        self.early_done = false;
         if st.completed && !self.opened {
             self.opened = true;
             self.grand_opening(kind, defs, st, mk);
@@ -2018,5 +2056,164 @@ mod tests {
         assert!(i(Slot::Super1) < i(Slot::Super2) && i(Slot::Super3) < i(Slot::Super4));
         assert!(i(Slot::Super4) < i(Slot::Idle) && i(Slot::Idle) < i(Slot::SuperLowPower));
         assert_eq!(Slot::RESTART.len(), Slot::ALL.len());
+    }
+
+    /// The ticks `from..=to` as the live view plays them (`live::update_slots`):
+    /// `prepare` with the state after the tick's logic, then each running slot's
+    /// turn, then `update`. A slot's turn is a model of S-0109 claims 5 and 23
+    /// for a stage delay of 3: *idle* advances when it is not frozen and at
+    /// least 3 ticks have passed since its last advance. Returns the ticks of
+    /// *idle*'s advances.
+    fn play(
+        s: &mut Slots<Fake>,
+        kind: &TypeKind,
+        d: &Defs,
+        at: &dyn Fn(i32) -> State,
+        ticks: std::ops::RangeInclusive<i32>,
+        last: &mut i32,
+    ) -> Vec<i32> {
+        let mut out = Vec::new();
+        for t in ticks {
+            let st = at(t);
+            s.prepare(kind, &st, true);
+            // spec: S-0109 claim 23 (a held animation does not advance; released, it advances on its first eligible update once d ticks have passed since the last advance) and claim 5
+            // measure: M-0014 (idle and active-1 advance every 3 ticks)
+            if !s.frozen(Slot::Idle) && t - *last >= 3 {
+                *last = t;
+                s.running.get_mut(&Slot::Idle).unwrap().anim.stage += 1;
+                out.push(t);
+            }
+            s.update(kind, d, &st, &mut Maker);
+        }
+        out
+    }
+
+    /// W8 of M-0014: running, its *idle* last advanced to frame 2 in 198,
+    /// then a pulse from 200 whose hold reaches 0 at the end of 289, and a
+    /// switch-off order applied before the logic of `off` (`None`: no order).
+    /// In our tick the order applies at the end of the tick before, so the
+    /// state after tick `off - 1` shows it.
+    fn w8(off: Option<i32>) -> impl Fn(i32) -> State {
+        move |t| {
+            let switched_off = off.is_some_and(|o| t >= o - 1);
+            let pulsed = (200..289).contains(&t);
+            State {
+                owner: Some(0),
+                switched_off,
+                pulsed,
+                in_operation: !switched_off && !pulsed,
+                ..done()
+            }
+        }
+    }
+
+    /// Plays W8 from 199 to 300, its slots set up before; returns *idle*'s
+    /// advances from 286 on and its final frame.
+    fn w8_run(off: Option<i32>) -> (Vec<i32>, i32) {
+        let d = defs();
+        let kind = TypeKind {
+            needs_engineer: true,
+            ..TypeKind::default()
+        };
+        let mut s = Slots::default();
+        let at = w8(off);
+        turn(&mut s, &kind, &d, &at(198), true);
+        s.running.get_mut(&Slot::Idle).unwrap().anim.stage = 2;
+        let mut last = 198;
+        let adv = play(&mut s, &kind, &d, &at, 199..=300, &mut last);
+        let late: Vec<i32> = adv.into_iter().filter(|t| *t >= 286).collect();
+        (late, s.running[&Slot::Idle].anim.stage)
+    }
+
+    /// measure: M-0014 (the recording run: W8's idle holds frame 2 under the pulse and advances
+    /// 2 to 3 in 289, the tick its hold reaches 0, then every 3 ticks; b22o-em2 and b22o-em3: a
+    /// switch-off order before the pulse's end does not hold that advance; b22o-ep1: an order
+    /// applied before 290 holds the slots at frame 3 from 290; b22o-ep2 at 291 and b22o-ep3 at
+    /// 292: the advance due in 292 does not come; b22o-ep6 at 295: frame 4 from 292, the advance
+    /// due in 295 does not come)
+    /// spec: S-0108 claims 13 and 28 (a pulse's end re-enables the building whatever its power
+    /// switch, before the orders of its tick; a power order acts after the turn pass); S-0109
+    /// claim 23
+    #[test]
+    fn m0014_pulse_end_and_switch_off_timing() {
+        assert_eq!(w8_run(None), (vec![289, 292, 295, 298], 6), "recording");
+        assert_eq!(w8_run(Some(287)), (vec![289, 292, 295, 298], 6), "em2");
+        assert_eq!(w8_run(Some(286)), (vec![289, 292, 295, 298], 6), "em3");
+        assert_eq!(w8_run(Some(290)), (vec![289], 3), "ep1");
+        assert_eq!(w8_run(Some(291)), (vec![289], 3), "ep2");
+        assert_eq!(w8_run(Some(292)), (vec![289], 3), "ep3");
+        assert_eq!(w8_run(Some(295)), (vec![289, 292], 4), "ep6");
+    }
+
+    /// W7 of M-0014 from 290 to 306: manned, its *idle* advancing on the
+    /// grid 296, 299; a trigger gives it to the bystander at 300; a
+    /// switch-off order applied before the logic of `off`.
+    fn w7_run(off: i32) -> Vec<i32> {
+        let d = defs();
+        let kind = TypeKind {
+            needs_engineer: true,
+            ..TypeKind::default()
+        };
+        let at = move |t: i32| {
+            let switched_off = t >= off - 1;
+            State {
+                owner: Some(if t >= 300 { 1 } else { 0 }),
+                switched_off,
+                in_operation: !switched_off,
+                captured_in_turn: false,
+                ..done()
+            }
+        };
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &at(289), true);
+        let mut last = 290;
+        play(&mut s, &kind, &d, &at, 291..=306, &mut last)
+    }
+
+    /// measure: M-0014 (b22n-t: an order applied before the logic of 300, the tick of the
+    /// trigger's change of owner: idle advances in 299 and 302; b22n-tm1: an order applied before
+    /// 299 holds the advance due in 299, and the change of owner at 300 re-enables W7 and idle
+    /// advances in 300, then every 3 ticks)
+    /// spec: S-0108 claims 13 and 26 (an ownership change of a type that needs an engineer
+    /// re-enables it; a polled trigger acts before any object's turn, S-0203 row 1)
+    #[test]
+    fn m0014_trigger_owner_change_timing() {
+        assert_eq!(w7_run(300), [293, 296, 299, 302, 305], "b22n-t");
+        assert_eq!(w7_run(299), [293, 296, 300, 303, 306], "b22n-tm1");
+    }
+
+    /// An engineer's capture (an announcing ownership change in the turn
+    /// pass) re-enables the building after its slots' turns: a held slot
+    /// whose clock is past due first advances in the tick after the capture.
+    /// measure: M-0014 (the captures at 133 and 134, as the run's timeline only: idle and active-1
+    /// advance in the next tick, then every 3 ticks)
+    /// spec: S-0108 claims 13 and 26; design: Q-2186
+    #[test]
+    fn m0014_capture_releases_in_the_next_tick() {
+        let d = defs();
+        let kind = TypeKind {
+            needs_engineer: true,
+            ..TypeKind::default()
+        };
+        for (captured_in_turn, first) in [(true, 134), (false, 133)] {
+            let at = move |t: i32| State {
+                setup: true,
+                unmanned: t < 133,
+                owner: Some(if t >= 133 { 0 } else { 9 }),
+                captured_in_turn: captured_in_turn && t == 133,
+                in_operation: t >= 133,
+                ..done()
+            };
+            let mut s = Slots::default();
+            turn(&mut s, &kind, &d, &at(0), true);
+            assert!(s.frozen(Slot::Idle));
+            let mut last = 0;
+            let adv = play(&mut s, &kind, &d, &at, 1..=140, &mut last);
+            assert_eq!(
+                adv[0], first,
+                "captured in the turn pass: {captured_in_turn}"
+            );
+            assert_eq!(adv[1], first + 3);
+        }
     }
 }
