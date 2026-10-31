@@ -287,3 +287,16 @@ to every contacted vehicle after its movement arrival, docked or not, in *sleep*
 | `depot_loss_leaves_sleep` | S-0314 claim 22, Edge cases (r107) | rejected (not in the layer) | Condition 2: the quirk text states a vehicle that "neither fires nor reacts until ordered", a vehicle that waits for an order and moves on one, not a stuck unit, a give-up, a unit that never moves again or a glitch; no play note or request names it. Condition 3: the off position gives each arrived contact the sale's run-away notice, a scatter move that can carry a vehicle into or out of a fight, so it changes combat outcomes. Both positions are tested (`quirk_depot_loss_leaves_sleep_off`, tethered and not; `claim_22_arrived_vehicle_keeps_its_behaviour`). |
 
 The layer file is unchanged, so the layered rules hash does not move.
+
+## Intake 61 (S-0306 r53): two projectile switches judged
+
+Ledger: [intake61-S-0607-S-0306.md](intake61-S-0607-S-0306.md).
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `switched_off_hover_lead` | S-0306 claim 3 (b), Edge cases | admitted (off) | (1) The Edge case states the off position (a switched-off vehicle is not led; the aim point is its reference point), built in `combat::projectile::led`. (2) The quirk text states a stuck attacker: "Attackers that keep it as their target can then fail to destroy it for the rest of the game" (the robot tank stall of M-0005, Q-2157 and Q-2158). (3) It acts only on a switched-off hovering target, a vehicle that neither travels nor fires; the off position aims at where it is, so it changes no balance between working units. Test: `layers::tests::play_fixes_sets_only_the_admitted_switches_off`; the two positions: `claims_s0306::claim3b_switched_off_hover_lead`. |
+| `owned_shell_ground_pass` | S-0306 T1, Edge cases | rejected | Condition 3: the off position detonates every straight or arcing shot that has a firer below the terrain, in a building band or at a wall overlay, which changes the hits of every artillery and cannon shot (a broad combat change). Condition 2: the quirk text states shells that fly on below the ground, and the stuck attacker they can give is the hover lead's, which the admitted switch answers. |
+
+**Version effects.** The layer file changes, so the layered `sim_rules_hash` moves: a save,
+replay, report or room made with the previous layer is refused on the rules hash. Reference files
+are unaffected.

@@ -362,9 +362,7 @@ pub fn launch(
     }
     // spec: S-0306 claim 3 (a moving vehicle target is led, F6)
     if let Some(Target::Object(t)) = firer_target
-        && let Some(tobj) = w.obj(t)
-        && tobj.kind == Kind::Vehicle
-        && crate::occupancy::in_progress(w, t)
+        && led(w, t)
     {
         aim = lead(w, firer, t, aim);
     }
@@ -596,14 +594,30 @@ pub fn led_aim_point(w: &World, firer: ObjectId, t: Target) -> Pos {
     let aim = ref_point(w, t);
     match t {
         // spec: S-0306 claim 3 (a moving vehicle target is led, F6)
-        Target::Object(x)
-            if w.obj(x).is_some_and(|o| o.kind == Kind::Vehicle)
-                && crate::occupancy::in_progress(w, x) =>
-        {
-            lead(w, firer, x, aim)
-        }
+        Target::Object(x) if led(w, x) => lead(w, firer, x, aim),
         _ => aim,
     }
+}
+
+/// Whether a target is a vehicle that claim 3 of S-0306 leads: one its
+/// locomotor is moving, by the moving test of the spec that owns that
+/// locomotor (S-0503 Terms for a hovering vehicle: a destination or a
+/// heading point).
+fn led(w: &World, t: ObjectId) -> bool {
+    if !w.obj(t).is_some_and(|o| o.kind == Kind::Vehicle) {
+        // spec: S-0306 claim 3 (infantry and aircraft targets are not led)
+        return false;
+    }
+    if crate::hover::is_hover(w, t) {
+        // spec: S-0306 claim 3 b and Edge cases (quirks.switched_off_hover_lead: a switched-off hovering vehicle that S-0503 counts as moving is led; off: a switched-off vehicle is not led)
+        if crate::hover::switched_off(w, t) && !w.rules().quirks.switched_off_hover_lead {
+            return false;
+        }
+        // spec: S-0306 claim 3 b and S-0503 Terms (a hovering vehicle is moving while it has a destination or a heading point)
+        return crate::hover::moving(w, t);
+    }
+    // spec: S-0306 claim 3 (S-0206 Terms: the locomotor moving the vehicle)
+    crate::occupancy::in_progress(w, t)
 }
 
 /// The 32-step drawn facing ψ and drawn pitch facing *e* of a projectile's
@@ -1088,13 +1102,19 @@ pub fn turn(w: &mut World, id: ObjectId) {
         && crossing(start.z, newpos.z, deck_here).is_some();
     let in_map = w.cells.cell(nc).is_some();
     if matches!(kind, ProjectileKind::Straight | ProjectileKind::Arcing) {
-        // spec: S-0306 T1 row 1 (below the terrain; a deck crossing; 0 to 149 above the terrain over a building or one of the three wall overlays)
-        if newpos.z < terrain_new {
+        let owned = has_firer(w, &pr);
+        // spec: S-0306 T1 row 1 and Edge cases (quirks.owned_shell_ground_pass: a projectile that has a firer is detonated only by the deck crossings; off: the whole row for every projectile)
+        let ground = !owned || !w.rules().quirks.owned_shell_ground_pass;
+        // spec: S-0306 T1 row 1 (below the terrain, only with no firer: z unchanged here, raised to the surface by claim 20 a; a deck crossing: the deck height going up, 20 below it going down; 0 to 149 above the terrain over an eligible building or one of the three wall overlays, only with no firer: z lowered to the terrain height)
+        if ground && newpos.z < terrain_new {
             rows.first = Some(newpos.z);
         } else if let Some(z) = cross {
             rows.first = Some(z);
-        } else if (0..150).contains(&(newpos.z - terrain_new)) && building_or_wall(w, &pr, nc) {
-            rows.first = Some(newpos.z);
+        } else if ground
+            && (0..150).contains(&(newpos.z - terrain_new))
+            && building_or_wall(w, &pr, nc, owned)
+        {
+            rows.first = Some(terrain_new);
         }
         // spec: S-0306 T1 (reached: the cell of K, or the same building, with h < 208)
         if h < 208 {
@@ -1337,21 +1357,44 @@ pub fn turn(w: &mut World, id: ObjectId) {
 /// Whether the cell holds a building that stops a straight or arcing
 /// projectile (T1 row 1), or one of the three wall overlays.
 // spec: S-0306 T1 and S-0307 claim 11 (the wall overlays 2, 26 and 243)
-fn building_or_wall(w: &World, pr: &Projectile, c: CellXY) -> bool {
-    if crate::combat::lof::wall_overlay(w, c).is_some_and(|o| [2u8, 26, 243].contains(&o)) {
-        return true; // spec: S-0306 Constants (hard-coded wall overlays 2, 26, 243)
-    }
-    w.cells
+fn building_or_wall(w: &World, pr: &Projectile, c: CellXY, owned: bool) -> bool {
+    let rules = w.rules();
+    let buildings: Vec<ObjectId> = w
+        .cells
         .list(c, crate::world::Layer::Ground)
         .iter()
-        .any(|&b| {
-            w.obj(b).is_some_and(|o| {
-                o.kind == Kind::Building
-                    && Some(b) != pr.firer
-                    && !crate::process::gate_open(w, b)
-                    && !w.allied(o.owner, pr.firer_house)
-            })
-        })
+        .copied()
+        .filter(|&b| w.obj(b).is_some_and(|o| o.kind == Kind::Building))
+        .collect();
+    if buildings.is_empty() {
+        // spec: S-0306 T1 row 1 and Constants (with no building present, one of the hard-coded wall overlays 2, 26, 243)
+        return crate::combat::lof::wall_overlay(w, c).is_some_and(|o| [2u8, 26, 243].contains(&o));
+    }
+    buildings.iter().any(|&b| {
+        let Some(o) = w.obj(b) else { return false };
+        // spec: S-0306 T1 row 1 and S-0211 Terms (not an inactive laser-fence section; section states are not modelled, so every section counts as inactive, as for S-0317 claim 19)
+        let fence = rules
+            .buildings
+            .get(o.type_index as usize)
+            .is_some_and(|t| t.building.laser_fence);
+        // spec: S-0306 T1 row 1 and S-0214 Terms (not a vehicle-like building)
+        let vehicle_like = crate::targeting::vehicle_like(w, b);
+        // spec: S-0306 T1 row 1 (any house's, an open gate included, scenario P32 f) and Edge cases (quirks.owned_shell_ground_pass off: a projectile that has a firer is not stopped by the firer itself or by a building allied with the firer's house)
+        let own = owned && (Some(b) == pr.firer || w.allied(o.owner, pr.firer_house));
+        !fence && !vehicle_like && !own
+    })
+}
+
+/// Whether a projectile has a firer (S-0306 Terms): it was made with one,
+/// and its detonation would still carry an attacker by S-0302 claim 1, so
+/// its firer was neither killed (death, delayed kill: `death::mark_killed`
+/// and `damage` clear the attacker) nor removed from the game since the
+/// shot. A firer loaded into a closed transport stays in the game, so it is
+/// still the firer. A firer that started to cloak is still counted as one:
+/// S-0302 claim 1's cloaking case is not built (a seam, low).
+pub fn has_firer(w: &World, pr: &Projectile) -> bool {
+    // spec: S-0306 Terms (a projectile's firer; no firer: made without one, or its firer killed or removed from the game while it flies)
+    pr.attacker.is_some() && pr.firer.is_some_and(|f| w.obj(f).is_some())
 }
 
 /// Whether two cells hold the same building.
@@ -1384,7 +1427,7 @@ fn proximity(w: &World, pr: &Projectile, p: Pos) -> Option<Pos> {
     let (d, x) = best?;
     let o = w.obj(x)?;
     // spec: S-0306 T1 (at d₃ < 128, neither the firer nor allied with the firer's house; with no firer any object counts)
-    let excluded = pr.firer.is_some() && (Some(x) == pr.firer || w.allied(o.owner, pr.firer_house));
+    let excluded = has_firer(w, pr) && (Some(x) == pr.firer || w.allied(o.owner, pr.firer_house));
     (d < 128 && !excluded).then_some(o.pos)
 }
 

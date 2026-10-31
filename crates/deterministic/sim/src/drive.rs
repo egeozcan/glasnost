@@ -548,17 +548,22 @@ fn record_step(w: &mut World, id: ObjectId, s: i32) {
 /// The speed estimate of a vehicle for the lead of S-0306 claim 3 and F6
 /// (S-0207 claim 18, F2a): F2 with the speed fraction the vehicle holds now,
 /// read without updating the fraction or earning progress. The integer is
-/// taken as leptons per tick by the lead, with no conversion. A vehicle with
-/// no driving state holds no fraction here, so its estimate is 0 (the
-/// fraction of another locomotor is not defined yet, S-0306 Open questions).
-/// No object carries a flag in this simulation, so the flag-carrier halving
-/// of F2 never applies.
+/// taken as leptons per tick by the lead, with no conversion. A hovering
+/// vehicle holds its own fraction (S-0503 claim 4). A vehicle with neither
+/// a driving nor a hovering state holds no fraction here, so its estimate is
+/// 0 (the fraction of another locomotor is not defined yet, S-0306 Open
+/// questions). No object carries a flag in this simulation, so the
+/// flag-carrier halving of F2 never applies.
 // spec: S-0207 claim 18 and F2a; S-0306 claim 3 (the speed estimate u)
 pub fn speed_estimate(w: &World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id) else { return 0 };
     let Some(u) = w.rules().unit(o.kind, o.type_index) else {
         return 0;
     };
+    if let Some(rho) = crate::hover::speed_fraction(w, id) {
+        // spec: S-0306 claim 3 and Open questions (a hovering vehicle's speed fraction is S-0503's) and S-0503 claim 4 (its s contains its own ρ)
+        return progress_with(w, id, u, rho);
+    }
     progress(w, id, u)
 }
 
