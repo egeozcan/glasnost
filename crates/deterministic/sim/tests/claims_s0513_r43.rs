@@ -215,6 +215,69 @@ fn claim39_whole_tick_holder_first_then_the_interim_drop() {
     assert_eq!(w.obj(h).unwrap().targeting_timer, timer, "no draw");
 }
 
+/// Runs the member's lone warp update with both holders holding it (`h1`
+/// with more than 10 ticks left, `h2` with at most 10), next to a control
+/// world in which nobody holds it, and checks that the update clears no
+/// holder's target, resets no timer and takes no draw for a holder.
+fn lone_update_keeps_holders(w: &mut World, h1: ObjectId, h2: ObjectId, m: ObjectId, what: &str) {
+    let mut control = w.clone();
+    hold(w, h1, m, 50, true);
+    hold(w, h2, m, 8, true);
+    let timers = (
+        w.obj(h1).unwrap().targeting_timer,
+        w.obj(h2).unwrap().targeting_timer,
+    );
+    assert!(warp::turn(w, m), "{what}");
+    assert!(warp::turn(&mut control, m), "{what}");
+    assert_eq!(target(w, h1), Some(Target::Object(m)), "{what}");
+    assert_eq!(target(w, h2), Some(Target::Object(m)), "{what}");
+    assert_eq!(
+        (
+            w.obj(h1).unwrap().targeting_timer,
+            w.obj(h2).unwrap().targeting_timer
+        ),
+        timers,
+        "{what}: no timer reset"
+    );
+    assert_eq!(w.rng, control.rng, "{what}: no holder draw");
+}
+
+#[test]
+fn claim39_placement_and_arrival_effects_clear_no_holder() {
+    // spec: S-0513 claim 39 (for a member neither destroyed nor set sinking, the later warp steps, its placement and its arrival effects, do not themselves clear holders' targets; a change is the member's step's only when made in its own update; SW12 part i: no holder's target changes between the reads just before and just after the member's placement or arrival-effects update)
+    let (mut w, h1, h2, m) = at_expiry(&rules());
+    lone_update_keeps_holders(&mut w, h1, h2, m, "departure");
+    assert_eq!(stage(&w, m), Some(Stage::Away));
+    lone_update_keeps_holders(&mut w, h1, h2, m, "placement");
+    assert_eq!(stage(&w, m), Some(Stage::Placed));
+    lone_update_keeps_holders(&mut w, h1, h2, m, "arrival effects");
+    assert!(matches!(stage(&w, m), Some(Stage::Hold(_))));
+}
+
+#[test]
+fn claim39_a_failed_and_a_redirected_landing_check_clear_no_holder() {
+    // spec: S-0513 claim 39 (a failed or redirected landing check does not itself clear holders' targets; SW12 part i repeated with an unprotected building on the landing cell, as in SW13 part b: no holder's target changes between the reads just before and just after the member's update of a failed or redirected check)
+    let r = rules();
+    let mut w = ready(&r);
+    let h1 = spawn(&mut w, "CART", ALPHA, 0, 3);
+    let h2 = spawn(&mut w, "WALKER", ALPHA, 3, 0);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    spawn(&mut w, "TOWER", BETA, 5, 5);
+    let tl = launch(&mut w);
+    run_through(&mut w, tl + 61);
+    assert_eq!(stage(&w, m), Some(Stage::Expired));
+    // The departure update's landing check fails: redirected.
+    lone_update_keeps_holders(&mut w, h1, h2, m, "departure, failed check");
+    assert_eq!(stage(&w, m), Some(Stage::Blocked));
+    assert!(w.obj(m).unwrap().sw.warp.as_ref().unwrap().redirected);
+    // The redirected check, in the next update of the member.
+    lone_update_keeps_holders(&mut w, h1, h2, m, "redirected check");
+    assert_eq!(stage(&w, m), Some(Stage::Away));
+    lone_update_keeps_holders(&mut w, h1, h2, m, "placement");
+    lone_update_keeps_holders(&mut w, h1, h2, m, "arrival effects");
+    assert!(matches!(stage(&w, m), Some(Stage::Hold(_))));
+}
+
 // --- The leaving stage's firing check -------------------------------------------------
 
 #[test]
