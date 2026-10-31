@@ -1,9 +1,9 @@
 ---
 id: Q-2151
 title: A gripped unit whose approach step against its lifter clears its destination
-status: open
+status: answered
 related: [S-0215, S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
