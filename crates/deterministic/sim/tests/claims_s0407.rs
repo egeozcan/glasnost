@@ -835,7 +835,10 @@ fn click_icon(w: &mut World, ty: TypeRef) -> bool {
     use glasnost_sim::econ::sidebar::{self, Click, ClickOutcome};
     match sidebar::click(w, H, ty, Click::Left, false) {
         ClickOutcome::Order(o) => {
-            assert!(issue(w, 0, o.clone()), "an order the click gives is legal: {o:?}");
+            assert!(
+                issue(w, 0, o.clone()),
+                "an order the click gives is legal: {o:?}"
+            );
             true
         }
         _ => false,
@@ -958,7 +961,11 @@ fn claim_16_refusal_sound_only_after_a_changed_count() {
     objects::remove(&mut w, pad);
     assert_eq!(pad_total(&w, 0), 1);
     step(&mut w);
-    assert_eq!(line(&w, 0, b).unwrap().queue.len(), 0, "refused when applied");
+    assert_eq!(
+        line(&w, 0, b).unwrap().queue.len(),
+        0,
+        "refused when applied"
+    );
     assert!(refusal_sound(&w), "with the refusal sound");
 }
 

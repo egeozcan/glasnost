@@ -323,7 +323,16 @@ fn claim_3_refusal_cue_at_application() {
         step(&mut w);
         assert_eq!(refusals(&w), 0);
         w.effects.clear();
-        issue(&mut w, 0, Order::Build { what: tank });
+        if limit {
+            // spec: S-0407 claims 13 and 16 *At issue* (revision 29: claim 16's test is made at issue with the line's copies, so the second request gets no order and plays no sound; the cue can follow only an order that passed at issue and fails when applied, which `force` stands for)
+            assert!(!issue(&mut w, 0, Order::Build { what: tank }));
+            step(&mut w);
+            assert_eq!(refusals(&w), 0, "refused at issue: silent");
+            force(&mut w, 0, Order::Build { what: tank });
+        } else {
+            // spec: S-0404 claim 3 (the queue limit of maximum queued types is tested when the request is applied)
+            assert!(issue(&mut w, 0, Order::Build { what: tank }));
+        }
         step(&mut w);
         assert_eq!(refusals(&w), 1);
     }
