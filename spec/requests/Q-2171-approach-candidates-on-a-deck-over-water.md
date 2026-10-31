@@ -1,9 +1,9 @@
 ---
 id: Q-2171
 title: Approach candidates on a high-bridge deck over water, and the reach test of an actor on such a deck
-status: open
+status: answered
 related: [S-0307, S-0212, S-0215]
-answered-by: [S-0307]
+answered-by: [S-0307, S-0215]
 ---
 
 ## Need
