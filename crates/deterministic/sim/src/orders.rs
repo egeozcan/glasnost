@@ -157,6 +157,11 @@ pub enum Order {
         target: Option<Target>,
         /// Destination.
         dest: Option<Target>,
+        /// The order's place (S-0213 claim 16b, revision 84): the target's;
+        /// for a *move*, the clicked cell or the clicked object's cell at
+        /// the click; for any other order, the destination's. `None`: the
+        /// order has no place and adds no point.
+        place: Option<Target>,
     },
     /// A point join (S-0213 claim 16a): the actor joins an existing route
     /// point of the house, or closes a loop at it. A press's orders name
@@ -566,6 +571,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             attack_move,
             target,
             dest,
+            place,
         } => {
             let step = crate::routes::Step {
                 point: 0,
@@ -576,7 +582,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 committed: false,
                 since: 0,
             };
-            crate::routes::apply_point(w, house, actor, step);
+            crate::routes::apply_point(w, house, actor, step, place);
         }
         Order::RouteJoin {
             actor,
@@ -659,7 +665,7 @@ fn on_vehicle_factory(w: &World, id: ObjectId) -> bool {
 
 /// Attack-move eligibility (S-0214 claim 5): infantry or a vehicle with a
 /// weapon in its first slot and without the prevent-attack-move flag.
-fn eligible(w: &World, id: ObjectId) -> bool {
+pub fn attack_move_eligible(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
         return false;
@@ -694,7 +700,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     let (b, memory) = if attack_move {
         if !mobile {
             (Behaviour::AttackMove, None)
-        } else if eligible(w, actor) {
+        } else if attack_move_eligible(w, actor) {
             match (target, dest) {
                 (Some(t), None) => (Behaviour::Attack, Some(Some(AttackMoveMemory::Target(t)))),
                 (_, Some(d)) => (Behaviour::Move, Some(Some(AttackMoveMemory::Dest(d)))),

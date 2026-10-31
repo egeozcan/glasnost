@@ -60,9 +60,10 @@ pub const MAGIC: [u8; 2] = *b"GN";
 /// Version 9 (M8 step C7): the room's setup and `Edit::Game` carry the
 /// *Pathing and other fixes* choice. Version 10 (M8 A3 intake 50): the
 /// route-mode order kinds. Version 11 (M8 A3 intake 56): the point join
-/// names its point by place.
+/// names its point by place. Version 12 (M8 A3 intake 63): the point add
+/// carries its order's place.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 11;
+pub const WIRE_VERSION: u8 = 12;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.

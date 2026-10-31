@@ -542,6 +542,8 @@ fn routed(c: &mut Client) -> ([ObjectId; 3], [u32; 3]) {
             attack_move: false,
             target: None,
             dest: Some(glasnost_sim::world::Target::Cell(cell)),
+            // spec: S-0213 claim 16b (revision 84: a move's place is the clicked cell's)
+            place: Some(glasnost_sim::world::Target::Cell(cell)),
         })
         .collect();
     session_mut(c).play.issue(adds);

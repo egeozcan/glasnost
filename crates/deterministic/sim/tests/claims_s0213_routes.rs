@@ -81,6 +81,7 @@ fn add(actor: ObjectId, c: CellXY) -> Order {
         attack_move: false,
         target: None,
         dest: Some(Target::Cell(c)),
+        place: Some(Target::Cell(c)),
     }
 }
 
@@ -352,6 +353,7 @@ fn claim_16b_refusals_when_a_point_add_is_applied() {
             attack_move: false,
             target: Some(Target::Cell(at(4, 4))),
             dest: None,
+            place: Some(Target::Cell(at(4, 4))),
         }],
     );
     let info = |m| RouteNote::Added { info: Some(m) };
@@ -371,6 +373,7 @@ fn claim_16b_refusals_when_a_point_add_is_applied() {
             attack_move: false,
             target: Some(Target::Object(hut)),
             dest: None,
+            place: Some(Target::Object(hut)),
         }],
     );
     assert_eq!(notes(&w), vec![info("MSG:PostTerminatingCommand")]);
@@ -947,11 +950,16 @@ fn claim_16d_a_click_area_skips_the_kind_test_both_ways() {
             Some("MSG:PlanningModeNoBuildings")
         );
         if skips {
-            // spec: S-0213 claim 16d (a building with no route record then joins the point and gets a route, low); design (Q-2192): what it does with it is not studied
+            // spec: S-0213 claim 16d (revision 84: a building with no route record then joins the point and gets a route, a route holder like any other object; a commit starts it from guard and it issues its first point, a move, under which it does nothing and issues no further point; claims_s0213_r84.rs tests the rest of its moments)
             assert_eq!(press(&w, &[hut], &[ps[0]]), Press::Take(ps[0]));
             let os = routes::press_orders(&w, A, &[hut], ps[0]);
             give(&mut w, os);
             assert_eq!(steps(&w, hut), ps);
+            give(&mut w, vec![Order::RouteCommit]);
+            assert_eq!(steps(&w, hut), ps[1..].to_vec(), "the commit starts it");
+            run_until(&mut w, 30, |w| current(w, hut) == Some(Behaviour::Move));
+            testkit::run(&mut w, 600);
+            assert_eq!(steps(&w, hut), ps[1..].to_vec(), "no further point");
         }
     }
 }
@@ -992,7 +1000,8 @@ fn claim_16b_a_press_orders_the_holders_of_the_last_point() {
     assert_eq!(w.routes.routes[&x].loop_from, Some(0));
     assert_eq!(steps(&w, wv), vec![ps[1], ps[2], ps[0], ps[1], ps[2]]);
     assert_eq!(w.routes.routes[&wv].loop_from, Some(2));
-    assert_eq!(w.routes.routes[&wv].loop_to, None);
+    assert_eq!(w.routes.routes[&wv].loop_len, Some(3));
+    assert!(!w.routes.routes[&wv].loop_ends_early());
     // spec: S-0213 claim 16h (selecting V while the key is held also selects the other holders of its last point, in the order they were given it)
     assert_eq!(routes::also_selected(&w, v), vec![wv, x]);
 }
@@ -1026,19 +1035,21 @@ fn claim_16b_a_press_copy_ignores_route_state_both_ways() {
         let r = &w.routes.routes[&wv];
         assert_eq!(steps(&w, wv), vec![p[1], p[4], p[0], p[1], p[2], p[3]]);
         if ignores {
-            assert_eq!((r.loop_from, r.loop_to), (Some(0), Some(3)), "P2, P5, P1");
+            assert_eq!((r.loop_from, r.loop_len), (Some(0), Some(3)), "P2, P5, P1");
+            assert!(r.loop_ends_early());
         } else {
-            assert_eq!((r.loop_from, r.loop_to), (Some(3), None), "in the copy");
+            assert_eq!((r.loop_from, r.loop_len), (Some(3), Some(3)), "in the copy");
+            assert!(!r.loop_ends_early());
         }
-        // design (Q-2191): a loop that ends before the route's last point is gone round as any loop: the issued point moves to the loop's end and the points after it are never issued
+        // spec: S-0213 claim 16c, A loop that ends early (revision 84, Q-2191: once the points before the loop's first point have been issued, every issued point, of the loop or after it, moves to the end of the route; the loop's number of points plays no part in the order of issue)
         give(&mut w, vec![Order::RouteCommit]);
         let r = &w.routes.routes[&wv];
         if ignores {
-            assert_eq!(steps(&w, wv), vec![p[4], p[0], p[1], p[1], p[2], p[3]]);
-            assert_eq!((r.loop_from, r.loop_to), (Some(0), Some(3)));
+            assert_eq!(steps(&w, wv), vec![p[4], p[0], p[1], p[2], p[3], p[1]]);
+            assert_eq!((r.loop_from, r.loop_len), (Some(0), Some(3)));
         } else {
             assert_eq!(steps(&w, wv), vec![p[4], p[0], p[1], p[2], p[3]]);
-            assert_eq!((r.loop_from, r.loop_to), (Some(2), None));
+            assert_eq!((r.loop_from, r.loop_len), (Some(2), Some(3)));
         }
     }
     // Past 16 points.
