@@ -2,13 +2,13 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 13
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561]
+requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159]
 supersedes: []
 ---
 
@@ -619,6 +619,87 @@ above the terrain*.
       that it can establish independently, not the otherwise hidden startup cadence.
     - Confidence: high
 
+### Close targets
+
+27. **Close targets and the launcher's own blast (Q-2159).**
+    - **No shot inside the minimum range, and a reset at adoption.** A spawner's shot needs the
+      firing check, whose range test includes the spawner weapon's minimum range (S-0307 claim
+      9). An idle controller makes the same range test, minimum range included, when it adopts
+      the target (claim 5). So a spawner whose weapon has a minimum range and is not of
+      unlimited range (S-0307 claim 2) does not fire at a target inside it, and the spawner's
+      approach step (S-0215 claim 37) acts on it as for any other target that is not in range:
+      whether the spawner keeps the target and gets a destination follows that claim's parts d
+      and f from its current behaviour and its type's can-approach property. For such a spawner, a
+      controller whose adopted target is inside the minimum range at the adopting pass resets
+      (claim 11) instead of launching. Being berserk changes neither test: the only firing
+      refusal that the berserk state adds is S-0610 claim 6's berserk-friendly one.
+    - **A target that comes close after adoption.** A launching controller does not repeat the
+      range test (claim 5). A target that comes inside the minimum range, or next to the spawner,
+      after the controller adopted it therefore still gets the launches of claims 6 to 8. A
+      missile slot launches only while the spawner's locomotor reports that it is not moving
+      (claim 6), whatever its position shows. Each rocket flies to
+      the aim point that claim 14 fixes, which can lie next to the spawner.
+    - **The launcher in its own blast.** The missile is the source object of its detonation (claim
+      19), so it is the hit's attacker (S-0302 claim 1). Area damage leaves out that source object
+      (S-0303 claim 9), so the spawner and the objects near it are candidates like any others. The
+      allies row of S-0302 claim 8 reads the owner of the hit's attacker object, the missile, and
+      not the detonation's source house, which claim 19 leaves empty. The missile belongs to the
+      spawner's house (claim 9), and a house is allied with itself. So, for a
+      spawner that has not changed house since the missile was made, when the rocket's warhead does
+      not affect allies, the stage-2 allies row of S-0302 claim 8 stops the hit on the spawner and
+      on the other objects of the spawner's house. For objects of other houses, S-0302 claim 8
+      governs whether the allies row stops the hit, with that claim's backing and confidence.
+      When the warhead affects allies, they take the
+      hit like any other object within the warhead's reach. Neither rule reads the berserk state, so
+      a berserk spawner's rockets damage it, and its housemates, exactly as an ordinary spawner's
+      do.
+    - **Crushing a berserk spawner.** Being berserk does not change whether a crusher can crush
+      an object (S-0210 claim 2): that test reads the object's house, flags and state, and not
+      whether it is berserk. So a crusher whose movement reaches the centre of a berserk spawner's
+      cell (S-0210 claim 3) crushes it when it would crush the same spawner not berserk, and
+      S-0210 claim 11's variants that drive at the crusher's target treat a berserk target the
+      same way. None of S-0210 claim 11's
+      choices names a cell: each sets the crusher's destination to the object itself, so the cell
+      under a spawner is never taken as a crush destination.
+    - **The crush response and a spawner's rockets.** A spawner's weapon launches no projectile,
+      and each hit of its rockets names the missile as its attacker. So when a spawner's rocket
+      hits a crusher, the crush response (S-0210 claim 11) can only name that missile as the
+      crusher's destination, and never the spawner, when neither the spawner nor the crusher is
+      berserk. The response's own test does not read whether the attacker, or the crusher, is
+      berserk: it judges alliance by house only, through S-0210 claim 2's test. So a berserk
+      spawner's rocket hit is answered in the same way, and the response never names that spawner
+      either.
+    - Backing: `measurable` (scenario R23: part a for the refusal inside the minimum range at
+      the shot and for the destination that the approach step gives, part b for the reset at
+      adoption, part c for the berserk case, part d for the
+      target that comes close after adoption, part e for the blast on the spawner and a
+      housemate with both settings of the affects-allies field, part f for crushing a berserk
+      infantry unit along a route, part g for crushing a berserk spawner in its cell, part h for
+      the response to a spawner's rocket).
+      The blast on objects of other houses is S-0302 claim 8's, at that claim's backing and
+      rating: part e's only object of another house is the target, whose house is allied with
+      no other house, so no part here has a one-way alliance.
+      That a berserk spawner's own blast is resolved like an ordinary one is `unmeasured`: no
+      scenario here puts a berserk spawner within its own rocket's reach. That the target-driven
+      variants and the response treat a berserk object like any other is `unmeasured`: no
+      scenario here gives a crusher a berserk target, or has a berserk crushable object hit a
+      crusher whose owner the response allows. Part h makes nothing berserk, so it backs the
+      response naming the missile and never the spawner only when neither is berserk. A berserk
+      crusher's response is S-0210 claim 11's, at that claim's rating.
+    - Confidence: high for the refusal inside the minimum range at the shot, for the reset at
+      adoption, and that being berserk does not change whether a crusher crushes an infantry
+      unit or a spawner whose reference point lies less than 128 leptons from the crusher's
+      centre on a tick on which its movement reaches a cell's centre (parts f and g compare each
+      berserk object with a twin that is not). Medium for the berserk case, for the launch
+      at a target that comes close after adoption, for the blast outcome on the spawner and the
+      objects of its house with each setting of the affects-allies field, for a berserk
+      spawner's own blast, for the allies row reading the missile's owner, for the destination
+      that the approach step gives, and for the response naming the missile and never the
+      spawner when neither is berserk. Low for the target-driven variants treating a berserk
+      target like any other, as S-0210 claim 11 rates the omni-crusher and attack-target
+      variants low, and low for the response treating a berserk attacker like any other,
+      including a berserk spawner's rocket hit never naming that spawner.
+
 ## Formulas
 
 Number domains: positions and recorded distances are integer leptons; table-root results before
@@ -1205,11 +1286,104 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   water and a conventional test warhead: expected the splash list (F5's splash case, decided at the
   nose point and its cell).
 
+- **R23. Close targets and the launcher's own blast (claim 27; Q-2159).** A named test map
+  overrides the spawner weapon's range and minimum range (the minimum range non-zero and well
+  below the range), the pause and tilt durations (long), the rocket warhead's affects-allies
+  field, reach and damage, and the spawner type's can-approach property (set to yes) and its
+  deploy-to-fire setting (off, so S-0215 claim 37 f2 does not apply). All of these are test
+  values. From every detonation point within the weapon's range of the spawner, the reach covers
+  the positions and the cells of both the spawner and the housemate below, and the damage is high
+  enough that S-0303's area damage at every such distance is above zero. Record on every tick the
+  spawner's position, its current behaviour, its destination, the spatial distance from its
+  range-test source point to its target, each pass's controller target and every fire event,
+  launch, reset, aim point and detonation point. Also record the health of the spawner, of a test
+  vehicle of the spawner's house standing in a cell next to the spawner's cell (the housemate),
+  and of the target. Unless a part says otherwise, the target belongs to the spawner's house and
+  the spawner force-fires at it, by a behaviour order for *attack* with that target (S-0213 claim
+  5).
+  - (a) A named high-health test structure (as in R11) stands inside the minimum range of the
+    spawner, which is ordered to fire at it. The target is then not in range (S-0215 claim 37
+    b), and in *attack* the spawner keeps it (that claim's part d). Expected: no fire event and
+    no launch while the distance is below the minimum range; the spawner keeps the target and
+    gets a destination by S-0215 claim 37 f; every fire event comes at a distance at or above
+    the minimum range. Falsified by a fire event or a launch at a distance below the minimum
+    range, or by a processing of *attack* with the target inside the minimum range after which
+    the spawner has neither the target nor a destination.
+  - (b) The target is a test vehicle just outside the minimum range, ordered to drive to a cell
+    next to the spawner right after the spawner's fire event. Count only the runs in which the
+    distance is below the minimum range at the adopting pass. Expected in a counted run: a reset
+    at that pass and no launch. Falsified by a launch in a counted run.
+  - (c) Repeat part a with the spawner made berserk as in S-0610 scenario P2 (that scenario's
+    chaos drone, withdrawn afterwards); the berserk spawner takes the test structure as target
+    on its own. Void a run in which its target is any other object, or in which the berserk
+    state ends before its first fire event. Its behaviour is then *hunt* (S-0610), in which a
+    type with the can-approach property keeps a target out of range (S-0215 claim 37 d).
+    Expected and falsified as in part a, with *hunt* in place of *attack*.
+  - (d) The target is a test vehicle outside the minimum range, ordered to drive to a cell next
+    to the spawner after the adopting pass. The spawner gets no order after its fire order, and
+    the cell the target drives to is free and off the spawner's cell, so nothing asks the
+    spawner to move. Also record on every tick the *moving now* report (glossary) of the
+    spawner's current locomotor, the report that claim 6 reads; an unchanged position does not
+    establish that report. Vary the order tick, and count only the runs in which the distance
+    is at least the minimum range at the adopting pass and below it at the next pass, the pass
+    at which claim 5 gives the first launch, and in which that report is "not moving" at that
+    next pass. Expected in a counted run: a launch at that next pass, and no reset. Falsified
+    by a reset, or by no launch at that next pass, in a counted run.
+  - (e) This part adds a computer house allied with no other house, owning only a named
+    high-health test structure, which is the target; it stands outside the minimum range, and
+    the spawner is ordered to attack it. Run once with the affects-allies field on and once with
+    it off. Expected: the target loses health in both runs and survives to the end of each run.
+    With the field on, the spawner and its housemate lose health by S-0303's area damage at
+    their distances from the recorded detonation point; with it off, neither does. Falsified by
+    a health loss of either with the field off, or by none with it on.
+  - (f) A crusher of a test type of the human house drives over a cell holding a crushable
+    infantry test unit of the computer house of part e that is berserk (made so by a chaos drone
+    of the human house), and
+    over a cell holding a twin that is not berserk. The crusher's warning can make either unit
+    leave (S-0210 claim 7), so record on every tick each unit's cell and the ticks on which the
+    crusher's movement reaches a cell's centre (S-0210 claim 3), and on each such tick the
+    horizontal distance of S-0210 Formulas F1 from each unit's position to the crusher's
+    centre. The map is flat ground with no bridge. Count a unit in a run only on such a tick
+    on which that distance is less than 128 leptons. Expected: each counted unit is crushed on
+    the first tick on which it is counted, the berserk one as its twin. Falsified by a counted
+    unit that survives that tick. A run set in which either unit is never counted gives no
+    result.
+  - (g) The test map also makes the spawner type crushable (a test value). A crusher of a test
+    type of the human house is ordered to drive to the cell of a spawner of the computer house of
+    part e that is berserk (made so by a chaos drone of the human house), and then to the cell
+    of a twin that is not berserk. Record on every tick each spawner's position, the ticks on
+    which the crusher's movement reaches a cell's centre (S-0210 claim 3), and on each such tick
+    the horizontal distance of S-0210 Formulas F1 from each spawner's position to the crusher's
+    centre. The map is flat ground with no bridge. Count a spawner in a run only on such a tick
+    on which that distance is less than 128 leptons. Void a run in which either spawner is never
+    counted. Expected: each spawner is crushed on the first tick on which it is counted.
+    Falsified by either one surviving that tick.
+  - (h) The spawner type stays crushable as in part g, and in this part the test map gives the
+    spawner weapon no minimum range and sets the affects-allies field off (test values). A
+    crusher of an unarmed test type, owned by a computer-controlled house that S-0210 claim 11's
+    table allows the response (as in S-0210 scenario K7), stands next to the spawner, within
+    the crush range of it, and the spawner is ordered to attack it. Record the crusher's
+    destination on every tick and every hit on it, with the hit's attacker by role. Expected:
+    every rocket hit names the missile as attacker, and the crusher's destination is never the
+    spawner. Falsified by a rocket hit that names the spawner, or by the spawner as the
+    crusher's destination.
+- **R24. How launchers leave play against chaos drones (Open questions; Q-2159 question 1).**
+  Replay the games of M-0016 in which a chaos-drone group meets a missile-launcher group and the
+  drone group wins, with the recorder. For every launcher record the tick at which it leaves
+  play and what removed it: the object that made the killing hit and the hit's warhead, each by
+  role, or the cause of a removal without a hit. Record also whether it was berserk then, its
+  target, and for each rocket it launched the launch position, the aim point, the detonation
+  point and the distance from the launcher to that point. No expected value: the record answers
+  the open question.
+
 ## Open questions
 
 - The complete list of events that reset the controller (claim 11) and clear its slots (claim 13),
   especially other disabling effects than the electromagnetic pulse.
 - Whether all building docking classifications in claim 14 are reachable as stock rocket targets.
+- (Q-2159 question 1.) How each of the last launchers leaves play in the games of M-0016 that a
+  chaos-drone group wins against a missile-launcher group is not established: M-0016 records
+  outcomes only. Scenario R24 records it.
 
 ## Questions for the project lead
 
