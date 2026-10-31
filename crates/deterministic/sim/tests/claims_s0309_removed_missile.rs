@@ -121,7 +121,6 @@ fn put(w: &mut World, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
 
 // spec: S-0309 claim 27 (r51, Q-2006: every infantry unit, vehicle, building and aircraft that holds an object as its target drops it at the moment the object is removed, inside the removing action; no holder keeps it until its own next turn)
 #[test]
-#[ignore = "S-0309 claim 27 (r51, Q-2006) is built by intake 52b; on main only aircraft holders drop a removed target"]
 fn claim_27_a_removed_missile_is_dropped_by_its_anti_air_holder() {
     let r = rules();
     let mut w = testkit::game_with(&r, SIZE, 7);
