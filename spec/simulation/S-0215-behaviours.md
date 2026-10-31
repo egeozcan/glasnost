@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 88
+revision: 91
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171]
 supersedes: []
 ---
 
@@ -2881,18 +2881,50 @@ apply in our engine to the actors of every player house.
 ### Approaching the target
 
 37. **The approach step (Q-0072, questions 1, 4 and 5, and the behaviour side of question 3,
-    and Q-2113 question 1, behaviour side).**
+    Q-2113 question 1, behaviour side, and Q-2171 question 4).**
     - (a) **When it is taken.** An infantry unit or vehicle takes the approach step at every
       processing of *attack* in which it has a target after the charge-target check (claim 23,
       row *approach*), so at the cadence of that processing's delay (claim 23 and F3), not on
       every tick. The *area guard* and *hunt* processings take it too where claims 26 and 27 say
       the actor approaches its target (the *guard* processing does not). Separately, on every tick, an infantry unit or
       vehicle that has a target and no destination, is not a team member, and either cannot reach
-      its target's cell (the target's cell is not in the actor's reach region for its movement
-      zone, S-0212 Terms; an actor whose type has no movement zone reaches every cell) or is a
-      passenger of an open-topped transport, takes the approach step in every behaviour; if it
-      still has no destination afterwards and its target is out of range (part b), it drops the
-      target. Aircraft, and buildings, never take the approach step (part g).
+      its target's cell (part a1) or is a passenger of an open-topped transport, takes the
+      approach step in every behaviour; if it still has no destination afterwards and its target
+      is out of range (part b), it drops the target. Aircraft, and buildings, never take the
+      approach step (part g).
+
+      (a1) **Cannot reach (Q-2171 question 4).** The actor cannot reach its target's cell when
+      S-0212 claim 6's comparison, made with the actor in place of the unit and the target's cell
+      in place of the destination cell, finds the two in different reach regions of the actor's
+      movement zone. So the actor's cell is read for its deck (S-0212 claim 4) when the actor is
+      on a bridge deck, and the target's cell whenever that cell carries a high bridge, whichever
+      layer the target is on. Two cells of no reach region count as the same region, and so do
+      two off-map cells (S-0212 claim 4). The comparison is skipped, and the target counts as
+      reachable, in claim 6's three exceptions. First, the actor's type has no movement zone,
+      which never happens in our engine (S-0212 departure D1). Second, the actor's cell is
+      outside the usable area but a legal cell. Third, the actor is in the corridor-disabling
+      state of S-0212 claim 14 (a train, a loaner, or current behaviour *retreat*: its team
+      condition does not arise, since a team member is excluded above), its cell is inside the
+      usable area, and the target's cell is a legal cell outside it. The actor's cell is the
+      cell of one point. While the actor travels through a tunnel (S-0212 Terms), it is the
+      tunnel exit's cell centre. Otherwise it is the point the actor's locomotor is moving it
+      towards at that moment, while there is one, and otherwise the actor's own position. For a
+      walking infantry unit that point is its walking target (S-0208 Terms), not the end of its
+      walk, so for infantry the point is its scatter reference point (S-0208 Terms). For a
+      vehicle it is its heading point as its movement spec gives it (S-0207 Terms for driving,
+      S-0503 Terms for hovering). So it is the actor's own cell while it has no movement in
+      progress.
+
+      So an actor on a deck reaches a target on the same bridge when both cells are read through
+      enabled links whose first ends lie in one reach region (as S-0307 claim 19 has it for its
+      candidates), and an actor on a bank cell of the region that the target's deck read gives
+      reaches a target on the deck or on the water under it. Two cells of one bridge need not
+      read through the same link, so being on the same bridge alone does not settle it.
+      Apart from the three exceptions, an actor on a cell of no reach region reaches a target on
+      another such cell, and no other.
+      A target on the water under a high bridge is read for the deck as well, so a vessel on that
+      water counts as unable to reach it unless the deck read gives the vessel's region. These
+      results follow S-0212 claim 6, which has no switch, and have none here.
 
       (a2) **Place in the tick (Q-0161).** The per-tick rule above judges the target,
       destination and current behaviour left after the per-tick start, any processing on that
@@ -3033,7 +3065,18 @@ apply in our engine to the actors of every player house.
       *attack* and *area guard*, case c2 for *hunt* with a human-controlled owner, case d for
       the per-tick rule with an unreachable target, case e for deployed infantry, case f for zero-speed types,
       case g for part a2's order on processing and non-processing ticks and same-tick loss
-      of a newly found target; B16 case e for buildings).
+      of a newly found target, case h for part a1; B16 case e for buildings).
+      Part a1's comparison and its deck reads through an enabled link are `measurable` (B32 h).
+      Part a1's deck reads through a link that is not enabled or with no link found are
+      `unmeasured`, for S-0212 claim 4's reasons. Its comparison of two cells of no reach region,
+      or of two off-map cells, is `unmeasured`: no scenario here stands an actor that holds a
+      target on such a cell. Its three exceptions are `unmeasured`: S-0212 claim 6's scenarios
+      back them for path computations only, and no scenario here puts an actor that holds a
+      target outside the usable area or in the corridor-disabling state while isolating the
+      per-tick rule. A moving actor's cell (the point its locomotor is moving it towards, or the
+      tunnel exit) is `unmeasured`: no scenario here gives an actor that is still moving a
+      target out of range with no destination (S-0307's Open questions leave the moving case
+      unmeasured for its search too).
       Part a2's independent eligibility and same-tick destination or target outcomes are
       `measurable` (B32 g). An unchanged in-range state imposes no requirement to repeat
       an indistinguishable evaluation.
@@ -3057,6 +3100,12 @@ apply in our engine to the actors of every player house.
       part f); medium (part c's magnetic-beam case and its part h exception, as S-0607 claim 11
       rates them, the per-tick rule of part a, the in-the-playfield mark, part f2, part g's deployed
       infantry and zero-speed types). High for part a2's ordering and independent eligibility.
+      Part a1: medium for the comparison and its deck reads through an enabled link. Low for its
+      deck reads through a link that is not enabled or with no link found, and for two cells of
+      no reach region or two off-map cells, as S-0212 claim 4 rates them. Low for the three
+      exceptions: S-0212 claim 6 rates them medium for path computations, but none of that
+      claim's backing concerns the per-tick rule and no scenario here tests them. Low for a
+      moving actor's cell.
 
 38. **House-selected centre after path give-up (Q-0238 and Q-0312).** This complements
     S-0212 claim 23a and its final nearby-search row in T5. It applies to the original's
@@ -5157,7 +5206,40 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   in-range case, repeat (d) with the unreachable target stationary in range across a known
   attack processing tick: expected target kept and no destination. These end states
   test the outcome only; no internal evaluation count is required by claim 37 a2.
-  Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. No external controller may play either house or alter game state. Run without mods or engine add-ons, apart from the named test data permitted by the common setup. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle and infantry in a, b, c, c2 and f; vehicle only in d and g; infantry only in e).
+  (h) Q-2171 question 4: the reach comparison at a bridge (claim 37 a1). A named map has one
+  bridge only: an enabled high bridge over water, of at least 10 deck cells, whose two banks
+  are also joined by land away from the bridge, so that both lie in one reach region of the
+  ground movement zone.
+  The bridge stays intact throughout, and each named object on or under it stands within 1 cell
+  of the bridge's centre line, so that each deck read finds the bridge's link (S-0212 claim 4).
+  Use case g's named test file, attacker vehicle and recorder, with the attacker in *guard*,
+  no target or destination, and an unarmed enemy object stationary 8 cells away. Run 1: the
+  attacker on the deck, the target an enemy vehicle on the same deck. Run 2: the attacker on a
+  bank cell, the same target. Run 3: the attacker on a bank cell, the target an enemy hover
+  vehicle on the water under the deck. Run 4 (control): the attacker on the deck, the target an
+  enemy hover vehicle on open water beside the bridge, with no bridge over its cell. Each run
+  has a control run, identical except that the named test file raises the attacker's weapon
+  range to 10 cells, so that the target is within range and the per-tick rule keeps it under
+  every reading. A run is void unless its control's target is held at the end of the control's
+  acquisition tick: that shows the search takes this target from this cell. Expected:
+  in runs 1 to 3 the target is still held at the end of its acquisition tick, with no
+  destination; in run 4 it is absent by the end of that tick, as in case g. Reading both cells
+  for their ground predicts a drop in runs 2 and 3 and a kept target in run 4. Reading the
+  actor's cell for its ground predicts a drop in run 1, and reading the target's cell for its
+  deck only when the target is on the deck predicts a drop in run 3. Falsified, in a run that
+  is not void, by a drop in runs 1 to 3, or by a target kept to the end of its acquisition tick
+  in run 4. Inconclusive: a
+  run with no recorded search tick that restarts the targeting timer while the target is within
+  guard range; a run in which the bridge is damaged or a named object stands farther than 1
+  cell from the centre line; a run in which a named object is not recorded in its stated layer
+  (the attacker on the deck in runs 1 and 4, the target on the deck in runs 1 and 2, and on the
+  water under the deck in run 3).
+  Record the stated actor and random-stream observables each tick, using the measurement
+  setup's scripted inputs. No external controller may play either house or alter game state.
+  Run without mods or engine add-ons, apart from the named test data permitted by the common
+  setup. Runs: three valid search ticks of each kind in case g, and three per other case and
+  attacker kind (vehicle and infantry in a, b, c, c2 and f; vehicle only in d, g and
+  h; infantry only in e).
 
 - **B33 (claim 13, Q-0202).** Common setup and fixed game speed 2. First repeat B15 b/c on a
   tiny open map with three ordinary move route points, no held attack-move input modifiers and
@@ -5876,6 +5958,12 @@ checks, not additional rules of this spec.
   claim 12 ties to a result ("a berserk hit has none, whatever it reports"). The crush response
   (claim 39) is not tied to the result and is made after a berserk hit too. S-0302 claims 10 and
   12 should say so where they list what a berserk hit does not set off.
+- **S-0307, Open questions ("Reach region of a moving attacker").** It names the point whose
+  cell the clear-cell test reads the scatter reference point, "its own cell only while it is not
+  moving". For infantry that is exact (its walking target, else its own position). For a
+  vehicle the point is its heading point as its movement spec gives it, as for claim 37 (a1)
+  here, which S-0208's term (built on an infantry unit's walking target) does not name. The
+  question should name the point as claim 37 (a1) does.
 - **S-0610, claim 4.** The *hunt* that the berserk entry queues is replaced by *move* when the
   same hit gives the crush response (claim 39). Its re-hit sentence ("A berserk hit on a unit that
   is already berserk only sets its remaining time to the new *T* … Nothing else changes: its
