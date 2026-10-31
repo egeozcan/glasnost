@@ -1686,7 +1686,7 @@ pub struct Quirks {
     // spec: S-0314 claim 21 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_remote_repair: bool,
-    /// After its depot is destroyed, a docked vehicle stays asleep and neither fires nor reacts until ordered; off: destruction gives contacts the sale's run-away notice and they switch to guard.
+    /// After its depot is destroyed, a contacted vehicle after its movement arrival in the docking-point cell, docked or not, keeps its behaviour: one in sleep stays asleep and neither fires nor reacts until ordered, one in guard stays in guard; off: destruction gives such contacts the sale's run-away notice and one in sleep switches to guard.
     // spec: S-0314 claim 22 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_loss_leaves_sleep: bool,

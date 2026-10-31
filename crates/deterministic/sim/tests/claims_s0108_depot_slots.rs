@@ -467,3 +467,196 @@ fn claim_20_special_2_after_a_failed_departure() {
     assert!(!runs(&w, k, DepotSlot::Special2));
     assert!(runs(&w, k, DepotSlot::Special3));
 }
+
+/// [`rules`] with M-0007's test rates, which are not stock values: the
+/// vehicle repair rate 0.125 minutes (*K*<sub>u</sub> = 113) and the
+/// *repair* behaviour's rate 1/64 minute (*D* = 14).
+fn m0007_rules() -> Ruleset {
+    let mut r = rules();
+    // measure: M-0007 (Setup: test rates, the vehicle repair rate 0.125 minutes, K_u 113)
+    r.sim.general.u_repair_rate = Some(glasnost_rules::sim::Decimal("0.125".into()));
+    r.sim.behaviours.insert(
+        "repair".into(),
+        glasnost_rules::sim::BehaviourProps {
+            // measure: M-0007 (Setup: test rates, the repair behaviour's rate 1/64 minute, D 14)
+            rate: Some(glasnost_rules::sim::Decimal("0.015625".into())),
+            ..Default::default()
+        },
+    );
+    r
+}
+
+/// M-0007's pilot on synthetic data: a damaged truck ordered into DEPOT at
+/// tick 4. Returns the world before any tick after the order.
+fn m0007_pilot(health_at: i32) -> (World, ObjectId, ObjectId) {
+    let mut w = game(&m0007_rules());
+    let k = spawn(&mut w, Kind::Building, "DEPOT", 0, 0);
+    let v = spawn(&mut w, Kind::Vehicle, "TRUCK", 6, 1);
+    w.obj_mut(v).unwrap().health = health_at;
+    while w.tick < 4 {
+        step(&mut w);
+    }
+    let o = Order::Behaviour {
+        actor: v,
+        behaviour: Behaviour::Enter,
+        attack_move: false,
+        target: None,
+        dest: Some(Target::Object(k)),
+    };
+    assert!(orders::issue(&mut w, ALPHA, o));
+    (w, k, v)
+}
+
+/// The ticks of the pilot's accepting waiting processing (the depot enters
+/// settling) and of its settling step.
+fn m0007_ticks() -> (i32, i32) {
+    let (mut w, k, v) = m0007_pilot(300);
+    let mut accept = None;
+    for _ in 0..600 {
+        let t = w.tick;
+        step(&mut w);
+        if beh(&w, k) == (Some(Behaviour::Repair), 1) {
+            accept = Some(t);
+            break;
+        }
+    }
+    let accept = accept.expect("the waiting processing accepts the truck");
+    let h = w.obj(v).unwrap().health;
+    let mut settle = None;
+    for _ in 0..20 {
+        let t = w.tick;
+        step(&mut w);
+        if w.obj(v).unwrap().health != h {
+            settle = Some(t);
+            break;
+        }
+    }
+    (accept, settle.expect("the settling step"))
+}
+
+/// Runs the pilot to the end of tick `last` (`w.tick` is then `last + 1`).
+fn m0007_until(health_at: i32, last: i32) -> (World, ObjectId, ObjectId) {
+    let (mut w, k, v) = m0007_pilot(health_at);
+    while w.tick <= last {
+        step(&mut w);
+    }
+    (w, k, v)
+}
+
+// spec: S-0314 claim 6 (the settling step 3 ticks after the accepting waiting processing; the second step D + K_u − 1 ticks after it, each later step K_u after the one before)
+// measure: M-0007 (pilot: accepting processing 215, settling step 218, second step 344 = 218 + 126, later steps every 113, with D 14 and K_u 113)
+#[test]
+fn m0007_pilot_step_spacing() {
+    let (accept, settle) = m0007_ticks();
+    assert_eq!(settle - accept, 3);
+    let (mut w, _k, v) = m0007_until(300, settle);
+    let mut steps = vec![settle];
+    while steps.len() < 4 {
+        let h = w.obj(v).unwrap().health;
+        let t = w.tick;
+        step(&mut w);
+        if w.obj(v).unwrap().health != h {
+            steps.push(t);
+        }
+        assert!(w.tick < settle + 1000, "steps come: {steps:?}");
+    }
+    assert_eq!(steps[1] - steps[0], 126, "D + K_u − 1");
+    assert_eq!(steps[2] - steps[1], 113);
+    assert_eq!(steps[3] - steps[2], 113);
+}
+
+// spec: S-0314 claims 6 and 22, state table row "waiting, no contact" (the processing that finds no contact in waiting stops production and special-2 and starts special-3 and active-1, and sets the next one 1 tick later; the depot is in guard from that tick, whether or not special-3 still runs); S-0108 claim 20 (special-1 does not start)
+// measure: M-0007 (B18 part d's nearest case: the first waiting processing at 215 finds no contact and special-3 starts; guard at 216 while special-3 runs; special-1 does not start. Here the loss is the truck's destruction, which S-0314 claim 22 expects to time alike)
+#[test]
+fn m0007_waiting_loss_guard_one_tick_later() {
+    let (accept, _) = m0007_ticks();
+    let (mut w, k, v) = m0007_until(300, accept - 1);
+    assert_eq!(beh(&w, k).1, 0, "still waiting");
+    damage::apply(&mut w, v, lethal());
+    assert!(w.obj(v).is_none());
+    step(&mut w);
+    assert_eq!(
+        beh(&w, k).0,
+        Some(Behaviour::Repair),
+        "the waiting processing at {accept} keeps repair current"
+    );
+    assert!(runs(&w, k, DepotSlot::Special3), "special-3 starts there");
+    assert!(reports(&w, k).contains(&(true, true)), "active-1 starts");
+    step(&mut w);
+    assert_eq!(beh(&w, k).0, Some(Behaviour::Guard), "guard 1 tick later");
+    assert!(
+        runs(&w, k, DepotSlot::Special3),
+        "without waiting for special-3"
+    );
+    assert!(!runs(&w, k, DepotSlot::Special1));
+}
+
+// spec: S-0314 claims 6 and 22, state table row "settling, no contact, no special-3 running" (a loss in the 3 ticks after the acceptance is met by the settling row at the processing 3 ticks after the acceptance: no slot change, guard at that processing)
+// measure: M-0007 (run 5: destroyed at 216 after the acceptance at 215; guard at 218; special-3 does not start)
+#[test]
+fn m0007_run_5_loss_after_the_acceptance() {
+    let (accept, _) = m0007_ticks();
+    let (mut w, k, v) = m0007_until(300, accept);
+    assert_eq!(beh(&w, k), (Some(Behaviour::Repair), 1));
+    damage::apply(&mut w, v, lethal());
+    for t in accept + 1..accept + 3 {
+        step(&mut w);
+        assert_eq!(beh(&w, k).0, Some(Behaviour::Repair), "tick {t}");
+    }
+    step(&mut w);
+    assert_eq!(beh(&w, k).0, Some(Behaviour::Guard), "guard 3 ticks after");
+    assert!(!runs(&w, k, DepotSlot::Special3));
+}
+
+// spec: S-0314 claim 6 (settling, not needed: the vehicle is sent away at once, with no payment and no announcement; the next processing D ticks later) and claim 22 (that processing finds no contact in settling with no special-3 running: guard)
+// measure: M-0007 (run 6: health written to full at 216 or 217; not needed at 218, no payment, contact released, the vehicle sent away; next processing 232, guard there, no special-3)
+#[test]
+fn m0007_run_6_full_health_at_the_settling_step() {
+    let (accept, settle) = m0007_ticks();
+    let (mut w, k, v) = m0007_until(300, accept + 1);
+    w.obj_mut(v).unwrap().health = 600;
+    let credits = w.houses[0].credits;
+    while w.tick <= settle {
+        step(&mut w);
+    }
+    assert_eq!(w.obj(v).unwrap().contact, None, "sent away at {settle}");
+    assert!(w.obj(v).unwrap().dest.is_some());
+    assert_eq!(w.houses[0].credits, credits, "no payment");
+    let dd = w.rules().behaviour(Behaviour::Repair).rate_delay;
+    assert_eq!(dd, 14);
+    while w.tick < settle + dd {
+        step(&mut w);
+        assert_eq!(beh(&w, k).0, Some(Behaviour::Repair), "tick {}", w.tick - 1);
+    }
+    step(&mut w);
+    assert_eq!(beh(&w, k).0, Some(Behaviour::Guard), "guard D ticks later");
+    assert!(!runs(&w, k, DepotSlot::Special3));
+}
+
+// spec: S-0314 claim 22 (a loss during the D ticks after the settling step that started working is met at the first working processing, D ticks after that step: settling, special-3 and active-1 start)
+// measure: M-0007 (run 1: destroyed at 223 after the settling step at 218; reaction at 232: settling, special-3 and active-1 start)
+#[test]
+fn m0007_run_1_loss_in_the_gap_after_the_settling_step() {
+    let (_, settle) = m0007_ticks();
+    let (mut w, k, v) = m0007_until(300, settle + 5);
+    assert_eq!(beh(&w, k), (Some(Behaviour::Repair), 2));
+    damage::apply(&mut w, v, lethal());
+    while w.tick < settle + 14 {
+        step(&mut w);
+        assert_eq!(
+            beh(&w, k),
+            (Some(Behaviour::Repair), 2),
+            "tick {}",
+            w.tick - 1
+        );
+    }
+    step(&mut w);
+    assert_eq!(
+        beh(&w, k),
+        (Some(Behaviour::Repair), 1),
+        "settling at {}",
+        settle + 14
+    );
+    assert!(runs(&w, k, DepotSlot::Special3));
+    assert!(reports(&w, k).contains(&(true, true)), "active-1 starts");
+}

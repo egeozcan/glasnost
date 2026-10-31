@@ -1214,6 +1214,9 @@ fn claim_20_combined_roles() {
     let mut w = game_on(&r);
     let b = pit(&mut w, "PITDEPOT");
     let u = tank(&mut w, 6, 1);
+    // spec: S-0314 claim 16 (revision 107: at full health the repeated request refuses it, so the tank is damaged)
+    let full = w.obj(u).unwrap().health;
+    w.obj_mut(u).unwrap().health = full / 2;
     let bug = put(&mut w, Kind::Vehicle, "BUGGY", 0, -5, -4);
     // Permission: claim 2's rows (P8 refuses a vehicle that is not eligible).
     assert!(glasnost_sim::depot::accepts(&w, b, u, true));

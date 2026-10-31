@@ -674,6 +674,7 @@ fn claim_7_docking_place_rule() {
             depot: b,
             place: 2,
             tethered: true,
+            arrived: false,
         });
     }
     assert_eq!(
