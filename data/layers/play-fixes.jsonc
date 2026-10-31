@@ -120,6 +120,13 @@
       // quirk text: a visible glitch). In our engine these slots are the client's, so the
       // switch changes no simulation state (docs/m8-claims/c7-play-fixes.md, intake 53).
       "ungranted_super_reads_clock": false,
+      // S-0306 claim 3 (b) and Edge cases (quirks.switched_off_hover_lead off): a hovering
+      // vehicle that is switched off is not led, so shots at it aim at its reference point. On
+      // (the original), one that S-0503 still counts as moving (a heading point kept) is led
+      // along its body facing although it has stopped travelling, and the spec's own quirk text
+      // states that attackers that keep it as their target "can then fail to destroy it for the
+      // rest of the game" (a stuck attacker). Acts only on switched-off hovering targets.
+      "switched_off_hover_lead": false,
     },
   },
 }

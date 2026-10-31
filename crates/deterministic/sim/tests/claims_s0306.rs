@@ -2252,13 +2252,121 @@ fn claim18_degeneration() {
 
 // ================================================================= detonation (T1, T2, claims 19 to 21)
 
-// spec: S-0306 T1 row 1 and claim 20 (a) (below the terrain: detonate at P′, raised to the surface)
+/// The projectile `id` as one made without a firer (S-0306 Terms: no
+/// firer, no attacker, no attacking house).
+fn no_firer(s: &mut S, id: ObjectId) {
+    let x = s.w.projectiles.get_mut(&id).unwrap();
+    x.firer = None;
+    x.attacker = None;
+    x.house = None;
+}
+
+// spec: S-0306 T1 row 1 and claim 20 (a) (below the terrain, a projectile with no firer: detonate at P′, raised to the surface)
 #[test]
 fn t1_row1_below_the_terrain() {
     let mut s = setup(&base(), 5, 5);
     let p = c(-3, 2, 20);
     let id = place(&mut s, far(), p, [50, 0, -30]);
+    no_firer(&mut s, id);
     assert_eq!(step(&mut s, id), Out::Detonated(Pos::new(p.x + 50, p.y, 0)));
+}
+
+// spec: S-0306 T1 row 1 and Edge cases (quirks.owned_shell_ground_pass on: a projectile that has a firer is not detonated below the terrain; it flies on, its height not raised)
+#[test]
+fn t1_row1_owned_flies_on_below_the_terrain() {
+    let mut s = setup(&base(), 5, 5);
+    let p = c(-3, 2, 20);
+    let id = place(&mut s, far(), p, [50, 0, -30]);
+    assert!(glasnost_sim::combat::projectile::has_firer(
+        &s.w,
+        pr(&s, id)
+    ));
+    assert_eq!(
+        step(&mut s, id),
+        Out::Flying(Pos::new(p.x + 50, p.y, 20 - 40))
+    );
+}
+
+// spec: S-0306 Edge cases (quirks.owned_shell_ground_pass off: the whole first row applies to a projectile that has a firer, so it detonates where it first passes below the terrain, raised to the surface)
+#[test]
+fn quirk_owned_shell_ground_pass_off_below_the_terrain() {
+    let mut r = base();
+    r.globals.quirks.owned_shell_ground_pass = false;
+    let mut s = setup(&r, 5, 5);
+    let p = c(-3, 2, 20);
+    let id = place(&mut s, far(), p, [50, 0, -30]);
+    assert_eq!(step(&mut s, id), Out::Detonated(Pos::new(p.x + 50, p.y, 0)));
+}
+
+// spec: S-0306 T1 (the deep-fall row h′ ≤ −416) with T1 row 1 and claim 20 (a) (quirks.owned_shell_ground_pass on; scenario P44 part b: a projectile with a firer flies on below the surface and detonates in the first turn in which it is 416 or more below it, at the surface there, farther along than where it passed below)
+#[test]
+fn p44b_owned_projectile_falls_to_the_deep_fall_row() {
+    let mut s = setup(&base(), 5, 5);
+    let p = c(-3, 2, 20);
+    let id = place(&mut s, far(), p, [10, 0, -30]);
+    // Level ground at height 0: V_z falls by 10 each turn (claim 10), so the
+    // new heights are -20, -70, -130, -200, -280, -370 and then -470, the
+    // first at 416 or more below the surface.
+    let (mut z, mut vz) = (20, -30);
+    for turn in 1..=7 {
+        vz -= G;
+        z += vz;
+        let at = Pos::new(p.x + 10 * turn, p.y, z);
+        if turn < 7 {
+            assert_eq!(
+                step(&mut s, id),
+                Out::Flying(at),
+                "turn {turn}: flies on below the surface"
+            );
+        } else {
+            assert!(z <= -416);
+            assert_eq!(
+                step(&mut s, id),
+                Out::Detonated(Pos::new(at.x, at.y, 0)),
+                "the deep-fall row, at the surface"
+            );
+        }
+        s.w.tick += 1;
+    }
+}
+
+// spec: S-0306 T1 row 1 and Terms (a firer killed while the projectile flies: no firer, so the whole first row applies; scenario P44 part c: it detonates in the first turn below the terrain, at the surface there)
+#[test]
+fn p44c_firer_killed_detonates_below_the_terrain() {
+    let mut s = setup(&base(), 5, 5);
+    let p = c(-3, 2, 20);
+    let id = place(&mut s, far(), p, [50, 0, -30]);
+    let a = s.a;
+    glasnost_sim::combat::death::kill(&mut s.w, a, &big_hit());
+    assert!(!glasnost_sim::combat::projectile::has_firer(
+        &s.w,
+        pr(&s, id)
+    ));
+    assert_eq!(step(&mut s, id), Out::Detonated(Pos::new(p.x + 50, p.y, 0)));
+}
+
+// spec: S-0306 Terms (a firer removed from the game while the projectile flies: no firer; a firer gone inside, as into a closed transport, is still the firer) with T1 row 1
+#[test]
+fn terms_firer_removed_or_inside() {
+    for removed in [true, false] {
+        let mut s = setup(&base(), 5, 5);
+        let p = c(-3, 2, 20);
+        let id = place(&mut s, far(), p, [50, 0, -30]);
+        let a = s.a;
+        if removed {
+            glasnost_sim::objects::remove(&mut s.w, a);
+        } else {
+            glasnost_sim::objects::take_inside(&mut s.w, a);
+        }
+        let owned = glasnost_sim::combat::projectile::has_firer(&s.w, pr(&s, id));
+        assert_eq!(owned, !removed, "removed {removed}");
+        let out = step(&mut s, id);
+        if removed {
+            assert_eq!(out, Out::Detonated(Pos::new(p.x + 50, p.y, 0)));
+        } else {
+            assert!(matches!(out, Out::Flying(_)), "inside: still the firer");
+        }
+    }
 }
 
 // spec: S-0306 T1 row 1 (crossing a bridge deck going up: z at the deck height)
@@ -2287,57 +2395,189 @@ fn t1_row1_deck_crossing_down() {
     );
 }
 
+/// Who the projectile's firer is in the band tests.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Firer {
+    /// The cart of house 0, still in play.
+    Owned,
+    /// None (Terms: the projectile has no firer).
+    None,
+}
+
 /// A straight projectile entering cell (4, 0) at height `z` from the cell
-/// before, with a building of `house` there.
-fn band(z: i32, house: u8) -> Out {
-    let mut s = setup(&base(), 6, 6);
-    testkit::spawn(&mut s.w, Kind::Building, "TOWER", house, cell_of(4, 0), 0);
+/// before, with a building of `house` there; `tweak` changes the rules and
+/// `prep` the building before the turn.
+fn band_with(
+    z: i32,
+    house: u8,
+    firer: Firer,
+    tweak: impl FnOnce(&mut Ruleset),
+    prep: impl FnOnce(&mut World, ObjectId),
+) -> Out {
+    let mut r = base();
+    tweak(&mut r);
+    let mut s = setup(&r, 6, 6);
+    let b = testkit::spawn(&mut s.w, Kind::Building, "TOWER", house, cell_of(4, 0), 0);
+    prep(&mut s.w, b);
     let p = c(3, 0, z);
     let id = place(&mut s, far(), p, [256, 0, 10]);
+    if firer == Firer::None {
+        no_firer(&mut s, id);
+    }
     step(&mut s, id)
 }
 
-// spec: S-0306 T1 row 1 (0 to 149 above the terrain in a cell holding an enemy building: detonate at P′)
+fn band(z: i32, house: u8, firer: Firer) -> Out {
+    band_with(z, house, firer, |_| {}, |_, _| {})
+}
+
+// spec: S-0306 T1 row 1 (0 to 149 above the terrain in a cell holding an eligible building of any house, for a projectile with no firer: detonate, the point lowered to the terrain height; scenario P32 runs a, b and c)
 #[test]
 fn t1_row1_building_band() {
-    let at = c(4, 0, 140);
-    assert_eq!(band(140, 1), Out::Detonated(at));
-    // 150 above: over the band.
-    assert!(matches!(band(150, 1), Out::Flying(_)));
-    // A building allied with the firer's house does not stop it.
-    assert!(matches!(band(140, 0), Out::Flying(_)));
+    // P′ lies in cell (4, 0) at 140 above the terrain; the point ends at the terrain height.
+    let at = c(4, 0, 0);
+    assert_eq!(band(140, 1, Firer::None), Out::Detonated(at));
+    // 150 above: over the band (run b).
+    assert!(matches!(band(150, 1, Firer::None), Out::Flying(_)));
+    // A building allied with the house of a projectile without a firer stops it too (run c).
+    assert_eq!(band(140, 0, Firer::None), Out::Detonated(at));
 }
 
-// spec: S-0306 T1 row 1 (the firer's own building does not stop it; scenario P32 g)
+// spec: S-0306 T1 row 1 and Edge cases (quirks.owned_shell_ground_pass on: the building band does not detonate a projectile that has a firer; scenario P32 run g)
+#[test]
+fn t1_row1_building_band_owned_flies_over() {
+    for house in [0, 1] {
+        assert!(
+            matches!(band(140, house, Firer::Owned), Out::Flying(_)),
+            "house {house}"
+        );
+    }
+}
+
+// spec: S-0306 Edge cases (quirks.owned_shell_ground_pass off: the band detonates a projectile with a firer as one with no firer, at the terrain height, except at the firer itself and at a building allied with the firer's house)
+#[test]
+fn quirk_owned_shell_ground_pass_off_building_band() {
+    let off = |r: &mut Ruleset| r.globals.quirks.owned_shell_ground_pass = false;
+    assert_eq!(
+        band_with(140, 1, Firer::Owned, off, |_, _| {}),
+        Out::Detonated(c(4, 0, 0))
+    );
+    assert!(matches!(
+        band_with(150, 1, Firer::Owned, off, |_, _| {}),
+        Out::Flying(_)
+    ));
+    assert!(matches!(
+        band_with(140, 0, Firer::Owned, off, |_, _| {}),
+        Out::Flying(_)
+    ));
+}
+
+// spec: S-0306 T1 row 1 (any house's building stops a projectile with no firer, an open gate included; scenario P32 run f)
+#[test]
+fn p32f_open_gate_stops_a_projectile_with_no_firer() {
+    let mut seen = None;
+    let out = band_with(
+        140,
+        1,
+        Firer::None,
+        |_| {},
+        |w, b| {
+            let o = w.obj_mut(b).unwrap();
+            o.beh.current = Some(glasnost_sim::rules::Behaviour::Open);
+            o.beh.gate.door = glasnost_sim::behaviour::Door::Open;
+            seen = Some(glasnost_sim::process::gate_open(w, b));
+        },
+    );
+    assert_eq!(seen, Some(true), "the gate is open");
+    assert_eq!(out, Out::Detonated(c(4, 0, 0)));
+}
+
+// spec: S-0306 T1 row 1 and S-0211 Terms (an inactive laser-fence section is not an eligible building, and with a building present the wall overlays do not count; section states are not modelled, so every section is inactive; scenario P32 run i with its ordinary-building control)
+#[test]
+fn p32i_laser_fence_section_does_not_stop() {
+    let fence = |r: &mut Ruleset| {
+        r.sim.buildings.get_mut("TOWER").unwrap().laser_fence = Some(true);
+    };
+    assert!(matches!(
+        band_with(140, 1, Firer::None, fence, |_, _| {}),
+        Out::Flying(_)
+    ));
+    // The control: the same building without the flag detonates.
+    assert_eq!(band(140, 1, Firer::None), Out::Detonated(c(4, 0, 0)));
+    // A wall overlay in the fence's cell: a building is present, so the wall does not count.
+    let fence_and_wall = |r: &mut Ruleset| {
+        fence(r);
+        overlays(r, &[2]);
+    };
+    let out = band_with(140, 1, Firer::None, fence_and_wall, |w, _| {
+        set_overlay(w, cell_of(4, 0), 2)
+    });
+    assert!(matches!(out, Out::Flying(_)), "{out:?}");
+}
+
+// spec: S-0306 T1 row 1 and S-0214 Terms (a vehicle-like building, one that undeploys into a vehicle on a 1 × 1 foundation, is not an eligible building; scenario P32 run j with its ordinary-building control)
+#[test]
+fn p32j_vehicle_like_building_does_not_stop() {
+    let like = |r: &mut Ruleset| {
+        r.sim.buildings.get_mut("TOWER").unwrap().undeploys_into = Some("BUGGY".into());
+    };
+    assert!(matches!(
+        band_with(140, 1, Firer::None, like, |_, _| {}),
+        Out::Flying(_)
+    ));
+    assert_eq!(band(140, 1, Firer::None), Out::Detonated(c(4, 0, 0)));
+}
+
+// spec: S-0306 T1 row 1 (the firer's own building does not stop it: with a firer only the deck crossings apply, and with quirks.owned_shell_ground_pass off the firer itself is excepted; scenario P32 g)
 #[test]
 fn t1_row1_not_the_firer() {
-    let mut s = setup(&base(), 6, 6);
-    let tw = testkit::spawn(&mut s.w, Kind::Building, "TOWER", 1, cell_of(4, 0), 0);
-    let p = c(3, 0, 140);
-    let f = c(4, 0, 300);
-    let id = launch(&mut s.w, tw, s.wp, far(), f, 50).unwrap();
-    {
-        let x = s.w.projectiles.get_mut(&id).unwrap();
-        x.pos = p;
-        x.vel = [n(256), n(0), n(10)];
-        x.prev_cell = p.cell();
-        x.omega = 1_000_000;
+    for quirk in [true, false] {
+        let mut r = base();
+        r.globals.quirks.owned_shell_ground_pass = quirk;
+        let mut s = setup(&r, 6, 6);
+        let tw = testkit::spawn(&mut s.w, Kind::Building, "TOWER", 1, cell_of(4, 0), 0);
+        let p = c(3, 0, 140);
+        let f = c(4, 0, 300);
+        let id = launch(&mut s.w, tw, s.wp, far(), f, 50).unwrap();
+        {
+            let x = s.w.projectiles.get_mut(&id).unwrap();
+            x.pos = p;
+            x.vel = [n(256), n(0), n(10)];
+            x.prev_cell = p.cell();
+            x.omega = 1_000_000;
+        }
+        assert!(matches!(step(&mut s, id), Out::Flying(_)), "quirk {quirk}");
     }
-    assert!(matches!(step(&mut s, id), Out::Flying(_)));
 }
 
-// spec: S-0306 T1 row 1 and S-0307 claim 11 (0 to 149 above the terrain in a cell with one of the wall overlays 2, 26 and 243)
+// spec: S-0306 T1 row 1 and S-0307 claim 11 (0 to 149 above the terrain in a cell with no building and one of the wall overlays 2, 26 and 243: a projectile with no firer detonates at the terrain height; one with a firer only with quirks.owned_shell_ground_pass off; scenario P32 runs d and e)
 #[test]
 fn t1_row1_wall_overlays() {
-    for (o, stops) in [(2u8, true), (26, true), (243, true), (5, false)] {
-        let mut r = base();
-        overlays(&mut r, &[2, 26, 243, 5]);
-        let mut s = setup(&r, 6, 6);
-        set_overlay(&mut s.w, cell_of(4, 0), o);
-        let p = c(3, 0, 100);
-        let id = place(&mut s, far(), p, [256, 0, 10]);
-        let out = step(&mut s, id);
-        assert_eq!(matches!(out, Out::Detonated(_)), stops, "overlay {o}");
+    for (quirk, firer) in [
+        (true, Firer::None),
+        (true, Firer::Owned),
+        (false, Firer::Owned),
+    ] {
+        for (o, walls) in [(2u8, true), (26, true), (243, true), (5, false)] {
+            let mut r = base();
+            r.globals.quirks.owned_shell_ground_pass = quirk;
+            overlays(&mut r, &[2, 26, 243, 5]);
+            let mut s = setup(&r, 6, 6);
+            set_overlay(&mut s.w, cell_of(4, 0), o);
+            let p = c(3, 0, 100);
+            let id = place(&mut s, far(), p, [256, 0, 10]);
+            if firer == Firer::None {
+                no_firer(&mut s, id);
+            }
+            let stops = walls && (firer == Firer::None || !quirk);
+            let out = step(&mut s, id);
+            let what = format!("overlay {o}, {firer:?}, quirk {quirk}");
+            if stops {
+                assert_eq!(out, Out::Detonated(c(4, 0, 0)), "{what}");
+            } else {
+                assert!(matches!(out, Out::Flying(_)), "{what}");
+            }
+        }
     }
 }
 
@@ -2858,6 +3098,8 @@ fn claim20c_electromagnetic_far_point_unchanged() {
     // 140 from the reference point (D_S = 140 − 128 = 12 < 42), in the cell before.
     let p = Pos::new(rp.x - 128 - 60, rp.y, 10);
     let id = place(&mut s, Target::Object(tw), p, [48, 0, -40]);
+    // With no firer, so that T1's first row detonates it below the terrain.
+    no_firer(&mut s, id);
     assert_eq!(
         step(&mut s, id),
         Out::Detonated(Pos::new(rp.x - 140, rp.y, 0))
@@ -2868,6 +3110,7 @@ fn claim20c_electromagnetic_far_point_unchanged() {
     let mut s = setup(&r2, 6, 6);
     let tw = testkit::spawn(&mut s.w, Kind::Building, "TOWER", 1, cell_of(4, 0), 0);
     let id = place(&mut s, Target::Object(tw), p, [48, 0, -40]);
+    no_firer(&mut s, id);
     assert_eq!(
         step(&mut s, id),
         Out::Detonated(Pos::new(rp.x, rp.y, rp.z + 90))
@@ -2882,7 +3125,9 @@ fn claim20c_vehicle_target_thresholds() {
         // A target of the firer's own house, so that the proximity row does not apply.
         let own = testkit::spawn(&mut s.w, Kind::Vehicle, "BUGGY", 0, cell_of(6, 3), 0);
         let tp = pos(&s, own);
-        let p = Pos::new(tp.x - dist - 50, tp.y + 200, 10);
+        // Deep below the surface: the deep-fall row detonates it (h′ ≤ −416), raised to the
+        // surface by claim 20 a (a projectile with a firer is not detonated by the terrain).
+        let p = Pos::new(tp.x - dist - 50, tp.y + 200, -380);
         let id = place(&mut s, Target::Object(own), p, [50, -200, -40]);
         // K elsewhere, so that no reached row (and its snap, claim 20 b) applies.
         s.w.projectiles.get_mut(&id).unwrap().stored = c(12, 9, 0);
@@ -2920,7 +3165,9 @@ fn claim21_cluster_detonations_and_draws() {
         let mut r = base();
         ball(&mut r).cluster = Some(cluster);
         let mut s = setup(&r, 18, 18);
-        let p = c(-12, -12, 20);
+        // Deep below the surface: the deep-fall row detonates it in its next turn (h′ ≤ −416), at
+        // the surface (claim 20 a); a projectile with a firer is not detonated by the terrain.
+        let p = c(-12, -12, -380);
         let id = place(&mut s, far(), p, [50, 0, -40]);
         let mut cl = s.w.rng.clone();
         let h = half(&s.w);
@@ -2974,7 +3221,9 @@ fn claim8_airburst_children_start_above_their_cells_terrain() {
         .projectiles
         .insert("Pellet".into(), ProjectileType::default());
     let mut s = setup(&r, 18, 18);
-    let p = c(-12, -12, 20);
+    // Deep below the surface: the deep-fall row detonates it in its next turn (h′ ≤ −416), at
+    // the surface (claim 20 a); a projectile with a firer is not detonated by the terrain.
+    let p = c(-12, -12, -380);
     // The cell east of the detonation cell is raised two levels.
     let det = Pos::new(p.x + 50, p.y, 0).cell();
     let high = CellXY::new(det.x + 1, det.y);
@@ -3034,7 +3283,9 @@ fn claim21_airburst_children() {
         .projectiles
         .insert("Pellet".into(), ProjectileType::default());
     let mut s = setup(&r, 18, 18);
-    let p = c(-12, -12, 20);
+    // Deep below the surface: the deep-fall row detonates it in its next turn (h′ ≤ −416), at
+    // the surface (claim 20 a); a projectile with a firer is not detonated by the terrain.
+    let p = c(-12, -12, -380);
     let id = place(&mut s, far(), p, [50, 0, -40]);
     let mut cl = s.w.rng.clone();
     let h = half(&s.w);
@@ -3074,7 +3325,9 @@ fn claim21_detonation_carries_damage_and_attacker() {
     let mut r = base();
     ball(&mut r).cluster = Some(2);
     let mut s = setup(&r, 18, 18);
-    let p = c(-12, -12, 20);
+    // Deep below the surface: the deep-fall row detonates it in its next turn (h′ ≤ −416), at
+    // the surface (claim 20 a); a projectile with a firer is not detonated by the terrain.
+    let p = c(-12, -12, -380);
     let id = place(&mut s, far(), p, [50, 0, -40]);
     s.w.projectiles.get_mut(&id).unwrap().damage = 31;
     s.w.effects.clear();
@@ -3262,6 +3515,7 @@ fn claim25_nuclear_warhead_without_a_fireball_type() {
     assert!(s.w.rules().combat.warhead_of(s.wp).unwrap().nuke);
     let p = c(-3, 2, 20);
     let id = place(&mut s, far(), p, [50, 0, -30]);
+    no_firer(&mut s, id);
     assert_eq!(step(&mut s, id), Out::Detonated(Pos::new(p.x + 50, p.y, 0)));
     // Another name is not the nuclear warhead.
     let s2 = setup(&base(), 6, 6);
@@ -3645,4 +3899,180 @@ fn claim3_led_aim_point_of_a_still_target() {
         glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(s.t)),
         s.w.reference_point(s.t)
     );
+}
+
+// ================================================================= revision 53: claims 3 (b) and 6 (a)
+
+/// `base()` with the hover fields of [General], land rows that let a
+/// hovering vehicle move, and SKIM: a fast hovering vehicle type (every
+/// name and number invented).
+fn hover_rules() -> Ruleset {
+    use glasnost_rules::sim::{LandRow, LandType, LocomotionClass, Locomotor, MovementZone};
+    let mut r = base();
+    let row = || LandRow {
+        foot: Some(d("1")),
+        track: Some(d("1")),
+        wheel: Some(d("1")),
+        hover: Some(d("1")),
+        float: Some(d("0")),
+        amphibious: Some(d("1")),
+        float_beach: Some(d("0")),
+        buildable: None,
+    };
+    let s = &mut r.sim;
+    s.land_types.insert(LandType::Clear, row());
+    s.land_types.insert(LandType::Road, row());
+    s.general.hover_height = Some(100);
+    s.general.hover_bob = Some(d("0"));
+    s.general.hover_boost = Some(d("1.5"));
+    s.general.hover_acceleration = Some(d("0.2"));
+    s.general.hover_brake = Some(d("0.01"));
+    s.general.hover_dampen = Some(d("0.75"));
+    s.vehicles.insert(
+        "SKIM".into(),
+        UnitType {
+            strength: Some(300),
+            speed: Some(40),
+            rot: Some(10),
+            locomotion_class: Some(LocomotionClass::Hover),
+            locomotor: Some(Locomotor::Hover),
+            movement_zone: Some(MovementZone::Amphibious),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("SKIM".into());
+    r
+}
+
+/// A hovering vehicle of house 0 three cells from the firer, ordered to a
+/// cell far away and run until it travels at speed; then switched off when
+/// `off` (S-0503 claim 10, as by S-0405 claim 13's disabling). The firer's
+/// target is set to it.
+fn travelling_hover(quirk: bool, off: bool) -> (S, ObjectId) {
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::Behaviour;
+    let mut r = hover_rules();
+    r.globals.quirks.switched_off_hover_lead = quirk;
+    let mut s = setup(&r, 6, 6);
+    while orders::blocked(&s.w) {
+        glasnost_sim::tick::step(&mut s.w);
+    }
+    let h = testkit::spawn(&mut s.w, Kind::Vehicle, "SKIM", 0, cell_of(3, -6), 0);
+    assert!(orders::issue(
+        &mut s.w,
+        glasnost_sim::world::HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(cell_of(3, 12))),
+        },
+    ));
+    let mut ticks = 0;
+    while !glasnost_sim::hover::moving_now(&s.w, h) || ticks < 30 {
+        glasnost_sim::tick::step(&mut s.w);
+        s.w.effects.clear();
+        ticks += 1;
+        assert!(ticks < 200, "the hover travels");
+    }
+    if off {
+        glasnost_sim::hover::switched(&mut s.w, h, true);
+        assert!(glasnost_sim::hover::switched_off(&s.w, h));
+    }
+    s.w.obj_mut(s.a).unwrap().target = Some(Target::Object(h));
+    (s, h)
+}
+
+// spec: S-0306 claim 3 (b) and Edge cases (quirks.switched_off_hover_lead on: a switched-off hovering vehicle that S-0503 counts as moving is led by the ordinary rule; off: a switched-off vehicle is not led, and one switched on is led in both positions; the lead moves only the launch, the stored point is the reference point; scenario P44 part a)
+#[test]
+fn claim3b_switched_off_hover_lead() {
+    let mut launches = Vec::new();
+    for quirk in [true, false] {
+        // Switched on and travelling: led in both positions.
+        let (s, h) = travelling_hover(quirk, false);
+        let rp = s.w.reference_point(h);
+        let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+        assert_ne!(led, rp, "a travelling hover is led (quirk {quirk})");
+        // Switched off while it still moves in S-0503's sense.
+        let (mut s, h) = travelling_hover(quirk, true);
+        assert!(
+            glasnost_sim::hover::moving(&s.w, h),
+            "S-0503 counts it as moving"
+        );
+        let rp = s.w.reference_point(h);
+        let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+        assert_eq!(led != rp, quirk, "led only with the quirk on");
+        let f = fp(&s, 300);
+        let id = fire(&mut s, Target::Object(h), f).expect("a launch");
+        assert_eq!(
+            pr(&s, id).stored,
+            rp,
+            "the stored point is the reference point"
+        );
+        launches.push(pr(&s, id).vel);
+    }
+    // The two worlds differ only in the switch: the led launch points elsewhere.
+    assert_ne!(launches[0], launches[1]);
+}
+
+/// The cart ordered to attack the buggy 5 cells away with `Shot` on an
+/// arcing projectile of turn rate `rot` and weapon speed 10, then run
+/// through the ordinary tick for `ticks`; gives the shots made and the
+/// cart's rearm countdown before and after.
+fn attack_with_arc(rot: i32, ticks: i32) -> (usize, i32, i32, bool) {
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::Behaviour;
+    let mut r = base();
+    ball(&mut r).arcing = Some(true);
+    ball(&mut r).rot = Some(rot);
+    weapon(&mut r).speed = Some(10);
+    let mut s = setup(&r, 5, 0);
+    while orders::blocked(&s.w) {
+        glasnost_sim::tick::step(&mut s.w);
+    }
+    let (a, t) = (s.a, s.t);
+    assert!(orders::issue(
+        &mut s.w,
+        glasnost_sim::world::HouseId(0),
+        Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(t)),
+            dest: None,
+        },
+    ));
+    let before = s.w.obj(a).unwrap().combat.rearm_until;
+    let mut shots = 0;
+    for _ in 0..ticks {
+        s.w.effects.clear();
+        glasnost_sim::tick::step(&mut s.w);
+        shots += s
+            .w
+            .effects
+            .iter()
+            .filter(|e| matches!(e, glasnost_sim::combat::effects::Effect::Shot { firer, .. } if *firer == a))
+            .count();
+    }
+    let o = s.w.obj(a).unwrap();
+    let still = o.target == Some(Target::Object(t));
+    (shots, before, o.combat.rearm_until, still)
+}
+
+// spec: S-0306 claim 6 (a) (revision 53: in an ordinary vehicle firing step after the rearm countdown has run out, a void launch leaves that countdown unchanged and every later attempt at the same unscattered impact point is void too; S-0301 claim 15) with a control that launches
+#[test]
+fn claim6a_void_launch_in_the_firing_step_keeps_the_countdown() {
+    // A negative turn rate with weapon speed 10: F4 has no solution 5 cells away.
+    let (shots, before, after, still) = attack_with_arc(-1, 120);
+    assert_eq!(shots, 0, "no projectile at any attempt");
+    assert_eq!(after, before, "the countdown is unchanged");
+    assert!(still, "the firer keeps its target and goes on attempting");
+    // The control: ρ = 0 takes its speed from the distance, so F4 is solved and the shot leaves.
+    let (shots, before, after, _) = attack_with_arc(0, 120);
+    assert!(shots > 0, "the control fires");
+    assert_ne!(after, before, "and starts its countdown");
 }

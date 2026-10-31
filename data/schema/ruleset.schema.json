@@ -10025,6 +10025,11 @@
           "type": "boolean",
           "default": true
         },
+        "owned_shell_ground_pass": {
+          "description": "A straight or arcing projectile that has a firer is detonated only by the deck crossings of T1's first row.",
+          "type": "boolean",
+          "default": true
+        },
         "ownership_gain_counts_as_kill": {
           "description": "An ownership change gives the gaining house a kill on the result screen; off: only destructions add kills.",
           "type": "boolean",
@@ -10807,6 +10812,11 @@
         },
         "superweapon_upgrade_second_removal_waits": {
           "description": "Removing an upgrade makes the immediate superweapon availability check only when the upgrade names a first superweapon; off: an upgrade naming either superweapon field makes it.",
+          "type": "boolean",
+          "default": true
+        },
+        "switched_off_hover_lead": {
+          "description": "A switched-off hovering vehicle that S-0503 counts as moving is led.",
           "type": "boolean",
           "default": true
         },

@@ -2213,6 +2213,26 @@ fn claim_16_firer_in_a_countdown() {
         panic!("no shot");
     };
     first(&mut w);
+    // Let the shot leave the tower's cells first: once the tower is killed the shot has no firer,
+    // and T1's first row then detonates it in the building band of any building, the tower's own
+    // included (S-0306 Terms and T1, revision 53).
+    let over_tower = |w: &World| {
+        w.projectiles.values().any(|p| {
+            w.cells
+                .list(p.pos.cell(), glasnost_sim::world::Layer::Ground)
+                .contains(&tower)
+        })
+    };
+    for _ in 0..600 {
+        if !over_tower(&w) {
+            break;
+        }
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(
+        !over_tower(&w) && !w.projectiles.is_empty(),
+        "the shot is in flight past the tower"
+    );
     let carried = |w: &World| {
         let mut v: Vec<_> = w
             .projectiles

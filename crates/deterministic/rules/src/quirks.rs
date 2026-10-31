@@ -844,6 +844,14 @@ pub struct Quirks {
     // spec: S-0306 claim 3
     #[serde(default = "on")]
     pub redirected_shot_aim: bool,
+    /// A switched-off hovering vehicle that S-0503 counts as moving is led.
+    // spec: S-0306 claim 3 b and Edge cases
+    #[serde(default = "on")]
+    pub switched_off_hover_lead: bool,
+    /// A straight or arcing projectile that has a firer is detonated only by the deck crossings of T1's first row.
+    // spec: S-0306 T1 and Edge cases
+    #[serde(default = "on")]
+    pub owned_shell_ground_pass: bool,
     /// An arcing shot at a point exactly below the fire point uses F4's zero-distance rule.
     // spec: S-0306 claim 6
     #[serde(default = "on")]
@@ -2390,6 +2398,8 @@ impl Default for Quirks {
             shot_distance_wrap: true,
             zero_speed_launch: true,
             redirected_shot_aim: true,
+            switched_off_hover_lead: true,
+            owned_shell_ground_pass: true,
             zero_distance_arc: true,
             stored_target_point: true,
             origin_as_missing_target_point: true,
@@ -3208,6 +3218,8 @@ impl Quirks {
             ("shot_distance_wrap", self.shot_distance_wrap),
             ("zero_speed_launch", self.zero_speed_launch),
             ("redirected_shot_aim", self.redirected_shot_aim),
+            ("switched_off_hover_lead", self.switched_off_hover_lead),
+            ("owned_shell_ground_pass", self.owned_shell_ground_pass),
             ("zero_distance_arc", self.zero_distance_arc),
             ("stored_target_point", self.stored_target_point),
             (

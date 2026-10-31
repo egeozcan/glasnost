@@ -140,10 +140,16 @@ fn claim_13_a_placed_hover_is_disabled_on_its_placement_cell() {
     assert_eq!(cell_of(&w, bot), home, "never left its placement cell");
 }
 
-// spec: S-0405 claim 20 (As a target: a disabled vehicle is targeted, attacked, damaged and destroyed like any other; no targeting or damage rule reads the disabled state; M-0005 measures the targeting part)
-#[test]
-fn claim_20_a_disabled_hover_is_targeted_damaged_and_destroyed() {
-    let mut w = game();
+/// A disabled HOVERBOT and a CART hunter of house 1 run for up to 2000
+/// ticks: whether the hunter took it as its target, damaged it and
+/// destroyed it.
+fn disabled_hover_as_a_target(lead_quirk: bool) -> (bool, bool, bool) {
+    let mut r = rules();
+    r.globals.quirks.switched_off_hover_lead = lead_quirk;
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    while orders::blocked(&w) {
+        glasnost_sim::tick::step(&mut w);
+    }
     let bot = put(&mut w, "HOVERBOT", 0, 0, 0);
     move_to(&mut w, bot, testkit::mid(SIZE, 5, 0));
     for _ in 0..30 {
@@ -166,10 +172,22 @@ fn claim_20_a_disabled_hover_is_targeted_damaged_and_destroyed() {
             break;
         }
     }
+    let destroyed = w.obj(bot).is_none_or(glasnost_sim::combat::damage::dead);
+    (targeted, damaged, destroyed)
+}
+
+// spec: S-0405 claim 20 (As a target: a disabled vehicle is targeted, attacked, damaged and destroyed like any other; no targeting or damage rule reads the disabled state; M-0005 measures the targeting part) and S-0306 Changes for other specs (the lead reads the moving state, not the disabled state: with quirks.switched_off_hover_lead off a switched-off vehicle is not led, so the shots aim at where it is)
+#[test]
+fn claim_20_a_disabled_hover_is_targeted_damaged_and_destroyed() {
+    let (targeted, damaged, destroyed) = disabled_hover_as_a_target(false);
     assert!(targeted, "the hunter picked the disabled vehicle");
     assert!(damaged, "it took damage");
-    assert!(
-        w.obj(bot).is_none_or(glasnost_sim::combat::damage::dead),
-        "destroyed"
-    );
+    assert!(destroyed, "destroyed");
+}
+
+// spec: S-0405 claim 20 (no targeting rule reads the disabled state) and S-0306 claim 3 (b) (quirks.switched_off_hover_lead on: a switched-off hover that S-0503 still counts as moving is led, so whether the shots reach it is S-0306's, scenario P44)
+#[test]
+fn claim_20_a_disabled_hover_is_targeted_with_the_lead_quirk_on() {
+    let (targeted, _, _) = disabled_hover_as_a_target(true);
+    assert!(targeted, "the hunter picked the disabled vehicle");
 }

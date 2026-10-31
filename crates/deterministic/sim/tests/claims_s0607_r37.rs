@@ -372,7 +372,7 @@ fn l19f_beyond_the_range_at_the_detonation_is_seized() {
     let t = Target::Object(v);
     // The shot falls while the distance is at most the weapon's range.
     assert!(run_until(&mut w, 400, |w| {
-        w.obj(v).is_some_and(|o| o.pos.cell().x >= at(0, 0).x + 1)
+        w.obj(v).is_some_and(|o| o.pos.cell().x > at(0, 0).x)
             && glasnost_sim::approach::in_range(w, l, t)
     }));
     let out = slow_shot(&mut w, l, v);

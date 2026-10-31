@@ -232,6 +232,13 @@ pub fn between_steps(w: &World, id: ObjectId) -> bool {
     state(w, id).is_some_and(|h| h.between)
 }
 
+/// A hovering vehicle's speed fraction ρ (claim 4), or `None` for a vehicle
+/// that does not hover.
+pub fn speed_fraction(w: &World, id: ObjectId) -> Option<F64> {
+    // spec: S-0503 claim 4 (the speed fraction ρ that s contains)
+    w.obj(id).and_then(|o| o.hover.as_ref()).map(|h| h.rho)
+}
+
 /// Whether a hovering vehicle's current speed is not zero for S-0212 claim
 /// 8's heading cell (S-0503 claim 14): ρ ≠ 0.
 pub fn has_speed(w: &World, id: ObjectId) -> bool {
