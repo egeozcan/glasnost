@@ -280,12 +280,6 @@ pub fn reach_read(w: &World, c: CellXY, z: MovementZone, deck: bool) -> Reach {
     }
 }
 
-/// Whether two cells lie in the same connected region of a movement zone
-/// (S-0212 claim 4), the cell layers given for the deck rule of S-0309
-/// claim 7. S-0212 claim 4 reads a deck through a link only where its
-/// claims 6, 14 and 25 say so; this read takes each cell's own reach region
-/// whatever its layer. A rule of another spec that reads a deck uses
-/// [`same_region_read`].
 /// Whether two cells lie in one reach region of a zone, each read for its
 /// deck when its flag says so ([`reach_read`]): two reach regions, equal.
 /// A cell of no reach region, an off-map cell and a deck with no link found
@@ -306,6 +300,12 @@ pub fn same_region_read(
     }
 }
 
+/// Whether two cells lie in the same connected region of a movement zone
+/// (S-0212 claim 4), the cell layers given for the deck rule of S-0309
+/// claim 7. S-0212 claim 4 reads a deck through a link only where its
+/// claims 6, 14 and 25 say so; this read takes each cell's own reach region
+/// whatever its layer. A rule of another spec that reads a deck uses
+/// [`same_region_read`].
 pub fn same_region(
     w: &World,
     z: MovementZone,
