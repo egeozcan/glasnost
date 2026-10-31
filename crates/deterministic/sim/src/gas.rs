@@ -1235,6 +1235,10 @@ pub fn system_turn(w: &mut World, id: ObjectId) {
         // spec: S-0616 claim 2 and S-0613 claim 17 (no behaviour kind: no kind work)
         None => {}
     }
+    if kind != Some(Behaviour::Fire) {
+        // spec: S-0301 claim 5, place-and-kind rule (revision 63, Q-2181: the fire place's let-go events apply to the system it holds whatever its kind; a fire-kind system makes the tests in its own turn)
+        crate::emitters::fire_place_let_go(w, id);
+    }
     // spec: S-0613 claim 17 (after the kind's own turn work, whatever the kind, also none)
     let Some(s) = w.gas.systems.get_mut(&id) else {
         return;
