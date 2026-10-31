@@ -3,7 +3,7 @@ id: Q-2114
 title: What happens to the targets of objects whose target is crushed
 status: open
 related: [S-0210, S-0215, S-0301, S-0306, S-0309, S-0312, S-0501]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
