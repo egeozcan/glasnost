@@ -151,6 +151,14 @@
 //! running slots with their frames and how many are frozen, tick by tick
 //! around the order. Counts, frames and ticks only.
 //!
+//! M8 step A3 intake 53 (S-0113, Q-2081 answered; S-0108 r102 claims 11
+//! and 18, Q-2001 answered): `body-rocking` puts three voxel vehicles of
+//! the driving locomotor around a point and sets off a rocking warhead
+//! there, saving the view and a crop of each over the rock with the view's
+//! angles and rates; `super-ungranted` places one building of each
+//! disableable superweapon type with the setting off, in both positions of
+//! `quirks.ungranted_super_reads_clock`, printing their running slots.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -215,6 +223,8 @@ const SCENES: &[Scene] = &[
     ("sinking-list", sinking_list),
     ("placed-off", placed_off),
     ("barracks-no-rally", barracks_no_rally),
+    ("body-rocking", body_rocking),
+    ("super-ungranted", super_ungranted),
 ];
 
 #[test]
@@ -4795,4 +4805,261 @@ fn slot_counting(
         .filter(|d| !d.normal.is_empty())
         .map(|d| d.power.counting())
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// M8 step A3 intake 53 (S-0113 body rocking; S-0108 r102 claims 11 and 18)
+
+/// A vehicle type with a voxel body whose locomotor draws rocking and that
+/// is not naval: its index.
+fn rocking_vehicle(l: &Lane) -> Option<usize> {
+    let s = l.c.session.as_ref().unwrap();
+    let import = &s.loaded.import;
+    let registry = &import.outcome.registries[&glasnost_convert::kinds::Kind::Vehicles];
+    let r = l.world().rules();
+    (0..r.vehicles.len()).find(|&i| {
+        let Some(u) = r.unit(Kind::Vehicle, i as u32) else {
+            return false;
+        };
+        let name = r.vehicles[i].name.as_bytes();
+        let voxel = registry
+            .iter()
+            .position(|t| t.name.eq_ignore_ascii_case(name))
+            .and_then(|x| {
+                import
+                    .arts
+                    .get(&(glasnost_convert::kinds::Kind::Vehicles, x))
+            })
+            .is_some_and(|a| a.voxels.contains_key("body"));
+        voxel
+            && !u.combat.naval
+            && u.strength > 0
+            && matches!(u.type_locomotor(), glasnost_rules::sim::Locomotor::Drive)
+    })
+}
+
+/// A crop of the current frame centred on each object's drawn point,
+/// written as `{key}-{mark}-{name}.png`.
+fn crops(l: &mut Lane, key: &str, mark: &str, objects: &[(&str, ObjectId)]) {
+    let rgba = l.c.frame_rgba();
+    let size = (l.c.size.0 as usize, l.c.size.1 as usize);
+    let s = l.c.session.as_ref().unwrap();
+    let (r, c) = (s.map_rect(), s.centre());
+    for &(name, id) in objects {
+        let Some(o) = l.world().obj(id).filter(|o| o.on_map) else {
+            continue;
+        };
+        let (px, py) = glasnost_render::projection::project_lifted(o.pos.x, o.pos.y, o.pos.z);
+        let at = (r.w / 2 + px - c.0, r.h / 2 + py - c.1);
+        let (cw, ch, crop) = crop_at(&rgba, size, at, 120, 100);
+        let file = format!("{key}-{mark}-{name}.png");
+        std::fs::write(l.dir.join(&file), png::png(cw, ch, &crop)).unwrap();
+        println!("wrote {file}");
+    }
+}
+
+/// S-0113 (claims 1, 5 to 7, 11 and 18; F1, F2): three vehicles of a voxel
+/// type with the driving locomotor, all facing 0 (map north), one cell
+/// north, east and west of a point *P*, and a detonation of a warhead with
+/// the rocking flag and a spread above 0 at *P* with no source object
+/// (found by its flags; when no stock warhead has both, the lane's copy of
+/// the rules sets the flag on one with a spread). *P* is behind the north
+/// one (its bow goes down), on the east one's left and on the west one's
+/// right (the nearer side rises). Frames of the view and a crop of each
+/// vehicle after 1, 3, 6, 12, 23, 30 and 45 ticks; the view's angles and
+/// rates per vehicle at each, as bits and values. Ids, ticks and angles
+/// only.
+fn body_rocking(l: &mut Lane) {
+    let Some(v) = rocking_vehicle(l) else {
+        println!("body-rocking: no voxel vehicle type with the driving locomotor");
+        return;
+    };
+    let warhead = {
+        let r = l.world().rules();
+        let both = r
+            .combat
+            .warheads
+            .iter()
+            .position(|h| h.rocker && h.spread.gt(glasnost_num::F64::ZERO));
+        let spread = r
+            .combat
+            .warheads
+            .iter()
+            .position(|h| h.spread.gt(glasnost_num::F64::ZERO));
+        println!(
+            "body-rocking: a stock warhead with the rocking flag and a spread: {}",
+            both.is_some()
+        );
+        both.map(|i| (i, false)).or(spread.map(|i| (i, true)))
+    };
+    let Some((h, patched)) = warhead else {
+        println!("body-rocking: no warhead with a spread");
+        return;
+    };
+    if patched {
+        patch_rules(l, |r| r.combat.warheads[h].rocker = true);
+        println!("body-rocking: the lane's copy of the rules sets the rocking flag on one warhead");
+    }
+    let local = l.local();
+    let home = l.home();
+    let Some(at) = l.area(home, (3, 3), 2, |x| x != land::WATER && x != land::ROCK) else {
+        println!("body-rocking: no open land");
+        return;
+    };
+    let p_cell = CellXY::new(at.x + 1, at.y + 1);
+    let name = type_name_of(l.world(), Kind::Vehicle, v);
+    let place = |l: &mut Lane, dx: i32, dy: i32| {
+        glasnost_sim::testkit::spawn(
+            l.world_mut(),
+            Kind::Vehicle,
+            &name,
+            local.0,
+            CellXY::new(p_cell.x + dx, p_cell.y + dy),
+            0,
+        )
+    };
+    let north = place(l, 0, -1);
+    let east = place(l, 1, 0);
+    let west = place(l, -1, 0);
+    let bodies = [("p-behind", north), ("p-left", east), ("p-right", west)];
+    l.look_at(p_cell);
+    l.ticks(3);
+    crops(l, "body-rocking", "0-before", &bodies);
+    l.save("body-rocking-0-before");
+    let (x, y) = glasnost_render::projection::cell_centre(p_cell.x, p_cell.y);
+    let z = l.world().surface_at(x, y);
+    let point = glasnost_sim::world::Pos::new(x, y, z);
+    glasnost_sim::combat::area::detonate(
+        l.world_mut(),
+        glasnost_sim::combat::area::Detonation {
+            point,
+            damage: 200,
+            warhead: Some(h as u32),
+            source: None,
+            house: None,
+            resources: false,
+        },
+    );
+    let t0 = l.world().tick;
+    let report = |l: &Lane, after: i32| {
+        let s = l.c.session.as_ref().unwrap();
+        let rocking = s.loaded.live.as_ref().expect("a live game").rocking();
+        for (name, id) in bodies {
+            match rocking.body(id) {
+                Some(b) => println!(
+                    "body-rocking +{after} (tick {}): {name} id {}: pitch {} ({:#010x}) roll {} ({:#010x}) pitch rate {} roll rate {}",
+                    l.world().tick,
+                    id.0,
+                    f32::from_bits(b.pitch.0),
+                    b.pitch.0,
+                    f32::from_bits(b.roll.0),
+                    b.roll.0,
+                    f32::from_bits(b.pitch_rate.0),
+                    f32::from_bits(b.roll_rate.0),
+                ),
+                None => println!(
+                    "body-rocking +{after} (tick {}): {name} id {}: level",
+                    l.world().tick,
+                    id.0
+                ),
+            }
+        }
+    };
+    for after in [1, 3, 6, 12, 23, 30, 45] {
+        while l.world().tick - t0 < after {
+            l.ticks(1);
+        }
+        report(l, after);
+        let mark = format!("{after:02}");
+        crops(l, "body-rocking", &mark, &bodies);
+        l.save(&format!("body-rocking-{mark}"));
+    }
+}
+
+/// S-0108 r102 claims 11 and 18 (`quirks.ungranted_super_reads_clock`): the
+/// superweapon setting off, so a disableable superweapon type is never
+/// granted (S-0512 claims 3 and 7), and one building of each type that gives one placed for
+/// the local house with power: its slots 60 ticks after its opening, with
+/// the switch on (the original: the clock of a record never granted reads
+/// 0, so *super-3*) and off (the play-fixes layer: *super-1*). The lane
+/// plays with the layer on, so each run sets the switch in the lane's copy
+/// of the rules. Slot names, counts and ticks only.
+fn super_ungranted(_: &mut Lane) {
+    for reads in [true, false] {
+        let Some(mut l) = Lane::start() else { return };
+        let local = l.local();
+        let picked = {
+            let r = l.world().rules();
+            let sw: Vec<(usize, u32)> = (0..r.buildings.len())
+                .filter_map(|i| {
+                    let s = r.superweapons.building_sw.get(i)?[0]?;
+                    r.superweapons
+                        .types
+                        .get(s as usize)
+                        .is_some_and(|t| t.disableable)
+                        .then_some((i, s))
+                })
+                .collect();
+            let power = (0..r.buildings.len())
+                .filter(|&i| {
+                    r.superweapons
+                        .building_sw
+                        .get(i)
+                        .is_none_or(|s| s[0].is_none())
+                        && r.buildings[i].raw.econ.power.unwrap_or(0) > 0
+                })
+                .max_by_key(|&i| r.buildings[i].raw.econ.power.unwrap_or(0));
+            power.filter(|_| !sw.is_empty()).map(|p| (sw, p))
+        };
+        let Some((sws, p)) = picked else {
+            println!(
+                "super-ungranted: no disableable superweapon building type, or no power plant"
+            );
+            return;
+        };
+        patch_rules(&mut l, |r| r.quirks.ungranted_super_reads_clock = reads);
+        l.world_mut().econ.settings.superweapons = Some(false);
+        let home = l.home();
+        let power_name = type_name_of(l.world(), Kind::Building, p);
+        let fp = l.world().rules().buildings[p].foundation;
+        for _ in 0..(4 * sws.len()) {
+            if let Some(at) = l.area(home, fp, 1, |x| x != land::WATER && x != land::ROCK) {
+                l.spawn(Kind::Building, &power_name, local, at);
+            }
+        }
+        let mut placed = Vec::new();
+        for &(b, sw) in &sws {
+            let name = type_name_of(l.world(), Kind::Building, b);
+            let fb = l.world().rules().buildings[b].foundation;
+            let Some(at) = l.area(home, fb, 1, |x| x != land::WATER && x != land::ROCK) else {
+                println!("super-ungranted: no free place for {name}");
+                continue;
+            };
+            placed.push((l.spawn(Kind::Building, &name, local, at), sw, at));
+        }
+        l.ticks(60);
+        let on = if reads { "on" } else { "off" };
+        for (k, &(id, sw, at)) in placed.iter().enumerate() {
+            let names = {
+                let s = l.c.session.as_ref().unwrap();
+                s.loaded.live.as_ref().expect("a live game").slot_names(id)
+            };
+            let slots: Vec<&str> = names
+                .iter()
+                .map(|n| n.split('=').next().unwrap_or(""))
+                .collect();
+            let granted =
+                glasnost_sim::superweapons::record(l.world(), local, sw).map(|r| r.granted);
+            println!(
+                "super-ungranted (switch {on}): building {k} id {}, tick {}, record granted {granted:?}, running slots {slots:?}",
+                id.0,
+                l.world().tick
+            );
+            let key = format!("super-ungranted-{on}-sw{k}");
+            l.look_at(at);
+            l.ticks(1);
+            crops(&mut l, &key, "60", &[("building", id)]);
+            l.save(&key);
+        }
+    }
 }

@@ -85,10 +85,10 @@ before and after.
 | Original-versus-fixed note (no switch; the 5/3 split is the original's) | no change | No switch added; `every_spec_quirk_has_a_switch` and `every_rendering_spec_quirk_has_a_switch` green. |
 | Import mapping (no imported key) | no change | The step, limit and groups are engine constants with spec citations. |
 | N5 wording ("Record" for "Confirm") | no change | Wording. |
-| N16 and its parts a to h | partly | Main run, part a, part e (cull: `start_sinking` path) and the absence of a shadow are covered by the tests and the lane. Parts b, c and h need rocking, drawn since M8 A4 rocking with Q-2081's interim (unmeasured); part f needs a magnetic-lift drop drawn with the type's locomotor (design); part g needs claim 5's fire point (seam); part d is unmeasured. |
+| N16 and its parts a to h | partly | Main run, part a, part e (cull: `start_sinking` path) and the absence of a shadow are covered by the tests and the lane. Parts b, c and h need rocking, drawn since M8 A4 rocking, by S-0113 since intake 53 ([intake53-S-0107-S-0108-S-0113.md](intake53-S-0107-S-0108-S-0113.md)); part f needs a magnetic-lift drop drawn with the type's locomotor (design); part g needs claim 5's fire point (seam); part d is unmeasured. |
 | Changes for other specs, S-0210's drawn sense of the body tilt | no change | Spec-side. We draw no crush tilt, so nothing of ours depends on the words. |
 | Changes for other specs, a pointer to F5 from S-0106 claim 9 and S-0210 | no change | Spec-side. |
-| Open questions (a rocked body's return to level; hovering and jumpjet composition; lift and teleport carriers; clipping) | no change | Our choices are the design rules above; no request filed here. The return to level is asked in Q-2081 (M8 A4 rocking). |
+| Open questions (a rocked body's return to level; hovering and jumpjet composition; lift and teleport carriers; clipping) | no change | Our choices are the design rules above; no request filed here. The return to level was asked in Q-2081 (M8 A4 rocking), answered by S-0113 claims 5 and 7 and built in intake 53. |
 
 **Seams named here.** Rocking (S-0303 claim 20, S-0614 claim 10, S-0210's rates) was not
 modelled, so the roll was always level and a sinking vessel always started from level; built by

@@ -12,7 +12,11 @@ taken; they are now reported rather than dropped. The view keeps the angles
 (`mapview::rocking::Rocking`) and moves them once per game tick. S-0303 claim 20 believes rocking
 does not reach game state, and S-0504 claim 16 allows the angles to be presentation state.
 
-**Interim rules (Q-2081, open).** No approved spec says how a strength becomes rates, how a rocked
+**Intake 53.** Q-2081 is answered by S-0113, and the view's rocking now follows it: the interim
+rules below, and the tests named in the table for them, are replaced. The current claims, tests
+and seams are in [intake53-S-0107-S-0108-S-0113.md](intake53-S-0107-S-0108-S-0113.md).
+
+**Interim rules (Q-2081, answered by S-0113; replaced in intake 53).** No approved spec says how a strength becomes rates, how a rocked
 body returns to level, how the weight scales it, or the sideways limit (S-0504 Open questions).
 Ours, marked `design: Q-2081` in `rocking.rs`:
 - a push sets both rates to 0.05 rad/tick × strength ÷ weight, split by cos and sin of the push's
@@ -52,7 +56,7 @@ Ours, marked `design: Q-2081` in `rocking.rs`:
 (S-0504 claim 16); slope tilt *T* is not in F5 (S-0106 claim 9); direct rocking (S-0514 claim 20)
 is selection only; the deck-layer case of S-0303 claim 20 has no test.
 
-**Requests.** Q-2081 (open): strength to rates, the return to level, weight, the sideways limit,
+**Requests.** Q-2081 (answered by S-0113, intake 53): strength to rates, the return to level, weight, the sideways limit,
 a centre cell without a source, the drone's side, the squid's push, and what reads rocking.
 Q-2082 to Q-2085 unused.
 

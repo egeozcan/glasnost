@@ -261,3 +261,17 @@ mod can still add the switch to the layer; each has an off-position test already
 - *Quick lane with the layer* (seeds 7 to 14, maps 8, 2 and 0, Yuri as house 1 against Allied and against Soviet, 48 games): every game over with a winner (house 1 wins 36, house 0 wins 12), no panic, median length 36 560 ticks. The reference quick lane was not re-run in part 3 (about 4 minutes a game batch; parts 1 and 2 ran it); the layer-on run is the no-stall check the brief asks for.
 
 **Version effects.** Only the layered `sim_rules_hash` changes (the layer file's content is in it). A save, replay, report or room made with part 2's layer matches neither the reference nor the new layered hash and is refused on the rules hash, as part 2 said. Reference files are unaffected. Wire 9, pathing report 2, desync bundle 3, save 83 and AI game format 45 are unchanged.
+
+## Intake 53 (S-0108 r102, S-0113): two rendering switches judged
+
+Ledger: [intake53-S-0107-S-0108-S-0113.md](intake53-S-0107-S-0108-S-0113.md). Both switches are
+rules quirks read only by the client (no simulation code reads them).
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `ungranted_super_reads_clock` | S-0108 claims 11 and 18, Edge cases | admitted (off) | (1) The Edge case states the off position (a record that is not granted counts as not charged: *super-1* at the opening, claim 18's check waits for the grant), built in `mapview::live::charge_reading`. (2) The quirk text states a visible glitch: a building that opens with a record never granted, as at most set-up placements, "shows the charged *super-3* although nothing has charged". (3) Not a balance change: in our engine a superweapon building's slots are the client's (`mapview::slot_play`), whose creation draws come from the view's own animation clock and not the scenario stream, so the switch changes no simulation state and the sweeps cannot move. The spec's reason for making it a switch (S-0108 Edge cases: in the original the slot starts take creation draws on the scenario stream, and an ending animation can cost another object its turn) applies only once these slots move into the simulation, as the depot's have; the layer entry should be judged again then. Test: `layers::tests::play_fixes_sets_only_the_admitted_switches_off`; the switch's two positions: `capture_tests::an_ungranted_superweapon_record_is_read_by_its_clock`. |
+| `rocking_limit_escape` | S-0113 claims 9 and 15, Edge cases | rejected | Condition 3: the off position decides whether repeated explosions carry a body past its limit and over, which claim 9 makes a destruction (a combat outcome), the reason `drain_relink_strands_previous` was rejected. Condition 2: the quirk text states that destruction, not a stuck unit, a give-up or a glitch, and no play note or request names it. (Our client does not yet destroy a body that rolls over: claim 9 is a simulation seam, so in our engine today the switch only changes how far a body tips.) |
+
+**Version effects.** The layered `sim_rules_hash` changes (the layer file's content is in it), so
+a save, replay, report or room made with the previous layer is refused on the rules hash, as for
+earlier layer changes. Reference files are unaffected.

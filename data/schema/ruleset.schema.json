@@ -10415,6 +10415,11 @@
           "type": "boolean",
           "default": true
         },
+        "rocking_limit_escape": {
+          "description": "An unlinked rocking angle is held at its limit only when the angle before the step was\nbelow it, so repeated pushes can carry a body past its limit and over; off: an unlinked\nangle that is not past the edge is held at its limit whenever the new angle would pass it.\nRead by the client's rocking (the sim keeps no rocking state yet).",
+          "type": "boolean",
+          "default": true
+        },
         "role_one_past_end": {
           "description": "A role naming the first missing tileset starts at the tile count.",
           "type": "boolean",
@@ -10907,6 +10912,11 @@
         },
         "undemolishable_heal_is_damage": {
           "description": "The minimum of 1 on an undemolishable building applies to every hit no row stops, so healing hits damage it.",
+          "type": "boolean",
+          "default": true
+        },
+        "ungranted_super_reads_clock": {
+          "description": "A superweapon building's slots read the owner's record clock whether or not the record is\ngranted, so a record never granted reads 0 and the grand opening shows the charged\n*super-3*; off: a record that is not granted counts as not charged (*super-1* at the\nopening, and the charge check waits for the grant).",
           "type": "boolean",
           "default": true
         },

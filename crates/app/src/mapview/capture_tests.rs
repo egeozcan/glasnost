@@ -1069,3 +1069,128 @@ fn a_building_placed_in_play_opens_at_its_completion() {
         "its slots start at its completion (built up over {building} ticks)"
     );
 }
+
+/// The superweapon slots of a HUTX that has the superweapon CURTX
+/// (recharge 0.1 minutes, 90 ticks, S-0512): its art starts SLOTL in
+/// *super-1* and in *super-3*; with `reads` the switch
+/// `quirks.ungranted_super_reads_clock` on; with `map_placed` the map places
+/// it for the neutral house at the set-up, otherwise it is placed for Alpha
+/// in play before the first tick. The
+/// names of its superweapon slots at its grand opening, and whether its
+/// owner's record was granted at the end of the set-up and at the opening.
+fn super_slots_at_opening(reads: bool, map_placed: bool) -> (Vec<String>, bool, bool) {
+    use glasnost_rules::sim::Decimal;
+    use glasnost_rules::sim_econ::SuperweaponType;
+    let (import, catalogue, assets) = import_with("SuperAnim=SLOTL\nSuperAnimThree=SLOTL\n");
+    let mut map = testkit::empty_map(SIZE);
+    let at = testkit::mid(SIZE, 0, 0);
+    if map_placed {
+        map.objects.structures.push(Structure {
+            placed: Placed {
+                key: b"0".to_vec(),
+                owner: b"Neutral".to_vec(),
+                type_name: b"HUTX".to_vec(),
+                health: 256,
+                cell: at,
+                facing: 0,
+                raw: Vec::new(),
+            },
+        });
+    }
+    let mut r = ruleset(false);
+    r.sim.superweapons.insert(
+        "CURTX".into(),
+        SuperweaponType {
+            kind: Some("IronCurtain".into()),
+            action: Some("IronCurtain".into()),
+            recharge_time: Some(Decimal("0.1".into())),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("superweapons".into())
+        .or_default()
+        .push("CURTX".into());
+    r.sim.buildings.get_mut("HUTX").unwrap().econ.super_weapon = Some("CURTX".into());
+    r.globals.quirks.ungranted_super_reads_clock = reads;
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let setup = setup();
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = if map_placed {
+        world
+            .objects
+            .values()
+            .find(|o| o.kind == SimKind::Building && o.pos.cell() == at)
+            .map(|o| o.id)
+            .expect("the map's building")
+    } else {
+        testkit::spawn(&mut world, SimKind::Building, "HUTX", 0, at, 0)
+    };
+    let owner = world.obj(b).unwrap().owner.expect("an owner");
+    assert_eq!(owner, if map_placed { NEUTRAL } else { ALPHA });
+    let set_up = glasnost_sim::superweapons::record(&world, owner, 0).is_some_and(|r| r.granted);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.redraw(&inputs, &mut scene);
+    for _ in 0..3 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let names: Vec<String> = live
+            .slot_names(b)
+            .into_iter()
+            .filter(|n| n.starts_with("Super"))
+            .collect();
+        if !names.is_empty() {
+            let granted = glasnost_sim::superweapons::record(&live.world, owner, 0)
+                .is_some_and(|r| r.granted);
+            return (names, set_up, granted);
+        }
+    }
+    panic!("no superweapon slot opened");
+}
+
+/// spec: S-0108 claim 11 and Edge cases (`quirks.ungranted_super_reads_clock`, default on: the
+/// slot reads the record's clock whether or not it is granted, and a record never granted and
+/// never reset reads 0, so a set-up opening, which meets no record a building granted, starts the
+/// charged *super-3*; off: a record that is not granted counts as not charged, so *super-1*. A
+/// building placed in play opens after its house's next update has granted the record, with its
+/// clock started at the grant: *super-1* in both positions)
+#[test]
+fn an_ungranted_superweapon_record_is_read_by_its_clock() {
+    for (reads, slot) in [(true, "Super3="), (false, "Super1=")] {
+        let (names, set_up, _) = super_slots_at_opening(reads, true);
+        assert!(!set_up, "the set-up grants no record");
+        assert_eq!(names.len(), 1, "one superweapon slot: {names:?}");
+        assert!(
+            names[0].starts_with(slot),
+            "set-up, switch {reads}: {names:?}"
+        );
+        let (names, _, granted) = super_slots_at_opening(reads, false);
+        assert!(granted, "granted at the house's update before the opening");
+        assert_eq!(names.len(), 1, "one superweapon slot: {names:?}");
+        assert!(
+            names[0].starts_with("Super1="),
+            "in play, switch {reads}: {names:?}"
+        );
+    }
+}

@@ -438,6 +438,9 @@ pub struct Live {
     /// Each building type's slot definitions, by import registration
     /// index, read when the type is first drawn.
     slot_defs: BTreeMap<usize, slot_play::Defs>,
+    /// The set-up superweapon buildings' charge readings at the end of the
+    /// set-up (S-0108 claim 11), used at their grand opening.
+    setup_charges: BTreeMap<ObjectId, Option<i32>>,
     /// Each building type's charged-animation time (S-0108 claim 18), by
     /// the simulation's type index, read from the import at the start.
     charged_anim_times: Vec<Option<glasnost_num::F64>>,
@@ -448,8 +451,9 @@ pub struct Live {
     /// tick reported (S-0108 claim 20): building, active-1 (else idle),
     /// start, damaged variant.
     depot_events: Vec<(ObjectId, bool, bool, bool)>,
-    /// The bodies that rock (S-0303 claim 20, S-0614 claims 9 and 10):
-    /// presentation state, moved once per game tick.
+    /// The bodies that rock (S-0113): the view's copy, moved once per game
+    /// tick, until the angles and rates move into the game state (claim 19,
+    /// a seam, docs/m8-claims/intake53-S-0107-S-0108-S-0113.md).
     rocking: super::rocking::Rocking,
 }
 
@@ -624,7 +628,7 @@ pub fn attitude(w: &World, o: &Object) -> Attitude {
         return Attitude::Sinking {
             // spec: S-0504 claim 15 and F4 (the pitch the simulation steps at each descent)
             pitch: glasnost_sim::naval::pitch(w, o.id).0,
-            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0303 claim 20, is the view's own state, which attitude_with adds; the game state alone gives a level roll)
+            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0113, is the view's copy until claim 19 is built, which attitude_with adds; the game state alone gives a level roll)
             roll: 0,
             drawn,
         };
@@ -671,22 +675,17 @@ pub fn draws_rocking(w: &World, o: &Object) -> bool {
     })
 }
 
-/// [`attitude`] with the view's rocking (`super::rocking`) in tick
-/// `shown`: a sinking vehicle's roll, and its lean when it was rocked as it
-/// began to sink (S-0504 claim 15); a vehicle that rocks and does not sink
-/// is drawn with its pitch and roll (S-0303 claim 20, S-0106 claim 9).
-pub fn attitude_with(
-    w: &World,
-    o: &Object,
-    rocking: &super::rocking::Rocking,
-    shown: i32,
-) -> Attitude {
-    let angles = rocking.angles(o.id, shown);
+/// [`attitude`] with the view's rocking (`super::rocking`): a sinking
+/// vehicle's roll, and its lean when it was rocked as it began to sink
+/// (S-0504 claim 15, S-0113 claim 5); a vehicle that rocks and does not
+/// sink is drawn with its pitch and roll (S-0113 claim 18, S-0106 claim 9).
+pub fn attitude_with(w: &World, o: &Object, rocking: &super::rocking::Rocking) -> Attitude {
+    let angles = rocking.angles(o.id);
     match attitude(w, o) {
         Attitude::Sinking { pitch, drawn, .. } => Attitude::Sinking {
             // spec: S-0504 claim 15 (Starting value: the lean steps from the rocked pitch the vehicle had when sinking began)
             pitch: rocking.lean(o.id).map_or(pitch, |p| p.0),
-            // spec: S-0504 claim 15 (the roll is left free: a rocking hit during descent rolls the hull) and claim 16 (drawn as S-0106 claim 9's rocking)
+            // spec: S-0113 claim 5 (a sinking body's roll takes table R's roll step: a push during descent rolls the hull) and S-0504 claim 16 (drawn as S-0106 claim 9's rocking)
             roll: angles.map_or(0, |(_, r)| r.to_bits()),
             drawn,
         },
@@ -736,6 +735,23 @@ pub fn charged_anim_time(
         .as_str()?;
     // spec: S-0108 F6 (t_c is the single-precision field widened exactly to binary64); S-0003 claim 7 (a single-precision field's value)
     glasnost_num::decimal::parse(text, glasnost_num::decimal::Field::Single, mode).ok()
+}
+
+/// The remaining charge in ticks that building `o`'s superweapon slots read
+/// at tick `now` from its owner's record of its first superweapon
+/// `first_sw` (S-0108 claims 11 and 18, S-0512 F2); `None` when there is no
+/// reading (no superweapon or no owner, or, with
+/// `quirks.ungranted_super_reads_clock` off, a record that is not granted).
+pub fn charge_reading(w: &World, o: &Object, first_sw: Option<u32>, now: i32) -> Option<i32> {
+    let reads_ungranted = w.rules().quirks.ungranted_super_reads_clock;
+    let (sw, h) = first_sw.zip(o.owner)?;
+    match glasnost_sim::superweapons::record(w, h, sw) {
+        // spec: S-0108 claims 11 and 18 (quirks.ungranted_super_reads_clock on: the clock is read whether or not the record is granted; off: a record that is not granted counts as not charged)
+        Some(rec) if rec.granted || reads_ungranted => Some(rec.remaining(now)),
+        Some(_) => None,
+        // spec: S-0108 claim 11 (each house holds one record of each type from its creation, S-0512 claim 1; a record never granted and never reset reads 0); the simulation allocates a house's records when it first writes one
+        None => reads_ungranted.then_some(0),
+    }
 }
 
 /// The bytes of a type name as our rules format writes it (bytes 128 to 255
@@ -1164,7 +1180,28 @@ impl Live {
             special_events: Vec::new(),
             depot_events: Vec::new(),
             rocking: Default::default(),
+            setup_charges: BTreeMap::new(),
         };
+        // spec: S-0108 claim 11 (a building placed during the game's set-up opens during the set-up: the record it meets is the one the set-up left, before the first tick's house updates grant it)
+        live.setup_charges = live
+            .building_ids
+            .values()
+            .filter_map(|id| live.world.obj(*id))
+            .filter_map(|o| {
+                let first_sw = live
+                    .rules
+                    .superweapons
+                    .building_sw
+                    .get(o.type_index as usize)
+                    .and_then(|s| s[0]);
+                first_sw.map(|_| {
+                    (
+                        o.id,
+                        charge_reading(&live.world, o, first_sw, live.world.tick),
+                    )
+                })
+            })
+            .collect();
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
         if !live.setup.sandbox {
@@ -1266,7 +1303,7 @@ impl Live {
         self.painter.canvas()
     }
 
-    /// The bodies that rock (presentation state, S-0303 claim 20).
+    /// The bodies that rock (S-0113; the view's copy until claim 19 is built).
     pub fn rocking(&self) -> &super::rocking::Rocking {
         &self.rocking
     }
@@ -1464,12 +1501,11 @@ impl Live {
                         .copied()
                         .flatten(),
                 };
-                // spec: S-0108 claims 11 and 18 (the weapon's remaining charge time: the owner's record of the type's first superweapon, S-0512 F2, in the tick the picture shows)
-                let charge_remaining = first_sw
-                    .zip(o.owner)
-                    .and_then(|(sw, h)| glasnost_sim::superweapons::record(w, h, sw))
-                    .filter(|rec| rec.granted)
-                    .map(|rec| rec.remaining(now));
+                // spec: S-0108 claim 11 (a set-up building's grand opening is during the set-up, so it meets the record as the set-up left it)
+                let charge_remaining = match self.setup_charges.get(&o.id) {
+                    Some(c) if !self.slot_anims.contains_key(&o.id) => *c,
+                    _ => charge_reading(w, o, first_sw, now),
+                };
                 let sizes: Vec<glasnost_num::F64> =
                     glasnost_sim::structures::absorb::passengers(w, o.id)
                         .iter()
@@ -2214,9 +2250,9 @@ impl Live {
         let now = self.shown_tick();
         let at = |p: glasnost_sim::world::Pos| project_lifted(p.x, p.y, p.z);
         let effects = std::mem::take(&mut self.world.effects);
-        // spec: S-0303 claim 20 and S-0614 claims 9 and 10 (the tick's rocking sets its bodies' rates); the angles move once per game tick, not per drawn frame (S-0504 claim 16)
-        self.rocking.take(&self.world, &effects, now);
+        // spec: S-0113 claim 19 and State and ordering (the rocking step is the first part of a body's turn, once per game tick and not per drawn frame; the tick's pushes then set the rates, which show from the next step)
         self.rocking.advance(&self.world);
+        self.rocking.take(&self.world, &effects);
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -2820,7 +2856,7 @@ impl Live {
             shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
-            attitude: attitude_with(w, o, &self.rocking, self.shown_tick()),
+            attitude: attitude_with(w, o, &self.rocking),
             // spec: S-0104 claim 13 (Deactivated voxel vehicles) and S-0405 claims 13 and 20
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
             // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)
