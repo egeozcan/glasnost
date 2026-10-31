@@ -1,9 +1,9 @@
 ---
 id: Q-2138
 title: Route-mode clicks that give no behaviour order, patrol over a marker, the marker's hit area and the kind refusal
-status: open
+status: answered
 related: [S-0213, S-0214]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
