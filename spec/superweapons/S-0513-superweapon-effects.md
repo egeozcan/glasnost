@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 34
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156]
 supersedes: []
 ---
 
@@ -90,11 +90,12 @@ presentation and swept-layer rules below also apply where those specs cite them.
 - **Strike witness.** The ground-layer infantry, vehicle, aircraft or building selected by
   the distance test of claim 18. This is not a search of neighbouring cells.
 - **Warp group.** The mobile objects one teleport warp moves or kills (claim 34).
-- **Leaving stage, arrival hold.** The period from a warp member's first update after launch
-  until departure, including the update at which its fixed 60-tick wait expires (claim 39), and
-  the time after arrival effects during which it is still phasing in (claim 40). The glossary
-  needs the same distinction: 60 ticks is the leaving wait, not the whole leaving stage.
-  A zero held delay still ends phasing in on the update after arrival effects.
+- **Leaving stage, arrival hold.** The *leaving stage* is the period from a warp member's first
+  update after launch until departure, including the update at which its fixed 60-tick wait
+  expires (claim 39). It ends at departure. The *arrival hold* is the time after arrival effects
+  during which the member is still phasing in (claim 40). The glossary needs the same
+  distinction: 60 ticks is the leaving wait, not the whole leaving stage. A zero held delay still
+  ends phasing in on the update after arrival effects.
 - **Phasing in.** The state of a warped object from the moment it leaves its old position until
   its arrival hold ends (claims 39 and 40). A phasing-in object is not warped again (claim 34).
 - **Camera sight.** The spy plane's sight with its radius replaced (claim 44).
@@ -964,7 +965,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Backing: `measurable` (scenario SW13 parts a to c)
     - Confidence: high for the outcomes; medium for the search settings
 
-38. **Fate on arrival.** When a member is placed at its landing point:
+38. **Fate on arrival.** In a member's arrival effects, the update after its placement at its
+    landing point (claim 39):
     - if any protected object is listed in the landing cell's ground layer (even under a deck),
       the member is killed as in claim 37,
     - a member that lands on water, is not infantry, not naval, not a hover type (a hover type
@@ -988,12 +990,12 @@ presentation and swept-layer rules below also apply where those specs cite them.
       stays at its old position throughout that expiry update and departs on the following
       update. It counts as *being erased* from its update in *t*_L + 1 until departure in
       *t*_L + 62, including the expiry update; S-0214 and S-0301 give what that refuses,
-    - leaves the map in its update of tick *t*_L + 62: the warp-out animation and departure sound
-      play at its old position. Parasite release at this departure is unresolved for a drone
-      parasite (S-0614 claim 12); a naval parasite was already released at launch (claim 34).
-      At departure,
-      every object targeting it drops it as in S-0207 claim 20 (e), it starts *phasing in*, and the
-      landing check of claim 37 runs,
+    - disappears from its old position in its update of tick *t*_L + 62: it leaves the cell it stood
+      in and is off the map (glossary) until it appears at its landing point, while it stays in
+      play. The warp-out animation and departure sound play at its old position. Parasite release at
+      this departure is unresolved for a drone parasite (S-0614 claim 12); a naval parasite was
+      already released at launch (claim 34). At departure it starts *phasing in*, and the landing
+      check of claim 37 runs,
     - when the check passes, appears at its landing point in its next update, and in the update
       after that has its arrival effects: arrival sound, claim 38's fate, a surviving member's
       sensor-disc transfer and adjacency reveal (S-0516 claim 22), the warp-out animation at
@@ -1013,8 +1015,95 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Backing: `measurable` for timing (SW12 part d); sensor coverage and transfer inherit
       S-0516 claim 22's backing (CS20 superweapon-warp part). Drone-parasite release on this path is
       `unmeasured`: the ordinary teleport release path is traced, but this superweapon path
-      has not been shown to reach the same release; no result is promised here
-    - Confidence: medium for the absolute tick timeline; low for drone-parasite release
+      has not been shown to reach the same release; no result is promised here. That a departed
+      member is off the map until it appears is `unmeasured`: no part here sends another object
+      into the old cell, or reads what that cell holds, while the member waits to land
+    - Confidence: medium for the absolute tick timeline; low for drone-parasite release; medium,
+      unmeasured, that a departed member is off the map until it appears
+
+    A departed member is off the map until it appears (above), but S-0309 claim 27's drop, its timer
+    reset and its rule for a projectile in flight do not apply to the departure, then or while the
+    member waits to land, and departure is not the teleporting locomotor's own jump of S-0207 claim
+    20 (e). Departure itself clears no holder's target and resets no holder's targeting timer: no
+    ranged draw over 4 to 8 ticks is taken for a holder, whatever its timer shows, so for a member
+    that the landing check does not kill, the departure adds no holder draw to the warp-out
+    animation's creation draws. This includes a holder with an override in effect (S-0215 claim 10):
+    the departure is not one of that claim's revert causes, so such a holder does not revert there
+    and keeps the member as its target (Changes for other specs). A member that the landing check
+    kills (claim 37) is a destroyed object, and its holders drop it as S-0309 claim 27 gives for a
+    destroyed object, with that claim's timer reset, at the hit that kills it. In the departure
+    update the warp-out animation is made before the landing check, so all its creation draws come
+    before those holders' timer-reset draws. Within the landing check the hits follow the landing
+    cell's listing (claim 37): the draws of an object killed earlier in that listing, and of its
+    holders, come before the member's holders' draws. The holders draw among themselves as S-0309
+    claim 27 gives. Where they fall against the member's own destruction draws is S-0309 claim
+    27's open question, unchanged here. A member that claim 38's fate
+    destroys in its arrival effects, the update after its placement, is likewise a destroyed object,
+    and its holders drop it as S-0309 claim 27 gives. A member that claim 38 sinks without
+    destroying it is S-0504 claim 5's, which leaves open when its holders drop it. For a member
+    neither destroyed nor set sinking by these steps, the later warp steps (a failed or redirected
+    landing check, its placement and its arrival effects) do not themselves clear holders' targets.
+    Here a change is the member's step's only when it is made in the member's own update; a change
+    made in a holder's own update in the same tick, a search at its timer's expiry included, is the
+    holder's own processing. Whether a holder's own target checks drop the member after departure is
+    left open (Open questions).
+
+    The teleporting locomotor's own jump (S-0207 claim 20 e) never gives a holder the ranged draw
+    over 4 to 8 ticks either: its drops are not S-0309 claim 27's or claim 28's, and S-0309 claim
+    27 gives its timer reset only to those drops, so a holder that drops the jumper keeps its
+    timer, whatever it shows (Changes for other specs).
+
+    A projectile already in flight towards the member does not lose it at departure: its target
+    does not become the cell the member stood in, as S-0306 claim 17 gives for a target that
+    becomes untargetable, and it keeps the member as its target object (Changes for other specs).
+    It goes on as S-0306 gives for a projectile whose target is an object. Where it then flies
+    while the member waits to land, and whether it can hit the member, are left open (Open
+    questions).
+
+    Before departure, a holder can lose the member by its own processing. Throughout the leaving
+    stage, a firing check asked about the member answers *illegal*, unless the asking weapon is a
+    temporal weapon (S-0301 Terms) or a reason ranked above it applies. It is a rank-4 reason of
+    S-0301 claim 9, placed within that rank as Changes for other specs gives. In particular it
+    outranks a running rearm countdown, so a holder that is rearming gets *illegal*, not *rearming*,
+    for the member. A holder whose weapon is not a temporal weapon and whose member is an
+    opportunity target therefore drops it at its next search in the leaving stage (S-0309 claims 4
+    and 19). Such a drop is not claim 27's and takes no draw over 4 to 8 ticks. An infantry holder
+    whose weapon does not heal keeps the member when its firing step gets this answer. Other drops
+    by a holder's own processing in the leaving stage are left open (Open questions).
+    - Backing for the holders: `measurable` (SW12 part i) for infantry holders at departure, at a
+      failed or redirected landing check, at placement and arrival effects, and for an infantry
+      holder's leaving-stage drop of an opportunity target and for an infantry holder's not dropping
+      the member in a leaving-stage firing step. That the keeping follows this particular answer is
+      `unmeasured`: part i records no firing-check answers. Whether the member's departure, failed
+      or redirected check, placement or arrival effects clear a holder's target, part i decides only
+      with reads just before and just after the member's update, which set a holder's own
+      processing, its expiry search included, apart from the member's step. The departure's lack of
+      a holder timer draw is decided with either kind of read. The same rules for vehicle, building
+      and aircraft holders, the opportunity-target drop included, are `unmeasured`: SW12 part i has
+      infantry holders only. The holders' drop of a member killed by the landing check or destroyed
+      by claim 38's fate in its arrival effects is `unmeasured`, and so is the place of a killed
+      member's holders' draws after the warp-out animation's draws and in the landing check's
+      listing order: no part here records the holders of such a member. The projectile that keeps
+      the member as its target is `unmeasured`: no part
+      here fires at a member as it departs. The leaving-stage answer's *illegal* label and its rank
+      are `unmeasured`: part i records no firing-check answers, and a drop at a search fits more
+      than one refusal. The holder with an override in effect is `unmeasured`: no part here puts an
+      override in effect for a holder of the member. The temporal-weapon exception is `unmeasured`:
+      no part here gives a holder a temporal weapon during a warp. The own jump's lack of a draw is
+      `unmeasured`: no part here jumps a held object with its own locomotor while a holder's timer
+      is read.
+    - Confidence: medium that departure itself clears no holder's target and takes no holder timer
+      draw, for every holder kind; medium that a failed or redirected landing check, placement and
+      arrival effects do not drop it, for every holder kind; medium for the opportunity-target drop
+      with no draw over 4 to 8 ticks by infantry holders (SW12 part i, holder H3), and for the
+      infantry holder's not dropping it in a leaving-stage firing step; medium, unmeasured, for the
+      same opportunity-target drop by vehicle, building and aircraft holders, for that keeping
+      following the *illegal* answer, for the drop of a member killed by the landing check or
+      destroyed by claim 38's fate in its arrival effects, for the place of the killed member's
+      holders' draws after the warp-out animation's draws and in the landing check's listing order,
+      for the projectile that keeps the member,
+      for the *illegal* label, for its rank, for the holder with an override in effect, for the
+      temporal-weapon exception and for the own jump's lack of a draw
 
 40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
     *held delay*, in ticks. With one update per tick, phasing in ends in tick
@@ -1486,7 +1575,7 @@ Absent-key defaults are in Import mapping.
 | examined | joins the group (claim 34) | warp pending; landing point fixed |
 | warp pending | update in *t*_L + 1 | leaving stage; counts as being erased; fixed wait starts |
 | leaving stage, waiting | update in *t*_L + 61, 60 elapsed ticks after the wait starts | remains at old position and still counts as being erased; target search if targetless |
-| leaving stage, wait expired | update in *t*_L + 62 | leaves the map; being-erased state ends; phasing in; landing check |
+| leaving stage, wait expired | update in *t*_L + 62 | disappears from its old position and is off the map until it appears; being-erased state ends; phasing in; landing check; the departure itself clears no holder's target and takes no holder timer draw (claim 39) |
 | check failed | each update | redirected search and check again; held delay set to the teleport delay |
 | check passed | next update | placed at the landing point |
 | placed | next update | arrival effects; arrival hold starts (claim 40) |
@@ -2122,6 +2211,49 @@ is not under test.
   at index 4, not the relocated warp type. A warp cursor/effect instead falsifies the fixed-index
   rule. Restore the list after this part; do not conflate this aiming test with S-0512 claim 11's
   link lookup.
+  (i) Holders of a warp member (Q-2156), on S-0309 scenario A18 part d's recorder. The human
+  launches the warp on a block holding one tank of the computer house as its only member, set up
+  as in part (d), which cannot fire (a test copy). A run in which the tank moves before departure
+  decides nothing. Three human-owned armed infantry holders stand within range of the tank, with
+  the normal targeting delay given a test value of 100 ticks and weapons that cannot kill it
+  during the run, none of them a temporal or healing weapon. *H*1 and *H*2 in *guard* pick the
+  tank by their own search (S-0309 claims 1 to 4) before the launch, at ticks chosen so that
+  neither targeting timer runs out between the launch and departure, and at departure *H*1's timer
+  has more than 10 ticks left and *H*2's at most 10. *H*3 in *guard* picks it before the launch at
+  a tick chosen so that its timer runs out in the leaving stage, and its weapon has a rearm delay
+  of 1 tick in the test map, so that rearming does not decide its answer. A run in which *H*1's or
+  *H*2's timer ran out between the launch and departure, or in which a holder did not hold the
+  tank at the launch, decides nothing for that holder. A run counts for *H*3 only if *H*3 held the
+  tank at the launch and its recorded timer ran out in the leaving stage; any other run decides
+  nothing for *H*3. Repeat until each of *H*1, *H*2 and *H*3 has at least five runs that count for
+  it; this count replaces the three runs of the scenario's preamble for this part. Record each
+  holder's target, targeting timer and behaviour in every tick from the launch to the end of the
+  arrival effects, just before and just after the member's update where the recorder allows reads
+  between updates, and otherwise at the end of the tick. A change between the reads just before
+  and just after the member's update is the member's; a change at any other point of the tick, a
+  holder's search at its own timer's expiry included, is the holder's own processing and decides
+  nothing for the member's warp steps. With end-of-tick reads only, this part decides nothing on
+  whether the member's departure, placement, arrival-effects, failed-check or redirected-check
+  update clears a holder's target; the draw lists still decide the departure's draws. List the
+  scenario-stream draws with their ranges in the member's departure update and in *H*3's update at
+  its timer's expiry, where the recorder allows it, otherwise those of the whole tick, with draws
+  that the other specs predict set aside. Expected: *H*1 and *H*2 hold the tank at the reads just
+  before and just after its departure update where read between updates, each timer counting down
+  from its value before departure; *H*3 drops it at its expiry in the leaving stage, and no holder
+  drops it in its firing step in the leaving stage; no list has a draw over 4 to 8 ticks that
+  another spec does not predict. Where read between updates, no holder's target changes between
+  the reads just before and just after the member's placement or arrival-effects update. Repeat
+  with an unprotected building on the landing cell, as in SW13 part (b), so that the first landing
+  check fails and a redirected check follows: expected the same, and no holder's target changes
+  between the reads just before and just after the member's update of a failed or redirected
+  check. Falsified if *H*1 or *H*2 shows a draw over 4 to 8 at departure (for *H*1, with its timer
+  then equal to that draw), if either holds the tank at the read just before the departure update
+  and no target at the read just after it, if *H*3 still holds the tank at departure in a run that
+  counts for it, if *H*1 or *H*2 drops it before departure in a tick in which its timer did not
+  run out, or if a holder's target is cleared between the reads just before and just after the
+  member's update of a later warp step. Part (i) records no firing-check answers, so no outcome
+  here falsifies the *illegal* label or its rank: *H*3's drop and the firing-step keeping test only
+  what claim 39 says that answer causes, and the label and rank stay `unmeasured` there.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -2362,6 +2494,13 @@ for these two kinds.
 - Q-0742 questions 1 to 3 are answered by S-0214 claim 31, table CS; question 5 belongs to
   S-0512 claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
+- What a holder of a warp member does with it in the leaving stage other than an opportunity
+  target's drop at a search, while it is off the map after departure, and after it appears at its
+  landing point: whether its own processing drops it (an attack behaviour, for example), and whether
+  it may fire at it while it is phasing in, which begins at departure, after the leaving stage
+  (claim 39).
+- Where a projectile that keeps a warp member as its target flies while the member waits to
+  land, and whether it can hit the member then or after it appears (claim 39).
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
 - Q-0738 is accounted for question by question in claim 48: leaving exclusions, stopped
@@ -2413,3 +2552,51 @@ for these two kinds.
   as its scenario. S-0519 leaves open the marking colour of a marked building's body, voxel
   turret and barrel while its centre cell is shrouded, and claim 29b's centre-cell row here
   withholds only the protection masks, so the two agree. No further change to S-0519 is needed.
+- **S-0309 claim 27.** A superweapon warp member goes off the map at its departure (S-0513 claim
+  39), but this claim's drop, its timer reset and its rule for a projectile in flight do not
+  apply to the departure. The claim gains, after its list of objects that go off the map: "A
+  member of a superweapon warp group goes off the map at its departure, but this claim's drop,
+  its timer reset and its rule for a projectile in flight do not apply to the departure, then or
+  while it waits to land (S-0513 claim 39). A member destroyed by its landing check is a
+  destroyed object here." Level: medium. Backing: `measurable` (S-0513 SW12 part i) for infantry
+  holders; `unmeasured` for the other holder kinds (SW12 part i has infantry holders only), for
+  the projectile rule (no part of S-0513 fires at a member as it departs) and for the member
+  destroyed by its landing check (no part of S-0513 records its holders).
+- **S-0306 claim 17.** The departure of a superweapon warp member (S-0513 claim 39) is not a
+  loss of target: a projectile in flight towards the member keeps it as its target object, and
+  its target does not become the cell the member stood in. "Becomes untargetable (for example by
+  being teleported)" covers the teleporting locomotor's own jump (P11 run d), not that departure.
+  The claim may gain: "The departure of a superweapon warp member is not such a loss (S-0513
+  claim 39)." Level: medium. Backing: `unmeasured`, because no part of S-0513 fires at a member
+  as it departs.
+- **S-0207 claim 20 (e).** The drops at the teleporting locomotor's own jump are not S-0309 claim
+  27's or claim 28's, so they take no targeting-timer draw, whatever a holder's timer shows. This
+  follows the committed text of S-0309 claim 27 ("This reset belongs to the drops of this claim
+  and of claim 28"); part (e) may say so for clarity. No change of behaviour. Level: medium.
+  Backing: `unmeasured` here, since no part here jumps a held object with its own locomotor
+  while a holder's timer is read.
+- **S-0301, the firing check.** The answer list gains a target test: a target in the leaving stage
+  of a superweapon warp (S-0513 claim 39) answers *illegal* unless the asking weapon is a temporal
+  weapon (Terms). Whether a target held by a temporal beam gets the same answer is not settled here.
+  It is a rank-4 reason. Within rank 4 it comes after every other reason listed there, except the
+  following, which it outranks: the spawner-weapon answers (S-0506 claim 10: the parasite-hold
+  *impossible* and the *rearming* when no spawned aircraft is alive), the *impossible* of the other
+  weapon's live effect, every row of S-0306 claim 23, and the magnetic-beam *rearming* against a
+  target other than the gripped unit (S-0607 claim 11). So it comes after, among others, the firer's
+  own-state refusals, the early *rearming* of a materialising firer, of its own gripped unit and of
+  a target it already holds with a temporal weapon, the drain and berserk refusals, the
+  hidden-target, absent-weapon and power-sensitive-weapon *impossible*, an infantry healer's
+  *illegal* and a building's pending delayed shot. A building's answers of S-0405 table T1 also come
+  before it. It outranks every reason of ranks 5 and 7 to 16 (rank 6 is not used), so a firer
+  whose rearm countdown is running,
+  or whose weapon's own effect is alive, gets *illegal* for such a target. Level: medium. Backing:
+  `unmeasured` for the *illegal* label, the temporal-weapon exception and the rank, because S-0513
+  SW12 part i records no firing-check answers. The drops and keeps that the answer causes are S-0513
+  claim 39's (medium: `measurable`, SW12 part i, for infantry holders, and `unmeasured` for other
+  holders).
+- **S-0215 claim 10.** The cause "the target goes off the map" does not include the departure of
+  a superweapon warp member (S-0513 claim 39). An actor with an override in effect whose target is
+  that member does not revert at the departure, keeps the member as its target and keeps its
+  suspended behaviour. The claim gains, after its off-map cause: "This cause does not include the
+  departure of a superweapon warp member (S-0513 claim 39)." Level: medium. Backing: `unmeasured`,
+  because no part of S-0513 puts an override in effect for a holder of a warp member.
