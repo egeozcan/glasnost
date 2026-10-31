@@ -2,11 +2,11 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-31
 measurements: []
 requests: [Q-0660]
 supersedes: []
@@ -722,13 +722,18 @@ are explicitly 1 unless a part names another value.
   0.375 of experience): veteran after the 3rd destruction, elite after the 6th. Record experience
   after each destruction. Any different delta or promotion count falsifies this part.
   Veteran only after the 8th would indicate no passenger credit.
-- *Part f (absorbed passengers with no crew):* a building that absorbs infantry, with the map's
-  no-crew setting, holding two absorbed infantry units, is destroyed by *K*; no charge was planted.
-  *Expected:* *K* gains the building's kill value only, and no insignia changes on any other
-  object. Repeat with a charge planted by a trainable infantry unit *P* of the human house
-  before *K*'s killing hit. Give the enemy building and its two enemy passengers cost 500
-  each, *P* cost 1000, ratio 4 and cap 2.5. *Expected:* *P* gains 0.25 for the two passengers
-  and *K* gains 0.125 for the building alone. *Falsified if:* either experience delta differs.
+- *Part f (absorbed passengers with no crew):* an enemy test building type that absorbs infantry
+  and is not eligible for a delayed kill (S-0302 claim 16) holds two absorbed enemy infantry
+  units. The building carries the tag of a test-map trigger whose action destroys attached
+  objects (S-0011 claim 27). That damage ignores defences and has no attacker, so the building
+  has no crew at its destruction (S-0312 claim 18) and its passengers die instead of coming out.
+  Give the building and each passenger cost 500, ratio 4 and cap 2.5. Run 1: no charge is
+  planted, and the trigger fires. *Expected:* no object's experience or insignia changes. Run 2:
+  a trainable infantry unit *P* of the human house, of cost 1000, plants a charge on the
+  building, and the trigger fires while the charge's countdown runs. *Expected:* *P* gains 0.25
+  for the two passengers and nothing for the building, and no other object's experience changes.
+  *Falsified if:* a passenger comes out, *P*'s delta differs, or another object's experience
+  changes. A run 2 whose countdown ends before the trigger fires is void.
 - In parts a, b and c (not c2/c3), use ratio 1 and cap 2, enough fresh targets to cross a rank
   threshold, and record each named recipient's experience delta per kill. Use equal recipient
   and victim costs so the predicted gain is 1. A delta on a different object, no delta on the
