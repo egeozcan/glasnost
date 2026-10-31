@@ -2,12 +2,12 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 36
-sources-class: [decomp, design]
+revision: 58
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
-measurements: []
+approved-on: 2026-10-31
+measurements: [M-0004]
 requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770]
 supersedes: []
 ---
@@ -26,10 +26,6 @@ lasting effect are S-0615 claims 12 to 17. Aircraft carrying a first passenger r
 shots with drop attempts (S-0522 claim 11), outside the ordinary-shot rules below. Which shot animation a shot makes,
 where it is and what it follows are claims 20 to 23; the target line that a vehicle with the
 target-laser flag shows its owner is claim 24.
-
-This revision narrows one sentence of claim 14 as previously committed: while a building's
-delayed shot is pending, its other firing checks answer *rearming* unless one of S-0405 table
-T1's building answers holds, which comes first (claim 9).
 
 ## Terms
 
@@ -81,15 +77,24 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Berserk.** The state of a unit that a berserk-causing warhead has put out of its owner's
   control (S-0610 claims 4 to 6). *Berserk-causing warhead*, *psionics immunity* and
   *berserk-friendly* have the meanings of S-0610 Terms.
-- **Effect weapon.** A weapon whose shot keeps a lasting effect attached to the firer: a sonic
-  wave, a spark-particle or fire-particle emitter, or a railgun particle trail (each an imported
-  weapon flag). A sonic wave is *alive* from the shot until it ends (the combat and rendering specs
-  own its duration). A particle emitter is alive from the shot until it is let go (below). A fire
-  emitter is let go on a retarget to a target not within reach (what counts as within reach is
-  S-0616 claim 1's; the measurement in F4 reads it as the weapon's range), a move order or death. A spark or railgun emitter is let go when it leaves play, which it does by its
-  own counter or line and not by anything the firer does (S-0616 claims 1 and 22). So a spark or
-  railgun emitter is not alive for as long as its firer is in play; a fire emitter is, when its
-  firer keeps its target, stays put and lives.
+- **Effect weapon.** A weapon whose shot keeps a lasting effect attached to the firer: a sonic wave,
+  a spark-particle or fire-particle emitter, or a railgun particle trail (each an imported weapon
+  flag). A sonic wave is *alive* from the shot until it ends (the combat and rendering specs own its
+  duration). A particle emitter's weapon flag sets its emitter place, and the place sets the let-go
+  events (S-0616 claim 1): an emitter in the fire place is let go on a retarget to a target not
+  within reach (what counts as within reach is S-0616 claim 1's; the measurement in F4 reads it as
+  the weapon's range), a move order or death. An emitter in the spark or railgun place is not let go
+  by anything the firer does. When the system leaves play, and what a let-go does to it, are set by
+  the behaviour kind of its system's type (S-0616 claim 22): a fire-kind system leaves play as
+  S-0613 claim 17 and S-0616 claim 22 give, and a spark-kind or railgun-kind system ends by its own
+  counter or line. An emitter whose system kind matches its place is called *matched*. A matched
+  emitter is *alive* from the shot until it is let go or its system leaves play, whichever comes
+  first. When an emitter that is not matched stops being alive is not stated (claim 5, Open
+  questions). A matched spark or railgun emitter is alive until its system leaves play. That is by
+  the system's own counter or line, except for a spark system whose type's spark-turns field is 0 or
+  less: S-0616 claim 20 treats it as bad data and marks it in its first turn (in the original its
+  counter never marks it, so its emitter stays alive until the owner's removal, a positive lifetime
+  or the trigger action ends the system).
 - **Disc laser weapon.** A weapon with the imported disc-laser flag (S-0203, Terms).
 - **Magnetic-beam weapon.** A weapon with the imported magnetic-beam flag. Its shot can make a
   *magnetic wave* attached to the firer (S-0607 claim 21). The firer's *held target* is its
@@ -166,8 +171,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    not change *D*, and `quirks.speed_normalised_delays` does not apply to any delay of this spec.
    A carrying aircraft's drop attempt instead leaves the countdown unchanged on refusal and
    expires it immediately on success; it sets no ordinary shot delay (S-0522 claim 11).
-   - Backing: `measurable` (scenario F1, S-0522 scenario P7 for drop attempts,
-     scenario F18 for charge arrival)
+   - Backing: `measured` (M-0004: the countdown, its independence of the game speed, and that a
+     retarget or a change of weapon leaves it running); `measurable` (scenario F1, fifth run, for
+     a turret turn shorter than the countdown; S-0522 scenario P7 for drop attempts, scenario F18
+     for charge arrival)
    - Confidence: high
 
 2. **Which delay a shot gets.** Four kinds of delay exist: the 1-tick delay of a building with
@@ -203,9 +210,18 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    and the berserk halving (claim 8) scale it where their condition holds, nested as Formula F1 nests
    them. The nesting shows in the delays: the same factors nested otherwise can truncate to a
    different whole number of ticks. Formula F1 gives the number domain of each result.
-   - Backing: `measurable` (scenarios F1 and F2 for the full delay; F3, F4 and F9 for the order)
-   - Confidence: high (the full delay, and 1-tick before every other kind); medium (effect weapon
-     before in-burst; scenario F4's burst part supplies named test data to isolate this order)
+   - Backing: `measured` (M-0004: the full delay as a base plus its one R(0, 2) draw, the in-burst
+     delay, the 1-tick delay of a building with spare rounds before both, and a fire-particle
+     weapon's bare rate, each as a countdown); `measurable` (scenario F2 for the factors, F4 for the
+     other effect weapons and its building part for the 1-tick delay before the bare rate, F14's
+     no-draw part for the absence of a delay draw with a burst-delay field, the bare rate and the
+     1-tick delay, which M-0004 does not separate from the background draws)
+   - Confidence: high (the full delay as a base plus one R(0, 2) draw, its factors carrying the
+     ratings of claims 3, 6 and 7, and the 1-tick delay before the full and in-burst delays); medium
+     (the 1-tick delay before the bare rate, until scenario F4's building part runs; that a
+     burst-delay field, the bare rate and the 1-tick delay take no draw; effect weapon before
+     in-burst; no delay draw was identified for M-0004's fire-particle weapon, which does not show
+     that order, and no other effect kind was run; scenario F4's burst part isolates the order)
 
 3. **The house rate-of-fire factor.** In a skirmish, *h* of a player house is the rate-of-fire factor
    of the house's difficulty row times the rate-of-fire factor of the house's country, a product of two
@@ -265,10 +281,22 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    exists is instead a drop attempt: it never advances the burst counter or chooses an ordinary
    full or in-burst delay, including their draws (S-0522 claim 11). The exception ends when no
    first passenger remains; any further attempts in that same burst are not cargo drops.
-   - Backing: `measurable` (scenario F3; S-0501 scenarios AC7 to AC9 for aircraft,
-     S-0522 scenario P7 for drop attempts)
-   - Confidence: high (the counter and both in-burst delays); medium (the reset when the target is
-     cleared, and the carry-over between weapons)
+   - Backing: `measured` (M-0004: the counter; a vehicle's fixed in-burst delays, its type's
+     burst-delay fields set to 7 and 9, as countdowns; the drawn in-burst delay as a countdown for
+     a building defence, and an infantry unit's in-burst R(3, 5) draws; the reset by a stop order,
+     the count kept across a retarget and carried over to the other weapon, one run each), and
+     `measurable` (scenario F3 for a vehicle's drawn in-burst delay, its type's burst-delay fields
+     set to −1, and for an infantry unit's countdown after an in-burst shot; scenario F14's no-draw
+     part for a burst-delay field taking no draw; S-0501 scenarios AC7 to AC9 for aircraft, S-0522
+     scenario P7 for drop attempts).
+     The reset for a target cleared otherwise than by a stop order is `unmeasured`
+     here: no record clears the target in another way.
+   - Confidence: high (the counter; a vehicle's fixed in-burst delays; a building's drawn in-burst
+     delay; an infantry unit's in-burst draw from R(3, 5)); medium (a vehicle's drawn in-burst
+     delay, and an infantry unit's in-burst delay being that draw in ticks, until scenario F3
+     runs; that a burst-delay field takes no draw; the reset by a stop order, and the retarget and
+     weapon-change rules, each seen
+     in one run; the reset for a target cleared otherwise than by a stop order, `unmeasured`)
 
 5. **Effect weapons fire at their bare rate.** The delay after a shot of a sonic, spark-particle,
    fire-particle or railgun weapon is the rate-of-fire field *R* itself, with no draw, no house
@@ -292,17 +320,23 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    for every enabled particle-effect flag whose place is empty, in the order fire, spark,
    railgun. Thus one shot can make three emitters; their creation order determines their
    subsequent turn order (S-0616 claim 1). The next checked shot must wait for every effect
-   selected by its flags to be let go, as well as for the other firing restrictions to pass.
+   selected by its flags to end (its life in Terms), as well as for the other firing restrictions
+   to pass.
 
-   With just one effect flag, an effect weapon fires again at the first attempt that is both at least *R*′ ticks after the
-   shot and after the effect has ended, where *R*′ is *R*
-   (trunc(*R* / 2) for a berserk firer, claim 8), and no draw is taken for its delay. For a sonic
-   weapon the effect ends when the wave does, so the interval is max(*R*′, the wave's lifetime). For
-   a particle emitter it ends when the emitter is let go (Terms): a spark or railgun
-   weapon fires again once its emitter has left play, and a fire weapon whose firer keeps its
-   target, stays put and lives fires only once until the emitter is let go. For a
-   building that holds more than 1 round, *R*′ is 1 instead (0 if berserk, claim 8), so
-   the live-effect gate can still hold it back (claim 10).
+   With just one effect flag, an effect weapon fires again at the first attempt that is both at
+   least *R*′ ticks after the shot and after the effect has ended, where *R*′ is *R* (trunc(*R* / 2)
+   for a berserk firer, claim 8), and no draw is taken for its delay. For a sonic weapon the effect
+   ends when the wave does, so the interval is max(*R*′, the wave's lifetime). For a matched
+   particle emitter it ends when the emitter's life ends (Terms). For a matched emitter (Terms): a
+   spark-particle or railgun weapon fires again once its emitter's system has left play. So does a
+   fire-particle weapon, when its firer keeps its target, stays put and lives: it fires at the first
+   attempt after both its emitter's system has left play and *R*′ ticks after the shot. When the
+   system leaves play is S-0613 claim 17's and S-0616 claim 22's. When a weapon whose emitter is not
+   matched (a fire-particle weapon whose system type is of the spark kind, for example) fires again
+   is not stated (Open questions): the let-go events follow its place (S-0616 claim 1) and the
+   system's end follows its kind (S-0616 claim 22), and no measurement covers the pairing. For a
+   building that holds more than 1 round, *R*′ is 1 instead (0 if berserk, claim 8), so the
+   live-effect gate can still hold it back (claim 10).
 
    A magnetic wave shares the sonic wave's single slot, so a live magnetic wave also counts as a
    live sonic effect: it blocks a sonic weapon of the same firer (*rearming* for the sonic weapon's
@@ -316,16 +350,23 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    refusal. There is no general own-wave firing block for a magnetic-beam weapon, including
    when the shared wave is sonic. A magnetic shot made while a wave is alive creates no new
    wave (S-0607 claim 21). Grip and wave lifetimes are independent.
-   - Backing: `measurable` (scenario F4, with its multi-flag, burst and building parts; S-0607 scenarios
-     L9 and L10 for magnetic firing, grip independence and wave creation)
-   - Confidence: high (the bare rate, the missing draw, *rearming* for an effect weapon's own
-     kind, the any-flag gate and particle-emitter creation order, and the magnetic conditional
-     gate and absence of a general own-wave block),
-     medium (*impossible* for the other weapon, that the effect's lifetime can lengthen the
-     interval, which depends on the effect specs, and the fire emitter's let-go events, including
-     what counts as within reach, which this spec leaves to S-0616 claim 1: scenario F4, particle
-     part); low for the shared slot of magnetic and sonic
-     waves (a firer needs both weapons, so test data must supply the case)
+   - Backing: `measured` (M-0004: a fire-particle weapon's countdown is its bare rate, and its
+     refire waits beyond it); `measurable` (scenario F14's no-draw part for the missing draw,
+     which M-0004 does not separate from the background draws; scenario F4, with its
+     multi-flag, burst and building parts; S-0607 scenarios L9 and L10 for magnetic firing,
+     grip independence and wave creation)
+   - Confidence: high (the bare rate of a fire-particle weapon, *rearming* for an effect weapon's
+     own kind, the any-flag gate and particle-emitter creation order, and the magnetic conditional
+     gate and absence of a general own-wave block), medium (the bare rate of the sonic,
+     spark-particle and railgun kinds, which no record has run, until scenario F4 runs; the missing
+     draw, until scenario F14's no-draw part runs; *impossible* for the other weapon, that the
+     effect's lifetime can lengthen the interval, which depends on the effect specs, and the let-go
+     events of an emitter in the fire place, including what counts as within reach, which this spec
+     leaves to S-0616 claim 1: scenario F4, particle part; that a matched fire weapon's refire waits
+     for its system to leave play: M-0004 measured a fire weapon of stock data refiring after much
+     more than *R* under one attack order, which fits the system lifetime but recorded neither the
+     system nor whether the firer kept its target and stood still); low for the shared slot of
+     magnetic and sonic waves (a firer needs both weapons, so test data must supply the case)
 
 6. **Veteran factor.** If the firer is veteran and its type has the veteran rate-of-fire ability,
    or it is elite and its type has the veteran or the elite rate-of-fire ability, the delay is
@@ -617,7 +658,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     There is no separate map ammunition value. This is the starting count, before any turns
     that can reload a vehicle (claim 11) or service an aircraft. Each shot
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
-    changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
+    changed. With *a* = 0 the firing check answers *out of ammunition*. An attempt that asks no
+    firing check (claim 9's secondary attempt of a SAM building or of a passing upgrade pair) is
+    not refused at *a* = 0: it is made as at any other count, uses no round, and a shot it makes
+    gets claim 2's normal delay, since the building holds no spare round. A disc laser shot uses no
     round (S-0615 claim 12; and it neither advances a garrison's muzzle index, S-0313,
     nor restarts a vehicle's reload, claim 11). A drain attempt likewise uses no ordinary
     per-shot round (claim 9; S-0608 claim 1). Aircraft instead make one round pending per
@@ -630,16 +674,46 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     a building's ammunition before the shot: a building that holds more than 1 round before a shot
     has a delay of exactly 1 tick after that shot, with no draw, whatever its weapon's burst count
     or kind (claim 2's order; `quirks.building_ammo_fast_rearm`). The shot made with its last round gets the normal delay of
-    claim 2, and a building with unlimited ammunition (*a* = −1) is not affected by the rule. A
-    building with 3 rounds and no other firing gate therefore fires in ticks *t*, *t* + 1
-    and *t* + 2, then answers
-    *rearming* until its countdown ends, and only then *out of ammunition*.
-    - Backing: `measurable` (scenario F9; the building part of scenario F3 for a burst weapon,
-      the building part of scenario F4; S-0522 scenario P7 for drop ammunition, and
-      S-0608 scenario D12 for aircraft drain-attempt pending rounds)
-    - Confidence: high (starting count, no clamp, the same rule for map and production,
-      rounds used, out of ammunition); medium (the building rule: it needs a building with
-      ammunition above 1, so test data must supply it)
+    claim 2, and a building with unlimited ammunition (*a* = −1) is not affected by the rule.
+
+    **A building's refill.** In every tick in which a building is in play, after its own
+    firing in that tick (after both attempts of a paired firing, claim 9), its ammunition is set
+    to its type's maximum *A* if it is 0, unless the type has the hospital flag or the armory
+    flag. The type's reload fields play no part, and no countdown of any kind is involved. So a
+    building eligible for this refill, with a nonzero maximum, is seen at 0 rounds after its first
+    tick only between a shot and the end of that shot's tick, and never stays *out of ammunition*:
+    - a building with 3 rounds and no other firing gate fires in ticks *t*, *t* + 1 and
+      *t* + 2, holds 3 rounds again at the end of tick *t* + 2, and fires its next group of three
+      when the delay that claim 2 gives the third shot has run, keeping its target throughout
+    - a building that starts with 0 rounds and *A* > 0 is filled at the end of its first tick, so
+      from its first attempt after that it fires as one that started full
+    - an initial count above *A* (above) is spent first, and every group
+      after it holds *A* rounds
+    - with *A* = −1 and an initial count of 0, the refill gives −1, so the building then has
+      unlimited ammunition
+    - with *A* = 0 the refill gives 0
+    - Backing: `measured` (M-0004: a building defence with 3 and with 4 rounds and a burst weapon,
+      its 1-tick delays as countdowns, its group size, its refill within the tick of the last
+      round's shot, and its never stopping for lack of ammunition, with a long reload field
+      set). Also `measurable` (scenario F14's no-draw part for the 1-tick delay taking no
+      draw, scenario F9's paired-refill part, variants a and b, for the refill's place after
+      both attempts and variant b for the unchecked secondary attempt at 0 rounds, the
+      building part of scenario F4, S-0522 scenario P7 for drop ammunition, S-0608
+      scenario D12 for aircraft drain-attempt pending rounds, and the refill-exception part of
+      scenario F9 for the hospital and armory flags)
+    - Confidence: high (starting count, no clamp, the same rule for map and production, rounds used,
+      out of ammunition, the 1-tick rule before the full and in-burst delays and the refill of a
+      building defence with a burst weapon that spent its last round, the kind M-0004 ran); medium
+      (the refill of other kinds of building, which no record has run; the 1-tick rule before the
+      bare rate, until the
+      building part of scenario F4 runs; the refill's exceptions for the hospital and armory flags,
+      a building that starts with 0 rounds, the refill with *A* = −1, which no record has run, and
+      the refill's place after the second attempt of a paired firing, until scenario F9's
+      paired-refill part runs; the unchecked secondary attempt of an upgrade pair at 0 rounds,
+      until variant b of that part runs; and that the 1-tick delay takes no draw, which M-0004
+      does not separate from the background draws). The same attempt by a SAM building is
+      `unmeasured` (no scenario here gives a SAM building a finite magazine), medium, since it
+      asks no firing check as the upgrade pair's does (claim 9)
 
 11. **Reloading (vehicles only).** A vehicle whose type has *A* ≥ 0 regains ammunition over time.
     The ordinary reload opportunities below are subject to the warp exclusion described after the table.
@@ -654,7 +728,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     The reload delay is the type's empty-reload field when *a* = 0 and that field is not −1; otherwise
     it is the reload field plus the reload-increment field times *q*², where *q* = 1
     when the type's pip-wrap field is 0, else *q* is *a* divided by the pip-wrap field in integer
-    division toward zero (Formula F3). Infantry and buildings never regain ammunition over time.
+    division toward zero (Formula F3). Infantry never regain ammunition. A building regains it
+    only by claim 10's refill, all at once and with no delay. The reload fields have no effect on
+    either.
     A vehicle regains at most one round in each of its turns, so a reload delay of 0 or less still
     gives one round per tick.
 
@@ -812,10 +888,26 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     it launches no projectile: successful release and its ammunition spending remain, and its
     rearm countdown expires; refusal retains the countdown (S-0522 claim 11). Neither outcome
     produces ordinary-shot effects: no spray draw, weapon report or shot animation (claim 23).
-    - Backing: `measurable` (S-0306, scenario P5 run d: an arcing shot for which the launch pitch has
-      no solution is removed before it enters play, S-0306 claim 6 a; observed here by scenario F14,
-      void-shot part; S-0522 scenario P7 for the drop exception)
-    - Confidence: medium (failed projectile launches); high (the drop exception)
+    - Backing: `measured` (M-0004 records attempts of a spray-attack vehicle whose countdown stayed
+      0, with no attributed delay draw, and gives no burst position for them; their classification
+      as void shots is an inference); `measurable` (S-0306, scenario P5 run d: an arcing shot for
+      which the launch
+      pitch has no solution is removed before it enters play, S-0306 claim 6 a, observed here
+      by scenario F14, void-shot part, also for the absence of any delay draw, which M-0004
+      does not separate from the background draws; S-0522 scenario P7 for the drop
+      exception); `unmeasured` for the burst counter, the ammunition and the muzzle position that
+      a void shot leaves: F14's void-shot fixture sets no finite ammunition and no burst position
+      that a shot would change; `unmeasured` for a void shot made while a countdown runs (claim 13's
+      sync tick, an
+      aircraft's same-tick burst or an unchecked building secondary attempt): no scenario of
+      this spec makes a launch
+      fail in one of those attempts, and a countdown of 0 cannot show whether a running one is
+      kept
+    - Confidence: medium (a void shot at a countdown of 0 leaves it at 0, until scenario F14's
+      void-shot part runs; that it takes
+      no delay draw, until scenario F14's void-shot part runs; a running countdown kept by a
+      void shot, the burst counter, the ammunition and the muzzle position of a void shot, and
+      which launches fail); high (the drop exception)
 
 ### Related state
 
@@ -846,13 +938,31 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     the delay kind chosen by claim 2's order takes one, and after it the draws of the effects the shot creates last: its
     shot animation (claim 20), a sonic wave or a laser (S-0202, claim 10, and the specs of those
     effects). Creating an effect weapon's particle system is not a draw: its draws come in the
-    system's own turns (S-0616 claims 10 to 18). A refused attempt takes no draw at all. A delay without a draw (a burst-delay field of claim 4, the bare
-    rate of claim 5, the 1-tick delay of claim 10) takes no delay draw. A void shot as in claim 15 takes the projectile's draws but no delay draw.
-    - Backing: `measurable` (scenario F14, with the random-state recorder; the void-shot rule through
-      S-0306 scenario P5 run d; S-0608 scenario D1 part a for drain attempts and link effects,
-      S-0522 scenario P7 for drop attempts)
-    - Confidence: high (one delay draw per shot, or none); medium (its place between the projectile's and the animation's
-      draws)
+    system's own turns (S-0616 claims 10 to 18). A refused attempt takes no draw at all. A
+    delay without a draw (a burst-delay field of claim 4, the bare rate of claim 5, the 1-tick
+    delay of claim 10) takes no delay draw. A void shot as in claim 15 takes the projectile's
+    draws but no delay draw.
+    - Backing: `measured` (M-0004: one full-delay draw after an inaccurate projectile's two
+      draws at each shot that ends its burst, one in-burst draw per in-burst shot of a building
+      defence, no further draw in the tick of the shot whose draws
+      were separated by its control run, and the spray pick first in an attempt read as a void shot,
+      followed by
+      the projectile's draws and no attributed delay draw)
+      - `measurable` (scenario F3 for one in-burst draw per in-burst shot of a vehicle and of an
+        infantry unit; scenario F14, with the random-state recorder, its no-draw part for a
+        burst-delay field, the bare rate and the 1-tick delay taking no delay draw, and its
+        void-shot part for a void shot taking none, which M-0004 does not separate from the
+        background draws; S-0608 scenario D1 part a for drain attempts and link effects, S-0522
+        scenario P7 for drop attempts)
+      - `unmeasured` for a refused attempt taking no draw: in the ticks of a refusal the firer's
+        behaviour processing can take its own draw over the same range (S-0215 claim 23), and
+        neither M-0004's comparison nor F14's refusal part tells a firing-check draw apart from it
+    - Confidence: high (one delay draw per shot of the full delay, and per in-burst shot of a
+      building defence); medium (one in-burst draw per in-burst shot of a vehicle or an infantry
+      unit, until scenario F3 runs; none
+      for a refused attempt, `unmeasured`; no delay draw for a burst-delay field, the bare rate and
+      the 1-tick delay, until F14's no-draw part runs, and none for a void shot, until its void-shot
+      part runs; the delay draw's place between the projectile's and the animation's draws)
 
 19. **Charge arrival queries a delay without firing.** At the sabotage arrival of S-0519
     claim 13, whether the charge is planted or refused, the infantry walker's rearm countdown
@@ -1170,8 +1280,9 @@ itself requires no further rounding.
 - **Building rounds** (`quirks.building_ammo_fast_rearm`, default on). A building whose ammunition
   is above 1 rearms in 1 tick after every shot (claim 10), over every other kind of delay. With the
   switch off, the delay is the one that claim 2's order gives without its first row, at every
-  ammunition level. Backing: `measurable` (scenarios F9, F3 and F4, building parts); confidence
-  medium.
+  ammunition level. Backing: `measured` (M-0004, a building with a burst weapon, before the full and
+  in-burst delays); `measurable` (scenarios F9 and F4, building parts, for other weapons and before
+  the bare rate); confidence high before the full and in-burst delays, medium before the bare rate.
 - **Shared wave slot** (`quirks.shared_wave_slot`, default on). Sonic waves and magnetic-beam waves
   share one effect slot per firer (claim 5). With the switch off, each has its own slot and a live
   magnetic wave does not affect a sonic weapon. Backing: `measurable` (scenario F4, shared slot
@@ -1208,6 +1319,11 @@ itself requires no further rounding.
   original). An explicit initial field above a nonnegative maximum supplies that many rounds,
   not the maximum. With the switch off, the starting count is capped at the maximum.
   Backing: `measurable` (scenario F9, starting-count part); confidence high.
+- **A building with an unlimited maximum that starts empty.** With a maximum of −1 and an
+  initial count of 0, claim 10's refill gives −1 at the end of the building's first tick, so it
+  fires as an unlimited building from then on. A vehicle or an infantry unit with the same
+  fields stays empty (claims 10 and 11). This is the original behaviour; no switch. Backing:
+  `measurable` (scenario F9, starting-count part); confidence medium.
 - **Ammunition below −1.** A firer whose *a* is below 0 spends no rounds when firing
   (a round is used only when *a* > 0) and is never *out of ammunition*
   (that answer needs *a* = 0). Without reloading it therefore behaves as unlimited.
@@ -1242,6 +1358,7 @@ itself requires no further rounding.
 | `Ammo` (rules, type) | maximum ammunition *A*, also the starting count when *J* = −1 (claim 10) | signed integer, rounds | −1 |
 | `InitialAmmo` (rules, type) | initial-ammunition field *J*: −1 selects *A*, every other value is literal, with no cap by default (claim 10, Formula F6) | signed integer, rounds | −1 (selects *A*, not necessarily unlimited) |
 | `Reload`, `EmptyReload`, `ReloadIncrement` (rules, type) | *L*, *E*, *I* of Formula F3 | integer, ticks | 0, −1, 0 |
+| `Hospital`, `Armory` (rules, building type) | the hospital flag and the armory flag: a building type with either is not refilled (claim 10); S-0314 claim 7 and S-0311 claim 12 own their other effects | boolean | no |
 | `PipWrap` (rules, type) | *W* of Formula F3 | integer | 0 |
 | `ManualReload` (rules, type) | no reload restart on firing (claim 11) | boolean | no |
 | `MobileFire` (rules, type) | reload advances while moving (claim 11); see S-0310 | boolean | yes |
@@ -1282,15 +1399,18 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   a stationary enemy target building with high strength in range; the house uses the normal row; the country factor is 1.0 (test rules file sets it if needed). Run a second time at another
   game speed. In a third run, while a countdown runs, change the target to another building in
   range, and in a fourth give the vehicle an order to use its other weapon (test data: a second
-  single-shot weapon in slot 1).
+  single-shot weapon in slot 1). In a fifth, with a turreted vehicle, while a countdown runs,
+  change the target to a second building in range at a bearing that its turret reaches before
+  the countdown's due tick, so that the turn ends while the countdown still runs. A run in which
+  the turret turn does not end while the countdown runs decides nothing.
 - Observable: shot ticks over 20 shots; the recorder's draw results for R(0, 2).
 - Expected: each interval equals *D*₁ of Formula F1 for that shot's draw *u*; the first shot
   comes in the first tick in which the vehicle is facing the target; the intervals in ticks are
   governed by the same formula at both speeds, using each run's recorded draws rather than
-  requiring independently seeded runs to have identical intervals; the target change and the
-  weapon change do not move the tick of the next shot.
+  requiring independently seeded runs to have identical intervals; the target change, the
+  weapon change and the turret turn of the fifth run do not move the tick of the next shot.
 - Falsified if: any interval differs from that value, the formula's tick delay depends on game speed, or a
-  target or weapon change shortens or lengthens the running countdown.
+  target or weapon change or a turret turn shortens or lengthens the running countdown.
 
 **F2. House and veteran factors.**
 - Setup: as F1, with a test rules file that sets the house's normal-row factor to 1.5 and its
@@ -1323,12 +1443,14 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   applies or omits the factor contrary to the expected rank test.
 
 **F3. Bursts.**
-- Setup: a vehicle whose weapon has burst count 3 (test rules file), then the same with burst delays
-  1 and 2 (claim 4) set to 7 and 9; an infantry unit with a burst-3 weapon.
-- Observable: shot ticks and draws.
-- Expected: without burst-delay fields, intervals inside a burst are 3, 4 or 5 matching the draws,
-  and after the third shot the full delay; with the fields, the vehicle's intervals are 7 and 9 with
-  no draw; the infantry unit always draws R(3, 5). Clearing the target in mid-burst (stop order) and
+- Setup: a vehicle whose weapon has burst count 3 and whose type sets burst delays 1 and 2
+  (claim 4) to −1 (test rules file), then the same with them set to 7 and 9; an infantry unit with
+  a burst-3 weapon.
+- Observable: shot ticks, the countdown after each shot, and draws.
+- Expected: with the fields at −1, intervals inside a burst are 3, 4 or 5 matching the draws,
+  and after the third shot the full delay; with 7 and 9, the vehicle's intervals are 7 and 9 with
+  no draw; inside a burst the infantry unit always draws R(3, 5), and its countdown after such a
+  shot is that draw. Clearing the target in mid-burst (stop order) and
   giving a new one starts a fresh burst. Changing the target (not clearing it) in mid-burst keeps
   the burst going.
 - Carry-over: a vehicle with a burst-3 weapon in one slot and a burst-2 weapon in the other (test
@@ -1338,13 +1460,14 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   3 rounds (test rules file). Expected: shots in ticks *t*, *t* + 1 and *t* + 2, and no R(3, 5)
   draw after the first two (claim 2's order puts the 1-tick delay first); the third shot is made
   with the last round and is the first of a new burst (*j* = 1 < *B*), so the delay after it is
-  one R(3, 5) draw, not a full delay (the recorder shows it; F9's observation of when the
-  building drops its target agrees). With 4 rounds instead, the fourth shot is *j* = 2 = *B* and
+  one R(3, 5) draw, not a full delay (the recorder shows it). With 4 rounds instead, the fourth
+  shot is *j* = 2 = *B* and
   its delay is the full delay, with an R(0, 2) draw. Falsified if the second shot comes 3 to 5
   ticks after the first, if no R(3, 5) draw follows the third shot of the 3-round run, or if an
   R(0, 2) draw follows it.
-- Falsified if: any interval or delay draw differs from the expected case, in-burst intervals
-  use the full delay, the counter is not reset by the stop, a
+- Falsified if: any interval or delay draw differs from the expected case, an infantry unit's
+  in-burst countdown differs from its draw, in-burst intervals use the full delay, the counter is
+  not reset by the stop, a
   change of target resets it, or the carried count does not decide the second weapon's delay.
 
 **F4. Effect weapons.**
@@ -1356,14 +1479,20 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Expected (sonic weapon): no delay draw is taken; intervals are max(*R*, wave lifetime).
 - Falsified if: a draw is taken for the delay, or an interval differs from
   max(*R*, wave lifetime) when facing, range and all other firing gates remain satisfied.
-- Particle part: a test rules file gives three firers one weapon each, with *R* shorter than every
-  emitter's life: a spark-particle weapon, a railgun weapon and a fire-particle weapon (each firer
-  with a stationary durable target building in range, all other gates satisfied). Record
-  shot ticks, and the tick at which each emitter leaves play (S-0616 scenario P1). Expected: the
-  spark and railgun firers shoot again at the first attempt after their emitter has left play, and
-  not earlier; the fire firer shoots once and not again while it keeps the target and stays put.
-  Falsified if a spark or railgun firer shoots before its emitter has left play or never shoots a
-  second time, or if the fire firer shoots a second time with its target kept.
+- Particle part: a test rules file gives four firers one weapon each, with *R* shorter than every
+  emitter's life: a spark-particle weapon, a railgun weapon and two fire-particle weapons, each
+  weapon's system type of the kind that matches its flag (each firer with a stationary durable
+  target building in range, all other gates satisfied). The first
+  fire weapon's system type has a lifetime of 0 or less, and the second's a positive lifetime *L*
+  longer than *R*. Record shot ticks, and the tick at which each emitter and each system leaves
+  play (S-0616 scenario P1). Expected: the spark and railgun firers shoot again at the first
+  attempt after their emitter has left play, and not earlier. The first fire firer shoots once and
+  not again while it keeps the target and stays put. The second fire firer shoots again at the
+  first attempt after its system has left play, and not earlier (claim 5; S-0613 claim 17 gives
+  when the system leaves play). Falsified if a spark or railgun firer shoots before its emitter
+  has left play or never shoots a second time, if the first fire firer shoots a second time with
+  its target kept, or if the second fire firer shoots again before its system has left play or
+  does not shoot again after it.
 - Multi-flag part: use S-0616 scenario P22 part a's named test rules with all three
   particle-effect flags on one weapon, one named system type and a durable enemy vehicle
   in range. Keep the firer stationary and all other gates satisfied, at speed index 2,
@@ -1376,26 +1505,31 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   creation order or checked shot with any selected place held falsifies the corresponding
   rule. If ordinary play never frees all selected places, report the later-shot boundary
   inconclusive rather than treating permanent refusal as evidence for that boundary.
-- Fire let-go part: as the fire firer above, then, in separate runs, (a) retarget it to a
-  target outside its weapon's range, (b) give it a move order, (c) kill it, (d) retarget it to a
-  second target that is within range. Expected: in (a) and (b), a shot at the first attempt after
-  the firer again has a target in range; in (c) none; in (d) no second shot. Falsified if a shot
-  comes in (c) or (d), or none comes in (a) or (b) while all gates hold. This part reads "within
-  reach" as the weapon's range. Where (a) and (d) disagree with that, the measurement replaces the
-  reading and S-0616 claim 1 is revised.
+- Fire let-go part: as the first fire firer above (lifetime 0 or less), then, in separate runs,
+  (a) retarget it to a target outside its weapon's range, (b) give it a move order, (c) kill it,
+  (d) retarget it to a second target that is within range. Expected: in (a) and (b), a shot at the
+  first attempt after the firer again has a target in range; in (c) none; in (d) no second shot.
+  Falsified if a shot comes in (c) or (d), or none comes in (a) or (b) while all gates hold. This
+  part reads "within reach" as the weapon's range. Where (a) and (d) disagree with that, the
+  measurement replaces the reading and S-0616 claim 1 is revised.
 - Burst part (claim 2's order): with a test rules file, the sonic vehicle's weapon gets burst count
   2, and its *R* is longer than the wave's lifetime. Expected: after every shot, including the
   first of a burst, the interval is *R* and the recorder shows no R(3, 5) draw. Falsified if the
   interval after the first shot is 3 to 5 ticks (a wave still alive would then answer *rearming*
   for the weapon's own kind, so the shot ticks show it) or a draw appears.
-- Building part: with a test rules file, a building defence that cannot be garrisoned, with a sonic weapon
-  (or a spark-particle weapon), *R* far longer than the effect's lifetime, and 3 rounds. Expected:
-  the second shot comes when the first wave ends (for a spark-particle weapon, when its emitter has
-  left play), not *R* ticks after the first (a 1-tick delay with the effect gate holding it); the delay after the shot made with the last round is *R*, so,
-  as in scenario F9, the building keeps its target and turns (S-0215, claim 32, second row) until
-  *R* ticks after that shot, and drops it at its first processing after that. Falsified if the
-  second shot comes *R* ticks after the first, or the building drops its target before *R* ticks
-  after its last shot.
+- Building part: with a test rules file, a building defence that cannot be garrisoned, with a
+  sonic weapon (or a spark-particle weapon), *R* far longer than the effect's lifetime, and 3
+  rounds. Record shot ticks, the building's ammunition at the end of every tick and whether it
+  keeps its target. Expected: the second shot comes when the first wave ends (for a
+  spark-particle weapon, when its emitter has left play), not *R* ticks after the first (a 1-tick
+  delay with the effect gate holding it), and the third at the first attempt after the second
+  wave ends. The building
+  is refilled to 3 rounds at the end of the tick of its third shot (claim 10). The delay after
+  that shot is *R*, so its next group starts at the first attempt *R* ticks after the third
+  shot. As in scenario F9, it keeps its target throughout and is never at 0 rounds at the end of
+  a tick. Falsified if the second shot comes *R* ticks after the first, the building holds 0
+  rounds at the end of a tick, drops its target, or makes no shot of a next group once *R* has
+  run since its third shot.
 - Shared slot: with test data, a vehicle that carries a sonic weapon and a magnetic-beam weapon,
   the magnetic weapon's full delay (its rate-of-fire field plus up to 2) set shorter than the
   wave's lifetime (the effect specs give it), so that the rearm countdown is over while the wave
@@ -1519,22 +1653,48 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 
 **F9. Ammunition.**
 - Setup: test rules file: a building defence whose weapon has burst count 1 and is not an effect
-  weapon, with maximum ammunition 3 and initial ammunition 3, and an infantry unit with maximum and initial ammunition 2 (both keys set, so the result does not
-  depend on how a new object's ammunition is derived).
-- Observable: shot ticks, the number of shots, and when the building drops its target.
-- Expected: the building fires in ticks *t*, *t* + 1 and *t* + 2 and never again. It keeps its
-  target and turns (S-0215, claim 32, second row) until the full delay after the third shot has
-  run, and drops it at its first processing after that. The infantry unit fires twice and never
-  again.
-- Falsified if: the building fires a fourth time, its intervals differ, it drops its target while
-  its countdown runs, or either regains rounds.
+  weapon, with maximum ammunition 3 and initial ammunition 3 and a reload field far longer than
+  the observation, and an infantry unit with maximum and initial ammunition 2 (both keys set, so
+  the result does not depend on how a new object's ammunition is derived).
+- Observable: shot ticks, the number of shots, each firer's ammunition at the end of every tick,
+  and whether the building keeps its target.
+- Expected: the building fires in ticks *t*, *t* + 1 and *t* + 2, holds 3 rounds again at the
+  end of tick *t* + 2, and repeats the group of three each time the full delay after a group's
+  third shot has run. It keeps its target throughout and is never at 0 rounds at the end of a
+  tick. The infantry unit fires twice and never again.
+- Falsified if: the building stops firing after a group, holds 0 rounds at the end of a tick,
+  drops its target for lack of ammunition, or its intervals differ, or the infantry unit regains
+  rounds.
+- Paired-refill part (claim 10): scenario F17's passing control (a populated single-shot
+  secondary, the upgrade gate passing), with the host's maximum ammunition set to 2 in place of
+  unlimited ammunition. Give the primary and the secondary weapon a rate-of-fire field of 30 (a
+  test value), so that every full delay of Formula F1 is longer than 1 tick. Record the
+  ammunition and the rearm countdown at the end of every tick, and both attempts' shots. If the
+  host's ammunition cannot be read at the end of a tick, the part is inconclusive.
+  - Variant a, initial ammunition 2. Expected: in the first paired processing the primary shot,
+    made with 2 rounds, takes the 1-tick delay and leaves 1 round; the secondary shot, made with
+    1 round, takes the delay claim 2 gives a building at its last round and leaves 0; the
+    building holds 2 rounds at the end of that tick. Falsified if it holds 0 or 1 round at the
+    end of that tick (a refill tested only between the two attempts or not in that tick), or if
+    the secondary shot takes the 1-tick delay (a refill before it).
+  - Variant b, initial ammunition 1, so that the primary shot empties the magazine. Expected: in
+    the first paired processing the primary shot, made with the last round,
+    leaves 0; the secondary attempt is still made, at 0 rounds (it asks no firing check,
+    claim 9), takes the full delay and uses no round; the building holds 2 rounds at the end of
+    that tick. Falsified if the secondary shot takes the 1-tick delay or the building holds 1
+    round at the end of that tick (a refill right after the shot that emptied the magazine, so
+    that the secondary is made with 2 rounds), if it holds 0 rounds then (no refill in that
+    tick), or if the secondary attempt makes no shot (an ammunition gate on the unchecked
+    attempt).
 - Starting-count part (Q-0060 question 1): a named test rules file sets a buildable vehicle,
   infantry and ungarrisoned defence building to maximum ammunition 4. Remove the initial field
   from every rules layer for those types. Use a small isolated skirmish test area, speed index 2,
   no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted), with one bystander computer player kept outside the area
   under the glossary's void rule. Repeat with an explicit initial field of −1, 0 and 6.
   also test maximum 0 with the initial field absent, and maximum −1 with initial field 0.
-  Supply a single-shot ordinary weapon and a durable stationary enemy target in range.
+  Supply a single-shot ordinary weapon with a rate-of-fire field of 30 (a test value), so that
+  every full delay of Formula F1 is longer than 1 tick, and a durable stationary enemy target in
+  range.
   Set the vehicle's ordinary and empty reload delays longer than the observation window,
   leave manual reload off, and exclude damage, servicing and ammo-changing effects.
 - Procedure: in each case compare one map-placed object with one produced and released by the
@@ -1544,20 +1704,42 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   Order sustained fire where orders apply, and let the neutral building acquire its target.
   Record projectile creation ticks by
   tick-labelled video, counting shots until no shot occurs for several full delays, before
-  the vehicle's reload can finish. Run each case once for each creation method and kind.
+  the vehicle's reload can finish. A building refills (claim 10), so for a building count the
+  shots of its first group instead: its shots up to the first one that is followed by an
+  interval longer than 1 tick. Run each case once for each creation method and kind.
   For the aircraft starting count, compare map-placed and produced aircraft of a test type
   with the same field pairs, using its ammunition pips before takeoff or servicing; if pips
   cannot distinguish an overfull count, report that observation as inconclusive rather than
   interpreting a full display as a cap.
-- Expected: absent or explicit −1 with maximum 4 gives four shots. Initial 0 starts empty:
-  infantry and buildings make no shot; the vehicle regains one round in its first turn
-  (claim 11's never-started countdown), so makes one shot before the long reload wait.
-  Initial 6 gives six, not four. Maximum 0 with the initial field absent gives none.
-  Maximum −1 with initial 0 also gives none. Map placement and production agree.
+- Expected: absent or explicit −1 with maximum 4 gives four shots, and a first group of four for
+  the building. Initial 0 starts empty: infantry make no shot; the vehicle regains one round in
+  its first turn (claim 11's never-started countdown), so makes one shot before the long reload
+  wait; the building is refilled at the end of its first tick, so its first group has four
+  shots. To tell that refill from a building that starts full, also record the building's
+  ammunition when it is created, before its first tick's logic (expected 0), and at the end of
+  its first tick (expected 4), with a target in range from tick 0. If the ammunition cannot be
+  read before the first tick's logic, report the empty-start case as inconclusive: the shots
+  alone cannot tell it from a full start. Initial 6 gives six, not four, and a first group of six
+  for the building. Maximum 0
+  with the initial field absent gives none. Maximum −1 with initial 0 gives none for the vehicle
+  and the infantry unit; the building is refilled to unlimited ammunition and fires at every
+  full delay, with no 1-tick interval. Map placement and production agree.
   Aircraft start with the same counts under Formula F6. Falsified by another count,
-  an unlimited result for absent initial ammunition with a finite maximum, a cap at four
+  an unlimited result for absent initial ammunition with a finite maximum (for the building:
+  no 1-tick interval), a cap at four
   in the six-round case, or a difference between creation methods. An aircraft count not
   distinguishable through pips remains an unconfirmed part of the proposed measurement.
+- Refill-exception part (claim 10): a test rules file gives two building types that cannot be
+  garrisoned the weapon of the main part, burst count 1, and maximum and initial ammunition 2. One
+  type has the hospital flag and the other the armory flag. A control type is the same with
+  neither flag. Each building has a durable stationary enemy target in range. Use speed index 2,
+  no engine add-on, the measurement harness's in-game helper off and no mods (the named test files
+  excepted), and record shot ticks and each building's ammunition at the end of every tick, for 3
+  runs of each type. Expected: each flagged building fires twice, 1 tick apart, holds 0 rounds at
+  the end of the tick of its second shot and at the end of every later tick, and fires no third
+  shot. The control fires groups of two without end. Falsified if a flagged building fires a third
+  shot or holds a nonzero count after its second shot, or if the control stops. A flagged building
+  that never takes the target leaves its run inconclusive.
 - Below-minus-one part: test rules file, an infantry unit with maximum and initial ammunition −2
   (both keys set), firing at a durable target for 20 shots. Expected: it never answers *out of
   ammunition*, fires every full delay as an unlimited unit does, and shows no ammunition change.
@@ -1663,15 +1845,58 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Spray and particle part: a spray-attack type's first shot of a burst (test data), and a
   fire-particle weapon's first shot. Expected: the spray pick comes before the projectile's draws
   and its delay draw follows them. For the fire-particle weapon, creating the emitter takes no draw
-  (its draws come in the system's own turns, S-0616 claims 10 to 18), and there is no delay draw at all (claim 5). Falsified if either
-  ordering differs, if a delay draw appears for the fire-particle shot, or if the spray pick
-  appears for any shot other than the first of a burst.
+  (its draws come in the system's own turns, S-0616 claims 10 to 18), and there is no delay
+  draw at all (claim 5). Read the fire-particle shot under the no-draw part's emitter
+  conditions (below), so that no turn of the new system draws in the firing tick. Falsified
+  if either ordering differs, if a delay draw appears for the fire-particle shot, or if the
+  spray pick appears for any shot other than the first of a burst.
+  In M-0004 every attempt of a stock tank given the spray flag and a burst-3 cannon was reported
+  with no projectile and no damage. Reading them as void shots is an inference.
+  Each took the pick and no attributed delay draw. M-0004 records
+  no burst position for these shots; by claim 15 a void shot leaves the burst counter
+  unchanged, so each would count as the first of a burst. The place of the delay draw after the
+  pick needs a spray type whose shots are made: use a spray-attack type with a direct-fire
+  weapon, and read the shots that make a projectile.
 - Refusal part: an attempt refused by the firing check while the countdown runs, in each of the
-  ticks of the countdown. Expected: no draw of the stream in those ticks from the firer. Falsified
-  if any appears.
+  ticks of the countdown. Expected: in those ticks the firer's draws are only those of its
+  behaviour processing (S-0215 claim 23). Falsified if the firer takes more draws in those ticks
+  than its behaviour processings account for, as a draw per refused attempt would give. This part
+  does not tell a firing-check draw apart from a behaviour-processing draw in the same tick, so it
+  checks only for draws in excess and does not back claim 18's absence for a refused attempt.
 - Void-shot part: in S-0306's scenario P5 run d the recorder shows the projectile's draws, if the
   projectile takes any, and no delay draw; the countdown, burst counter and ammunition are
   unchanged. Falsified if a delay draw is taken or the countdown starts.
+- No-draw part: three pairs of runs. In each pair the test run and its control are the same
+  game, with the same seed, placement and orders, and differ only in test data that changes the
+  delay kind claim 2 gives the shot read. Nothing before that shot depends on that data, so
+  both runs log the same draws up to the shot, including every behaviour-processing draw
+  (S-0215). The shot read is each run's first, made before any impact.
+  - Run 1: a vehicle whose weapon has burst count 2 or more and a burst-delay field for its
+    first shot (test data). Its control lacks that field, so its first shot takes the in-burst
+    delay and its R(3, 5) draw.
+  - Run 2: a building defence whose single-shot ordinary weapon is not an effect weapon,
+    holding 2 rounds before the shot. Its control holds 1 round, so the shot takes the full
+    delay and its R(0, 2) draw.
+  - Run 3: a fire-particle weapon (claim 5). Its control is the same weapon without the
+    fire-particle flag, so the shot takes the full delay and its R(0, 2) draw. The new system
+    must take no draw in the firing tick: give its system type a spawn interval longer than
+    the run (test data) and place the target straight ahead of a firer that does not turn in
+    that tick, so that no emission and no flame sweep falls in it (S-0616 claims 10 and 11).
+    The system has no particle yet, so no update draw is taken. If the firer turns in the firing
+    tick, the pair is inconclusive.
+  - Observable: the draws of the firing tick in both runs, with their ranges, and the countdown
+    after the shot.
+  - Compared: the draws of the firing tick up to and including the shot's own draws (the
+    projectile's draws, the delay draw and the shot animation's), by range and order, not by raw
+    result. Once a draw is missing, every later draw in the tick takes the stream one step
+    earlier, so later raw results, and the number of later draws whose count depends on an
+    earlier result, may differ: draws after the shot's own are not compared.
+  - Expected: within the compared draws, the test run's are the control's with exactly one draw
+    removed, the control's delay draw of range 3 to 5 or 0 to 2, at its place after the
+    projectile's draws. The countdown is the burst-delay field, 1 tick or the bare rate.
+  - Falsified if the test run's compared draws include the control's delay draw, or differ from
+    the control's in any other range or place. A difference before the shot means the runs are
+    not the same game, and the pair is rerun.
 
 **F15. The named reasons of the rank table.** Each part checks that a shot is not made while
 one reason holds, with every other reason absent (the rearm countdown over, the target in range
@@ -2091,6 +2316,16 @@ is absent (the control).
   on *illegal*. Its sentence "one whose target leaves its weapon's range returns to *guard* at its
   next processing" can add: "unless its animation-delayed shot is pending, when the firing check
   answers *rearming* until the end of the delay (S-0301 claim 14)".
+- **S-0215 (approved, revision 88), scenario B45, case (e) "Non-SAM ammunition exhaustion".** A
+  building with one finite round is refilled in the tick of its shot (S-0301 claim 10), so the
+  firing check never answers *out of ammunition* there. Replace "giving the building one finite
+  ammunition round and a reload delay longer than the observation" with "giving the building a
+  maximum ammunition of 0 and no initial-ammunition value, so that every attempt answers *out of
+  ammunition* (S-0301 claim 10)", and "around each processing after the shot, through the first
+  *out of ammunition* answer" with "around each processing from the first attack order, through
+  the first *out of ammunition* answer". This changes what case (e) tests: an attack that is
+  refused for lack of ammunition from its first attempt, not a building that runs out after a
+  shot.
 
 ## Open questions
 
@@ -2119,3 +2354,12 @@ is absent (the control).
   claim 7).
 - Claim 24 (g): which of the two dot phases a given tick shows, and from which end the dots are
   counted, is not stated (low confidence); only the period and the swap every tick are.
+- Claim 5: when a weapon whose emitter is not matched (Terms) fires again. Its place gives the
+  let-go events (S-0616 claim 1) and its system's kind gives when the system leaves play (S-0616
+  claim 22); whether the weapon fires at the first of the two, or only when the system has left
+  play, is not stated. Scenario F4's particle part uses matched emitters only.
+- Claim 15: why every attempt of a stock tank given the spray flag and a burst-3 cannon was
+  reported with no projectile in M-0004 is not known (reading those attempts as void shots is an
+  inference). The same tank's shots with the same cannon and no spray flag were made. Until it is
+  known, claim 15 states only what a void shot leaves unchanged, and the spray part of S-0313 has no
+  observed shot that was made.
