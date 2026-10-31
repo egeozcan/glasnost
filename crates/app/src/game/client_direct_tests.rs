@@ -196,7 +196,7 @@ fn agree(hashes: &[BTreeMap<i32, String>], at_least: usize) {
 #[test]
 fn direct_links_carry_the_frames_and_hostile_bytes_on_them_change_nothing() {
     let (_rt, relay) = relay(51);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let net = FakeNet::new(20);
     let mut a = on(&relay, &net, "Ann");
     let mut b = on(&relay, &net, "Bea");
@@ -253,7 +253,7 @@ fn direct_links_carry_the_frames_and_hostile_bytes_on_them_change_nothing() {
 #[test]
 fn a_pair_that_cannot_link_and_a_switched_client_play_on_the_relay() {
     let (_rt, relay) = relay(52);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let net = FakeNet::new(20);
     let mut a = on(&relay, &net, "Ann");
     let mut b = on(&relay, &net, "Bea");
@@ -316,7 +316,7 @@ fn a_pair_that_cannot_link_and_a_switched_client_play_on_the_relay() {
 #[test]
 fn a_direct_link_that_dies_mid_game_falls_back_and_is_used_again() {
     let (_rt, relay) = relay(54);
-    let clock = Clock(Instant::now());
+    let clock = Clock::new();
     let net = FakeNet::new(20);
     let mut a = on(&relay, &net, "Ann");
     let mut b = on(&relay, &net, "Bea");
