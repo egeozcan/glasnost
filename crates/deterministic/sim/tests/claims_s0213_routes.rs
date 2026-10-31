@@ -667,6 +667,16 @@ fn claim_16b_joins_copy_loops() {
     give(&mut w, vec![join(e, qs[2])]);
     assert_eq!(steps(&w, e), vec![qs[2], qs[3], qs[1]]);
     assert_eq!(w.routes.routes[&e].loop_from, Some(0));
+    // spec: S-0213 claim 16b (the copied points are uncommitted until the next commit)
+    assert!(
+        w.routes.routes[&e].steps.iter().all(|s| !s.committed),
+        "a copy of D's committed loop is uncommitted"
+    );
+    let e_at = cell(&w, e);
+    testkit::run(&mut w, 40);
+    assert_eq!(cell(&w, e), e_at, "E waits for a commit");
+    give(&mut w, vec![Order::RouteCommit]);
+    assert!(committed(&w, e));
     // (4) After D has gone round its loop once, H joins Q4.
     run_until(&mut w, 3000, |w| cell(w, d) == q4);
     run_until(&mut w, 3000, |w| cell(w, d) == q2);
