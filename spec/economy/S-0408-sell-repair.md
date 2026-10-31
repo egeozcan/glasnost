@@ -2,11 +2,11 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-31
 measurements: []
 requests: [Q-0130, Q-0131, Q-0225, Q-0282, Q-0284, Q-0440]
 supersedes: []
@@ -270,11 +270,16 @@ its *master*, and slaves *inside* rather than on the map. In addition:
 
    Since the centre position is never given, one cell takes at most 3 survivors, fewer when absorbed
    passengers (claim 8) or other infantry already stand there; on a 1 × 1 building at most 3 of 5
-   attempts can succeed. A building with no crew (S-0312, F5) releases none.
-   - Backing: `measurable` (scenario S6, parts a to d; the draws by comparing the scenario random stream's state before and after the sale)
-   - Confidence: high (the count of attempts and its *K*, the placement within the chosen cell, that
+   attempts can succeed. A building whose type lacks the crewed flag makes no attempts (*C* = 0 by
+   S-0312's F5). F5's other zero case, a building with no crew, never holds at a sale (claim 8).
+   - Backing: `measurable` (scenario S6, parts a to d, and part e for a type without the crewed
+     flag; the draws by comparing the scenario random stream's state before and after the sale)
+     - `unmeasured` for a building with no crew never being sold, for claim 8's reason
+   - Confidence: high (the count of attempts and its *K*, none for a type without the crewed
+     flag, the placement within the chosen cell, that
      the percent draw is taken for every building that has never changed owner), medium (the type
-     choice, the single engineer, full health, the other draws and their order)
+     choice, the single engineer, full health, the other draws and their order, and a building
+     with no crew never being sold, as claim 8 rates it)
 
 8. **Absorbed passengers on a sale.** A sold absorbing building releases its absorbed passengers at
    the step of claim 6, by the placement rule of S-0312 (claim 24): one per foundation cell in the
@@ -285,12 +290,22 @@ its *master*, and slaves *inside* rather than on the map. In addition:
    draw when the cell is not blocked), each facing the building's facing, with a forced scatter
    request, and on *hunt* when its owner is computer-controlled in the original (our engine: no
    order for a player house, as S-0312 claim 25 gives; the neutral and special houses keep the
-   original's rule, glossary *AI house*). A building with no crew deletes them instead. A passenger that
-   cannot be placed is deleted. With more passengers than foundation cells, S-0312's edge case
-   *Absorbed passengers beyond the last cell* applies here too. The passengers come out before the
-   survivors, so they can take positions the survivors would otherwise get.
-   - Backing: `measurable` (scenario S6, part e)
-   - Confidence: high (passenger order); medium (placement and other release effects)
+   original's rule, glossary *AI house*). A passenger that cannot be placed is deleted. The release
+   ignores the type's crewed flag: a building whose type lacks it releases its absorbed passengers
+   as any other does. S-0312's no-crew state, in which a destroyed building's absorbed passengers
+   die instead of coming out (S-0312 claims 18 and 24), never holds at a sale, since it arises only
+   at a destruction whose killing damage ignores defences. With more passengers than foundation
+   cells, S-0312's edge case *Absorbed passengers beyond the last cell* applies here too. The
+   passengers come out before the survivors, so they can take positions the survivors would
+   otherwise get.
+   - Backing: `measurable` (scenario S6, part e; its type with the crewed flag off for the
+     release's ignoring that flag)
+     - `unmeasured` for the no-crew state's never holding at a sale: it rests on S-0312 claim 18's
+       lifecycle of that state, which is `unmeasured` there (no finite set of runs shows that no
+       other event sets it)
+   - Confidence: high (passenger order, the release's ignoring the crewed flag); medium (placement
+     and other release effects; the no-crew state's never holding at a sale, as S-0312 claim 18
+     rates that state's lifecycle)
 
 9. **Garrison on a sale.** A sold garrisoned building puts out its occupants at the step of claim 6,
    after its absorbed passengers (claim 8) and before its sale survivors (claim 7). Where each
@@ -725,7 +740,7 @@ tick the building disappears.
 | Rules, building section, `Repairable` | repairable flag (claim 14) | boolean | yes |
 | Rules, building section, `ClickRepairable` | click-repairable flag (claim 14) | boolean | yes |
 | Rules, `[General]`, `AlliedSurvivorDivisor`, `SovietSurvivorDivisor`, `ThirdSurvivorDivisor` | survivor divisors of S-0312 F5 (claim 7); S-0312's Import mapping owns them | integer | S-0312's absent-key defaults; keeps |
-| Rules, type section, `Crewed` | building has a crew (claim 7, through S-0312 F5) | boolean | owned by S-0312 |
+| Rules, type section, `Crewed` | crewed flag: without it a sale makes no survivor attempts (claim 7, through S-0312 F5); the passengers' release ignores it (claim 8) | boolean | owned by S-0312 |
 | Rules, `[General]`, `SurvivorRate` | nothing: the original reads it but no rule uses it | decimal | — |
 | Rules, `[AudioVisual]`, `SellSound` | the sell sound (claims 6, 12) | sound name | sound specs |
 | Rules, `[General]`, `BuildupTime` | build-down stage delay through S-0108 claim 5, including the non-positive-count delay of 1 tick (claim 17) | decimal, game minutes | S-0108 Import mapping owns the default and layering |
@@ -907,15 +922,15 @@ tick number. Any game speed.
   survivors whose cell record blocks every position, which take no last draw); (d) a varying count (S-0312 claim 18) where the sale's count
   never varies; (e) the passengers come out on the first three foundation cells in reverse entry
   order: most recently entered on the first cell, then the next most recent, then the earliest.
-  None come from the type with the crewed flag off.
+  The type with the crewed flag off releases its passengers in the same way, and no survivors.
 - *Falsified if:* fewer survivors than the count above explains, a survivor that first appears
   outside the foundation, two engineers in a sale, a damaged survivor, the draws in another order,
   a missing first percent draw for a building that does not produce buildings (or an extra one),
   or in (b) a count outside the bands above (a count outside them for a producing type of either
   variant rejects the rate 1 − 0.75^*C*, not only the one-engineer rule), or in (e) a passenger
   that comes out elsewhere than on the first three foundation cells or takes a cell out of
-  reverse entry order, or any passenger from the type
-  with the crewed flag off.
+  reverse entry order, or a passenger of the type with the crewed flag off that does not come
+  out as from the crewed type, or any survivor from that type.
 
 **S7: stored resources (claim 10), only if a setup is found that fills a building's storage.**
 - *Setup:* an own storing building whose own storage holds a known amount of one resource, in a
