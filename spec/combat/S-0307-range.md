@@ -2,13 +2,13 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 16
+revision: 20
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-31
 measurements: []
-requests: [Q-0172, Q-0230, Q-0237]
+requests: [Q-0172, Q-0230, Q-0237, Q-2171]
 supersedes: []
 ---
 
@@ -32,7 +32,8 @@ of types with the close-range property, claim 23 the replacement of a destroyabl
 target, and claim 24 the one rule that treats jumpjets differently. Deploying searches and
 jumpjet stopping remain open below. Claim 21 resolves the usable-area/reach-region distinction
 of Q-0230. Claim 22 b cites S-0208 claim 21 for the ordinary walker's shortcut outcome.
-Claim 25 resolves the non-walking outcome of Q-0237.
+Claim 25 resolves the non-walking outcome of Q-0237. Claim 19 reads a high-bridge candidate's
+reach region for its deck, so deck cells over water can qualify (Q-2171).
 Skirmish is covered; campaigns and network games are out of scope.
 
 ## Terms
@@ -437,7 +438,27 @@ and *subject to walls*. In addition:
     record, not the ground record beneath it; cells without a high bridge use ground occupancy.
     The test requires the actor's locomotion class, its own movement zone and its current
     reach region, determined from its actual cell and its current ground/deck layer. The
-    candidate region is the ground-layer region. No candidate-height equality is required.
+    candidate's reach region is read for its deck (S-0212 claim 4) when its cell carries a high
+    bridge, and is its own region otherwise. The candidate qualifies only when that region is
+    the actor's. No candidate-height equality is required.
+    - **A deck over water (Q-2171).** The ground under such a deck is in no reach region of a
+      ground zone, but the candidate is not read for its ground. With an enabled bridge link
+      it gets the reach region of the link's first end. A ground vehicle or infantry unit
+      standing on a deck has its own region read for its deck too, each cell through the link
+      that S-0212 claim 4 picks for that cell. A deck cell qualifies for it when the two reads
+      give the same region, as they do when both cells read through enabled links whose first
+      ends lie in one reach region. An attacker on a bank qualifies a deck cell when its own
+      region is the one that cell's deck read gives. The attacker's kind changes none of this.
+      A close-range type takes the same deck reads through claim 22's pointer to this claim.
+      That is `unmeasured` here (RG18 and run e use an attacker without the close-range
+      property), medium.
+    - **A deck read through a link that is not enabled, or with no link found.** The candidate
+      and a deck-standing actor then take S-0212 claim 4's other rows for their deck reads, and
+      the same equality decides. What a same-deck actor gets there is left open here: this spec
+      states no outcome for those rows beyond that equality.
+    - **A deck over other ground.** The same read applies to a high-bridge cell whose ground is
+      in a reach region. An attacker on the ground under or beside the bridge qualifies such a
+      cell only when its region is the deck's, whatever the region of the cell's ground.
     The *winged* exception of claim 21 bypasses all these clear-cell conditions, not the range
     or detour tests. S-0211 claim 10 supplies the clear-cell land and wall tests, with a high-bridge deck
     bypassing the underlying land multiplier. This can accept a deck candidate whose ground
@@ -451,8 +472,14 @@ and *subject to walls*. In addition:
     in claims 15 and 16 is replaced by these rules. The range test's elevation bonus still
     uses the actual firer's cell, not the proposed candidate cell; its line of fire and
     distances use the candidate source point.
-    - Backing: `measurable` (RG18)
-    - Confidence: medium
+    - Backing: `measurable` (RG18; run e for a deck over water, run c for a deck whose ground
+      region differs from the deck's). The deck read through a link that is not enabled, or
+      with no link found, is `unmeasured` here, as in S-0212 claim 4: no scenario of this spec
+      places such a deck. That two cells of one deck give the same region is `measurable` only
+      for run e's bridge; no scenario here varies the links of one bridge.
+    - Confidence: medium (heights, occupancy layers, detour endpoints, and the deck read through
+      an enabled link, the equality of the actor's and candidate's deck reads included); low
+      (the deck read through a link that is not enabled or with no link found)
 
 20. **Ordinary cell targets (Q-0172 question 2).** For an ordinary ground attacker without
     the close-range property, a cell target that is not a destroyable cliff uses the same
@@ -469,7 +496,8 @@ and *subject to walls*. In addition:
     does not make outside cells members of the attacker's reach region.
 
     For an actor of locomotion class other than *winged*, the clear-cell test still compares
-    the candidate's ground reach region with the actor's region of claims 15 and 19. A legal
+    the candidate's reach region, read as claim 19 gives, with the actor's region of claims 15
+    and 19. A legal
     outside-area cell on ordinary flat ground has category *off-map* (S-0211 claim 11) and
     no reach region (S-0212 claims 2 to 4). A stationary actor inside a ground reach region
     therefore refuses that alternative, even when its terrain is open and continuous with
@@ -1201,13 +1229,30 @@ points, terrain heights, candidate occupancy layers, chosen slot and first desti
 - Run c: make a high-bridge primary the first qualifying one. Put an immobile occupant
   underneath, leaving the deck empty. Expected: it can qualify; reverse occupancy, ground
   empty and deck occupied: rejected. Keep the actor's current reach region equal to the
-  candidate's ground-region test result; repeat with those regions different: rejected.
+  candidate's deck read (claim 19). Then use a high bridge over land whose ground under the
+  deck lies in a reach region other than the banks', and put the attacker on that ground, so
+  that every primary that passes the range test is a deck cell. Expected: those deck cells are
+  rejected (the deck read gives the banks' region). Falsified by: a deck cell chosen, which a
+  ground-region read would predict.
 - Run d: enable elevation on the plateau fixture, with a floor-bound attacker and target.
   Arrange a primary at a different elevation level from the attacker's cell and choose the
   range so the primary passes with the bonus based on the actual firer's cell but fails with
   the bonus based on the candidate's cell, or vice versa. Expected: the actual-firer-cell
   prediction. Repeat with elevation disabled as a control and compute the new destination.
   Fixtures giving the same destination under both hypotheses do not test this part.
+- Run e (Q-2171): a map with an enabled high bridge over water, of at least 8 deck cells, named
+  in the record. Stand an unarmed enemy vehicle in the middle of the deck, and give the attacker
+  a test range such that every F4 primary that passes the range test is a deck cell. Order an
+  ordinary ground vehicle on the same deck, out of range, to attack it. Record whether it keeps
+  its target and its first destination. Expected: it keeps the target, and its first
+  destination is the first qualifying deck primary in F4's order. Judge target dropping only
+  when the recorded inputs establish at least one primary that satisfies claim 19's
+  enabled-link region, clearance and detour conditions (claim 16); otherwise the run is
+  inconclusive for this contrast. Under that condition, falsified by: the target dropped at
+  once, which a ground-region read of the deck cells predicts. Repeat with the
+  attacker on a bank cell next to an end of the bridge, and with an infantry attacker on the
+  deck. Expected: a deck primary qualifies in each, provided the bank lies in the reach
+  region the deck read gives (S-0212 claim 4); record which bank was used.
 - One run per fixture and ground attacker kind where applicable. Check the two detour tests
   with the endpoint layers of claim 19. A different selected cell under the recorded inputs
   falsifies the corresponding height, occupancy or region rule. Travelling to the destination
@@ -1390,6 +1435,15 @@ and scenario stream state each tick through the first subsequent movement.
   that chooses an outside alternative; RG20 replaces the earlier impossible same-region
   fixture. Whether a reachable bridge or moving-actor combination makes the outside-area
   switch affect destination choice remains open, not an ordinary flat-ground exemption.
+- **Q-2171.** Questions 1 to 3 are answered by claim 19: a high-bridge candidate's region is read
+  for its deck. Through enabled links whose first ends lie in one reach region, a ground
+  vehicle on the same deck keeps its target and is given a deck cell that also passes the
+  clearance, range and detour tests (claims 16 and 19), and infantry and
+  attackers on a bank follow the same read (medium). Through a link that is not enabled, or
+  with no link found, the same equality of deck reads decides, and the outcome is left open
+  (low, `unmeasured`). Question 4 concerns the
+  reach comparison of S-0215 claim 37 (a), which belongs to that spec; the change it needs is
+  under *Cross-spec changes required in this round*.
 - **Q-0237.** Questions 1 to 3 were already answered by S-0208 claims 3 and 21 and W13.
   Claim 22 b now cites them explicitly; claim 25 and RG26 answer question 4. Complete
   subsequent motion of other locomotors remains owned by their movement specs, not by
@@ -1454,3 +1508,25 @@ claim 25. Confirm these matching contracts at joint sign-off; no further edit to
 is requested here. The shared teleport-ground-reservation and same-tick search and landing
 checks named by S-0215 concern S-0207, S-0209, S-0212 and S-0208; they do not change this
 spec's approach-position selection or failed-approach search parameters.
+
+S-0215 claim 37 (a), for Q-2171 question 4: the per-tick rule's "cannot reach its target's cell"
+is the comparison of S-0212 claim 6, with the actor in place of the unit and its target's cell
+in place of the destination cell. This changes S-0215's wording ("the target's cell is not in
+the actor's reach region"). Outside claim 6's exceptions (below), the two agree whenever the
+actor's cell is in a reach region, and differ only where the comparison counts two cells as one
+region although neither lies in a reach region (both of no reach region, or both off the map).
+The actor's cell is read for its deck (S-0212 claim 4) when the actor is on a bridge deck, and
+the target's cell whenever that cell carries a high bridge, whichever layer the target is on.
+Claim 6's exceptions skip the comparison, and the target then counts as reachable. Which cell
+stands for a moving actor in this comparison is left to S-0215's revision: claim 19's scatter
+reference point is not measured for a moving attacker (Open questions), and this hand-off states
+no rule for it.
+Backing: `unmeasured`. S-0212 claim 6 states this comparison for path computations; no scenario
+here isolates the per-tick rule's making the same comparison, with the same deck reads and
+exceptions, from claim 19's search (RG18 tests the candidate side only).
+Confidence: medium for the comparison and its deck reads through an enabled link; low for its
+deck reads through a link that is not enabled or with no link found and for two cells of no
+reach region or two off-map cells (as S-0212 claim 4 rates them), and for the exceptions
+skipping it. S-0212 claim 6 rates those exceptions medium for path computations; they are rated
+lower here because no backing of that claim concerns the per-tick rule. S-0215's revision owns
+the scenario that tests it.
