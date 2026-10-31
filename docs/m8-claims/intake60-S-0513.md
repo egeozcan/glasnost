@@ -35,7 +35,7 @@ judgement is needed. `every_spec_quirk_has_a_switch` is unchanged.
 
 No hashed state was added: save format 91, AI game format 53. Goldens: see Measurements.
 
-The tests are in `crates/deterministic/sim/tests/claims_s0513_r43.rs` (10 tests, synthetic
+The tests are in `crates/deterministic/sim/tests/claims_s0513_r43.rs` (12 tests, synthetic
 types from `tests/sw_common`). The fixture:
 
 - holder *h*1, a CART, at (0,3), and holder *h*2, a WALKER, at (3,0);
@@ -60,7 +60,7 @@ old text and is removed.
 | Where that projectile flies while the member waits to land, and whether it can hit it | request | Open question in the spec. **Q-2212**. Interim: the projectile's own next update finds the target object off the map and drops it, as for any off-map target object, and flies to its stored point (`combat::projectile`, comment at the off-map drop) |
 | A holder's own processing after departure: whether it drops the member, and whether it may fire at it while it phases in | request | Open question in the spec. **Q-2211**. Interim: S-0309 claim 27's DECIDED rule. `held::firing_target` treats the off-map member as no target, and `held::turn_start_drop` drops it at the start of the holder's next turn, with no draw and no revert. `claim39_whole_tick_holder_first_then_the_interim_drop` (one infantry holder, made before the member) shows both halves: in the departure tick the holder's turn comes first and it still holds *m* at the end of the tick, with its timer unchanged; in the next tick its turn drops it, with the timer still unchanged (no draw) |
 | "A change is the member's step's only when it is made in the member's own update" | tested | The tests' reads between `warp::turn` calls (above) |
-| The later warp steps (a failed or redirected landing check, placement, arrival effects) do not themselves clear holders' targets | tested by construction | `warp::check_or_redirect`, placement and arrival call no drop. Under the Q-2211 interim almost no holder still holds the member by then (see the whole-tick test), so no separate test reads a holder there |
+| The later warp steps (a failed or redirected landing check, placement, arrival effects) do not themselves clear holders' targets | tested | `claim39_placement_and_arrival_effects_clear_no_holder` and `claim39_a_failed_and_a_redirected_landing_check_clear_no_holder` (an unprotected TOWER on the landing cell, as in SW13 part b). Before each of the member's lone updates (departure, the failed check at departure, the redirected check, placement, arrival effects), *h*1 is set to hold *m* with 50 ticks left and *h*2 with 8. After the update both still hold it, the timers are unchanged, and the stream equals that of a control world whose holders hold nothing. Only lone updates are run, so the Q-2211 turn-start drop does not take part |
 
 ## Claim 39: a member killed by its landing check
 
@@ -129,9 +129,10 @@ intake's.
 
 ## Measurements
 
-Before: 590bc3f (main at the start). After: the sim commits of this intake on that same base
-(6df00a2 and 7e9e091), before the rebase onto intake 57, so that the comparison holds this
-intake's change only. Outputs are in the local, ignored `local-lane/m8/intake60/{before,after}/`.
+Before: 590bc3f (main at the start). After: this intake's sim commits on that same base, before
+the rebase, so that the comparison holds this intake's change only. Those commits are 9ec4da7 and
+5874477 after the rebase (6df00a2 and 7e9e091 before it). The later test-only commit 39750a7
+cannot move a lane. Outputs are in the local, ignored `local-lane/m8/intake60/{before,after}/`.
 
 | Lane | Before | After |
 |---|---|---|
@@ -144,14 +145,15 @@ intake's change only. Outputs are in the local, ignored `local-lane/m8/intake60/
 | AI quick lane (seeds 7–10, maps 0, 2 and 8; 36 games) | house 0 won 18, house 1 won 18 | identical: every winner and end tick, and every counter line (only timings differ) |
 | `cargo test --release -p glasnost-ai -- --include-ignored` | 239 passed, 0 failed | 239 passed, 0 failed |
 
-No lane moved: no game in these lanes has a warp member with a holder at its departure, or a
-firing check asked about a member in its leaving stage, in a way that changes an outcome.
+No lane moved.
 
 Goldens: none moved. After the rebase, `cargo test --release -p glasnost-sim-gate --tests --
 --include-ignored` passes with every golden as committed (`golden.rs` both tests, `m6c`, `m7a`,
-`m7b`, `margins`, `play_fixes`). Without `--tests` the run also tries the crate's doctest, which
-fails under the release profile (rustdoc cannot find the thin-LTO rlibs). That has nothing to do
-with this change: the crate has no doctest to run.
+`m7b`, `margins`, `play_fixes`), and `cargo xtask gate` matches every golden. Without `--tests`
+the same run also builds the crate's doctest target, which failed to build here: rustdoc reported
+E0463 (cannot find the crates `glasnost_ai`, `glasnost_sim`, `glasnost_rules`). In the same
+session two other build steps failed because a release or debug rlib was missing from `target/`
+(fixed by `cargo clean -p`).
 
 ## Rebases
 
@@ -162,7 +164,9 @@ below were run on the rebased branch.
 
 ## Checks (on the rebased branch)
 
-- `cargo test --workspace --no-fail-fast`: 7091 passed, 1 failed, 115 ignored. The one failure is
+- `cargo test --workspace --no-fail-fast`: 7091 passed, 1 failed, 115 ignored. This ran before
+  the test-only commit 39750a7. Its two tests then passed in `claims_s0513_r43` (12 of 12), with
+  clippy and fmt clean on `glasnost-sim`. The one failure is
   `glasnost-rules` `quirks::tests::every_spec_quirk_has_a_switch`, and it fails on main as well.
   S-0306 r53, on main since 5f0c528, names the quirks `owned_shell_ground_pass` and
   `switched_off_hover_lead`, and their switches are intake 61's work. This intake adds no quirk.
