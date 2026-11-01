@@ -2,12 +2,12 @@
 id: S-0001
 title: INI lexical rules
 topic: rules-import
-revision: 5
-sources-class: [decomp, design]
+revision: 7
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
-measurements: []
+approved-on: 2026-11-01
+measurements: [M-0012]
 requests: [Q-0478]
 supersedes: []
 ---
@@ -88,7 +88,10 @@ release's unmodified data files.
    follows it. A file whose final entry has no trailing newline loses that entry. One stock data file
    ends this way, so its last entry is not seen by the original (see Import mapping).
    Quirk `quirks.ini_final_line_needs_newline`.
-   - Backing: `measurable` (scenario L4)
+   - Backing: `measured` (M-0012) for one key whose line is the last line of the rules file read
+     at a skirmish's start: without a line feed after it the game behaves as if the key were
+     absent. `measurable` (scenario L4) for the same key read with a line feed after it, and for
+     other files and keys.
    - Confidence: high
 
 6. **Section headers.** A line is a section header when its first non-whitespace byte is `[` and the
