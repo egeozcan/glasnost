@@ -436,6 +436,14 @@ fn rally_capable(w: &World, id: ObjectId) -> bool {
     })
 }
 
+/// Whether building `id`'s guard spot is a rally point: a rally-capable
+/// building (S-0214 Terms) or a factory of infantry, vehicles or aircraft
+/// (S-0213 claim 20: for a factory the guard spot is its rally point).
+pub fn holds_rally_point(w: &World, id: ObjectId) -> bool {
+    // spec: S-0213 claim 20 (for a factory the guard spot is its rally point; cases a and c) and S-0214 Terms (rally-capable)
+    rally_capable(w, id) || makes_units(w, id)
+}
+
 /// A factory of infantry, vehicles or aircraft (S-0213 claim 20 (c)).
 fn makes_units(w: &World, id: ObjectId) -> bool {
     use crate::rules::FactoryKind as F;

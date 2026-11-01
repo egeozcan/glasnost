@@ -669,9 +669,12 @@ pub fn start_crash(w: &mut World, id: ObjectId, hit: Option<&Hit>) -> bool {
         let mode = w.rules().mode;
         let half = w.rules().quirks.ranged_draw_half_span;
         // spec: S-0312 claim 16 (tumbling, unless infantry: one unit-interval value, one ranged draw over 0 to 1, one more unit-interval value)
-        let _ = w.rng.unit(mode);
-        let _ = w.rng.ranged(0, 1, half);
-        let _ = w.rng.unit(mode);
+        let u1 = w.rng.unit(mode);
+        let sense = w.rng.ranged(0, 1, half);
+        let u3 = w.rng.unit(mode);
+        // spec: S-0113 claim 16 (the three draws set the crashing body's rates; the view keeps them, presentation only)
+        w.effects
+            .push(crate::combat::effects::Effect::CrashTumble { id, u1, sense, u3 });
     }
     upd(w, id, |j| j.crash_started = true);
     true

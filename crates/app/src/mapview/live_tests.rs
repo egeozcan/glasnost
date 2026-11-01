@@ -2775,6 +2775,7 @@ fn aircraft_attitude_is_drawn() {
         speed: speed.to_bits(),
         turn,
         crashing: false,
+        tumble: (0, 0),
     };
     let (base, base_shadow) = images(craft(16384, 20480, flying(0, 1.0, 0)));
     assert_eq!(
@@ -2816,14 +2817,30 @@ fn aircraft_attitude_is_drawn() {
         images(craft(16384, 20480, flying(10, 0.75, 1))).1,
         base_shadow
     );
-    // A crashing body is drawn level.
-    let crash = Attitude::Flying {
+    // A crashing body takes no pitch or bank of claim 42: with no tumble it is drawn level.
+    let crash = |pitch: f32, roll: f32| Attitude::Flying {
         height: 10,
         speed: 0.75f64.to_bits(),
         turn: 1,
         crashing: true,
+        tumble: (pitch.to_bits(), roll.to_bits()),
     };
-    assert_eq!(images(craft(16384, 20480, crash)).0, base);
+    assert_eq!(images(craft(16384, 20480, crash(0.0, 0.0))).0, base);
+    // spec: S-0113 claim 18 (a crashing aircraft is drawn with its tumble angles); design: Q-2236 interim (S-0504 F5 on the flight drawing heading, the shadow on the heading alone)
+    let (tumbled, tumbled_shadow) = images(craft(16384, 20480, crash(0.3, 1.2)));
+    assert_ne!(tumbled, base, "a tumbling body is drawn rolled");
+    assert_ne!(tumbled, images(craft(16384, 20480, crash(0.3, 1.5))).0);
+    assert_eq!(
+        tumbled_shadow, base_shadow,
+        "the shadow keeps the heading alone"
+    );
+    assert_eq!(
+        tumbled,
+        images(craft(24576, 20480, crash(0.3, 1.2))).0,
+        "the heading is the aiming facing, not the body facing"
+    );
+    // Below the drawing threshold the body is drawn level.
+    assert_eq!(images(craft(16384, 20480, crash(0.001, 0.004))).0, base);
 }
 
 /// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405

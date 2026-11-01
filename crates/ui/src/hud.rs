@@ -523,12 +523,149 @@ impl Layout {
     }
 }
 
-const TAB_LABELS: [&str; TABS] = ["Bld", "Def", "Inf", "Veh"];
-const MODE_LABELS: [(Mode, &str); 3] = [
-    (Mode::Sell, "Sell"),
-    (Mode::Repair, "Fix"),
-    (Mode::Power, "Pwr"),
+/// A button symbol: 11 rows of 12 pixels, `#` drawn and `.` clear.
+pub type Symbol = [&'static str; SYMBOL.1 as usize];
+
+/// A symbol's size in pixels.
+pub const SYMBOL: (i32, i32) = (12, 11);
+
+// design: M8 A4 round 7 note 41 (the command and tab buttons show symbols of our own drawing; no spec names their install images, Q-2238)
+const SELL_SYMBOL: Symbol = [
+    "....####....",
+    "..##....##..",
+    ".#...#....#.",
+    ".#..####..#.",
+    "#..#.#.....#",
+    "#...###....#",
+    "#....#.#...#",
+    ".#..####..#.",
+    ".#...#....#.",
+    "..##....##..",
+    "....####....",
 ];
+const REPAIR_SYMBOL: Symbol = [
+    "........#..#",
+    "........#..#",
+    "........####",
+    ".......###..",
+    "......###...",
+    ".....###....",
+    "....###.....",
+    "...###......",
+    "..###.......",
+    ".###........",
+    ".##.........",
+];
+const POWER_SYMBOL: Symbol = [
+    ".....#####..",
+    "....#####...",
+    "...#####....",
+    "..#####.....",
+    ".#########..",
+    "....#####...",
+    "...#####....",
+    "..####......",
+    ".###........",
+    ".##.........",
+    "#...........",
+];
+const BUILDINGS_SYMBOL: Symbol = [
+    "..##........",
+    "..##........",
+    "..##..#...#.",
+    "..##.##..##.",
+    "..#####.###.",
+    "############",
+    "#..........#",
+    "#.##.##.##.#",
+    "#.##.##.##.#",
+    "#..........#",
+    "############",
+];
+const DEFENCES_SYMBOL: Symbol = [
+    "............",
+    "....####....",
+    "...######...",
+    "...#########",
+    "...######...",
+    "....####....",
+    "....####....",
+    "...######...",
+    "..########..",
+    ".##########.",
+    ".##########.",
+];
+const INFANTRY_SYMBOL: Symbol = [
+    ".....##.....",
+    "....####....",
+    ".....##.....",
+    "...######...",
+    "..#.####.#..",
+    "..#.####.#..",
+    "....####....",
+    "....#..#....",
+    "....#..#....",
+    "....#..#....",
+    "...##..##...",
+];
+const VEHICLES_SYMBOL: Symbol = [
+    "............",
+    "............",
+    "....####....",
+    "...#########",
+    "...#####....",
+    ".##########.",
+    "############",
+    "#..........#",
+    "#.##.##.##.#",
+    ".##########.",
+    "............",
+];
+
+/// Each tab's symbol and name (shown on hover).
+const TAB_BUTTONS: [(Symbol, &str); TABS] = [
+    (BUILDINGS_SYMBOL, "Buildings"),
+    (DEFENCES_SYMBOL, "Defences"),
+    (INFANTRY_SYMBOL, "Infantry"),
+    (VEHICLES_SYMBOL, "Vehicles"),
+];
+/// Each command button's mode, symbol and name (shown on hover).
+const MODE_BUTTONS: [(Mode, Symbol, &str); 3] = [
+    (Mode::Sell, SELL_SYMBOL, "Sell"),
+    (Mode::Repair, REPAIR_SYMBOL, "Repair"),
+    (Mode::Power, POWER_SYMBOL, "Power on/off"),
+];
+
+/// Draws `s` centred in `r`, one fill per run of drawn pixels in a row.
+fn symbol(d: &mut DrawList, r: Rect, s: &Symbol, ink: crate::draw::Rgba) {
+    let x0 = r.x + (r.w - SYMBOL.0) / 2;
+    let y0 = r.y + (r.h - SYMBOL.1) / 2;
+    for (y, row) in s.iter().enumerate() {
+        let bytes = row.as_bytes();
+        let mut x = 0;
+        while x < bytes.len() {
+            if bytes[x] != b'#' {
+                x += 1;
+                continue;
+            }
+            let start = x;
+            while x < bytes.len() && bytes[x] == b'#' {
+                x += 1;
+            }
+            d.fill(
+                Rect::new(x0 + start as i32, y0 + y as i32, (x - start) as i32, 1),
+                ink,
+            );
+        }
+    }
+}
+
+/// A push button showing symbol `s` (see [`widget::button`] for `hot` and
+/// `enabled`).
+fn symbol_button(d: &mut DrawList, r: Rect, s: &Symbol, hot: bool, enabled: bool) {
+    widget::button(d, r, "", hot, enabled);
+    symbol(d, r, s, if enabled { colour::TEXT } else { colour::DIM });
+}
 
 /// The largest scroll position for `n` icons in `rows` rows.
 pub fn max_scroll(n: usize, rows: usize) -> usize {
@@ -605,11 +742,27 @@ pub fn view(
         d.fill(Rect::new(x, l.power.y + 1, *ext, l.power.h - 2), ink);
         x += ext;
     }
+    // design: M8 A4 round 7 note 43 (with output above drain the supplied part fills the
+    // occupied extent, S-0405 claim 19; our mark inside it shows how much of it the drain uses)
+    if let Some(at) = drain_mark(m.power, m.meter[0]) {
+        d.fill(
+            Rect::new(l.power.x + 1 + at, l.power.y, 1, l.power.h),
+            colour::TEXT,
+        );
+    }
     d.frame(l.power, colour::EDGE);
+    // The button or bar under the pointer, with its tooltip lines.
+    let mut named: Option<(Rect, Vec<String>)> = None;
+    if hot(l.power) {
+        named = Some((l.power, power_lines(m.power)));
+    }
 
-    for (r, (mode, label)) in l.modes.iter().zip(MODE_LABELS) {
-        widget::button(&mut d, *r, label, hot(*r) || m.mode == Some(mode), true);
+    for (r, (mode, sym, name)) in l.modes.iter().zip(MODE_BUTTONS) {
+        symbol_button(&mut d, *r, &sym, hot(*r) || m.mode == Some(mode), true);
         t.push(*r, HudHit::Mode(mode));
+        if hot(*r) {
+            named = Some((*r, vec![name.to_string()]));
+        }
     }
     for (i, r) in l.tabs.iter().enumerate() {
         let tv = m.tabs[i];
@@ -619,13 +772,11 @@ pub fn view(
                 .flash_start
                 .is_some_and(|t| tab_lit(t, m.tick, m.flash_extra));
         let active = i == m.shown;
-        widget::button(
-            &mut d,
-            *r,
-            TAB_LABELS[i],
-            active || lit || hot(*r),
-            tv.count > 0,
-        );
+        let (sym, name) = TAB_BUTTONS[i];
+        symbol_button(&mut d, *r, &sym, active || lit || hot(*r), tv.count > 0);
+        if hot(*r) {
+            named = Some((*r, vec![name.to_string()]));
+        }
         if active {
             d.fill(Rect::new(r.x, r.bottom() - 2, r.w, 2), colour::ACCENT);
         }
@@ -656,9 +807,30 @@ pub fn view(
     }
     // The pointer's icon wins over the keyboard's.
     if let Some((r, c)) = tip {
-        tooltip(&mut d, r, c, size);
+        tooltip(&mut d, r, tooltip_lines(c), size);
+    } else if let Some((r, lines)) = named {
+        tooltip(&mut d, r, lines, size);
     }
     (d, t)
+}
+
+/// Where the drain mark sits inside the power bar, in bands from its inner
+/// left edge, for totals `(O, D)` and the supplied extent `supplied`: at
+/// ⌊supplied × D / O⌋ when 0 < D < O, none otherwise (with D ≥ O the
+/// occupied extent already shows the drain, S-0405 claim 19).
+// design: M8 A4 round 7 note 43 (our mark of the drain within the supplied part; the three parts' extents are F4's, unchanged)
+pub fn drain_mark((o, d): (i32, i32), supplied: i32) -> Option<i32> {
+    (d > 0 && d < o).then(|| (i64::from(supplied) * i64::from(d) / i64::from(o)) as i32)
+}
+
+/// The power bar's tooltip: the totals it represents (S-0405 claim 4).
+// design: M8 A4 round 7 note 43 (the output and drain shown as numbers on hover)
+pub fn power_lines((o, d): (i32, i32)) -> Vec<String> {
+    vec![
+        "Power".to_string(),
+        format!("Output {o}"),
+        format!("Drain {d}"),
+    ]
 }
 
 /// The lines of an icon's tooltip: its name, then a build type's price
@@ -685,10 +857,10 @@ pub fn tooltip_lines(c: &CameoView) -> Vec<String> {
     v
 }
 
-/// Draws an icon's tooltip beside its rectangle `r`, on the battlefield
-/// side of the sidebar, kept on the screen.
-fn tooltip(d: &mut DrawList, r: Rect, c: &CameoView, size: (i32, i32)) {
-    let lines = tooltip_lines(c);
+/// Draws a tooltip of `lines` (the first one a name) beside the hovered
+/// rectangle `r`, on the battlefield side of the sidebar, kept on the
+/// screen.
+fn tooltip(d: &mut DrawList, r: Rect, lines: Vec<String>, size: (i32, i32)) {
     let w = lines.iter().map(|s| font::text_width(s)).max().unwrap_or(0) + 8;
     let h = lines.len() as i32 * (font::LINE_HEIGHT + 2) + 4;
     let x = (r.x - w - 4).max(0);
@@ -1122,6 +1294,109 @@ mod tests {
         // The pointer's icon: T0's name shows twice (the placeholder card and the tooltip).
         assert_eq!(t.iter().filter(|s| *s == "T0").count(), 2);
         assert_eq!(t.iter().filter(|s| *s == "T1").count(), 1);
+    }
+
+    // design: M8 A4 round 7 note 41 (symbols of our own on the command and tab buttons, their names on hover; Q-2238)
+    #[test]
+    fn command_and_tab_buttons_show_symbols_and_name_on_hover() {
+        for s in [
+            SELL_SYMBOL,
+            REPAIR_SYMBOL,
+            POWER_SYMBOL,
+            BUILDINGS_SYMBOL,
+            DEFENCES_SYMBOL,
+            INFANTRY_SYMBOL,
+            VEHICLES_SYMBOL,
+        ] {
+            assert!(s.iter().all(|r| r.len() == SYMBOL.0 as usize));
+            assert!(s.iter().all(|r| r.bytes().all(|b| b == b'#' || b == b'.')));
+        }
+        let mut m = HudModel::default();
+        m.tabs[0].count = 1;
+        let size = (800, 600);
+        let l = Layout::new(size);
+        let texts = |m: &HudModel, hover| {
+            view(m, size, None, hover)
+                .0
+                .texts()
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect::<Vec<_>>()
+        };
+        let plain = texts(&m, None);
+        for name in ["Sell", "Repair", "Power on/off", "Buildings", "Vehicles"] {
+            assert!(!plain.contains(&name.to_string()), "{name} not as a label");
+        }
+        // Each button draws its symbol inside its rectangle, dimmed on a tab without icons.
+        let (d, _) = view(&m, size, None, None);
+        let inks_in = |r: Rect| {
+            d.prims
+                .iter()
+                .filter_map(|p| match p {
+                    Prim::Fill { rect, rgba } if r.intersect(rect) == *rect && rect.h == 1 => {
+                        Some(*rgba)
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        for r in l.modes.iter().chain(&l.tabs[..1]) {
+            assert!(inks_in(*r).iter().filter(|c| **c == colour::TEXT).count() >= 11);
+        }
+        assert!(
+            inks_in(l.tabs[3])
+                .iter()
+                .filter(|c| **c == colour::DIM)
+                .count()
+                >= 11
+        );
+        // The hit targets are kept.
+        let (_, t) = view(&m, size, None, None);
+        assert_eq!(t.hit(l.modes[1].centre()), Some(HudHit::Mode(Mode::Repair)));
+        assert_eq!(t.hit(l.tabs[0].centre()), Some(HudHit::Tab(0)));
+        // Hover names the button.
+        assert!(texts(&m, Some(l.modes[1].centre())).contains(&"Repair".to_string()));
+        assert!(texts(&m, Some(l.tabs[3].centre())).contains(&"Vehicles".to_string()));
+    }
+
+    // spec: S-0405 claim 19 and F4 (the three parts' extents are unchanged); design: M8 A4 round 7 note 43 (a drain mark within the supplied part while 0 < D < O, the totals on hover)
+    #[test]
+    fn the_power_bar_marks_the_drain_and_names_the_totals() {
+        assert_eq!(drain_mark((100, 50), 120), Some(60));
+        assert_eq!(drain_mark((300, 25), 120), Some(10));
+        assert_eq!(drain_mark((100, 0), 120), None, "no drain");
+        assert_eq!(drain_mark((100, 100), 120), None, "all of it used");
+        assert_eq!(drain_mark((0, 25), 0), None, "short of power");
+        let size = (800, 600);
+        let l = Layout::new(size);
+        let m = HudModel {
+            power: (200, 50),
+            meter: [100, 0, 0],
+            ..HudModel::default()
+        };
+        let (d, _) = view(&m, size, None, None);
+        let mark = Rect::new(l.power.x + 1 + 25, l.power.y, 1, l.power.h);
+        assert!(d.prims.contains(&Prim::Fill {
+            rect: mark,
+            rgba: colour::TEXT
+        }));
+        let parts: Vec<Rect> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Fill { rect, rgba } if *rgba == colour::GOOD => Some(*rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            parts,
+            [Rect::new(l.power.x + 1, l.power.y + 1, 100, l.power.h - 2)]
+        );
+        let tip = view(&m, size, None, Some(l.power.centre())).0;
+        let t = tip.texts();
+        assert!(t.contains(&"Output 200") && t.contains(&"Drain 50"));
+        assert!(!d.texts().contains(&"Output 200"));
     }
 
     #[test]

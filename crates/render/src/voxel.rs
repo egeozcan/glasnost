@@ -899,6 +899,16 @@ pub struct FlightAttitude {
     pub bank: Bank,
 }
 
+impl FlightAttitude {
+    /// No pitch and no bank: the attitude of claim 42 when its tests fail.
+    pub const LEVEL: Self = Self {
+        alpha: 0.0,
+        beta: 0.0,
+        pitched: false,
+        bank: Bank::None,
+    };
+}
+
 /// The pitch and bank of a non-crashing flying body (S-0105 claim 42).
 ///
 /// `height` is the signed height above the current surface in leptons,
@@ -951,6 +961,26 @@ pub fn flying_body_pose(heading: u16, a: &FlightAttitude, quirks: &VoxelQuirks) 
     let v = view(quirks);
     let body = v.then(&flying_body_local(heading, a, quirks));
     // spec: S-0105 claim 42 (the shadow uses the slope transform and the 32-step flight drawing heading, never the pitch or bank angles)
+    let shadow = v.then(&Mat34::IDENTITY.rotate_z(body_angle(heading), quirks));
+    VehiclePose {
+        body,
+        turret: body,
+        barrel: body,
+        shadow,
+        turret_first: false,
+    }
+}
+
+/// The pose of a crashing flying body and its shadow (S-0113 claims 16 and
+/// 18): the body *V · D* with [`Rocking::body`] (S-0504 F5) on the flight
+/// drawing heading, the shadow *V · Rz(θ_flight)* on flat ground, as for
+/// any flying body. No claim gives the flying locomotor's composition
+/// (Q-2236).
+// design: Q-2236 interim (S-0504 F5 with the flight drawing heading and the tumble angles only, no drawing pitch or bank; the shadow on the heading alone, S-0105 claim 42)
+pub fn crashing_body_pose(heading: u16, rocking: &Rocking, quirks: &VoxelQuirks) -> VehiclePose {
+    let v = view(quirks);
+    let body = v.then(&rocking.body(heading, quirks));
+    // spec: S-0105 claim 42 (a flying body's shadow uses the 32-step flight drawing heading, never the pitch or bank angles)
     let shadow = v.then(&Mat34::IDENTITY.rotate_z(body_angle(heading), quirks));
     VehiclePose {
         body,
@@ -4005,6 +4035,27 @@ mod tests {
             flying_body_pose(raw32(5), &none, &q()).body,
             flying_body_pose(raw32(6), &none, &q()).body
         );
+        assert_eq!(none, FlightAttitude::LEVEL);
+    }
+
+    /// spec: S-0113 claims 16 and 18 (a crashing flying body is drawn with its tumble angles);
+    /// design: Q-2236 interim (S-0504 F5's D on the flight drawing heading, the shadow the
+    /// heading alone as for any flying body)
+    #[test]
+    fn crashing_pose() {
+        let r = Rocking::new(0.4, 1.3, [20, 12, 8]);
+        let p = crashing_body_pose(raw32(5), &r, &q());
+        let v = view(&q());
+        assert_eq!(p.body, v.then(&r.body(raw32(5), &q())));
+        assert_eq!(p.turret, p.body);
+        assert_eq!(p.barrel, p.body);
+        assert_eq!(
+            p.shadow,
+            flying_body_pose(raw32(5), &FlightAttitude::LEVEL, &q()).shadow
+        );
+        assert_ne!(p.body, p.shadow, "the body rolls, the shadow does not");
+        // The heading turns the body.
+        assert_ne!(p.body, crashing_body_pose(raw32(6), &r, &q()).body);
     }
 
     /// spec: S-0105 claims 26, 42 (the flying body's key: the 32-step flight drawing

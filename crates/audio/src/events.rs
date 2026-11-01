@@ -1073,7 +1073,8 @@ impl Audio {
             Effect::Rock { .. }
             | Effect::DroneRock { .. }
             | Effect::GrapplePush { .. }
-            | Effect::OverloadRock { .. } => {}
+            | Effect::OverloadRock { .. }
+            | Effect::CrashTumble { .. } => {}
             // The bunker's special animations and the bunkered notice are
             // drawing and selection only; the walls sounds come through
             // Effect::Sound (S-0606 claims 7, 12 and 14).

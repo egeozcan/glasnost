@@ -1624,9 +1624,12 @@ pub fn start_crash_hit(
     let mode = w.rules().mode;
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0312 claim 16 (tumbling: one unit-interval value, one ranged draw over 0 to 1, one more unit-interval value)
-    let _ = w.rng.unit(mode);
-    let _ = w.rng.ranged(0, 1, half);
-    let _ = w.rng.unit(mode);
+    let u1 = w.rng.unit(mode);
+    let sense = w.rng.ranged(0, 1, half);
+    let u3 = w.rng.unit(mode);
+    // spec: S-0113 claim 16 (the three draws set the crashing body's rates; the view keeps them, presentation only)
+    w.effects
+        .push(crate::combat::effects::Effect::CrashTumble { id, u1, sense, u3 });
     if let Some(a) = st_mut(w, id) {
         a.crash = Some(0);
         // spec: S-0501 claim 9 (a living crash: its locomotor is switched off; which states start one is Open question 9) and claim 36 (a release crash is a dead crash, not a living disabled fall)

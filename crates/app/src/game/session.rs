@@ -2322,6 +2322,44 @@ impl Session {
             };
             brackets(&mut d, cx, cy, hw, hh);
         }
+        // spec: S-0213 claim 20 (a factory's guard spot is its rally point); design: M8 A4 round 7 note 42 (no spec says what shows it: while one of our factories, cloning buildings or repair depots is selected, a dashed line from it to its rally point and a diamond on the point's cell)
+        let rally_phase = (self.clock_ms / DASH_MS).rem_euclid(2 * DASH) as i32;
+        for &id in &self.play.selection {
+            let Some(o) = w.obj(id) else { continue };
+            if o.owner != Some(self.play.local) || !targeting::holds_rally_point(w, id) {
+                continue;
+            }
+            let (cell, to) = match o.guard_spot {
+                Some(glasnost_sim::world::Target::Cell(c)) => (c, None),
+                Some(glasnost_sim::world::Target::Object(t)) => match w.obj(t) {
+                    Some(t) => (t.pos.cell(), Some(t.pos)),
+                    None => continue,
+                },
+                None => continue,
+            };
+            let level = w.cells.cell(cell).map_or(0, |x| i32::from(x.level));
+            let (tx, ty) = cell_top(cell.x, cell.y);
+            let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
+            diamond(&mut d, sx, sy, RALLY_POINT_INK, m);
+            let end = match to {
+                Some(p) => {
+                    let (qx, qy) = project_lifted(p.x, p.y, p.z);
+                    world_to_screen(qx, qy)
+                }
+                // The diamond's centre: 15 pixels below its top corner (S-0101 F1).
+                None => (sx, sy + 15),
+            };
+            let p = w.reference_point(id);
+            let (qx, qy) = project_lifted(p.x, p.y, p.z);
+            dashed(
+                &mut d,
+                world_to_screen(qx, qy),
+                end,
+                rally_phase,
+                RALLY_INK,
+                m,
+            );
+        }
         // spec: S-0610 claims 10 and 11 (the hostile-intent lines the local player's psychic sensors show: from the unit's firing point to its target's aim point or to its destination, a 3 × 3 square in the unit owner's house colour at both ends, the dashes moving with real time)
         let phase = (self.clock_ms / DASH_MS).rem_euclid(2 * DASH) as i32;
         for l in glasnost_sim::psychic::intent_lines(w, self.play.local) {
@@ -2600,6 +2638,12 @@ const ROUTE_INK: [u8; 4] = [120, 230, 120, 230];
 /// A route point marker's ink (our own look).
 // nocite: our own look of route point markers, not studied (S-0213 claim 16g)
 const ROUTE_POINT_INK: [u8; 4] = [120, 230, 120, 110];
+/// The line from a selected factory to its rally point (our own look).
+// nocite: our own presentation of a rally point (M8 A4 round 7 note 42; no spec draws it)
+const RALLY_INK: [u8; 4] = [255, 230, 80, 255];
+/// The rally point's cell (our own look).
+// nocite: our own presentation of a rally point (M8 A4 round 7 note 42; no spec draws it)
+pub(crate) const RALLY_POINT_INK: [u8; 4] = [255, 230, 80, 90];
 /// The selected route point's ink (our own look).
 // nocite: our own look of the selected route point, not studied (S-0213 claim 16g)
 const ROUTE_SELECTED_INK: [u8; 4] = [255, 255, 140, 160];
