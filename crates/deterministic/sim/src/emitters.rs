@@ -243,11 +243,12 @@ pub fn let_go_fire(w: &mut World, owner: ObjectId) {
 }
 
 /// S-0301 claim 5's place-and-kind rule for a system held in its owner's
-/// fire place whose kind is not fire: the fire place's let-go events of a
-/// retarget to a target not within reach and of the firer's death apply to
-/// it as to a fire-kind system (S-0616 claim 1), whose own turn makes those
-/// tests ([`retarget_let_go`], `crate::particles::fire_turn`). Called in
-/// the system's turn after its kind's own work.
+/// fire place whose kind is not fire: the fire place's let-go at the
+/// firer's death applies to it as to a fire-kind system (S-0616 claim 1),
+/// whose own turn makes that test (`crate::particles::fire_turn`). Called
+/// in the system's turn after its kind's own work. The retarget let-go is
+/// not made here but at the change of the firer's target
+/// ([`retarget_let_go`]).
 pub fn fire_place_let_go(w: &mut World, sys: ObjectId) {
     let Some(owner) = w.gas.systems.get(&sys).and_then(|s| s.owner_object) else {
         return;
@@ -259,32 +260,31 @@ pub fn fire_place_let_go(w: &mut World, sys: ObjectId) {
     if !alive {
         // spec: S-0301 claim 5, place-and-kind rule (revision 63: the fire place's let-go events are a retarget to a target not within reach, a move order and the firer's death; a let-go marks the system the place holds, whatever its kind)
         let_go_fire(w, owner);
-        return;
     }
-    // spec: S-0301 claim 5, place-and-kind rule (revision 63: a retarget to a target not within reach lets the fire place go whatever the kind of the system it holds); design (Q-2246): the test is made in the held system's own turn, after its kind's work, as a fire-kind system makes it in its turn (S-0616 claim 1 gives no tick for the test)
-    retarget_let_go(w, owner, sys);
 }
 
-/// S-0616 claim 1, the retarget let-go: in the fire system's turn, an owner
-/// whose target is no longer the one the emitter remembers lets the emitter
-/// go when the new target is not within reach (S-0307 claim 12's range
-/// test with the emitter's weapon); a new target within reach is
-/// remembered. Returns whether the emitter was let go.
-pub fn retarget_let_go(w: &mut World, owner: ObjectId, sys: ObjectId) -> bool {
+/// S-0616 claim 1 and S-0301 claim 5, *Moment of a retarget's let-go*
+/// (revision 67, Q-2246): the retarget let-go of `owner`'s fire place. It is
+/// called at every change of `owner`'s own target, in whichever part of the
+/// tick makes that change, never in the held system's turn, and it reads
+/// nothing of that system's kind. A target that is no longer the one the
+/// emitter remembers lets the emitter go when it is not within reach
+/// (S-0307 claim 12's range test with the emitter's weapon); a new target
+/// within reach, or no target, is remembered. Returns whether the emitter
+/// was let go.
+pub fn retarget_let_go(w: &mut World, owner: ObjectId) -> bool {
     let Some(o) = w.obj(owner) else { return false };
     let Some(e) = o.combat.fire_emitter else {
         return false;
     };
-    if e.system != sys || o.target == e.target {
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: the test is made at the change of the firer's target, in whichever part of the tick makes that change, and not in the turn of the system the fire place holds; it reads nothing of that system's kind, so it is the same for every kind)
+    if o.target == e.target {
         return false;
     }
     let now = o.target;
     let Some(t) = now else {
-        // A cleared target is not a new target: the emitter stays (S-0301 Terms: let go on a retarget).
-        if let Some(ob) = w.obj_mut(owner)
-            && let Some(f) = ob.combat.fire_emitter.as_mut()
-        {
-            f.target = None;
+        if let Some(ob) = w.obj_mut(owner) {
+            cleared(ob);
         }
         return false;
     };
@@ -300,6 +300,20 @@ pub fn retarget_let_go(w: &mut World, owner: ObjectId, sys: ObjectId) -> bool {
     }
     let_go_fire(w, owner);
     true
+}
+
+/// The retarget let-go's case of a cleared target ([`retarget_let_go`]),
+/// for the clears that hold only the object: a cleared target is not a new
+/// target, so the fire emitter stays and remembers no target. Called by
+/// `crate::spawn`'s own-target clears at the clear itself.
+pub fn cleared(ob: &mut crate::world::Object) {
+    if ob.target.is_some() {
+        return;
+    }
+    // spec: S-0301 Terms (a fire emitter is let go on a retarget; a cleared target is not a new target, so the emitter stays) and claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change itself)
+    if let Some(f) = ob.combat.fire_emitter.as_mut() {
+        f.target = None;
+    }
 }
 
 /// S-0303 claim 19: the barrel particle system at `p` (the 25 % draw has

@@ -581,6 +581,8 @@ pub fn set_own_target(ob: &mut crate::world::Object, t: Option<Target>) {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1);
     }
     ob.target = t;
+    // A nonempty target's retarget let-go needs the world: the caller makes it (`crate::emitters::retarget_let_go`).
+    crate::emitters::cleared(ob);
     if t.is_none() && had {
         request_clear(ob, true);
     }
@@ -601,6 +603,7 @@ pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
     }
     ob.target = None;
+    crate::emitters::cleared(ob);
     request_clear(ob, had);
 }
 
@@ -613,6 +616,7 @@ pub fn redirected_to_none(ob: &mut crate::world::Object) {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
     }
     ob.target = None;
+    crate::emitters::cleared(ob);
     // spec: S-0309 claim 24 (assigning a nonempty target redirected to no target requests the conditional clear, even if the old own target was empty)
     request_clear(ob, true);
 }
@@ -1404,6 +1408,8 @@ pub fn aircraft_attack(w: &mut World, x: ObjectId, target: Target) {
     if let Some(o) = w.obj_mut(x) {
         o.target = Some(target);
     }
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+    crate::emitters::retarget_let_go(w, x);
 }
 
 /// A non-missile slot aircraft flies back to its spawner (S-0506 Slot
@@ -1417,6 +1423,7 @@ pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
     }
     if let Some(o) = w.obj_mut(x) {
         o.target = None;
+        crate::emitters::cleared(o);
         o.dest = Some(Target::Object(spawner));
     }
 }
@@ -1447,6 +1454,8 @@ pub fn kamikaze_orders(w: &mut World) {
         o.target = Some(Target::Cell(cell));
         // spec: S-0506 claim 26 (attack queued, without forcing an immediate behaviour start; no draws)
         o.beh.queue(Some(crate::rules::Behaviour::Attack));
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+        crate::emitters::retarget_let_go(w, x);
     }
 }
 

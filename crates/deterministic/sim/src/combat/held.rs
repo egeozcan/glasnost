@@ -68,6 +68,7 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
         timer_draw(w, x);
         let Some(ob) = w.obj_mut(x) else { continue };
         let mut restored = None;
+        let mut reverted = false;
         if ob.kind == Kind::Aircraft && how != Leaving::Destroyed {
             // spec: S-0501 claim 32 (an aircraft holds no target, then an overridden one is reverted right after the loss)
             crate::spawn::clear_own_target(ob);
@@ -77,6 +78,7 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
                 // spec: S-0501 claim 32 and S-0215 claim 10 (the revert brings back the target put aside, even the object that left the map)
                 crate::spawn::set_own_target(ob, t);
                 ob.dest = d;
+                reverted = true;
             }
         } else if ob.beh.suspended.is_some()
             && let Some((t, d)) = ob.beh.revert()
@@ -87,9 +89,15 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
                 restored = Some(ob.dest);
                 ob.dest = d;
             }
+            reverted = true;
         } else {
             crate::spawn::clear_own_target(ob);
         }
+        if reverted {
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, x);
+        }
+        let Some(ob) = w.obj_mut(x) else { continue };
         if how == Leaving::Removed && ob.target == Some(Target::Object(gone)) {
             // spec: S-0309 claim 27 (the removal drops a restored object again; together the drops take at most one timer draw)
             crate::spawn::clear_own_target(ob);

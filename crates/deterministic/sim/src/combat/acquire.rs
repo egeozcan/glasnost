@@ -286,6 +286,8 @@ pub fn override_attack(w: &mut World, actor: ObjectId, target: ObjectId) {
     o.beh.aside = Some((o.target, o.dest));
     o.target = Some(Target::Object(target));
     let mobile = o.kind.is_mobile();
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+    crate::emitters::retarget_let_go(w, actor);
     // spec: S-0215 claim 13 and S-0502 claim 28 (a destination clear requested by behaviour processing, here after the override installed its target: a balloon-hover vehicle with a nonempty destination can reject it, keeping destination, point, commitment and reservation)
     let retained = mobile && crate::jump::clear_rejected(w, actor);
     let Some(o) = w.obj_mut(actor) else { return };
@@ -1346,6 +1348,8 @@ fn set_target_from_search(
             && t.is_some()
             && t != before;
     }
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+    crate::emitters::retarget_let_go(w, a);
     // spec: S-0309 claim 4 (a pick lowers the target's expected remaining health by the expected damage, unless the projectile is inaccurate)
     if let Some((y, e)) = expected
         && let Some(tob) = w.obj_mut(y)
@@ -1535,6 +1539,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             {
                 // spec: S-0309 claim 23 (running as for an object with no target does not itself request a spawner's pending-target clear)
                 ob.target = None;
+                crate::emitters::cleared(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             search(w, a, SearchKind::Range, ctx);
@@ -1554,6 +1559,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             if let Some(ob) = w.obj_mut(a) {
                 // spec: S-0309 claim 23 (running as for an object with no target does not itself request a spawner's pending-target clear)
                 ob.target = None;
+                crate::emitters::cleared(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             search(w, a, SearchKind::Range, SearchContext::AttackMoveFresh);
@@ -1568,6 +1574,8 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                     ob.target = Some(mem);
                 }
             }
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, a);
         }
     }
 }

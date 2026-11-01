@@ -789,6 +789,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             // spec: S-0215 claim 12 and S-0506 claim 25 (an order setting the target to nothing obeys the spawner pending-target rule)
             None => crate::spawn::explicit_clear_own_target(m),
         }
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: the test is made at the change of the firer's target, here at the order's application, which comes after the turn pass, S-0203 claim 7)
+        crate::emitters::retarget_let_go(w, actor);
         // spec: S-0213 claim 21 and S-0502 claim 28 (an order installs its target before it requests the empty destination, so a balloon-hover vehicle with a nonempty destination can reject that clear and keep its destination, point, commitment and reservation)
         retained = mobile && dest.is_none() && crate::jump::clear_rejected(w, actor);
         let Some(m) = w.obj_mut(actor) else { return };

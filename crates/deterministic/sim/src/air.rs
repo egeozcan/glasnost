@@ -2887,6 +2887,8 @@ pub fn fall_back_early(w: &mut World, id: ObjectId) -> bool {
                 ob.beh.progress = 0;
             }
         }
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+        crate::emitters::retarget_let_go(w, id);
         return true;
     }
     // spec: S-0501 T2 row 2 and S-0519 claim 19 (retreat, the paradrop and spy-plane behaviours, not a strike aircraft: unchanged; a strike aircraft in retreat is not exempt from falling back)
@@ -4061,6 +4063,8 @@ pub fn carrier_attack(w: &mut World, x: ObjectId, target: Target) {
     if let Some(o) = w.obj_mut(x) {
         o.target = Some(target);
     }
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+    crate::emitters::retarget_let_go(w, x);
     // spec: S-0501 T4 (receive the controller target and queue attack)
     queue(w, x, Behaviour::Attack);
 }

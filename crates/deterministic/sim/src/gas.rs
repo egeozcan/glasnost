@@ -1236,7 +1236,7 @@ pub fn system_turn(w: &mut World, id: ObjectId) {
         None => {}
     }
     if kind != Some(Behaviour::Fire) {
-        // spec: S-0301 claim 5, place-and-kind rule (revision 63, Q-2181: the fire place's let-go events apply to the system it holds whatever its kind; a fire-kind system makes the tests in its own turn)
+        // spec: S-0301 claim 5, place-and-kind rule (revision 63, Q-2181: the fire place's let-go events apply to the system it holds whatever its kind; a fire-kind system makes the death test in its own turn) and Moment of a retarget's let-go (revision 67, Q-2246: the retarget test is made at the change of the firer's target, not here)
         crate::emitters::fire_place_let_go(w, id);
     }
     // spec: S-0613 claim 17 (after the kind's own turn work, whatever the kind, also none)
