@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 20
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-01
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238]
 supersedes: []
 ---
 
@@ -28,12 +28,16 @@ Network games and campaigns are out of scope.
 **Out of scope — lead decision of 2026-10-14, Interface looks.** Sidebar and shell
 positions, sizes, side-dependent layout, clock artwork, label and count fonts and positions,
 and the lit tab's artwork are the implementer's design (Q-0276 and Q-0283).
+A client that draws the install's tab images instead uses their lit frames (claim 19).
 Shared battlefield status messages instead follow S-0213 claim 25 for wrapping,
 explicit line breaks and imported-font metrics (Q-0282 and Q-0393); that contract
 is separate from sidebar labels. This spec fixes sidebar values, states and timing,
 not a reproduction of the original shell. Power values and meaningful
 meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
+
+Drawing the install's command-button and tab images is optional. When the client
+draws them, claim 19 fixes the file, frame and palette for each state (Q-2238).
 
 **Paired revisions.** S-0404 revision 13 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
@@ -371,7 +375,8 @@ last recheck). In addition:
     subject on the tab, flashing stops and its lit flash state clears. These updates
     do not run during frozen cycles or while the game stands still, so pausing does
     not consume the flash period. Lit means the flash state, independent of selection
-    or mouse-over styling; its artwork is the implementer's design. Presentation only.
+    or mouse-over styling; its artwork is the implementer's design or the install's
+    lit tab frames of claim 19. Presentation only.
     - Backing: `measurable` (scenario S8, including restart and pause controls,
       S-0512 scenario X9 for superweapon flash eligibility)
     - Confidence: high (initial parity and update counts); medium (visible tick boundary
@@ -605,6 +610,96 @@ last recheck). In addition:
       wheel's one-row silent path); medium (release activation and pointer-independent
       wheel observation)
 
+19. **Command-button and tab images (Q-2238).** The original draws the sell button,
+    the repair button, each of the four tab buttons and the two scroll buttons from
+    one image file each, named in Import mapping. The tab files are numbered in claim
+    1's tab order. Each file is resolved by the ordinary precedence of S-0005 claims 1
+    and 7, with the local player's side group mounted as S-0005 claims 13 and 13a
+    give. Whether these pictures are stored for the session is left open by S-0005,
+    whose Open questions name interface art other than the four palettes of its claim
+    22, and is not claimed here. Every one of these images is drawn with the
+    dedicated sidebar palette named in Import mapping, the same file name for every
+    side: the copy found by the ordinary precedence. S-0005 claim 22 owns that
+    palette's discarding and resolution at each side-group mount.
+
+    The first row that matches the button's state, read top to bottom, gives the frame.
+
+    | Button | State | Frame |
+    |---|---|---|
+    | Tab | its tab has no icons (unavailable) | 2 |
+    | Tab | lit (claim 11) and shown | 4 |
+    | Tab | lit | 3 |
+    | Tab | shown | 1 |
+    | Tab | any other state | 0 |
+    | Sell, repair | its mode active | 1 |
+    | Sell, repair | any other state | 0 |
+    | Scroll | disabled (claim 18) | 2 |
+    | Scroll | its press in progress, with the pointer over it | 1 |
+    | Scroll | any other state | 0 |
+
+    The shown tab is the one whose icons the sidebar displays. A lit tab therefore
+    alternates between frames 3 and 0, or between 4 and 1 while shown, at claim 11's
+    toggles. A tab with no icons shows frame 2 whatever its flash state. A held press
+    has no frame of its own on a tab, sell or repair button. Only the scroll buttons
+    show it, and a disabled scroll button shows frame 2 even while pressed. A pointer
+    resting over a button without a press changes no frame. In the original, a scroll
+    button's frame while its press is in progress with the pointer off it is not
+    claimed. Our engine shows frame 0 then (design).
+
+    *Mode buttons.* A click on the sell or repair button while its mode is active ends
+    that mode, as a click while it is inactive enters it (S-0214 claim 13). Whether a
+    click changes either mode while the local player owns no building, or while a
+    building placement is in progress, is not claimed here.
+
+    *Mode lighting.* Our engine uses the sell and repair rows above: frame 1 in every
+    frame drawn while the mode is active, however it was entered, and frame 0 in every
+    other frame. The original differs, a display bug without gameplay effect and so
+    without a quirk switch: it shows frame 0 for a mode entered other than by its
+    button, and its frame after a mode ends follows the sidebar updates, as below.
+    For the original, the first row that matches the mode gives the frame.
+
+    | Sell or repair mode | Original's frame |
+    |---|---|
+    | active, last entered by a click on its button | 1 in every frame drawn |
+    | active, entered another way (for example by its key) | 0 in every frame drawn |
+    | inactive | 0 in every frame drawn after the first sidebar update that finishes with the mode inactive |
+
+    A click on the button that ends its mode is handled by such an update, so no frame
+    drawn after the click shows frame 1. For a mode ended another way, the frames drawn
+    between the ending and that update are not claimed for the original.
+
+    *Power-mode button.* Our engine's power-mode button (S-0214 claim 13) and its
+    picture are the implementer's design, and no install image is imported for it.
+    Whether the original offers a power-mode button or image is not claimed here.
+
+    *Layout (Q-2238 question 4).* Positions, spacing and button cells stay the
+    implementer's design (Summary, Interface looks). The images can be drawn into our
+    own cells and carry no placement our engine must reproduce. The image sizes are
+    not specified here, so how an image fits its cell is a design choice too. Where
+    a file or a needed frame cannot be resolved, our engine draws its own symbol for
+    that button (design).
+    - Backing: `measurable` (scenario S15 part a for the files, frames and palette by
+      opening the install's files; part b for the frame per state in play, during a
+      held press on every button kind, with the pointer over and off each scroll
+      button, for the mode buttons' clicks, each side's images and the original's mode
+      lighting, with S8's recorder dating each sidebar update), and `unmeasured` for a
+      tab with no icons while lit, which no scenario sets up, and for our engine's mode
+      lighting for modes entered other than by their buttons, the scroll frame while the
+      pointer is off a pressed button, the power-mode picture, layout and the
+      missing-art symbol, which are design decisions, not behaviour of the original
+    - Confidence: high (files, tab numbering, palette name and file form, resolution by
+      the ordinary precedence; the tab frames 0 to 2 in the states S15 part b holds; the
+      scroll frames except during a press with the pointer off the button; no frame
+      change from a resting pointer; a click on the sell or repair button ending its
+      active mode in the states S15 part b holds; the original's first two mode rows for
+      a mode entered by its button or by its key, and its last row for a mode ended by
+      its button; no frame of its own for a held press on a tab, sell or repair button
+      in the states S15 part b holds it); medium (the lit-tab frames 3 and 4 and their
+      alternation, at claim 11's toggles, whose timing claim 11 rates medium in
+      part); medium (a lit tab with no icons showing frame 2); medium (the original's last mode
+      row for a mode ended other than by its button, and its second row for an entry
+      other than by the key); medium (design parts)
+
 ## Formulas
 
 - **Clock stage** = progress + 1 (claim 8). Integers: progress is S-0403's integer from 0 to 54, so
@@ -710,6 +805,11 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `FlashSidebarTabFrames` (rules, superweapon) | superweapon flash-window eligibility | integer ticks; initially −1, unlimited; 0 disables the window; positive values limit it from the reference tick; S-0512 claim 17 owns the full rule |
 | No data key | scroll dispatch and end tests | claim 18: page button on release, no held repeat, wheel one row per event; disabled buttons emit no request; no imported repeat timer |
 | `GUITabSound`, `ScoldSound` (rules, audio-visual section) | accepted page-scroll and refused page-scroll sound respectively | single sound-entry names; initially no sound, later omission or unknown name retains earlier value, including session retention; S-0701 Import mapping |
+| `SELL.SHP`, `REPAIR.SHP` | sell and repair button images | fixed file names, no rules selector; frames 0 and 1 by claim 19; resolved by the ordinary precedence of S-0005 claims 1 and 7, with the local player's side group mounted per S-0005 claims 13 and 13a; unresolved file: our engine's own symbol |
+| `TAB00.SHP`, `TAB01.SHP`, `TAB02.SHP`, `TAB03.SHP` | first to fourth tab images | fixed file names; the two digits are the tab's zero-based position in claim 1's order; frames 0 to 4 by claim 19's first table; resolution as above |
+| `R-UP.SHP`, `R-DN.SHP` | scroll-up and scroll-down button images | fixed file names; frame 0 ready, 1 press in progress over it, 2 disabled (claim 19); resolution as above |
+| `SIDEBAR.PAL` | palette of the sell, repair, tab and scroll images above | fixed file name for every side, no rules selector; discarding and resolution at each side-group mount are S-0005 claim 22's; 768-byte file of 256 entries, each a red, a green and a blue byte; a file byte *c* gives the palette component (4·*c*) mod 256; unresolved file: our engine's own symbols (claim 19) |
+| No data key | power-mode button image | no install image is imported; our picture is design (claim 19) |
 | `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
 
 These delegated inputs matter to claims 13 and 14:
@@ -1201,6 +1301,67 @@ the time the script sent a button event, dates a click.
   Falsified by any opposite kind, missing predicted request or a new start/resume
   announcement merely for adding an active-line queued copy.
 
+**S15. Command-button and tab images (claim 19, Q-2238).**
+- Setup: (a) read-only: the stock install's side group that S-0005 claims 13 and 13a
+  mount for each of the Allied, Soviet and Yuri sides. (b) the common sidebar probe
+  skirmish with stock files, run once each with an Allied, a Soviet and a Yuri human
+  house, each run the first game of a freshly started session, with S8's recorder,
+  which dates each sidebar update and its drawn frame and here also logs per tick
+  whether sell mode and repair mode are active. Bind keys to the sell-mode and
+  repair-mode commands in the keyboard options.
+- Procedure: (a) for each of the three sides, resolve the sell, repair, four tab and
+  two scroll images and the sidebar palette named in Import mapping by the ordinary
+  precedence with that side's group mounted; render every frame of each with the
+  palette resolved the same way. (b) In play capture the
+  sidebar: at the start, before any icon exists (every tab unavailable); with each
+  tab shown in turn; while a done building flashes its tab, once with that tab shown
+  and once with another tab shown, across several toggles; with sell and with repair
+  mode entered by its button and left by its button; entered by its button and ended
+  by a battlefield right click without a scroll drag (S-0214 claim 28), which ends
+  that mode; entered by its key and ended the same way; entered by its key and ended
+  by its button; with a scroll button held, released, disabled (all icons fit), and
+  pressed while disabled. With each scroll button once enabled and once disabled, and
+  with each tab, sell and repair button in its state at the time, all with no press,
+  capture it with the pointer away from the sidebar and with the pointer resting over
+  the button. Hold a press, the
+  pointer over the button and before the release, on a tab button while its tab is
+  unavailable, while it is not lit and shown, while it is not lit and not shown, while
+  it is lit and shown and while it is lit and not shown; and on the sell and on the
+  repair button, once with its mode off and once with it active, entered by its button.
+- Observable: (a) frame counts and the look of each frame. (b) per capture, the
+  frame each button shows, matched against the part a renders, and the sidebar
+  update it falls in; for each mode ended by the right click, every drawn frame of
+  its image from the last tick the mode is active to the first frame 0; for each
+  click on a sell or repair button, whether its mode is active in the recorder's log
+  before and after the click.
+- Expected: (a) every file and the palette resolve for each side, and each file has
+  the frames claim 19's first table uses. (b) Claim 19's first table, with sell and
+  repair modes entered and ended by their buttons: the first click on the button
+  makes its mode active and the second makes it inactive. Each side shows the images of its mounted
+  side group, in the first game of the session, as part a renders them for that side,
+  colours included. A mode entered by key shows frame 0 while active, and in every
+  frame drawn after the click on its button that ends it. A scroll button shows
+  frame 0 when enabled and frame 2 when disabled, with the pointer away and with it
+  resting over the button, and every other button shows the same frame in both
+  pointer positions. A mode entered by its button and ended by the right click shows
+  frame 1 in each frame drawn while it is active, and frame 0 in each frame drawn
+  after the first sidebar update that finishes with the mode inactive. During each
+  held press on a tab, sell or repair button, the button shows the frame claim 19's
+  first table gives for its state at that moment. A disabled scroll button shows
+  frame 2 while pressed.
+- Falsified if: any button shows a frame other than claim 19's first table predicts for a
+  state part b captures, apart from the original's mode lighting for a mode entered
+  or ended other than by its button, which the items below test. Also falsified if a
+  tab, sell or repair button shows any other frame during a held press, a click on a
+  mode's button leaves an active mode active, a pointer position without a press
+  changes a button's frame, or a key-entered mode shows frame 1 while active or in a
+  frame drawn after the click on its button that ends it. Also if a button-entered
+  mode ended by the right click shows frame 0 while active or frame 1 in a frame drawn
+  after that first sidebar update, a side shows images other than those of its
+  mounted side group in the first game of the session, colours included, or a file
+  lacks a frame claim 19 uses. One run per side, screen capture plus read-only image
+  and palette inspection.
+
 ## Open questions
 
 1. Battlefield right-click exit without item cancellation is resolved by claim 10 and
@@ -1215,7 +1376,7 @@ the time the script sent a button event, dates a click.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
    aircraft icon with every dock taken play (claims 4 and 12, S3).
 7. Q-0283 is resolved by claim 11: initial and subsequent lit periods are specified.
-   The lit artwork is the implementer's design.
+   The lit artwork is the implementer's design or claim 19's install frames.
 8. Q-0120 is partly resolved by S-0404 claims 7, 13 and 15: busy or failed release
    cancels with a refund without retry, and claim 15 gives ordinary aircraft pad positions.
    S-0417 claim 14 supplies contact-place count, infantry exit-candidate acceptance and
@@ -1224,9 +1385,15 @@ the time the script sent a button event, dates a click.
    belong to S-0417's open questions. Specialised docking combinations remain outside the
    verified pad-position rule. This spec adds no rules for those outcomes and does not
    claim to answer the whole request. Q-0196's four questions are answered by claim 15.
+9. Q-2238 question 1, power-mode part: whether the original offers a power-mode button or an
+   image for one is not claimed here. Our engine's power-mode button and its picture are
+   design (claim 19).
 
 ## Changes for other specs
 
+- S-0214: claim 13 gives the sell and repair buttons as mode entry. Claim 19 here
+  relies on a click on either button ending its mode while active. Add that sentence
+  to claim 13 at hand-off. No behavioural conflict.
 - S-0404: refresh its paired Summary reference to S-0411 claims 9, 14 and 15
   at joint hand-off. Its application-boundary release/refund, sale and capacity contracts
   already agree; no behavioural replacement is required.
@@ -1244,7 +1411,6 @@ the time the script sent a button event, dates a click.
   retain the pointer to claim 16 here. No behavioural change required.
 - S-0103: Q-0275 palette conversion, lifetime and missing-file behaviour are already
   claim 13; retain that ownership. No behavioural change required.
-
 Earlier correction requests are resolved by the current companion drafts: S-0406 claims 1
 and 20 give placement's appropriate announcement and text/no-text feedback; S-0007 claims
 22 and 25 point to claim 16 for icon content; S-0103 claim 13 owns dedicated icon-palette
