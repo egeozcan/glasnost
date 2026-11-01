@@ -2,11 +2,11 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-11-01
 measurements: []
 requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244]
 supersedes: []
@@ -320,7 +320,11 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - A lifetime of 0 goes to −1 on the first turn and so never again equals 0: it never ends. Every
       negative lifetime, −1 included, likewise never ends (its count comes back to 0 only after
       2³² + *L* turns, *L* being the lifetime, once it has wrapped round: far beyond any game).
-      Only a positive lifetime ever sets the mark through the count-down; owner removal (above) and a trigger action (S-0616 claim 1) are the only other ways a system is marked here, and S-0616 claim 22 lists the marks of the other kinds.
+      Only a positive lifetime ever sets the mark through the count-down. Owner removal (above), a
+      trigger action (S-0616 claim 1) and a let-go of the fire place while the system is held
+      there (S-0616 claim 1, S-0301 claim 5) are the only other ways a system is marked here. A
+      let-go marks the system that place holds, whatever its kind, a gas-kind system included.
+      S-0616 claim 22 lists the marks of the other kinds.
     - A system marked by owner removal leaves play like any marked system: in the first turn,
       after that turn's count-down, in which it holds no particle. Removal in the middle of a tick
       therefore leaves an empty system in play until its own turn comes, in that same tick if its
@@ -344,9 +348,13 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       `unmeasured` here: no stock data path gives a gas system an owner object, so no scenario can
       vary it. The behaviour after removal is `unmeasured`: the original stops there, so there
       is no original behaviour to compare. The 2³² + *L* turns to the first return to 0 is
-      `unmeasured`: no run here is that long.
+      `unmeasured`: no run here is that long. The fire-place let-go's mark is backed as S-0616
+      claim 1's place-and-kind backing gives; for a gas-kind system it is `unmeasured`: no
+      scenario puts a gas-kind system in the fire place.
     - Confidence: high (count-down placement, lifetime 0, negatives, same-turn removal, owner removal); medium
-      for the no-behaviour-kind line, which follows from the kind work being absent.
+      for the no-behaviour-kind line, which follows from the kind work being absent; medium for the
+      fire-place let-go's mark, as S-0616 claim 1 rates a let-go's mark of the system held in the
+      fire place.
 
 18. **Order inside one gas particle's update.** The countdown and hits, the stage step and the
     lifetime count-down all run on every tick. On even ticks the particle also runs its drift, its
