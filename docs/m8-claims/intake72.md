@@ -59,7 +59,8 @@ This intake adds the missing tests and moves the citations to S-0616's own claim
 | 22, the table's fire-place let-go entries (smoke, fire, spark, railgun, no kind) and the gas-kind sentence | Tested by the tests above, one kind each |
 | F14, computed for the system of the railgun place, whatever its kind | Existing (`emitters::effect_weapon_emitter`); tested by the cell-shot test (railgun place) and `claims_s0301_r63::creation_follows_the_place` |
 | Terms *Marked* and the state table's marked row | Tested by the P1 part b test |
-| P1 part a and part b wording | The P1 part b test follows the new set-up: a next type for the smoke system's held type, and a spark counter still above 0 at the mark |
+| P1 part a and part b wording | The new set-up is followed: a next type for the smoke system's held type, and a spark counter still above 0 at the mark |
+| P1 part b as a whole (a trigger mark on a smoke, a fire, a spark and a gas system in one cell; a second run on the shared gas system's cell) | Partly. The smoke and spark systems are tested by the P1 part b test above. The trigger mark of every system in a cell, whatever its kind, is tested by `claims_s0616_emitters::claim_1_trigger_actions` (existing). A marked fire system that makes no emission is tested by `claims_s0301_r67` (the fire firer). A marked gas system's turn does not read the mark (S-0613). No new test covers the shared gas system's run |
 | Changes for other specs, S-0613 claim 17 | Taken in by S-0613 r13 (below) |
 
 ### S-0613 r13
