@@ -43,7 +43,13 @@ appears or leaves the game.
   its landing cell; S-0302 claim 8's leaving-stage protection (`being_erased`) covers only the
   leaving stage, so the phase-in does not stop a hit, as before.
 
-T2 asks no airborne question of the target in our engine; no change there.
+T2 asks no airborne or floor-bound question of the target (its rows and T1's read only the
+anti-air row's "airborne target"; the ground row reads the projectile's own height), and no other
+projectile flight path in the simulation crate classifies its target object: the remaining
+`airborne_by_height` and `floor_bound` callers are the firing check, range, acquisition and
+locomotion, which claim 17 does not name. No change there. After the shadowing
+`effect_target` in `detonation_inner`, `target` is read only by the special arms; the area
+damage, animation and debris do not read it.
 
 ## Claims
 
