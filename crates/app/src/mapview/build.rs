@@ -444,6 +444,10 @@ const ROLL_ANGLE_DEFAULT: f64 = 0.5235987755982988;
 /// The speed fraction a flying body must exceed to pitch and bank.
 // spec: S-0105 Import mapping (PitchSpeed: 0.25)
 const PITCH_SPEED_DEFAULT: f64 = 0.25;
+/// Marks a crashing body's image-cache angles as F1 table steps (0 … 8191)
+/// rather than a rocking body's single-precision angle bits: a cache key
+/// of ours, not a behaviour.
+const TUMBLE_STEP_TAG: u32 = 1 << 31;
 
 /// A type's drawing angle in radians (S-0105 Import mapping): the degrees
 /// multiplied by the binary64 π/180, rounded toward zero; −1 keeps the value
@@ -473,12 +477,13 @@ enum Tilt {
     },
     /// A flying-locomotor body (claim 42).
     Flying(voxel::FlightAttitude),
-    /// A crashing flying-locomotor body with its tumble angles (S-0113
-    /// claims 16 and 18).
+    /// A crashing flying-locomotor body at strictly positive signed height,
+    /// with its tumble (S-0113 claims 16, 18 and 20).
     Tumbling {
-        /// The pitch, radians.
+        /// The drawn pitch *ψ′*, radians: the tumble pitch, plus the
+        /// drawing-pitch angle when the speed test passes (claim 20).
         pitch: f32,
-        /// The roll, radians.
+        /// The tumble roll *φ*, radians.
         roll: f32,
     },
     /// A sinking or rocking vehicle (S-0504 claims 15 and 16; S-0303 claim
@@ -4933,13 +4938,6 @@ impl<'a> Builder<'a> {
                 crashing,
                 tumble: (pitch, roll),
             } => {
-                if crashing {
-                    // spec: S-0113 claim 18 (the flying locomotor draws the pitch and roll only while the aircraft is crashing) and S-0105 claim 42 (claim 42's angles are for a non-crashing body)
-                    return Tilt::Tumbling {
-                        pitch: f32::from_bits(pitch),
-                        roll: f32::from_bits(roll),
-                    };
-                }
                 let (kind, idx) = (m.kind, m.idx);
                 let pitch_angle =
                     rule_angle(self.import, kind, idx, b"PitchAngle", PITCH_ANGLE_DEFAULT);
@@ -4947,6 +4945,22 @@ impl<'a> Builder<'a> {
                     rule_angle(self.import, kind, idx, b"RollAngle", ROLL_ANGLE_DEFAULT);
                 let pitch_speed =
                     rule_real(self.import, kind, idx, b"PitchSpeed").unwrap_or(PITCH_SPEED_DEFAULT);
+                if crashing {
+                    // spec: S-0113 claim 20 (at zero or negative signed height a crashing body is turned to its heading only: no tumble, no α and no β)
+                    if height <= 0 {
+                        return Tilt::Flying(voxel::FlightAttitude::LEVEL);
+                    }
+                    // spec: S-0113 claims 18 and 20 (the flying locomotor draws the tumble only while the aircraft is crashing at strictly positive signed height; ψ′ takes α under S-0105 claim 42's speed test, the bank never)
+                    return Tilt::Tumbling {
+                        pitch: voxel::crash_pitch(
+                            f32::from_bits(pitch),
+                            f64::from_bits(speed),
+                            pitch_speed,
+                            pitch_angle,
+                        ),
+                        roll: f32::from_bits(roll),
+                    };
+                }
                 Tilt::Flying(voxel::flight_attitude(
                     height,
                     f64::from_bits(speed),
@@ -5021,8 +5035,7 @@ impl<'a> Builder<'a> {
                 roll,
                 drawn: true,
                 ..
-            }
-            | Tilt::Tumbling { pitch, roll } => self
+            } => self
                 .voxel_model(&main_file)
                 .and_then(|b| b.sections.first().map(|s| s.size))
                 .map(|size| voxel::Rocking::new(pitch, roll, size))
@@ -5045,14 +5058,18 @@ impl<'a> Builder<'a> {
             Tilt::Rocket { pitch, .. } => voxel::rocket_body_pose(body_raw, pitch, &q),
             // spec: S-0105 claim 42 (V · Rz(θ_flight) · Ry(α) · Rx(β), the shadow the heading alone)
             Tilt::Flying(a) => voxel::flying_body_pose(heading, &a, &q),
-            // design: Q-2236 interim (a crashing flying body: S-0504 F5's transform on the flight drawing heading with the tumble angles only, the shadow on the heading alone as in S-0105 claim 42); below the drawing threshold, level
-            Tilt::Tumbling { .. } => match rocking {
-                Some(r) => voxel::crashing_body_pose(heading, &r, &q),
-                None => voxel::flying_body_pose(heading, &voxel::FlightAttitude::LEVEL, &q),
-            },
+            // spec: S-0113 claim 20 (a crashing flying body at strictly positive signed height: V · Rz(θ_flight) · Rx(φ) · Ry(ψ′), whatever the size of its angles; the shadow on the heading alone)
+            Tilt::Tumbling { pitch, roll } => voxel::crashing_body_pose(heading, roll, pitch, &q),
         };
         // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles)
-        let list = rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits()));
+        let list = match tilt {
+            // spec: S-0113 claim 20 (a crashing body at positive height is drawn fresh, never reused, with the rotations of S-0105 F1): the drawn transform depends on ψ′ and φ only through their F1 table steps, so the images are kept apart under those steps, as a rocket's fresh pitch is (S-0105 claim 41); the pixels are a fresh draw's and the retention is bounded by the table. The high bit keeps these apart from a rocking body's angle bits.
+            Tilt::Tumbling { pitch, roll } => Some((
+                voxel::table_step(f64::from(pitch), &q) | TUMBLE_STEP_TAG,
+                voxel::table_step(f64::from(roll), &q) | TUMBLE_STEP_TAG,
+            )),
+            _ => rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits())),
+        };
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
@@ -5094,8 +5111,7 @@ impl<'a> Builder<'a> {
                     .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
             b.limit_checked(&shadow_file, "shadow", shadow_key, img)
         };
-        // A tumbling body's shadow takes the heading alone (Q-2236 interim), so it is the
-        // flying body's image, not one kept apart under the angles.
+        // spec: S-0113 claim 20 (a crashing body's shadow follows only the heading and the slope shape, and its image key is S-0105 claim 42's), so it is the level flying body's image, not one kept apart under the angles.
         let shadow_list = if matches!(tilt, Tilt::Tumbling { .. }) {
             None
         } else {
@@ -5133,7 +5149,7 @@ impl<'a> Builder<'a> {
             }
             Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
             Tilt::Flying(a) => voxel::flying_body_key(heading, body_frame, &a),
-            // design: Q-2236 interim (a tumbling body's images are kept apart under their exact angles, as any rocking body's, S-0105 claim 26)
+            // spec: S-0113 claim 20 (the body at positive height is drawn fresh, never reused, S-0105 claim 26: its images are kept apart under the F1 table steps of ψ′ and φ, `list` above, beside the level key)
             Tilt::Tumbling { .. } => {
                 voxel::flying_body_key(heading, body_frame, &voxel::FlightAttitude::LEVEL)
             }

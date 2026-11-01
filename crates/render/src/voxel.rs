@@ -971,16 +971,50 @@ pub fn flying_body_pose(heading: u16, a: &FlightAttitude, quirks: &VoxelQuirks) 
     }
 }
 
-/// The pose of a crashing flying body and its shadow (S-0113 claims 16 and
-/// 18): the body *V · D* with [`Rocking::body`] (S-0504 F5) on the flight
+/// The drawn pitch *ψ′* of a crashing flying body at strictly positive
+/// signed height (S-0113 claim 20): the tumble pitch `pitch` plus the
+/// imported drawing-pitch angle `pitch_angle` when S-0105 claim 42's speed
+/// test passes (`speed` strictly above `pitch_speed`, compared in double
+/// precision), else the tumble pitch alone. The angle is not narrowed to
+/// single precision first: the sum is formed at 53-bit precision and
+/// stored in single precision, truncated toward zero.
+pub fn crash_pitch(pitch: f32, speed: f64, pitch_speed: f64, pitch_angle: f64) -> f32 {
+    // spec: S-0113 claim 20 (ψ′ = ψ + α when S-0105 claim 42's speed test passes, the current speed fraction strictly greater than the imported threshold; otherwise ψ′ = ψ)
+    if speed > pitch_speed {
+        // spec: S-0113 claim 20 and S-0105 F0 (the single pitch and the double angle added at 53-bit precision, the sum stored in single precision toward zero; the angle not first narrowed)
+        to_f32_rz(add_rz(f64::from(pitch), pitch_angle))
+    } else {
+        pitch
+    }
+}
+
+/// A crashing flying body's local draw transform *D_crash = Rz(θ_flight) ·
+/// Rx(φ) · Ry(ψ′)* (S-0113 claim 20), before the view and the section HVA
+/// transforms: `roll` is the tumble roll *φ*, `pitch` the drawn pitch *ψ′*
+/// of [`crash_pitch`]. No slope tilt, lift or shift, and never the bank.
+pub fn crashing_body_local(heading: u16, roll: f32, pitch: f32, quirks: &VoxelQuirks) -> Mat34 {
+    // spec: S-0113 claim 20 (D_crash = Rz(θ_flight) · Rx(φ) · Ry(ψ′): pitched about its own lateral axis first, then rolled about its own forward axis, then turned to its heading; no slope tilt, lift or shift; the bank never enters; the rotations of S-0105 F1 and F0)
+    Mat34::IDENTITY
+        .rotate_z(body_angle(heading), quirks)
+        .rotate_x(f64::from(roll), quirks)
+        .rotate_y(f64::from(pitch), quirks)
+}
+
+/// The pose of a crashing flying body at strictly positive signed height
+/// and its shadow (S-0113 claim 20): the body *V · D_crash* on the flight
 /// drawing heading, the shadow *V · Rz(θ_flight)* on flat ground, as for
-/// any flying body. No claim gives the flying locomotor's composition
-/// (Q-2236).
-// design: Q-2236 interim (S-0504 F5 with the flight drawing heading and the tumble angles only, no drawing pitch or bank; the shadow on the heading alone, S-0105 claim 42)
-pub fn crashing_body_pose(heading: u16, rocking: &Rocking, quirks: &VoxelQuirks) -> VehiclePose {
+/// level flight. At zero or negative height the caller draws the heading
+/// alone ([`flying_body_pose`] with [`FlightAttitude::LEVEL`]).
+pub fn crashing_body_pose(
+    heading: u16,
+    roll: f32,
+    pitch: f32,
+    quirks: &VoxelQuirks,
+) -> VehiclePose {
     let v = view(quirks);
-    let body = v.then(&rocking.body(heading, quirks));
-    // spec: S-0105 claim 42 (a flying body's shadow uses the 32-step flight drawing heading, never the pitch or bank angles)
+    // spec: S-0113 claim 20 (drawn with V · D_crash before the HVA, as S-0105 claim 42's transform is)
+    let body = v.then(&crashing_body_local(heading, roll, pitch, quirks));
+    // spec: S-0113 claim 20 and S-0105 claim 42 (the shadow follows only the heading and the slope shape, never φ, ψ, α or β)
     let shadow = v.then(&Mat34::IDENTITY.rotate_z(body_angle(heading), quirks));
     VehiclePose {
         body,
@@ -4038,15 +4072,18 @@ mod tests {
         assert_eq!(none, FlightAttitude::LEVEL);
     }
 
-    /// spec: S-0113 claims 16 and 18 (a crashing flying body is drawn with its tumble angles);
-    /// design: Q-2236 interim (S-0504 F5's D on the flight drawing heading, the shadow the
-    /// heading alone as for any flying body)
+    /// spec: S-0113 claim 20 (D_crash = Rz(θ_flight) · Rx(φ) · Ry(ψ′) drawn with V before the
+    /// HVA; no lift or shift; the shadow the heading alone, as level flight's)
     #[test]
     fn crashing_pose() {
-        let r = Rocking::new(0.4, 1.3, [20, 12, 8]);
-        let p = crashing_body_pose(raw32(5), &r, &q());
+        let (roll, pitch) = (1.3f32, 0.4f32);
+        let p = crashing_body_pose(raw32(5), roll, pitch, &q());
         let v = view(&q());
-        assert_eq!(p.body, v.then(&r.body(raw32(5), &q())));
+        let explicit = Mat34::IDENTITY
+            .rotate_z(body_angle(raw32(5)), &q())
+            .rotate_x(f64::from(roll), &q())
+            .rotate_y(f64::from(pitch), &q());
+        assert_eq!(p.body, v.then(&explicit));
         assert_eq!(p.turret, p.body);
         assert_eq!(p.barrel, p.body);
         assert_eq!(
@@ -4054,8 +4091,44 @@ mod tests {
             flying_body_pose(raw32(5), &FlightAttitude::LEVEL, &q()).shadow
         );
         assert_ne!(p.body, p.shadow, "the body rolls, the shadow does not");
+        // Not S-0504 F5: its lift and shifts move a body this rolled and pitched.
+        let r = Rocking::new(pitch, roll, [20, 12, 8]);
+        assert_ne!(r.shifts(&q()), (0, 0, 0));
+        assert_ne!(p.body, v.then(&r.body(raw32(5), &q())), "no lift or shift");
+        // Not the reverse order Rz · Ry(ψ′) · Rx(φ).
+        let reverse = Mat34::IDENTITY
+            .rotate_z(body_angle(raw32(5)), &q())
+            .rotate_y(f64::from(pitch), &q())
+            .rotate_x(f64::from(roll), &q());
+        assert_ne!(p.body, v.then(&reverse), "roll outermost");
         // The heading turns the body.
-        assert_ne!(p.body, crashing_body_pose(raw32(6), &r, &q()).body);
+        assert_ne!(p.body, crashing_body_pose(raw32(6), roll, pitch, &q()).body);
+        // Tiny tumble angles still give D_crash, not the settled level body.
+        let tiny = crashing_body_pose(raw32(5), 0.001, 0.001, &q());
+        assert_eq!(
+            tiny.body,
+            v.then(&crashing_body_local(raw32(5), 0.001, 0.001, &q()))
+        );
+    }
+
+    /// spec: S-0113 claim 20 (ψ′ = ψ + α only when the speed fraction is strictly above the
+    /// threshold; the double α is added at 53-bit precision and the sum stored toward zero, the
+    /// angle not first narrowed to single precision)
+    #[test]
+    fn crash_pitch_adds_the_drawing_pitch_on_the_speed_test() {
+        let (psi, alpha, threshold) = (0.3f32, 0.35f64, 0.25f64);
+        assert_eq!(crash_pitch(psi, 0.25, threshold, alpha), psi, "not above");
+        assert_eq!(crash_pitch(psi, 0.2, threshold, alpha), psi);
+        let sum = crash_pitch(psi, 0.26, threshold, alpha);
+        assert_eq!(sum, to_f32_rz(add_rz(f64::from(psi), alpha)));
+        assert!((f64::from(sum) - 0.65).abs() < 1e-6);
+        // The precision: α narrowed first gives another single for these values (a sum
+        // smaller than α, so its last place is finer than α's single).
+        let (psi, alpha) = (-0.3f32, 0.35f64);
+        let narrowed_first = to_f32_rz(add_rz(f64::from(psi), f64::from(to_f32_rz(alpha))));
+        let wide = crash_pitch(psi, 1.0, 0.0, alpha);
+        assert_eq!(wide, to_f32_rz(add_rz(f64::from(psi), alpha)));
+        assert_ne!(wide, narrowed_first, "the angle is not narrowed first");
     }
 
     /// spec: S-0105 claims 26, 42 (the flying body's key: the 32-step flight drawing

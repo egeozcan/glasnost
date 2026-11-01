@@ -5,8 +5,10 @@
 //! note 43 (the power meter at full power and short of power). Each screen
 //! drawn on the CPU goes to `local-lane/m8/a4-r7/<tag>/` (git-ignored; the
 //! tag is `GLASNOST_R7_TAG`, default `after`; `GLASNOST_LANE_OUT` moves
-//! it). Types are chosen by their fields, never by name; it prints counts,
-//! cells, ticks and booleans only.
+//! it). Types are chosen by their fields, never by name (the damage smoke
+//! by the engine's fixed name, S-0501 Import mapping); it prints counts,
+//! cells, ticks and booleans only. `intake_67_a_damaged_and_a_crashing_aircraft`
+//! (M8 A3 intake 67) writes to `local-lane/m8/intake67/<tag>/` instead.
 //!
 //! Run with `cargo test --release -p glasnost-app --test r7_lane --
 //! --ignored --nocapture --test-threads 1`.
@@ -122,9 +124,14 @@ fn ticks(c: &mut Client, clock: &mut i64, n: usize) {
 /// Starts a skirmish on map 0 from the menu on a window of `size`, every
 /// player house allied (lobby team 1) so the game plays on undisturbed.
 fn start(size: (i32, i32)) -> Option<(Client, Shots)> {
+    start_in(size, "m8/a4-r7")
+}
+
+/// [`start`] with its screens written under `local-lane/<sub>/<tag>/`.
+fn start_in(size: (i32, i32), sub: &str) -> Option<(Client, Shots)> {
     let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
     let tag = std::env::var("GLASNOST_R7_TAG").unwrap_or_else(|_| "after".into());
-    let out = png::lane_out(&format!("m8/a4-r7/{tag}"));
+    let out = png::lane_out(&format!("{sub}/{tag}"));
     std::fs::create_dir_all(&out).unwrap();
     let mut c = Client::new();
     c.resize(size);
@@ -359,6 +366,161 @@ fn note_40_an_aircraft_shot_down() {
     }
     println!(
         "falling: body image changes {changes}, distinct body images {}",
+        images.len()
+    );
+}
+
+/// The damage-smoke animations in play (S-0501 claim 37, the engine's
+/// fixed type name): their ids.
+fn smoke_ids(c: &Client) -> Vec<ObjectId> {
+    let w = world(c);
+    let r = w.rules_arc();
+    w.anims
+        .anims
+        .iter()
+        .filter(|(_, a)| {
+            a.anim
+                .and_then(|i| r.animations.get(i as usize))
+                .is_some_and(|t| t.name.eq_ignore_ascii_case(glasnost_sim::air::DAMAGE_SMOKE))
+        })
+        .map(|(id, _)| *id)
+        .collect()
+}
+
+/// M8 A3 intake 67 (note 40 again, S-0501 r65 and S-0113 r17): an aircraft
+/// of the note 40 type, damaged below the smoke threshold in flight until
+/// it has shown smoke, then shot down and followed until it leaves play.
+/// Screens go to `local-lane/m8/intake67/<tag>/`.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn intake_67_a_damaged_and_a_crashing_aircraft() {
+    let Some((mut c, shots)) = start_in((1280, 800), "m8/intake67") else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let mut clock = 0;
+    let home = deploy(&mut c, &mut clock);
+    let local = c.session.as_ref().unwrap().play.local;
+    let r = world(&c).rules_arc();
+    let picked = (0..r.aircraft.len()).find(|&i| {
+        let voxel = c
+            .session
+            .as_ref()
+            .unwrap()
+            .loaded
+            .import
+            .arts
+            .get(&(glasnost_convert::kinds::Kind::Aircraft, i))
+            .is_some_and(|a| a.voxels.contains_key("body"));
+        voxel && r.aircraft[i].type_locomotor() == glasnost_rules::sim::Locomotor::Fly
+    });
+    let Some(ti) = picked else {
+        println!("no flying aircraft type with a voxel body");
+        return;
+    };
+    let smoke_type = r
+        .animations
+        .iter()
+        .any(|t| t.name.eq_ignore_ascii_case(glasnost_sim::air::DAMAGE_SMOKE));
+    println!("aircraft type {ti}; the damage-smoke type is registered: {smoke_type}");
+    let at = CellXY::new(home.x + 8, home.y + 8);
+    let a = {
+        let w = world_mut(&mut c);
+        let name = w.rules().aircraft[ti].name.clone();
+        glasnost_sim::testkit::spawn(w, Kind::Aircraft, &name, local.0, at, 0)
+    };
+    let dest = CellXY::new(home.x - 14, home.y + 8);
+    c.session
+        .as_mut()
+        .unwrap()
+        .play
+        .issue(vec![glasnost_sim::orders::Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(dest)),
+        }]);
+    for _ in 0..600 {
+        ticks(&mut c, &mut clock, 1);
+        if glasnost_sim::air::height(world(&c), a) >= 400 {
+            break;
+        }
+    }
+    // Below the condition-red ratio: a third of its strength.
+    {
+        let w = world_mut(&mut c);
+        let o = w.obj_mut(a).unwrap();
+        o.health = (o.health / 3).max(1);
+    }
+    let mut alive_smokes = 0;
+    let mut seen: std::collections::BTreeSet<ObjectId> = Default::default();
+    for t in 0..400 {
+        ticks(&mut c, &mut clock, 1);
+        for id in smoke_ids(&c) {
+            if seen.insert(id) {
+                alive_smokes += 1;
+            }
+        }
+        if alive_smokes >= 3 || t == 399 {
+            println!("living: {alive_smokes} smoke animations after {t} ticks");
+            break;
+        }
+    }
+    let cell = world(&c).obj(a).unwrap().pos.cell();
+    look_at(&mut c, cell);
+    if let Some(p) = centre_of(&mut c, a) {
+        shots.save(&mut c, "i67-0-damaged");
+        shots.zoom(&mut c, "i67-0-damaged", p, (200, 160, 3));
+    }
+    let killed_at = world(&c).tick;
+    glasnost_sim::combat::damage::apply(
+        world_mut(&mut c),
+        a,
+        glasnost_sim::combat::damage::Hit {
+            amount: 1_000_000,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    );
+    println!(
+        "killed at tick {killed_at}; crashing {}",
+        glasnost_sim::air::crashing(world(&c), a)
+    );
+    let mut dead_smokes = 0;
+    let mut images = std::collections::BTreeSet::new();
+    for t in 0..200 {
+        ticks(&mut c, &mut clock, 1);
+        for id in smoke_ids(&c) {
+            if seen.insert(id) {
+                dead_smokes += 1;
+            }
+        }
+        let Some(o) = world(&c).obj(a) else {
+            println!("tick +{t}: left play");
+            break;
+        };
+        let cell = o.pos.cell();
+        let h = glasnost_sim::air::height(world(&c), a);
+        look_at(&mut c, cell);
+        let Some(p) = centre_of(&mut c, a) else {
+            continue;
+        };
+        images.extend(body_images(&c, a));
+        if t % 3 == 0 {
+            println!("tick +{t}: height {h}, smoke animations so far {dead_smokes}");
+            shots.zoom(&mut c, &format!("i67-1-crashing-t{t:02}"), p, (200, 160, 3));
+        }
+        if t == 9 {
+            shots.save(&mut c, "i67-1-crashing");
+        }
+    }
+    println!(
+        "falling: {dead_smokes} smoke animations, {} distinct body images",
         images.len()
     );
 }

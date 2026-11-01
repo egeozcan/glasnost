@@ -713,8 +713,10 @@ pub fn attitude_with(w: &World, o: &Object, rocking: &super::rocking::Rocking) -
             speed,
             turn,
             crashing: true,
-            // spec: S-0113 claim 18 (the flying locomotor draws the pitch and roll only while the aircraft is crashing)
-            tumble: angles.map_or((0, 0), |(p, r)| (p.to_bits(), r.to_bits())),
+            // spec: S-0113 claims 18 and 20 (the flying locomotor draws the pitch and roll only while the aircraft is crashing; the body at positive height is drawn fresh with claim 16's angles, so they are not held to the drawing step)
+            tumble: rocking
+                .exact_angles(o.id)
+                .map_or((0, 0), |(p, r)| (p.to_bits(), r.to_bits())),
         },
         Attitude::None if o.kind == SimKind::Vehicle => match angles {
             Some((pitch, roll)) if pitch != 0.0 || roll != 0.0 => Attitude::Rocking {

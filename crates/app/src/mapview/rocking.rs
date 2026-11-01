@@ -720,6 +720,15 @@ impl Rocking {
         Some((drawn(b.pitch), drawn(b.roll)))
     }
 
+    /// The pitch and roll of `id` as they stand, radians, single precision,
+    /// not held to the drawing step: a crashing aircraft's tumble, which
+    /// S-0113 claim 20 draws fresh with its exact angles. `None` when it has
+    /// no body here.
+    pub fn exact_angles(&self, id: ObjectId) -> Option<(f32, f32)> {
+        let b = self.bodies.get(&id)?;
+        Some((f32::from_bits(b.pitch.0), f32::from_bits(b.roll.0)))
+    }
+
     /// The lean of a sinking vessel that was rocked when it began to sink,
     /// if the view steps it (S-0504 claim 15, *Starting value*).
     pub fn lean(&self, id: ObjectId) -> Option<F32> {
