@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 89
+revision: 94
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-01
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230, Q-2247]
 supersedes: []
 ---
 
@@ -1168,9 +1168,22 @@ Terms).
     any actor (claims 4 and 5), with no test of whether a click would give the joining holder that
     action. A vehicle that issues an engineer's copied *capture* on an enemy building gets
     *capture* with the building as its destination and no target, and S-0215 claim 28 processes
-    it as for any vehicle in *capture*. The vehicle does not attack the building, since the order
-    names no target, and never captures it, since only an infantry unit makes a building entry
-    (S-0509 claim 1). Its route goes on as any holder's does (claim 16c): it issues its next
+    it as for any vehicle in *capture*. The order names no target, so the vehicle fires at nothing
+    while it heads for the building. A drive vehicle (S-0207 Terms) armed in S-0209 claim 5's sense
+    (it has a primary weapon) whose type is neither a train type nor has the crusher flag attacks
+    the building once its next step is a cell of the
+    building: an armed vehicle's step check of that cell gives *enemy obstacle* (S-0209 claim 5,
+    row VP28, unless an earlier row of that table decides it), which S-0209 part 5f does not
+    change for such a type, and a repeated check (S-0207 Terms) whose step enters a cell of the
+    building makes it attack the first object listed in the cell by an override, with no
+    destination (S-0207 claim 15, table T4, and S-0215 claim 10). For an unarmed vehicle,
+    a vehicle of another movement kind, or one of a train type or with the crusher flag, this is
+    not claimed.
+    That object is the building when nothing else is listed there (medium). The vehicle never
+    captures the building, since only an infantry unit makes a building entry (S-0509 claim 1).
+    A copied *sabotage* behaves in the same way: its order also has the building as its
+    destination and no target (S-0214 table M), and S-0215 claim 28 processes *sabotage* as
+    *capture* (medium). Its route goes on as any holder's does (claim 16c): it issues its next
     point, if it has one, at its next fall-back to rest (medium).
 
     A refusal leaves the route unchanged. For the local player's own orders it shows a message,
@@ -1248,8 +1261,10 @@ Terms).
       the *enter* that a full-health vehicle's point on an own repair building issues (part ab),
       and for the engineer's *capture* that a joining vehicle issues (part ac), and `unmeasured`
       otherwise: no scenario here changes, between the add and the issue, anything that a point's
-      action depends on. The joining vehicle's making no shot at the building and not capturing it
-      are `measurable` in part ac. That its route goes on at its next fall-back to rest is
+      action depends on. The joining vehicle's making no shot at the building before its next step
+      is a cell of the building, its attack on the building by the override at that step, and its
+      not capturing the building are `measurable` in part ac, for *capture* in run 1 and for
+      *sabotage* in run 2. That its route goes on at its next fall-back to rest is
       `unmeasured`: a *capture* point is terminating, so part ac's copy has no later point.
     - Confidence: high that the click takes its ordinary S-0214 action, and for the deploy
       refusal for a vehicle or infantry unit; medium for the four refusal cases and their
@@ -1258,9 +1273,10 @@ Terms).
       kept per holder, the order's place, the order a holder issues being the one recorded at the
       add or copied at a join with no new classification, a copied action that a click would
       not give the joining holder being applied as for any actor (a joining vehicle's copied
-      *capture* giving it *capture*, no shot at the building and no capture, and its route going
-      on at its next fall-back to rest, unmeasured), the info messages, the sound and
-      the three conditions
+      *capture* or *sabotage* giving it that behaviour, no shot at the building before its step
+      into the building, the override's attack on the building at that step, and no capture, and
+      its route going on at its next fall-back to rest, unmeasured), the info messages, the sound
+      and the three conditions
       of the point-click test, and for the holder that a join copies (holders given the point
       in the same tick included) and what the copy holds and loops; medium for the copied
       points' being uncommitted until the next commit; low for
@@ -3445,20 +3461,30 @@ Q-1753).**
     the cursor in either run does not show *enter* over D, the part decides nothing.
   - *(ac) A copied capture issued by a vehicle (claim 16b, *Joins*):* a network game of two humans
     not allied (as in part h). The first player has an infantry unit N of a type that captures
-    buildings and an armed ground vehicle T, both at rest and neither having held a route point.
-    The second player has a building X of a type that N can capture, built up and not being sold,
-    and makes no input. T's own click action on X is *attack*. F is a bare cell far from X, on the
-    side of N away from X, so that N's trip to F and back to X lasts longer than T's trip to X.
-    Select N alone, hold the key, click F, then X (the cursor shows *capture* over X), and keep
-    the key held. Click T to select it, press the marker of the point at X's place, and release.
-    Record, every tick from the release until N reaches F, T's current and queued behaviour, its
-    target and destination, its cell, every shot of T's, and X's owner and health. Expected: T
-    issues an order whose action is *capture*, with no target and with X as its destination, has
-    *capture* current, and heads for X. T makes no shot at X, and X keeps its owner and health.
-    Falsified if T issues another order (*attack* on X, as its own click would give, or a
-    *move*), issues none, fires at X, or X changes owner or loses health while N is still on its
-    way to F. If the cursor does not show *capture* over X at N's click, or T is not given the
-    point, the part decides nothing.
+    buildings and a drive vehicle T (S-0207 Terms) with a primary weapon (armed as in S-0209
+    claim 5), of a type that is neither a train type
+    nor has the crusher flag, not a crusher and in contact with nothing (S-0209 Terms), both at
+    rest and neither having held a route point. The second player has a building X of a type that
+    N can capture, built up and not being sold, not cloaked, and of none
+    of the kinds that S-0209 claim 5 rows VP5 to VP16 and VP27 name (so that, with nothing else
+    listed in X's cells, no row before VP28 decides any of them for T), and makes no input. T's own
+    click action on X is *attack*. F is a bare cell far from X, on the side of N away from X, so
+    that N's trip to F lasts longer than T's trip to X. Select N alone, hold the key, click F, then
+    X (the cursor shows *capture* over X), and keep the key held. Click T to select it, press the
+    marker of the point at X's place, and release. Record, every tick from the release until N
+    reaches F, T's current and queued behaviour, its target and destination, its cell, every shot of
+    T's, and X's owner and health. Expected (run 1): T issues an order whose action is *capture*,
+    with no target and with X as its destination, has *capture* current, and heads for X. T makes no
+    shot at X, and X keeps its owner and health, until T stands in a cell next to X. While T stands
+    in that cell, before it enters any cell of X, it gets *attack* current with X as its target and
+    no destination, and X keeps its owner while N is on its way to F. Falsified if T issues another
+    order (*attack* on X, as its own click would give, or a *move*) or issues none, if T fires at X
+    or X loses health before T stands next to X, if T enters a cell of X, or if T still has
+    *capture* current with no target when N reaches F, X standing. Run 2: as run 1, with N of a type
+    that plants explosive charges and X of a type that accepts them and meets run 1's conditions on
+    X, the cursor showing *sabotage* over X at N's click; the same expectations and falsifiers with
+    *sabotage* in place of *capture*. If the cursor does not show the run's action over X at N's
+    click, or T is not given the point, the run decides nothing.
 
 **Scenario O9: one input event per cycle (claims 1 and 3).**
 - *Setup:* one vehicle of the player's, selected, moving towards a far cell *A*. Game speed 6
@@ -4034,6 +4060,11 @@ extension is a design rule and has no oracle measurement.
   sends its order directly with no point, and the *unload* that lets a building's occupants out
   is a point add at the building's own place. Question 2 is answered by claim 16b (*Joins*) and
   Scenario O8 part ac.
+- Q-2247 is answered by claim 16b (*Joins*) and Scenario O8 part ac: a drive vehicle with a
+  primary weapon, not of a train type and without the crusher flag, in a copied *capture*
+  attacks the building by an
+  override once its next step is a cell of the building (question 1, so question 2 does not
+  arise), and a copied *sabotage* does the same (question 3).
 - Q-2228 is answered by claim 16d (*Aircraft and buildings*) and Scenario O8 part x (7): a
   building under *move* starts a later *attack* order when it has no turret and never when it
   has one, as S-0215 claim 11 already gives. S-0215 needs no change.
