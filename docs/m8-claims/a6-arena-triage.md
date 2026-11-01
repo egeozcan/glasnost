@@ -51,7 +51,7 @@ the stock's outcome on the failing side.
 | 15 | M-0003 | MTNK–HTNK | side outcome, side B | col 6 of 6 | col 63 of 64 (*p*⁶ = 0.91) | (d) | – | – | none | fail | fail |
 | 16 | M-0003 | MGTK–APOC | side outcome, side A | col 6 of 6 | col 61 of 64 (*p*⁶ = 0.75) | (d) | – | – | none | fail | fail |
 | 17 | M-0003 | ROBO–APOC | side outcome, side A | none 6 of 6 | none 0 of 64 (col 64) | (b) | As row 11: the disabled ROBO are all destroyed | as row 11 | **Q-1710** (answered, as row 11); the stall: **Q-2157** | fail | fail (A6); fail after intake 52b: ours col 12 of 12 games (stock none 11 of 12); **pass** after intake 61 (Q-2157 answered, as row 11): ours none 12 of 12 |
-| 18 | M-0003 | ROBO–HTK | side outcome, both sides (seeds 0 to 5: A none 1, B none 2) | col 6 of 6 on each side | side B col 23 of 64 (none 41), side A col 59 of 64 | (b) | New after intake 61 (S-0306 r53): the HTK leave the disabled robot tanks of the rear column standing | S-0306 claim 3 b, T1 | **Q-2216** | pass | fail after intake 61 ([ledger](intake61-S-0607-S-0306.md)) |
+| 18 | M-0003 | ROBO–HTK | side outcome, both sides (seeds 0 to 5: A none 1, B none 2) | col 6 of 6 on each side | side B col 23 of 64 (none 41), side A col 59 of 64 | (b) | New after intake 61 (S-0306 r53): the HTK leave the disabled robot tanks of the rear column standing | S-0306 claim 3 b, T1 | Q-2216 (answered by S-0306 r62, intake 65: as built; P45 part a is the lead's record) | pass | fail after intake 61 ([ledger](intake61-S-0607-S-0306.md)); unchanged after intake 65 ([ledger](intake65-S-0306.md)) |
 
 Totals: (a) 0, (b) 5 (four requests, one open request reused), (c) 0, (d) 12.
 
