@@ -501,7 +501,7 @@ fn f4_unmatched_second_run() {
 // ---------------------------------------------------------------------------
 // The let-go events of the fire place, whatever the held system's kind
 
-/// spec: S-0301 claim 5, place-and-kind rule (revision 63, Q-2181: the fire place's let-go events are a retarget to a target not within reach, a move order and the firer's death; a let-go marks the system the place holds, whatever its kind) and S-0616 claim 1 (a new target within reach keeps it)
+/// spec: S-0301 claim 5, place-and-kind rule (revision 63, Q-2181: the fire place's let-go events are a retarget to a target not within reach, a move order and the firer's death; a let-go marks the system the place holds, whatever its kind; revision 67, Q-2246: the retarget test is made at the change of the target) and S-0616 claim 1 (a new target within reach keeps it)
 #[test]
 fn fire_place_let_go_of_a_spark_kind_system() {
     // A retarget out of reach.
@@ -526,7 +526,10 @@ fn fire_place_let_go_of_a_spark_kind_system() {
     w.obj_mut(a).unwrap().target = Some(Target::Object(b));
     assert!(fire::shot(&mut w, a, 0, Target::Object(b)));
     let s = emitters::held(&w, a, Place::Fire).expect("held in the fire place");
+    // Revision 67 (Q-2246): the test is made at the change of the target,
+    // so each write is followed by the engine's at-change call.
     w.obj_mut(a).unwrap().target = Some(Target::Object(near));
+    emitters::retarget_let_go(&mut w, a);
     gas::system_turn(&mut w, s);
     assert_eq!(
         emitters::held(&w, a, Place::Fire),
@@ -535,7 +538,7 @@ fn fire_place_let_go_of_a_spark_kind_system() {
     );
     assert!(!w.gas.systems[&s].ending);
     w.obj_mut(a).unwrap().target = Some(Target::Object(far));
-    gas::system_turn(&mut w, s);
+    emitters::retarget_let_go(&mut w, a);
     assert_eq!(
         emitters::held(&w, a, Place::Fire),
         None,
