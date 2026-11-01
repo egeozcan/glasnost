@@ -571,7 +571,10 @@ fn claim_16b_a_deploy_click_is_refused() {
     assert_eq!(plain.orders.len(), 1, "a deploy order outside route mode");
     let shown = targeting::cursor(&w, A, &[m], on, Modifiers::default());
     assert_eq!(shown, Action::Deploy);
-    assert_eq!(targeting::in_route_mode(shown), Action::NoDeploy);
+    assert_eq!(
+        targeting::in_route_mode(&w, &[m], on, shown),
+        Action::NoDeploy
+    );
     assert_eq!(
         routes::click(&w, A, &[m], ClickOn::Object(m), Modifiers::default()),
         RouteClick::Ignored

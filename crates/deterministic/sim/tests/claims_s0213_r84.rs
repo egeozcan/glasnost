@@ -12,7 +12,7 @@ use glasnost_sim::orders::{self, Order};
 use glasnost_sim::routes::{self, RouteClick, RouteNote};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::structures::absorb;
-use glasnost_sim::targeting::{self, ClickOn, Modifiers};
+use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
@@ -818,7 +818,7 @@ fn claim_16b_a_buildings_move_on_an_object_and_primary_are_sent_directly() {
     );
 }
 
-/// spec: S-0213 claim 16b (revision 87: a building is given its deploy action only by a click on the building itself; each behaviour order *unload* that the action gives names the building itself as its target, so it has the building's own place and is a point add there; its points are issued as claim 16d says) and Changes for other specs (S-0214 table M part 3, deploy row)
+/// spec: S-0213 claim 16b (revision 87: a building's deploy action is not refused in route mode; a building is given its deploy action only by a click on the building itself; each behaviour order *unload* that the action gives names the building itself as its target, so it has the building's own place and is a point add there; its points are issued as claim 16d says) and Changes for other specs (S-0214 table M part 3, deploy row)
 #[test]
 fn claim_16b_a_buildings_unload_is_a_point_at_its_own_place() {
     let mut w = game();
@@ -829,6 +829,13 @@ fn claim_16b_a_buildings_unload_is_a_point_at_its_own_place() {
     let os = targeting::click(&w, A, &[u], ClickOn::Object(bio), Modifiers::default()).orders;
     give(&mut w, os);
     run_until(&mut w, 900, |w| absorb::absorbed_in(w, u) == Some(bio));
+    // Its deploy action is not refused in route mode: the cursor keeps deploy.
+    let shown = targeting::cursor(&w, A, &[bio], ClickOn::Object(bio), Modifiers::default());
+    assert_eq!(shown, Action::Deploy);
+    assert_eq!(
+        targeting::in_route_mode(&w, &[bio], ClickOn::Object(bio), shown),
+        Action::Deploy
+    );
     let got = routes::click(&w, A, &[bio], ClickOn::Object(bio), Modifiers::default());
     let RouteClick::Orders(os) = got else {
         panic!("a point add: {got:?}")

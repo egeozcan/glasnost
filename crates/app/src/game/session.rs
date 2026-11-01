@@ -2048,9 +2048,9 @@ impl Session {
                     Offer::AttackMove
                 } else {
                     let action = targeting::cursor(w, local, sel, on, mods);
-                    // spec: S-0214 table VD row VD1, table I rows v2 and I22 (route mode held: no-deploy)
+                    // spec: S-0214 table VD row VD1, table I rows v2 and I22 (route mode held: no-deploy); S-0213 claim 16b (revision 87: not a building's deploy)
                     let action = if self.route.held {
-                        targeting::in_route_mode(action)
+                        targeting::in_route_mode(w, sel, on, action)
                     } else {
                         action
                     };
