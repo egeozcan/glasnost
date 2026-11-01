@@ -358,7 +358,7 @@ fn f4_third_run_a_marked_spark_system_keeps_bursting() {
     assert!(x.ending, "marked");
 }
 
-/// spec: S-0301 Changes for other specs, S-0616 (d) (revision 67, Q-2246: a marked system makes no emission, though the mark does not stop a spark system's bursts while its K is above 0, S-0616 claim 15) and S-0616 claim 15 (K counts down by 1 each turn whatever the mark)
+/// spec: S-0301 Changes for other specs, S-0616 (d), taken in by S-0616 Terms *Marked* and claim 15 (revision 27) (revision 67, Q-2246: a marked system makes no emission, though the mark does not stop a spark system's bursts while its K is above 0, S-0616 claim 15) and S-0616 claim 15 (K counts down by 1 each turn whatever the mark)
 #[test]
 fn a_marked_spark_system_bursts_while_its_counter_lasts() {
     let mut w = testkit::game_with(&rules(), N, 7);

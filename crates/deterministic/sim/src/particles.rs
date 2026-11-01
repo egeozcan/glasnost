@@ -340,7 +340,7 @@ pub fn smoke_turn(w: &mut World, sys: ObjectId) {
     for i in 0..n {
         update_one(w, sys, i);
     }
-    // spec: S-0616 claim 5 (the removal pass, newest first, before any move: a dead particle splits into successors, claim 8, and is removed)
+    // spec: S-0616 claim 5 (the removal pass, newest first, before any move: a dead particle splits into successors, claim 8, and is removed) and claim 8 (revision 27: also in a marked system, so the pass never reads the mark)
     removal_pass(w, sys);
     // spec: S-0616 claims 5 and 7 (then each particle without the dead mark moves)
     let Some(s) = w.gas.systems.get(&sys) else {
@@ -985,6 +985,7 @@ pub fn spark_turn(w: &mut World, sys: ObjectId) {
     };
     let half = w.rules().quirks.ranged_draw_half_span;
     let m = mode(w);
+    // spec: S-0616 claim 15 (revision 27: the table reads only K, not whether the system is marked: a marked spark system whose K is above 0 still bursts)
     let k = s.sparks;
     if t.spark_turns <= 0 {
         // spec: S-0616 claims 15 and 20 (a type's spark-turns field of 0 or less is bad data: our engine marks the system in its first turn, with no burst and no draw of claim 15; its particles still update; a fix with no switch, lead decision)
