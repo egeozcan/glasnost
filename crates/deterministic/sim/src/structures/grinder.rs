@@ -17,7 +17,6 @@
 use crate::combat::effects::Effect;
 use crate::econ::TypeRef;
 use crate::rules::{Behaviour, Kind};
-use crate::scatter::{self, ScatterRequest};
 use crate::transport::Answer;
 use crate::world::{HouseId, Layer, ObjectId, Target, World};
 
@@ -127,65 +126,21 @@ pub fn bound_for(w: &World, u: ObjectId, b: ObjectId) -> bool {
 // ---------------------------------------------------------------------------
 // The eaten processing (claim 3, S-0215 claim 28)
 
-/// Whether an actor is a building taker for *eaten* (S-0215 claim 28): an
-/// infantry unit with explosive charges or an engineer; occupiers,
-/// assaulters and infiltrators do not count here.
-fn building_taker(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.kind == Kind::Infantry)
-        && (crate::bomb::has_charges(w, id) || crate::structures::engineer::is_engineer(w, id))
-}
-
-/// The *eaten* processing of an infantry unit or vehicle (claim 3, S-0215
-/// claim 28's table with its *eaten* differences). Returns the delay.
+/// The *eaten* processing of an infantry unit, vehicle or aircraft (claim
+/// 3, S-0215 claim 28's table with its *eaten* differences, shared with
+/// *capture* in `process::process_capture`). Returns the delay.
 pub fn process_eaten(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return crate::process::standard_delay(w, id);
     };
-    let mut dest = o.dest;
-    if let Some(Target::Object(k)) = dest
+    if let Some(Target::Object(k)) = o.dest
         && w.obj(k).is_none_or(|x| !x.on_map)
     {
         // spec: S-0603 claim 15 (a destination building that has left the game is cleared)
         crate::econ::assign_destination(w, id, None);
-        dest = None;
     }
-    let target_building = match o.target {
-        Some(Target::Object(t)) => w
-            .obj(t)
-            .is_some_and(|x| x.kind == Kind::Building && x.on_map),
-        _ => false,
-    };
-    if dest.is_none() {
-        if target_building && building_taker(w, id) {
-            // spec: S-0215 claim 28 row 1 (no destination; the target a building and the actor a building taker: the target becomes its destination)
-            crate::econ::assign_destination(w, id, o.target);
-        } else {
-            // spec: S-0603 claim 3 and S-0215 claims 14, 15 and 28 row 2 (no destination: it falls back to rest; a vehicle in eaten queues nothing)
-            crate::process::fall_back(w, id, false);
-            let on_building = w.obj(id).is_some_and(|x| {
-                x.on_map
-                    && w.cells
-                        .list(x.pos.cell(), Layer::Ground)
-                        .iter()
-                        .any(|&b| w.obj(b).is_some_and(|y| y.kind == Kind::Building))
-            });
-            if on_building {
-                // spec: S-0215 claim 28 (the scatter off a building: no threat point, forced, not move-anywhere)
-                scatter::request(
-                    w,
-                    id,
-                    ScatterRequest {
-                        threat: None,
-                        forced: true,
-                        anywhere: false,
-                    },
-                );
-            }
-            // spec: S-0215 claim 28 (in our engine the hunt rule never applies; for eaten it never applies in the original either)
-        }
-    }
-    // spec: S-0215 claim 28 rows 3 and 4 (a destination: no change; the hunt rule never applies to eaten) and the standard delay
-    crate::process::standard_delay(w, id)
+    // spec: S-0603 claim 3 and S-0215 claim 28 (eaten is processed by the capture table, occupiers, assaulters and infiltrators not counting as building takers; a vehicle in eaten queues nothing when it falls back, claim 15)
+    crate::process::process_capture(w, id, true)
 }
 
 // ---------------------------------------------------------------------------
