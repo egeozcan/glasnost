@@ -444,6 +444,10 @@ const ROLL_ANGLE_DEFAULT: f64 = 0.5235987755982988;
 /// The speed fraction a flying body must exceed to pitch and bank.
 // spec: S-0105 Import mapping (PitchSpeed: 0.25)
 const PITCH_SPEED_DEFAULT: f64 = 0.25;
+/// Marks a crashing body's image-cache angles as F1 table steps (0 … 8191)
+/// rather than a rocking body's single-precision angle bits: a cache key
+/// of ours, not a behaviour.
+const TUMBLE_STEP_TAG: u32 = 1 << 31;
 
 /// A type's drawing angle in radians (S-0105 Import mapping): the degrees
 /// multiplied by the binary64 π/180, rounded toward zero; −1 keeps the value
@@ -5057,9 +5061,13 @@ impl<'a> Builder<'a> {
             // spec: S-0113 claim 20 (a crashing flying body at strictly positive signed height: V · Rz(θ_flight) · Rx(φ) · Ry(ψ′), whatever the size of its angles; the shadow on the heading alone)
             Tilt::Tumbling { pitch, roll } => voxel::crashing_body_pose(heading, roll, pitch, &q),
         };
-        // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles); S-0113 claim 20 (a crashing body at positive height is drawn fresh, never reused: kept apart under its exact drawn pitch ψ′ and roll, so the same tumble with and without α never shares an image)
+        // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles)
         let list = match tilt {
-            Tilt::Tumbling { pitch, roll } => Some((pitch.to_bits(), roll.to_bits())),
+            // spec: S-0113 claim 20 (a crashing body at positive height is drawn fresh, never reused, with the rotations of S-0105 F1): the drawn transform depends on ψ′ and φ only through their F1 table steps, so the images are kept apart under those steps, as a rocket's fresh pitch is (S-0105 claim 41); the pixels are a fresh draw's and the retention is bounded by the table. The high bit keeps these apart from a rocking body's angle bits.
+            Tilt::Tumbling { pitch, roll } => Some((
+                voxel::table_step(f64::from(pitch), &q) | TUMBLE_STEP_TAG,
+                voxel::table_step(f64::from(roll), &q) | TUMBLE_STEP_TAG,
+            )),
             _ => rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits())),
         };
         let object = m.object;
@@ -5141,7 +5149,7 @@ impl<'a> Builder<'a> {
             }
             Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
             Tilt::Flying(a) => voxel::flying_body_key(heading, body_frame, &a),
-            // spec: S-0113 claim 20 (the body at positive height is drawn fresh, never reused, S-0105 claim 26: its images are kept apart under the exact ψ′ and φ, `list` above, beside the level key)
+            // spec: S-0113 claim 20 (the body at positive height is drawn fresh, never reused, S-0105 claim 26: its images are kept apart under the F1 table steps of ψ′ and φ, `list` above, beside the level key)
             Tilt::Tumbling { .. } => {
                 voxel::flying_body_key(heading, body_frame, &voxel::FlightAttitude::LEVEL)
             }
