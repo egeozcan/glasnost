@@ -1,9 +1,9 @@
 ---
 id: Q-2231
 title: What do a projectile's target-object effects do to a departed warp member, and which render layer is a member that departed from a deck in?
-status: open
+status: answered
 related: [S-0306, S-0513, S-0514, S-0102]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
