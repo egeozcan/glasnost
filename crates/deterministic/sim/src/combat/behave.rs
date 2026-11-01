@@ -239,6 +239,20 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
         let answer = check(w, id, Some(t), slot, true);
         // spec: S-0516 claim 11 (a) (cloaked: the infantry unit starts uncloaking)
         crate::cloak::machine::firing_answer(w, id, slot, t, answer);
+        if answer == Answer::Illegal {
+            // spec: S-0309 r70's Changes for S-0310 claim 11 (an infantry unit whose default weapon heals replies to illegal in its own firing step, in each of its turns: it drops a target that is not infantry or is at full health, and keeps an infantry target below full health and does nothing in that step)
+            let default_heals = slot_weapon(w, id, choose_slot(w, id, None))
+                .is_some_and(|x| rules.combat.weapon(x).damage < 0);
+            if default_heals {
+                let keep = matches!(t, Target::Object(x)
+                    if w.obj(x).is_some_and(|ob| ob.kind == Kind::Infantry)
+                        && crate::combat::damage::strength(w, x) > w.obj(x).map_or(0, |ob| ob.health));
+                if !keep && let Some(ob) = w.obj_mut(id) {
+                    crate::spawn::clear_own_target(ob);
+                    ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+                }
+            }
+        }
         if answer != Answer::CanFire {
             return;
         }

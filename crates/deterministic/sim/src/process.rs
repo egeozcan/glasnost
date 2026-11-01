@@ -1184,7 +1184,10 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
     // spec: S-0518 claim 15 (an infantry unit whose charging mark is set first runs an automatic range search, without the timer gate)
     crate::linked::break_off(w, id);
     let o = w.obj(id).cloned().unwrap_or(o);
-    if let Some(t) = o.target {
+    if let Some(t) = o.target
+        // spec: S-0309 r70's Changes for S-0304 claim 2 (an actor that S-0309 claim 29 covers drops an illegal target at that claim's periodic check, not at its attack processing; for the others, interim Q-2263, S-0304 claim 2's drop at the first check of the attack that answers illegal)
+        && !crate::combat::held::periodic_covers(w, id)
+    {
         let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
         // spec: S-0304 claim 2 (the target is dropped, and the attack stopped, at the first check that answers illegal)
         if crate::combat::check::check(w, id, Some(t), slot, true)

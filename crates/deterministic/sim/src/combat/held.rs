@@ -2,10 +2,16 @@
 //! of an object as its target drops it when the object is destroyed, goes
 //! off the map or is removed, inside that action; each drop resets the
 //! holder's targeting timer; a revert can give the object back, and our
-//! engine's design rule for such a target (claim 27, DECIDED).
+//! engine's design rule for such a target (claim 27, DECIDED). Also the
+//! periodic held-target check of claim 29: a held target that the firing
+//! check refuses is dropped in a check tick.
 
-use crate::rules::Kind;
+use crate::combat::check::Answer;
+use crate::rules::{Behaviour, Kind};
 use crate::world::{Object, ObjectId, Target, World};
+
+// spec: S-0309 claim 29 and Constants (held-target check period 16 ticks: checks fall in the ticks whose tick number is a multiple of it)
+const CHECK_PERIOD: i32 = 16;
 
 // spec: S-0309 claim 27 (a draw only when the targeting timer has more than 10 integer ticks left; S-0501 claim 37 for an aircraft)
 const DROP_TIMER_LEFT: i32 = 10;
@@ -115,6 +121,85 @@ pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
     // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 claim 39 leaves a departed warp member's handling by the holder open: interim Q-2211, the same rule
     o.target
         .filter(|t| !matches!(*t, Target::Object(x) if left(w, x)))
+}
+
+/// Whether claim 29's periodic check covers holder `id` by its owner
+/// (S-0309 claim 29): every holder of a human-controlled owner, which in
+/// our engine is every player house, AI houses included (S-0309 Terms,
+/// *Houses in our engine*). Whether the original applies the check to
+/// holders of the neutral and special houses is open (S-0309 Open
+/// questions, *Other holders and targets*): interim Q-2263, they are not
+/// checked and keep S-0304 claim 2's drop at their attack processing. The
+/// check is the same whatever gave the target (an order, a search, a
+/// retaliation or a revert: the engine does not record which; the last two
+/// are open in the same question, interim Q-2263, checked).
+pub fn periodic_covers(w: &World, id: ObjectId) -> bool {
+    // spec: S-0309 claim 29 (holders of a human-controlled owner: every player house in our engine) and Terms (Test-only exception: a marked player house takes the computer-owner rules)
+    crate::combat::acquire::player_owned(w, id)
+}
+
+/// Whether tick number `t` is a check tick of claim 29: a multiple of the
+/// check period, the same ticks for every object (shared phase).
+pub fn check_tick(t: i32) -> bool {
+    // spec: S-0309 claim 29 (Phase: every object checks in the same ticks, those whose tick number is a multiple of 16)
+    t.rem_euclid(CHECK_PERIOD) == 0
+}
+
+/// The periodic held-target check (S-0309 claim 29), in holder `id`'s own
+/// turn. In a check tick, a covered infantry unit, vehicle, aircraft or
+/// building whose current behaviour is *attack* or *guard* asks the firing
+/// check about its target, without the range test, for the weapon it would
+/// use against it; on *illegal* or *impossible* it drops the target. The
+/// drop takes no targeting-timer draw, causes no revert and changes no
+/// behaviour; a spawner gets no exception (claim 4's keep on *impossible*
+/// ends here).
+///
+/// The caller places it at the start of the turn, after the warp update
+/// (S-0513 claim 51 and S-0203 claim 4: a warp member takes no check from
+/// its first pending update through its arrival effects; in the arrival
+/// hold it comes after the hold-end test) and before the behaviour
+/// processing, the searches and the firing step. Where in the turn the
+/// check falls against those is open (S-0309 Open questions, *Place of the
+/// periodic check*, and *A refusal that begins in the holder's turn*):
+/// interim Q-2261, this place. Against a building's pending delayed shot it
+/// comes first, as claim 29 requires: that shot still answers *rearming*.
+pub(crate) fn periodic_check(w: &mut World, id: ObjectId) {
+    if !check_tick(w.tick) {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0309 claim 29 (every infantry unit, vehicle, aircraft and building)
+    if !matches!(
+        o.kind,
+        Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+    ) {
+        return;
+    }
+    let Some(t) = o.target else { return };
+    // spec: S-0309 claim 29 (Behaviours: a holder whose current behaviour is attack or guard makes the check; capture and sabotage make none; the others are open, S-0309 Open questions, Other behaviours: interim Q-2262, no check)
+    if !matches!(o.beh.current, Some(Behaviour::Attack | Behaviour::Guard)) {
+        return;
+    }
+    // spec: S-0309 claim 29 (Turns cut short: a building being erased makes no check; an infantry unit, vehicle or landed aircraft being erased drops its target instead in each of its turns, S-0215 claim 2; a materialising holder on which a temporal beam is locked is open, interim Q-2264: being erased, no check)
+    if crate::temporal::erased(w, id) {
+        return;
+    }
+    if !periodic_covers(w, id) {
+        return;
+    }
+    // spec: S-0309 claim 29 (the weapon it would use against the target, S-0308 and S-0304 claim 6)
+    let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
+    // spec: S-0309 claim 29 (Answers: S-0301 claim 9's, with its ranks, without the range row)
+    let answer = crate::combat::check::check(w, id, Some(t), slot, false);
+    // spec: S-0309 claim 29 (illegal or impossible drops the target; any other answer leaves it held)
+    if !matches!(answer, Answer::Illegal | Answer::Impossible) {
+        return;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0309 claim 29 (The drop: the target set to none with claim 24's consequences, a spawner's conditional pending-target clear and an airstrike's cancellation through the target change; no targeting-timer draw; no revert, S-0215 claim 10; no behaviour change)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
 }
 
 /// The start of a holder's turn (S-0309 claim 27, DECIDED): a held object
