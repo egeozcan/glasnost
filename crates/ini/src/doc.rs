@@ -413,6 +413,7 @@ mod tests {
     }
 
     /// spec: S-0001 claims 5, 7 and 14; S-0001 scenarios L4, L5g, L12b, L12c
+    /// measure: M-0012 (claim 5's fresh-load case, measured for one key: the end-to-end comparison is `glasnost_convert`'s `a_rules_files_unterminated_last_line_reads_as_absent`)
     #[test]
     fn final_line_and_order() {
         let (d, w) = parse("[T]\nCost=5");
