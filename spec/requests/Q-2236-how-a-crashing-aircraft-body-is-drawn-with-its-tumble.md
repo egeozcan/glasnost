@@ -1,9 +1,9 @@
 ---
 id: Q-2236
 title: How a crashing flying-locomotor aircraft's body is drawn with its tumble angles
-status: open
+status: answered
 related: [S-0113, S-0105, S-0106, S-0504, S-0312, S-0501]
-answered-by: []
+answered-by: [S-0113]
 ---
 
 ## Need
