@@ -43,14 +43,18 @@ All tests are in `crates/deterministic/sim/tests/claims_s0215_capture.rs` unless
 
 ## Goldens
 
-Only `duel-m6c` moved, in all 1200 lines. Its engineers and charge carriers take the standard
-delay's draw from the first ten ticks on. The other eight goldens are unchanged.
+Only `duel-m6c` moved, in all 1200 lines, from the first recorded tick (tick 10) on. The likely
+cause, not traced, is that its engineers and charge carriers now take the standard delay's draw.
+The other eight goldens are unchanged. The golden was regenerated before the rebase onto intakes
+65 and 67. After the rebase only the debug prefix was checked against it: `cargo xtask gate` was
+stopped by the system for low memory and was not rerun, so the full run is unverified.
 
 ## Lanes
 
 The "before" numbers are intake 66's "after" (`local-lane/m8/intake66/after/`), which is the same
 code as this branch's base (`git diff 797614e^2 797614e -- crates` is empty). "After" is
-`local-lane/m8/seam-capture/after/`.
+`local-lane/m8/seam-capture/after/`, run on the branch before its rebase onto intakes 65 and 67,
+so both sides share the same base.
 
 | Lane | Before | After |
 |---|---|---|
@@ -81,11 +85,13 @@ earlier ticks for seed 7 (`local-lane/m8/seam-capture/after/quick-dump/`):
 
 - **Object destination, no target (row 4).** These are engineers sent to capture, spies sent to
   infiltrate and occupiers sent to garrison, all in *capture*, and charge carriers sent to sabotage
-  in *sabotage*. All of them stand on a different cell at N−1 than at N−301, so they are on their
-  way. Row 4 leaves them as they are, because the hunt rule does not apply in our engine. There are
-  more of them than before: units that used to stay in *capture* with nothing to do now fall back
-  and are idle, so the AI's garrison, capture and sabotage steps send them out again. Seed 8 was
-  not dumped. Its entries are of the same kind (5 *capture*, 2 *sabotage*, each ×1).
+  in *sabotage*. Every one of them that appears in both dumps stands on a different cell at N−1
+  than at N−301, so it is on its way. Some appear in only one of the two dumps. Row 4 leaves them
+  as they are, because the hunt rule does not apply in our engine. There are more of them than
+  before. The likely reason, not traced: units that used to stay in *capture* with nothing to do
+  now fall back and are idle, so the AI's garrison, capture and sabotage steps send them out
+  again. Seed 8 was not dumped. Its entries are of the same kind (5 *capture*, 2 *sabotage*, each
+  ×1).
 - **No destination, no target (seed 9, the game that ends at 49,827).** An engineer whose
   destination was set at N−301 and cleared by N−1. Its next processing, which applies row 2, had
   not come yet when the game ended.
