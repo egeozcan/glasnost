@@ -2,13 +2,13 @@
 id: S-0113
 title: Body rocking
 topic: rendering
-revision: 15
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-01
 measurements: []
-requests: [Q-2081]
+requests: [Q-2081, Q-2236]
 supersedes: []
 ---
 
@@ -23,7 +23,8 @@ Claims 1 to 4 answer Q-2081 question 1, claims 5 to 9 question 2, claim 3 and cl
 question 3, claim 6 question 4, claims 3 and 11 question 5, claim 13 question 6, claim 14
 question 7 and claims 18 and 19 question 8. The causes of a push stay with the specs that own
 them (S-0303 claim 20, S-0514 claim 20, S-0614 claims 9 and 10, S-0601 claim 16, S-0210,
-S-0312 claim 16); this spec gives what a push of each kind does to the angles.
+S-0312 claim 16); this spec gives what a push of each kind does to the angles. Claim 20 answers
+Q-2236: how a crashing aircraft's body is drawn with its tumble.
 
 ## Terms
 
@@ -362,23 +363,26 @@ define *melee-linked*.
 
 18. **Drawing.** The driving, naval, hovering and jumpjet locomotors draw a body with its pitch
     and roll (S-0106 claim 9, S-0504 F5). The flying locomotor draws them only while the aircraft
-    is crashing. The walking, mechanical walking, drop-pod and teleporting locomotors draw the
-    body without them, although their angles still step. The tunnelling locomotor draws the body
-    without them too: with the cell's slope tilt, or with its own digging pitch (S-0106). The rocket
-    locomotor draws its own attitude (S-0105 claim 41) and not the rocking angles.
-    - Backing: `measurable` (RK2 part b) for the walking body's angles stepping. The drawing is
-      `unmeasured` for every locomotor: RK8 records fire points and RK9 records angles and rates,
-      not drawing; no scenario here runs the mechanical walking, drop-pod, teleporting, tunnelling
-      or rocket locomotors, and RK2 part b records the walking body's angles, not its drawing.
-    - Confidence: medium, except low for the rocket locomotor's drawing, which is believed but not
-      checked as closely as the others.
+    is crashing at strictly positive signed height (claim 20). The walking, mechanical walking,
+    drop-pod and teleporting locomotors draw the body without them, although their angles still
+    step. The tunnelling locomotor draws the body without them too: with the cell's slope tilt, or
+    with its own digging pitch (S-0106). The rocket locomotor draws its own attitude (S-0105
+    claim 41) and not the rocking angles.
+    - Backing: `measurable` (RK2 part b) for the walking body's angles stepping, and (RK12) for
+      the flying locomotor's crashing body. The drawing is `unmeasured` for every other
+      locomotor: RK8 records fire points and RK9 records angles and rates, not drawing; no scenario
+      here runs the mechanical walking, drop-pod, teleporting, tunnelling or rocket locomotors, and
+      RK2 part b records the walking body's angles, not its drawing.
+    - Confidence: high for the flying locomotor's crashing body at strictly positive signed
+      height; medium for the others, except low for the rocket locomotor's drawing, which is
+      believed but not checked as closely as the others.
 
-19. **Fire points.** A body whose locomotor draws its rocking (claim 18) takes its fire point
-    (S-0313 claim 1) through its body transform: the rocking angles with S-0106 claim 9's table
-    tilt, which is the transform the original also draws with. S-0106 claim 4's presentation-only
-    correction of the drawn tilt does not enter the fire point. So rocking moves the point
-    where its shots start, outside sinking as well as in it (S-0504 claim 16). With claim 9's
-    destruction, this makes rocking game state.
+19. **Fire points.** A body of the driving, naval, hovering and jumpjet locomotors of claim 18
+    takes its fire point (S-0313 claim 1) through its body transform: the rocking angles with
+    S-0106 claim 9's table tilt, which is the transform the original also draws with. S-0106
+    claim 4's presentation-only correction of the drawn tilt does not enter the fire point. So
+    rocking moves the point where its shots start, outside sinking as well as in it (S-0504
+    claim 16). With claim 9's destruction, this makes rocking game state.
     DECIDED (autonomy, 2026-10-29): our engine simulates the angles and rates as game state,
     advances them once in each turn of the body as this spec gives, and builds fire points on them.
     The view only reads them. The rocking step is the first part of the body's turn, before its
@@ -387,6 +391,51 @@ define *melee-linked*.
     one. Which order the original uses is open (Open questions).
     - Backing: `measurable` (RK8)
     - Confidence: medium
+
+20. **A crashing aircraft's body (Q-2236).** While an aircraft with the flying locomotor crashes
+    at strictly positive signed height above the current surface (the height of S-0105 claims 40
+    and 42), its body transform is
+
+    > *D*<sub>crash</sub> = Rz(*θ*<sub>flight</sub>) · Rx(*φ*) · Ry(*ψ*′),
+
+    and it is drawn with *V* · *D*<sub>crash</sub> before the HVA, *V* being S-0105's view
+    transform (its claim 1), as S-0105 claim 42's transform is. *θ*<sub>flight</sub> is S-0105
+    claim 3's 32-step flight drawing heading, from the aiming facing as in flight, not the body
+    facing. *φ* is the roll and *ψ* the pitch of claim 16, with the signs of the Terms. So the body
+    is pitched about its own lateral axis first, then rolled about its own forward axis, then
+    turned to its heading. That is S-0504 F5's order of roll and pitch, roll outermost, and the
+    reverse of flight's order Rz(*θ*<sub>flight</sub>) · Ry(*α*) · Rx(*β*) (S-0105 claim 42).
+    - No slope tilt, lift or shift enters *D*<sub>crash</sub>: the tumble moves no part of the
+      body's placement, which is the same as in non-crashing flight at the same position and
+      height.
+    - *ψ*′ = *ψ* + *α* when S-0105 claim 42's speed test passes (the current speed fraction
+      strictly greater than the imported drawing-pitch threshold), with *α* the imported
+      drawing-pitch angle. Otherwise *ψ*′ = *ψ*. The single-precision pitch and the
+      double-precision angle are added at 53-bit precision and the sum is stored in single
+      precision, truncated toward zero (S-0105 F0). The angle is not first narrowed to single
+      precision, as claim 42 narrows it for a non-crashing body.
+    - The bank *β* never enters a crashing body, in a turn or not, and whether or not the speed
+      test passes.
+    - The rotations use S-0105 F1 and F0, as claim 42's do. F1's table index wraps every whole
+      turn, so it covers every angle the tumble reaches.
+    - At zero or negative signed height, a crashing body is turned to its heading only, with no
+      tumble, no *α* and no *β*. This is the original's behaviour, kept: it is the one height rule
+      that flight also follows.
+    - The shadow follows only the heading and the slope shape of S-0106 claim 11 (with its
+      dropship exception), never *φ*, *ψ*, *α* or *β*. Its image key is S-0105's (claim 42).
+      The body at positive height is drawn fresh, never reused (S-0105 claim 26).
+    - Backing: `measurable` (RK12 parts a to c and e) for *D*<sub>crash</sub>, its order and
+      axes, the absent tilt, lift and shift and the shadow's outline; (RK12 part c) for the *α*
+      term; (RK12 part e, with the speed test passing in a turn) for the absent bank; (RK12
+      part d) for the heading source; (S-0105 scenario MS-32's crash run) for the fresh body.
+      `unmeasured` for the precision of the sum *ψ* + *α*, which changes the pitch only in the last
+      binary digits of a single-precision value, so no outline can show it; for the
+      case at zero or negative height, which a crashing aircraft reaches only as it meets the
+      ground; and for the shadow's key, since pixels alone do not show reuse.
+    - Confidence: high for *D*<sub>crash</sub>, its order and axes, the heading source, the absent
+      tilt, lift, shift and bank, the *α* term, the shadow's outline and the fresh body; medium
+      for the precision of the sum, for the case at zero or negative height and for the shadow's
+      key.
 
 ## Formulas
 
@@ -733,7 +782,60 @@ follows S-0504 claim 15's lean. A roll that moves during the descent falsifies t
 entry. Expected in our engine: the roll follows table R from the pushed rate and returns to level,
 and the pitch follows the lean.
 
+**RK12. A crashing aircraft's drawing (claims 18, 20).** RK9's aircraft run, on a test aircraft
+type with the flying locomotor whose body is an asymmetric test model: a long arm along its forward
+axis, a fin on its left side only and a block on its top only, so that its outline differs under
+every nonzero roll, pitch and heading and under either order of roll and pitch. The test sets the
+type's drawing-pitch angle and bank angle to large nonzero values. The aircraft is destroyed in the
+air by scripted damage, as in RK9, with screenshots in every tick from the crash start until it
+leaves play (the bench at 800 × 600). The run uses a recorder that reads, in the same ticks, the
+aircraft's roll, pitch, aiming facing, body facing, current speed fraction and signed height (more
+than RK9's records, which hold only rates and angles). (a) Flying straight along one map axis,
+with the drawing-pitch threshold set by the test above every speed fraction the recorder reads (a
+run whose recorded fraction passes it is void). (b) As (a), flying along a diagonal. (c) As (a)
+and (b), with the threshold set to zero. (d) Shot down while it turns its aim toward a target off
+its course (S-0501 claims 19 and 42), so that the recorded aiming facing and body facing fall in
+different 32-step buckets. A run in which they share a bucket in every frame of the crash is void.
+(e) As (c), with the threshold at zero, shot down during a turn of its aiming facing, the recorder
+showing the facing change between ticks. Frames are compared from the first tick in which both
+recorded angles are at least 0.3 radians in magnitude; a run whose pitch never gets there before
+the aircraft leaves play is void (another seed). In (c), the *α* term is judged only on compared
+frames whose recorded speed fraction is strictly positive, so that S-0105 claim 42's speed test
+passes; a run of (c) with no such frame decides nothing for the *α* term (another seed). In (e),
+the bank is judged only on compared frames whose recorded speed fraction is strictly positive and
+whose recorded aiming facing has changed since the previous tick, so that the speed test passes
+during a turn; a run of (e) with no such frame decides nothing for the bank (another seed).
+Observable: the body's outline and the shadow's outline in each compared frame, beside the recorded
+values. Expected: each body outline matches our engine's render of claim 20's *D*<sub>crash</sub>
+for the recorded roll, pitch, aiming facing and speed fraction, placed as that render places
+it; in (c) the pitch is *ψ* + *α* in each judged frame; in (e) the judged frames show no bank; the
+shadow outline is the one level flight has for the recorded heading and cell, unchanged while only
+the angles change. An outline that matches the reverse order Rz · Ry(*ψ*′) · Rx(*φ*) instead, a
+displacement of the outline that grows with |sin *φ*| or |sin *ψ*| (S-0504 F5's lift and shifts),
+an outline in a judged frame of (e) that matches *D*<sub>crash</sub> with S-0105 claim 42's bank
+for the recorded turn added, a pitch in a judged frame of (c) equal to (a)'s at the same recorded
+angles, an outline in (d) turned to the body facing, or a shadow that changes with the tumble
+falsifies claim 20.
+
 ## Changes for other specs
+
+- **For S-0105 claim 42 (*Flying bodies pitch and bank*) and Terms (*Flight bank*, *flight
+  drawing pitch*).** Its sentence "This claim does not replace S-0312's crash attitude rules" can
+  point to S-0113 claim 20, which gives a crashing flying body's transform at strictly positive
+  signed height: Rz(*θ*<sub>flight</sub>) · Rx(*φ*) · Ry(*ψ*′), with *ψ*′ the tumble pitch plus
+  *α* under this claim's speed test, and no *β*. Its shadow sentence, "never these pitch or bank
+  angles", holds for a crashing body's tumble angles as well. The Terms entry's "for a
+  non-crashing flying-locomotor body" can add that *α* also enters a crashing body's pitch
+  (S-0113 claim 20). Confidence: high. Backing: `measurable` (S-0113 RK12). Its sentence on
+  narrowing the configured angles to single precision can add that a crashing body's *α* is not
+  narrowed first: it is added to the tumble pitch at 53-bit precision and the sum is stored in
+  single precision (S-0113 claim 20). Confidence: medium. Backing: `unmeasured`, as S-0113 claim
+  20 gives.
+
+- **For S-0106 claim 11 (*Shadow tilt*).** Its "Neither shadow includes body pitch or bank" also
+  covers a crashing aircraft's tumble roll and pitch (S-0113 claim 20): the shadow of a crashing
+  flying body keeps the transform S-0106 claim 11 gives. Scenario T4's attitude part can
+  cite S-0113 RK12 for a crashing aircraft. Confidence: high. Backing: `measurable` (S-0113 RK12).
 
 - **For S-0504 claim 15 (*The pitch belongs to the lean; the roll is left free*).** Its statement
   that no approved spec gives how a rolled body comes back to level, and its open question on
