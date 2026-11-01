@@ -208,7 +208,7 @@ pub fn effect_weapon_emitter(
             // spec: S-0616 claim 1 (owner object: the firer; no first particle) and Terms (a system with an owner object takes the owner's current target as its target object; a railgun turn uses only its fixed target point)
             s.owner_object = Some(firer);
             s.target = point;
-            // spec: S-0301 Changes for other specs, S-0616 (c) (revision 63: the place, not the system's kind, sets the creation: the fire or spark place passes the shot's target object, the railgun place passes none)
+            // spec: S-0616 claim 1 (revision 27, from S-0301 revision 63's change (c): the place, not the system's kind, sets the creation: the fire or spark place passes the shot's target object, the railgun place passes none)
             s.target_object = if place == Place::Railgun {
                 None
             } else {
@@ -238,7 +238,7 @@ pub fn let_go_fire(w: &mut World, owner: ObjectId) {
     let Some(e) = w.obj_mut(owner).and_then(|o| o.combat.fire_emitter.take()) else {
         return;
     };
-    // spec: S-0616 claim 1 (a fire emitter is marked and let go) and S-0301 claim 5, place-and-kind rule (revision 63: a let-go of the fire place marks the system that place holds, whatever its kind, and the place is freed at the let-go)
+    // spec: S-0616 claim 1 (revision 27: the system held in the fire place, whatever its kind, is marked and let go; the fire place is freed by its let-go events) and S-0301 claim 5, place-and-kind rule (revision 63: a let-go of the fire place marks the system that place holds, whatever its kind, and the place is freed at the let-go)
     crate::particles::mark(w, e.system);
 }
 
@@ -503,12 +503,13 @@ pub fn natural_smoke_yellow(w: &mut World, id: ObjectId) {
 
 /// S-0616 claim 1, damage sparks: an infantry object of a cyborg type,
 /// strictly below the yellow ratio, higher than 10 leptons below the
-/// surface and holding no spark emitter, may make a spark system from the
+/// surface and holding nothing in its spark place, may make a spark system from the
 /// spark-kind entries of its damage list. Called in its turn after its
 /// behaviour processing and self-healing, before its radiation hit,
 /// movement and infantry firing (S-0616 claim 1, Q-1404 answered).
 pub fn damage_sparks(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
+    // spec: S-0616 claim 1 (revision 27: holding nothing in its spark place, whatever the kind of a system held there)
     if o.kind != Kind::Infantry || o.combat.spark_emitter.is_some() {
         return;
     }

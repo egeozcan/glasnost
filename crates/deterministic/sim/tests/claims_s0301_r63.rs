@@ -617,7 +617,7 @@ fn spark_and_railgun_places_have_no_let_go() {
 // ---------------------------------------------------------------------------
 // The creation reading (S-0616 (c))
 
-/// spec: S-0301 Changes for other specs, S-0616 (c) (revision 63: the creation follows the place: the system made for the fire or spark place takes the shot's target object and that object's position; the system made for the railgun place takes no target object, whatever the system's kind)
+/// spec: S-0301 Changes for other specs, S-0616 (c), taken in by S-0616 claim 1 (revision 27) (revision 63: the creation follows the place: the system made for the fire or spark place takes the shot's target object and that object's position; the system made for the railgun place takes no target object, whatever the system's kind)
 #[test]
 fn creation_follows_the_place() {
     for (flag, sys) in [

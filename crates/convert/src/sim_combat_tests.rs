@@ -224,6 +224,47 @@ fn weapon_fields_and_not_given_values() {
     assert_eq!(dec(&s.general.ballistic_scatter), Some("15e-1"));
 }
 
+/// spec: S-0001 claim 5 (revision 7: in a fresh load a last line with no line feed after it is not read; quirks.ini_final_line_needs_newline on) and S-0002 claim 6 (the base rules file is read by a fresh load)
+/// measure: M-0012 (run 1 against the control: a rules file whose last line is a weapon's burst key with no line feed after it gives the same play as the file without that line; run 2 against the control: with one line feed after it, the play differs)
+#[test]
+fn a_rules_files_unterminated_last_line_reads_as_absent() {
+    // Every name and number here is our own; only the comparisons are M-0012's.
+    let head = "[VehicleTypes]\n1=Cart\n[Cart]\nPrimary=Zap\n\
+                [Zap]\nROF=40\nDamage=10\nWarhead=Boom\nProjectile=Dart\n";
+    let run1 = format!("{head}Burst=5");
+    let run2 = format!("{head}Burst=5\n");
+    let control = head.to_string();
+    let (s1, w1) = sim(&run1, "", "");
+    let (s2, _) = sim(&run2, "", "");
+    let (sc, wc) = sim(&control, "", "");
+    assert_eq!(
+        s1, sc,
+        "run 1 reads as the control: the burst key is absent"
+    );
+    assert_eq!(s1.weapons["Zap"].burst, None);
+    assert_ne!(s2, sc, "run 2 differs from the control");
+    assert_eq!(
+        s2.weapons["Zap"].burst,
+        Some(5),
+        "read once a line feed follows"
+    );
+    assert!(
+        warned(&w1, "no line feed after it"),
+        "the importer warns: {w1:?}"
+    );
+    assert!(!warned(&wc, "no line feed after it"));
+    // The switch off (our own reading): the unterminated line is read.
+    let options = ImportOptions {
+        ini: IniQuirks {
+            ini_final_line_needs_newline: false,
+            ..IniQuirks::default()
+        },
+        ..ImportOptions::default()
+    };
+    let (s1_off, _, _) = import(&run1, "", "", "", &options);
+    assert_eq!(s1_off.weapons["Zap"].burst, Some(5), "switch off: read");
+}
+
 /// spec: S-0316 Import mapping (IsElectricBolt, IsAlternateColor, IsLaser, IsRadBeam: weapon booleans, absent no)
 #[test]
 fn electric_bolt_weapon_fields() {

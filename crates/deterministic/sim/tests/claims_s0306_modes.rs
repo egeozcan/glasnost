@@ -422,6 +422,29 @@ fn claim18_land_row_stops_retaliation_and_mode_zero_fires_back() {
     }
 }
 
+// spec: S-0306 P16 part g (revision 63: retaliation does not restart the copy's processing timer, so its first processing in attack can wait until the guard processing delay then running ends) and S-0215 claim 10 (neither an override nor a revert restarts the processing timer, claim 3) and S-0309 claim 18 (the override to attack with the attacker as target)
+#[test]
+fn claim18_retaliation_keeps_the_guard_processing_timer() {
+    let (mut w, a, x) = duel("AAV", 0, 0, "AGV", land::CLEAR);
+    w.houses[0].human = false;
+    // Let the copy's guard processing run, so that its timer holds a delay.
+    testkit::run(&mut w, 8);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "in guard");
+    assert_eq!(o.target, None, "holding no target");
+    let timer = (o.beh.last, o.beh.expired);
+    assert!(timer.0.is_some(), "a guard processing has run");
+    acquire::retaliate(&mut w, a, x);
+    assert!(retaliated(&w, a, x), "mode 0 retaliates");
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.suspended, Some(Behaviour::Guard), "an override");
+    assert_eq!(
+        (o.beh.last, o.beh.expired),
+        timer,
+        "the processing timer is not restarted"
+    );
+}
+
 // spec: S-0309 claim 18 (the water row stops retaliation against an attacker on water when the naval mode gives "none"; a mode-1 object retaliates against an attacker on water that its naval mode does not refuse)
 #[test]
 fn claim18_water_row_and_mode_one_on_water() {
