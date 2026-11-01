@@ -90,8 +90,20 @@ async fn meet(addr: std::net::SocketAddr) -> Vec<(Client, Begin)> {
         assert_eq!(info.map.starts, 8);
         c.lobby(&join(&code, &format!("P{i}"), "build-1", "synthetic-8"));
         clients.push(c);
+        // A join clears every ready mark and takes effect in the order the
+        // relay reads the connections, so the next step waits until the
+        // host sees this member in the room.
+        loop {
+            if let FromRelay::Room(v) = clients[0].next_lobby().await
+                && v.members.len() == i + 1
+            {
+                break;
+            }
+        }
     }
     // The host takes colour 5 and row 1 colour 1; row 2 stays on random.
+    // An edit also clears every ready mark, so both are seen by the host
+    // before anyone says ready.
     for (row, colour) in [(0u8, 5u8), (1, 1)] {
         clients[usize::from(row)].lobby(&ToRelay::Edit(Edit::Choices {
             row,
@@ -101,6 +113,14 @@ async fn meet(addr: std::net::SocketAddr) -> Vec<(Client, Begin)> {
             start: None,
         }));
     }
+    loop {
+        if let FromRelay::Room(v) = clients[0].next_lobby().await
+            && v.setup.slots[0].colour == Some(5)
+            && v.setup.slots[1].colour == Some(1)
+        {
+            break;
+        }
+    }
     for c in &clients[1..] {
         c.lobby(&ready("synthetic-8"));
     }
@@ -108,7 +128,6 @@ async fn meet(addr: std::net::SocketAddr) -> Vec<(Client, Begin)> {
         if let FromRelay::Room(v) = clients[0].next_lobby().await
             && v.members.len() == 3
             && v.members.iter().filter(|m| m.ready).count() == 2
-            && v.setup.slots[1].colour == Some(1)
         {
             break;
         }
