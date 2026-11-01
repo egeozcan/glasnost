@@ -1,9 +1,9 @@
 ---
 id: Q-2246
 title: When the fire place's retarget test is made for a system that is not of the fire kind
-status: open
+status: answered
 related: [S-0301, S-0616]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need
