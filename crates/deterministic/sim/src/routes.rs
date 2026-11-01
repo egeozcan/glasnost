@@ -229,22 +229,23 @@ pub enum RouteNote {
 /// the clicked cell, or for a click on an object the cell that object
 /// stands on at the click; for any other order that names no target, its
 /// destination's. An order with neither a target nor a destination has no
-/// place.
+/// place. An attack-move click has the place that the same click gives
+/// without attack-move entry, so the order's attack-move mark plays no
+/// part.
 pub fn order_place(
     w: &World,
     on: ClickOn,
     behaviour: Behaviour,
-    attack_move: bool,
     target: Option<Target>,
     dest: Option<Target>,
 ) -> Option<Target> {
     if let Some(t) = target {
-        // spec: S-0213 claim 16b (revision 84: the place of the target that the click gave the order)
+        // spec: S-0213 claim 16b (revision 84: the place of the target that the click gave the order; revision 89, Q-2230: an attack-move click on an object whose order names a target puts the point at the target's place)
         return Some(t);
     }
-    // design (Q-2230): an attack-move order is not a *move* order here: it is claim 6's distinct order, so it has its destination's place as any other order that names no target
-    if behaviour == Behaviour::Move && !attack_move {
-        // spec: S-0213 claim 16b (revision 84: a move order's place is the clicked cell's, or for a click on an object that of the cell the object stands on at the click, whatever the move's destination, also one the nearby-cell search found)
+    // spec: S-0213 claim 16b (revision 89, Q-2230: an attack-move click has the place that the same click gives without attack-move entry; entry changes only the order's kind, not the target, destination or cell the click gave it, so an attack move that would be a *move* without entry has the move's place)
+    if behaviour == Behaviour::Move {
+        // spec: S-0213 claim 16b (revision 84: a move order's place is the clicked cell's, or for a click on an object that of the cell the object stands on at the click, whatever the move's destination, also one the nearby-cell search found; revision 89: the same for an attack-move click on a cell or on an object)
         return match on {
             ClickOn::Cell(c) => Some(Target::Cell(c)),
             ClickOn::Object(x) => w.obj(x).map(|o| Target::Cell(o.pos.cell())),
@@ -1030,14 +1031,21 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
 
 /// The point after `point`'s first place in the route of its longest
 /// holder, going round a loop (S-0213 claim 16e and claim 16b, *A point
-/// that a route holds twice*).
+/// that a route holds twice*). It is found in that route as it stands
+/// before the delete.
 fn next_after(w: &World, house: HouseId, point: u32) -> Option<u32> {
     let h = holders_of(w, house, point).into_iter().next()?;
     let r = &w.routes.routes[&h];
+    // spec: S-0213 claim 16e (revision 89, Q-2226 question 2: where the route holds the deleted point at two places, the point after its first place is taken; that first place is never the route's last point, so the count round the loop does not apply)
     let i = r.first_place(point)?;
-    let j = match r.loop_from {
-        // spec: S-0213 claim 16e (going round a loop: after the loop's last point comes its first); design (Q-2226): on a route whose loop ends early, after the route's last point comes the loop's first too, as the holder goes round (claim 16c, revision 84; claim 16e leaves which point such a delete selects open)
-        Some(l) if i >= l && i + 1 == r.steps.len() => l,
+    let last = i + 1 == r.steps.len();
+    let j = match (r.loop_from, r.loop_len) {
+        // spec: S-0213 claim 16e (revision 89, Q-2226 question 1: when the deleted point is the route's last point, the count goes on round the loop's points only: with n the points from the loop's first to the route's last, both included, and C the loop's number of points, the selected point is the one n mod C places after the loop's first point; on a loop that runs to the route's end n = C, so it is the loop's first point)
+        (Some(l), c) if last => {
+            let n = r.steps.len() - l;
+            l + n % c.unwrap_or(n).max(1)
+        }
+        // spec: S-0213 claim 16e (revision 89: a route without a loop gives no point when its last point is deleted; otherwise the point after the deleted one)
         _ => i + 1,
     };
     r.steps.get(j).map(|s| s.point).filter(|&n| n != point)
@@ -1178,7 +1186,7 @@ pub fn click(
                 attack_move,
                 target,
                 dest,
-                place: order_place(w, on, behaviour, attack_move, target, dest),
+                place: order_place(w, on, behaviour, target, dest),
             }),
             // spec: S-0213 claim 16b (a route-mode click that would order a detonate adds no point: when claim 16d's tests pass, the detonate order is sent at the release, as outside route mode, with no route-mode message)
             Order::Detonate { .. } => out.push(o),

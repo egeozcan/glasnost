@@ -261,7 +261,7 @@ pub fn fire_place_let_go(w: &mut World, sys: ObjectId) {
         let_go_fire(w, owner);
         return;
     }
-    // spec: S-0301 claim 5, place-and-kind rule (revision 63: a retarget to a target not within reach lets the fire place go whatever the kind of the system it holds); design: the test is made in the held system's own turn, after its kind's work, as a fire-kind system makes it in its turn (S-0616 claim 1 gives no tick for the test)
+    // spec: S-0301 claim 5, place-and-kind rule (revision 63: a retarget to a target not within reach lets the fire place go whatever the kind of the system it holds); design (Q-2246): the test is made in the held system's own turn, after its kind's work, as a fire-kind system makes it in its turn (S-0616 claim 1 gives no tick for the test)
     retarget_let_go(w, owner, sys);
 }
 

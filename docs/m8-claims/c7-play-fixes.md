@@ -310,3 +310,17 @@ Ledger: [intake64-S-0306.md](intake64-S-0306.md).
 | `warp_deck_departure_airborne` | S-0306 claim 17, Edge cases | rejected | Condition 2: the quirk text states a classification, a warp member that departed from a high-bridge deck counted as airborne until it appears, and its effects on projectiles aimed at it: at a landing-check kill a steering shot is left without target and climbs, and an anti-air shot can detonate near the point the member left. None of these is a stuck unit, a give-up although an open way exists, a unit that never moves again or a visible glitch; no play note or request names it. Condition 3: the off position turns those shots' loss into a cell target on the deck, where they detonate and deal area damage, and lets anti-air shots fly on, so it changes combat outcomes, however rarely (a warp superweapon launched on a bridge deck while shots are in flight). Both positions are tested (`claims_s0306_r57::quirk_warp_deck_departure_airborne_on_*` and `_off_*`). |
 
 The layer file is unchanged, so the layered rules hash does not move.
+
+## Intake 66 (S-0213 r89): the click-area kind-test switch judged again
+
+Ledger: [intake66-S-0213.md](intake66-S-0213.md).
+S-0213 r89 adds no quirk. It adds one consequence to the off position of
+`click_area_skips_kind_test`: no turreted building is left under *move* with an *attack* that
+never starts (claim 16d, Q-2228). Intake 56 rejected the switch on condition 2, so it is judged
+again.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `click_area_skips_kind_test` | S-0213 claim 16d, Edge cases (r89) | rejected (not in the layer) | Condition 2 is now met in part. With the switch on, a turreted building that joins a *move* point keeps *move* current for good, and it never fires again, which is a stuck unit. The person brings this about by pressing a marker with the defence selected while holding the route key, and no play note names it. Condition 3 fails. The off position does more than free that building: it refuses every route point for every aircraft and building. Aircraft routes and a non-turreted building's later *attack* both work in the original, so turning the switch off takes away orders a person can give and changes how aircraft can be used in play. A switch that covers only the stuck building would be a new rule, and no spec states one. Both positions are tested (`claim_16d_a_click_area_skips_the_kind_test_both_ways`). The building is tested on its own in `claims_s0213_r89::claim_16d_a_turreted_building_under_move_never_starts_a_later_attack`. |
+
+The layer file is unchanged, so the layered rules hash does not move.
