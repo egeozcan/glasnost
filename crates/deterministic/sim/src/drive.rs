@@ -1262,6 +1262,8 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
             ob.path.steps.clear();
         }
     }
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+    crate::emitters::retarget_let_go(w, id);
 }
 
 /// The immediate recomputation of S-0212 claim 20, taken from where the

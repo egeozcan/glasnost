@@ -318,6 +318,8 @@ fn redirect(w: &mut World, d: ObjectId, x: ObjectId) {
             o.target = Some(Target::Object(x));
             o.beh.queue(Some(Behaviour::Attack));
             aimed = true;
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, a);
         }
     }
     if let Some(s) = w.strike.strikes.get_mut(&d) {

@@ -640,6 +640,8 @@ pub fn hand_down_target(w: &mut World, t: ObjectId) {
             // spec: S-0213 table T3 (f) (an open-topped transport gives the same target to its passengers when the target is not nothing)
             crate::spawn::set_own_target(ob, Some(target));
         }
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+        crate::emitters::retarget_let_go(w, p);
     }
 }
 

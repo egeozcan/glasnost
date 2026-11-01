@@ -403,7 +403,7 @@ fn claim_1_spark_emitter_ends_by_its_counter() {
     );
 }
 
-/// spec: S-0616 claim 1 (a fire emitter is marked and let go on a move order, on a new target not within reach, and when the firer dies; a new target within reach keeps it)
+/// spec: S-0616 claim 1 (a fire emitter is marked and let go on a move order, on a new target not within reach, and when the firer dies; a new target within reach keeps it); S-0301 claim 5, Moment of a retarget's let-go (revision 67: the retarget's test at the change of the target)
 #[test]
 fn claim_1_fire_emitter_let_go_events() {
     // Move order.
@@ -453,6 +453,8 @@ fn claim_1_fire_emitter_let_go_events() {
     assert!(fire::shot(&mut w, a, 0, t));
     let s = w.obj(a).unwrap().combat.fire_emitter.unwrap().system;
     w.obj_mut(a).unwrap().target = Some(Target::Object(near));
+    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: the test is made at the change of the firer's target, not in the system's turn)
+    emitters::retarget_let_go(&mut w, a);
     particles::fire_turn(&mut w, s);
     let e = w
         .obj(a)
@@ -467,11 +469,11 @@ fn claim_1_fire_emitter_let_go_events() {
         "the owner's current target"
     );
     w.obj_mut(a).unwrap().target = Some(Target::Object(far));
-    particles::fire_turn(&mut w, s);
+    emitters::retarget_let_go(&mut w, a);
     assert_eq!(
         w.obj(a).unwrap().combat.fire_emitter,
         None,
-        "out of reach: let go"
+        "out of reach: let go at the change"
     );
     assert!(w.gas.systems[&s].ending);
 

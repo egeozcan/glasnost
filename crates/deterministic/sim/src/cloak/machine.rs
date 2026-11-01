@@ -248,7 +248,10 @@ fn drop_attackers(w: &mut World, id: ObjectId) {
                 restored = Some(ob.dest);
                 ob.dest = d;
             }
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, x);
         }
+        let Some(ob) = w.obj_mut(x) else { continue };
         if ob.target == Some(Target::Object(id)) {
             crate::spawn::clear_own_target(ob);
         }

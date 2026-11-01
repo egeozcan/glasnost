@@ -294,6 +294,7 @@ fn forget_and_scatter(w: &mut World, engineer: ObjectId, hut: ObjectId) {
             // spec: S-0511 claim 17 (every infantry unit forgets the hut as a target or destination)
             if o.target == Some(Target::Object(hut)) {
                 o.target = None;
+                crate::emitters::cleared(o);
             }
             if o.dest == Some(Target::Object(hut)) {
                 o.dest = None;

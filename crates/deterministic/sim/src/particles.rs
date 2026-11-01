@@ -635,8 +635,9 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
     }
     let mut swept = false;
     if alive && let Some(o) = owner {
-        // spec: S-0616 claim 1 (a new target not within reach lets the fire emitter go)
-        crate::emitters::retarget_let_go(w, o, sys);
+        // The retarget let-go of S-0616 claim 1 is not made here but at the
+        // change of the owner's target (`crate::emitters::retarget_let_go`).
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: the test is made at the change of the firer's target and not in the turn of the system the fire place holds, for every kind) and S-0616 claim 10 (the fire turn's owner step has no retarget test)
         // spec: S-0616 Terms (a system with an owner object takes the owner's current target as its target object)
         let to = match w.obj(o).and_then(|x| x.target) {
             Some(crate::world::Target::Object(x)) if w.obj(x).is_some() => Some(x),

@@ -55,7 +55,7 @@ game, and ac. It also adds one Changes-for-other-specs entry (S-0501 claim 6). R
 | 16b r89 an attack-move click on a cell has the clicked cell's place, not the cell the search finds; entry changes only the kind (part q (6)) | Tested: `claim_16b_an_attack_move_click_on_a_cell_has_the_clicked_cells_place` (an armed vehicle and an enclosed cell, end to end: the point add, its place and destination with and without entry, and the applied marker on the clicked cell) |
 | 16b r89 an attack-move click on an object: the target's place when its order names a target; the object's cell at the click when its order would be a *move* without entry | Tested: `claim_16b_an_attack_move_click_on_an_object` (an attack on an enemy end to end; the *move* case through `order_place`, since no click on an object gives our armed test vehicle a *move*) |
 | 16b r89, Joins: a copied action a click would not give the joining holder is applied as for any actor; a vehicle issuing an engineer's copied *capture* gets *capture*, X as its destination and no target, and heads for X (part ac) | Tested: `claim_16b_a_vehicle_issues_a_copied_capture_and_heads_for_x` (every tick from the release until T stands next to X, with N still on its way to F: *capture* current, no target, X its destination, no shot, X's health and owner kept) |
-| 16b r89, Joins: the vehicle does not attack X while N is on its way to F; X never captured (part ac) | Blocked: Q-2247. S-0207 claim 15 table T4 with S-0209 row VP28 makes T attack X by an override once its next step is in X's foundation. `claim_16b_a_vehicle_with_a_copied_capture_never_attacks_x` (the full window) is ignored on Q-2247 and fails when run |
+| 16b r89, Joins: the vehicle does not attack X while N is on its way to F; X never captured (part ac) | Blocked: Q-2247. S-0207 claim 15 table T4 with S-0209 row VP28 makes T attack X by an override once its next step is in X's foundation. `claim_16b_a_vehicle_with_a_copied_capture_never_attacks_x` (the full window) is ignored on Q-2247 and fails when run. **Superseded by S-0213 r94** (Q-2247 answered: T attacks X by the override at its step into X): the ignored test is replaced by `claim_16b_a_vehicle_with_a_copied_capture_attacks_x_by_the_override` ([intake 70](intake70-S-0213-S-0301.md)) |
 | 16b r89, Joins: the vehicle's route goes on at its next fall-back to rest | Partly: rated `unmeasured`. A *capture* point is terminating, so the copy has no later point, and the test checks that the route is used up. The fall-back issue is the ordinary rule (`routes::fall_back`, intake 56) |
 | 16b r89 Q-2227 question 1 (primary and a rally point on an object sent directly; a building's *unload* a point at its own place) | Built and tested by intake 63 (r87), no change |
 | 16d r89 an aircraft's issue at a flight's end is S-0501 claim 6's planned-route step and comes before the pad-bound test; a pad-bound aircraft away from its pad issues and does not fall back (part x (6), pad-bound game) | Tested: `claim_16d_a_pad_bound_aircraft_issues_before_the_pad_bound_test` (built at its pad and at rest there; it flies to P1's issued destination and on to P2 with no crash and no turn back towards the pad). P1's order is the car's, and its recorded destination is a cell next to P1's own cell, so the test follows the issued destination. Recorded after P2, as the part asks: the aircraft flies back near its pad and hovers there under *move* with a cell destination for the rest of the test (over 1,300 ticks); left to S-0501 |
@@ -75,11 +75,13 @@ game, and ac. It also adds one Changes-for-other-specs entry (S-0501 claim 6). R
 - **Q-2246**: when the fire place's retarget test is made for a system that is not of the fire
   kind (S-0301 claim 5, S-0616 claim 1). This is intake 63's unnumbered `design:` note in
   `emitters::fire_place_let_go`. The interim is unchanged: the test is made in the held system's
-  own turn, after its kind's work.
+  own turn, after its kind's work. Answered by S-0301 r67 (the test is made at the change of the
+  target), built by [intake 70](intake70-S-0213-S-0301.md).
 - **Q-2247**: whether a vehicle in *capture* whose destination is an enemy building attacks
   that building as an enemy obstacle (S-0207 claim 15 table T4, S-0209 row VP28) when its next
   step enters the building's foundation, against S-0213 r89 part ac. There is no interim code:
   the engine follows S-0207 and S-0209, and the full-window test of part ac is ignored.
+  Answered by S-0213 r94 (it attacks by the override), built by [intake 70](intake70-S-0213-S-0301.md).
 
 ## C7
 

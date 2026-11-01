@@ -1185,6 +1185,8 @@ fn emerge(w: &mut World, id: ObjectId) {
             so.target = Some(Target::Object(id));
             so.beh.force(Behaviour::Harvest, t, stale);
         }
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+        crate::emitters::retarget_let_go(w, s);
     }
 }
 

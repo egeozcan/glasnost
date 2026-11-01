@@ -692,6 +692,8 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
             // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
             ob.beh.queue_and_start_at_once(Behaviour::Attack, t, stale);
             ob.target = Some(x);
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, id);
         }
     }
 }

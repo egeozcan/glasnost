@@ -2,7 +2,9 @@
 //! attack-move route point, the point a delete selects after a route's last
 //! point, a copied *capture* issued by a vehicle, a turreted building under
 //! *move*, and an aircraft's issue at a flight's end) on synthetic data:
-//! invented types, no game data.
+//! invented types, no game data. Scenario O8 part ac is tested as revision
+//! 94 gives it (Q-2247: the vehicle attacks the building by an override at
+//! its step into the building; a copied *sabotage* the same).
 
 mod common;
 mod econ_common;
@@ -17,7 +19,7 @@ use glasnost_sim::routes::{self, RouteClick, RouteNote};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::world::{HouseId, Layer, ObjectId, Target, World};
 
 const SIZE: i32 = 48;
 const A: HouseId = HouseId(0);
@@ -34,7 +36,10 @@ const ENTRY: Modifiers = Modifiers {
 /// turreted building TOWER) with
 /// - POST: TOWER without the turret flag;
 /// - ENG: an unarmed engineer (the testkit's WALKER with the engineer flag);
-/// - LAB: a 2 × 2 building that engineers can capture;
+/// - SAB: a charge planter (the testkit's armed WALKER with the
+///   explosive-charges flag);
+/// - LAB: a durable 2 × 2 building that engineers can capture and that
+///   accepts charges;
 /// - HELI: an unarmed flying aircraft with no dock that may land anywhere;
 /// - the engine's default area-guard threshold, so that armed objects rest
 ///   in guard (S-0215 claim 15).
@@ -47,6 +52,7 @@ fn ruleset() -> Ruleset {
     push("buildings", "POST");
     push("buildings", "LAB");
     push("infantry", "ENG");
+    push("infantry", "SAB");
     push("aircraft", "HELI");
     let s = &mut r.sim;
     let mut post = s.buildings["TOWER"].clone();
@@ -55,12 +61,16 @@ fn ruleset() -> Ruleset {
     s.buildings.insert(
         "LAB".into(),
         BuildingType {
-            strength: Some(800),
+            // Durable, so that T's attack leaves X standing until N reaches F.
+            strength: Some(60000),
             foundation: Some([2, 2]),
             capturable: Some(true),
             ..Default::default()
         },
     );
+    let mut sab = s.infantry["WALKER"].clone();
+    sab.c4 = Some(true);
+    s.infantry.insert("SAB".into(), sab);
     let mut eng = s.infantry["WALKER"].clone();
     eng.engineer = Some(true);
     eng.primary = None;
@@ -414,12 +424,17 @@ fn claim_16e_a_delete_of_a_point_held_twice_takes_the_one_after_its_first_place(
 }
 
 // ---------------------------------------------------------------------------
-// A copied capture issued by a vehicle (claim 16b, Joins, Q-2227 question 2)
+// A copied capture or sabotage issued by a vehicle (claim 16b, Joins,
+// Q-2227 question 2, Q-2247)
 
-/// Part ac's game up to the release: N's route F then X (capture), T
-/// joined to the point at X's place, committed. Returns the world, N, T,
-/// X, F, and X's health and owner at the release.
-fn copied_capture() -> (
+/// Part ac's game up to the release, for run 1 (`Behaviour::Capture`, N an
+/// engineer) or run 2 (`Behaviour::Sabotage`, N a charge planter): N's
+/// route F then X (the run's action), T joined to the point at X's place,
+/// committed. Returns the world, N, T, X, F, and X's health and owner at the
+/// release.
+fn copied_entry(
+    run: Behaviour,
+) -> (
     World,
     ObjectId,
     ObjectId,
@@ -428,8 +443,21 @@ fn copied_capture() -> (
     i32,
     Option<HouseId>,
 ) {
+    let (who, action) = match run {
+        Behaviour::Capture => ("ENG", Action::Capture),
+        Behaviour::Sabotage => ("SAB", Action::Sabotage),
+        _ => unreachable!("part ac has two runs"),
+    };
+    // T: a drive vehicle with a primary weapon, of a type that is neither a
+    // train type nor has the crusher flag (S-0213 r94 claim 16b, Joins).
+    let r = ruleset();
+    let cart = &r.sim.vehicles["CART"];
+    assert_eq!(cart.locomotor, Some(Locomotor::Drive));
+    assert!(cart.primary.is_some());
+    assert_ne!(cart.is_train, Some(true));
+    assert_ne!(cart.crusher, Some(true));
     let mut w = game();
-    let n = put(&mut w, Kind::Infantry, "ENG", 0, 0, 0);
+    let n = put(&mut w, Kind::Infantry, who, 0, 0, 0);
     let t = put(&mut w, Kind::Vehicle, "CART", 0, 0, 2);
     let x = put(&mut w, Kind::Building, "LAB", 1, 6, 0);
     let f = at(-14, 0);
@@ -441,10 +469,10 @@ fn copied_capture() -> (
         targeting::action(&w, A, t, ClickOn::Object(x), Modifiers::default()),
         Action::Attack
     );
-    // N's route: F, then X with the cursor showing capture.
+    // N's route: F, then X with the cursor showing the run's action.
     assert_eq!(
         targeting::action(&w, A, n, ClickOn::Object(x), Modifiers::default()),
-        Action::Capture
+        action
     );
     let to_f = one_point(routes::click(
         &w,
@@ -464,9 +492,10 @@ fn copied_capture() -> (
     give(&mut w, vec![to_x]);
     let px = routes::point_in(&w, A, cell(&w, x)).expect("a point at X");
     let rec = w.routes.routes[&n].steps[1].clone();
+    // spec: S-0214 table M (the run's order has the building as its destination and no target)
     assert_eq!(
         (rec.behaviour, rec.target, rec.dest),
-        (Behaviour::Capture, None, Some(Target::Object(x)))
+        (run, None, Some(Target::Object(x)))
     );
     // T joins the point at X's place, and the release commits.
     give_join(&mut w, t, px);
@@ -475,70 +504,172 @@ fn copied_capture() -> (
     (w, n, t, x, f, hp, owner)
 }
 
-/// One tick of part ac's record: once T has *capture* current it keeps it,
-/// with no target and X as its destination; T makes no shot and X keeps
-/// its health and owner. Returns whether T has *capture* current.
-fn copied_capture_tick(
-    w: &World,
-    (t, x, hp, owner): (ObjectId, ObjectId, i32, Option<HouseId>),
-    capturing: bool,
-) -> bool {
-    let o = w.obj(t).unwrap();
-    let capturing = capturing || o.beh.current == Some(Behaviour::Capture);
-    if capturing {
-        assert_eq!(o.beh.current, Some(Behaviour::Capture), "t={}", w.tick);
-        assert_eq!(o.target, None, "no target: t={}", w.tick);
-        assert_eq!(o.dest, Some(Target::Object(x)), "X its destination");
-    }
-    assert!(
-        !w.effects
-            .iter()
-            .any(|e| matches!(e, Effect::Shot { firer, .. } if *firer == t)),
-        "no shot of T's"
-    );
-    assert_eq!(health(w, x), hp, "X keeps its health");
-    assert_eq!(w.obj(x).unwrap().owner, owner, "X keeps its owner");
-    capturing
-}
-
-/// spec: S-0213 claim 16b, Joins (revision 89, Q-2227 question 2: a copied action that a click would not give the joining holder is applied as for any actor: a vehicle that issues an engineer's copied capture on an enemy building gets capture with the building as its destination and no target, and heads for it); Scenario O8 part ac, every tick from the release until T stands next to X
-#[test]
-fn claim_16b_a_vehicle_issues_a_copied_capture_and_heads_for_x() {
-    let (mut w, n, t, x, f, hp, owner) = copied_capture();
-    let mut capturing = false;
-    let next_to_x = |w: &World| {
-        let (c, b) = (cell(w, t), cell(w, x));
-        (c.x - b.x).abs() <= 1 && (c.y - b.y).abs() <= 1
-    };
-    for _ in 0..2000 {
-        if next_to_x(&w) || cell(&w, n) == f {
-            break;
+/// The cells X's foundation covers: those whose ground list holds X.
+fn foundation(w: &World, x: ObjectId) -> Vec<CellXY> {
+    let c = cell(w, x);
+    let mut out = Vec::new();
+    for dy in -3..=3 {
+        for dx in -3..=3 {
+            let k = CellXY::new(c.x + dx, c.y + dy);
+            if w.cells.list(k, Layer::Ground).contains(&x) {
+                out.push(k);
+            }
         }
-        capturing = copied_capture_tick(&w, (t, x, hp, owner), capturing);
-        testkit::run(&mut w, 1);
     }
-    capturing = copied_capture_tick(&w, (t, x, hp, owner), capturing);
-    assert!(capturing, "T has capture current");
-    assert!(next_to_x(&w), "T heads for X and reaches it first");
-    assert_ne!(cell(&w, n), f, "while N is still on its way to F");
-    assert!(steps(&w, t).is_empty(), "a capture point is terminating");
+    assert_eq!(out.len(), 4, "a 2 × 2 foundation");
+    out
 }
 
-/// spec: S-0213 claim 16b, Joins (revision 89, Q-2227 question 2: the vehicle does not attack the building, since the order names no target, and never captures it, since only an infantry unit makes a building entry, S-0509 claim 1); Scenario O8 part ac, every tick until N reaches F. Blocked on Q-2247: S-0207 claim 15 table T4 (repeated check) with S-0209 claim 4 row VP28 makes T, standing next to X with its next step in X's foundation, take X as its target by an override and attack it
-#[test]
-#[ignore = "Q-2247: S-0207 claim 15 table T4 makes T attack X as an enemy obstacle"]
-fn claim_16b_a_vehicle_with_a_copied_capture_never_attacks_x() {
-    let (mut w, n, t, x, f, hp, owner) = copied_capture();
-    let mut capturing = false;
-    for _ in 0..2000 {
+/// Whether `c` is a cell next to (not in) the foundation `fx`.
+fn next_to(fx: &[CellXY], c: CellXY) -> bool {
+    !fx.contains(&c)
+        && fx
+            .iter()
+            .any(|b| (c.x - b.x).abs() <= 1 && (c.y - b.y).abs() <= 1)
+}
+
+/// Whether T fired in the tick just run.
+fn shot(w: &World, t: ObjectId) -> bool {
+    w.effects
+        .iter()
+        .any(|e| matches!(e, Effect::Shot { firer, .. } if *firer == t))
+}
+
+/// What part ac's record of one run saw.
+#[derive(Debug, Default)]
+struct Ac {
+    /// T had the run's behaviour current, with no target and X as its
+    /// destination, from some tick on.
+    entered: bool,
+    /// The first tick at whose end T stood next to X.
+    next_to: Option<i32>,
+    /// The first tick at whose end T had *attack* current on X.
+    attack: Option<i32>,
+    /// T's first shot.
+    first_shot: Option<i32>,
+}
+
+/// Part ac, one run, every tick from the release until N reaches F (S-0213
+/// r94, Scenario O8 part ac): before T stands next to X, the run's
+/// behaviour once current stays current with no target and X as its
+/// destination, and T makes no shot and X keeps its health and owner; T
+/// never enters a cell of X; X keeps its owner. Returns what the record saw
+/// and the world at N's arrival at F.
+fn part_ac(run: Behaviour) -> (Ac, World, ObjectId, ObjectId) {
+    let (mut w, n, t, x, f, hp, owner) = copied_entry(run);
+    let fx = foundation(&w, x);
+    let mut ac = Ac::default();
+    for _ in 0..3000 {
         if cell(&w, n) == f {
             break;
         }
-        capturing = copied_capture_tick(&w, (t, x, hp, owner), capturing);
         testkit::run(&mut w, 1);
+        let tick = w.tick;
+        let o = w.obj(t).unwrap();
+        let c = o.pos.cell();
+        assert!(
+            !fx.contains(&c),
+            "{run:?}: T never enters a cell of X: t={tick}"
+        );
+        if ac.next_to.is_none() && next_to(&fx, c) {
+            ac.next_to = Some(tick);
+        }
+        if shot(&w, t) && ac.first_shot.is_none() {
+            ac.first_shot = Some(tick);
+        }
+        if ac.next_to.is_none() {
+            ac.entered |= o.beh.current == Some(run);
+            if ac.entered {
+                assert_eq!(o.beh.current, Some(run), "{run:?}: t={tick}");
+                assert_eq!(o.target, None, "{run:?}: no target: t={tick}");
+                assert_eq!(
+                    o.dest,
+                    Some(Target::Object(x)),
+                    "{run:?}: X its destination"
+                );
+            }
+            assert!(!shot(&w, t), "{run:?}: no shot before T stands next to X");
+            assert_eq!(health(&w, x), hp, "{run:?}: X keeps its health");
+        } else if ac.attack.is_none()
+            && o.beh.current == Some(Behaviour::Attack)
+            && o.target == Some(Target::Object(x))
+        {
+            assert_eq!(o.dest, None, "{run:?}: the override gives no destination");
+            assert!(next_to(&fx, c), "{run:?}: while T stands next to X");
+            ac.attack = Some(tick);
+        }
+        assert_eq!(w.obj(x).unwrap().owner, owner, "{run:?}: X keeps its owner");
     }
-    assert_eq!(cell(&w, n), f, "N reaches F");
-    assert!(capturing, "T has capture current");
+    assert_eq!(cell(&w, n), f, "{run:?}: N reaches F");
+    assert!(w.obj(x).is_some_and(|o| o.health > 0), "{run:?}: X stands");
+    (ac, w, t, x)
+}
+
+/// spec: S-0213 claim 16b, Joins (revision 94, Q-2227 question 2: a copied action that a click would not give the joining holder is applied as for any actor: a vehicle that issues an engineer's copied capture on an enemy building gets capture with the building as its destination and no target, and fires at nothing while it heads for the building); Scenario O8 part ac, run 1, every tick from the release until T stands next to X
+#[test]
+fn claim_16b_a_vehicle_issues_a_copied_capture_and_heads_for_x() {
+    let (ac, w, t, _) = part_ac(Behaviour::Capture);
+    assert!(
+        ac.entered,
+        "T has capture current before it reaches X: {ac:?}"
+    );
+    assert!(
+        ac.next_to.is_some(),
+        "T heads for X and stands next to it: {ac:?}"
+    );
+    assert!(
+        ac.first_shot.is_none_or(|s| s >= ac.next_to.unwrap()),
+        "no shot before it stands next to X: {ac:?}"
+    );
+    assert!(steps(&w, t).is_empty(), "a capture point is terminating");
+}
+
+/// spec: S-0213 claim 16b, Joins (revision 94, Q-2247 question 1: a drive vehicle armed in S-0209 claim 5's sense, neither of a train type nor with the crusher flag, attacks the building once its next step is a cell of the building: the step check gives enemy obstacle, S-0209 claim 5 row VP28, and the repeated check makes it attack the first object listed in the cell by an override with no destination, S-0207 claim 15 table T4 and S-0215 claim 10; that object is the building when nothing else is listed there; it never captures the building, S-0509 claim 1); Scenario O8 part ac, run 1, every tick until N reaches F
+#[test]
+fn claim_16b_a_vehicle_with_a_copied_capture_attacks_x_by_the_override() {
+    let (ac, w, t, x) = part_ac(Behaviour::Capture);
+    let near = ac.next_to.expect("T stands next to X");
+    let attack = ac
+        .attack
+        .unwrap_or_else(|| panic!("T gets attack on X while next to it: {ac:?}"));
+    assert!(attack >= near, "{ac:?}");
+    // Falsified if T still has capture current with no target when N
+    // reaches F, X standing.
+    let o = w.obj(t).unwrap();
+    assert!(
+        !(o.beh.current == Some(Behaviour::Capture) && o.target.is_none()),
+        "T is not left in capture with no target"
+    );
+    assert_eq!(w.obj(x).unwrap().owner, Some(HouseId(1)), "never captured");
+}
+
+/// spec: S-0213 claim 16b, Joins (revision 94, Q-2247 question 3: a copied sabotage behaves in the same way: its order also has the building as its destination and no target, S-0214 table M, and S-0215 claim 28 processes sabotage as capture); Scenario O8 part ac, run 2
+#[test]
+fn claim_16b_a_vehicle_with_a_copied_sabotage_does_the_same() {
+    let (ac, w, t, x) = part_ac(Behaviour::Sabotage);
+    assert!(
+        ac.entered,
+        "T has sabotage current before it reaches X: {ac:?}"
+    );
+    let near = ac.next_to.expect("T stands next to X");
+    assert!(
+        ac.first_shot.is_none_or(|s| s >= near),
+        "no shot before it stands next to X: {ac:?}"
+    );
+    let attack = ac
+        .attack
+        .unwrap_or_else(|| panic!("T gets attack on X while next to it: {ac:?}"));
+    assert!(attack >= near, "{ac:?}");
+    let o = w.obj(t).unwrap();
+    assert!(
+        !(o.beh.current == Some(Behaviour::Sabotage) && o.target.is_none()),
+        "T is not left in sabotage with no target"
+    );
+    assert_eq!(
+        w.obj(x).unwrap().owner,
+        Some(HouseId(1)),
+        "X keeps its owner"
+    );
 }
 
 // ---------------------------------------------------------------------------
