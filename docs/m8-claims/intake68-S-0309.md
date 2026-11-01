@@ -184,11 +184,12 @@ at which a holder drops a refused target: `duel.txt`, `duel-diagonal.txt`, `duel
 ## Lanes
 
 Before is main at 746ba32: intake 67, the capture seam (S-0215 claim 28) and intake 69, which
-changes only the client. For the sweeps and the arena, before is the capture seam's after run
-(`local-lane/m8/seam-capture/after`), which has the same sim code as 746ba32. For the quick lane,
-before is a fresh run of 746ba32 (`local-lane/m8/intake68/main-quick`). After is this branch
-rebased onto 746ba32 (`local-lane/m8/intake68/after2`, the code of 546adc1). Outputs are in
-`local-lane/m8/`, which is git-ignored.
+changes only the client. Before is a fresh run of 746ba32: `local-lane/m8/intake68/main-lanes`
+for the sweeps, the arena and the AI tests, and `local-lane/m8/intake68/main-quick` for the quick
+lane. The capture seam's own after run (`local-lane/m8/seam-capture/after`) came from before that
+branch's rebase. The fresh run matches it exactly: the same sweep counts and byte-identical arena
+csvs. After is this branch rebased onto 746ba32 (`local-lane/m8/intake68/after2`, the code of
+546adc1). Outputs are in `local-lane/m8/`, which is git-ignored.
 
 | Lane | Before | After |
 |---|---|---|
