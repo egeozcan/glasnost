@@ -211,6 +211,102 @@ pub struct HudModel {
     /// The icon the keyboard focus is on, whose tooltip shows when the
     /// pointer is on no icon.
     pub focus_cameo: Option<usize>,
+    /// The install's button images the client draws (S-0411 claim 19).
+    pub buttons: ButtonArt,
+    /// The scroll button (0 up, 1 down) whose press is in progress with the
+    /// pointer over it (S-0411 claim 19).
+    pub scroll_pressed: Option<usize>,
+}
+
+/// One button's image as the client registered it (S-0411 claim 19).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ButtonImage {
+    /// The sprite id; frame *f* of the file is the sprite's frame *f*.
+    pub id: u32,
+    /// The file's canvas size, which is the button's cell (our layout).
+    pub size: (i32, i32),
+    /// Bit *f* set when frame *f* was read and registered.
+    pub frames: u32,
+}
+
+impl ButtonImage {
+    /// Whether frame `f` can be drawn.
+    pub fn has(&self, f: u32) -> bool {
+        f < 32 && self.frames & (1 << f) != 0
+    }
+}
+
+/// The install's images of the sidebar buttons (S-0411 claim 19). A
+/// button without one draws our own symbol (claim 19: a file that cannot
+/// be resolved).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ButtonArt {
+    /// The sell button's image.
+    pub sell: Option<ButtonImage>,
+    /// The repair button's image.
+    pub repair: Option<ButtonImage>,
+    /// Each tab's image, in claim 1's tab order.
+    pub tabs: [Option<ButtonImage>; TABS],
+    /// The scroll-up and scroll-down images.
+    pub scroll: [Option<ButtonImage>; 2],
+}
+
+impl ButtonArt {
+    /// The image of mode button `m` (none for the power button: claim 19,
+    /// no install image is imported for it).
+    pub fn mode(&self, m: Mode) -> Option<ButtonImage> {
+        match m {
+            Mode::Sell => self.sell,
+            Mode::Repair => self.repair,
+            // spec: S-0411 claim 19 (Power-mode button: our design, no install image is imported for it)
+            Mode::Power => None,
+        }
+    }
+}
+
+/// A tab button's frame (S-0411 claim 19, first table: the first row that
+/// matches, top to bottom). `lit` is claim 11's flash state, `shown`
+/// whether the sidebar displays this tab's icons.
+pub fn tab_frame(unavailable: bool, lit: bool, shown: bool) -> u32 {
+    if unavailable {
+        // spec: S-0411 claim 19 (a tab with no icons, unavailable: frame 2, whatever its flash state)
+        2
+    } else if lit && shown {
+        // spec: S-0411 claim 19 (a tab lit, claim 11, and shown: frame 4)
+        4
+    } else if lit {
+        // spec: S-0411 claim 19 (a tab lit: frame 3)
+        3
+    } else if shown {
+        // spec: S-0411 claim 19 (a tab shown: frame 1)
+        1
+    } else {
+        // spec: S-0411 claim 19 (a tab in any other state: frame 0)
+        0
+    }
+}
+
+/// A sell or repair button's frame (S-0411 claim 19, *Mode lighting*: our
+/// engine shows frame 1 in every frame drawn while the mode is active,
+/// however it was entered).
+pub fn mode_frame(active: bool) -> u32 {
+    // spec: S-0411 claim 19 (sell, repair: its mode active frame 1, any other state frame 0; Mode lighting: our engine's rows, however the mode was entered)
+    u32::from(active)
+}
+
+/// A scroll button's frame (S-0411 claim 19, first table). `pressed`: its
+/// press is in progress with the pointer over it.
+pub fn scroll_frame(disabled: bool, pressed: bool) -> u32 {
+    if disabled {
+        // spec: S-0411 claim 19 (a disabled scroll button, claim 18: frame 2, even while pressed)
+        2
+    } else if pressed {
+        // spec: S-0411 claim 19 (its press in progress, with the pointer over it: frame 1)
+        1
+    } else {
+        // spec: S-0411 claim 19 (any other state: frame 0; a press with the pointer off it shows frame 0 in our engine, design)
+        0
+    }
 }
 
 /// The outline that marks the battlefield view's part of the map on the
@@ -447,6 +543,50 @@ pub enum HudHit {
     Options,
 }
 
+/// Our cell of a mode button without an image (our layout).
+const MODE_CELL: (i32, i32) = (44, 18);
+/// Our cell of a tab button without an image (our layout).
+const TAB_CELL: (i32, i32) = (32, 18);
+/// Our cell of a scroll button without an image (our layout).
+const SCROLL_CELL: (i32, i32) = (68, 18);
+/// The space between the buttons of a row, and below a row (our layout).
+const BUTTON_GAP: i32 = 4;
+/// The narrowest power button beside the sell and repair images: our
+/// symbol and a 2-pixel margin each side (our layout).
+const POWER_MIN_W: i32 = SYMBOL.0 + 4;
+
+/// Cells of `sizes` side by side from the top `y`, `BUTTON_GAP` apart,
+/// as many to a line as fit in `bar` and the rest on the lines below; each
+/// line centred in `bar` and each cell centred in its line's height. A
+/// cell wider than the bar is narrowed to it. Returns the cells and the
+/// top of the next row.
+fn row(bar: Rect, y: i32, sizes: &[(i32, i32)]) -> (Vec<Rect>, i32) {
+    let mut out = Vec::with_capacity(sizes.len());
+    let mut y = y;
+    let mut rest = sizes;
+    while !rest.is_empty() {
+        let mut n = 1;
+        let mut total = rest[0].0.min(bar.w);
+        while let Some(s) = rest.get(n)
+            && total + BUTTON_GAP + s.0 <= bar.w
+        {
+            total += BUTTON_GAP + s.0;
+            n += 1;
+        }
+        let (line, next) = rest.split_at(n);
+        let height = line.iter().map(|s| s.1).max().unwrap_or(0);
+        let mut x = bar.x + (bar.w - total) / 2;
+        for &(w, h) in line {
+            let w = w.min(bar.w);
+            out.push(Rect::new(x, y + (height - h) / 2, w, h));
+            x += w + BUTTON_GAP;
+        }
+        y += height + BUTTON_GAP;
+        rest = next;
+    }
+    (out, y)
+}
+
 /// The game screen's fixed rectangles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Layout {
@@ -473,8 +613,25 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// The layout for a window of `size`.
+    /// The layout for a window of `size`, every button in our own cell.
     pub fn new(size: (i32, i32)) -> Self {
+        Self::with_buttons(size, &ButtonArt::default())
+    }
+
+    /// The layout for a window of `size` with the button images `art`.
+    ///
+    /// design: S-0411 claim 19 (*Layout*) leaves positions, spacing and
+    /// cells to us and gives no image sizes. A button with an image takes
+    /// its file's canvas as its cell, so the image is drawn whole and
+    /// unscaled. Each row (sell, repair and power; the four tabs; the two
+    /// scroll buttons) is centred in the sidebar with 4 pixels between its
+    /// cells and is as tall as its tallest cell; a row too wide for the
+    /// sidebar goes on over more lines, and a cell wider than the sidebar
+    /// is narrowed to it (its image clipped). The power button keeps our
+    /// width of 44, narrowed to what the row leaves (at least 16, else it
+    /// takes a line of its own), and the row's height. Without images every
+    /// rectangle is the one of our earlier layout.
+    pub fn with_buttons(size: (i32, i32), art: &ButtonArt) -> Self {
         let (w, h) = size;
         let bar = Rect::new(w - SIDEBAR_W, 0, SIDEBAR_W, h);
         let x = bar.x + (SIDEBAR_W - RADAR.0) / 2;
@@ -482,15 +639,35 @@ impl Layout {
         let options = Rect::new(x, 2, RADAR.0, 16);
         let credits = Rect::new(x, radar.bottom() + 4, RADAR.0, 14);
         let power = Rect::new(x, credits.bottom() + 2, RADAR.0, 8);
+        let cell = |a: Option<ButtonImage>, own: (i32, i32)| a.map_or(own, |a| a.size);
         let my = power.bottom() + 6;
-        let modes = [0, 1, 2].map(|i| Rect::new(x + i * 48, my, 44, 18));
-        let ty = my + 22;
-        let tabs = [0, 1, 2, 3].map(|i| Rect::new(x + i * 36, ty, 32, 18));
-        let gy = ty + 24;
-        let rows = ((h - gy - 26) / (CAMEO.1 + 4)).max(1);
+        let (sell, repair) = (cell(art.sell, MODE_CELL), cell(art.repair, MODE_CELL));
+        let mh = sell.1.max(repair.1);
+        let room = bar.w - 4 - sell.0 - repair.0 - 2 * BUTTON_GAP;
+        let (modes, ty) = if room >= POWER_MIN_W {
+            let pw = MODE_CELL.0.min(room);
+            let (r, bottom) = row(bar, my, &[sell, repair, (pw, mh)]);
+            ([r[0], r[1], r[2]], bottom)
+        } else {
+            let (r, bottom) = row(bar, my, &[sell, repair]);
+            let (p, bottom) = row(bar, bottom, &[MODE_CELL]);
+            ([r[0], r[1], p[0]], bottom)
+        };
+        let tab_cells: Vec<(i32, i32)> = art.tabs.iter().map(|a| cell(*a, TAB_CELL)).collect();
+        let (t, tb) = row(bar, ty, &tab_cells);
+        let tabs = [t[0], t[1], t[2], t[3]];
+        let gy = tb + 2;
+        let scroll_cells = [
+            cell(art.scroll[0], SCROLL_CELL),
+            cell(art.scroll[1], SCROLL_CELL),
+        ];
+        // The scroll buttons' height, on one line or two.
+        let sh = row(bar, 0, &scroll_cells).1 - BUTTON_GAP;
+        let rows = ((h - gy - sh - 8) / (CAMEO.1 + 4)).max(1);
         let grid = Rect::new(x, gy, RADAR.0, rows * (CAMEO.1 + 4));
         let sy = grid.bottom() + 2;
-        let scroll = [Rect::new(x, sy, 68, 18), Rect::new(x + 72, sy, 68, 18)];
+        let (s, _) = row(bar, sy, &scroll_cells);
+        let scroll = [s[0], s[1]];
         Self {
             map: Rect::new(0, 0, w - SIDEBAR_W, h),
             bar,
@@ -667,6 +844,28 @@ fn symbol_button(d: &mut DrawList, r: Rect, s: &Symbol, hot: bool, enabled: bool
     symbol(d, r, s, if enabled { colour::TEXT } else { colour::DIM });
 }
 
+/// Draws frame `frame` of the button image `a` in its cell `r`, when it
+/// has that frame; returns whether it drew (S-0411 claim 19: otherwise the
+/// button draws our own symbol). The image is drawn as it is: no hover or
+/// press styling is added, since a resting pointer changes no frame and a
+/// held press has no frame of its own on a tab, sell or repair button.
+fn image(d: &mut DrawList, r: Rect, a: Option<ButtonImage>, frame: u32) -> bool {
+    match a {
+        Some(a) if a.has(frame) => {
+            // design: S-0411 claim 19 (Layout: the image drawn into our own cell, its canvas centred in it)
+            d.sprite(
+                a.id,
+                frame,
+                r.x + (r.w - a.size.0) / 2,
+                r.y + (r.h - a.size.1) / 2,
+                r,
+            );
+            true
+        }
+        _ => false,
+    }
+}
+
 /// The largest scroll position for `n` icons in `rows` rows.
 pub fn max_scroll(n: usize, rows: usize) -> usize {
     // spec: S-0411 Formulas, settled scroll end (E = max(0, ⌈N/2⌉ − R), two icons per row)
@@ -700,7 +899,7 @@ pub fn view(
     radar_image: Option<u32>,
     hover: Option<Point>,
 ) -> (DrawList, Targets<HudHit>) {
-    let l = Layout::new(size);
+    let l = Layout::with_buttons(size, &m.buttons);
     let mut d = DrawList::new();
     let mut t = Targets::new();
     let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
@@ -758,7 +957,11 @@ pub fn view(
     }
 
     for (r, (mode, sym, name)) in l.modes.iter().zip(MODE_BUTTONS) {
-        symbol_button(&mut d, *r, &sym, hot(*r) || m.mode == Some(mode), true);
+        let active = m.mode == Some(mode);
+        if !image(&mut d, *r, m.buttons.mode(mode), mode_frame(active)) {
+            // design: S-0411 claim 19 (a file or frame that cannot be resolved, and the power button: our own symbol)
+            symbol_button(&mut d, *r, &sym, hot(*r) || active, true);
+        }
         t.push(*r, HudHit::Mode(mode));
         if hot(*r) {
             named = Some((*r, vec![name.to_string()]));
@@ -773,12 +976,16 @@ pub fn view(
                 .is_some_and(|t| tab_lit(t, m.tick, m.flash_extra));
         let active = i == m.shown;
         let (sym, name) = TAB_BUTTONS[i];
-        symbol_button(&mut d, *r, &sym, active || lit || hot(*r), tv.count > 0);
+        let frame = tab_frame(tv.count == 0, lit, active);
+        if !image(&mut d, *r, m.buttons.tabs[i], frame) {
+            // design: S-0411 claim 19 (a file or frame that cannot be resolved: our own symbol; claim 11's lit look is then ours)
+            symbol_button(&mut d, *r, &sym, active || lit || hot(*r), tv.count > 0);
+            if active {
+                d.fill(Rect::new(r.x, r.bottom() - 2, r.w, 2), colour::ACCENT);
+            }
+        }
         if hot(*r) {
             named = Some((*r, vec![name.to_string()]));
-        }
-        if active {
-            d.fill(Rect::new(r.x, r.bottom() - 2, r.w, 2), colour::ACCENT);
         }
         if tv.count > 0 {
             t.push(*r, HudHit::Tab(i));
@@ -800,7 +1007,11 @@ pub fn view(
     // spec: S-0411 claim 18 (both page buttons disabled when all icons fit)
     let enabled = overflows(m.cameos.len(), rows);
     for (k, (r, label)) in l.scroll.iter().zip(["Up", "Down"]).enumerate() {
-        widget::button(&mut d, *r, label, enabled && hot(*r), enabled);
+        let frame = scroll_frame(!enabled, m.scroll_pressed == Some(k));
+        if !image(&mut d, *r, m.buttons.scroll[k], frame) {
+            // design: S-0411 claim 19 (a file or frame that cannot be resolved: our own button)
+            widget::button(&mut d, *r, label, enabled && hot(*r), enabled);
+        }
         if enabled {
             t.push(*r, HudHit::Scroll(if k == 0 { -1 } else { 1 }));
         }
@@ -1358,6 +1569,258 @@ mod tests {
         // Hover names the button.
         assert!(texts(&m, Some(l.modes[1].centre())).contains(&"Repair".to_string()));
         assert!(texts(&m, Some(l.tabs[3].centre())).contains(&"Vehicles".to_string()));
+    }
+
+    // spec: S-0411 claim 19 (the frame tables: the first matching row, top to bottom)
+    #[test]
+    fn claim19_the_frame_tables() {
+        // A tab: unavailable 2 whatever else; lit and shown 4; lit 3; shown 1; else 0.
+        for lit in [false, true] {
+            for shown in [false, true] {
+                assert_eq!(tab_frame(true, lit, shown), 2);
+            }
+        }
+        assert_eq!(tab_frame(false, true, true), 4);
+        assert_eq!(tab_frame(false, true, false), 3);
+        assert_eq!(tab_frame(false, false, true), 1);
+        assert_eq!(tab_frame(false, false, false), 0);
+        // Sell and repair: active 1, else 0.
+        assert_eq!(mode_frame(true), 1);
+        assert_eq!(mode_frame(false), 0);
+        // Scroll: disabled 2, even while pressed; pressed with the pointer over it 1; else 0.
+        assert_eq!(scroll_frame(true, true), 2);
+        assert_eq!(scroll_frame(true, false), 2);
+        assert_eq!(scroll_frame(false, true), 1);
+        assert_eq!(scroll_frame(false, false), 0);
+    }
+
+    /// Synthetic button images: file *k* has id `900 + k`, the frames of
+    /// `frames` and the canvas `size`.
+    fn art(size: (i32, i32), frames: u32) -> ButtonArt {
+        let image = |k: u32| {
+            Some(ButtonImage {
+                id: 900 + k,
+                size,
+                frames,
+            })
+        };
+        ButtonArt {
+            sell: image(0),
+            repair: image(1),
+            tabs: [image(2), image(3), image(4), image(5)],
+            scroll: [image(6), image(7)],
+        }
+    }
+
+    fn sprites(d: &DrawList) -> Vec<(u32, u32, i32, i32)> {
+        d.prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Sprite {
+                    id, frame, x, y, ..
+                } => Some((*id, *frame, *x, *y)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn frame_of(d: &DrawList, id: u32) -> Option<u32> {
+        sprites(d).into_iter().find(|s| s.0 == id).map(|s| s.1)
+    }
+
+    // design: S-0411 claim 19 (Layout: without images every rectangle is our earlier layout's)
+    #[test]
+    fn claim19_layout_without_images_is_our_earlier_layout() {
+        for (w, h) in [(800, 600), (1024, 768), (640, 400)] {
+            let l = Layout::with_buttons((w, h), &ButtonArt::default());
+            assert_eq!(l, Layout::new((w, h)));
+            let x = w - SIDEBAR_W + 14;
+            let my = 22 + 108 + 4 + 14 + 2 + 8 + 6;
+            for i in 0..3 {
+                assert_eq!(l.modes[i as usize], Rect::new(x + i * 48, my, 44, 18));
+            }
+            let ty = my + 22;
+            for i in 0..4 {
+                assert_eq!(l.tabs[i as usize], Rect::new(x + i * 36, ty, 32, 18));
+            }
+            let gy = ty + 24;
+            let rows = ((h - gy - 26) / (CAMEO.1 + 4)).max(1);
+            assert_eq!(l.grid, Rect::new(x, gy, 140, rows * (CAMEO.1 + 4)));
+            let sy = l.grid.bottom() + 2;
+            assert_eq!(
+                l.scroll,
+                [Rect::new(x, sy, 68, 18), Rect::new(x + 72, sy, 68, 18)]
+            );
+        }
+    }
+
+    // design: S-0411 claim 19 (Layout: an image's canvas is its cell, each row centred in the sidebar)
+    #[test]
+    fn claim19_layout_with_images_takes_their_canvases() {
+        let size = (800, 600);
+        // (canvas, the power button on a line of its own, the tabs on more than one line)
+        for (cell, power_own_row, tabs_wrap) in [
+            ((30, 14), false, false),
+            ((50, 30), false, true),
+            ((70, 26), false, true),
+            ((72, 26), true, true),
+            ((200, 20), true, true),
+        ] {
+            let a = art(cell, 0b11111);
+            let l = Layout::with_buttons(size, &a);
+            let cells = [l.modes[0], l.modes[1]]
+                .into_iter()
+                .chain(l.tabs)
+                .chain(l.scroll);
+            for r in cells.clone() {
+                // A canvas wider than the sidebar is narrowed to it.
+                assert_eq!((r.w, r.h), (cell.0.min(SIDEBAR_W), cell.1), "{r:?}");
+            }
+            assert_eq!(l.tabs[3].y > l.tabs[0].y, tabs_wrap);
+            let all: Vec<Rect> = cells.chain([l.modes[2]]).collect();
+            for (i, r) in all.iter().enumerate() {
+                assert!(l.bar.intersect(r) == *r, "{r:?} inside the bar");
+                for s in &all[i + 1..] {
+                    assert!(
+                        r.intersect(s).w <= 0 || r.intersect(s).h <= 0,
+                        "{r:?} {s:?}"
+                    );
+                }
+            }
+            // The power button keeps our symbol's room, beside them or on its own row.
+            assert!(l.modes[2].w >= POWER_MIN_W);
+            assert_eq!(l.modes[2].y >= l.modes[0].bottom(), power_own_row);
+            // The rows stack downwards and the grid holds whole rows of icons.
+            assert!(l.tabs[0].y >= l.modes[2].bottom());
+            assert!(l.grid.y > l.tabs[0].bottom());
+            assert_eq!(l.grid.h, l.rows() as i32 * (CAMEO.1 + 4));
+            assert!(l.scroll[0].y > l.grid.bottom());
+            assert!(l.scroll[1].bottom() <= size.1);
+        }
+    }
+
+    // spec: S-0411 claim 19 (each button draws the frame of its state; the power button has no image)
+    #[test]
+    fn claim19_the_view_draws_each_buttons_frame() {
+        let size = (800, 600);
+        let mut m = HudModel {
+            buttons: art((40, 20), 0b11111),
+            flash_extra: true,
+            ..HudModel::default()
+        };
+        // Tab 0 shown, tab 1 lit, tabs 2 and 3 without icons.
+        m.tabs[0].count = 30;
+        m.tabs[1] = TabView {
+            count: 1,
+            waiting: true,
+            flash_start: Some(23),
+            sw_ready: false,
+        };
+        m.tick = 39; // spec: S-0411 claim 11 (start 23: lit from tick 39)
+        m.cameos = (0..30).map(cameo_view).collect();
+        let (d, _) = view(&m, size, None, None);
+        assert_eq!(frame_of(&d, 900), Some(0), "sell, no mode");
+        assert_eq!(frame_of(&d, 901), Some(0), "repair, no mode");
+        assert_eq!(frame_of(&d, 902), Some(1), "shown");
+        assert_eq!(frame_of(&d, 903), Some(3), "lit");
+        assert_eq!(frame_of(&d, 904), Some(2), "unavailable");
+        assert_eq!(frame_of(&d, 905), Some(2), "unavailable");
+        assert_eq!(frame_of(&d, 906), Some(0), "scroll up, enabled");
+        assert_eq!(frame_of(&d, 907), Some(0), "scroll down, enabled");
+        assert_eq!(sprites(&d).len(), 8, "no image for the power button");
+        m.shown = 1;
+        m.mode = Some(Mode::Repair);
+        m.scroll_pressed = Some(1);
+        let (d, _) = view(&m, size, None, None);
+        assert_eq!(frame_of(&d, 900), Some(0));
+        assert_eq!(frame_of(&d, 901), Some(1), "repair mode active");
+        assert_eq!(
+            frame_of(&d, 902),
+            Some(0),
+            "available, neither lit nor shown"
+        );
+        assert_eq!(frame_of(&d, 903), Some(4), "lit and shown");
+        assert_eq!(frame_of(&d, 906), Some(0));
+        assert_eq!(
+            frame_of(&d, 907),
+            Some(1),
+            "pressed with the pointer over it"
+        );
+        // All icons fit: both scroll buttons disabled, frame 2 even while pressed.
+        m.cameos.truncate(2);
+        m.mode = Some(Mode::Sell);
+        let (d, t) = view(&m, size, None, None);
+        assert_eq!(frame_of(&d, 900), Some(1), "sell mode active");
+        assert_eq!(frame_of(&d, 901), Some(0));
+        assert_eq!(frame_of(&d, 906), Some(2));
+        assert_eq!(frame_of(&d, 907), Some(2));
+        // The image is centred in its cell, and the hit targets are kept.
+        let l = Layout::with_buttons(size, &m.buttons);
+        let s = sprites(&d).into_iter().find(|s| s.0 == 900).unwrap();
+        assert_eq!((s.2, s.3), (l.modes[0].x, l.modes[0].y));
+        assert_eq!(t.hit(l.modes[0].centre()), Some(HudHit::Mode(Mode::Sell)));
+        assert_eq!(t.hit(l.modes[2].centre()), Some(HudHit::Mode(Mode::Power)));
+        assert_eq!(t.hit(l.tabs[1].centre()), Some(HudHit::Tab(1)));
+    }
+
+    // spec: S-0411 claim 19 (a resting pointer changes no frame; a press shows only on a scroll button with the pointer over it)
+    #[test]
+    fn claim19_hover_changes_no_frame() {
+        let size = (800, 600);
+        let mut m = HudModel {
+            buttons: art((40, 20), 0b11111),
+            ..HudModel::default()
+        };
+        m.tabs[0].count = 30;
+        m.cameos = (0..30).map(cameo_view).collect();
+        let l = Layout::with_buttons(size, &m.buttons);
+        let plain = sprites(&view(&m, size, None, None).0);
+        for r in l.modes.iter().chain(&l.tabs).chain(&l.scroll) {
+            let (d, _) = view(&m, size, None, Some(r.centre()));
+            assert_eq!(sprites(&d), plain, "hover over {r:?}");
+        }
+        // Hover still names the button.
+        let (d, _) = view(&m, size, None, Some(l.modes[0].centre()));
+        assert!(d.texts().contains(&"Sell"));
+    }
+
+    // spec: S-0411 claim 19 (a file or frame that cannot be resolved: our own symbol, for that state only)
+    #[test]
+    fn claim19_a_missing_frame_falls_back_to_the_symbol() {
+        let size = (800, 600);
+        // Only frame 0 of every file.
+        let mut m = HudModel {
+            buttons: art((40, 20), 0b1),
+            ..HudModel::default()
+        };
+        m.tabs[0].count = 1;
+        m.tabs[1].count = 1;
+        m.shown = 1;
+        let l = Layout::with_buttons(size, &m.buttons);
+        let ink_rows_in = |d: &DrawList, r: Rect| {
+            d.prims
+                .iter()
+                .filter(|p| {
+                    matches!(p, Prim::Fill { rect, .. } if r.intersect(rect) == *rect && rect.h == 1)
+                })
+                .count()
+        };
+        let (d, _) = view(&m, size, None, None);
+        assert_eq!(frame_of(&d, 900), Some(0), "sell at rest has its frame");
+        assert_eq!(frame_of(&d, 902), Some(0), "tab 0 at rest has its frame");
+        assert_eq!(frame_of(&d, 903), None, "tab 1 shown: frame 1 missing");
+        assert!(ink_rows_in(&d, l.tabs[1]) >= 11, "our symbol instead");
+        assert_eq!(frame_of(&d, 904), None, "unavailable: frame 2 missing");
+        assert_eq!(ink_rows_in(&d, l.tabs[0]), 0, "no symbol over an image");
+        m.mode = Some(Mode::Sell);
+        let (d, _) = view(&m, size, None, None);
+        assert_eq!(frame_of(&d, 900), None, "sell active: frame 1 missing");
+        assert!(ink_rows_in(&d, l.modes[0]) >= 11);
+        assert_eq!(frame_of(&d, 901), Some(0), "repair unaffected");
+        // No images at all: every button is ours, no sprite drawn.
+        m.buttons = ButtonArt::default();
+        let (d, _) = view(&m, size, None, None);
+        assert!(sprites(&d).is_empty());
     }
 
     // spec: S-0405 claim 19 and F4 (the three parts' extents are unchanged); design: M8 A4 round 7 note 43 (a drain mark within the supplied part while 0 < D < O, the totals on hover)

@@ -856,3 +856,47 @@ fn a_selected_factory_shows_its_rally_point() {
     let (list, _) = c.frame();
     assert_eq!(fills_of(&list, RALLY_POINT_INK), 0, "no rally point");
 }
+
+/// A scroll button shows its press frame exactly while a press that
+/// started on it goes on with the pointer over it: when a release would
+/// page (S-0411 claim 18).
+// spec: S-0411 claim 19 (scroll: its press in progress, with the pointer over it, frame 1; any other state frame 0; a resting pointer changes no frame) and claim 18 (a page button acts on release over the button after a press there)
+#[test]
+fn a_scroll_buttons_press_frame_follows_the_press_over_it() {
+    let mut c = client((800, 300), 100);
+    start_by_keyboard(&mut c);
+    super::access_tests::deploy_base(&mut c);
+    let s = session(&c);
+    let l = s.layout();
+    let n = hud::entries(s.play.world(), s.play.local, s.play.shown_tab()).len();
+    assert!(
+        hud::overflows(n, l.rows()),
+        "{n} icons in {} rows",
+        l.rows()
+    );
+    let (up, down) = (l.scroll[0].centre(), l.scroll[1].centre());
+    let off = l.grid.centre();
+    c.pointer_moved(down);
+    assert_eq!(session(&c).scroll_pressed(), None, "hover only");
+    c.pointer_down(Button::Left, down);
+    assert_eq!(session(&c).scroll_pressed(), Some(1));
+    c.pointer_moved(off);
+    assert_eq!(session(&c).scroll_pressed(), None, "the pointer off it");
+    c.pointer_moved(up);
+    assert_eq!(session(&c).scroll_pressed(), None, "over the other button");
+    c.pointer_moved(down);
+    assert_eq!(session(&c).scroll_pressed(), Some(1), "back over it");
+    let top = session(&c).play.scroll;
+    c.pointer_up(Button::Left, down, Modifiers::default());
+    assert_eq!(session(&c).scroll_pressed(), None, "released");
+    assert_eq!(session(&c).play.scroll, top + 1, "the release paged");
+    c.pointer_down(Button::Left, up);
+    assert_eq!(session(&c).scroll_pressed(), Some(0));
+    c.pointer_up(Button::Left, off, Modifiers::default());
+    assert_eq!(session(&c).scroll_pressed(), None);
+    assert_eq!(
+        session(&c).play.scroll,
+        top + 1,
+        "released off it: no paging"
+    );
+}
