@@ -3993,9 +3993,50 @@ fn smoke(w: &mut World, id: ObjectId) {
     }
     let u = w.rng.ranged(0, 99, rules.quirks.ranged_draw_half_span); // spec: S-0501 claim 37 (a U(0, 99) draw)
     let dead = crate::combat::damage::dead(&o);
-    // spec: S-0501 claim 37 (smoke when u < 10 alive, u < 80 dead); the smoke animation is presentation and not created here
-    let _shown = if dead { u < 80 } else { u < 10 };
+    // spec: S-0501 claim 37 (smoke when u < 10 alive, u < 80 dead)
+    let shown = if dead { u < 80 } else { u < 10 };
+    if !shown {
+        return;
+    }
+    // spec: S-0501 claim 37 (Q-2237: one animation of the fixed damage-smoke type, the same for a living and a dead aircraft and for every aircraft type, found by its name without regard to letter case; at the aircraft's position when u is taken, after its own movement in this tick, height included, with no raise or lowering; not attached; no initial loop delay, repeat factor 1, no reverse request; its creation draws, S-0109 claims 3 and 13, right after u in this turn; no type of that name: nothing created, u still taken)
+    let made = crate::anims::spawn(
+        w,
+        DAMAGE_SMOKE,
+        Some(o.pos),
+        crate::anims::Spawn {
+            creation: crate::anim_clock::Creation {
+                loop_delay: 0,
+                repeat: 1,
+                reverse: false,
+            },
+            owner: None,
+            role: crate::anims::Role::Ordinary,
+        },
+    );
+    if made.id.is_some() {
+        // The presentation event: the view draws the animation the simulation plays, under
+        // the type's registered name.
+        let name = made
+            .id
+            .and_then(|id| w.anims.anims.get(&id))
+            .and_then(|a| a.anim)
+            .and_then(|i| w.rules().animations.get(i as usize))
+            .map_or_else(|| DAMAGE_SMOKE.to_owned(), |t| t.name.clone());
+        w.effects.push(crate::combat::effects::Effect::Anim {
+            name,
+            pos: o.pos,
+            delay: made.delay,
+            reverse: false,
+            z_adjust: None,
+            id: made.id,
+        });
+    }
 }
+
+/// The fixed name of the damage-smoke animation type (S-0501 Import
+/// mapping): no rules entry names it.
+// spec: S-0501 Import mapping (animation type `SGRYSMK1`, a fixed animation type name, found without regard to letter case, S-0004 claims 2 and 7) and claim 37
+pub const DAMAGE_SMOKE: &str = "SGRYSMK1";
 
 // ---------------------------------------------------------------------------
 // Carrier slot aircraft (claims 35 and 36, table T4)
