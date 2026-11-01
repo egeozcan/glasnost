@@ -3,7 +3,7 @@ id: Q-2099
 title: How "round" settles an exact half in the arena records' group counts
 status: open
 related: [M-0001, M-0002, M-0003, M-0017]
-answered-by: []
+answered-by: [S-0216]
 ---
 
 ## Need
