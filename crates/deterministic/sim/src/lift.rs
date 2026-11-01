@@ -261,6 +261,10 @@ pub fn seize_hit(
     // spec: S-0607 claim 2 (otherwise, before the target is tested, the firer's current grip ends as claim 13 says, the firer keeping its target, even when the target then turns out immune) and claim 12 (a new seizing detonation: the lifter's target is not cleared)
     end_grip(w, f, false);
     let Some(x) = x else { return };
+    // spec: S-0306 claim 17 and Questions for the project lead (engine design, no switch: a locomotor-seizing hit does nothing to a superweapon warp member from its departure until its arrival hold ends; the row still replaces ordinary damage; Q-2231)
+    if crate::superweapons::warp::phasing(w, x) {
+        return;
+    }
     // spec: S-0607 claim 22 (claims 1 to 3 decide the seize the same way whatever locomotor the warhead names)
     if !eligible(w, x, damage) {
         return;

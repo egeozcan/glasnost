@@ -2330,6 +2330,28 @@ fn p44b_owned_projectile_falls_to_the_deep_fall_row() {
     }
 }
 
+// spec: S-0306 T1 (the flak row: P′ below the target's reference height and h′ < 0, also for a projectile that has a firer) and claim 20 (a) (quirks.owned_shell_ground_pass on; scenario P45 part b: P44 part b with the flak-scattering flag and the weapon's range at the 6-cell distance of the attack detonates in the first turn with h′ < 0, at the surface there)
+#[test]
+fn p45b_owned_flak_projectile_detonates_in_its_first_turn_below_the_surface() {
+    let mut r = base();
+    ball(&mut r).flak_scatter = Some(true);
+    weapon(&mut r).range = Some(d("6"));
+    let mut s = setup(&r, 5, 5);
+    let p = c(-3, 2, 20);
+    let id = place(&mut s, far(), p, [10, 0, -30]);
+    assert!(glasnost_sim::combat::projectile::has_firer(
+        &s.w,
+        pr(&s, id)
+    ));
+    // The first turn: V_z = -40, h′ = 20 - 40 = -20 < 0, below the far
+    // cell's reference height 0 (level ground).
+    assert_eq!(
+        step(&mut s, id),
+        Out::Detonated(Pos::new(p.x + 10, p.y, 0)),
+        "the flak row in the first turn, at the surface"
+    );
+}
+
 // spec: S-0306 T1 row 1 and Terms (a firer killed while the projectile flies: no firer, so the whole first row applies; scenario P44 part c: it detonates in the first turn below the terrain, at the surface there)
 #[test]
 fn p44c_firer_killed_detonates_below_the_terrain() {
@@ -4017,6 +4039,58 @@ fn claim3b_switched_off_hover_lead() {
     }
     // The two worlds differ only in the switch: the led launch points elsewhere.
     assert_ne!(launches[0], launches[1]);
+}
+
+// spec: S-0306 claim 3 (b) (r62: a switched-off hovering vehicle that is led is led by the amount that its held speed fraction ρ gives, so none when ρ = 0; quirks.switched_off_hover_lead on, the default)
+#[test]
+fn claim3b_a_switched_off_hover_holding_rho_zero_is_not_moved() {
+    let (mut s, h) = travelling_hover(true, true);
+    assert!(glasnost_sim::hover::moving(&s.w, h));
+    let rp = s.w.reference_point(h);
+    let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+    assert_ne!(led, rp, "ρ > 0: led");
+    s.w.obj_mut(h).unwrap().hover.as_mut().unwrap().rho = F64::ZERO;
+    assert!(glasnost_sim::hover::moving(&s.w, h), "still moving");
+    let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+    assert_eq!(led, rp, "ρ = 0: no lead");
+}
+
+// spec: S-0306 claim 3 (b) (r62: a switched-off hovering vehicle keeps its heading point, S-0503 claims 16 and 19, and is led while it has a destination or a heading point; one that arrives at its heading point with no destination and no stored step loses the point, S-0503 claim 15, and is no longer led; scenario P45 part a)
+#[test]
+fn claim3b_a_switched_off_hover_that_arrives_is_no_longer_led() {
+    let (mut s, h) = travelling_hover(true, true);
+    let point = s.w.obj(h).unwrap().hover.as_ref().unwrap().point;
+    assert!(
+        point.is_some(),
+        "it keeps its heading point at the switch-off"
+    );
+    // Led while it keeps its heading point (its destination was cleared by
+    // the stop request, S-0503 claim 10).
+    let rp = s.w.reference_point(h);
+    let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+    assert_ne!(led, rp, "led while it has a heading point");
+    // In our engine the switched-off vehicle slows and stops short of its
+    // point (S-0503 claims 2 and 3), so the arrival is set up directly: its
+    // heading point where it now stands on the map plane, which S-0503 F5's
+    // test counts as reached at any step length, and no stored step left.
+    let here = s.w.obj(h).unwrap().pos;
+    {
+        let o = s.w.obj_mut(h).unwrap();
+        o.path.steps.clear();
+        o.hover.as_mut().unwrap().point = Some(glasnost_sim::world::Pos::new(here.x, here.y, 0));
+    }
+    assert!(glasnost_sim::hover::moving(&s.w, h));
+    glasnost_sim::tick::step(&mut s.w);
+    s.w.effects.clear();
+    assert!(!glasnost_sim::hover::moving(&s.w, h), "no longer moving");
+    assert_eq!(
+        s.w.obj(h).unwrap().hover.as_ref().unwrap().point,
+        None,
+        "the arrival cleared the heading point"
+    );
+    let rp = s.w.reference_point(h);
+    let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+    assert_eq!(led, rp, "not moving: not led");
 }
 
 /// The cart ordered to attack the buggy 5 cells away with `Shot` on an
