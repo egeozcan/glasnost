@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 63
+revision: 67
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-01
 measurements: [M-0004]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246]
 supersedes: []
 ---
 
@@ -340,6 +340,21 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    - **Freeing.** The fire place is freed at the first of its let-go events and its system's
      leaving play. The spark and railgun places are freed only when their system leaves play. A
      marked system leaves play in its first turn in which it holds no particle (S-0613 claim 17).
+   - **Moment of a retarget's let-go (Q-2246).** The test of a retarget is made at the change of the
+     firer's target, in whichever part of the tick makes that change, and not in the turn of the
+     system that the fire place holds. It reads nothing of that system's kind, so it is the same for
+     every kind. The retarget's mark affects only system turns after the target change. An attack
+     order takes effect after the turn pass (S-0203 claim 7). So after a retarget by an order, the
+     system's turn in the next tick is the first one that the retarget's mark affects. A marked turn
+     is the kind's own turn with the mark set. Smoke and fire systems emit no new particle (S-0616
+     claims 9 and 10), though a smoke system's dying particles still split into successors as
+     S-0616 claim 8 gives. A railgun system that has not yet made its line makes none (S-0616
+     claim 17).
+     The mark does not stop a spark system's bursts: while its counter *K* is above 0 it bursts as
+     S-0616 claim 15 gives. A gas system's turn is unchanged. Neither turn depends on the mark
+     (S-0616 claim 15, S-0613 claim 6). A system of a behaviour kind keeps updating and ending its
+     particles, and every system leaves play as S-0613 claim 17 gives (a system with no behaviour
+     kind never updates its particles, S-0613 claim 17).
    - **Spark-turns field of 0 or less.** A spark system of such a type makes no burst. In the
      original its counter never marks it, so only the other marks above end it: held in the fire
      place, a let-go marks it, and since it holds no particle it leaves play at its next turn. Under
@@ -392,7 +407,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      Confidence line gives: a retarget's effect on the spark and railgun places, a let-go's mark of
      a railgun-kind system, the
      fire place's freeing at the let-go itself rather than when its marked system leaves play, and
-     the original's let-go end of a spark system with a spark-turns field of 0 or less
+     the original's let-go end of a spark system with a spark-turns field of 0 or less. For the
+     moment of a retarget's let-go: `measurable` (scenario F4's unmatched part, third run: u10 and
+     the fire firer for the first turn that the mark affects, u9 for a marked spark system's
+     bursts); `unmeasured` that the test is made at the change itself rather than at the start of
+     the system's next turn (nothing between the two reads the mark, so no run tells them apart),
+     and for a railgun-kind system (the moment shows only for a retarget between the shot and the
+     system's first turn, which no scenario here sets up) and for gas-kind and no-kind systems
+     (their turns do not depend on the mark, so the moment changes nothing observable)
    - Confidence: high (the bare rate of a fire-particle weapon, *rearming* for an effect weapon's
      own kind, the any-flag gate and particle-emitter creation order, and the magnetic conditional
      gate and absence of a general own-wave block), medium (the bare rate of the sonic,
@@ -427,7 +449,12 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      in the fire place whose type's spark-turns field is 0 or less in the original (no scenario
      here sets such a type in the fire place; it rests on the same let-go events); our engine's
      first-turn mark of such a system as S-0616 claim 20 rates it; medium for the smoke, gas and
-     no-kind cases, which rest on those kinds' end rules
+     no-kind cases, which rest on those kinds' end rules. For the moment of a retarget's let-go:
+     medium, `unmeasured`, that the test is made at the change of target and not at the start of
+     the system's next turn, medium that the system's first turn after the change is the first one
+     the mark affects, whatever the held system's kind, and medium for each kind's marked turn, all
+     resting on S-0616 claim 1's let-go events (rated medium there), the marked turns also on S-0616
+     claims 9, 10, 15 and 17 and S-0613 claim 6 (rated high there)
 
 6. **Veteran factor.** If the firer is veteran and its type has the veteran rate-of-fire ability,
    or it is elite and its type has the veteran or the elite rate-of-fire ability, the delay is
@@ -1586,6 +1613,31 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   - Void: a run in which a firer is removed, leaves the map or is destroyed, or a trigger action
     marks a system. A second run in which u1's or u8's system bursts before its last counter turn
     is void.
+  - Third run (Q-2246, the moment of a retarget's let-go): three firers, each with a second enemy
+    placed outside its weapon's range. u9 is u1's pairing with a spark chance field of 1, a
+    particle cap of 2 or more and a spark-turns field large enough that its counter has not run
+    out by the end of the run. Its held spark type has x and y velocity fields of 1, a vertical
+    velocity range of 1, a minimum vertical velocity above twice the rules' gravity and a particle
+    lifetime of 2 or more ticks, and its system type keeps the default spawn direction (0, 0, 0)
+    (F10, F11 of S-0616), so that every spark rises with no sideways
+    motion in its first update and the system holds the sparks of each burst at the end of the
+    turn that makes them. u10 has a fire flag and a smoke-kind type with a spawn interval of
+    1, a slow-down field of 0 and a spawn cut-off of 1 or more. The third is the particle part's first fire firer with its type's
+    spawn interval set to 1. Each of the three types has a held particle type, and u10's names
+    no next particle type. All of these are test values, so that each system, while unmarked,
+    makes a particle in every turn. After the
+    first shot of each, give it an attack order on its second enemy. For each firer, let *t* be
+    the tick at whose end its new target is first recorded. Record every tick whether its first
+    system takes its turn and whether it makes a particle in that turn, and the tick at which
+    that system leaves play. A run in which a system takes no turn in tick *t* or in a later tick
+    of the record while it is in play is void.
+    - Expected: u9's system makes sparks in every turn, in tick *t* + 1 and later as before (with
+      a chance field of 1 its decision always passes).
+      u10's and the fire firer's systems make a particle in tick *t*'s turn and none in tick
+      *t* + 1's turn or any later one.
+    - Falsified if: u9's system makes no sparks in a turn after tick *t* while its counter is above
+      0, or u10's or the fire firer's system makes a particle in tick *t* + 1 or later, or
+      none in tick *t*.
 - Multi-flag part: use S-0616 scenario P22 part a's named test rules with all three
   particle-effect flags on one weapon, one named system type and a durable enemy vehicle
   in range. Keep the firer stationary and all other gates satisfied, at speed index 2,
@@ -2477,6 +2529,19 @@ is absent (the control).
     or, while it is held in the fire place, a let-go of that place could still end it".
   - Scenario P1, Falsified: replace "by a fire emitter let go at a tick other than claim 1 gives"
     with "by the system held in the fire place let go at a tick other than claim 1 gives".
+  - (d) A marked spark system's bursts (Q-2246). Claim 15's burst does not depend on the mark, so
+    the mark does not stop a spark system's bursts: while its *K* is above 0 it bursts as claim 15
+    gives (S-0301 claim 5, *Moment of a retarget's let-go*). Terms, *Marked*: replace "A marked
+    system makes no new particles and leaves play" with "A marked system makes no emission (claims
+    9, 11 and 17), though the mark does not stop a spark system's bursts while its *K* is above 0
+    (claim 15), and it leaves play". The system-states table's row for a marked system with
+    particles remaining: replace "keeps taking turns, no emission" with "keeps taking turns and
+    makes no emission, except that the mark does not stop a spark system's bursts while *K* is above
+    0 (claim 15)". Scenario P1 part b, Expected: replace "each marked system makes no new particle"
+    with "each marked system makes no emission, except that the mark does not stop the spark
+    system's bursts while its *K* is above 0 (claim 15)". Scenario P1 part b, Falsified: replace "by
+    a marked system that emits" with "by a marked smoke, fire or railgun system that emits". Level:
+    medium, `measurable` (S-0301 scenario F4's unmatched part, third run, u9).
   - Levels. Each kind's own marks and the place's freeing when its system leaves play: as S-0616
     rates them (high: claims 10, 15, 17 and 22, claim 4 for removal, and claim 20's fix and the
     original's spark-turns behaviour); a fire-kind system in the spark or railgun place not marked
