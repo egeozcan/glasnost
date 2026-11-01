@@ -1,9 +1,9 @@
 ---
 id: Q-2229
 title: The exact moment an aircraft issues its next route point at a flight's end
-status: open
+status: answered
 related: [S-0213, S-0501]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
