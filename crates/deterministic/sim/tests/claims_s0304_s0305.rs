@@ -253,11 +253,13 @@ fn ordered_attack(v: &str, rearm: i32, limit: i32) -> (Option<i32>, i32, usize) 
     (dropped, until, shots)
 }
 
-// spec: S-0304 claim 2 (an attack order on an illegal target is accepted, the actor never fires, and drops the target at the first check that answers illegal)
+// spec: S-0304 claim 2 (an attack order on an illegal target is accepted and the actor never fires) and S-0309 r70's Changes for S-0304 claim 2 (a vehicle that S-0309 claim 29 covers drops it at that claim's periodic check, in a tick whose tick number is a multiple of 16, 1 to 16 ticks after the tick in which the order is applied)
 #[test]
 fn an_attack_on_an_illegal_target_never_fires() {
     let (dropped, _, shots) = ordered_attack("0", 0, 120);
-    assert!(dropped.is_some());
+    // `dropped` is read after the step, one above the tick of the drop.
+    let k = dropped.expect("dropped") - 1;
+    assert_eq!(k.rem_euclid(16), 0, "dropped in a check tick: {k}");
     assert_eq!(shots, 0);
     // The same order on a legal target fires and keeps it.
     let (dropped, _, shots) = ordered_attack("1", 0, 120);
@@ -265,13 +267,15 @@ fn an_attack_on_an_illegal_target_never_fires() {
     assert!(shots > 0);
 }
 
-// spec: S-0304 claim 2 (while the rearm countdown runs the check answers rearming, so the target is kept until the countdown has run out, then dropped)
+// spec: S-0304 claim 2 (while the rearm countdown runs the check answers rearming, so the target is kept until the countdown has run out, then dropped) and S-0309 r70's Changes for S-0304 claim 2 with S-0309 claim 29 (otherwise the first tick whose tick number is a multiple of 16 after they have ended; scenario V1 run 4b)
 #[test]
 fn an_illegal_target_is_kept_while_rearming() {
     let (dropped, until, shots) = ordered_attack("0", 80, 300);
-    let dropped = dropped.expect("dropped after the countdown");
-    assert!(dropped > until, "kept until the countdown ends");
-    assert!(dropped <= until + 60, "dropped at the next check after it");
+    // `dropped` is read after the step, one above the tick of the drop.
+    let k = dropped.expect("dropped after the countdown") - 1;
+    assert!(k >= until, "kept until the countdown has run out");
+    assert_eq!(k.rem_euclid(16), 0, "dropped in a check tick: {k}");
+    assert!(k < until + 16, "at the first check tick after it");
     assert_eq!(shots, 0);
 }
 

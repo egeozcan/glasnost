@@ -186,6 +186,8 @@ fn claim_9_no_destination_flies_to_the_found_point() {
     assert_eq!(d.cell(), c);
     assert_eq!((d.x, d.y), (c.x * 256 + 128, c.y * 256 + 128));
     assert!(jump::moving(&w, v));
+    // spec: S-0309 r70 claim 29 and its Changes for S-0304 claim 2 (the lifter, a covered holder in attack, keeps the airborne victim, which its firing check refuses, until the next check tick rather than dropping it at its attack processing; the later area-guard search then picks the victim again and grips it as it lands). This claim is the victim's own stop, so the lifter leaves play once the grip has ended.
+    glasnost_sim::objects::remove(&mut w, l);
     assert!(run_until(&mut w, 400, |w| height(w, v) == 0 && !jump::moving(w, v)));
     let p = w.obj(v).unwrap().pos;
     assert_eq!((p.x, p.y), (d.x, d.y), "landed at the point");

@@ -194,7 +194,32 @@ fn claim39_whole_tick_holder_first_then_the_interim_drop() {
     assert_eq!(stage(&w, m), Some(Stage::Leaving(tl + 1)));
     hold(&mut w, h, m, 100, true);
     let timer = w.obj(h).unwrap().targeting_timer;
-    // spec: S-0513 claim 39 (an infantry holder whose weapon does not heal keeps the member when its firing step gets the leaving stage's answer; SW12 part i: no holder drops it in its firing step in the leaving stage)
+    // spec: S-0309 r70 claim 29 and Constants (check period 16: the first tick from the next one to run whose tick number is a multiple of 16)
+    // spec: S-0513 r62 claim 39 and S-0309 r70 claim 29 (a holder that claim 29 covers drops the member, which answers illegal, at its first checking turn in a check tick after the launch; before it, an infantry holder whose weapon does not heal keeps it in its firing step); S-0309 Constants (check period 16)
+    let first = (w.tick + 15) / 16 * 16;
+    while w.tick < first {
+        step(&mut w);
+        assert_eq!(
+            target(&w, h),
+            Some(Target::Object(m)),
+            "tick {}",
+            w.tick - 1
+        );
+    }
+    step(&mut w);
+    assert_eq!(target(&w, h), None, "dropped at check tick {first}");
+    // spec: S-0309 r70 claim 29 (the drop takes no targeting-timer draw)
+    assert_eq!(w.obj(h).unwrap().targeting_timer, timer, "no draw");
+    // spec: S-0513 r62 claim 39 (a holder that takes the member again after its last check tick before the member's update holds it through the departure)
+    let last = (tl + 61) / 16 * 16;
+    assert!(
+        (tl + 62) % 16 != 0,
+        "the departure tick {} is not a check tick in this setup",
+        tl + 62
+    );
+    run_through(&mut w, last);
+    hold(&mut w, h, m, 100, true);
+    let timer = w.obj(h).unwrap().targeting_timer;
     while w.tick <= tl + 61 {
         step(&mut w);
         assert_eq!(

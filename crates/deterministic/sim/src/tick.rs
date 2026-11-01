@@ -241,6 +241,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::combat::fire::reload_elapsed(w, id);
         return;
     }
+    // spec: S-0309 claim 29 (the periodic held-target check in the holder's own turn of a check tick; its place in the turn is open, interim Q-2261: here, before the behaviour processing, searches and firing step, and before a building's pending delayed shot counts down) and S-0513 claim 51 with S-0203 claim 4 (suppressed in the warp turns above; in the arrival hold after the hold-end test)
+    crate::combat::held::periodic_check(w, id);
     // spec: S-0608 claims 12 and 15 (Q-1440: a vehicle drainer's position check samples its position before that turn's behaviour start, behaviour processing, movement and firing, and before its erasure exit; the warp-only stages, which returned above, exclude it, S-0513 claim 51; a pulse-disabled drainer still checks)
     crate::drain::position_check(w, id);
     if !crate::temporal::erased(w, id) {
