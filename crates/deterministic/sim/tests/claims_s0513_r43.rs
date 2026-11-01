@@ -238,7 +238,7 @@ fn claim39_whole_tick_holder_first_then_the_interim_drop() {
         "kept through the departure"
     );
     assert_eq!(w.obj(h).unwrap().targeting_timer, timer);
-    // spec: S-0309 claim 27 (DECIDED turn-start drop) applied to a departed warp member, our interim for S-0513 claim 39's open question (Q-2211): the holder's own next turn drops it, with no timer draw and no revert
+    // spec: S-0513 r62 claim 39 (what the firing check answers about a departed member is open, Q-2211 question 3; S-0309 claim 27's rule for an object a revert gave back does not apply to a holder that kept it through departure) - interim Q-2211 question 3: our own rule, the same handling as S-0309 claim 27's turn-start drop, so the holder's own next turn drops it, with no timer draw and no revert
     step(&mut w);
     assert_eq!(target(&w, h), None);
     assert_eq!(w.obj(h).unwrap().targeting_timer, timer, "no draw");
@@ -311,7 +311,7 @@ fn claim39_a_failed_and_a_redirected_landing_check_clear_no_holder() {
 
 #[test]
 fn claim39_leaving_stage_answers_illegal_ahead_of_rearming_and_range() {
-    // spec: S-0513 claim 39 and its Changes for S-0301 (a target in the leaving stage answers illegal, a rank-4 reason that outranks a running rearm countdown, rank 5, and the range test, rank 10)
+    // spec: S-0513 r62 claim 39 and its Changes for S-0301 (from the launch until the departure update, the pending stage before the first update included, a target with a warp pending answers illegal, a rank-4 reason that outranks a running rearm countdown, rank 5, and the range test, rank 10)
     let mut w = ready(&rules());
     let h = spawn(&mut w, "CART", ALPHA, 0, 3);
     let far = spawn(&mut w, "CART", ALPHA, 0, -9);
@@ -322,12 +322,13 @@ fn claim39_leaving_stage_answers_illegal_ahead_of_rearming_and_range() {
         let t = w.tick;
         w.obj_mut(h).unwrap().combat.rearm_until = t + 100;
     };
-    // Pending (before its first update): not yet the leaving stage.
+    // Pending (before its first update): not yet the leaving stage, but the
+    // answer holds from the launch (r62; r43 answered rearming here).
     assert_eq!(stage(&w, m), Some(Stage::Pending));
     rearming(&mut w);
     assert_eq!(
         check(&w, h, Some(Target::Object(m)), 0, true),
-        Answer::Rearming
+        Answer::Illegal
     );
     run_through(&mut w, tl + 30);
     assert!(matches!(stage(&w, m), Some(Stage::Leaving(_))));
@@ -381,26 +382,47 @@ fn claim39_the_materialising_firer_keeps_its_earlier_rearming() {
 }
 
 #[test]
-fn claim39_a_temporal_weapon_is_not_refused_by_the_leaving_stage() {
-    // spec: S-0513 claim 39 and its Changes for S-0301 (illegal unless the asking weapon is a temporal weapon, S-0301 Terms: its warhead has the temporal flag)
+fn claim39_a_temporal_weapon_gets_illegal_too() {
+    // spec: S-0513 r62 claim 39 and its Changes for S-0301 (Q-2213 answered: illegal for every weapon, a temporal weapon, S-0301 Terms, included; the test is made on the pending warp itself and makes no exception for a temporal weapon; r43's exception is withdrawn)
     let mut r = rules();
     r.sim.warheads.get_mut("HE").unwrap().temporal = Some(true);
     let mut w = ready(&r);
     let h = spawn(&mut w, "CART", ALPHA, 0, 3);
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    // h makes no shot before the launch: a temporal shot in flight at the
+    // launch that locks a beam on the member at its detonation would give h
+    // S-0514 claim 19's rearming, which ranks above (interim Q-2276).
+    let t0 = w.tick;
+    w.obj_mut(h).unwrap().combat.rearm_until = t0 + 1000;
     let tl = launch(&mut w);
-    run_through(&mut w, tl + 30);
-    let t = w.tick;
-    w.obj_mut(h).unwrap().combat.rearm_until = t + 100;
+    let rearming = |w: &mut World| {
+        let t = w.tick;
+        w.obj_mut(h).unwrap().combat.rearm_until = t + 100;
+    };
+    assert_eq!(stage(&w, m), Some(Stage::Pending));
+    rearming(&mut w);
     assert_eq!(
         check(&w, h, Some(Target::Object(m)), 0, true),
-        Answer::Rearming
+        Answer::Illegal,
+        "pending"
+    );
+    run_through(&mut w, tl + 30);
+    assert!(matches!(stage(&w, m), Some(Stage::Leaving(_))));
+    assert!(
+        !glasnost_sim::temporal::holds(&w, h, m),
+        "no beam of h's on the member"
+    );
+    rearming(&mut w);
+    assert_eq!(
+        check(&w, h, Some(Target::Object(m)), 0, true),
+        Answer::Illegal,
+        "leaving"
     );
 }
 
 #[test]
 fn claim39_an_opportunity_target_is_dropped_at_the_search_without_a_drop_draw() {
-    // spec: S-0513 claim 39 (a holder whose weapon is not temporal and whose member is an opportunity target drops it at its next search in the leaving stage, S-0309 claims 4 and 19; the drop is not claim 27's and takes no draw over 4 to 8 ticks; SW12 part i, H3)
+    // spec: S-0513 r62 claim 39 (before its first check tick, a holder whose member is an opportunity target drops it at its next search if that comes first, whatever its weapon, S-0309 claims 4 and 19; the drop is not claim 27's and takes no draw over 4 to 8 ticks; SW12 part i, H3)
     let mut w = ready(&rules());
     let h = spawn(&mut w, "WALKER", ALPHA, 3, 0);
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);

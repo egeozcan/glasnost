@@ -99,7 +99,7 @@ Requests filed: **Q-2261** to **Q-2264**.
 | 29, Turns cut short: tunnel travel, the last death-frame turn, the earlier death-frame turns' *impossible*, a building being materialised | seam | No tunnel, vehicle death frames or materialising building in our engine |
 | 29, a holder that misses its turn in a check tick acts at its next checking turn | by construction | The check runs only in the holder's own turn; nothing carries over |
 | 29, materialising holders (open) | interim | Q-2264: a holder with a beam locked counts as being erased (no check, the per-turn drop); one with no beam makes the check, and the hidden-target *impossible* and the projectile *illegal* come before the phasing-in *rearming* in our firing check, so it drops. Not tested |
-| 29, Warp members: no check in the warp turns; in the arrival hold after the hold-end test (S-0513 claim 51, design) | by construction | The call follows `warp::turn`'s early return. Intake 60's warp tests still pass |
+| 29, Warp members: no check in the warp turns; in the arrival hold after the hold-end test (S-0513 claim 51, design) | by construction | The call follows `warp::turn`'s early return. Intake 60's warp tests still pass. **Tested since [intake 71](intake71-S-0513-S-0216.md)** (S-0513 r62 claim 51, SW23 part f): `claim51_sw23_f_the_members_own_periodic_check_is_suppressed_through_arrival_effects` puts a check tick on each warp row and on the hold end |
 | Constants, held-target check period 16 ticks | tested | `held::CHECK_PERIOD`, used by every test above |
 | 4 r70, the drop on an unusable target can come earlier at a check tick | tested | through the part m test |
 | 4 r70, a spawner's keep of an *impossible* target ends at the first check tick | by construction | No spawner exception in `periodic_check`; no test (the spec rates the keep `unmeasured`) |
@@ -117,7 +117,7 @@ Requests filed: **Q-2261** to **Q-2264**.
 | Changes, S-0310 claim 11 and T10 parts g and h: an infantry healer drops a non-infantry or full-health target in its firing step | tested | `an_infantry_healer_drops_a_vehicle_target_in_its_firing_step` |
 | Changes, S-0310 claim 11: an infantry healer keeps a damaged infantry target that answers *illegal*, to the next check tick | tested | `an_infantry_healers_keep_lasts_to_the_check_tick` (a healing warhead with versus 0) |
 | Changes, S-0513 claim 39: a holder of a warp member drops it at its first checking turn in a check tick after the launch | tested | `claim39_whole_tick_holder_first_then_the_interim_drop` (`claims_s0513_r43.rs`), updated (below) |
-| Changes, S-0513 claims 48, 51 and 52 and S-0203 claim 4: the check is among the work the warp turn suppresses | by construction | see *Warp members* above |
+| Changes, S-0513 claims 48, 51 and 52 and S-0203 claim 4: the check is among the work the warp turn suppresses | tested (intake 71) | see *Warp members* above |
 
 ## Tests changed
 
