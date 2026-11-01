@@ -815,3 +815,44 @@ fn selecting_a_holder_in_route_mode_selects_its_last_points_holders() {
     want.sort();
     assert_eq!(got, want, "with the key");
 }
+
+/// The fills of `rgba` in a drawing, its layers included.
+fn fills_of(d: &glasnost_ui::draw::DrawList, rgba: [u8; 4]) -> usize {
+    use glasnost_ui::draw::Prim;
+    d.prims
+        .iter()
+        .map(|p| match p {
+            Prim::Fill { rgba: c, .. } if *c == rgba => 1,
+            Prim::Layer { list, .. } => fills_of(list, rgba),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// Round 7 note 42: a selected factory of ours shows its rally point; an
+/// unselected one does not.
+// spec: S-0213 claim 20 (a factory's guard spot is its rally point); design: M8 A4 round 7 note 42 (a dashed line from the building and a diamond on the point's cell while it is selected)
+#[test]
+fn a_selected_factory_shows_its_rally_point() {
+    use crate::game::session::RALLY_POINT_INK;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let s = session_mut(&mut c);
+    let local = s.play.local;
+    let at = s.under(s.map_rect().centre()).0;
+    let w = &mut s.play.game.world;
+    let f = glasnost_sim::testkit::spawn(w, Kind::Building, "FACT", local.0, at, 0);
+    let spot = CellXY::new(at.x - 3, at.y + 3);
+    w.obj_mut(f).unwrap().guard_spot = Some(glasnost_sim::world::Target::Cell(spot));
+    let (list, _) = c.frame();
+    assert_eq!(fills_of(&list, RALLY_POINT_INK), 0, "not selected");
+    session_mut(&mut c).play.selection = vec![f];
+    let (list, _) = c.frame();
+    // The diamond: one fill per row of the cell's 30 rows (S-0101 F1).
+    assert_eq!(fills_of(&list, RALLY_POINT_INK), 30);
+    // No rally point set: nothing.
+    let s = session_mut(&mut c);
+    s.play.game.world.obj_mut(f).unwrap().guard_spot = None;
+    let (list, _) = c.frame();
+    assert_eq!(fills_of(&list, RALLY_POINT_INK), 0, "no rally point");
+}
