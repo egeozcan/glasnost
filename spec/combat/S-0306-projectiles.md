@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 57
+revision: 62
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-01
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232]
 supersedes: []
 ---
 
@@ -28,7 +28,9 @@ voxel orientation, palette and brightness, its shadow and its light glow. Claim 
 the firing check's refusals that depend on the firer's type rather than its weapon: the
 land-targeting mode's row and the naval-targeting mode's row. The two departures under Edge
 cases that state our engine's own choice (the object numbering and the failed comparison solve)
-are design, which is why `design` is among this spec's sources. This spec covers skirmish.
+are design, which is why `design` is among this spec's sources. Claim 17's two rules for a
+superweapon warp member (its deck count after a refused placement, and no locomotor seizing of
+it from departure until its arrival hold ends) are design as well. This spec covers skirmish.
 Network games and campaigns are out of scope.
 
 This revision changes claim 23 of the committed text in two places. It states the rank of a
@@ -327,32 +329,55 @@ S-0501 claim 20.
    - (b) **A switched-off hovering vehicle.** A hovering vehicle is moving while it has a
      destination or a heading point (S-0503, Terms). The stop request of a switch-off clears its
      destination and stored path only when destination and heading point differ as full
-     three-dimensional points, and otherwise leaves them (S-0503 claim 10), and it does not zero the
-     speed fraction (S-0503 claim 4). A switched-off hovering vehicle that remains moving under
-     S-0503 is led by this claim's ordinary moving-vehicle rule: every shot at it is led along its
-     body facing with the speed fraction it holds (quirk `quirks.switched_off_hover_lead`). Whether
-     the switch-off retains its heading point belongs to S-0503, which does not state it, so this
-     claim does not say whether a switched-off vehicle that has stopped travelling is still moving.
+     three-dimensional points, and otherwise leaves them (S-0503 claim 10). It keeps the heading
+     point (S-0503 claims 16 and 19). It does not zero the speed fraction (S-0503 claim 4). A
+     switched-off hovering vehicle that remains moving under S-0503 is led by this claim's
+     ordinary moving-vehicle rule: a shot at it is led along its body facing by the amount its
+     held speed fraction gives (none when that fraction is 0) (quirk
+     `quirks.switched_off_hover_lead`). Whether and how far a switched-off vehicle travels, and
+     when it reaches, replaces or loses its heading point, are S-0503's (claims 2, 3, 5, 7, 8, 10,
+     12, 15, 16 and 19). Observable consequences of those claims for a group of switched-off
+     vehicles, among others:
+     - one that has a destination or a heading point when switched off is moving, so a shot at
+       it is led, while it keeps either of them.
+     - one that arrives at its heading point by S-0503 claim 7's test, with no destination left
+       after that arrival and no stored step, loses the heading point at that arrival and is no
+       longer moving (S-0503 claim 15), so from then on shots at it are aimed at its reference
+       point, scattered about it by claim 4 when the projectile is arcing and inaccurate.
+
      Whether the targets of M-0005 that never change cell were moving in S-0503's sense is not
-     recorded (Open questions), so this case is not shown to apply to them. Whether and how far a
-     switched-off vehicle travels, and when it reaches or replaces its heading point, are S-0503's
-     (claims 2, 5, 7, 8 and 10); this claim does not state them. Off: a switched-off vehicle is not
-     led. The lead moves only the aim point of this claim, from which the launch direction,
-     elevation and impact point are computed. The projectile keeps no led point: the target point it
-     stores is *K* of claim 9, the target's reference point, so a led shot and an unled one at the
-     same target store the same point, and a led shot shows its lead only in its launch velocity and
-     its flight. Consequences: a lead away from the firer can make an arcing shot void (claim 6 a).
-     Otherwise T1 and T2 determine its detonation and claim 20 its detonation point. A straight or
-     arcing projectile whose firer is still in play outside any transport and has not been killed or
-     started to cloak since the shot is not detonated by the terrain (T1, its first row and note),
-     so a shot that passes below the ground short of the vehicle flies on and can detonate away from
-     it.
+     recorded (Open questions), so this case is not shown to apply to them. Off: a switched-off
+     vehicle is not led. The lead moves only the aim point of this claim, from which the launch
+     direction, elevation and impact point are computed. The projectile keeps no led point: the
+     target point it stores is *K* of claim 9, the target's reference point, so a led shot and an
+     unled one at the same target store the same point, and a led shot shows its lead only in its
+     launch velocity and its flight. Consequences:
+     - A lead away from the firer can make an arcing shot void (claim 6 a).
+     - Otherwise T1 and T2 determine its detonation and claim 20 its detonation point. The impact
+       point of a led arcing shot lies about the led point, moved by the scatter of claim 4 when
+       the projectile is inaccurate.
+     - A led shot whose new position lies in the cell of *K* (claim 9) at a start-of-turn height
+       below 208 detonates by a "reached" row of T1, which T2 puts before every other row. An
+       inaccurate one is not moved onto the vehicle (claim 20 b), so whether the vehicle takes
+       damage is S-0303's area damage from that point.
+     - A straight or arcing projectile whose firer is still in play outside any transport and has
+       not been killed or started to cloak since the shot is not detonated by the terrain (T1, its
+       first row and note). One that is not flak-scattering and passes below the ground short of
+       the vehicle flies on and can detonate away from it. One that is flak-scattering and has a
+       target is detonated by T1's flak row where the target's reference point is not below the
+       surface beneath the projectile: in the first turn in which it is below the terrain, at
+       the surface there (claim 20 a), whatever its firer.
+
+     Which of these rules applies to a given firer follows from its weapon's projectile flags in
+     the imported data.
    - Backing: `measurable` (scenario P2, run c for an aircraft target, run d for *w* = 0, run e for
      a lead weapon other than the weapon fired, run f for a switching type, run g for a gattling
      type, runs h and i for the speed estimate at two speed fractions; S-0207 scenario D20 for the
      estimate itself; P17 for case a, spray attack and area fire; P44 part a for case b, including
      the stored point of a led shot, and part b for a shot that passes below the ground
-     unexploded). M-0005's per-shot aim point, the target's position at its fire
+     unexploded; P45 part a for the group of switched-off vehicles, which of them are led and
+     where the shots at them land, and part b for the flak row's detonation of a shot with
+     a firer). M-0005's per-shot aim point, the target's position at its fire
      event for every detonated projectile, is the point *K* that each projectile stores, which the
      lead does not move: the record agrees with case (b) and does not test it, since it records
      neither launch velocities nor heading points. The flag-carrier halving is `unmeasured` here as
@@ -367,10 +392,14 @@ S-0501 claim 20.
      current target.
    - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target, and
      that no skirmish case reaches it; the switched-off case (b), which applies the ordinary lead to
-     a vehicle that S-0503 counts as moving, at S-0503's medium for its moving test and for claim
-     10; the unled stored point of a led shot), high for the speed estimate *u*; high that a shot of
-     a firer still in play, as above, passes below the ground unexploded, the case of T1's first row
-     that P44 part b tests; low for the fragment exception, as S-0318 claim 6 rates it
+     a vehicle that S-0503 counts as moving, at S-0503's medium for its moving test and for claims
+     10, 16 and 19; the unled stored point of a led shot; which vehicles of a switched-off group
+     are led, so that one with neither a destination nor a heading point is not, as after the
+     arrival of S-0503 claims 7 and 15; where a led shot detonates, by T1, T2
+     and claim 20; the flak row's detonation below the ground, at T1's medium for that row),
+     high for the speed estimate *u*; high that a shot of a firer still in play, as above, that is
+     not flak-scattering passes below the ground unexploded, the case of T1's first row that P44
+     part b tests; low for the fragment exception, as S-0318 claim 6 rates it
 
 4. **Scatter of inaccurate arcing projectiles.** Only a projectile that is both arcing and
    inaccurate scatters at launch. The impact point is the aim point moved by a radius *σ* in a
@@ -752,24 +781,77 @@ S-0501 claim 20.
     (T1, T2, claim 20 and the loss above) ask whether the target is airborne, a member between
     departure and appearance does not fall under S-0307's rule that an object not on the map is
     neither airborne nor floor-bound. It is counted by its height above the surface beneath its kept
-    position, and as standing on a deck only once its landing check has passed for a landing cell on
-    a deck. So a member that departed from a high-bridge deck counts as airborne from departure
-    until it appears, except once a landing check has passed for a landing cell on a deck
-    (`quirks.warp_deck_departure_airborne`).
+    position, and as standing on a deck only while a landing check that passed for a landing cell
+    on a deck awaits its placement. So a member that departed from a high-bridge deck counts as
+    airborne from departure until it appears, except while such a passed check awaits placement
+    (`quirks.warp_deck_departure_airborne`). In our engine a placement can be refused after a
+    passed check (S-0513 claim 50, engine design). With the quirk on (the default), the member
+    then counts by its height again until a later check passes for a landing cell on a deck. A
+    later check that fails, that redirects it, or that passes for a landing cell not on a deck
+    leaves it counted by its height.
+    Each passed check sets the deck count from its own landing cell alone, whatever an earlier
+    check gave. With the quirk off, the member counts as standing on the deck it departed from
+    until it appears, through any refusal. This refusal rule is our engine's design (Q-2232), not a
+    reproduction claim, and has no quirk switch of its own.
+
+    *Special hits on a warp member.* A detonation whose warhead selects one of the rows of S-0514
+    claim 20 listed here acts on the projectile's target object, not through area damage, so the
+    off-map rule above does not stop it. When that target object is a departed warp member, off
+    the map or phasing in after it appears, the selected row acts as follows:
+    - takeover (S-0601 claim 5): the member changes owner at the detonation, by that claim's
+      tests,
+    - bomb planting (S-0519 claim 2) and bomb disarming (S-0519 claim 7): the member gets or
+      loses its bomb at the detonation, by those claims' tests,
+    - air-strike designation (S-0519 claim 16): the member is designated, by that claim's tests,
+    - disguise-making (S-0516 claim 31): the firer copies the member as that claim gives,
+    - electric charging (S-0518 claim 11): nothing happens, since it acts on buildings only, and
+      the member's health is unchanged,
+    - temporal erasure (S-0514 claims 1 to 4): the lock attaches, by those claims' tests. Its
+      ground-layer test (S-0514 claim 1) passes, by the next paragraph. What the lock then does
+      to the member's warp is not established (Open questions),
+    - locomotor replacement: nothing happens to the member from its departure until its arrival
+      hold ends. This is our engine's design, not a reproduction claim, and has no quirk switch:
+      in the original what the seizure then does
+      to its warp is not established (Open questions).
+
+    In every case listed here the selected row still replaces ordinary damage (S-0514 claim 20).
+    Parasite attachment is S-0614's (claim 21 here), and this paragraph does not cover it. What
+    the direct-rocking and nuke-making rows of S-0514 claim 20 do to a departed member is not
+    established (Open questions).
+
+    *Render layer of a warp member.* From its warp's launch until at least the end of its arrival
+    hold, a warp member is in the ground render layer, whatever its height. When it leaves that
+    layer after the hold is not established here. So claim 20 (c) uses the threshold 42 for a warp
+    member, also for one that departed from a high-bridge deck and counts as airborne by the
+    paragraph above. No member uses 128 there:
+    an aircraft is never warped while in the air (S-0513 claim 34).
     - Backing: `measurable` (scenario P11: run a for the airborne target, run c for the target on
       the ground, run d for a target that teleports, run e for a firer that leaves the game, run f
       for a projectile that keeps a warp member and turns towards its landing point; P38 for a
       building target whose target point is the world origin). The other warp parts are
       `unmeasured`: P11 run f judges post-appearance flight and damage, and it provides no
       distinguishing expectation for flight while the member is off the map. No part here
-      detonates a projectile near a member then, places a hit before or after the end of a
-      member's phasing in, has the landing check kill a member that a projectile targets, or warps
-      a member from a deck. That S-0307's off-the-map rule does not apply is `unmeasured` as well
+      detonates a projectile of ordinary damage near a member then, places an ordinary hit before
+      or after the end of a member's phasing in, has the landing check kill a member that a
+      projectile targets, or tests whether a member that departed from a deck counts as airborne
+      (run j's threshold 42 holds either way). That S-0307's off-the-map rule does not apply is
+      `unmeasured` as well.
+      The special hits are `measurable` by run g (off the map) and run h (phasing in). The
+      refusal rule of the deck count is
+      `measurable` in our engine by run i; the original has no refused placement to compare. The
+      rule of no seizing is `measurable` in our engine by run h part h run there; run in the
+      original, that part only records the original's outcome. The threshold 42 for a member
+      that counts as airborne is `measurable` by run j. That the ground layer lasts at least
+      until the arrival hold ends is `unmeasured`: no rule here reads the layer after appearance
     - Confidence: high; medium for the target point at the world origin; medium for the warp
       member kept as target, the turn towards its landing point and the hit there (run f), and
       medium, unmeasured, for the position read while the member is off the map, for the lack of
       area damage to it then, for the hit while it phases in, for the loss when its landing check
-      kills it, for the deck rule and for the airborne count of a departed member
+      kills it, for the deck rule and for the airborne count of a departed member. Medium for each
+      special-hit row on a departed member (runs g and h), medium for the threshold 42 (run j),
+      medium, unmeasured, for the ground render layer lasting until the arrival hold ends, and high
+      for the two engine-design rules (the deck count after a refused placement, and no seizing
+      of a member from its departure until its arrival hold ends) as design contracts
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
@@ -1753,7 +1835,12 @@ passed-by rows. A row's "detonate" takes effect at once, except for a projectile
 warhead (claim 25), which first waits for an animation. A straight or arcing projectile that has a
 firer is not detonated by the terrain, a building or a wall overlay through the first row: below
 the terrain it flies on, following its velocity and gravity as above it, and detonates by the
-first other row of T1 that applies, with T2 and claim 20 giving the point. The first row's
+first other row of T1 that applies, with T2 and claim 20 giving the point. For a
+flak-scattering projectile with a target (an object or a cell) the flak row is such a row. Where
+the target's reference point is not below the surface beneath the projectile, the flak row
+detonates it in the first turn in which it is below the terrain, at the surface there (claim 20
+a), as the first row would detonate one with no firer: under that condition such a projectile
+never flies on below the terrain. The first row's
 confidence cell rates this for each cause by which a projectile can lose its firer (Terms). For
 example, a "reached" row applies when it enters the cell of *K* with *h* < 208, which includes a
 negative *h*, so a shot that passes below the ground short of that cell can still hit there. The
@@ -1950,8 +2037,12 @@ that no fix would change.
   a firer that started to cloak or was loaded) is not detonated by the terrain, by the building
   band or by the wall overlays of T1's first row. Only that row's deck crossings detonate it. It
   can fly on below the surface until another row of T1 detonates it (the note below T1), with T2
-  and claim 20 giving the point, and claim 20 (a) raises a detonation point below the surface. An
-  enemy building in its path that does not share a cell with *K* stops it only by the proximity row,
+  and claim 20 giving the point, and claim 20 (a) raises a detonation point below the surface. A
+  flak-scattering one with a target is detonated by T1's flak row where the target's reference
+  point is not below the surface beneath it, in the first turn in which it is below the terrain
+  (the note below T1), so the switch does not change where it
+  detonates there. An enemy building in its path that does not share a cell with *K* stops it
+  only by the proximity row,
   a wall only by the line-of-fire row. Off: the first row applies to every straight or arcing
   projectile as it does to one with no firer, so a shot detonates where it first passes below the
   terrain or enters the band of a building or wall overlay, except that the firer itself and a
@@ -1967,13 +2058,15 @@ that no fix would change.
   (claim 3 b). Shots of a straight or arcing projectile at it are aimed
   ahead of it along its body facing. An arcing shot at it can be void (claim 6 a). Otherwise T1 and
   T2 determine their detonation, and with `quirks.owned_shell_ground_pass` a shot that passes below
-  the ground short of it flies on and can detonate away from it. Attackers that keep it as their
+  the ground short of it flies on and can detonate away from it, unless the projectile is
+  flak-scattering and has a target (T1's flak row). Attackers that keep it as their
   target can then fail to destroy it for the rest of the game. Off: a vehicle that is switched off
   is not led, so the aim point is its reference point.
 - **`quirks.warp_deck_departure_airborne`** (default on). A warp member that departed from a
   high-bridge deck keeps the deck's height but no longer counts as standing on the deck, so the
   rules here that ask whether the target is airborne count it as airborne until it appears, except
-  once a landing check has passed for a landing cell on a deck (claim 17). At a landing-check kill,
+  while a landing check that passed for a landing cell on a deck awaits its placement (claim 17).
+  At a landing-check kill,
   the projectile loses its target according to claim 17's airborne classification (a steering one
   left without target climbs, claim 15). Off: until it appears, the member counts as standing on
   the deck it departed from, so it is not airborne and its loss gives the deck cell it stood in.
@@ -2159,7 +2252,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   the same distance.
 - Observable: each projectile's impact point (Terms), which the recorder reads directly when the
   projectile enters play, as it reads its first velocity. The detonation point is not used for
-  it, since a projectile with a firer flies on below the surface (T1's note). Also the detonation
+  it, since the detonation point of a projectile with a firer need not lie at the impact point
+  (T1's note). Also the detonation
   points of the invisible projectiles of (d) and (e), and the random-stream draws per shot with
   the recorder. If the recorder cannot read the impact point, runs a, b, e and f give no result
   for their distances. The recorder also logs each fire attempt and whether it creates a
@@ -2556,6 +2650,86 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   - Void if: the projectile detonates or leaves the map before V appears; the landing check does
     not pass at its first try or kills an object; the firer makes a second projectile before the
     first detonates; V is moved, attacked or damaged by anything else.
+- Run g (claim 17, special hits on a member off the map):
+  - Setup: as run f, except that the projectile's arm time is short and the test file gives its
+    warhead one special-hit flag per part, the others cleared. Part a: takeover, from a firer
+    that can take over. Part b: bomb planting, from an infantry firer. Part c: electric charging.
+    Part d: temporal erasure, from a firer that holds a temporal beam (S-0514 claim 1). Part e:
+    air-strike designation, from a firer that can designate. Part f: bomb disarming, with a bomb
+    planted on V by another unit before the warp. Part g: disguise-making, from a vehicle firer,
+    with V disguised as another vehicle type before the warp. A control run of each part without
+    the warp gives the tick *t*_A in which the projectile detonates on V. The warp is then
+    launched in tick *t*_A − 62, so that V departs in that tick (S-0513 claim 39). V entered play
+    before the projectile, so in each tick V's update comes before the projectile's turn (S-0203
+    claim 3): the projectile's turn in *t*_A falls after V's departure and before its appearance.
+  - Procedure: order the firer to attack V, launch the warp in tick *t*_A − 62 with V as its only
+    member, and let V land.
+  - Observable: V's departure and appearance ticks, the detonation tick and point, V's owner,
+    bomb, erasure state and health in each tick, the designation, the firer's disguise, and
+    the ticks of V's appearance and arrival effects in part d.
+  - Expected: the detonation is at V's old position while V is off the map. Part a: V's owner is
+    the firer's house from the detonation on. Part b: V carries a bomb from the detonation on.
+    Part c: nothing changes, and V's health is unchanged. Part d: V is being erased from the
+    detonation on. Part e: V is designated. Part f: V's bomb is gone from the detonation on.
+    Part g: the firer takes V's disguise. In every part V's health is unchanged by the hit.
+  - Falsified if: the effect of a part does not happen, happens only once V appears, or V loses
+    health from the hit. Part d's appearance and arrival-effect ticks are recorded for the Open
+    questions, and no outcome of them falsifies a claim here.
+  - Void if: the recorder does not show V's departure before the detonation and, except in part
+    d, V's appearance after it; the landing check does not pass at its first try; anything else
+    attacks V.
+- Run h (claim 17, special hits on a member phasing in): as run g, except that the warp is
+  launched so that the detonation falls after V's appearance and before its arrival hold ends.
+  A part with a locomotor-seizing warhead, from a firer that can seize V, is added as part h, and
+  is also run with run g's timing. Expected: the detonation is on V at its landing point, and
+  parts a to g give their effects as in run g. Part h, run in the original: its result, in both
+  timings, is recorded for the Open questions, and no outcome falsifies a claim here. Part h, run
+  in our engine: V is not seized, and it appears and has its arrival effects on run g's ticks.
+  A seizure, or a later appearance, falsifies claim 17's design rule. Void if: the detonation is
+  not inside that span.
+- Run i (claim 17, the deck count after a refused placement; our engine only, since the original
+  has no refused placement after a passed check, S-0513 claim 50):
+  - Setup: as run f, with `quirks.warp_deck_departure_airborne` on, V on a high-bridge deck, its
+    landing cell on another deck, and an anti-air test projectile whose type cannot hit a target
+    that is not airborne. The engine test forces a placement refusal after the first passed
+    check, as S-0513 scenario SW24 part c forces one in our engine, and then forces the outcome
+    of the next landing check: in part a it fails, in part b it redirects V to a cell not on a
+    deck, in part c it passes for a landing cell not on a deck, and in part d it passes for a
+    landing cell on a deck. In parts a to c no later check passes for a cell on a deck before V
+    appears.
+  - Procedure: order the firer to attack V and, once the projectile is in flight, launch the warp
+    with V as its only member. The projectile's speed and the launch distance are chosen so that
+    it is still in flight from the refusal until at least two ticks after the forced check.
+  - Observable: in each tick, whether the projectile's rows treat V as airborne, and the check
+    results, redirects and placement of V.
+  - Expected: V counts as standing on a deck only in the ticks between a check passed for a deck
+    cell and that check's placement or refusal. In every part V counts as airborne from the
+    refusal until the forced check. In parts a, b and c it still counts as airborne after the
+    forced check (counted by its height after a failed check, a redirect, and a pass for a cell
+    not on a deck). In part d it counts as on a deck from the forced check until its placement.
+  - Falsified if: V counts as on a deck in any other tick, as airborne between a deck pass and
+    its placement or refusal, or as on a deck after the failed check of part a, the redirect of
+    part b or the pass of part c.
+  - Void if: the projectile detonates before the second tick after the forced check, or the
+    forced outcome does not occur.
+- Run j (claim 17, the threshold of claim 20 c for a member that departed from a deck):
+  - Setup: V on a high-bridge deck, `quirks.warp_deck_departure_airborne` on (the default), its
+    landing cell on level ground several cells away. A straight test projectile with the ranged
+    flag and a short arm time flies level at the deck's height, so its height above the surface
+    over the deck's cells is at least 208 and no "reached" row of T1 applies. Its speed and the
+    launch distance are chosen so that its positions in two turns straddle V's reference point,
+    the last one before it at least 64 leptons from it (so the arrival row does not apply) and
+    the first one after it farther from it: the passed-by row of T1 then detonates it there. A
+    control run in which V has already appeared at its landing point before the projectile
+    passes gives the tick *t*_P of that detonation and the distance from its point to V's old
+    reference point, which must lie between 64 and 128 leptons.
+  - Procedure: as run g, with the warp launched in tick *t*_P − 62.
+  - Observable: V's departure and appearance ticks, the detonation tick and point.
+  - Expected: the detonation point is the projectile's own position, not V's old target point,
+    because the threshold is 42.
+  - Falsified if: the point is moved onto V's old target point (the threshold 128).
+  - Void if: the detonation is not in tick *t*_P or not by the passed-by row, V is not off the
+    map then, or the distance falls outside 64 to 128 leptons.
 
 **P12. Degeneration (claim 18).**
 - Setup: straight test projectile, damage field 20, degenerates flag, warhead 100 % against the
@@ -3450,6 +3624,46 @@ b and 6 a, T1's first row).**
   another turn or at another point than T1, T2 and claim 20 give, (b) a projectile detonates in the
   first turn in which it is below the terrain, or (c) one flies on below the terrain.
 
+**P45. A group of switched-off hovering targets, and the flak row for a shot with a firer (claims
+3 b and 4, T1's flak row; Q-2216).**
+- Setup: part a replays M-0003's pairing of the robot tank against the HTK with the robot tanks on
+  side B, seed 2, with the harness's five gameplay changes off as M-0017 replays it, and a
+  read-only recorder. The front column is the robot tanks' column nearer side A at placement, the
+  rear column the other. Part b is P44 part b with one change: its test projectile type also has the
+  flak-scattering flag, and the test weapon's range is set to the 6-cell distance of the attack.
+- Observable: part a, for every fire attempt of a side-A unit, its tick, its target and whether it
+  creates a projectile. For every projectile, its launch velocity, its impact point (Terms) and
+  stored target point, its position and height above the surface in every turn, its detonation
+  tick and its detonation point and height before and after claim 20. For every robot tank in
+  every tick: its position, its destination (the locomotor's, S-0503 Terms), its heading point,
+  the length of its stored path,
+  its speed fraction, its hover speed, its body facing, whether it is moving in S-0503's sense
+  and whether it is switched off, and its health. The tick each robot tank leaves play. Every
+  damage event, with the projectile that caused it. Part b: as P44 part b.
+- Runs: part a 1, repeated for seeds 0, 1, 3, 4 and 5 when it does not falsify; part b 5 shots,
+  with shots set aside and replaced by the rules of P44 parts b and c.
+- Expected: (a) For every shot at a robot tank, the observer computes the led point of F6 from
+  the robot tank's recorded speed fraction and body facing at the shot's tick when it is moving,
+  and takes its reference point when it is not. The impact point lies no farther from that point
+  than the largest radius that claim 4 gives for the shot (0 for a projectile type that does not
+  scatter). A robot tank that arrives at its heading point after its switch-off by S-0503 claim
+  7's test, with no destination and no stored step left after that arrival, has no heading point
+  and is not moving from that arrival on. Each projectile detonates in the turn and at the point
+  that T1, T2 and claim 20 give for its recorded positions and heights and its projectile type's
+  flags. In particular no flak-scattering one is still in play after a turn in which the target's
+  reference point is not below the surface beneath it and its height after the turn (*h*′) is
+  negative, and one whose new position lies in the
+  cell of its stored point *K* at a start-of-turn height below 208 detonates in that turn. Each
+  damage event of a robot tank is recorded with its cause and judges nothing here. (b) Each
+  projectile detonates in the first turn in which its height after the turn (*h*′) is negative,
+  at the surface there, short of the depth of 416 below the surface at which part b of P44
+  detonates.
+- Falsified if: (a) an impact point lies farther from the computed point than that radius, a
+  robot tank keeps its heading point after such an arrival with no destination and no stored step
+  left, or a projectile detonates in another turn or at another point than T1, T2 and claim 20
+  give, (b) a projectile flies on after a turn in which its height after the turn (*h*′) is
+  negative.
+
 ## Open questions
 
 - Q-1761 question 2, beyond this spec: this spec answers it for the firing check on every route
@@ -3490,14 +3704,23 @@ b and 6 a, T1's first row).**
 - Whether the light-glow image of a projectile (claim 33) follows the projectile while it flies,
   and when it is removed, is not established; scenario P42 part h records it.
 - (Q-2157.) A switched-off hovering vehicle is led only while S-0503 counts it as moving (claim
-  3 b). S-0503 claim 10 does not say whether the stop request of a switch-off leaves the heading
-  point, so whether a switched-off vehicle that has stopped travelling is still led is not settled
-  here. P44 part a records its heading point and speed fraction.
+  3 b): one that has a destination or a heading point is led, one that has neither, as after the
+  arrival of S-0503 claims 7 and 15, is not. P44 part a records its heading point and speed
+  fraction, P45 part a its destination too.
   M-0005 does not record heading points or launch velocities, and its per-shot aim point is the
   stored point *K*, which a lead does not move (claim 3 b), so which of its targets were led is not
   established from that record; scenario P44 part a records it. Which of claims 3 b, 6 a and T1's
   first row applies to M-0005's hunters also follows from their weapon's flags in the imported data
   (arcing or straight, inaccurate or not), which this spec does not state.
+- (Q-2216.) M-0003 records each game's winner and end sample only, so which of its robot tanks
+  were led, and where the shots at them detonated, is not established from that record; scenario
+  P45 part a records them. Whether the rear-column robot tanks are hit chiefly by shots aimed at
+  them or by the area damage of shots aimed at others (Q-2216 question 3) is not established: it
+  depends on the hunters' weapons, their scatter and spread and the placement of the columns,
+  which this spec does not state. P45 part a records each damage event with its cause.
+  Which of the rules of claim 3 b applies to its hunters follows from their weapon's projectile
+  flags in the imported data, which this spec does not state. Which target a hunter takes when its
+  target leaves play is S-0309's.
 - (Q-2158.) M-0005 records its hunters' fire attempts and whether each made a projectile, not the
   firing check's answer, and not whether an attempt reached the launch. An attempt that reaches the
   launch is made only on the answer *can fire* (S-0310 claim 9, S-0301 claim 9). M-0005 therefore
@@ -3514,12 +3737,14 @@ b and 6 a, T1's first row).**
   the record. Claim 6 a says what ends a repeating void shot in general (a change of the firer,
   its target or the target's lead, or for an arcing and inaccurate projectile a scatter whose
   impact point F4 can reach), and this spec does not claim that it applies to that hunter.
-- (Q-2212.) What a detonation does to a departed warp member through the warhead effects that act
-  on the projectile's target object itself rather than through area damage is not established,
-  whether the member is off the map then or phasing in after it appears (claim 17 covers the
-  area damage only). Nor is the distance threshold of claim 20's move onto the target point for
-  a member that departed from a high-bridge deck and counts as airborne (claim 17): the render
-  layer such a member is in until it appears is not established.
+- (Q-2231.) What a locomotor-seizing hit does in the original to a superweapon warp member from
+  its departure until its arrival hold ends is not established: whether the
+  member still lands, and when, is not known. Claim 17 gives our engine's rule instead (scenario
+  P11 run h, part h, records the original). Whether, in the original, an erasure lock on a member
+  that is off the map holds back its warp is not established either (run g part d records V's
+  appearance and arrival-effect ticks). Nor is what the direct-rocking and nuke-making rows of
+  S-0514 claim 20 do to a departed member, which claim 17 does not list. Nor is the moment at which
+  a warp member leaves the ground render layer after its arrival hold, which no rule here needs.
 
 ## Changes for other specs
 
@@ -3533,8 +3758,7 @@ b and 6 a, T1's first row).**
 
 - S-0513 claim 39 and its Open questions leave open, in the words of the latter: "Where a projectile
   that keeps a warp member as its target flies while the member waits to land, and whether it can
-  hit the member then or after it appears (claim 39)." Claim 17 here settles it, except for the
-  warhead effects that act on the target object itself, which stay open here (Open questions). Every
+  hit the member then or after it appears (claim 39)." Claim 17 here settles it. Every
   rule here reads the member's position at departure until it appears. A
   steering projectile therefore steers to the old position and then turns to the landing point,
   while a straight or arcing one retains its stored target point. The detonation's ordinary area
@@ -3543,6 +3767,26 @@ b and 6 a, T1's first row).**
   a member counted as airborne (`quirks.warp_deck_departure_airborne`). S-0513 can point here and
   drop the open question. For the projectile that keeps the member it can cite scenario P11 run f
   here: medium, `measurable`. The other parts are medium, `unmeasured`, as claim 17 rates them.
+  Claim 17 also gives what the special hits of S-0514 claim 20 that it lists do to a departed
+  member, off the map or phasing in. Takeover, bomb planting, bomb disarming, air-strike
+  designation, disguise-making and the erasure lock act on it, charging does nothing, and in our
+  engine a locomotor-seizing
+  hit does nothing until its arrival hold ends (design). The selected row replaces ordinary
+  damage in every case. A warp member is in the ground render layer from the launch until at least the end
+  of its arrival hold. With `quirks.warp_deck_departure_airborne` on, its deck count after a
+  refused placement follows the latest passed check (design, with claim 50). S-0513 claim 39 can
+  point here for these: medium, `measurable` by P11 runs g, h and j, except how long the layer
+  lasts, medium, `unmeasured`, and the two design rules, high as design contracts.
+
+- S-0102 claim 3 and its layer table: a superweapon warp member is in the ground layer from its
+  warp's launch until at least the end of its arrival hold, whatever its height (claim 17 here).
+  S-0102 can say so, pointing here. When it leaves that layer after the hold is not established.
+  Medium, `unmeasured`, as claim 17 rates it.
+
+- S-0601 claim 5, S-0519 claims 2, 7 and 16, S-0516 claim 31 and S-0514 claims 1 to 4: a
+  departed warp member is an ordinary target object for these hits, off the map or phasing in
+  (claim 17 here). Each can point here for that case. S-0514 claim 1's ground-layer test passes
+  for a warp member by claim 17's render-layer rule. Medium, `measurable` by P11 runs g and h.
 
 - S-0405 claim 20 (its bullet on a disabled vehicle as a target) and its Open questions on Q-1710
   leave open what sets where M-0005's stall shells land, and why some hunters make a fire attempt
@@ -3553,11 +3797,16 @@ b and 6 a, T1's first row).**
   on each later *can fire*. A straight or arcing projectile whose firer is still in play outside
   any transport and has not been killed or started to cloak that passes below the ground is not
   detonated there but flies on, so it can detonate away from the vehicle (T1 and T2 determine its
-  detonation). S-0405 can point
+  detonation), unless it is flak-scattering and has a target: where the target's reference point
+  is not below the surface beneath it, T1's flak row then detonates it in the first turn in which
+  it is below the terrain. Which vehicles of a switched-off group are led follows S-0503's moving
+  test (claim 3 b here): one with a destination or a heading point is led, one that has neither,
+  as after the arrival of S-0503 claims 7 and 15, is not. S-0405 can point
   here for those rules. Which of them applies to M-0005's hunters follows from their weapon's flags
   in the imported data, which neither spec states. S-0405's sentence that no targeting or damage
   rule reads the disabled state stays true: the lead reads the vehicle's moving state (S-0503
-  Terms), not its disabled state. The pointer would be medium, `measurable` by scenario P44 here.
+  Terms), not its disabled state. The pointer would be medium, `measurable` by scenarios P44
+  and P45 here.
 
 - S-0318 claim 5 places a fragment at the burst point and points to claim 8 here. By claim 8, a
   fragment whose burst point is not above the terrain starts 1 lepton above it, at the same *x*
@@ -3587,6 +3836,16 @@ b and 6 a, T1's first row).**
   projectile is anti-air only is offered the attack (scenario P16 part h). T4 part C (e) should
   name the test unit's type as having land-targeting mode 1, or add that mode to its test file.
   Its expectations then stand as written.
+- S-0503 claims 7, 12, 15, 16 and 19 together give an observable consequence for a switched-off
+  hovering vehicle that S-0503 could state beside claim 10, pointing here: one that has a
+  destination or a heading point when switched off is moving and shots at it are led while it
+  keeps either (claim 3 b here, `quirks.switched_off_hover_lead`). One that has neither is not
+  moving, so shots at it are not led: for example one that arrives at its heading point by claim
+  7's test, with no destination and no stored step left after that arrival (claim 15). Losing
+  the heading point alone, as at a refused step (claim 12), leaves it moving while it keeps its
+  destination. Medium, as S-0503 rates claim 10's exceptions, `measurable` by scenario P45
+  part a here, which records the heading point, speed fraction and moving state of each vehicle
+  of such a group.
 
 ## Questions for the project lead
 
@@ -3597,4 +3856,12 @@ Decided under the project lead's delegated sign-off (2026-10-10); recorded on th
 - The flatter-arc launch after a failed solve for *d* + 1 (F4, Edge cases) is accepted as a
   design-choice departure with no switch and no importer warning, as for S-0205 claim 8: launch
   at θ.
+- No locomotor seizing of a superweapon warp member from its departure until its arrival hold
+  ends (claim 17, Q-2231). The original's outcome is not established and could leave a member
+  stuck or carried while unseen; our engine keeps the warp self-contained. The row still replaces
+  ordinary damage. Design with no switch, decided under the autonomy granted 2026-10-25.
+- With `quirks.warp_deck_departure_airborne` on, the deck count of a warp member after a refused
+  placement follows the latest passed check (claim 17, Q-2232), as S-0513 claim 50's refusal is
+  itself our engine's design. Each pass sets the count from its own landing cell. Design with no
+  switch, under the same autonomy.
 - The glossary's *fire point* entry agrees with claim 5 here: only a dropping projectile starts from the firer's own position. No glossary correction is required.
