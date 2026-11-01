@@ -113,9 +113,13 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
 /// Whether object `x`, held as a target, is one that only a revert can
 /// have given back (S-0309 claim 27, DECIDED): off the map, or destroyed
 /// and still in play. A superweapon warp member is also held off the map
-/// after its departure, which drops nobody's target (S-0513 claim 39);
-/// what a holder's own processing does with it then is open there, and our
-/// interim rule (Q-2211) treats it the same way.
+/// after its departure, which drops nobody's target and is no revert
+/// (S-0513 r62 claim 39). Claim 27's rule does not apply to a holder that
+/// holds it through the departure; what the firing check answers for the
+/// departed member, and so what that holder's own processing does with it,
+/// is open there (Q-2211 question 3). Our interim gives it the same
+/// handling, as our own rule rather than claim 27's. A member that a revert
+/// gives back while it is off the map is claim 27's case.
 fn left(w: &World, x: ObjectId) -> bool {
     w.obj(x)
         .is_some_and(|o| !o.on_map || crate::combat::damage::dead(o))
@@ -126,7 +130,7 @@ fn left(w: &World, x: ObjectId) -> bool {
 /// as no target, so no firing check is asked about it and no shot is fired
 /// at it or at its place.
 pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
-    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 claim 39 leaves a departed warp member's handling by the holder open: interim Q-2211, the same rule
+    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 r62 claim 39 (claim 27's rule does not apply to a holder of a departed warp member that no revert gave back; what the firing check answers for that member is open: interim Q-2211 question 3, the same handling as our own rule)
     o.target
         .filter(|t| !matches!(*t, Target::Object(x) if left(w, x)))
 }
@@ -222,7 +226,7 @@ pub(crate) fn turn_start_drop(w: &mut World, id: ObjectId) {
         return;
     }
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0309 claim 27 (DECIDED: dropped at the start of the holder's next turn, no draw, no revert); S-0513 claim 39 (a departed warp member: whether the holder's own target checks drop it is open; interim Q-2211, this same drop, a holder's own processing, never the member's step)
+        // spec: S-0309 claim 27 (DECIDED: dropped at the start of the holder's next turn, no draw, no revert); S-0513 r62 claim 39 (a departed warp member that no revert gave back is not claim 27's case, and what the holder's own processing does with it is open: interim Q-2211 question 3, this same drop as our own rule, a holder's own processing, never the member's step, with no draw over 4 to 8 ticks and no revert, as claim 39 gives for a drop by the holder's own processing)
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
