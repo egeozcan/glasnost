@@ -42,16 +42,19 @@
 //!   cleanup (S-0009 claim 28). See *Differences* in docs/development.md for what we cannot
 //!   reproduce (the original's skirmish AI, the observer, the tech level).
 //! - **Groups**: per side one type, round(9000 / cost) units (an exact half
-//!   to the even number), at least 1, infantry at most 60. Unit *i* of side A on
-//!   cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map east, side B on
-//!   (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map west. A unit its
-//!   stated cell does not take stands on a free cell around it
-//!   ([`placed_cell`]; the test and the order are ours, Q-2096). Every
-//!   unit stands at its cell's centre point, infantry with no
-//!   standing-position draw: A1's interim, while Q-1711 question 5 and
-//!   Q-2097 are open. The facings are those of S-0216 claim 1. Side A's
-//!   group is created first. Every unit starts in the hunt behaviour; no
-//!   order is given.
+//!   to the even number, S-0216 claim 8's Formulas), at least 1, infantry at
+//!   most 60. Unit *i* of side A on cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod
+//!   8)) facing map east, side B on (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8))
+//!   facing map west. Our arena's set-up is S-0216 claim 8 (design): the
+//!   map's objects as any game loads them; side A's units by index, then
+//!   side B's, each created, tested and placed before the next; a unit its
+//!   stated cell does not take ([`takes`]) stands on the first of its eight
+//!   neighbours that does ([`NEIGHBOURS`]), and set-up stops with an error
+//!   when none does ([`placed_cell`]); the placement is a play-time placement
+//!   (S-0216 claims 1 to 4: the facings, an infantry unit's standing
+//!   position with its one draw R(0, 3)), and the group's mission, hunt, is
+//!   then queued as a placing step's behaviour. M-0006's moves are the
+//!   acceptance check, not an input. No order is given.
 //! - **Samples**: every [`SAMPLE_PERIOD`] frames (ticks from game start);
 //!   the game is over at the first sample at which only one side owns
 //!   anything (that side wins), or at which neither does (`none`), or at
@@ -82,7 +85,7 @@ use glasnost_map::{CellXY, Map};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::setup::{self, HouseValues, Player, Row, Settings};
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
-use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
+use glasnost_sim::world::{HouseId, ObjectId, World};
 
 use crate::stats;
 
@@ -124,41 +127,29 @@ pub const COUNTRIES: [&str; 2] = ["Americans", "Russians"];
 /// Players).
 pub const STARTS: [u32; 2] = [0, 1];
 
-/// Map east and map west facings (glossary *facing*: 16384 is map east,
-/// 49152 map west); side A faces east, side B west (measure: M-0001,
-/// Setup, Groups).
-pub const FACINGS: [u16; 2] = [16384, 49152];
+/// The facing values *v* of side A and side B for a play-time placement
+/// (S-0216 claim 1: body and turret facings 256 × *v*): 256 × 64 = 16384
+/// is map east and 256 × 192 = 49152 map west (glossary *facing*); side A
+/// faces east, side B west (measure: M-0001, Setup, Groups).
+pub const FACINGS: [u8; 2] = [64, 192];
 
-/// The cells of the square ring of Chebyshev radius `r` (at least 1)
-/// around `c` in the scan order of S-0212 claim 25's nearby-cell search: a
-/// unit its stated cell does not take is tried on the rings around that
-/// cell in this order (our design while Q-2096 is open).
-pub fn ring(c: CellXY, r: i32) -> Vec<CellXY> {
-    let mut out = Vec::new();
-    // spec: S-0212 claim 25 (a row cell has |y − cy| = r, a column cell |x − cx| = r otherwise; every row cell comes before every column cell; row cells by x, then y; column cells by y, then x)
-    for x in c.x - r..=c.x + r {
-        for y in [c.y - r, c.y + r] {
-            out.push(CellXY::new(x, y));
-        }
-    }
-    for y in c.y - r + 1..c.y + r {
-        for x in [c.x - r, c.x + r] {
-            out.push(CellXY::new(x, y));
-        }
-    }
-    out
-}
+/// The offsets of the eight neighbouring cells a unit its stated cell does
+/// not take is tried on, in order (S-0216 claim 8, *Moving on*).
+// spec: S-0216 claim 8 (the order (x − 1, y − 1), (x, y − 1), (x + 1, y − 1), (x − 1, y), (x + 1, y), (x − 1, y + 1), (x, y + 1), (x + 1, y + 1))
+pub const NEIGHBOURS: [(i32, i32); 8] = [
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+    (-1, 0),
+    (1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+];
 
-/// The largest ring tried around a stated cell: S-0212 claim 25's largest
-/// radius for the world's map size.
-fn largest_ring(w: &World) -> i32 {
-    let fp = *w.cells.footprint();
-    // spec: S-0212 claim 25 (largest radius 31, or w + h − 1 when w + h < 32)
-    if fp.width + fp.height < 32 {
-        fp.width + fp.height - 1
-    } else {
-        31
-    }
+/// The eight neighbouring cells of `c` in [`NEIGHBOURS`] order.
+pub fn neighbours(c: CellXY) -> [CellXY; 8] {
+    NEIGHBOURS.map(|(dx, dy)| CellXY::new(c.x + dx, c.y + dy))
 }
 
 /// The fastest game speed: index 0 (glossary claim G2; measure: M-0001,
@@ -879,7 +870,8 @@ pub fn load_placements(dir: &Path) -> Result<Vec<Placements>, String> {
 }
 
 /// The measured placements for the games of oracle arena record `record`,
-/// relative to W ([`Ground::placed`]).
+/// relative to W: the acceptance check of our set-up (S-0216 claim 8,
+/// *Acceptance*), never an input to it.
 pub fn placed_for(placements: &[Placements], record: &str) -> Vec<(CellXY, CellXY)> {
     let rel = |w: CellXY, c: CellXY| CellXY::new(c.x - w.x, c.y - w.y);
     placements
@@ -914,10 +906,6 @@ pub struct Ground {
     /// as the record's houses are; `false` plays them as AI houses of our
     /// engine, which follow the human-controlled rules (glossary *AI house*).
     pub computer: bool,
-    /// Measured placements ([`Placements`]): each stated cell, relative to
-    /// W, with the cell its unit is placed on, relative to W; empty for a
-    /// record that no placement record covers.
-    pub placed: Vec<(CellXY, CellXY)>,
 }
 
 /// The sha256 of `bytes`, lower-case hex.
@@ -988,7 +976,6 @@ pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, 
             w: CellXY::new(i32::from(x), i32::from(y)),
             countries: COUNTRIES.map(str::to_owned),
             computer: true,
-            placed: Vec::new(),
         })
     })
 }
@@ -1014,13 +1001,11 @@ pub fn synthetic_ground(size: i32) -> Ground {
         w,
         countries,
         computer: true,
-        placed: Vec::new(),
     }
 }
 
-/// The kind and group size of type `name`: round(BUDGET / cost) (an exact
-/// half to even, [`round_half_even`]), at least 1, infantry at most [`INFANTRY_CAP`] (measure:
-/// M-0001, Setup, Groups). A cost of 0 or less gives 1.
+/// The kind and group size of type `name` for the records' budget
+/// [`BUDGET`] ([`count`]).
 pub fn group(rules: &SimRules, name: &str) -> Result<(Kind, u32, i64), String> {
     let (kind, index) = [Kind::Infantry, Kind::Vehicle, Kind::Aircraft]
         .into_iter()
@@ -1033,25 +1018,37 @@ pub fn group(rules: &SimRules, name: &str) -> Result<(Kind, u32, i64), String> {
             .of(TypeRef { kind, index })
             .map_or(0, |t| t.cost),
     );
+    Ok((kind, count(kind, BUDGET, cost) as u32, cost))
+}
+
+/// A group's count for `budget` and its type's `cost` (S-0216 claim 8,
+/// *Group counts*): budget / cost rounded to the nearest integer, an exact
+/// half to the even one ([`round_half_even`]), then held to the records'
+/// minimum 1 and, for infantry, their cap [`INFANTRY_CAP`] (measure:
+/// M-0001, Setup, Groups). The rule is the same for infantry and vehicle
+/// groups. A cost of 0 or less gives the minimum (our guard: the formula
+/// takes a positive cost).
+pub fn count(kind: Kind, budget: i64, cost: i64) -> i64 {
+    // spec: S-0216 claim 8 (the count rounded, then the records' minimum and infantry cap)
     let mut n = if cost > 0 {
-        round_half_even(BUDGET, cost)
+        round_half_even(budget, cost)
     } else {
         1
     };
-    n = n.max(1);
+    n = n.max(1); // measure: M-0001 (Setup, Groups: at least 1)
     if kind == Kind::Infantry {
         n = n.min(i64::from(INFANTRY_CAP));
     }
-    Ok((kind, n as u32, cost))
+    n
 }
 
 /// a / b rounded to the nearest whole number, an exact half to the even
-/// one (a ≥ 0, b > 0). The records say "round"; their CSVs before the
-/// revision of 2026-10-29 settled the half: a budget that is an exact half
-/// of two group sizes gave the even one (the shares of such groups were
-/// whole multiples of 1/n only for the even n; measure: M-0001, M-0003,
-/// CSV). The restated CSVs have no shares, so the even one is kept while
-/// Q-2099 is open.
+/// one (a ≥ 0, b > 0): S-0216 claim 8's Formulas, *q* = ⌊*B* / *c*⌋,
+/// *r* = *B* − *q* × *c*; *q* when 2*r* < *c*, *q* + 1 when 2*r* > *c*, the
+/// even one of the two when 2*r* = *c*, in exact integer arithmetic. Our
+/// arena's own tie rule; what the records' harness gave is open (Q-2099
+/// question 1).
+// spec: S-0216 claim 8 (Formulas: the arena group count before the minimum and cap)
 pub fn round_half_even(a: i64, b: i64) -> i64 {
     let (q, r) = (a / b, a % b);
     match (2 * r).cmp(&b) {
@@ -1192,58 +1189,76 @@ pub struct Moved {
 }
 
 /// Whether `cell` takes the created unit `id` of `kind`, not yet on the map
-/// (our design while Q-2096 is open): the cell is a map cell with no unit
-/// on it, and the unit's entry outcome there is *clear*, asked as a
-/// play-time placement asks it. An aircraft-kind group is not tested: the
-/// entry test is that of infantry and vehicles.
+/// (S-0216 claim 8, *The take test*, design): the cell is inside the map's
+/// usable area by S-0009 claim 4's height-aware test, the unit's entry
+/// outcome there is *clear*, asked as S-0216 claim 5 asks it, and, for a
+/// vehicle, no unit stands on the cell; for an infantry unit, the cell's
+/// ground record has neither of S-0216 claim 2's first-row refusals and at
+/// least one of its right, left and bottom standing positions is free. The
+/// test takes no draw. An aircraft-kind group is not covered (S-0216 Open
+/// questions, *Aircraft-kind groups*): no record has one, and such a group
+/// is refused by [`setup`].
 pub fn takes(w: &World, id: ObjectId, kind: Kind, cell: CellXY) -> bool {
     refusal(w, id, kind, cell).is_none()
 }
 
 /// Why `cell` does not take the unit ([`takes`]): `None` when it does.
 pub fn refusal(w: &World, id: ObjectId, kind: Kind, cell: CellXY) -> Option<String> {
+    use glasnost_sim::world::Layer;
     if !matches!(kind, Kind::Infantry | Kind::Vehicle) {
-        return None;
+        return Some(format!("a {kind:?} group is not covered (S-0216 claim 8)"));
     }
     let Some(level) = w.cells.cell(cell).map(|c| i32::from(c.level)) else {
         return Some("not a map cell".into());
     };
-    // measure: M-0001, M-0017 (Setup: a unit its stated cell does not take is placed on a free neighbouring cell)
-    let unit_there = w.objects.values().any(|o| {
-        o.on_map
-            && o.id != id
-            && matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
-            && o.pos.cell() == cell
-    });
-    if unit_there {
-        return Some("a unit stands there".into());
+    // spec: S-0216 claim 8 (the cell inside the map's usable area by S-0009 claim 4's height-aware test, as S-0009 claim 5a applies it to object placement)
+    if !w.cells.usable(cell) {
+        return Some("outside the usable area".into());
     }
-    // spec: S-0216 claim 5 (the unit's entry outcome for the cell, asked without an approach direction or source elevation, against the ground occupants; only clear accepts)
+    // spec: S-0216 claim 8 and claim 5 (the unit's entry outcome for the cell, asked without an approach direction or source elevation, against the ground occupants; only clear takes)
     let outcome = if kind == Kind::Infantry {
         glasnost_sim::occupancy::infantry_outcome(w, id, cell, level)
     } else {
         glasnost_sim::occupancy::vehicle_outcome(w, id, cell, level)
     };
-    (outcome != glasnost_sim::occupancy::Outcome::Clear)
-        .then(|| format!("entry outcome {outcome:?}"))
+    if outcome != glasnost_sim::occupancy::Outcome::Clear {
+        return Some(format!("entry outcome {outcome:?}"));
+    }
+    if kind == Kind::Vehicle {
+        // spec: S-0216 claim 8 (for a vehicle, no unit stands on the cell)
+        let unit_there = w.objects.values().any(|o| {
+            o.on_map
+                && o.id != id
+                && matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+                && o.pos.cell() == cell
+        });
+        return unit_there.then(|| "a unit stands there".into());
+    }
+    // spec: S-0216 claim 8 and claim 2 (for an infantry unit, neither the vehicle-present flag nor the object-present flag without an open gate in the cell: claim 2's first row)
+    if glasnost_sim::occupancy::no_position_by_flags(w, cell, Layer::Ground) {
+        return Some("a first-row refusal (vehicle-present or object-present)".into());
+    }
+    // spec: S-0216 claim 8 (at least one of the right, left and bottom standing positions, S-0208 table O's centre rows, is free)
+    if w.cells.occ(cell, Layer::Ground).is_some_and(|o| o.full()) {
+        return Some("the right, left and bottom positions are taken".into());
+    }
+    None
 }
 
-/// The cell the created unit `id` stands on, given its stated cell: the
-/// stated cell when it takes the unit ([`takes`]), else the first cell
-/// that does on the rings around it ([`ring`]), nearest ring first, up to
-/// S-0212 claim 25's largest radius; `None` when none does. The records
-/// say "a unit that its stated cell does not take is placed on a free
-/// neighbouring cell" (measure: M-0001, M-0002, M-0003 and M-0017, Setup)
-/// and "a free cell nearby" (measure: M-0011, M-0015, Setup); the test,
-/// the order and the rings past the first are ours while Q-2096 is open.
-/// A unit takes a cell first come, first served: a later unit whose stated
-/// cell an earlier one took is refused there in turn.
+/// The cell the created unit `id` stands on, given its stated cell (S-0216
+/// claim 8, *Moving on*, design): the stated cell when it takes the unit
+/// ([`takes`]), else the first of its eight neighbouring cells, in
+/// [`NEIGHBOURS`] order, that does; `None` when none does, and set-up then
+/// stops with an error. First come, first served: no cell is kept for a
+/// later unit, which is tested on its stated cell in turn, so an infantry
+/// unit can still be taken by a cell that holds infantry, and a vehicle is
+/// moved on.
 pub fn placed_cell(w: &World, id: ObjectId, kind: Kind, stated: CellXY) -> Option<CellXY> {
     if takes(w, id, kind, stated) {
         return Some(stated);
     }
-    (1..=largest_ring(w))
-        .flat_map(|r| ring(stated, r))
+    neighbours(stated)
+        .into_iter()
         .find(|&c| takes(w, id, kind, c))
 }
 
@@ -1320,9 +1335,9 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
     {
         return Err("a side owns objects before its group is placed".into());
     }
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let mut units: [Vec<ObjectId>; 2] = [Vec::new(), Vec::new()];
     let mut moved = Vec::new();
+    // spec: S-0216 claim 8 (Order: side A's units first, in increasing unit index, then side B's; each unit created, then tested and placed, before the next is created)
     for side in [Side::A, Side::B] {
         let s = side.index();
         let (kind, n, _) = group(rules, types[s])?;
@@ -1337,69 +1352,17 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
                     types[s], stated.x, stated.y
                 ));
             }
-            // The unit is created first (its creation draws), then its cell is chosen.
-            let id = glasnost_sim::objects::create(&mut w, kind, ti, Some(houses[s]));
-            let off = CellXY::new(stated.x - ground.w.x, stated.y - ground.w.y);
-            // measure: M-0006 (Result, Units off their stated cells: a unit stated on one of the cliff cells is placed on the cell the table gives, in every archived game; some placed cells already hold a unit)
-            let measured = ground
-                .placed
-                .iter()
-                .find(|(s, _)| *s == off)
-                .map(|(_, p)| CellXY::new(ground.w.x + p.x, ground.w.y + p.y));
-            // measure: M-0001, M-0017 (Setup: a unit that its stated cell does not take is placed on a free neighbouring cell; the test and the order are ours, Q-2096)
-            let cell = measured.or_else(|| placed_cell(&w, id, kind, stated)).ok_or_else(|| {
-                let why: Vec<String> = std::iter::once(stated)
-                    .chain(ring(stated, 1))
-                    .map(|c| {
-                        format!(
-                            "({}, {}) {}",
-                            c.x,
-                            c.y,
-                            refusal(&w, id, kind, c).unwrap_or_default()
-                        )
-                    })
-                    .collect();
-                format!(
-                    "{}: unit {i}: no cell around ({}, {}) takes it; the stated cell and ring 1: {}",
-                    types[s],
-                    stated.x,
-                    stated.y,
-                    why.join("; ")
-                )
-            })?;
-            if cell != stated {
+            let (id, cell, why) = place_unit(&mut w, kind, ti, houses[s], stated, FACINGS[s])
+                .map_err(|e| format!("{}: unit {i}: {e}", types[s]))?;
+            if let Some(why) = why {
                 moved.push(Moved {
                     side,
                     index: i,
                     stated,
                     placed: cell,
-                    why: if measured.is_some() {
-                        "the placed cell of M-0006".into()
-                    } else {
-                        refusal(&w, id, kind, stated).unwrap_or_default()
-                    },
+                    why,
                 });
             }
-            // Our design (Q-1711 question 5, Q-2097): A1's interim in the chosen cell, its centre,
-            // no standing-position draw; S-0216 claims 2 and 3 are not applied.
-            // spec: S-0216 claim 1 (FACINGS are 256 × 64 and 256 × 192)
-            let p = Pos::centre(cell, 0);
-            let z = w.surface_at(p.x, p.y);
-            glasnost_sim::objects::place(&mut w, id, Pos::new(p.x, p.y, z), FACINGS[s]);
-            let tick = w.tick;
-            let o = w
-                .obj_mut(id)
-                .ok_or_else(|| format!("{}: not created", types[s]))?;
-            if !o.on_map || o.pos.cell() != cell {
-                return Err(format!(
-                    "{}: unit {i} could not stand on cell ({}, {})",
-                    types[s], cell.x, cell.y
-                ));
-            }
-            // The resting behaviour the testkit's placement gave before, then hunt.
-            o.beh.force(Behaviour::Guard, tick, stale);
-            // spec: S-0009 claim 41 (the behaviour a placed object starts with: hunt, measure: M-0001)
-            o.beh.force(Behaviour::Hunt, tick, stale);
             units[s].push(id);
         }
     }
@@ -1409,6 +1372,59 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
         units,
         moved,
     })
+}
+
+/// Creates one unit of `kind` and type index `ti` for `house` and places it
+/// as S-0216 claim 8 gives (design): created first, with its creation draw;
+/// then tested on its `stated` cell and, if refused, on its eight
+/// neighbours in order ([`placed_cell`]), taking no draw; then placed on the
+/// cell that takes it by a play-time placement with facing value `v`
+/// (S-0216 claims 1 to 4: an infantry unit's one draw R(0, 3)); then the
+/// group's mission, hunt, is queued. Returns the unit, its cell, and why its
+/// stated cell refused it when it was moved on. An error when no cell takes
+/// it (claim 8's error stop) or the placement fails.
+pub fn place_unit(
+    w: &mut World,
+    kind: Kind,
+    ti: u32,
+    house: HouseId,
+    stated: CellXY,
+    v: u8,
+) -> Result<(ObjectId, CellXY, Option<String>), String> {
+    // spec: S-0216 claim 8 (the unit is created, its creation draw first, then tested and placed with its placement draw if any, before the next unit is created)
+    let id = glasnost_sim::objects::create(w, kind, ti, Some(house));
+    // spec: S-0216 claim 8 (Moving on: the stated cell, then its eight neighbours in order; if none takes the unit, set-up stops and reports an error)
+    let Some(cell) = placed_cell(w, id, kind, stated) else {
+        let why: Vec<String> = std::iter::once(stated)
+            .chain(neighbours(stated))
+            .map(|c| {
+                format!(
+                    "({}, {}) {}",
+                    c.x,
+                    c.y,
+                    refusal(w, id, kind, c).unwrap_or_default()
+                )
+            })
+            .collect();
+        return Err(format!(
+            "neither ({}, {}) nor a neighbouring cell takes it: {}",
+            stated.x,
+            stated.y,
+            why.join("; ")
+        ));
+    };
+    let why = (cell != stated).then(|| refusal(w, id, kind, stated).unwrap_or_default());
+    // spec: S-0216 claim 8 (Placement: a play-time placement on the cell that takes the unit, as claims 1 to 4 give it: the facings of claim 1, an infantry unit's standing position of claim 2 with its one draw R(0, 3), claim 3's draws, claim 4's fall-back)
+    if !glasnost_sim::objects::place_in_play(w, id, cell, v) {
+        return Err(format!(
+            "could not be placed on cell ({}, {})",
+            cell.x, cell.y
+        ));
+    }
+    let o = w.obj_mut(id).ok_or("not created")?;
+    // spec: S-0216 claim 8 and claim 4 (the group's mission is then queued as a placing step's behaviour, S-0215 claim 7, without being started); S-0009 claim 41 (hunt, measure: M-0001)
+    o.beh.queue(Some(Behaviour::Hunt));
+    Ok((id, cell, why))
 }
 
 /// What a house owns: the number of its objects with health above 0 (any
@@ -1999,13 +2015,10 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
     };
     let mut out = String::new();
     let mut grounds: BTreeMap<(String, String), Ground> = BTreeMap::new();
-    let placements = load_placements(&cli.measurements)?;
     let mut ground_of = |r: &OracleRecord| -> Result<Ground, String> {
         let key = (r.map_file.clone(), r.map_sha256.clone());
         if let Some(g) = grounds.get(&key) {
-            let mut g = g.clone();
-            g.placed = placed_for(&placements, &r.id);
-            return Ok(g);
+            return Ok(g.clone());
         }
         let dir = game_dir.ok_or_else(|| {
             format!(
@@ -2018,7 +2031,6 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
         g.computer = !cli.ai_houses;
         eprintln!("loaded {} in {} ms", r.map_file, t0.elapsed().as_millis());
         grounds.insert(key, g.clone());
-        g.placed = placed_for(&placements, &r.id);
         Ok(g)
     };
     if cli.groups {
@@ -2624,6 +2636,7 @@ mod tests {
 
     #[test]
     fn group_sizes_round_an_exact_half_to_even() {
+        // spec: S-0216 claim 8 (Formulas: q when 2r < c, q + 1 when 2r > c, the even one when 2r = c)
         assert_eq!(round_half_even(9, 2), 4);
         assert_eq!(round_half_even(15, 2), 8);
         assert_eq!(round_half_even(10, 4), 2);
@@ -2654,40 +2667,33 @@ mod tests {
         assert_eq!(cell_of(w, Side::B, 9), CellXY::new(57, 37));
     }
 
-    /// The rings around a refused stated cell come in S-0212 claim 25's
-    /// scan order: row cells by x then y, then column cells by y then x.
+    /// The neighbours of a refused stated cell come in S-0216 claim 8's
+    /// order, the eight neighbours only.
     #[test]
-    fn rings_follow_the_nearby_search_scan_order() {
+    fn neighbours_follow_claim_8s_order() {
         let c = CellXY::new(10, 20);
-        let off =
-            |r| -> Vec<(i32, i32)> { ring(c, r).iter().map(|p| (p.x - 10, p.y - 20)).collect() };
-        // spec: S-0212 claim 25 (scan order of a ring)
+        let off: Vec<(i32, i32)> = neighbours(c).iter().map(|p| (p.x - 10, p.y - 20)).collect();
+        // spec: S-0216 claim 8 (Moving on: (x − 1, y − 1), (x, y − 1), (x + 1, y − 1), (x − 1, y), (x + 1, y), (x − 1, y + 1), (x, y + 1), (x + 1, y + 1))
         assert_eq!(
-            off(1),
+            off,
             [
                 (-1, -1),
-                (-1, 1),
                 (0, -1),
-                (0, 1),
                 (1, -1),
-                (1, 1),
                 (-1, 0),
-                (1, 0)
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1)
             ]
-        );
-        let r2 = off(2);
-        assert_eq!(r2.len(), 16);
-        assert_eq!(&r2[..2], [(-2, -2), (-2, 2)]);
-        assert_eq!(
-            &r2[10..],
-            [(-2, -1), (2, -1), (-2, 0), (2, 0), (-2, 1), (2, 1)]
         );
     }
 
-    /// A stated cell with a unit on it does not take another: the unit
-    /// goes to the first cell around it that takes it (synthetic ground).
+    /// A stated cell with a unit on it does not take a vehicle: the vehicle
+    /// goes to the first neighbour, in claim 8's order, that takes it
+    /// (synthetic scenario).
     #[test]
-    fn a_unit_on_the_stated_cell_sends_the_next_one_to_a_ring() {
+    fn a_unit_on_the_stated_cell_moves_a_vehicle_to_the_first_neighbour_that_takes_it() {
         let mut w = glasnost_sim::testkit::combat_game(1);
         let (kind, ti, c) = w
             .objects
@@ -2696,16 +2702,34 @@ mod tests {
             .map(|o| (o.kind, o.type_index, o.pos.cell()))
             .unwrap();
         let id = glasnost_sim::objects::create(&mut w, kind, ti, None);
-        assert_eq!(
-            refusal(&w, id, kind, c).as_deref(),
-            Some("a unit stands there")
-        );
+        // spec: S-0216 claim 8 (the take test: for a vehicle, no unit stands on the cell)
+        assert!(refusal(&w, id, kind, c).is_some());
         let placed = placed_cell(&w, id, kind, c).unwrap();
         assert_ne!(placed, c);
-        let first = (1..=largest_ring(&w))
-            .flat_map(|r| ring(c, r))
-            .find(|&p| takes(&w, id, kind, p));
+        let first = neighbours(c).into_iter().find(|&p| takes(&w, id, kind, p));
         assert_eq!(Some(placed), first);
+        assert!((placed.x - c.x).abs() <= 1 && (placed.y - c.y).abs() <= 1);
+    }
+
+    /// S-0216 claim 8's count rule (PT7 parts a and b, on test budgets and
+    /// costs): an exact half to the even count for both kinds, the minimum
+    /// 1 and the infantry cap.
+    #[test]
+    fn counts_round_an_exact_half_to_even_then_take_the_minimum_and_cap() {
+        for kind in [Kind::Infantry, Kind::Vehicle] {
+            // spec: S-0216 claim 8 (Formulas and PT7 part a: B / c = n + 1/2 gives n for n even, n + 1 for n odd, for infantry and vehicles alike)
+            assert_eq!(count(kind, 9000, 2000), 4, "{kind:?}: 4.5");
+            assert_eq!(count(kind, 9000, 1200), 8, "{kind:?}: 7.5");
+            assert_eq!(count(kind, 9000, 3600), 2, "{kind:?}: 2.5");
+            assert_eq!(count(kind, 9000, 6000), 2, "{kind:?}: 1.5");
+            assert_eq!(count(kind, 9000, 1999), 5, "{kind:?}: above the half");
+            assert_eq!(count(kind, 9000, 2001), 4, "{kind:?}: below the half");
+            // spec: S-0216 claim 8 (PT7 part b: below the records' minimum gives the minimum)
+            assert_eq!(count(kind, 9000, 20000), 1, "{kind:?}: 0.45");
+        }
+        // spec: S-0216 claim 8 (PT7 part b: an infantry count above the cap gives the cap; a vehicle count has none)
+        assert_eq!(count(Kind::Infantry, 9000, 100), i64::from(INFANTRY_CAP));
+        assert_eq!(count(Kind::Vehicle, 9000, 100), 90);
     }
 
     fn record_of(id: &str, games: Vec<Game>) -> OracleRecord {

@@ -314,32 +314,15 @@ fn m0006_placements_parse() {
     assert!(oracle::placed_for(&all, "M-0011").is_empty());
 }
 
-/// A measured placement puts its unit on the measured cell, and the setup
-/// names it as moved: our own synthetic ground, with an invented placement
-/// of side A's unit 0 onto the stated cell of a unit 1 (made-up data, not
-/// M-0006's).
-#[test]
-fn a_measured_placement_is_applied() {
-    let mut g = oracle::synthetic_ground(40);
-    let rel = |c: glasnost_map::CellXY| glasnost_map::CellXY::new(c.x - g.w.x, c.y - g.w.y);
-    let s0 = oracle::cell_of(g.w, oracle::Side::A, 0);
-    let s1 = oracle::cell_of(g.w, oracle::Side::A, 1);
-    g.placed = vec![(rel(s0), rel(s1))];
-    let a = oracle::setup(&g, ["CART", "WALKER"], 0).unwrap();
-    let u0 = a.units[0][0];
-    assert_eq!(a.world.obj(u0).unwrap().pos.cell(), s1);
-    let m = &a.moved[0];
-    assert_eq!((m.index, m.stated, m.placed), (0, s0, s1));
-    assert_eq!(m.why, "the placed cell of M-0006");
-}
-
-/// The local lane's check of M-0006 against our setup (never in CI): with
-/// `GLASNOST_GAME_DIR` set, our W of the record's map is M-0006's; a
-/// building of a house that is neither side stands on each of its neutral
-/// bunker cells at tick 0; in the setup of every type of M-0001 to M-0003,
-/// no side-B unit is moved, and each unit stated on a cell of the
-/// placement table stands on its placed cell (measure: M-0006, Tolerance
-/// for tests: exact).
+/// The local lane's acceptance check of our set-up against M-0006 (S-0216
+/// claim 8, *Acceptance*, and scenario PT6's acceptance items; never in
+/// CI): with `GLASNOST_GAME_DIR` set, our W of the record's map is
+/// M-0006's; in the tick-0 state of the setup of every type of M-0001 to
+/// M-0003, a building of the neutral house covers each of its four bunker
+/// cells (medium), every unit is placed (setup completes), no side-B unit
+/// is moved and every move is to a neighbouring cell (medium), and each
+/// unit stated on a cell of the cliff-cell table stands on the cell the
+/// table names (low). The table is the acceptance check, not an input.
 #[test]
 fn m0006_bunkers_and_placed_cells_in_our_setup() {
     let records = oracle::load_records(&measurements()).unwrap();
@@ -355,10 +338,9 @@ fn m0006_bunkers_and_placed_cells_in_our_setup() {
         println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
         return;
     };
-    let mut g = oracle::stock_ground(Path::new(&dir), &r.map_file, &r.map_sha256).unwrap();
+    let g = oracle::stock_ground(Path::new(&dir), &r.map_file, &r.map_sha256).unwrap();
     // measure: M-0006 (Setup: W; Map content; Units off their stated cells)
     assert_eq!(g.w, p.w, "our W is the record's");
-    g.placed = oracle::placed_for(&all, "M-0001");
     let mut types: Vec<String> = Vec::new();
     for id in ["M-0001", "M-0002", "M-0003"] {
         for game in &oracle::find_record(&records, id).unwrap().games {
@@ -370,36 +352,60 @@ fn m0006_bunkers_and_placed_cells_in_our_setup() {
         }
     }
     let mut checked = false;
+    let mut cliff = Vec::new();
     for t in &types {
+        // spec: S-0216 claim 8 (Acceptance: every unit placed; set-up stops with an error otherwise)
         let a = oracle::setup(&g, [t, t], 0).unwrap();
         let w = &a.world;
+        let neutral = w
+            .houses
+            .iter()
+            .position(|h| h.role == glasnost_sim::world::HouseRole::Neutral)
+            .map(|i| glasnost_sim::world::HouseId(i as u8));
+        assert!(neutral.is_some(), "{t}: a neutral house");
         for &c in &p.neutral {
-            let here = w
-                .cells
-                .occ(c, glasnost_sim::world::Layer::Ground)
-                .is_some_and(|o| o.buildings > 0);
-            assert!(here, "{t}: a building stands on {c:?}");
-            assert!(
-                w.objects
-                    .values()
-                    .all(|o| o.kind != glasnost_sim::rules::Kind::Building
-                        || !o.owner.is_some_and(|h| a.houses.contains(&h))),
-                "{t}: neither side owns a building"
-            );
+            // spec: S-0216 claim 8 (Map objects, acceptance: a building of the neutral house covers each of M-0006's four bunker cells in the tick-0 state)
+            let here = w.objects.values().any(|o| {
+                o.on_map
+                    && o.kind == glasnost_sim::rules::Kind::Building
+                    && o.owner == neutral
+                    && glasnost_sim::econ::placement::foundation_cells(
+                        w,
+                        o.type_index,
+                        o.pos.cell(),
+                    )
+                    .contains(&c)
+            });
+            assert!(here, "{t}: a neutral building covers {c:?}");
         }
+        // spec: S-0216 claim 8 (Acceptance: no side-B unit moved; every move to a neighbouring cell)
         assert!(
             a.moved.iter().all(|m| m.side == oracle::Side::A),
             "{t}: no move on side B"
         );
+        for m in &a.moved {
+            assert!(
+                (m.stated.x - m.placed.x).abs() <= 1 && (m.stated.y - m.placed.y).abs() <= 1,
+                "{t}: unit {} moved beyond a neighbouring cell",
+                m.index
+            );
+        }
         for (i, &u) in a.units[0].iter().enumerate() {
             let stated = oracle::cell_of(g.w, oracle::Side::A, i as u32);
             if let Some(&(_, placed)) = p.moves.iter().find(|(s, _)| *s == stated) {
-                assert_eq!(w.obj(u).unwrap().pos.cell(), placed, "{t}: unit {i}");
+                // spec: S-0216 claim 8 (Acceptance, low: a unit stated on a cliff cell lands on the cell M-0006's table names)
+                let at = w.obj(u).unwrap().pos.cell();
+                if at != placed {
+                    cliff.push(format!(
+                        "{t}: unit {i} on {at:?}, the table gives {placed:?}"
+                    ));
+                }
                 checked = true;
             }
         }
     }
     assert!(checked, "some group reaches a cell of the placement table");
+    assert!(cliff.is_empty(), "the cliff-cell table (low): {cliff:#?}");
 }
 
 /// The local lane's comparison (never in CI): with `GLASNOST_GAME_DIR` set,
