@@ -2227,7 +2227,7 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         set_dest(w, id, Some(next));
         return;
     }
-    // spec: S-0213 claim 16d (revision 84, Q-2192: an aircraft issues its next route point when a flight ends, at the moment it would begin to land, unless its behaviour is then enter) and Changes for other specs (S-0215 claim 13); design (Q-2229): the moment is the landing trigger, before the pad-bound test, and an aircraft that issues a point does not also begin to land in that tick
+    // spec: S-0213 claim 16d (revision 84, Q-2192: an aircraft issues its next route point when a flight ends, at the moment it would begin to land, at either landing trigger, unless its behaviour is then enter) and revision 89 (Q-2229: this issue is S-0501 claim 6's going on to a further waypoint of a planned route, and it comes before that claim's pad-bound test, so a pad-bound aircraft away from its pad that has a point to issue issues it and does not fall back to rest; an aircraft that issues a point begins no landing in that tick and stays in flight; the issue is preceded by claim 16c's queue of wait with an immediate start) and Changes for other specs (S-0501 claim 6, planned-route exception). The waypoint step above serves only destinations queued by other paths, which give an aircraft none
     if o.beh.current != Some(Behaviour::Enter) && crate::routes::issue_later(w, id) {
         return;
     }

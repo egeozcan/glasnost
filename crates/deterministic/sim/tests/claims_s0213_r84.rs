@@ -246,7 +246,7 @@ fn claim_16b_the_orders_place() {
     let v = put(&mut w, Kind::Vehicle, "BUGGY", 0, 0, 0);
     let x = put(&mut w, Kind::Vehicle, "BUGGY", 0, 3, 0);
     let (c, d) = (at(5, 5), at(6, 5));
-    let place = |on, b, am, t, de| routes::order_place(&w, on, b, am, t, de);
+    let place = |on, b, _attack_move: bool, t, de| routes::order_place(&w, on, b, t, de);
     // A move: the clicked cell, not a destination the nearby-cell search found.
     assert_eq!(
         place(
@@ -601,7 +601,7 @@ fn claim_16d_an_aircraft_issues_no_point_at_a_fall_back() {
 /// spec: S-0213 claim 16d, Aircraft and buildings (revision 84, Q-2192: a building with no route record joins a point and gets a route; a commit starts it from guard and it issues its first point; under move a building does nothing: it neither moves nor looks for targets nor fires, and issues no further point; a later commit does not start it again) and claim 17 (an order outside route mode ends its route); Scenario O8 part x (7)
 #[test]
 fn claim_16d_a_building_under_move_does_nothing() {
-    // design (Q-2228): POST has no turret; a turreted building under move gets no ready mark (S-0215 claim 11), so its queued attack would never start
+    // spec: S-0213 claim 16d (revision 89, Q-2228: POST has no turret, so its body range sets its ready mark and it starts a later attack and fires; a turreted building never does, claims_s0213_r89.rs) and Scenario O8 part x (7), first game
     let mut w = game();
     let b = put(&mut w, Kind::Building, "POST", 0, 0, 0);
     let v = put(&mut w, Kind::Vehicle, "BUGGY", 0, 0, 12);
