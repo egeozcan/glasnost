@@ -1,9 +1,9 @@
 ---
 id: Q-2232
 title: Does a departed warp member still count as standing on a deck after its placement on that deck is refused?
-status: open
+status: answered
 related: [S-0306, S-0513]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
