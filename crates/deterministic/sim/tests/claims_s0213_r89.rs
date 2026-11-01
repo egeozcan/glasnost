@@ -629,6 +629,13 @@ fn claim_16d_an_aircraft_flies_on_at_a_flights_end_tick_by_tick() {
 /// spec: S-0213 claim 16d, Aircraft and buildings (revision 89, Q-2229 question 1: the issue at a flight's end is S-0501 claim 6's going on to a further waypoint of a planned route and comes before that claim's pad-bound test, so a pad-bound aircraft away from its pad that has a point to issue issues it and does not fall back to rest) and Changes for other specs (S-0501 claim 6, planned-route exception); Scenario O8 part x (6), the pad-bound game
 #[test]
 fn claim_16d_a_pad_bound_aircraft_issues_before_the_pad_bound_test() {
+    pad_bound_game_on_its_way_to_p2();
+}
+
+/// The pad-bound game of part x (6) up to the tick in which A, unarmed and
+/// pad-bound with the pad type as its dock type, has left P1 for P2 with P2
+/// issued. Returns the world, A, its pad and P2.
+fn pad_bound_game_on_its_way_to_p2() -> (World, ObjectId, ObjectId, CellXY) {
     use econ_common::{building, game as econ_game, issue, ready, set_credits, t, wheel};
     let mut r = econ_common::ruleset();
     let pad = r.sim.buildings.get_mut("AIRPAD").unwrap();
@@ -712,4 +719,53 @@ fn claim_16d_a_pad_bound_aircraft_issues_before_the_pad_bound_test() {
     }
     assert!(left_p1, "it flies on to P2");
     assert!(steps(&w, a).is_empty(), "P2 issued");
+    (w, a, k, p2)
+}
+
+/// spec: S-0213 claim 16d, Aircraft and buildings (when the aircraft has no point to issue, S-0501 claim 6's pad-bound test and landing follow unchanged) and Scenario O8 part x (6), the pad-bound game ("Record what A does after P2", no expectation given); S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with does not land but falls back to rest) and table T2 (in flight, unarmed, not in a team, no passengers: "in flight, otherwise", the F8 landing spot and *move*; the pad rows are for armed aircraft only); F8 (below 256 leptons from the chosen building, a free cell near its own cell). Q-2252 asks whether the original does this: the composed rules make A fall back to rest at every tick above its F8 cell near the pad, under *move*, and never dock or land
+#[test]
+fn claim_16d_after_p2_an_unarmed_pad_bound_aircraft_falls_back_above_its_f8_spot() {
+    let (mut w, a, k, p2) = pad_bound_game_on_its_way_to_p2();
+    run_until(&mut w, 1500, |w| cell(w, a) == p2);
+    // From P2 it is sent to an F8 landing spot near its pad, not to the pad.
+    run_until(
+        &mut w,
+        100,
+        |w| matches!(w.obj(a).unwrap().dest, Some(Target::Cell(c)) if c != p2),
+    );
+    let Some(Target::Cell(spot)) = w.obj(a).unwrap().dest else {
+        unreachable!()
+    };
+    let pad = w.obj(k).unwrap().pos.cell();
+    assert!(
+        (spot.x - pad.x).abs() <= 3 && (spot.y - pad.y).abs() <= 3,
+        "a spot near the pad: {spot:?}, pad {pad:?}"
+    );
+    assert!(
+        !w.cells
+            .list(spot, glasnost_sim::world::Layer::Ground)
+            .contains(&k),
+        "not a cell of the pad"
+    );
+    run_until(&mut w, 1500, |w| cell(w, a) == spot);
+    // Once it has slowed in that cell (claim 6's target fraction of 0), the landing trigger comes.
+    run_until(&mut w, 200, |w| {
+        w.obj(a).unwrap().beh.last_common_effects == Some(w.tick - 1)
+    });
+    for _ in 0..1300 {
+        let o = w.obj(a).expect("no crash");
+        assert!(o.health > 0);
+        assert_eq!(current(&w, a), Some(Behaviour::Move));
+        assert_eq!(o.dest, Some(Target::Cell(spot)), "the same F8 spot");
+        assert_eq!(o.contact, None, "no pad contact");
+        assert_eq!(o.pos.cell(), spot);
+        assert!(!air::on_ground(&w, a), "it does not land");
+        testkit::run(&mut w, 1);
+        // S-0501 claim 6: it falls back to rest at each tick it stands in its destination cell.
+        assert_eq!(
+            w.obj(a).unwrap().beh.last_common_effects,
+            Some(w.tick - 1),
+            "a fall-back to rest in that tick"
+        );
+    }
 }
