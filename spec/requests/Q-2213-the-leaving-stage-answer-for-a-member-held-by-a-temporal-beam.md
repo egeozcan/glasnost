@@ -1,9 +1,9 @@
 ---
 id: Q-2213
 title: What does the firing check answer for a warp member in the leaving stage that a temporal beam holds?
-status: open
+status: answered
 related: [S-0513, S-0301, S-0514]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
