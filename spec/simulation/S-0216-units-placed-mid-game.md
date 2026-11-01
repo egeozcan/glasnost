@@ -2,13 +2,13 @@
 id: S-0216
 title: Units placed after the game has started
 topic: simulation
-revision: 31
-sources-class: [decomp, measurement]
+revision: 37
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
-measurements: [M-0001, M-0002, M-0003, M-0006]
-requests: [Q-1711, Q-1713]
+approved-on: 2026-11-01
+measurements: [M-0001, M-0002, M-0003, M-0006, M-0017]
+requests: [Q-1711, Q-1713, Q-2096, Q-2098, Q-2099]
 supersedes: []
 ---
 
@@ -28,8 +28,15 @@ cells, since every unit stated on one was placed on a neighbouring cell (M-0006)
 request's premise does not hold for them. What ends those games stays open (Open questions).
 Questions 2 and 3 are answered for an infantry unit that stands on such a cell and whose house
 is one of the original's computer players, a placement that did not occur in the records' games.
-Placement by the map during the game's set-up is S-0009's and S-0208's (claim 5), and is restated
-here only as a contrast. Skirmish only: campaigns and network games are out of scope.
+Claim 8 gives our own arena's set-up rules (design), with M-0006's outcomes as the acceptance
+check. It answers Q-2096 in part: where the arena puts a unit that its stated cell does not
+take, and question 5 (which units stood off their stated cells in the records' games) only as far
+as M-0006 does. It answers Q-2098 in part: what our arena loads on the bunker cells, while the
+bunkers' kind and their fate in a stock game stay open. It answers Q-2099 in part: how our arena
+settles exact halves in its group counts, while question 1, what the records' harness gave, stays
+open. It leaves the records' own harness open. Placement by the map during the
+game's set-up is S-0009's and S-0208's (claim 5), and is restated here only as a contrast.
+Skirmish only: campaigns and network games are out of scope.
 
 ## Terms
 
@@ -253,7 +260,8 @@ S-0208 claim 3 reads it. In addition:
      is about the archived logs' placed cells only: M-0006 does not compare the 32 replays' tick-0
      cells with them.
    - Questions 2 and 3 below are about a unit that stands on such a cell. No unit of the records'
-     games was placed on one, so they describe a placement that did not occur in those games and are not
+     games was placed on one, so they describe a placement that did not occur in those games and
+     are not
      findings about those games' units.
    - Question 2. A hunting infantry unit on such a cell fires at an enemy on open ground only once
      that enemy is its target, and the enemy coming within its weapon's range does not by itself
@@ -305,7 +313,8 @@ S-0208 claim 3 reads it. In addition:
      place more than one unit on some cells (M-0006), so the one-cell-each statement does not hold
      for those cells, and a "free" neighbouring cell there is one that accepts the unit, not an
      empty one. Several infantry units in one cell are consistent with claim 2: a placement into a
-     cell that already holds infantry takes a free standing position of its row. Which nearby cell each moved unit was placed on is a fact of the records' Setup,
+     cell that already holds infantry takes a free standing position of its row. Which nearby
+     cell each moved unit was placed on is a fact of the records' Setup,
      not a rule of the game.
    - Why those stated cells were taken M-0006 does not record. For the five *rock* cells of
      Q-1502 (124,79, 124,80, 125,79, 125,80 and 125,86), a refusal by the entry test of claim 5
@@ -324,6 +333,95 @@ S-0208 claim 3 reads it. In addition:
      the moves from the five *rock* cells are entry test refusals: that is inferred, and it does not
      explain the other moves.
 
+8. **Our arena's set-up (design).** Our engine's arena, the tool that sets up the games of the
+   measurement records M-0001 to M-0003 and M-0017 on their map, follows the rules below. They are
+   rules of our own, not claims about the original: how the records' harness placed its units and
+   counted its groups is not established (claim 7, Open questions). They have no quirk switch.
+   M-0006's committed outcomes are their acceptance check.
+   - **Map objects (Q-2098, in part).** The arena loads the records' map as any game on that map
+     is loaded (S-0009): every map entry that S-0009's loading creates is in play from tick 0 as
+     the map gives it, the neutral house's buildings and vehicles and the terrain objects
+     included, and the arena adds or changes none of them and removes none beyond what S-0009
+     removes. What stands on the bunker cells M-0006 lists (*Map content*) is
+     whatever the map gives there, with the kind and behaviour its type's imported data give. The
+     arena has no rule of its own for these objects and does not pick them by type. Acceptance:
+     in the arena's tick-0 state a building of the neutral house covers each of those four cells,
+     whether one building or several. What the records' games had there, and what a stock game
+     on the map does with them, stay open (Open questions).
+   - **Order.** The arena creates and places the units one at a time: side A's units first, in
+     increasing unit index *i* (the index of M-0006's stated-cell formula), then side B's in the
+     same way. Each unit is created, then tested and placed as below, before the next unit is
+     created. So the scenario stream takes, per unit and in this order, its creation draw and
+     then its placement draw if any (claim 3), and no unit's creation draw falls between another
+     unit's creation draw and that unit's placement draw. Each unit is first tried on its stated
+     cell.
+   - **The take test.** A cell *takes* a unit when the cell is inside the map's usable area by
+     S-0009 claim 4's height-aware test (as S-0009 claim 5a applies it to object placement), the
+     unit's entry outcome there, asked as claim 5 asks it, is *clear*, and:
+     - for a vehicle, no unit stands on the cell
+     - for an infantry unit, the cell's ground record has neither its vehicle-present flag on
+       nor its object-present flag on with no open gate in the cell (claim 2's first row), and at
+       least one of the right, left and bottom standing positions (the positions of the centre
+       rows of S-0208 table O) is free.
+
+     A cell outside the usable area never takes a unit, so the case that claim 2 leaves open
+     does not arise in the arena. A group of an aircraft-kind type is not covered here (Open
+     questions). The test is asked before the unit is placed and takes no random draw. So,
+     unlike claim 5's order for an ordinary play-time placement, a cell that refuses an infantry
+     unit leaves no standing-position draw behind.
+   - **Moving on.** A unit that its stated cell does not take is tried on the eight neighbouring
+     cells of its stated cell (*x*, *y*), in this order: (*x* − 1, *y* − 1), (*x*, *y* − 1),
+     (*x* + 1, *y* − 1), (*x* − 1, *y*), (*x* + 1, *y*), (*x* − 1, *y* + 1), (*x*, *y* + 1),
+     (*x* + 1, *y* + 1). It stands on the first that takes it. If none takes it, the set-up stops
+     and reports an error.
+     - First come, first served: no cell is kept for a later unit. A later unit whose stated cell
+       an earlier unit took is tested there in turn, so an infantry unit can still be taken by a
+       cell that holds infantry, and a vehicle is moved on.
+   - **Placement on the cell that takes it.** The unit is placed there, on the ground of that
+     cell, which is inside the usable area, by a play-time placement as claims 1 to 4 give it:
+     the vehicle facings of claim 1, the standing position of claim 2 with its one draw R(0, 3)
+     for an infantry unit, the draws of claim 3 in their order, and the fall-back of claim 4.
+     Since the take test asks claim 2's first-row refusals, a free standing position and claim
+     5's entry outcome, claim 2 then finds a position and claim 5 accepts. The group's mission is
+     then queued as a placing step's behaviour (claim 4).
+   - **Acceptance (M-0006, *Units off their stated cells*).** Every unit placed, no side-B unit
+     moved, every move to a neighbouring cell, and the moves of the cliff-cell table. In the
+     order above, wherever a group states a unit on one of the cliff cells of Q-1502, that unit
+     lands on the cell the table names if the test refuses the cliff cells and the cell 126,79,
+     and takes the cell the table names when its turn comes. Infantry sharing a cell fits
+     M-0006's placed cells that hold more than one unit.
+   - **Group counts (Q-2099, in part).** A group's count is its budget divided by its type's
+     cost, rounded to the nearest integer, then held to the records' minimum and infantry cap
+     (M-0001 Setup). An exact half goes to the even one of the two counts (Formulas). The rule is
+     the same for infantry and vehicle groups.
+   - Backing: `measurable`. Scenario PT6, a run of our engine's arena on the records' map, tests
+     the order, with each unit's creation and placement draws interleaved, the take test, the
+     neighbour order, first come first served and the placement draws, and checks the acceptance
+     items against M-0006's (`measured`) outcomes for its groups. Scenario PT7, a run of our
+     engine's arena with test data, reaches the exact half, the minimum, the cap, the error stop
+     and raised cells at the usable area's top and bottom edges, where the height-aware test and
+     the plain test differ, which the records' groups need not reach. The acceptance items for
+     the arena's other groups are `unmeasured`. Whether the records' harness used
+     the same test, order, draws and rounding is `unmeasured` (Open questions).
+   - Confidence: high for the order (each unit created, tested and placed before the next is
+     created), the neighbour order and the count rule with its exact-half tie, as design rules of
+     our engine. The draws that this order interleaves are at claim 3's level (medium). Medium for
+     the take test, first come first served and the error stop, since they act on the take test's
+     result on a given cell, which rests on claim 5's entry outcome and on claim 2's first-row
+     refusals and free standing positions (medium, with the object-present refusal `unmeasured`
+     there), and, for the usable-area part, on S-0009 claim 4's height-aware test as S-0009 claim
+     5a applies it to object placement (medium there). For the placement on the cell that takes
+     the unit, and for its finding a position and being accepted there, the levels of claims 1,
+     2, 3 and 5 that it invokes. Low for claim 4's fall-back for a unit that is ready to change,
+     as claim 4 rates it. For the acceptance items: medium, for the groups PT6 sets up, that
+     every unit is placed, that no side-B unit is moved, that every move is to a neighbouring
+     cell and that the arena's tick-0 state passes the bunker-cell check, since these rest on the
+     map's content, on S-0009's map loading and on M-0006's cells. For the arena's other groups
+     these items are `unmeasured` (medium): they follow from the same rules and the same map, but
+     no run sets those groups up. Low that the order gives the moves of the cliff-cell table,
+     since it rests on the refusals of claim 7 (low) and on the neutral building's covering
+     126,79, which is not established (Open questions). Low for the records' harness's own rules.
+
 ## Formulas
 
 > Body facing = turret facing = 256 × *v* facing units, *v* the integer facing value 0 … 255.
@@ -334,6 +432,11 @@ S-0208 claim 3 reads it. In addition:
 > *k* = 3 → bottom (S-0208 table O).
 
 > Visceroid placement draw = R(0, 29) (S-0202 claim 10).
+
+> Arena group count before the records' minimum and cap (claim 8, design), for budget *B* and
+> cost *c*, both positive integers: *q* = ⌊*B* / *c*⌋, *r* = *B* − *q* × *c*. Count = *q* when
+> 2*r* < *c*, *q* + 1 when 2*r* > *c*, and the even one of *q* and *q* + 1 when 2*r* = *c*.
+> Exact integer arithmetic.
 
 ## Constants
 
@@ -372,7 +475,7 @@ standing-position rule a walker uses, and is not a fault.
 
 ## Measurement scenarios
 
-All scenarios use stock data with no modifications except the test type data named in PT3 and
+PT1 to PT5 use stock data with no modifications except the test type data named in PT3 and
 PT5, a small
 purpose-made map, flat (except PT5 part d's cliff cell) and with all its cells usable unless a
 part says otherwise, and a measurement
@@ -491,6 +594,61 @@ placement, and whether each unit is on the map in its cell right after its place
   method. Units of (a) to (d) standing on their refused
   cells then say nothing about claim 5.
 
+**PT6: our arena's set-up (claim 8, our engine).** This part runs our engine's arena, not the
+original. Set up, on the records' map, every side-A group of M-0001 and of M-0002 against
+its side-B group, each pairing as its own run at seed 0. Record at tick 0 every unit's stated
+and placed cell, every scenario-stream draw from the first creation to the first update, and every
+building of the neutral house with the cells it covers.
+- *Expected (rules):* units placed in the order of claim 8; every moved unit on the first cell
+  of claim 8's neighbour order that takes it; the draws in claim 8's interleaved order, each
+  unit's creation draw followed by its own placement draw if any before the next unit's creation
+  draw; exactly one draw R(0, 3) after the creation draw of each infantry unit placed, and none
+  at a cell the take test refuses; and group counts as claim 8's rounding gives them.
+- *Expected (acceptance):* every unit placed; no side-B unit moved; every move to a neighbouring
+  cell; a neutral building covering each of M-0006's four bunker cells (each medium); and,
+  wherever a run's group states a unit on a cell of M-0006's cliff-cell table, that unit on the
+  cell the table names (low).
+- *Falsified if:* a unit stands off the cell that claim 8's take test and neighbour order give it on
+  the map as recorded; the draws come in another order, for example all creation draws first and
+  then the placement draws; an infantry unit's placement has other than exactly one draw R(0, 3)
+  after its creation draw (a draw at a refused cell shows as a second one); or a group's count
+  differs from claim 8's rounding. A unit left unplaced (the error stop), a side-B unit moved, a
+  move beyond a neighbouring cell, a cliff-cell unit on another cell than M-0006's table gives,
+  or a bunker cell with no neutral building fails the acceptance check and is reported against
+  that item's level in claim 8 (medium, or low for the cliff-cell table), not against claim 8's
+  rules.
+
+**PT7: our arena's edge rules (claim 8, our engine).** This part runs our engine's arena with
+test data of our own, not stock data and not the records' groups. Parts a to c use a small flat
+test map with every cell usable. Part d uses a small test map with flat raised cells (no slopes)
+at its usable area's edges. Set up these cases, each at seed 0:
+- *a, exact halves:* one infantry group and one vehicle group whose test budget is exactly an odd
+  multiple of half its test type's cost, so that *B* / *c* = *n* + 1/2 with *n* even, and one
+  each with *n* odd, *n* and *n* + 1 both at least the records' minimum and, for infantry, at
+  most the infantry cap.
+- *b, minimum and cap:* an infantry group whose rounded count is below the records' minimum, and
+  one whose rounded count is above the infantry cap.
+- *c, error stop:* a unit whose stated cell and all eight neighbouring cells are refused by the
+  take test (for an infantry unit, each of the nine cells made to hold a vehicle; for a vehicle,
+  each made to hold a unit).
+- *d, raised edge cells:* one vehicle stated on a flat cell of height level 1 in the topmost
+  half-row of the usable area by the plain test, which S-0009 claim 4's height-aware test puts
+  outside it, and one vehicle stated on a flat cell of height level 1 in the half-row just below
+  the area's bottom edge, outside it by the plain test and inside it by the height-aware test. All
+  other take-test conditions hold on both cells and on their neighbours, which are flat at height
+  level 0.
+
+Record each group's count, for part c whether set-up completes, and for part d each vehicle's
+stated and placed cell.
+- *Expected:* in part a, the count is *n* when *n* is even and *n* + 1 when *n* is odd, for both
+  kinds; in part b, the minimum and the cap; in part c, set-up stops and reports an error, with
+  no unit of that case on the map; in part d, the top-edge vehicle on the first cell of claim 8's
+  neighbour order that the height-aware test puts inside the area, and the bottom-edge vehicle on
+  its stated cell.
+- *Falsified if:* any count in parts a and b differs from these; in part c the unit is placed
+  on any cell or set-up completes; or in part d the top-edge vehicle stands on its stated cell or
+  the bottom-edge vehicle is moved (the plain test's result).
+
 ## Changes for other specs
 
 - S-0206 claim 5 and Terms: the conversion of a facing value *v* to 256 × *v* facing units, given
@@ -519,11 +677,35 @@ placement, and whether each unit is on the map in its cell right after its place
 - **Q-1711 question 5.** How the measurement records' units were put on the map: by a play-time
   placement with its entry test (claims 1 to 5), or otherwise. M-0006 shows only that they were
   in play at tick 0 and where the archived logs place them (claim 7). It needs a run that
-  observes the placement itself (backlog).
+  observes the placement itself (backlog). Our arena's own placement is claim 8's (design), and
+  does not depend on this answer.
+- **The records' harness (Q-2096, Q-2098, Q-2099).** Whether the records' harness used claim 8's
+  test, order, neighbour order, placement draws and rounding, and whether it removed or changed
+  any map entry (the neutral house's other map objects, the bunkers' "in play from tick 0" among
+  its listed changes), are not established (low). Our arena does not need them: claim 8's rules are our own,
+  and a difference shows only as a failed acceptance check.
+- **Aircraft-kind groups (Q-2096 question 1, in part).** How our arena tests and places a group of
+  an aircraft-kind type, if a record has one, is not given here (low): claims 1 to 5 cover
+  vehicles and infantry only.
+- **Q-2099 question 1.** What the records' harness gave for a group whose budget over its type's
+  cost is exactly a half is not established (low). Claim 8's tie rule is our arena's own.
+- **Q-2096 question 5.** Which units stood off their stated cells in the games of M-0001 to
+  M-0003. M-0006 answers it in part: no unit unplaced, no side-B unit moved, every move to a
+  neighbouring cell, and the moves from the cliff cells of Q-1502 that its cliff-cell table
+  lists (claim 7). Which other units moved, by type and side, is not established here (low):
+  M-0006 keeps those counts local.
+- **Q-2098 questions 1 to 3.** What kind of object each of the records' four bunkers is (a tank
+  bunker of S-0606, a garrisonable building of S-0508, or another kind), whether the stock map
+  gives them or the records' harness added or changed them, what a stock game on the map would
+  do with them, and whether the neutral house's other map objects were in play in the records'
+  games, are not established (low). M-0006 gives one cell of each and that they were in play
+  from tick 0. Which cells a bunker covers beyond its listed one, 126,79 among them, is not
+  established either (low).
 - **Q-1713 question 1, for the records.** The request asks how the infantry units on the cliff
   cells were destroyed in the stock games of M-0001 and M-0002, or how they destroyed the enemy,
   because those games end and ours do not. No unit of those games was placed on the cliff cells
-  (claim 6): each unit stated on one was placed on a neighbouring cell. So what ends those games, and
+  (claim 6): each unit stated on one was placed on a neighbouring cell. So what ends those games,
+  and
   what the units on the neighbouring cells did, is open. Claims 1 to 6 do not decide it, and
   whether those neighbouring cells belong to a reach region is not established here. It needs an
   oracle run on the records' stock replays (backlog).
