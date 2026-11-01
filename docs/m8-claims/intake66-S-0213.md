@@ -90,4 +90,24 @@ No quirk added; r89 adds none. It adds one consequence to the off text of
 ## Formats
 
 No new state and no order change, so the save format (92), the AI game format (54) and the wire
-version (12) are unchanged.
+version (12) are unchanged. `GLASNOST_UPDATE_GOLDEN=1` on the gate crate moved no golden.
+
+## Lanes
+
+Before is main at 5c72f70. After is this branch. Outputs are in `local-lane/m8/intake66/`, which
+is git-ignored.
+
+| Lane | Before | After |
+|---|---|---|
+| M6c sweep, seeds 1–16 (29 counts) | passes | the same minimum, median and maximum for every count |
+| M7a sweep, seeds 1–16 (26 counts) | passes | the same for every count |
+| M7b sweep, seeds 1–16 (34 counts) | passes | the same for every count |
+| Arena `--record all`, scored as intake 47 / A6: M-0001 | 9 of 96 failing | 9 of 96, `ours-M-0001.csv` byte-identical |
+| M-0002 | 1 of 24 | 1 of 24, identical |
+| M-0003 | 1 of 35 | 1 of 35, identical |
+| Arena total | 11 of 155 | 11 of 155 |
+| `glasnost-ai --include-ignored` (release) | passes | passes |
+| AI quick lane, seeds 7–10, maps 0, 2 and 8 | 36 games | every game ends at the same tick with the same winner |
+
+None of the changed paths runs in an AI game. Routes are a human input, and no headless game
+uses one.
