@@ -3,7 +3,7 @@ id: Q-2216
 title: How do the stock HTK destroy every disabled robot tank in ROBO against HTK when the robot tanks start on side B?
 status: open
 related: [S-0306, S-0503, S-0405]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
