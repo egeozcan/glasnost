@@ -880,7 +880,7 @@ fn jet_world() -> (World, ObjectId) {
     (w, jet)
 }
 
-// spec: S-0113 claim 16 (an object that is not infantry starts to crash: S-0312 claim 16's three draws set its rates; while it crashes each angle adds its rate every turn, rounded to single, with no limit, pull or stop) and claim 18 (the flying locomotor draws the pitch and roll only while crashing)
+// spec: S-0113 claim 16 (an object that is not infantry starts to crash: S-0312 claim 16's three draws set its rates; while it crashes each angle adds its rate every turn, rounded to single, with no limit, pull or stop), claim 18 (the flying locomotor draws the pitch and roll only while crashing) and claim 20 (drawn fresh with those angles)
 #[test]
 fn a_crashing_aircraft_tumbles_by_its_draws() {
     let (mut w, jet) = jet_world();
@@ -922,7 +922,7 @@ fn a_crashing_aircraft_tumbles_by_its_draws() {
         assert_eq!((body.pitch_rate, body.roll_rate), (pitch_rate, roll_rate));
     }
     assert!(real(roll).abs() > 1.9, "past every limit: {}", real(roll));
-    // Drawn with the tumble.
+    // Drawn with the tumble: claim 20's exact angles, not held to the drawing step.
     let Attitude::Flying {
         crashing: true,
         tumble,
@@ -931,7 +931,8 @@ fn a_crashing_aircraft_tumbles_by_its_draws() {
     else {
         panic!("a crashing aircraft");
     };
-    let (p, r) = rocking.angles(jet).unwrap();
+    assert_eq!(tumble, (pitch.0, roll.0));
+    let (p, r) = rocking.exact_angles(jet).unwrap();
     assert_eq!(tumble, (p.to_bits(), r.to_bits()));
     assert!(r != 0.0);
 }

@@ -2817,30 +2817,68 @@ fn aircraft_attitude_is_drawn() {
         images(craft(16384, 20480, flying(10, 0.75, 1))).1,
         base_shadow
     );
-    // A crashing body takes no pitch or bank of claim 42: with no tumble it is drawn level.
-    let crash = |pitch: f32, roll: f32| Attitude::Flying {
-        height: 10,
-        speed: 0.75f64.to_bits(),
-        turn: 1,
+    // spec: S-0113 claims 18 and 20 (a crashing aircraft at strictly positive signed height is
+    // drawn with Rz(θ_flight) · Rx(φ) · Ry(ψ′); ψ′ takes α under the speed test; the bank never
+    // enters; at zero or negative height the heading alone; the shadow the heading alone)
+    let crash = |height: i32, speed: f64, turn: i32, pitch: f32, roll: f32| Attitude::Flying {
+        height,
+        speed: speed.to_bits(),
+        turn,
         crashing: true,
         tumble: (pitch.to_bits(), roll.to_bits()),
     };
-    assert_eq!(images(craft(16384, 20480, crash(0.0, 0.0))).0, base);
-    // spec: S-0113 claim 18 (a crashing aircraft is drawn with its tumble angles); design: Q-2236 interim (S-0504 F5 on the flight drawing heading, the shadow on the heading alone)
-    let (tumbled, tumbled_shadow) = images(craft(16384, 20480, crash(0.3, 1.2)));
+    let (tumbled, tumbled_shadow) = images(craft(16384, 20480, crash(10, 0.75, 0, 0.3, 1.2)));
     assert_ne!(tumbled, base, "a tumbling body is drawn rolled");
-    assert_ne!(tumbled, images(craft(16384, 20480, crash(0.3, 1.5))).0);
+    assert_ne!(
+        tumbled,
+        images(craft(16384, 20480, crash(10, 0.75, 0, 0.3, 1.5))).0
+    );
     assert_eq!(
         tumbled_shadow, base_shadow,
         "the shadow keeps the heading alone"
     );
     assert_eq!(
         tumbled,
-        images(craft(24576, 20480, crash(0.3, 1.2))).0,
+        images(craft(24576, 20480, crash(10, 0.75, 0, 0.3, 1.2))).0,
         "the heading is the aiming facing, not the body facing"
     );
-    // Below the drawing threshold the body is drawn level.
-    assert_eq!(images(craft(16384, 20480, crash(0.001, 0.004))).0, base);
+    // The bank never enters: a turn either way draws the same body.
+    assert_eq!(
+        tumbled,
+        images(craft(16384, 20480, crash(10, 0.75, 1, 0.3, 1.2))).0
+    );
+    assert_eq!(
+        tumbled,
+        images(craft(16384, 20480, crash(10, 0.75, -1, 0.3, 1.2))).0
+    );
+    // α only on the speed test (PitchSpeed 0.5 here): the same tumble below it is another body.
+    let slow = images(craft(16384, 20480, crash(10, 0.4, 0, 0.3, 1.2))).0;
+    assert_ne!(
+        tumbled, slow,
+        "the drawing pitch enters above the threshold"
+    );
+    assert_eq!(
+        slow,
+        images(craft(16384, 20480, crash(10, 0.5, 1, 0.3, 1.2))).0,
+        "at the threshold, no α"
+    );
+    // Tiny angles are drawn by D_crash too, not as a settled level body: the α shows on them.
+    let tiny_slow = images(craft(16384, 20480, crash(10, 0.4, 0, 0.001, 0.004))).0;
+    let tiny_fast = images(craft(16384, 20480, crash(10, 0.75, 0, 0.001, 0.004))).0;
+    assert_ne!(tiny_slow, tiny_fast);
+    // At zero or negative height, the heading alone, the level flying body's image.
+    assert_eq!(
+        images(craft(16384, 20480, crash(0, 0.75, 1, 0.3, 1.2))).0,
+        base
+    );
+    assert_eq!(
+        images(craft(16384, 20480, crash(-5, 0.75, 0, 0.3, 1.2))).0,
+        base
+    );
+    assert_eq!(
+        images(craft(16384, 20480, crash(0, 0.75, 1, 0.3, 1.2))).1,
+        base_shadow
+    );
 }
 
 /// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405
