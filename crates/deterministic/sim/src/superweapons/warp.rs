@@ -125,13 +125,23 @@ pub fn departed(w: &World, id: ObjectId) -> bool {
     member(w, id).is_some_and(|m| m.departed())
 }
 
+/// Whether an object is a warp member whose warp has been launched and whose
+/// arrival hold has not ended: S-0306 claim 17 puts it in the ground render
+/// layer then, whatever its height. The member state exists from joining
+/// the group at launch until the hold ends (`turn`).
+pub fn in_ground_layer(w: &World, id: ObjectId) -> bool {
+    // spec: S-0306 claim 17 (a warp member is in the ground render layer from its warp's launch until at least the end of its arrival hold, whatever its height)
+    member(w, id).is_some()
+}
+
 /// Whether a departed member's landing check has passed for a landing cell
-/// on a deck, so that S-0306 claim 17 counts it as standing on a deck: from
-/// the pass to its placement. A placement refused after the pass (claim 50)
-/// takes it back to the landing retry and ends this until a check passes
-/// again (our reading; Q-2232).
+/// on a deck and awaits its placement, so that S-0306 claim 17 counts it as
+/// standing on a deck. A placement refused after the pass (claim 50) takes
+/// it back to the landing retry and ends this until a later check passes
+/// for a deck cell; each passed check sets the count from its own landing
+/// cell (S-0306 claim 17, engine design, Q-2232).
 pub fn passed_for_deck(w: &World, id: ObjectId) -> bool {
-    // spec: S-0306 claim 17 (standing on a deck only once its landing check has passed for a landing cell on a deck) and S-0513 T2 (check passed: placed on the next update)
+    // spec: S-0306 claim 17 (standing on a deck only while a landing check that passed for a landing cell on a deck awaits its placement; after a refused placement, by its height again until a later check passes for a deck cell; engine design with no switch, Q-2232) and S-0513 T2 (check passed: placed on the next update)
     member(w, id).is_some_and(|m| {
         m.stage == Stage::Away && crate::teleport::landing_layer(w, m.landing.cell()) == Layer::Deck
     })

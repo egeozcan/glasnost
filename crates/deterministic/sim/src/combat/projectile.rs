@@ -1486,10 +1486,7 @@ fn detonation_point(
         Target::Cell(_) => dr,
     };
     let em = w.rules().combat.warhead_of(pr.weapon).is_some_and(|h| h.em);
-    // A departed warp member is airborne by claim 17's count. Its render
-    // layer until it appears is open (S-0306 Open questions, Q-2212;
-    // Q-2231): interim, the layer its kept state gives, so a vehicle that
-    // departed from a deck is in the ground render layer and gets 42.
+    // A departed warp member is airborne by claim 17's count.
     let airborne = |x| {
         if crate::superweapons::warp::departed(w, x) {
             // spec: S-0306 claim 17 (claim 20's question whether the target is airborne, for a departed warp member)
@@ -1498,9 +1495,12 @@ fn detonation_point(
             crate::combat::weapon::in_air(w, x)
         }
     };
+    // spec: S-0306 claim 17 (a warp member is in the ground render layer from its warp's launch until at least the end of its arrival hold, whatever its height, so claim 20 (c) uses 42 for it, also when it departed from a deck and counts as airborne)
+    let ground =
+        |x| crate::temporal::ground_layer(w, x) || crate::superweapons::warp::in_ground_layer(w, x);
     // spec: S-0306 claim 20 (c) (threshold 42 for a target that is not airborne or is airborne in the ground render layer; 128 for a target airborne in another render layer)
     let threshold = match t {
-        Target::Object(x) if airborne(x) && !crate::temporal::ground_layer(w, x) => 128,
+        Target::Object(x) if airborne(x) && !ground(x) => 128,
         _ => 42,
     };
     // spec: S-0306 claim 20 (c) (below the threshold and no electromagnetic flag: the target point; else D_R below 32: the reference point)
@@ -1537,9 +1537,8 @@ fn explode(
     // spec: S-0516 claim 31 (a disguise-flag warhead's projectile does no damage to the target)
     let area = special.is_none();
     if special == Some(Special::Disguise) {
-        // spec: S-0516 claim 31 (detonating on its target, it disguises its firer)
-        let on = effect_target(w, pr.target);
-        crate::cloak::disguise::disguise_hit(w, pr.attacker, on);
+        // spec: S-0516 claim 31 (detonating on its target, it disguises its firer) and S-0306 claim 17 (a departed warp member, off the map or phasing in, is copied as that claim gives)
+        crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
     }
     if p.airburst {
         // spec: S-0525 claim 1 (the airburst projectile's own detonation leaves radiation with its own weapon; its nine children carry no weapon and leave none)
@@ -1718,8 +1717,7 @@ fn detonation_inner(
     } else {
         special_of(w, weapon, target)
     };
-    // The selection above reads the target; the effects act on effect_target's (Q-2231 interim).
-    let target = effect_target(w, target);
+    // spec: S-0306 claim 17 (these rows act on the projectile's target object, not through area damage, so a departed warp member, off the map or phasing in, receives them by each row's own tests; electric charging acts on buildings only; no locomotor seizing from departure until the arrival hold ends, `lift::seize_hit`)
     match special {
         // spec: S-0601 claim 5 (takeover replaces damage and every other special hit; only the projectile's target can change owner)
         Some(Special::Takeover) => crate::mind::detonation(w, attacker, target),
@@ -2101,16 +2099,18 @@ pub(crate) fn target_leaves(w: &mut World, id: ObjectId) {
 /// appearance (S-0513 claim 39), off the map then, S-0307's rule that an
 /// object not on the map is neither airborne nor floor-bound does not
 /// apply: it is counted by its height above the surface beneath the
-/// position it kept, and as standing on a deck only while a passed landing
-/// check is for a landing cell on a deck (S-0306 claim 17). Every other
-/// object is S-0307's airborne.
+/// position it kept, and as standing on a deck only while a landing check
+/// that passed for a landing cell on a deck awaits its placement (S-0306
+/// claim 17). After a refused placement it counts by its height again until
+/// a later check passes for a deck cell (claim 17's design rule, Q-2232).
+/// Every other object is S-0307's airborne.
 pub fn target_airborne(w: &World, id: ObjectId) -> bool {
     use crate::superweapons::warp;
     let Some(o) = w.obj(id) else { return false };
     if !warp::departed(w, id) {
         return airborne_by_height(w, id);
     }
-    // spec: S-0306 claim 17 (a departed member counts as standing on a deck once its landing check has passed for a landing cell on a deck; Q-2232 for a placement refused after the pass)
+    // spec: S-0306 claim 17 (a departed member counts as standing on a deck only while a landing check that passed for a landing cell on a deck awaits its placement; each passed check sets the count from its own landing cell; after a refused placement, engine design with no switch, it counts by its height again, Q-2232)
     if warp::passed_for_deck(w, id) {
         return false;
     }
@@ -2123,21 +2123,6 @@ pub fn target_airborne(w: &World, id: ObjectId) -> bool {
     };
     // spec: S-0307 Terms (airborne: height above the surface at least 208 leptons)
     o.pos.z - surface >= 208
-}
-
-/// The target a detonation's effects on the projectile's target object
-/// itself act on (S-0514 claim 20's special hits, S-0516 claim 31's
-/// disguise). What they do to a superweapon warp member that has departed
-/// and not yet appeared is open (S-0306 Open questions, Q-2212; Q-2231).
-/// Interim: none of them acts on it while it is off the map, as when such a
-/// projectile had lost its target before revision 57; the selected row
-/// still replaces ordinary damage. After it appears it is a target on the
-/// map like any other.
-fn effect_target(w: &World, target: Option<Target>) -> Option<Target> {
-    match target {
-        Some(Target::Object(x)) if crate::superweapons::warp::departed(w, x) => None,
-        t => t,
-    }
 }
 
 /// A projectile leaves play (S-0203 claim 5: a removal for claim 10).

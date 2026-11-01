@@ -139,8 +139,8 @@ pub fn deliver(w: &mut World, firer: Option<ObjectId>, target: Option<Target>) {
         let_go(w, f);
         return;
     }
-    // spec: S-0514 claim 1 (an object target must be in the ground render layer, otherwise this effect does nothing)
-    if !ground_layer(w, x) {
+    // spec: S-0514 claim 1 (an object target must be in the ground render layer, otherwise this effect does nothing) and S-0306 claim 17 (a warp member is in the ground render layer from its warp's launch until at least the end of its arrival hold, so the test passes for it, off the map or phasing in)
+    if !ground_layer(w, x) && !crate::superweapons::warp::in_ground_layer(w, x) {
         return;
     }
     // Q-0984 (interim: a firer whose type supplies no beam, and none carried, makes no lock and no side effect)
