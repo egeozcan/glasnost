@@ -3,7 +3,7 @@ id: Q-2211
 title: What does a holder of a superweapon warp member do with it after the member's departure?
 status: open
 related: [S-0513, S-0309, S-0215, S-0301]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
