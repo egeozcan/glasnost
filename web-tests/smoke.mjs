@@ -106,7 +106,24 @@ try {
 
     if (viewer) {
       // Import a synthetic folder through the folder input, as a user would.
-      await page.locator("#glasnost-folder").setInputFiles(syntheticInstall);
+      //
+      // Playwright's Firefox backend sometimes never answers a directory
+      // upload (one stall of 30 s on CI in 12 runs; 70 local runs, alone and
+      // under load, never stalled). The page is not the cause the log can
+      // show: the wait below proves its main thread still serves frames. The
+      // upload is a protocol call the app does not own, so it gets a short
+      // timeout and is retried; a retry that lands after the first one did
+      // work only remounts the same folder.
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await page.locator("#glasnost-folder").setInputFiles(syntheticInstall, { timeout: 10000 });
+          break;
+        } catch (e) {
+          if (attempt === 3) throw e;
+          console.log(`[${browserName}/${backend}] folder upload attempt ${attempt} stalled; retrying`);
+        }
+      }
       const mount = await page
         .waitForFunction(() => document.body.dataset.glasnostMount, null, { timeout: timeoutMs })
         .then((h) => h.jsonValue())
