@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 87
+revision: 89
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-01
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230]
 supersedes: []
 ---
 
@@ -915,7 +915,12 @@ Terms).
     search of S-0214 claim 11: the point is then on the clicked cell, whatever the move order's
     destination. Any
     other order that names no target has its destination's place, so a *patrol* click on a cell
-    puts the point on the cell that the search finds. An
+    puts the point on the cell that the search finds. An attack-move click (claim 6, Q-2230) has
+    the place that the same click gives without attack-move entry: entry changes only the
+    order's kind, not the target, destination or cell that the click gave it. So an attack-move
+    click on a cell puts the point on the clicked cell, not on the cell the search finds. One on
+    an object puts it at the target's place when its order names a target, and on the cell that
+    the object stands on at the click when its order would be a *move* without entry. An
     order that names neither a target nor a destination has no place: when it is applied it
     adds no point, with no message and no sound, and has no other effect. For each holder the
     point records the order that the click gave that holder: its action, with the click's
@@ -1159,8 +1164,14 @@ Terms).
     holder, and the joining holder issues it as any holder issues its own (above). Its action is
     not resolved anew for the joining holder, at the join or when the point is issued (medium).
     So a joining holder can issue an action that a click would not give it, such as an engineer's
-    *capture* copied to a tank. What such an order then does is not settled here (Open
-    questions).
+    *capture* copied to a vehicle (Q-2227 question 2). That order is applied as it would be for
+    any actor (claims 4 and 5), with no test of whether a click would give the joining holder that
+    action. A vehicle that issues an engineer's copied *capture* on an enemy building gets
+    *capture* with the building as its destination and no target, and S-0215 claim 28 processes
+    it as for any vehicle in *capture*. The vehicle does not attack the building, since the order
+    names no target, and never captures it, since only an infantry unit makes a building entry
+    (S-0509 claim 1). Its route goes on as any holder's does (claim 16c): it issues its next
+    point, if it has one, at its next fall-back to rest (medium).
 
     A refusal leaves the route unchanged. For the local player's own orders it shows a message,
     each case its own text: after a terminating point, after a continual point, in a loop and
@@ -1170,7 +1181,8 @@ Terms).
     that case is shown as information. The checks are made when the order is applied, and only
     the messages depend on the local player.
     - Backing: `measurable` (Scenario O8, parts a, b, e, f and l, parts n and r for joins, with
-      part r (5) for holders given the point in the same tick, and part q for the order's place,
+      part r (5) for holders given the point in the same tick, and part q for the order's place
+      (part q (6) for an attack-move click on a cell),
       the clicks on existing points and the route record kept, part v for the detonate, the
       moment it is sent and its refusal by the holder limit, part w for the click area, the
       patrol action, a press for a mixed selection in both selection orders,
@@ -1218,8 +1230,8 @@ Terms).
       the same record. An aircraft's deploy action adding no point, and an order that names
       neither a target nor a destination adding none, are `unmeasured`: no scenario here gives a
       selected aircraft that carries passengers the deploy action, and no other click gives
-      such an order. The place of a *move* click on an object, and that of a *patrol* point, are
-      `unmeasured`: part q (5) runs only a *move* click on a cell. The
+      such an order. The place of a *move* or attack-move click on an object, and that of a
+      *patrol* point, are `unmeasured`: parts q (5) and q (6) run only clicks on a cell. The
       undeploy click is `unmeasured`: no scenario here selects a building that can undeploy.
       That the detonate click's route-state test is made at the release is `unmeasured`: the
       test can refuse it only with a selection of more than one object, and no scenario here
@@ -1234,15 +1246,20 @@ Terms).
       for it at the add or copied to it at a join, not one classified anew when it is issued, is
       `measurable` for a loop's *move* point changed into an attack-move order (part aa) and for
       the *enter* that a full-health vehicle's point on an own repair building issues (part ab),
-      and `unmeasured` otherwise: no scenario here changes, between the add and the issue,
-      anything that a point's action depends on, and none gives a joining holder a copied action
-      that a click would not give it
+      and for the engineer's *capture* that a joining vehicle issues (part ac), and `unmeasured`
+      otherwise: no scenario here changes, between the add and the issue, anything that a point's
+      action depends on. The joining vehicle's making no shot at the building and not capturing it
+      are `measurable` in part ac. That its route goes on at its next fall-back to rest is
+      `unmeasured`: a *capture* point is terminating, so part ac's copy has no later point.
     - Confidence: high that the click takes its ordinary S-0214 action, and for the deploy
       refusal for a vehicle or infantry unit; medium for the four refusal cases and their
       separate texts (an aircraft's deploy is not one of them: it adds no point because its
       order has no place, rated low below with the aircraft's click actions), the action
       kept per holder, the order's place, the order a holder issues being the one recorded at the
-      add or copied at a join with no new classification, the info messages, the sound and
+      add or copied at a join with no new classification, a copied action that a click would
+      not give the joining holder being applied as for any actor (a joining vehicle's copied
+      *capture* giving it *capture*, no shot at the building and no capture, and its route going
+      on at its next fall-back to rest, unmeasured), the info messages, the sound and
       the three conditions
       of the point-click test, and for the holder that a join copies (holders given the point
       in the same tick included) and what the copy holds and loops; medium for the copied
@@ -1491,8 +1508,20 @@ Terms).
     rest are in *guard* or *area guard* with no target, so a commit after its join or first point
     add makes it issue its first point. It issues each point as any holder does (claim 16b),
     with the attack-move translation of claim 6. Its later points are issued at these moments:
-    - an aircraft issues its next point when a flight ends, at the moment it would begin to land,
-      unless its behaviour is then *enter*. It issues none when it falls back to rest. So after a
+    - an aircraft issues its next point when a flight ends, at the moment it would begin to land
+      (either landing trigger of S-0501 claim 6), unless its behaviour is then *enter*. This issue
+      is S-0501 claim 6's going on to a further waypoint of a planned route, not a step beside it,
+      and it comes before that claim's pad-bound test (Q-2229). So a pad-bound aircraft away from
+      its pad that has a point to issue issues it and does not fall back to rest. An aircraft that
+      issues a point begins no landing in that tick and stays in flight. As for every holder, the
+      issue is preceded by claim 16c's queue of *wait* with an immediate start, so an aircraft
+      that is ready to change has *wait* current from the flight's end until the issued order's
+      behaviour becomes current. The issued order applies at the end of that tick (claim 1). When
+      it names a destination, it gives the aircraft that destination while the aircraft is
+      neither landing nor taking off, so the aircraft flies on with no landing and no take-off.
+      What an issued order with no destination makes the aircraft do is that order's own effect
+      (claim 5 and S-0501). When the aircraft has no point to issue, S-0501 claim 6's pad-bound
+      test and landing follow unchanged. It issues none when it falls back to rest. So after a
       point whose flight ends in *enter*, such as a return to its dock, its remaining points are
       not issued.
     - a building whose type does not have the SAM flag issues its next point only when its
@@ -1504,6 +1533,15 @@ Terms).
       of S-0215 claim 32 follows as committed, and an issued order still applies at the next
       order boundary. Under *move* a building does nothing:
       it neither moves nor looks for targets nor fires, and it issues no further point.
+      An *attack* order given to it outside route mode (Q-2228) ends its route (claim 17) and
+      queues *attack* with the order's target (claim 5). The building starts that *attack* only
+      at a per-tick start at which its ready mark is set (S-0215 claim 11). A building without
+      a turret has the mark set by its body range, so it starts the *attack* and fires.
+      Nothing sets a turreted building's mark while *move* is current. *Move* has no processing
+      rule for a building (S-0215 claim 4), its body range sets no mark outside *construction*
+      and *selling*, and the start that made *move* current cleared the mark (S-0215 Terms,
+      *ready mark*). So a turreted building keeps *move* current and *attack* queued, and makes
+      no shot at that target. This is S-0215 claim 11 applied, not a rule of its own.
     - a building whose type has the SAM flag issues no later point. Its *attack* follows S-0215
       claim 32's SAM rows unchanged: without a suitable target it drops the target and queues
       *guard*, and no point is issued, so it issues only the first point that a commit makes it
@@ -1514,8 +1552,9 @@ Terms).
     (claim 16c).
     - Quirk: `quirks.click_area_skips_kind_test` (default: original). With the switch off, every
       route-mode battlefield press with objects selected meets the kind test first, inside a
-      click area or not, so no aircraft or building gets a route point, and none is left with
-      points that it does not issue.
+      click area or not, so no aircraft or building gets a route point, none is left with
+      points that it does not issue, and no turreted building is left under *move* with an
+      *attack* that never starts.
     - Backing: `measurable` (Scenario O8, part d, part q for clicks on existing points, and game
       B step 3 for the two refusals together, part x for the kind test at the press, the clicks
       that skip the other two tests, the message among several kind failures, the presses
@@ -1524,11 +1563,17 @@ Terms).
       point at more than the holder limit, and part v for a detonate click refused by the holder
       limit; its route-state test is claim 16b's `unmeasured` part, part x (5) to (7) for an
       aircraft's and a building's join, the start at the commit and the points then issued or
-      not, part x (8) for right clicks with a building selected, and part h's third game for a
+      not, part x (7)'s first and third games for a building under *move* that starts a later
+      *attack* order or not by whether it has a turret, part x (8) for right clicks with a
+      building selected, and part h's third game for a
       press inside the click area of a point that the player cannot see, with a factory
       selected, and the rally point it sets). An aircraft's or building's place in the
       route-holder count is `unmeasured`: no scenario here brings a house to the limit with one
-      among its holders. A building's issue of its next point when its *attack* has no target,
+      among its holders. Part x (6)'s per-tick record backs an aircraft's issue at a flight's
+      end beginning no landing and no take-off, and its pad-bound game the issue coming before
+      the pad-bound test. That *wait* precedes an aircraft's issue is `unmeasured`: whether it is
+      ever current depends on the aircraft's readiness to change in flight, which no scenario
+      here sets or records. A building's issue of its next point when its *attack* has no target,
       and the *guard* it then queues or not, are `unmeasured`: no scenario here gives a building
       an *attack* point. So is a building with the SAM flag issuing no later point: no scenario
       here gives such a building a route point. That an aircraft
@@ -1550,10 +1595,13 @@ Terms).
       detonate click meeting both release-time tests. Medium for each of these too: an aircraft
       or building with no route record joining a point and getting a route; its start at a
       commit; the moments at which it issues its later points (unmeasured but for an aircraft's
-      issue at a flight's end), a building's *guard* queued or not after such an issue
+      issue at a flight's end); an aircraft's issue coming before the pad-bound test and
+      beginning no landing in its tick; its issue being preceded by *wait* (unmeasured); a
+      building's *guard* queued or not after such an issue
       (unmeasured), a building with the SAM flag issuing no later point (unmeasured), and a
       later commit not starting it again (unmeasured); a
-      building under *move* doing nothing; an aircraft or building
+      building under *move* doing nothing; a building under *move* starting a later *attack*
+      order when it has no turret and never when it has one; an aircraft or building
       counted as a route holder (unmeasured), but for a join that gives it its first points,
       which is low (unmeasured, from claim 16f's low rule for joins); the click areas of points
       not drawn for the player counting for the kind test; right presses never tested for kind
@@ -1570,8 +1618,7 @@ Terms).
     remaining points form an ordinary route. On a route whose loop ends early (claim 16c), a
     point after the loop counts as one inside it: deleting any point at or after the loop's first
     point lowers the loop's number of points by 1, and the loop is cancelled once that number is
-    below 3. Which point such a delete then selects, when the deleted point was its longest
-    holder's last, has not been settled (Open questions). A route can be extended: holding the
+    below 3. A route can be extended: holding the
     key again with the same selection and clicking adds points to the end of each route,
     whether or not the route is being followed, under the checks of claims 16b and 16d.
     Releasing the key commits again. A holder still busy with an earlier point is not
@@ -1585,9 +1632,20 @@ Terms).
     earliest-made of them (claim 16b, Q-2166). When a point-delete order of the local player's house
     is applied, the point after the deleted one in the route of its longest holder (claim 16b),
     going round a loop, becomes the selected point, if there is one. So repeated presses delete the
-    following points in turn. A point delete applied after the key's release selects that next point
-    too, and a later press of the delete key then deletes it, with route mode off and no marker
-    drawn.
+    following points in turn. The point is found in that route as it stands before the delete.
+    When the deleted point is that route's last point, the count goes on round the loop's points
+    only (Q-2226). Let *n* be the number of points from the loop's first point to the route's
+    last, both included, and *C* the loop's number of points (claim 16c). The selected point is
+    the one (*n* mod *C*) places after the loop's first point, where 0 places is that point
+    itself. On a loop that runs to the route's end, *n* = *C*, so the selected point is the
+    loop's first point. On a loop that ends early (claim 16c) it is a point of the loop, never
+    one after the loop, and it is the loop's first point only when *n* is a multiple of *C*.
+    A route without a loop gives no point when its last point is deleted. Where the route holds
+    the deleted point at two places, the point after its first place is taken (claim 16b, *A
+    point that a route holds twice*). That first place is never the route's last point, so the
+    count round the loop does not apply. A point delete applied after the key's release selects
+    that next point too, and a later press of the delete key then deletes it, with route mode off
+    and no marker drawn.
     - Quirk: `quirks.delete_selects_after_release` (default: original). With the switch off, a
       point delete applied while the route-mode key is not held selects no point.
     - Backing: `measurable` (Scenario O8, part g, and part i for the loop cancelled below
@@ -1596,9 +1654,14 @@ Terms).
       is `unmeasured`: one player's inputs are taken one per cycle (claim 1), so a delete pressed
       before the release is applied before the release is taken, and no scenario here applies a
       point delete in a later tick than the one it is issued in. A delete on a route
-      whose loop ends early is `unmeasured`, as claim 16c's early loop
-    - Confidence: medium; low for the loop cancelled below 3 points, a delete after an early
-      loop's last point included, for which holder's route
+      whose loop ends early, and the point it selects, are `unmeasured`, as claim 16c's early
+      loop is
+    - Confidence: medium, the point selected after a delete of the last point on a route whose
+      loop ends early included (unmeasured, as a rule: such routes come about only through claim
+      16b's low outcomes, which bound how often it applies, not the rule); low for the loop
+      cancelled below 3 points, for the point
+      selected where the route holds the deleted point at two places (claim 16b's low rating),
+      for which holder's route
       gives the next point when several hold the deleted one, and for a point delete applied
       after the release
 
@@ -3044,7 +3107,10 @@ Q-1753).**
     water cell one cell from the shore, a click to which S-0214 claim 11 gives a destination
     found by the nearby-cell search, and keep holding. Expected: the marker on the water cell,
     with T's route line ending there. A marker on a land cell falsifies the order's place. Where
-    T goes after the release is not an observable of this part.
+    T goes after the release is not an observable of this part. (6) In a fresh game with the same
+    set-up, where T is of a type eligible for attack moves (claim 6), make (5)'s click with
+    attack-move entry (S-0214 claim 5) active as well. Expected: as in (5), the marker on the
+    water cell. A marker on a land cell falsifies the attack-move click's place.
   - *(r) Which route a join copies (claim 16b):* a fresh game, with vehicles A to H of the player's
     that have not held a route point. B is created before A (a lower object number) and stands
     nearer to C than A does. All points are cells. (1) Give A a plain move order to a far cell and,
@@ -3237,25 +3303,43 @@ Q-1753).**
     takes off after the release and flies to P₁. (6) In a second game with the same set-up,
     route V through P₁ and a far cell P₂ instead. Select A alone, hold the key, press P₁'s
     marker and release. Expected: A flies to P₁ and on to P₂ without landing at P₁ or turning
-    back. Record what A does after P₂. (7) In a network game of two humans not allied (as in
+    back. A's type is one with a take-off sound (a test copy with a test value if needed).
+    Record every tick from A's arrival over P₁ until it is on its way to P₂: its height, its
+    current and queued behaviour, its destination, and any take-off sound. Expected: A's height
+    does not fall below its cruise height in those ticks, no take-off sound is played at P₁, A's
+    destination goes from P₁ to P₂ with no tick in which it has none, and no tick shows *guard*
+    current or queued. Record what A does after P₂. In a further game with the same set-up (the
+    pad-bound game), A's type is a pad-bound test copy (test value) and A stands at rest on an
+    own pad building of a type that it docks at, far from P₁, and (6)'s steps are made.
+    Expected: as above, with A neither turning back towards a pad nor crashing at P₁. Record
+    what A does after P₂. (7) In a network game of two humans not allied (as in
     part h), with the same set-up for the first player and a vehicle E of the second player's,
     whose type is a test copy that has no weapon and a strength that no shot of B's can use up
-    (test values), kept out of B's range. With no target in B's range, select B alone, hold the
+    (test values), kept out of B's range. B's type is a test copy without the turret flag (test
+    value). With no target in B's range, select B alone, hold the
     key, press P₁'s marker and release. Expected: no building-in-selection text. Then the
     second player drives E into B's range and stops it there. Expected: B makes no shot at E.
     Then the first player, without the key, gives B an *attack* order on E. Expected: B fires
     at E. In a second such game, the second player first drives E into B's range, and once B
     fires at E the first player makes the same press on P₁'s marker with B selected. Expected:
     B keeps firing at E after the release, since a holder under *attack* on an object is not
-    started by the commit (claim 16c). (8) With B selected
+    started by the commit (claim 16c). In a third such game, B's type is instead a copy of the
+    same test type with the turret flag (test value), and the first game's steps are made.
+    Expected: B makes no shot at E in the 1,000 ticks after the *attack* order, with *move*
+    current and *attack* queued throughout. (8) With B selected
     and the key held, right-click bare ground with press and release at one screen position,
     then select B again, hold the key and right-drag across the battlefield. Expected: no
     building-in-selection text and no refusal sound for either, B no longer selected after the
     right click, and the view scrolled by the drag. Falsified if any expectation fails. An
     aircraft-in-selection text in (5) falsifies the press inside a click area untested for kind,
-    A coming to rest at P₁ in (6) falsifies the aircraft's issue at a flight's end, and a shot
+    A coming to rest at P₁ in (6) falsifies the aircraft's issue at a flight's end. In (6), a
+    fall in height or a take-off sound at P₁ falsifies the issue that begins no landing, and in
+    its pad-bound game A turning back towards a pad or crashing at P₁ falsifies the
+    issue coming before the pad-bound test. A shot
     of B's at E before the *attack* order in (7)'s first game falsifies the building that does
-    nothing under *move*.
+    nothing under *move*. In (7)'s third game, a shot of B's at E, or *attack* current, falsifies
+    the turreted building whose ready mark nothing sets under *move*, and in the first game no
+    shot of B's at E after the *attack* order falsifies the start that the body range allows.
   - *(y) Selection and tools (claim 16h):* a fresh game, with vehicles V and X of one type, W of
     another and Z of a third, none of which has held a route point, V in control group 1 (claim 22),
     cells P₁, P₂ and P₃ far from them, an own building that can be sold, an own damaged building, an
@@ -3359,6 +3443,22 @@ Q-1753).**
     with no destination), from a classification made at the issue (V's orders in the two runs
     differ) and from any other order (an action other than *enter*, or another destination). If
     the cursor in either run does not show *enter* over D, the part decides nothing.
+  - *(ac) A copied capture issued by a vehicle (claim 16b, *Joins*):* a network game of two humans
+    not allied (as in part h). The first player has an infantry unit N of a type that captures
+    buildings and an armed ground vehicle T, both at rest and neither having held a route point.
+    The second player has a building X of a type that N can capture, built up and not being sold,
+    and makes no input. T's own click action on X is *attack*. F is a bare cell far from X, on the
+    side of N away from X, so that N's trip to F and back to X lasts longer than T's trip to X.
+    Select N alone, hold the key, click F, then X (the cursor shows *capture* over X), and keep
+    the key held. Click T to select it, press the marker of the point at X's place, and release.
+    Record, every tick from the release until N reaches F, T's current and queued behaviour, its
+    target and destination, its cell, every shot of T's, and X's owner and health. Expected: T
+    issues an order whose action is *capture*, with no target and with X as its destination, has
+    *capture* current, and heads for X. T makes no shot at X, and X keeps its owner and health.
+    Falsified if T issues another order (*attack* on X, as its own click would give, or a
+    *move*), issues none, fires at X, or X changes owner or loses health while N is still on its
+    way to F. If the cursor does not show *capture* over X at N's click, or T is not given the
+    point, the part decides nothing.
 
 **Scenario O9: one input event per cycle (claims 1 and 3).**
 - *Setup:* one vehicle of the player's, selected, moving towards a far cell *A*. Game speed 6
@@ -3926,6 +4026,25 @@ extension is a design rule and has no oracle measurement.
   attack-move gesture or the command-bar button for one-click mode, not a dedicated
   attack-move key. No part of this request remains open. The keyboard preferences file's
   full encoding and options-dialog closing shortcuts are outside this request.
+- Q-2226 is answered by claim 16e (*The delete key*): the point that a delete of its longest
+  holder's last point selects on a route whose loop ends early (question 1), and on a route that
+  holds the deleted point at two places (question 2).
+- Q-2227 question 1 is answered by claim 16b (*Aircraft and buildings*): in route mode a click
+  that makes a factory the primary factory, or that sets a factory's rally point on an object,
+  sends its order directly with no point, and the *unload* that lets a building's occupants out
+  is a point add at the building's own place. Question 2 is answered by claim 16b (*Joins*) and
+  Scenario O8 part ac.
+- Q-2228 is answered by claim 16d (*Aircraft and buildings*) and Scenario O8 part x (7): a
+  building under *move* starts a later *attack* order when it has no turret and never when it
+  has one, as S-0215 claim 11 already gives. S-0215 needs no change.
+- Q-2229 is answered by claim 16d (*Aircraft and buildings*) and Scenario O8 part x (6): the
+  issue at a flight's end is S-0501 claim 6's planned-route step and comes before its pad-bound
+  test (question 1), an aircraft that issues a point begins no landing in that tick and stays
+  in flight (question 2), and the issue is preceded by claim 16c's queue of *wait* (question 3).
+- Q-2230 is answered by claim 16b and Scenario O8 part q (6): an attack-move click has the place
+  that the same click gives without attack-move entry, so the clicked cell for a click on a
+  cell (question 1), and for a click on an object the target's place or the object's cell at
+  the click (question 2).
 - Q-1988 is answered jointly: claim 22 here gives the control-group keys (question 1's binding
   part), and S-0214 claim 33 answers the rest.
 
@@ -3956,13 +4075,9 @@ extension is a design rule and has no oracle measurement.
   on the answer.
 - How the command bar's route-mode button behaves: whether it stays on until clicked again, and
   how it is shown (claim 16h).
-- Which point a point delete selects next when the deleted point is the last of its longest
-  holder's route and that route's loop ends early (claim 16e).
 - Whether a point join raises the route-holder count: claim 16f states that it does not, at
   low confidence (O8 o).
 - Whether a point whose place is an object's moves with the object (claim 16b). It appears to.
-- What a joining holder does when it issues a copied order whose action a click would not give
-  it, such as an engineer's *capture* copied to a tank (claim 16b, *Joins*).
 - The look of route markers and lines (claim 16g) and the alliance direction that lets a house
   see another's routes; which sound a refused point add or a refused route-mode key command
   plays, and what an accepted point add plays when the route-point sound is absent.
@@ -4136,6 +4251,13 @@ extension is a design rule and has no oracle measurement.
   row names the building as the target of each *unload*, at low, pointing to S-0213 claim 16b,
   which uses it for the place of a building's route point.
 
+- **S-0501, claim 6, planned-route exception.** Its further waypoint of a planned route is the
+  next route point of S-0213 claim 16, and going on to it is the issue of S-0213 claim 16d
+  (*Aircraft and buildings*). That issue comes before the pad-bound test, so a pad-bound
+  aircraft away from its pad that has a point to issue issues it and does not fall back to
+  rest, and an aircraft that issues a point begins no landing in that tick (S-0213 claim 16d,
+  medium, `measurable` in Scenario O8 part x (6)). S-0501 may point to S-0213 claim 16d in place
+  of "the waypoint planning of the order specs". Its rule is otherwise unchanged.
 - **S-0512, claim 25.** It leaves open whether arming a superweapon ends route mode. Arming it
   leaves route mode on (S-0213 claim 16h, medium, Scenario O8 part y (4)). S-0512 may close that
   open question, pointing to S-0213 claim 16h.
