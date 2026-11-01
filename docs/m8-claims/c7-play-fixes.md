@@ -300,3 +300,13 @@ Ledger: [intake61-S-0607-S-0306.md](intake61-S-0607-S-0306.md).
 **Version effects.** The layer file changes, so the layered `sim_rules_hash` moves: a save,
 replay, report or room made with the previous layer is refused on the rules hash. Reference files
 are unaffected.
+
+## Intake 64 (S-0306 r57): the warp deck departure switch judged
+
+Ledger: [intake64-S-0306.md](intake64-S-0306.md).
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `warp_deck_departure_airborne` | S-0306 claim 17, Edge cases | rejected | Condition 2: the quirk text states a classification, a warp member that departed from a high-bridge deck counted as airborne until it appears, and its effects on projectiles aimed at it: at a landing-check kill a steering shot is left without target and climbs, and an anti-air shot can detonate near the point the member left. None of these is a stuck unit, a give-up although an open way exists, a unit that never moves again or a visible glitch; no play note or request names it. Condition 3: the off position turns those shots' loss into a cell target on the deck, where they detonate and deal area damage, and lets anti-air shots fly on, so it changes combat outcomes, however rarely (a warp superweapon launched on a bridge deck while shots are in flight). Both positions are tested (`claims_s0306_r57::quirk_warp_deck_departure_airborne_on_*` and `_off_*`). |
+
+The layer file is unchanged, so the layered rules hash does not move.
