@@ -43,20 +43,13 @@ say).
 
 ## Possible observation
 Replay one game of the largest side-A infantry group of M-0002 (side A, seed 0) and one of a
-side-A vehicle group of M-0001 that reaches the third column (side A, seed 0), and record, for every unit, its stated cell and the cell it stands on at tick 0, and the
+side-A vehicle group of M-0001 (side A, seed 0), and record, for every unit, its stated cell and the cell it stands on at tick 0, and the
 scenario-stream draws taken at each placement.
 
 ## What our test refuses
-With the test of the workaround below, on the records' map, only side-A units are refused, and
-only in groups large enough to reach the third column (x = W.x − 8). A neutral building stands on
-the cells (W.x − 9, W.y − 5) to (W.x − 8, W.y − 4), entry outcome *enemy obstacle*, so the first
-unit of the third column is refused in every such group, vehicles as well as infantry. In the
-largest infantry groups the fourth column's first unit is refused on the same building, and
-further west the cliff cells Q-1502 lists and a few more cells with entry outcome *blocked* refuse
-units, and so do the cells that refused units took before their own units came. Per group the
-refused units are 1 in the smaller of the groups that reach the third column, 11 or 21 in the
-largest infantry groups, and 0 in every other group and in every side-B group (the types and
-cells are in our local lane).
+With the test of the workaround below, on the records' map, only side-A units are refused. A neutral building stands on
+the cells (W.x − 9, W.y − 5) to (W.x − 8, W.y − 4), entry outcome *enemy obstacle*. Further west the cliff cells Q-1502 lists and a few more cells with entry outcome *blocked* refuse
+units, and so do the cells that refused units took before their own units came.
 
 ## Current workaround
 Our design, until this is answered (M8 step A3 intake 47): a stated cell takes a unit when it has
@@ -71,7 +64,7 @@ cell the unit stands as before at the cell's centre point, with no standing-posi
 *hunt* current (A1's interim).
 
 We first tried ring 1 alone, as "neighbouring cell" reads. In a placement probe (no game played)
-the first unit of the fourth column in the largest infantry groups had no cell in ring 1 that
+the first unit of the fourth column had no cell in ring 1 that
 took it (its stated cell and three neighbours on the neutral building, three on cliff cells, one
 taken by the moved first unit of the third column), so the setup could not be made. The rings past the first follow M-0011's and M-0015's "a free cell nearby".
 The rule was fixed after that probe and before any arena comparison with it, and is not tuned to
