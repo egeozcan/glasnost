@@ -1,9 +1,9 @@
 ---
 id: Q-2226
 title: Which point a point delete selects after the last point of a route whose loop ends early
-status: open
+status: answered
 related: [S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
