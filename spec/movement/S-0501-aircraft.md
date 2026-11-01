@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 62
+revision: 65
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-11-01
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905, Q-1940, Q-1941, Q-1942]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905, Q-1940, Q-1941, Q-1942, Q-2237]
 supersedes: []
 ---
 
@@ -1154,9 +1154,35 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       taken whether or not smoke is then shown, and whether or not the smoke animation can be
       created. This scenario-stream consumption is controlled by
       `quirks.aircraft_smoke_scenario_draw` (default on); its off alternative is below.
+    - **The smoke animation (Q-2237).** When smoke is shown, one animation of the fixed
+      damage-smoke type is created (Import mapping). The type is the same for a living and a
+      dead aircraft, as are the point and the creation settings; only the chance differs.
+      - Type. The type is found by its fixed name without regard to letter case (S-0004
+        claims 2 and 7). No rules entry of the aircraft's type and no game-wide rules entry
+        names it: it is the same for every aircraft type, whatever those entries give.
+      - Point. It is created at the aircraft's position when the chance draw *u* is taken,
+        height included, with no raise and no lowering. *u* is taken after the aircraft's own
+        movement in that tick, so the point is where that movement leaves the aircraft, not
+        where the tick found it. The type's vertical image shift moves only the drawn image
+        (S-0109 claim 26).
+      - Attachment. It is not attached to the aircraft (S-0109 claim 22). It stays where it
+        was created while the aircraft flies on or falls.
+      - Settings. It has no initial loop delay, a repeat factor of 1 and no reverse request.
+      - Draws. The creation takes the draws S-0109 gives any animation created with no loop
+        delay, in its order: claim 3's stage-delay draw, exactly when S-0109 claim 3 gives one
+        for the type, then the conditional draws of its start event (claim 13). These come in
+        the aircraft's own turn, right after the smoke chance draw *u*. A shown smoke
+        therefore takes *u* plus the type's own creation draws, and an unshown one takes *u*
+        alone. Which creation draws occur depends on the type's own fields.
+      - Absent type. When no animation type of that fixed name exists, no smoke is created
+        and *u* is still taken. The original's result there is undefined; this engine creates
+        nothing.
     - **Sinking splashes.** While an aircraft is sinking (claim 9), in each tick whose number is a
-      multiple of 4, two draws *U*(−170, 170) are taken; the first is discarded and the second
-      shifts the splash in x.
+      multiple of 4, two draws *U*(−170, 170) are taken. The first shifts the splash in y and the
+      second shifts it in x, from the aircraft's horizontal position, at the ground height
+      below it. That height is the terrain surface height of S-0106 claims 2 and 3 at the
+      aircraft's horizontal position, after this tick's lowering. Over water it is the water
+      cell's own surface height, as for any terrain.
     - **Processing delays.** The standard delay of S-0215 claim 6 takes its own draw wherever
       claims 12, 29 and 33 use it.
     - **Edge cells.** A paradrop plane's arrival cell, a retreating aircraft's destination and
@@ -1186,8 +1212,31 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       `measurable` through AC20, AC22, AC29 and S-0522 scenario P3. Sinking splash draws are
       `unmeasured`: AC5 and AC22 have no established normal-input witness for aircraft sinking.
       The smoke switch-off alternative is `unmeasured`, a design rule of our engine
-      rather than an outcome of the original
-    - Confidence: high (the listed draws); low (the unresolved draw inventory)
+      rather than an outcome of the original.
+      The smoke animation's type, point, attachment and settings are `measurable` (AC5 parts
+      b to d): part d varies the aircraft type's own animation entries, its cruise height and
+      the game-wide animation and smoke entries, and the per-tick positions of parts b and d
+      show the point after the tick's movement and the absent attachment. That no rules entry
+      other than those part d varies names the type, and that no field of an aircraft type
+      other than those parts b and d run moves or attaches the smoke, are `unmeasured`: a run
+      can vary only the entries it sets. Its
+      creation's stage-delay draw right after *u*, and the image shift's leaving the point
+      unmoved, are `measurable` (AC5 part c, whose test override sets those fields).
+      The draws of the smoke's start event, and their place after the delay draw, are
+      `unmeasured` here. The absent-type
+      rule is `unmeasured`: stock data always defines the type, and the original's result is
+      undefined.
+    - Confidence: high (the listed draws other than the sinking splashes; the smoke
+      animation's type, point after the tick's movement, attachment and settings, for the
+      entries part d varies and the aircraft types parts b and d run; its creation's
+      stage-delay draw right after *u*; the image shift's leaving the point unmoved); medium
+      (no other rules entry naming the type, and no other aircraft-type field moving or
+      attaching the smoke, read from the original but beyond what a run can vary; the
+      sinking splash draws, their cadence, axes and height, read from the original but with
+      no witness; the draws of the smoke's start event and their place, whose composition
+      belongs to S-0109 claim 13 and the specs it delegates to; the absent-type rule, an
+      engine decision); low
+      (the unresolved draw inventory)
 
 38. **Boundaries.** This spec does not cover the paradrop and cargo delivery behaviours
     (*paradrop approach* and *paradrop overfly*: S-0522 claims 6 to 8). Ordinary air-transport
@@ -2434,9 +2483,11 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
 
 **Ordering.**
 - A queued behaviour started at the end-of-update opportunity can already cause the pending
-  attack-run round to be spent in that same update. The smoke draw follows that opportunity.
-  An aircraft removed by the edge test takes no later smoke draw in that update. These
-  consequences do not prescribe the internal arrangement of processing and movement.
+  attack-run round to be spent in that same update. The smoke draw follows that opportunity,
+  and it follows the aircraft's own movement in that update, so a smoke is created where that
+  movement leaves the aircraft (claim 37). An aircraft removed by the edge test takes no later
+  smoke draw in that update. These consequences do not otherwise prescribe the internal
+  arrangement of processing and movement.
 - In a service step, aircraft are dealt with in contact-place order, one step each.
 - A round of a run is spent no earlier than the next approach after it was fired, so an aircraft
   that fired its last round still counts it until that point; the firing check never refuses for
@@ -2584,6 +2635,7 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
 | `AttackingAircraftSightRange` | rules, `[General]` | reveal radius on firing | integer, cells | 5 |
 | `SpyPlaneCameraFrames` | rules, `[AudioVisual]` | spy-plane approach delay | integer, ticks | 16 |
 | `ConditionRed` | rules, `[AudioVisual]` | smoke threshold | double, ratio | 0.5 |
+| animation type `SGRYSMK1` | fixed animation type name | damage-smoke animation (claim 37) | name, found without regard to letter case (S-0004 claims 2 and 7) | none: no smoke, the chance draw still taken |
 | `PoseDir` | rules, `[AudioVisual]` | landing direction without contact; the facing of a release onto a pad, set in AC30 part k (7)'s named test rules | S-0404 Import mapping | S-0404 |
 
 The aircraft-type flags are read only for aircraft types. An aircraft type's `FlightLevel` that is
@@ -2678,18 +2730,59 @@ listed in Open questions are not claimed confirmed by these scenarios.
   is the otherwise empty cell blocks landing. Repeat with one blocker on a bridge deck and an otherwise empty
   passable ground layer: F7's occupant lookup must ignore the deck blocker. Multi-occupant
   selection remains open.
-- **AC5 Crash and sinking (claim 9).** Shoot down an aircraft at cruise height over land and water.
-  log height and horizontal coordinates each tick, death, impact and removal. Expected: falling
-  counter increments of 1 while dead. Compare the net height with F5 followed by F2 when movement
-  remains active, not with triangular-number drops alone. Forward motion continues only while
-  ordinary movement remains active. The living and sinking branches are exploratory only and
+- **AC5 Crash and sinking (claims 9 and 37).** Shoot down an aircraft at cruise height over land and
+  water. Log height and horizontal coordinates each tick, death, impact and removal. Expected:
+  falling counter increments of 1 while dead. Compare the net height with F5 followed by F2 when
+  movement remains active, not with triangular-number drops alone. Forward motion continues only
+  while ordinary movement remains active. The living and sinking branches are exploratory only and
   remain unmeasured. A proposed named disable-flight test-map variant must first identify a
   normal-input disabling effect that leaves the aircraft alive in a crash: if found, expect
-  increments of 3 combined with ordinary altitude adjustment. Immediate killing does not
-  cover that branch. A proposed named sinking-aircraft variant must first demonstrate aircraft
-  sinking without changing movement mode: if found, expect 5 leptons lower each update and
-  removal only below −400. A different drop or removal threshold would falsify the respective
-  hypothesis; failure to reach either state leaves the coverage gap.
+  increments of 3 combined with ordinary altitude adjustment. Immediate killing does not cover that
+  branch. A proposed named sinking-aircraft variant must first demonstrate aircraft sinking without
+  changing movement mode: if found, expect 5 leptons lower each update and removal only below −400.
+  A different drop or removal threshold would falsify the respective hypothesis; failure to reach
+  either state leaves the coverage gap.
+  - **Part b, damage smoke (claim 37, Q-2237).** Over land, damage an aircraft below the smoke
+    threshold, let it fly a straight course above height 0 at a speed above 0, then shoot it
+    down. Add a recorder of animation creations (type name, position, loop delay, repeat
+    factor, reverse request), of each smoke animation's position in every tick until it ends,
+    and of the aircraft's position at the end of every tick, with the permitted random-state
+    recorder. Expected for every smoke animation, before and after the death: the fixed type
+    of Import mapping, created in the tick of a successful chance draw, with no initial loop
+    delay, repeat factor 1 and no reverse request. Its creation position equals the
+    aircraft's position recorded at the end of that tick, height included, which is the
+    aircraft's position when *u* is taken. Its position then stays the same in every tick
+    while the aircraft moves on or falls: the absent attachment is read from that, as an
+    attached smoke would move with the aircraft. A *u* that shows no smoke is followed by no
+    smoke draw. This part's type is stock data, so its creation draws are tested in part c.
+    Falsified by another type, a different type after the death, a creation position equal
+    to the aircraft's position at the end of the previous tick or otherwise displaced, a
+    smoke whose position changes, or a draw attributed to an unshown smoke.
+  - **Part c, smoke test override (claim 37, Q-2237).** Repeat part b with a test
+    override that gives the fixed-named smoke type a random rate pair in descending order
+    whose converted ends differ (S-0109 claim 3), and a nonzero vertical image shift. Use the
+    same recorders. Expected for every shown smoke: exactly one ranged draw over the
+    converted range directly after *u*, in the same aircraft turn, with no other attributed
+    draw between them, and a creation position equal to the aircraft's position when *u* is
+    taken, height included. Expected for every unshown smoke: *u* alone. Falsified by a
+    shown smoke with no ranged draw after *u* (a creation that takes no delay draw), a ranged
+    draw separated from *u* by another attributed draw, or a creation position moved by the
+    image shift. Draws after the delay draw, those of the type's start event (S-0109 claim
+    13), are not judged here.
+  - **Part d, smoke source variants (claim 37, Q-2237).** Repeat part b with a test rules
+    file that adds a test aircraft type next to part b's aircraft type. The test type copies
+    part b's type, but sets a different cruise height and gives every entry of its own that
+    names an animation or a particle system (its explosions, debris, destruction animation
+    and damage particle systems) a test animation type or test particle system other than the
+    fixed-named type. The same file sets every game-wide rules entry that names an animation
+    or a smoke particle system (the game-wide smoke animation, the damaged-unit and debris
+    smoke systems and the default smoke systems) to test entries. Damage both aircraft below
+    the smoke threshold and fly both, then shoot both down. Use part b's recorders. Expected
+    for every smoke animation of either aircraft, living and dead: the fixed type of Import
+    mapping, at part b's creation position, with part b's settings and fixed position.
+    Falsified by a smoke animation of another type for either aircraft, by one of the test
+    entries appearing as an aircraft's damage smoke, or by a creation position or later
+    position other than part b gives.
 - **AC6 Exit eligibility (claim 10).** Follow dispatched visiting aircraft from outside the usable
   area through entry and departure. Record visiting mark, entered-area state, target, behaviour,
   the two flight flags and removal. Expected: no eligibility-based removal before first entry.
@@ -3017,8 +3110,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
   recorder comparison, not a statistical smoke frequency, decides the draw claim. Accumulate
   dead-aircraft updates across repeated crashes rather than expecting one crash to last 200 ticks.
   The proposed sinking variant is exploratory and unmeasured until AC5 establishes a witness:
-  expected ticks divisible by 4 take two *U*(−170, 170) draws before smoke, and only the second
-  moves the splash in x. A different draw count, order or splash shift would falsify that part. Compare a strafer's target selection with a non-strafer
+  expected ticks divisible by 4 take two *U*(−170, 170) draws before smoke; the first moves the
+  splash in y and the second in x, at the ground height below the aircraft: the terrain
+  surface height, which over water is the water surface. A different draw count, order,
+  splash shift or height would falsify that part.
+  Compare a strafer's target selection with a non-strafer
   finding a firing spot: only the latter takes the additional *U*(0, 99) selection draw, before
   its standard-delay draw. Separate projectile, creation and firing-delay draws through S-0202
   claim 10 and S-0301 claim 18. Repeat AC13's pad searches and AC15's service steps with this
@@ -3694,6 +3790,15 @@ listed in Open questions are not claimed confirmed by these scenarios.
   row "carrier removed other than by death" (`quirks.crash_drops_planted_bomb` here). S-0519's
   row "carrier dies on the map" could say "dies from a killing hit", with this case as a separate
   row. Backed by AC29 part i here.
+
+- **S-0109 claim 29 (creator table).** The table could add aircraft damage smoke (claim 37
+  here): created during the aircraft's own turn, right after its smoke chance draw, at the
+  aircraft's position when that draw is taken, after the aircraft's own movement in that tick,
+  with no initial loop delay, repeat factor 1, no reverse request and no attachment (claim 22).
+  Its creation draws are S-0109 claim 3's delay draw and claim 13's start-event draws, at the
+  creation. Backed by AC5 parts b to d here
+  (`measurable`; high for the row and the delay draw). The start-event draws are medium,
+  `unmeasured` here: their composition belongs to S-0109 claim 13.
 
 ## Open questions
 
