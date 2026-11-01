@@ -324,3 +324,17 @@ again.
 | `click_area_skips_kind_test` | S-0213 claim 16d, Edge cases (r89) | rejected (not in the layer) | Condition 2 is now met in part. With the switch on, a turreted building that joins a *move* point keeps *move* current for good, and it never fires again, which is a stuck unit. The person brings this about by pressing a marker with the defence selected while holding the route key, and no play note names it. Condition 3 fails. The off position does more than free that building: it refuses every route point for every aircraft and building. Aircraft routes and a non-turreted building's later *attack* both work in the original, so turning the switch off takes away orders a person can give and changes how aircraft can be used in play. A switch that covers only the stuck building would be a new rule, and no spec states one. Both positions are tested (`claim_16d_a_click_area_skips_the_kind_test_both_ways`). The building is tested on its own in `claims_s0213_r89::claim_16d_a_turreted_building_under_move_never_starts_a_later_attack`. |
 
 The layer file is unchanged, so the layered rules hash does not move.
+
+## Intake 67 (S-0501 r65, S-0113 r17): the smoke switch judged
+
+Ledger: [intake67-S-0501-S-0113.md](intake67-S-0501-S-0113.md).
+S-0501 r65 and S-0113 r17 add no quirk. S-0501 r65 widens the off position of
+`aircraft_smoke_scenario_draw`: with the switch off, no smoke chance is drawn and no smoke
+animation is made (claim 37, Edge cases, Q-2237). The switch now governs a visible animation,
+so it is judged.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `aircraft_smoke_scenario_draw` | S-0501 claim 37, Edge cases (r65) | rejected (not in the layer) | Condition 1 is met: the spec states the off position, and it is built. Condition 2 fails. The quirk text says only that the smoke chance draws from the scenario stream, which can change later game-state random outcomes. It names no stuck unit, no give-up and no visible glitch. The smoke itself is the original's look, not a glitch, and no play note or request names the switch. Condition 3 fails too. The off position stops the scenario draws, which moves every later game-state random outcome (combat included). It also takes away a visible effect that the original shows. Both positions are tested: `claims_s0501::claim_37_smoke_draw_both_ways` (the draw) and `claims_s0501_r65::claim_37_the_smoke_animation_follows_the_scenario_draw_switch_both_ways` (the animation). |
+
+The layer file is unchanged, so the layered rules hash does not move.
