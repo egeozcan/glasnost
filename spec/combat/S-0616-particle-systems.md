@@ -2,11 +2,11 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 20
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-11-01
 measurements: []
 requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540, Q-1590]
 supersedes: []
@@ -27,13 +27,6 @@ Damage follows the particle's own kind, including gas when kinds are mixed (clai
 Claims 23 to 31 say how every particle is drawn (presentation only): which are drawn, palette and
 brightness, image frame, translucency, placement, the pixel colours of sparks and railgun
 particles, draw order, and the lights and laser of a system.
-
-Revision 20 takes in the S-0616 entry of S-0317's Changes for other specs, and corrects claim 1
-of revision 16: the system of a voxel-model animation is made at the piece's creation point, not
-at its start position, which differs from it for meteor and falling pieces (S-0317 claims 3, 4
-and 13). It also states the displacement that a smoke system of a voxel-model animation keeps
-from its piece: zero for a falling piece, the flight from the start position to the creation point
-for a meteor piece, as S-0317 claim 13 has it.
 
 **What this spec does not restate.**
 - **The gas kind,** the shared gas system, and every system's lifetime count-down and leaving
@@ -85,7 +78,12 @@ stands alone. This spec adds the terms after them.
   effect: a weapon's fire, spark or railgun system, or a damage-smoke or damage-sparks system. An
   object has four *emitter places*, one each for fire, railgun, damage smoke and spark; a weapon's
   spark emitter and a damage-sparks system share the spark place. An object holds at most one
-  system per place and makes a new one only when the place is empty.
+  system per place and makes a new one only when the place is empty. A weapon's emitter goes into
+  the place its weapon flag names, whatever the behaviour kind of its system's type, so a place
+  can hold a system of another kind. S-0301 claim 5's place-and-kind rule (S-0301 Terms,
+  *Effect weapon*) is the complete rule for what marks such a system and when its place is
+  freed; claims 1, 20 and 22 state it here. Below, "fire place", "spark place" and "railgun
+  place" name the place, and "fire-kind", "spark-kind" and "railgun-kind" name the kind.
 - **Smoke point.** One of the four displacements (from a refinery's position) at which the refinery
   makes a smoke system (claim 1).
 - **Bridge cell.** A map cell that carries a bridge span, so that it has a deck above its ground
@@ -113,10 +111,12 @@ stands alone. This spec adds the terms after them.
   shot itself (Open questions).
 - **Dropping projectile.** A projectile that does not steer or fly out from the fire point but
   drops towards the impact point (S-0306 claim 5; the glossary's *fire point*).
-- **Marked.** S-0613 claim 17's state of a system that is to end. A marked system makes no new
-  particles and leaves play in the first turn in which it holds none. Besides the lifetime, claims
-  1 (the healing marks of damage smoke and the trigger action that marks the systems of a cell), 4, 9,
-  10, 15, 17 and 20 (a spark counter of 0 or less) mark systems.
+- **Marked.** S-0613 claim 17's state of a system that is to end. A marked system makes no
+  emission (claims 9, 11 and 17), though the mark does not stop a spark system's bursts while its
+  *K* is above 0 (claim 15, rated medium there), and a smoke system's dead particles still split
+  into successors (claim 8, rated medium there for a marked system). It leaves play in the
+  first turn in which it holds no particle. Besides the lifetime, claims 1 (the healing marks of
+  damage smoke and the trigger action that marks the systems of a cell), 4, 9, 10, 15, 17 and 20 (a spark counter of 0 or less) mark systems.
 - **Dead mark.** A particle's flag that it has ended. A particle with the dead mark is removed in
   the removal pass of its system's turn. S-0613 uses the same mark for gas.
 - **Particle speed** *S*. A single-precision value of each particle, in leptons per tick. It
@@ -156,7 +156,7 @@ stands alone. This spec adds the terms after them.
    | Destruction smoke of a building | at destruction (S-0312 claim 19 f; which entries are eligible and what counts as attached already: this claim, below) | the building | the world origin, unused | no |
    | Refinery smoke | at each unloading step of a resource delivery, one system per smoke point (this claim, below) | the building that makes it (this claim, below) | the world origin, unused | no |
    | Natural smoke of a building | when the building is placed in play, and again when it uncloaks (this claim, below; S-0516) | none | a point of the building (its position), unused | no |
-   | Effect weapon (fire, spark or railgun emitter) | at the shot, after the projectile (S-0301 claims 5 and 18) | the firer | fire and spark: the position of the firer's target object when the shot has one, else the world origin; railgun: the beam's end point (F14), fixed at the shot | no |
+   | Effect weapon (fire, spark or railgun emitter) | at the shot, after the projectile (S-0301 claims 5 and 18) | the firer | for the fire or spark place: the position of the firer's target object when the shot has one, else the world origin; for the railgun place: the beam's end point (F14), fixed at the shot; whatever the system's kind | no |
    | Mind-control overload | 5 spark systems per damaging pulse (S-0601 claim 16) | none | unused | no |
    | Electric bolt | at the bolt's end, after the bolt's own draw (this claim, below) | none | unused | no |
    | Drone parasite delivery | per delivery to a host that is not infantry (S-0614 claim 9) | none | unused | no |
@@ -227,15 +227,26 @@ stands alone. This spec adds the terms after them.
      railgun, an emitter of the weapon's system type is made when the firer's place for that kind
      is empty. So a weapon with two or three flags makes up to two or three emitters at one shot,
      made in that order (which sets their turn order, S-0203). S-0301 claim 5's gate refuses the
-     weapon while any place of its flags is held. For fire and spark emitters the creator passes
-     the shot's target object (target point: its position at the shot). For a railgun emitter it
-     passes no target object, and the target point is the beam's end point of F14, computed at the
-     shot from the emitter's position to the target's position. Like every system with an owner
-     object, the railgun emitter still takes the firer's current target as its target object
-     (Terms), but its turn uses only the target point, which is never recomputed from the target.
-     So later motion of the target changes nothing: the line (claim 17) is made in the system's
-     first turn, to that fixed point. A fire
-     emitter is marked and let go when its firer takes a new target that is not within reach (outside the weapon's range, the test of S-0307 claim 12), is given a move order, or dies. A spark or railgun emitter is not let go by any of these; it is marked only by claim 4's owner removal, and otherwise ends by its own counter or line (claim 22).
+     weapon while any place of its flags is held. For a system made for the fire or spark place,
+     whatever its kind, the creator passes the shot's target object (target point: its position at
+     the shot, the world origin when the shot has none). For a system made for the railgun place,
+     whatever its kind, it passes no target object, and the target point is the beam's end point
+     of F14, computed at the shot from the emitter's position to the target's position. Like every
+     system with an owner object, the system in the railgun place still takes the firer's current
+     target as its target object (Terms), but a railgun-kind turn uses only the target point,
+     which is never recomputed from the target. So later motion of the target changes nothing: the
+     line (claim 17) is made in the system's first turn, to that fixed point. A railgun-kind
+     system held in the fire or spark place makes its line to that place's target point, not to
+     F14's end point.
+     The system held in the fire place, whatever its kind, is marked and let go when its firer
+     takes a new target that is not within reach (outside the weapon's range, the test of S-0307
+     claim 12), is given a move order, or dies. A system held in the spark or railgun place is not
+     let go by any of these, whatever its kind. It ends by the marks of its own kind, owner removal
+     (claim 4), a positive lifetime or the trigger action (claim 22). Each kind keeps its own marks
+     (claim 22's first column) in whatever place holds it, and a let-go of the fire place marks
+     whatever system that place holds. The fire place is freed by its let-go events or by its
+     system leaving play; the spark and railgun places are freed only by their system leaving
+     play.
      Creating the emitter takes no draw. The railgun shot's hits, terrain effects and their
      draws are owned by S-0306 claim 27 and occur with F14's end-point computation, before
      the emitter is created. F14 remains this spec's sampling and end-point rule.
@@ -266,14 +277,17 @@ stands alone. This spec adds the terms after them.
      infantry or organic object healed by its house's self-healing gets no such test in that turn,
      so its damage smoke is marked only by a later hit or by its own self-healing. The object keeps it in the
      damage-smoke place, and so makes no new damage smoke, until the system leaves play (claim 22).
-     The marked system makes no new particle; the particles it holds keep updating, moving and
-     ending, and the system leaves in the first turn in which it holds none. Nothing is removed at
-     once, unlike the cloak row of natural smoke above. An object healed above yellow and damaged
-     again before its system has left play therefore gets no new damage smoke.
+     The marked system makes no emission (its dead particles still split as claim 8 gives, rated
+     medium there for a marked system); the
+     particles it holds keep updating, moving and ending, and the system leaves in the first turn
+     in which it holds none. Nothing is removed at once, unlike the cloak row of natural smoke
+     above. An object healed above yellow and damaged again before its system has left play
+     therefore gets no new damage smoke.
    - **Damage sparks.** An infantry object whose type is a cyborg type (the damage-sparks flag, Terms),
      with its health ratio strictly below the yellow ratio, whose height above the surface is greater
-     than −10 leptons (the test S-0302 claim 13 uses), and holding no spark emitter, makes a spark
-     system by the draws of the table below. The list is S-0302's (Import mapping). S-0302 claim 13
+     than −10 leptons (the test S-0302 claim 13 uses), and holding nothing in its spark place,
+     makes a spark system by the draws of the table below. The list is S-0302's (Import mapping).
+     S-0302 claim 13
      uses only its smoke-kind entries, for the damage smoke that a hit starts, and gives no role to the
      spark-kind entries; this claim is the only rule that reads them. The original has a separate
      per-turn rule for them, with its own comparison with the yellow ratio: strictly below here,
@@ -322,6 +336,46 @@ stands alone. This spec adds the terms after them.
      system is marked, as for the removal of an owner object (claim 4), and leaves play once it
      holds no particle (claim 22).
 
+   - Place and kind (S-0301 claim 5), confidence: each kind's own marks and a place's freeing
+     when its system leaves play are rated as claims 4, 10, 15, 17, 20 and 22 rate them (high,
+     except claim 20's let-go end in the fire place, medium). A
+     fire-kind system in the spark or railgun place not marked by its own turn while its owner is
+     alive and on the map: high. A move order frees neither the spark nor the railgun place: high.
+     A retarget to a target not within reach frees neither of them: medium, resting on the let-go
+     events above (rated medium). A let-go's mark of the system in the fire place, whatever its
+     kind: medium, on the same events. That a retarget's let-go test is made at the change of
+     target and not at the start of the system's next turn: medium. That the system's first turn
+     after a let-go is the first one the mark affects, whatever the held system's kind: medium.
+     Each kind's marked turn reached by a let-go of the fire place (claims 9, 10, 15 and 17, and
+     S-0613's marked gas turn): medium, resting on the let-go events, and for the smoke, gas and
+     no-kind cases also on those kinds' end rules. The fire place's freeing at the let-go itself
+     rather than when its marked system leaves play: medium. The original's let-go end of a spark system with
+     a spark-turns field of 0 or less held in the fire place (claim 20): medium. The creation
+     reading by place: high for a matched emitter (its kind matches its place), medium for a
+     system whose kind does not match its place.
+   - Place and kind, backing: `measurable` (S-0301 scenario F4, unmatched part: u3 and u4 for a
+     fire-kind system in the spark or railgun place, u5 and u6 for the spark and railgun places'
+     freeing, the second run's u1 against u8 for a let-go's mark of a spark-kind system and its u3
+     and u4 for a move order in the spark and railgun places, and the third run's u10 for a
+     let-go's mark of a smoke-kind system in the fire place, its u10 and fire firer for the first
+     turn that a retarget's mark affects, and its u9 for a marked spark system's bursts).
+     `unmeasured`: that the retarget's test is made at the change itself rather than at the start
+     of the system's next turn (nothing between the two reads the mark, so no run tells them
+     apart), for the moment of the mark in a gas-kind or no-kind system (their turns do not depend
+     on the mark, so the moment changes nothing observable), for a retarget in the
+     spark and railgun places (no scenario gives a firer in those places a retarget to a target not
+     within reach), for a let-go's mark of a railgun-kind system (its own line marks it in its
+     first turn, so a let-go's mark would show only before that turn, which no scenario sets up),
+     for the fire place's freeing at the let-go itself (no scenario records whether the marked
+     system still holds a particle at the firer's first attempt after the let-go, so both readings
+     give the same shot ticks), for the spark-turns case in the fire place (no scenario sets such a
+     type in the fire place), for a let-go's mark of a gas-kind or no-kind system held in the fire
+     place (no scenario puts a system of those kinds in the fire place) and for the
+     creation reading when the kind does not match the place (no scenario records the line or
+     target point of a railgun-kind system held in the fire or spark place). Each kind's own
+     marks, the freeing when the system leaves play and the creation reading for a matched
+     emitter: as backed below (scenarios P1, P4, P8, P11, P12, P14 and P22).
+     Claim 20's fix: a design decision.
    - Backing: `measurable` (scenario P1, one run per row; P15 for the yellow factor of the
      natural-smoke row; P16 for the damage-sparks row and the damage-smoke position; P19 for
      the healing marks; P20 for refinery smoke; P21 for destruction smoke; P22 for effect
@@ -331,8 +385,10 @@ stands alone. This spec adds the terms after them.
    - Confidence: high for the creators, owners and first particles, for the refinery smoke
      events, the destruction-smoke rules, the natural-smoke factor, the effect-weapon flags and
      the place of the damage sparks in the turn. Medium for the three events
-     that let a fire emitter go, for the self-healing mark of damage smoke, for the deactivated-vehicle row, for the shared gas system's position and for the natural-smoke uncloak
-     rule (the displacement test). Medium for the damage-smoke position when the screen-relative
+     that let the system held in the fire place go, for the self-healing mark of damage smoke,
+     for the deactivated-vehicle row, for the shared gas system's position and for the
+     natural-smoke uncloak rule (the displacement test). Medium for the damage-smoke position when
+     the screen-relative
      flag is off. Medium for the position and displacement of a voxel-model animation's system
      (S-0317 scenario V11 is the measurement that would settle it). The flag-on conversion is `unmeasured`: no validating scenario for that unresolved conversion is supplied here (Open questions). The below-surface self-healing mark is also `unmeasured`: no setup here isolates a healing gain below −10 leptons.
 
@@ -348,12 +404,15 @@ stands alone. This spec adds the terms after them.
    - **A system with no behaviour kind** does no kind work (S-0613 claim 17). Its particles never
      update, move, take draws or end. This answers Q-1243 question 3: such a system leaves play
      only when it is marked and holds no particle. One that holds a particle stays in play for
-     ever; one that never held a particle leaves play when its lifetime, claim 4 or the trigger action of claim 1 marks it.
+     ever; one that never held a particle leaves play when its lifetime, claim 4, the trigger
+     action of claim 1 or, while it is held in the fire place, a let-go of that place (claim 1)
+     marks it.
 
    Drawing (frames, colour, translucency, lights, the railgun's laser and helix: claims 23 to 31) changes nothing
    else in play. The colour draws of claims 16 and 18 are taken whether or not anything is drawn.
-   - Backing: `measurable` (scenario P2)
-   - Confidence: high
+   - Backing: `measurable` (scenario P2). The no-kind bullet's fire-place let-go: `unmeasured`, as
+     claim 1's place-and-kind backing gives (no scenario puts a no-kind system in the fire place).
+   - Confidence: high. The no-kind bullet's fire-place let-go: medium (claim 1).
 
 ### Common to all four kinds
 
@@ -456,8 +515,9 @@ stands alone. This spec adds the terms after them.
    position. Both have target point (0, 0, 0). Each takes its creation draws (S-0202 claim 15),
    then one raw value *r*; its translucency is the dead particle's plus 25 percentage points when *r* rem 6 ≠ 0, otherwise the dead particle's unchanged value (drawn only). Each successor's speed
    *S* is set to the dead particle's, but its flight direction and velocity are its own. Observably, the draws come in this order: *o*ₓ, then *o*ᵧ, then the first successor's creation draws and its translucency draw, then the second's; the dead particle is removed after both. This claim gives the successors made in a smoke system (claim 3); the successor made in a gas system is S-0613 claim 7's.
-   - Backing: `measurable` (scenario P7, whose named test rules explicitly supply a next type)
-   - Confidence: high
+   - Backing: `measurable` (scenario P7, whose named test rules explicitly supply a next type).
+     In a marked system: `measurable` (scenario P1 part b).
+   - Confidence: high. In a marked system: medium, until P1 part b has run.
 
 9. **Smoke emission and end.** A turn emits when all of these hold:
    - the system is not marked,
@@ -474,10 +534,13 @@ stands alone. This spec adds the terms after them.
    After the emission step, *T* grows by the slow-down field (single precision). When *T* is then
    above the type's spawn cut-off, the system is marked. A system whose slow-down field is 0 and
    whose cut-off is at or above its spawn interval is never marked by this claim. It ends only by
-   claim 4, by the trigger action of claim 1 or by its lifetime (S-0613 claim 17); a damage-smoke
-   system also ends by the healing mark of claim 1.
-   - Backing: `measurable` (scenario P5)
-   - Confidence: high
+   claim 4, by the trigger action of claim 1, by its lifetime (S-0613 claim 17) or, while it is
+   held in the fire place, by a let-go of that place (claim 1); a damage-smoke system also ends by
+   the healing mark of claim 1.
+   - Backing: `measurable` (scenario P5). The fire-place let-go: `measurable` (S-0301 scenario F4,
+     unmatched part, third run: u10), as claim 1's place-and-kind backing gives.
+   - Confidence: high. The fire-place let-go: medium, as claim 1 rates a let-go's mark of the
+     system held in the fire place.
 
 ### Fire
 
@@ -495,8 +558,11 @@ stands alone. This spec adds the terms after them.
     - The emission (claim 11) takes place unless the system is marked.
 
     S-0613 claim 17's count-down follows. This answers Q-1243 question 1 for fire.
-    - Backing: `measurable` (scenario P8)
-    - Confidence: high
+    - Backing: `measurable` (scenario P8). A marked turn reached by a let-go of the fire place:
+      `measurable` (S-0301 scenario F4, unmatched part, third run: the fire firer), as claim 1's
+      place-and-kind backing gives.
+    - Confidence: high. A marked turn reached by a let-go of the fire place: medium, as claim 1
+      rates it.
 
 11. **Flame sweep and emission.**
     - **Sweep.** The target point is placed in the owner's body facing (the facing of the owner,
@@ -577,9 +643,11 @@ stands alone. This spec adds the terms after them.
     takes one ranged draw R(0, 2147483646) in every turn that starts with *K* > 0, after the burst's
     draws; its value affects only drawing. Whatever *K* is, each particle then updates, oldest
     first, including the sparks just made (claims 3 and 16), and the particles with the dead mark
-    are removed. This answers Q-1243 question 1 for spark.
-    - Backing: `measurable` (scenario P11)
-    - Confidence: high
+    are removed. This answers Q-1243 question 1 for spark. The table reads only *K*, not whether the
+    system is marked: a marked spark system whose *K* is above 0 still bursts as the table gives.
+    - Backing: `measurable` (scenario P11; for a marked system, scenario P1 part b and S-0301
+      scenario F4's unmatched part, third run)
+    - Confidence: high for the table, medium for a marked system's bursts
 
 16. **Spark particle update.** Each update moves a live spark by its velocity, with gravity counted
     a second time in the vertical step (F11); the stored vertical velocity is lowered by gravity
@@ -617,8 +685,10 @@ stands alone. This spec adds the terms after them.
     In that turn and every later one, after the emission step, each particle updates, oldest first
     (claims 3 and 18). Then the particles with the dead mark are removed. This
     answers Q-1243 question 1 for railgun.
-    - Backing: `measurable` (scenario P12)
-    - Confidence: high
+    - Backing: `measurable` (scenario P12). A system marked by a let-go of the fire place before
+      its first turn: `unmeasured`, for the reason claim 1's place-and-kind backing gives.
+    - Confidence: high. A marked turn reached by a let-go of the fire place: medium, as claim 1
+      rates it.
 
 18. **Railgun particle update.** The particle moves along its flight direction and takes one ranged draw
     R(0, 2147483646) that varies its speed slightly. Then it takes a second ranged draw for its
@@ -676,21 +746,26 @@ stands alone. This spec adds the terms after them.
       this spec's choice. (Q-1590 question 1.)
     - **Spark-turns field of 0 or less** (claim 15; also the absent-key value, Import mapping):
       the original does not stop here, but such a system is never marked by its counter. It ends
-      only by its owner's removal (claim 4), a positive lifetime or the trigger action of claim 1.
-      Neither a move order, nor a new target, nor the firer's death lets a spark emitter go
-      (claim 1), so in the original the firer's spark place stays held, and every weapon of its
-      that S-0301 claim 5's gate ties to that place stays refused while the system remains in play. Owner removal, a positive lifetime or a trigger mark can end that refusal.
+      only by its owner's removal (claim 4), a positive lifetime, the trigger action of claim 1
+      or, while it is held in the fire place, a let-go of that place (claim 1): the let-go marks
+      it, and since it makes no burst it holds no particle and leaves play in its next turn
+      (claim 22). Neither a move order, nor a new target, nor the firer's death lets a system held
+      in the spark place go (claim 1), so in the original a spark place that holds such a system
+      stays held, and every weapon of the firer that S-0301 claim 5's gate ties to that place stays
+      refused while the system remains in play. Owner removal, a positive lifetime or a trigger
+      mark can end that refusal.
       Our engine fixes this outright (lead decision, no switch): such a system takes no burst and
       no draw of claim 15 and is marked in its first turn. It then leaves play in the first turn
       in which it holds no particle (claim 22), so an emitter, which starts empty, leaves in its
-      first turn and frees the spark place. This applies to every spark system of such a type,
-      whoever made it. For a damage-sparks system of such a type (claim 1) the fix frees the
+      first turn and frees its place. This applies to every spark system of such a type,
+      whoever made it and whatever place holds it, so after that turn a let-go of the fire place
+      finds the place free. For a damage-sparks system of such a type (claim 1) the fix frees the
       spark place after one turn, so the object's per-turn decision draw resumes from its next
       turn, where the original takes no further damage-sparks draw once the place is held: an
       expected draw-count difference, not a mismatch. The importer warns for a nonpositive value, including the absent-key default.
 
     - Backing (the original): `unmeasured`: the original stops or faults in these cases, so there is no behaviour to compare; the negative-radius case is not known (Open questions). One case is an exception: for the spark-turns case the original's behaviour is `measurable` (scenario P22, part c). The railgun line with *n* ≥ 1 and no held type is a second exception: that the original stops is `measurable` (scenario P31 part c, with part d establishing, through the missing first particle at a detonation, that the `<none>` reading gives no held type).
-    - Confidence (the original): high that the original stops or faults in the cases other than the railgun line; high for the original's spark-turns behaviour; medium for the railgun stop, until P31 parts c and d have run.
+    - Confidence (the original): high that the original stops or faults in the cases other than the railgun line; high for the original's spark-turns behaviour outside the fire place; medium for its let-go end while held in the fire place, which is `unmeasured` (claim 1's place-and-kind items); medium for the railgun stop, until P31 parts c and d have run.
     - Our engine's behaviour in every case of this claim, the railgun beam with *n* ≥ 1 and no held type included, is a departure by decision. Backing: `unmeasured` (a design decision; no measurement of the original decides it). Confidence: high (fixed by this claim).
 
 21. **Absent held-type key.** A particle system type section that is read without a held-type key
@@ -715,19 +790,27 @@ stands alone. This spec adds the terms after them.
 
     | Kind | Starts empty, with an owner object | Starts empty, no owner object | Starts with a particle, no owner object (a detonation) |
     |---|---|---|---|
-    | Smoke | Marked when *T* passes the cut-off (claim 9), the owner is removed, or a damage-smoke healing mark of claim 1 occurs (including its below-surface test). | Marked when *T* passes the cut-off. | Marked when *T* passes the cut-off. The first particle (made at the detonation) is an extra particle beyond the emissions; the system leaves in the first turn after the mark in which it holds none. |
-    | Fire | Marked when the owner is no longer alive (claim 10), is removed, or lets the emitter go (claim 1). | Marked in its first turn. Never emits. | Marked in its first turn. Never emits. Leaves when its first particle is gone. |
-    | Spark | Marked when *K* runs out (claim 15) or the owner is removed; in its first turn when the spark-turns field is 0 or less (claim 20). | Marked when *K* runs out, or in its first turn as in the column before. | Marked when *K* runs out, or in its first turn as in the first column. The first particle falls from rest (claim 16). |
-    | Railgun | Marked after its line (claim 17) or when the owner is removed. | Marked after its line. | Marked in the first turn after its first particle is gone: its target point is its own position, so its line has no particle (claim 17). It leaves in that turn. |
-    | No kind | Marked when the owner is removed or by the trigger action; leaves only if empty (claim 2). | Marked only by the trigger action (claim 1). | Leaves only after a trigger mark, once empty (claim 2). |
+    | Smoke | Marked when *T* passes the cut-off (claim 9), the owner is removed, a damage-smoke healing mark of claim 1 occurs (including its below-surface test) or, while it is held in the fire place, that place is let go (claim 1). | Marked when *T* passes the cut-off. | Marked when *T* passes the cut-off. The first particle (made at the detonation) is an extra particle beyond the emissions; the system leaves in the first turn after the mark in which it holds none. |
+    | Fire | Marked when the owner is no longer alive (claim 10), is removed, or, while it is held in the fire place, when that place is let go (claim 1). Held in the spark or railgun place, it is not marked by its own turn while its owner is alive and on the map. | Marked in its first turn. Never emits. | Marked in its first turn. Never emits. Leaves when its first particle is gone. |
+    | Spark | Marked when *K* runs out (claim 15), when the owner is removed or, while it is held in the fire place, when that place is let go (claim 1); in its first turn when the spark-turns field is 0 or less (claim 20). | Marked when *K* runs out, or in its first turn as in the column before. | Marked when *K* runs out, or in its first turn as in the first column. The first particle falls from rest (claim 16). |
+    | Railgun | Marked after its line (claim 17), when the owner is removed or, while it is held in the fire place, when that place is let go (claim 1). | Marked after its line. | Marked in the first turn after its first particle is gone: its target point is its own position, so its line has no particle (claim 17). It leaves in that turn. |
+    | No kind | Marked when the owner is removed, by the trigger action or, while it is held in the fire place, when that place is let go (claim 1); leaves only if empty (claim 2). | Marked only by the trigger action (claim 1). | Leaves only after a trigger mark, once empty (claim 2). |
 
     A spark system whose type's spark-turns field is 0 or less is marked in its first turn by
-    claim 20 (in the original it would never reach its counter's mark, but owner removal, a positive lifetime or a trigger mark could still end it). A smoke system that
-    claim 9 never marks keeps emitting, and each emission takes its two raw values whether or not
+    claim 20 (in the original it would never reach its counter's mark, but owner removal, a
+    positive lifetime, a trigger mark or, while it is held in the fire place, a let-go of that
+    place could still end it). A gas-kind system held in the fire place is likewise marked when
+    that place is let go (claim 1); its other marks are S-0613's. A smoke system that claim 9
+    never marks keeps emitting, and each emission takes its two raw values whether or not
     the system has a held type (claim 9). With a positive lifetime the system is also marked in
     that turn (S-0613 claim 17).
-    - Backing: `measurable` (scenarios P1 and P14)
-    - Confidence: high
+    - Backing: `measurable` (scenarios P1 and P14). The table's fire-place let-go entries, as
+      claim 1 backs them: for a fire-kind system by scenario P1; for a spark-kind system by S-0301
+      scenario F4's second run (u1 against u8); for a smoke-kind system by its third run (u10).
+      They are `unmeasured` for a railgun-kind, gas-kind or no-kind system, for the reasons claim
+      1's place-and-kind backing gives.
+    - Confidence: high. The table's fire-place let-go entries: medium, as claim 1 rates a let-go's
+      mark of the system held in the fire place.
 
 ### Drawing (presentation only)
 
@@ -1080,9 +1163,10 @@ form converts to 0; this is no departure (confidence
 medium; a zero divisor in floating point does not stop the original, unlike claim 20's integer
 divisions). With δ_F < −1 the divisor is negative and the formula applies unchanged.
 
-**F14. Railgun beam end point.** Computed once, at the shot that makes a railgun emitter (claim
-1). *P* is the emitter's position (the fire point, integers) and *Q* the target's position at the
-shot (integers; the target's own position, with no further raise). Let δ be the fixed
+**F14. Railgun beam end point.** Computed once, at the shot that makes the system of the railgun
+place, whatever its kind (claim 1). *P* is the emitter's position (the fire point, integers)
+and *Q* the target's position at the shot (integers; the target's own position, with no further
+raise). Let δ be the fixed
 single-precision value nearest 1/49, exactly 10 956 549 / 536 870 912 (about 0.020408163).
 This constant is unchanged by the rounding mode; it is not a fresh division in that mode.
 For *i* = 0 … 49:
@@ -1116,8 +1200,10 @@ In particular the no-stop end point is the exact *Q*, not *s*₄₉, even when t
 enter *Q*'s cell. Candidate hits and the target fallback remain S-0306 claim 27's rules,
 including its line-distance and degenerate-beam cases (Q-1405 questions 2 and 3).
 - Backing: `measurable` (P22 parts b and d for claim 1's sampling and end point).
-  No oracle measurement is claimed.
-- Confidence: high
+  No oracle measurement is claimed. For a system of another kind in the railgun place:
+  `unmeasured`, as claim 1's place-and-kind backing gives.
+- Confidence: high for a railgun-kind system. For a system of another kind in the railgun
+  place: medium (claim 1's creation reading).
 
 **F15. Fire direction group.** With *P*₁ = (*x*₁, *y*₁) and *P*₂ = (*x*₂, *y*₂) the screen pixels
 (S-0101 F1, height lift included) of the particle's creation position and of the target point it
@@ -1237,7 +1323,7 @@ and fire, emission comes last, so a new particle's first update is in the next t
 |---|---|---|
 | Active | kind mark (claims 9, 10, 15, 17), lifetime reaching 0, owner removed (claim 4), a trigger action on its cell (claim 1), a damage-smoke healing mark of claim 1 (including its below-surface test), or a spark-turns field of 0 or less at its first turn (claim 20) | Marked |
 | Active, natural smoke | building reaches full cloaking (claim 1) | Removed at once, with its particles |
-| Marked | particles remain | keeps taking turns, no emission; its particles keep updating, moving and ending |
+| Marked | particles remain | keeps taking turns and makes no emission, except that the mark does not stop a spark system's bursts while *K* is above 0 (claim 15, medium); its particles keep updating, moving and ending, and a smoke system's dead particles still split (claim 8, medium for a marked system) |
 | Marked | holds no particle after the count-down | leaves play (S-0613 claim 17) |
 | Active or marked, no kind, holds a particle | system turn | particle unchanged; system cannot leave while it holds the particle (claim 2). Other events can still mark the system. |
 
@@ -1386,12 +1472,17 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   which each leaves play, the ticks at which deactivated-vehicle systems are made, the points at which refinery smoke is made, the position of each system that a trigger action makes, and the two displacement draws of each deactivated-vehicle system. Expected: claim 1's columns and claim 22's end. Falsified by a system
   that leaves play at another tick, by an owner object or first particle other than listed, by a
   deactivated-vehicle system whose spark ticks are not 30 apart or whose displacement lies outside −100 … 100 (the phase is not compared with the original's, since claim 1's departure note allows it), by refinery smoke
-  made at an unset point or missed at a set one, or by a fire emitter let go at a tick other than
-  claim 1 gives (a new out-of-reach target, a move order and a death, one run each).
+  made at an unset point or missed at a set one, or by the system held in the fire place let go
+  at a tick other than claim 1 gives (a new out-of-reach target, a move order and a death, one run
+  each).
   Part b: a trigger action that marks the systems of one cell (a smoke, a fire, a spark and a gas system
-  in it, each holding particles; a second run with the waypoint in the cell of the shared gas system), and a natural-smoke building that reaches full cloaking. Expected:
-  each marked system makes no new particle and leaves in the first turn in which it holds none; the
-  cloaked building's system is removed at once, with its particles. Falsified by a marked system that emits, by one that leaves at another tick, by a removal that keeps its particles, or (second run) by a shared gas system that is not marked by an action on a waypoint in cell (10, 10), or that is marked by one in another cell. Part c: two natural-smoke building types that differ only in the natural-smoke displacement, one (0, 0, 0) and one not, each cloaked fully and then uncloaked. Expected: after the uncloak the second building has a new natural-smoke system and the first has none. Falsified by a new system for the first type or none for the second (if the first also gets one, claim 1's condition and S-0516 claim 18's displacement condition are revised).
+  in it, each holding particles; named test rules give the smoke system's held type a next
+  particle type, as in P7, and give the spark system's type a spark-turns field large enough that
+  its *K* is still above 0 at the mark; a second run with the waypoint in the cell of the shared gas system), and a natural-smoke building that reaches full cloaking. Expected:
+  each marked system makes no emission, except that the mark does not stop the spark system's
+  bursts while its *K* is above 0 (claim 15), the marked smoke system's dead particles still
+  split into successors after the mark (claim 8), and each leaves in the first turn in which it holds
+  none (the observable adds, for this part, each successor made and each spark burst, per tick); the cloaked building's system is removed at once, with its particles. Falsified by a marked smoke, fire or railgun system that emits, by a marked smoke system that makes no successor after the mark while dead particles of a type with a next type occur in it, by a marked spark system that takes no burst draws after the mark in a turn in which claim 15's table gives them while its *K* is above 0, by one that leaves at another tick, by a removal that keeps its particles, or (second run) by a shared gas system that is not marked by an action on a waypoint in cell (10, 10), or that is marked by one in another cell. Part c: two natural-smoke building types that differ only in the natural-smoke displacement, one (0, 0, 0) and one not, each cloaked fully and then uncloaked. Expected: after the uncloak the second building has a new natural-smoke system and the first has none. Falsified by a new system for the first type or none for the second (if the first also gets one, claim 1's condition and S-0516 claim 18's displacement condition are revised).
 - **P2. Kinds that change play.** Two runs that differ only in a smoke system's slow-down field.
   Observable: the recorder. Expected: draw counts differ from the first tick in which the
   emission count differs, and later draws of other objects shift. No unit's health differs except
@@ -1516,8 +1607,8 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   of 0 never lets it leave (claim 20), so with the absent counter the place would stay held after
   the first success and the rate could not be measured. With the counter at 1 the place is free
   again once the system's sparks have ended. One set of runs at a ratio below the red ratio and one between the red
-  and yellow ratios. Observable: the turns on which no spark emitter is held, and how many of them
-  make a system. Expected: about 0.02 of those turns make a system below the red ratio (red
+  and yellow ratios. Observable: the turns on which the spark place holds nothing, and how many
+  of them make a system. Expected: about 0.02 of those turns make a system below the red ratio (red
   default), and about 0.01 between the red and yellow ratios. Falsified by a rate outside twice the
   standard error of those figures.
 - **P17. Sparks and a wall.** Sparks over a wall cell beside a building. Observable: whether each spark ends at its contact. Expected: sparks end at the wall and at the building. Falsified by a spark that passes either.
@@ -1752,3 +1843,8 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   detonation either. Scenario: S-0616 P31 part d (it can join G3's held-type variants).
 - **S-0004 claim 2.** The `<none>` row for a particle system's emitted particle type gains a
   scenario: S-0616 P31 part d.
+- **S-0613 claim 17.** "owner removal (above) and a trigger action (S-0616 claim 1) are the only
+  other ways a system is marked here" should also name a let-go of the fire place, while the
+  system is held there (S-0616 claim 1, S-0301 claim 5): it marks the system that place holds,
+  whatever its kind, a gas-kind system included. Level: medium, `unmeasured` for a gas-kind
+  system (no scenario puts one in the fire place), as S-0616 claim 1 gives.
