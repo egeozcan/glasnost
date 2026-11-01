@@ -1,9 +1,9 @@
 ---
 id: Q-2247
 title: Whether a vehicle with a copied capture attacks its destination building as an enemy obstacle
-status: open
+status: answered
 related: [S-0213, S-0207, S-0209, S-0215]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
