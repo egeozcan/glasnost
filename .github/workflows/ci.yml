@@ -7,6 +7,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Weekly run, so the optional WebGPU lane below is still exercised.
+  schedule:
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -187,6 +190,13 @@ jobs:
   browser-webgpu:
     name: browser lane, WebGPU (optional)
     needs: wasm
+    # Off push and pull_request: on a GitHub runner (no GPU) Chromium presents
+    # with WebGPU but the canvas reads back all white on every run (the frame
+    # reaches neither the screenshot nor the dark clear colour). The same step
+    # passes headless on a machine with a GPU, so the fault is the runner's
+    # software Vulkan path, not the app. Run it by hand (workflow_dispatch) or
+    # on the weekly schedule instead of leaving every push red.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
