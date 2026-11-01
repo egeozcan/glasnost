@@ -185,6 +185,7 @@ async fn smoke_async(
                         | Effect::DroneRock { .. }
                         | Effect::GrapplePush { .. }
                         | Effect::OverloadRock { .. }
+                        | Effect::CrashTumble { .. }
                         | Effect::OverlayCrushed { .. }
                         | Effect::PieceSound { .. }
                         | Effect::Superweapon { .. }

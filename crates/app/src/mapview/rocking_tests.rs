@@ -13,7 +13,8 @@ use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 use super::build::Attitude;
 use super::live::attitude_with;
 use super::rocking::{
-    Push, Rocking, SLOWED_PITCH_LIMIT, USUAL_LIMIT, area_strength, axis_step, drawn, push_rates,
+    Push, Rocking, SLOWED_PITCH_LIMIT, USUAL_LIMIT, area_strength, axis_step, crash_rates, drawn,
+    push_rates,
 };
 use super::sinking_tests::images;
 
@@ -830,4 +831,123 @@ fn a_rocking_vehicle_has_images_of_its_own_and_keeps_its_shadow() {
     assert_ne!(a[1].0, a[2].0);
     assert_eq!(a[3], a[0], "not drawn by its locomotor: settled");
     assert_eq!(a[4], a[0], "level again");
+}
+
+// spec: S-0113 F5 (roll rate = RZ₂₄(RZ₅₃(u₁ × 0.15) + 0.1), negated when b = 0; pitch rate = RZ₂₄(u₃ × 0.1); 0.15 and 0.1 double-precision constants) and RK9 (roll rate magnitude 0.1 to 0.25, pitch rate 0 to 0.1)
+#[test]
+fn the_crash_rates_follow_f5() {
+    let (pitch, roll) = crash_rates(F64::ZERO, 1, F64::ZERO, RZ);
+    assert_eq!(pitch, F32::ZERO);
+    // 0.1 as a double, rounded to single toward zero.
+    assert_eq!(roll, F32(0x3dcc_cccc));
+    let (_, negative) = crash_rates(F64::ZERO, 0, F64::ZERO, RZ);
+    assert_eq!(real(negative), -real(roll), "b = 0 negates the roll rate");
+    let (pitch, roll) = crash_rates(one(), 1, one(), RZ);
+    // The two doubles 0.15 and 0.1 sum to 0.25 exactly.
+    assert_eq!(roll, F32(0x3e80_0000));
+    assert_eq!(pitch, F32(0x3dcc_cccc));
+    let half = F64(0.5f64.to_bits());
+    let (pitch, roll) = crash_rates(half, 1, half, RZ);
+    assert!((real(roll) - 0.175).abs() < 1e-7, "{}", real(roll));
+    assert!((real(pitch) - 0.05).abs() < 1e-7, "{}", real(pitch));
+}
+
+/// A world with one flying-locomotor aircraft 1000 leptons up.
+fn jet_world() -> (World, ObjectId) {
+    use glasnost_rules::sim::{MovementZone, UnitType};
+    let mut r = testkit::ruleset();
+    r.registries.insert("aircraft".into(), vec!["JET".into()]);
+    r.sim.aircraft.insert(
+        "JET".into(),
+        UnitType {
+            strength: Some(100),
+            speed: Some(10),
+            locomotor: Some(Locomotor::Fly),
+            movement_zone: Some(MovementZone::Fly),
+            ..Default::default()
+        },
+    );
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let jet = testkit::spawn(
+        &mut w,
+        SimKind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    w.obj_mut(jet).unwrap().pos.z += 1000;
+    (w, jet)
+}
+
+// spec: S-0113 claim 16 (an object that is not infantry starts to crash: S-0312 claim 16's three draws set its rates; while it crashes each angle adds its rate every turn, rounded to single, with no limit, pull or stop) and claim 18 (the flying locomotor draws the pitch and roll only while crashing)
+#[test]
+fn a_crashing_aircraft_tumbles_by_its_draws() {
+    let (mut w, jet) = jet_world();
+    let mut rocking = Rocking::default();
+    let mode = w.rules().mode;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let mut rng = w.rng.clone();
+    let u1 = rng.unit(mode);
+    let b = rng.ranged(0, 1, half);
+    let u3 = rng.unit(mode);
+    w.effects.clear();
+    assert!(glasnost_sim::air::start_crash(&mut w, jet, false));
+    assert_eq!(
+        w.effects,
+        vec![Effect::CrashTumble {
+            id: jet,
+            u1,
+            sense: b,
+            u3
+        }]
+    );
+    assert_eq!(w.rng, rng, "the three draws, nothing else");
+    let (pitch_rate, roll_rate) = crash_rates(u1, b, u3, mode);
+    tick(&mut w, &mut rocking);
+    let body = rocking.body(jet).unwrap();
+    assert_eq!((body.pitch_rate, body.roll_rate), (pitch_rate, roll_rate));
+    assert_eq!(
+        (body.pitch, body.roll),
+        (F32::ZERO, F32::ZERO),
+        "shows from the next turn"
+    );
+    let (mut pitch, mut roll) = (F32::ZERO, F32::ZERO);
+    for _ in 0..20 {
+        tick(&mut w, &mut rocking);
+        pitch = pitch.to_f64().add(pitch_rate.to_f64(), mode).to_f32(mode);
+        roll = roll.to_f64().add(roll_rate.to_f64(), mode).to_f32(mode);
+        let body = rocking.body(jet).unwrap();
+        assert_eq!((body.pitch, body.roll), (pitch, roll));
+        assert_eq!((body.pitch_rate, body.roll_rate), (pitch_rate, roll_rate));
+    }
+    assert!(real(roll).abs() > 1.9, "past every limit: {}", real(roll));
+    // Drawn with the tumble.
+    let Attitude::Flying {
+        crashing: true,
+        tumble,
+        ..
+    } = attitude_with(&w, w.obj(jet).unwrap(), &rocking)
+    else {
+        panic!("a crashing aircraft");
+    };
+    let (p, r) = rocking.angles(jet).unwrap();
+    assert_eq!(tumble, (p.to_bits(), r.to_bits()));
+    assert!(r != 0.0);
+}
+
+// spec: S-0113 claim 18 (outside a crash the flying locomotor draws no pitch or roll)
+#[test]
+fn a_flying_aircraft_is_drawn_without_rocking() {
+    let (w, jet) = jet_world();
+    let rocking = Rocking::default();
+    let Attitude::Flying {
+        crashing: false,
+        tumble,
+        ..
+    } = attitude_with(&w, w.obj(jet).unwrap(), &rocking)
+    else {
+        panic!("a flying aircraft");
+    };
+    assert_eq!(tumble, (0, 0));
 }

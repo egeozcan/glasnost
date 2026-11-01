@@ -667,6 +667,8 @@ pub fn attitude(w: &World, o: &Object) -> Attitude {
             0
         },
         crashing: air.is_some_and(|a| a.crash.is_some()),
+        // spec: S-0113 claim 16 (the tumble angles are the view's copy until claim 19 is built, which attitude_with adds; the game state alone gives none)
+        tumble: (0, 0),
     }
 }
 
@@ -688,7 +690,8 @@ pub fn draws_rocking(w: &World, o: &Object) -> bool {
 /// [`attitude`] with the view's rocking (`super::rocking`): a sinking
 /// vehicle's roll, and its lean when it was rocked as it began to sink
 /// (S-0504 claim 15, S-0113 claim 5); a vehicle that rocks and does not
-/// sink is drawn with its pitch and roll (S-0113 claim 18, S-0106 claim 9).
+/// sink is drawn with its pitch and roll (S-0113 claim 18, S-0106 claim 9);
+/// a crashing aircraft with its tumble (S-0113 claims 16 and 18).
 pub fn attitude_with(w: &World, o: &Object, rocking: &super::rocking::Rocking) -> Attitude {
     let angles = rocking.angles(o.id);
     match attitude(w, o) {
@@ -698,6 +701,20 @@ pub fn attitude_with(w: &World, o: &Object, rocking: &super::rocking::Rocking) -
             // spec: S-0113 claim 5 (a sinking body's roll takes table R's roll step: a push during descent rolls the hull) and S-0504 claim 16 (drawn as S-0106 claim 9's rocking)
             roll: angles.map_or(0, |(_, r)| r.to_bits()),
             drawn,
+        },
+        Attitude::Flying {
+            height,
+            speed,
+            turn,
+            crashing: true,
+            ..
+        } => Attitude::Flying {
+            height,
+            speed,
+            turn,
+            crashing: true,
+            // spec: S-0113 claim 18 (the flying locomotor draws the pitch and roll only while the aircraft is crashing)
+            tumble: angles.map_or((0, 0), |(p, r)| (p.to_bits(), r.to_bits())),
         },
         Attitude::None if o.kind == SimKind::Vehicle => match angles {
             Some((pitch, roll)) if pitch != 0.0 || roll != 0.0 => Attitude::Rocking {
@@ -2548,6 +2565,7 @@ impl Live {
                 | Effect::DroneRock { .. }
                 | Effect::GrapplePush { .. }
                 | Effect::OverloadRock { .. }
+                | Effect::CrashTumble { .. }
                 | Effect::OverlayCrushed { .. }
                 | Effect::PieceSound { .. }
                 | Effect::Superweapon { .. }

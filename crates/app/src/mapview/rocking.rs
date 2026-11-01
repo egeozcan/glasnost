@@ -7,7 +7,7 @@
 //! destruction. Our simulation does not keep them yet (a seam of
 //! docs/m8-claims/intake53-S-0107-S-0108-S-0113.md): it reports what rocks
 //! (`Effect::Rock`, `Effect::DroneRock`, `Effect::GrapplePush`,
-//! `Effect::OverloadRock`), and the view applies S-0113 to those reports in
+//! `Effect::OverloadRock`, `Effect::CrashTumble`), and the view applies S-0113 to those reports in
 //! the simulation's own soft-float arithmetic and rounding mode, once per
 //! game tick and never per drawn frame, so the rules here can move into the
 //! simulation unchanged. Only drawing reads any of it.
@@ -52,6 +52,10 @@ const OVER: F32 = F32(0x4049_0fdb); // spec: S-0113 claim 9 and Constants (rolli
 /// −π/4 (single): a balloon-hover body's lowest pitch and roll while it
 /// crashes.
 const MINUS_QUARTER: F32 = F32(0xbf49_0fdb); // spec: S-0113 claim 16 (the pitch raised to −π/4 when below it, the roll held within ±π/4; π/4 a single, claim 8)
+/// 0.15, F5's crash roll rate spread (double).
+const CRASH_ROLL_SPREAD: F64 = F64(0x3fc3_3333_3333_3333); // spec: S-0113 F5 and Constants (crash roll rate spread 0.15, a double-precision constant)
+/// 0.1, F5's crash roll rate base and crash pitch rate spread (double).
+const CRASH_TENTH: F64 = F64(0x3fb9_9999_9999_999a); // spec: S-0113 F5 and Constants (crash roll rate base 0.1 and pitch rate spread 0.1, double-precision constants)
 /// π/10 for F4's frame angle (double).
 const GRAPPLE_STEP: F64 = F64(0x3fd4_1b2f_769c_f0e0); // spec: S-0113 F4 (π/10 a double-precision constant)
 
@@ -98,6 +102,24 @@ pub fn area_strength(damage: i32, mode: Rounding) -> F32 {
         .mul(STRENGTH_PER_DAMAGE, mode)
         .min(STRENGTH_CAP)
         .to_f32(mode)
+}
+
+/// F5's crash tumble rates *(pitch rate, roll rate)* from S-0312 claim 16's
+/// three draws: *u*₁, the sense draw *b* (0 or 1) and *u*₃ (S-0113 claim 16).
+pub fn crash_rates(u1: F64, sense: i32, u3: F64, mode: Rounding) -> (F32, F32) {
+    // spec: S-0113 F5 (roll rate = RZ₂₄(RZ₅₃(u₁ × 0.15) + 0.1), negated when b = 0)
+    let roll = u1
+        .mul(CRASH_ROLL_SPREAD, mode)
+        .add(CRASH_TENTH, mode)
+        .to_f32(mode);
+    let roll = if sense == 0 {
+        roll.to_f64().negated().to_f32(mode)
+    } else {
+        roll
+    };
+    // spec: S-0113 F5 (pitch rate = RZ₂₄(u₃ × 0.1))
+    let pitch = u3.mul(CRASH_TENTH, mode).to_f32(mode);
+    (pitch, roll)
 }
 
 /// One rocking body's angles and rates (S-0113 Terms), single precision.
@@ -417,6 +439,13 @@ impl Rocking {
                     level,
                     draw,
                 } => self.overload(w, *controller, *level, *draw),
+                Effect::CrashTumble { id, u1, sense, u3 } => {
+                    // spec: S-0113 claim 16 and F5 (an object that is not infantry starts to crash: the three draws set both rates; the angles keep their values)
+                    let (pitch, roll) = crash_rates(*u1, *sense, *u3, mode);
+                    let b = self.bodies.entry(*id).or_default();
+                    b.pitch_rate = pitch;
+                    b.roll_rate = roll;
+                }
                 Effect::GrapplePush { host, way } => {
                     let g = self.grapples.entry(*host).or_default();
                     if g.pushed {
@@ -569,7 +598,7 @@ impl Rocking {
                     axis_step(b.roll, b.roll_rate, USUAL_LIMIT, true, escape, mode);
                 return !b.level();
             }
-            if glasnost_sim::jump::crashing(w, id) {
+            if glasnost_sim::jump::crashing(w, id) || glasnost_sim::air::crashing(w, id) {
                 // spec: S-0113 claim 16 and table S (crashing: each angle adds its rate, rounded to single, with no limit, pull, stop or destruction)
                 b.roll = b.roll.to_f64().add(b.roll_rate.to_f64(), mode).to_f32(mode);
                 b.pitch = b
@@ -708,11 +737,12 @@ impl Rocking {
     }
 }
 
-/// Whether the view keeps rocking for an object of kind `k`: vehicles
-/// only. S-0113's rocking bodies are every kind drawn as a voxel model, but
-/// an aircraft draws its angles only while it crashes (claim 18), whose
-/// tumble rates the simulation does not report (claim 16 is a seam), and
-/// buildings and infantry are drawn from sprites.
+/// Whether the view keeps the pushes' rocking for an object of kind `k`:
+/// vehicles only. S-0113's rocking bodies are every kind drawn as a voxel
+/// model, but an aircraft draws its angles only while it crashes (claim
+/// 18), from the tumble rates `Effect::CrashTumble` reports (claim 16), and
+/// buildings and infantry are drawn from sprites. The angles an aircraft
+/// would carry into its crash from earlier pushes are not kept.
 // design: S-0113 claim 18 (only vehicles draw the angles outside a crash); a seam for the other kinds
 fn kept(k: SimKind) -> bool {
     k == SimKind::Vehicle

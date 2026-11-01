@@ -473,6 +473,14 @@ enum Tilt {
     },
     /// A flying-locomotor body (claim 42).
     Flying(voxel::FlightAttitude),
+    /// A crashing flying-locomotor body with its tumble angles (S-0113
+    /// claims 16 and 18).
+    Tumbling {
+        /// The pitch, radians.
+        pitch: f32,
+        /// The roll, radians.
+        roll: f32,
+    },
     /// A sinking or rocking vehicle (S-0504 claims 15 and 16; S-0303 claim
     /// 20): its pitch and roll, whether its locomotor draws rocking, and
     /// whether it sinks (then it draws no shadow).
@@ -4923,7 +4931,15 @@ impl<'a> Builder<'a> {
                 speed,
                 turn,
                 crashing,
+                tumble: (pitch, roll),
             } => {
+                if crashing {
+                    // spec: S-0113 claim 18 (the flying locomotor draws the pitch and roll only while the aircraft is crashing) and S-0105 claim 42 (claim 42's angles are for a non-crashing body)
+                    return Tilt::Tumbling {
+                        pitch: f32::from_bits(pitch),
+                        roll: f32::from_bits(roll),
+                    };
+                }
                 let (kind, idx) = (m.kind, m.idx);
                 let pitch_angle =
                     rule_angle(self.import, kind, idx, b"PitchAngle", PITCH_ANGLE_DEFAULT);
@@ -4931,8 +4947,6 @@ impl<'a> Builder<'a> {
                     rule_angle(self.import, kind, idx, b"RollAngle", ROLL_ANGLE_DEFAULT);
                 let pitch_speed =
                     rule_real(self.import, kind, idx, b"PitchSpeed").unwrap_or(PITCH_SPEED_DEFAULT);
-                // spec: S-0105 claim 42 (a crashing body keeps S-0312's attitude rules, not built here: drawn level)
-                let height = if crashing { 0 } else { height };
                 Tilt::Flying(voxel::flight_attitude(
                     height,
                     f64::from_bits(speed),
@@ -4995,7 +5009,7 @@ impl<'a> Builder<'a> {
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
         let tilt = self.tilt(m, &q);
         // spec: S-0105 Terms and claim 3 (flight drawing heading: a flying-locomotor aircraft's body and shadow take its aiming facing, a rocket and every other body its body facing)
-        let heading = if matches!(tilt, Tilt::Flying(_)) {
+        let heading = if matches!(tilt, Tilt::Flying(_) | Tilt::Tumbling { .. }) {
             turret_raw
         } else {
             body_raw
@@ -5007,7 +5021,8 @@ impl<'a> Builder<'a> {
                 roll,
                 drawn: true,
                 ..
-            } => self
+            }
+            | Tilt::Tumbling { pitch, roll } => self
                 .voxel_model(&main_file)
                 .and_then(|b| b.sections.first().map(|s| s.size))
                 .map(|size| voxel::Rocking::new(pitch, roll, size))
@@ -5030,6 +5045,11 @@ impl<'a> Builder<'a> {
             Tilt::Rocket { pitch, .. } => voxel::rocket_body_pose(body_raw, pitch, &q),
             // spec: S-0105 claim 42 (V · Rz(θ_flight) · Ry(α) · Rx(β), the shadow the heading alone)
             Tilt::Flying(a) => voxel::flying_body_pose(heading, &a, &q),
+            // design: Q-2236 interim (a crashing flying body: S-0504 F5's transform on the flight drawing heading with the tumble angles only, the shadow on the heading alone as in S-0105 claim 42); below the drawing threshold, level
+            Tilt::Tumbling { .. } => match rocking {
+                Some(r) => voxel::crashing_body_pose(heading, &r, &q),
+                None => voxel::flying_body_pose(heading, &voxel::FlightAttitude::LEVEL, &q),
+            },
         };
         // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles)
         let list = rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits()));
@@ -5074,11 +5094,18 @@ impl<'a> Builder<'a> {
                     .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
             b.limit_checked(&shadow_file, "shadow", shadow_key, img)
         };
+        // A tumbling body's shadow takes the heading alone (Q-2236 interim), so it is the
+        // flying body's image, not one kept apart under the angles.
+        let shadow_list = if matches!(tilt, Tilt::Tumbling { .. }) {
+            None
+        } else {
+            list
+        };
         // An aircraft's shadow comes before the body, which covers it.
         if kind != Kind::Vehicles
             && let Some(s) = shadow
             && let Some(part) =
-                self.cached_part_in(kind, idx, list, shadow_key, |b| draw_shadow(b, s))
+                self.cached_part_in(kind, idx, shadow_list, shadow_key, |b| draw_shadow(b, s))
         {
             // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's
             // own drawing; it never paints over its own aircraft)
@@ -5106,6 +5133,10 @@ impl<'a> Builder<'a> {
             }
             Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
             Tilt::Flying(a) => voxel::flying_body_key(heading, body_frame, &a),
+            // design: Q-2236 interim (a tumbling body's images are kept apart under their exact angles, as any rocking body's, S-0105 claim 26)
+            Tilt::Tumbling { .. } => {
+                voxel::flying_body_key(heading, body_frame, &voxel::FlightAttitude::LEVEL)
+            }
         };
         if let Some(part) = self.cached_part_in(kind, idx, list, key, |b| {
             let body = b.voxel_model(&body_file)?;
@@ -5642,8 +5673,12 @@ pub enum Attitude {
         speed: u64,
         /// The sign of the unfinished aiming-facing turn: positive clockwise.
         turn: i32,
-        /// Crashing (S-0312): drawn level here, the crash attitude is not built.
+        /// Crashing (S-0312): drawn with its tumble, not claim 42's angles.
         crashing: bool,
+        /// While crashing, the tumble's pitch and roll (S-0113 claims 16 and
+        /// 18), radians, single-precision bits; the view holds them
+        /// (`super::rocking`), the game none.
+        tumble: (u32, u32),
     },
     /// A vehicle that rocks (S-0303 claim 20, S-0614 claims 9 and 10) and
     /// does not sink: where its locomotor draws rocking its body is drawn

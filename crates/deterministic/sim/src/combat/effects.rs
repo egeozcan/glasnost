@@ -95,6 +95,20 @@ pub enum Effect {
         /// The draw *r* that chose the sign.
         draw: i32,
     },
+    /// An object that is not infantry started to crash (S-0312 claim 16):
+    /// its three tumbling draws, which set its rocking rates (S-0113 claim
+    /// 16 and F5). Presentation only: the view keeps the angles (a seam of
+    /// S-0113 claim 19, as for the other rocking reports).
+    CrashTumble {
+        /// The crashing object.
+        id: ObjectId,
+        /// The first draw, a unit-interval value *u*₁.
+        u1: glasnost_num::F64,
+        /// The second draw *b*, 0 or 1 (the roll's sense).
+        sense: i32,
+        /// The third draw, a unit-interval value *u*₃.
+        u3: glasnost_num::F64,
+    },
     /// A grappling parasite's push starts (S-0614 claim 10): `way` is the
     /// push's draw, 0 or 1.
     GrapplePush {
