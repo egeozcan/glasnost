@@ -183,15 +183,16 @@ at which a holder drops a refused target: `duel.txt`, `duel-diagonal.txt`, `duel
 
 ## Lanes
 
-Before is main at ccf5c34. Main then moved to 7f7ce87 (intake 67), and this branch was rebased
-onto it. Intake 67 left the sweeps and the arena unchanged but moved the quick lane, so the quick
-lane's before is intake 67's own after run (`local-lane/m8/intake67/after/quick`, the same sim
-code as 7f7ce87). After is this branch at a4e198a. Outputs are in `local-lane/m8/intake68/`,
-which is git-ignored.
+Before is main at 746ba32: intake 67, the capture seam (S-0215 claim 28) and intake 69, which
+changes only the client. For the sweeps and the arena, before is the capture seam's after run
+(`local-lane/m8/seam-capture/after`), which has the same sim code as 746ba32. For the quick lane,
+before is a fresh run of 746ba32 (`local-lane/m8/intake68/main-quick`). After is this branch
+rebased onto 746ba32 (`local-lane/m8/intake68/after2`, the code of 546adc1). Outputs are in
+`local-lane/m8/`, which is git-ignored.
 
 | Lane | Before | After |
 |---|---|---|
-| M6c sweep, seeds 1–16 (29 counts) | passes | passes; 25 counts move. Lower minimums: garrison orders 22 → 13, spy infiltrations 6 → 5, chrono erasure orders 24 → 23, erasures begun 6 → 5, disarm orders 5 → 4, suicide orders 15 → 14, crate orders 78 → 37, crates picked up 10 → 5 |
+| M6c sweep, seeds 1–16 (29 counts) | passes | passes; 25 counts move. Lower minimums: garrison orders 13 → 10, tech building income cycles 2 346 → 1 372, jumpjet orders 21 → 2, jumpjet flight 8 984 → 8 135, jumpjet units built and flown 8 → 6, radiation in the field 5 129 → 1 890, chrono erasure orders 20 → 19, prism buildings ordered 10 → 7, charger orders 9 → 6, support beams 66 → 0, suicide orders 14 → 6, sabotage orders 10 → 3, air-strike orders 5 → 3, air strikes called 8 → 6, crate orders 73 → 65, crates picked up 11 → 9 |
 | M7a sweep, seeds 1–16 (26 counts) | passes | passes; 24 counts move. Lower minimums: berserk weapon orders 11 → 7, units made berserk 18 → 14, slave-miner buildings placed or deployed 13 → 5, vehicles bunkered 5 → 4, bunker exit orders 4 → 3, seized units dropped 5 → 4 |
 | M7b sweep, seeds 1–16 (34 counts) | passes | passes; 10 counts move, with only drained-building ticks lower at the minimum (19 182 → 19 169) |
 | Arena `--record all`, scored as intake 47 / A6: M-0001 | 9 of 96 failing | 9 of 96, `ours-M-0001.csv` byte-identical |
@@ -199,10 +200,22 @@ which is git-ignored.
 | M-0003 | 1 of 35 | 1 of 35, identical |
 | Arena total | 11 of 155 | 11 of 155 |
 | `glasnost-ai --include-ignored` (release) | 239 pass | 239 pass |
-| AI quick lane, seeds 7–10, maps 0, 2 and 8 | 36 games, all ended; house 0 won 17, house 1 won 19; median 45 620 ticks | 36 games, all ended; 1 identical (31 221 ticks), 35 end at another tick; house 0 won 16, house 1 won 20; median 46 317 ticks |
+| AI quick lane, seeds 7–10, maps 0, 2 and 8 | 36 games, all ended; house 0 won 15, house 1 won 21; median 42 716 ticks | 36 games, all ended; none end at the same tick; house 0 won 18, house 1 won 18; median 42 455 ticks |
 
 The sweep games are AI games, and a drop that moves by up to 15 ticks changes their course, so
 the counts move both ways. Every sweep test passes with its minimums.
+
+The M6c minimums fall further on this base than on the first one, and most of the fall comes from
+seed 3. Its smallest count falls from 4 on main to 0: support beams 0 and jumpjet orders 2. The
+other fifteen seeds keep a smallest count of 3 or 4. The sweep test still passes, because it
+accepts a count below 3 in a single seed, as the M7a sweep on main already shows in several seeds.
+It is still the largest move in this intake, so it is a candidate for a follow-up look at that
+game. It was not traced in this intake.
+
+On the first base (7f7ce87, intake 67, without the capture seam) the same change passed every
+sweep too. The M6c sweep had fewer lower minimums there, chiefly garrison orders 22 → 13 and
+crate orders 78 → 37. M7a and M7b were identical to the runs above, the arena was unchanged at
+11 of 155, and the quick lane went from a median of 45 620 to 46 317 ticks.
 
 The 11 failing arena pairings, each unchanged (same rows, same verdict): DISK–FV, LTNK–E1,
 CAOS–APOC, CAOS–TTNK, TELE–APOC, TELE–TTNK, TELE–V3, CAOS–E1, CAOS–V3, INIT–E2 and ROBO–HTK.
