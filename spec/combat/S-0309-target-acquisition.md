@@ -2,11 +2,11 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 53
+revision: 70
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-01
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114]
 supersedes: []
@@ -20,7 +20,8 @@ How objects pick targets by themselves in *automatic searches* (range, area and 
 search looks for, where and in which order it looks, which objects are candidates, the *threat
 score* and the winner, plus the retaliation conditions, the rules for dropping or replacing a
 self-chosen target, the drop of a held target that is destroyed or removed, starts to cloak or
-goes underground, and the owner rules that the neutral and special houses keep. S-0215 owns when
+goes underground, the periodic check that drops a held target the firing check refuses, and
+the owner rules that the neutral and special houses keep. S-0215 owns when
 most searches run (claim 1 also names contexts owned by other specs). Skirmish only: network games and
 campaign missions are out of scope.
 
@@ -29,7 +30,7 @@ campaign missions are out of scope.
 Glossary terms are used as defined there, in particular *object*, *type*, *field*, *house*,
 *human-controlled*, *computer-controlled*, *AI house*, *behaviour*, *target, destination*, *guard
 spot*, *cell*, *lepton*, *legal cell*, *usable cell*, *bridge deck*, *cell layer*, *render layer*,
-*scenario random stream*, *known attacker*, *disguise*, *being erased*, *armed* (here in the sense
+*scenario random stream*, *tick number*, *known attacker*, *disguise*, *being erased*, *armed* (here in the sense
 of S-0214), *quirk switch*, *departure*, *importer warning*, *measurement setup*, and the *neutral
 house* and *special house* (glossary *house*). From other
 specs: *behaviour* names, *targeting timer*, *opportunity target*, *processing*, *team member* and
@@ -37,8 +38,8 @@ specs: *behaviour* names, *targeting timer*, *opportunity target*, *processing*,
 (S-0214); *veterancy rank* and *veterancy ability* (S-0311, claims 1 and 3); *versus value*, τ<sub>r</sub> and τ<sub>a</sub> (S-0304); *weapon
 slot*, *weapon number*, *weapon it would use*, *mean weapon damage*, *healer for acquisition*,
 *multi-weapon type*, *gattling type*, *switching type* and *airborne* (S-0308); *floor-bound* (S-0307, Terms); *expected damage* (S-0302, claim 18); *reference point* and *table square
-root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *illegal*, *impossible*, *busy* and
-*out of range* (S-0301, claim 9); *tracked flying object*, *sector* and the flying-object search
+root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *illegal*, *impossible*, *busy*,
+*rearming* and *out of range* (S-0301, claim 9); *tracked flying object*, *sector* and the flying-object search
 (S-0303, Terms and F7); *land-targeting mode* (S-0308, table P and Import mapping); *naval-targeting
 mode* (S-0308, table N); *spray-attack
 type* (S-0313, Terms); *spawner weapon*, *spawned aircraft* and *launching* (S-0301, Terms),
@@ -281,10 +282,13 @@ index 1. This is a design rule, not an additional claim about the original.
    draw from the scenario random stream. In the teleport case this is separate from the
    conditional 4-to-8-tick draw before the search (claim 1). An opportunity target for which the firing check of the
    weapon the searcher would use against it answers *illegal*, *out of range* or *impossible* is
-   dropped, and the same search may pick a new target (whether another rule can drop it earlier
-   is open, claim 19). One exception: a searcher that controls
+   dropped, and the same search may pick a new target (for a searcher that claim 29 covers, its
+   periodic check can drop it earlier). One exception: a searcher that controls
    spawned aircraft (a spawner type) and gets *impossible* keeps the target, but resets its
-   spawn controller as S-0506 claim 11 gives. Released missiles already in flight continue to
+   spawn controller as S-0506 claim 11 gives. For a searcher that claim 29 covers, that keep
+   ends at its first checking turn in a check tick of claim 29 at which the answer is *illegal*
+   or *impossible*: claim 29 makes no exception for it. Released
+   missiles already in flight continue to
    their fixed aim points (S-0506 claims 11–12). The answer *busy*
    (the searcher is launching spawned aircraft, S-0301) is none of the three, so the target is kept
    and the spawned aircraft are left alone. Apart from the attack-move searches of claim 23 that
@@ -305,14 +309,22 @@ index 1. This is a design rule, not an additional claim about the original.
    searches later in the same tick sees the lowered value, and in mode *strong* or *normal*
    (claim 14, table C) may reject or deprioritise that target. A searcher of a distributed-fire
    type picks by claim 20 instead, and its pick lowers no expected remaining health.
-   - Backing: `measurable` (scenario A6 for the keep and drop cases, A6 part f for the spawner and
-     *busy* cases; that a player house's search takes no draw per tested or scored object by
+   - Backing: `measurable` (scenario A6 for the keep and drop cases, A6 part f for the *busy*
+     case; that a
+     player house's search takes no draw per tested or scored object by
      scenario A14, part n; that the timer draw is the search's first draw and that a search takes
      no fixed further draw by scenario A15, part h; the expected-health reduction, including the same-tick effect, through scenario
      A8, parts b and c; the inaccurate-projectile exception through A8, part d; the distributed-fire
-     exception through A8, part e)
-   - Confidence: high (medium for the inaccurate-projectile and distributed-fire exceptions and the
-     spawned-aircraft case)
+     exception through A8, part e). `unmeasured`: a spawner's keep on *impossible*, its
+     controller reset and its released missiles' continuing to their fixed aim points, since no
+     part here gives a spawner an *impossible* answer; the drop and re-pick on *impossible* at a
+     search by a firer that is not a spawner, since A6 part f reaches it only when a search of the
+     firer falls in a hidden span that holds no check tick of claim 29, and no setup here is shown
+     to give one)
+   - Confidence: high (medium for the inaccurate-projectile and distributed-fire exceptions, for
+     a spawner's keep on *impossible*, its controller reset and its released missiles' continuing
+     to their fixed aim points, and for the drop and re-pick on *impossible* at a search by a
+     firer that is not a spawner)
 
 ### What a search looks for
 
@@ -941,17 +953,23 @@ index 1. This is a design rule, not an additional claim about the original.
 19. **An opportunity target is replaced when it becomes unusable.** Because of claim 4, an object
     whose opportunity target becomes illegal, moves out of range or becomes a target the firing check
     answers *impossible* for drops it (unless the answer is *impossible* and it controls spawned
-    aircraft, claim 4) no later than its next search, and that search picks a new target. An object whose
-    target came from an order keeps it through searches covered by claim 4, except the attack-move
-    searches of claim 23 that run as for an object with no target. The charging break-off search
-    has its separate replacement rule in claim 1 and S-0518 claim 15. The behaviour rules of S-0215 (claims
-    18, 26 and 33) add the other cases in which a target is dropped: retaliation replaces the
-    target, the area-guard leash drops it, and some behaviours drop an opportunity target.
+    aircraft, claim 4) no later than its next search, and that search picks a new target. When the
+    answer is *illegal* or *impossible*, claim 29's periodic check drops it at a check tick if that
+    comes first, for a holder that claim 29 covers; claim 4 gives where a spawner's keep ends.
+    An object whose target came from an order keeps it through searches covered by
+    claim 4, except the attack-move searches of claim 23 that run as for an object with no target.
+    The charging break-off search has its separate replacement rule in claim 1 and S-0518 claim 15.
+    The behaviour rules of S-0215 (claims 18, 26 and 33) add the other cases in which a target is
+    dropped: retaliation replaces the target, the area-guard leash drops it, and some behaviours
+    drop an opportunity target.
     - Backing: `measurable` (scenario A6: part a for a target out of range, part m for one that
-      becomes illegal, part f for *impossible*)
+      becomes illegal). `unmeasured` for a target the firing check answers *impossible* for: its
+      drop at a search is claim 4's (`unmeasured` there), and run p5 of part p judges only the drop
+      at a check tick, for an ordered target.
     - Confidence: high that the target is gone by the next search and that this search picks a
-      new one. Part m does not judge the tick of the drop: whether another rule drops it earlier
-      is open (Open questions, *An earlier drop*).
+      new one, for a target out of range or illegal; medium for one the firing check answers
+      *impossible* for. The earlier drop at a check tick is rated in claim 29 (part m judges its
+      tick).
 
 20. **Distributed fire.** A searcher whose type has the distributed-fire flag does not pick by
     claim 17. In a map-wide search it collects no candidates and so picks nothing and empties its
@@ -1378,9 +1396,10 @@ index 1. This is a design rule, not an additional claim about the original.
     action, with the same two exceptions. These are the exceptions that S-0215 claim 10 gives for
     these events as revert causes. Each of these drops, at either cloak moment and on going
     underground, resets the holder's targeting timer as in claim 27. A holder that keeps the target
-    under an exception takes no timer draw. When a drop ends an override, the revert of S-0215 claim
-    10 follows. Without an override the holder is left with no target, as in claim 27's
-    consequences.
+    under an exception takes no timer draw. If claim 29 covers it, it can still lose the target
+    later at claim 29's check if the firing check then refuses it, for example by S-0516 claim 24's
+    hidden-target refusal. When a drop ends an override, the revert of S-0215 claim 10 follows.
+    Without an override the holder is left with no target, as in claim 27's consequences.
     - Backing: the cloak drops at both moments, with the building's single drop and the two
       exceptions: S-0516 claim 14's own backing (`measurable`, S-0516 scenario CS9: parts a and b
       for the house's sensing, part c for the same owner; the building's single drop rests on that
@@ -1393,6 +1412,158 @@ index 1. This is a design rule, not an additional claim about the original.
     - Confidence: medium for the cloak drops at both moments (S-0516 claim 14's level); medium for
       the timer reset at each cloak moment and on going underground; medium for the underground
       drop and its exceptions; the revert at S-0215 claim 10's level
+
+### The periodic held-target check
+
+29. **A held target that the firing check refuses is dropped at a periodic check.** In its own
+    turn of every tick whose tick number is a multiple of 16 (a *check tick*), each holder that
+    this claim covers asks the firing check about its target, without the range test, for the
+    weapon it would use against it (S-0308, which owns the weapon choice, and S-0304 claim 6 for a
+    zero versus value). If the answer is *illegal* or *impossible*, it drops the target. Any other
+    answer leaves the target held. The claim covers every infantry unit, vehicle, aircraft and
+    building of a human-controlled owner that holds a target given by an order or a search while
+    its current behaviour is *attack* or *guard* (*Behaviours* below), and the check is the same
+    whichever of the two gave the target. In our engine that is every
+    holder of a player house, AI houses included (Terms, *Houses in our engine*). Whether the
+    original applies these rules unchanged to holders of computer-controlled owners, and to
+    targets that retaliation or a revert gave, is not established here (Open questions, *Other
+    holders and targets*). Its rules:
+    - **Phase.** Every object checks in the same ticks. A refusal that begins outside the holder's
+      turn, and that holds at the holder's first checking turn (one that is not cut short, in a
+      behaviour that checks) at the first check tick in which the holder's turn comes after the
+      refusal begins, is acted on in that turn.
+      When the holder takes such a turn in every tick, such a refusal that begins in tick *t*
+      before the holder's turn is acted on 0 to 15 ticks after *t*, and one that begins after the
+      holder's turn in tick *t*, as with an order applied after the turn pass (S-0203 claim 7), 1
+      to 16 ticks after *t*. A refusal that begins inside the holder's own turn is not given these
+      ranges: when it begins in its turn of a check tick, whether that turn's check acts on it is
+      not established here (Open questions, *A refusal that begins in the holder's turn*). A
+      holder that misses its turn in a check
+      tick (S-0203 claim 10), or whose turn there is cut short or in a behaviour that makes no
+      check, acts on the refusal, if it still holds, at its next checking turn in a later check
+      tick instead.
+    - **Behaviours.** A holder whose current behaviour is *attack* or *guard* makes the check. One
+      whose current behaviour is *capture* or *sabotage* makes none. Whether a holder in another
+      behaviour makes it, such as one in which no weapon is aimed at the held target, is not
+      specified here (Open questions, *Other behaviours*).
+    - **Answers.** The answer is S-0301 claim 9's, with its ranks, except that its range row (rank
+      10) is not asked. Whether the target is in range plays no part. A reason ranked above the
+      refusal gives its own answer, and the target is kept unless that answer is *illegal* or
+      *impossible*. So while the holder's rearm countdown runs (rank 5), a target for which only a
+      rank-9 reason holds, such as a zero versus value (S-0304 claim 1), is kept, and it is
+      dropped at the first check tick after the countdown has run out. A vehicle launching spawned
+      aircraft (rank 2, *busy*) keeps its target. A rank-4 refusal, such as an airborne target
+      that the projectile cannot hit (S-0306 claim 23), outranks the countdown, so that target is
+      dropped at the first check tick whatever the countdown shows. A holder whose chosen weapon
+      is not refused keeps the target, even if its other weapon would be.
+    - **Place in the turn.** This spec does not fix where in the holder's turn the check falls,
+      against its behaviour processing, its searches and its firing step (Open questions, *Place
+      of the periodic check*), except against a building's pending delayed shot (S-0301 claim
+      14): a building makes the check before that shot's remaining delay counts down in its turn,
+      so in the tick that ends the delay the pending shot still answers *rearming* (S-0301 claim
+      9) and the target is kept, as S-0301 scenario F21 requires. The drop leaves the holder with
+      no target until something gives it one: a search may pick the same object again where table C
+      does not reject it (it does not reject on *impossible*), and the firing check is then asked
+      about it as about any target.
+    - **The drop.** It sets the holder's target to none, with claim 24's consequences of a setting
+      that leaves no target (a spawner's conditional pending-target clear, the cancellation of an
+      airstrike). It takes no targeting-timer draw: claim 27's reset belongs only to those drops
+      of claims 27 and 28 that give it. It causes no revert (S-0215 claim 10: clearing the target by
+      another rule does not revert). It changes no behaviour by itself: the behaviour's next
+      processing does what it does with no target (S-0215), so an object in *attack* stops attacking
+      at that processing.
+    - **Turns cut short.** A turn that ends early makes no check: that of a vehicle or infantry
+      unit travelling through a tunnel, the one turn in which a vehicle completes its death
+      frames, and that of a building that is being erased or materialising. A vehicle's earlier
+      turns of its death frames are not cut short. It makes the check in them, and S-0301 claim 9
+      answers *impossible* (rank 1) for a vehicle playing its death frames, so it drops a held
+      target at its first checking turn in a check tick while they play. An infantry unit,
+      vehicle or landed aircraft that is being erased drops its target instead in each of its
+      turns (S-0215 claim 2). What a materialising vehicle or aircraft on
+      which a temporal beam is locked does with a held target is left open (Open questions). A
+      materialising vehicle or aircraft on which no temporal beam is locked makes the check, and
+      S-0301 claim 9 gives a materialising firer *rearming* within rank 4. Where no other rank-4
+      reason holds, or only ones ranked after it (a deactivated firer's *illegal* and the
+      *illegal* against the firer's own current drained building, which S-0301 claim 9 ranks
+      there, and the *illegal* for a target with a superweapon warp pending, which S-0513's
+      Changes for S-0301 rank there), that *rearming* is the answer and the target is kept.
+      Where another rank-4 reason that answers *illegal* or *impossible* holds too and S-0301
+      claim 9 gives no order between the two, whether the target is dropped is not established
+      (Open questions).
+    - **Warp members.** Whether a member of a superweapon warp (S-0513 claim 39) that holds a
+      target makes this check in its turns of the warp in the original, from its first turn after
+      the launch through its arrival effects, is not settled here: S-0513 claims 48 and 52 give
+      what is established about the ordinary work of those turns, and leave it unsettled. Our
+      engine does not take these checks in the warp: S-0513 claim 51 makes the warp update the
+      whole member turn from its first pending update through its arrival effects, and this check
+      is among the ordinary work it suppresses there. In the arrival hold that contract puts the
+      check after the hold-end test, under this claim's rules. Both are engine design rules of
+      S-0513 claim 51, not reproduction claims, and have no quirk switch.
+
+    Consequences for the other drops of this spec: claim 19's drop of an opportunity target can
+    come earlier than the next search, at a check tick, and claim 4's keep of an *impossible*
+    target by a searcher that controls spawned aircraft ends at a check tick, as claim 4 gives.
+    This is not the only drop made at the
+    start of a holder's turn (Open questions, *Other drops at the start of a turn*). Nor is it
+    the only drop of a target that the firing check refuses: a healer's firing step drops its
+    target on its own reply to *illegal*, in each of its turns (S-0310 claim 11, and the Changes
+    entry for it below for infantry healers), so for those targets that drop can come first
+    (as that claim rates it for vehicle healers, and medium, `unmeasured`, for infantry healers, as
+    that entry gives).
+    - Backing: `measurable` (scenario A6, part p: runs p1 and p2 for the cadence, the drop of an
+      ordered target on *illegal*, for vehicle and infantry holders, with a drop off a multiple of
+      16 before the expected tick falsifying the cadence; run p1, in its runs in which the holder's
+      targeting timer has more than 10 ticks left at the drop tick, for the absence of a timer draw,
+      and run p2 for the rank-5 keep, for a vehicle holder; run p6 for the shared phase, against a
+      phase counted from each holder's creation, for vehicle and infantry holders; run p4 for the
+      rank-4 refusal against a running countdown; run p5 for the drop on *impossible*, through a
+      hidden target; part m for the drop of an opportunity target by a vehicle holder in *guard* no
+      later than the first check tick after the refusal begins). `unmeasured`: the drop of a
+      searched target by an infantry holder, since part m's firer is a vehicle; for a holder in
+      *guard*, the absence of a timer draw, the shared phase and the cadence, since runs p1, p2 and
+      p6 give their holders *attack*, part m's firer is a vehicle, and part m lets a drop in a tick
+      whose tick number is not a multiple of 16, at no search of the firer, decide nothing; the
+      absence of the range test, since it shows only for a refusal ranked
+      below range (rank 12), which no part here gives; the absence of a revert, since no part here
+      puts an override in effect for a holder whose target the check refuses; the behaviour
+      exception, since no part here gives a holder in *capture* or *sabotage* a target that the
+      check refuses; the rank-5 keep for an infantry holder, since run p2's holder is a vehicle; the
+      chosen weapon, since in run p3 the second weapon's rearm countdown can answer *rearming*
+      (rank 5) at every check tick and so hide a check that asks about the first weapon; a
+      building's check before its pending delayed shot counts down, since no part here or in
+      S-0301 scenario F21 ends a delay in a check tick by design; the
+      later drop of a holder that misses its turn in a check tick, since no part here makes a holder
+      miss a turn; the turns cut short, the check and drop in a vehicle's earlier death-frame turns,
+      the drop by a holder that is being erased and the materialising cases, since no part here
+      gives a target to a holder in one of those states; the end of a spawner's keep at a check
+      tick, for the reason given in claim 4's Backing; aircraft holders, since no part here gives an
+      aircraft holder a refused target; and building holders, since a building's own attack
+      processing (S-0215 claim 32) drops such a target at its next processing, so its records cannot
+      tell the periodic drop apart. The original's checks in a warp member's turns are `unmeasured`:
+      no part here gives a warp member a held target that the check refuses at a check tick, and
+      S-0513 claims 48 and 52 leave them unsettled. Our engine's suppression of them is `measurable`
+      in our engine (S-0513 scenario SW23 part f).
+    - Confidence: high (the cadence of the drops at check ticks, the shared phase, the drop on
+      *illegal* of a target given by an order and the absence of a timer draw, for human-controlled
+      vehicle and infantry holders in *attack* that take a checking turn in every tick, and the
+      drop on *illegal* of a target given by a search no later than the first check tick after the
+      refusal begins, for such vehicle holders in *guard*), medium (for holders in *guard*, the
+      shared phase, the absence of a timer draw and the cadence; the drop on *illegal* of a target
+      given by a search, for infantry holders; the absence of the
+      range test; the absence of a revert; the drop on *impossible*, run p5; the end of a spawner's
+      keep at a check tick; the examples of the ranks above, which are S-0301 claim 9's and rated
+      medium here, with the rank-5 keep for a vehicle holder; the chosen weapon; a building's
+      check before its pending delayed shot counts down; the
+      behaviour exception; the later drop after a missed or exempt turn; the turns cut short, the
+      check and drop in a vehicle's earlier death-frame turns, the drop by a holder that is being
+      erased, and the materialising cases for vehicles where S-0301 claim 9 orders the rank-4
+      reasons that hold; aircraft and building holders), low (the materialising cases for aircraft,
+      whose turn was read only in part; the rank-5 keep for an infantry holder; the other
+      behaviours, the place of the check in the turn otherwise, a refusal that begins inside the
+      holder's own turn of a check tick, and the original's same rules for holders of
+      computer-controlled owners and for targets that retaliation or a revert gave, all four left to
+      Open questions). For the warp members: low for the original's checks, which S-0513 claims 48
+      and 52 leave unsettled, and high as design for our engine's suppression of them
 
 ## Formulas
 
@@ -1550,6 +1721,7 @@ truncated toward zero (Notation above), so the difference is an integer.
 | Disguise draw range | 0 … 99 | random draw value (no unit) | Claim 25, part g; one ranged draw per test |
 | Passive-acquire and retaliate flags absent-key default | yes | boolean (no unit) | Import mapping |
 | Initial type coefficient | 0 | coefficient (no unit) | claim 26; absent-key replacement is separate |
+| Held-target check period | 16 | ticks | Claim 29; checks fall in the ticks whose tick number is a multiple of it |
 | Coefficient warning threshold | 10⁶ | coefficient magnitude (no unit) | Edge cases, *Out-of-range scores*; one of our constants, not the original's: the importer warns above it |
 
 ## State and ordering
@@ -1609,6 +1781,11 @@ The attack-move searches of claim 23 (a) that run as for an object with no targe
 whatever the target before: for them the two rows with the target before "none" apply, and claim
 23 (a) then gives what follows.
 
+These rows are one search's. Between searches, claim 29's periodic check drops any held target
+of a holder that claim 29 covers and that makes the check, when the firing check answers *illegal*
+or *impossible* for it at a check tick, whether it is an opportunity target or not, the target that
+the spawner row above keeps included.
+
 For a searcher of the neutral or special house whose search can have wall candidates, the two
 rows with the target before "none" are replaced by the table of claim 25, part i, which decides
 between the wall target *W*, the best candidate and no target.
@@ -1622,7 +1799,7 @@ between the wall target *W*, the best candidate and no target.
   timer draw (scenario A1, part f). The timer reset at a dropped target (claims 27 and 28) is not
   a search draw: it comes inside the action that destroys, removes, cloaks or buries the object,
   at both cloak moments of claim 28. Its place against the destruction's own draws (S-0312
-  claim 1) is open (Open questions). At a crush the draws follow claim 27's order: per removed
+  claim 1) is open (Open questions). Claim 29's periodic check and its drops take no draw. At a crush the draws follow claim 27's order: per removed
   object in the cell layer's listing order, a vehicle's animation picks (S-0210 claim 4) before
   its holders' timer draws, the holders in creation order. Scenario A18 part f tests the
   holders' order and the order between removed objects (medium); the animation picks' place
@@ -2119,7 +2296,7 @@ set in the test map's override sections.
   of the attacker at or before that processing; the run is void if it never takes the attacker
   as its target.
 
-**A6: keeping and replacing targets (claims 4, 19, 21, 23, 24).**
+**A6: keeping and replacing targets (claims 4, 19, 21, 23, 24, 29).**
 - *Part a:* a firer whose type has the attack-friendlies flag (set in the test map), with *X* and
   *Y* of the firer's own house, so that the person can move them, and no other object within the
   firer's range. The firer picks *X* by itself; *X*
@@ -2141,26 +2318,33 @@ set in the test map's override sections.
 - *Part f (spawner, busy, impossible and re-pick cases, claims 4 and 24):* firers whose types have
   the attack-friendlies flag (test map), with targets *X* and *Y* of the firer's own house, so that
   the person can move them, no other object within the firer's range, and the target recorder
-  running. *Busy:* a firer of a spawner type
-  (S-0301) picks *X* by itself; on every search made while its spawned aircraft are launching, the
-  target stays and the spawned aircraft keep theirs. *Impossible, spawner:* after it has picked *X*
-  by itself, the spawner firer is disabled (a disabled firer gets the answer *impossible*, S-0301
-  claim 9), for example by a weapon that disables its victims; at its next search it keeps *X* and
-  its spawn controller resets as S-0506 claim 11 gives. Record the controller target and slot
-  states, distinguishing them from the firer's kept target. Repeat with a missile already in
-  flight: expect it to continue to its fixed aim point, not retarget or disappear
-  (S-0506 scenario R7). Since *X* was kept, not set again, it is still an
-  opportunity target: once the firer is no longer disabled and *X* is moved out of range with *Y*
-  in range, the spawner switches to *Y* (as in part a). *Impossible, other firer:* a firer that is not of a
-  spawner type, disabled in the same way, drops *X* at its next search, and the same search picks
-  *X* again (table C does not reject on *impossible*), so the recorder shows *X* throughout; *X* is
-  then no longer an opportunity target (claim 24). Once the firer is no longer disabled, *X* is
-  moved out of range with *Y* in range: the firer keeps *X* and never switches to *Y* by itself
-  (compare part a). *Falsified if:* the spawner's target changes while it is launching, its
-  controller keeps its target in the *impossible* case, an already flying released missile
-  changes its aim point because of the reset, the spawner keeps *X* when *X* is
-  moved out of range afterwards, or the other firer switches to *Y*. (If the recorder shows
-  no search while a firer is disabled, the *impossible* cases are not decided.)
+  running. *Busy:* a firer of a spawner type (S-0301) picks *X* by itself; on every search made
+  while its spawned aircraft are launching, the target stays and the spawned aircraft keep theirs.
+  *Impossible:* a firer that is not of a spawner type, whose weapon is given a rate-of-fire delay of
+  200 ticks in the test map, picks *X* by itself and fires at it once; a run in which *X* is
+  destroyed decides nothing. *X* is unarmed and of a type
+  that does not cloak by itself, and there is a cloaking building of the firer's house whose field
+  lies within the firer's range, and no sensor of the firer's house on the map. While the countdown
+  runs, the person moves *X* onto a cell at the edge of the field, where it stops and cloaks, and by
+  scripted input orders it one cell out of the field in the tick in which it becomes fully cloaked.
+  The span from that tick to the start of its uncloak is the hidden span; a run in which a tick
+  whose tick number is a multiple of 16 falls in it decides nothing, since claim 29 would drop *X*
+  there. While it is fully cloaked, *X* is hidden from the firer's house and the firing check
+  answers *impossible* for it (S-0516 claim 24, the firer's mean weapon damage being above 0).
+  S-0516 claim 14 keeps it at both cloak moments, since the holder has the same owner. *Expected:* a
+  search of the firer within the span drops *X*, and the same search picks *X* again (table C's
+  cloak row does not reject an object of the searcher's own house, and table C does not reject on
+  *impossible*), so the recorder shows *X* throughout; *X* is then no longer an opportunity target
+  (claim 24). Once *X* is out of the field and seen again, it is moved out of range with *Y* in
+  range: the firer keeps *X* and never switches to *Y* by itself (compare part a). A run decides
+  this case only if the firer's search falls within a hidden span that holds no tick whose tick
+  number is a multiple of 16. The run is repeated until a search falls within such a span, as
+  part m repeats for its window; no setup here is shown to give such a span, so claims 4 and 19
+  rate this case without it (`unmeasured`). Record the cloak state of *X*
+  and the tick numbers of the span. *Falsified if:* the spawner's target changes while it is
+  launching, or in a deciding run the firer switches to *Y*, or the recorder shows no target at the
+  end of the search tick in the hidden span. (A spawner's keep on *impossible* and its controller
+  reset have no case here: claim 4's Backing.)
 - *Part g (attack-move, claim 23):* an attack-move order on a cell 20 cells away, through an enemy
   standing 6 cells from the route and within weapon range. Record position, target, current and
   queued behaviour, memory, engaged mark and targeting timer every tick. *Expected:* after the
@@ -2247,11 +2431,18 @@ set in the test map's override sections.
   range, later than *X* in the scan order, with the target recorder. *X* is of an aircraft type
   that can stay in the air over one place. After the firer has picked *X* by itself, *X* is
   ordered to take off and to fly to a cell within the firer's range, where it stays in the air.
-  *Expected:* by the firer's next search *X* has been dropped (the firing check answers
-  *illegal* against an aircraft in the air), and that search picks *Y*. The part does not judge
-  the tick of the drop (Open questions, *An earlier drop*). It decides only if *X* is in the air
-  and within the firer's range at that search. *Falsified if:* the firer still holds *X* after
-  that search while *X* is in the air within its range, or has no target after that search.
+  Record, with tick numbers, *X*'s height, the firer's target and each of the firer's searches.
+  *Expected:* the firer drops *X* (the firing check answers *illegal* against an aircraft in the
+  air) in a tick whose tick number is a multiple of 16 (claim 29), or at one of its searches,
+  and no later than the first tick after the tick in which *X* reaches its flying height whose
+  tick number is a multiple of 16. That deadline follows claim 29's phase rule whether the
+  refusal begins before or after the firer's turn. Its first search after the drop picks *Y*.
+  The part decides only if *X* stays in the air within the firer's range from the tick in which
+  *X* reaches its flying height to the firer's first search after the drop, and the firer takes
+  its turn in every tick of that span (S-0203 claim 10). A drop in a tick whose tick number is not
+  a multiple of 16 and at no search of the firer is recorded with its tick and decides nothing
+  (Open questions, *Other drops at the start of a turn*). *Falsified if:* the firer still holds
+  *X* at the end of that first tick, or it has no target after its first search after the drop.
 - *Part n (uncontested arrival, Q-0162 questions 1 to 3):* a tiny flat skirmish map, one
   human-owned ordinary armed infantry unit and one ordinary armed vehicle, tested separately,
   plus one bystander computer player kept away. Stock types, no engine add-on and no mods (the named test files of a scenario excepted), game speed
@@ -2286,6 +2477,124 @@ set in the test map's override sections.
   the converted destination is not *X*'s last cell, or a qualifying non-engaged fall-back
   in *attack* preserves it. Repeat each run three times; a run without the specified engaged
   state at removal does not decide that case.
+- *Part p (the periodic held-target check, claim 29):* the test warhead *H*, the test weapon *W*
+  and the defender *D* of S-0304 scenario V1 (a stock vehicle type whose single weapon is
+  replaced by *W*), with *H*'s value 0 % against the armour class of the type of the target *X*
+  and 100 % against every other class. *X* is an enemy vehicle of the computer house whose weapon
+  is replaced by one with 0 % against every class, so that it never fires, standing 3 cells from
+  *D* on open ground that *D* can reach, within *W*'s range (as in S-0304 V1 run 2). Record every
+  tick, with tick numbers: *D*'s target, shots, rearm countdown, targeting
+  timer and current behaviour, and the random-state recorder's draws with their ranges.
+  - *Run p1:* *D*, which has not fired, is ordered by scripted input to attack *X* with
+    force-fire held. The order is applied in four series, in ticks whose tick numbers leave the
+    remainders 1, 5, 9 and 13 when divided by 16, three runs each, and the tick of application
+    is recorded for each run. Repeat with an infantry *D* of a stock type whose single weapon is
+    replaced by *W*. For run p1 the test map gives the normal targeting delay (S-0215, F6) a
+    value of 200 ticks, so that *D*'s targeting timer, restarted by its last search in *guard*
+    before the order, usually has more than 10 ticks left at the drop tick, where claim 27's
+    reset would draw. A run in which *D*'s targeting timer has 10 ticks or fewer left at its turn
+    of the drop tick decides nothing for the absence of a timer draw, and each series is repeated
+    until it has at least one run, for each holder kind, that decides it. *Expected:* *D* makes
+    no shot at *X* and drops it in its turn of the first
+    tick whose tick number is a multiple of 16 after the tick in which the order is applied, so
+    15, 11, 7 and 3 ticks after that tick in the four series. A run in which *D* misses its turn
+    in that tick (S-0203 claim 10) decides nothing.
+    No draw over 4 to 8 ticks falls in *D*'s turn of that tick, and its targeting timer counts
+    on without a reset there. *D*'s behaviour stays *attack* up to its next processing and then
+    does what S-0215 gives with no target.
+  - *Run p2:* as run p1 with the vehicle *D*, whose weapon *W* is given a rate-of-fire delay of
+    40 ticks in the test map. *D* first fires at a second enemy vehicle *Y*, an armed-and-legal
+    target, and is ordered onto *X* with force-fire while its countdown from that shot runs, as
+    in S-0304 V1 run 4b. *Expected:* *D* keeps *X* at every tick whose tick number is a multiple
+    of 16 at which its countdown has not run out at its turn, and drops *X* at the first such
+    tick at which it has. A run in which no tick whose tick number is a multiple of 16 falls
+    after the order's tick and before the tick in which the countdown runs out decides nothing.
+  - *Run p3 (the chosen weapon):* a stock vehicle type with two weapons for which S-0304 claim 6
+    chooses the second against *X*, with its first weapon replaced by *W* and its second by a
+    weapon with 100 % against every class whose damage cannot kill *X* within the run, is ordered
+    onto *X* as in run p1. *Expected:* it keeps *X* at every tick whose tick number is a multiple
+    of 16 for 100 ticks and fires at it with its second weapon. A run in which *X* is destroyed
+    decides nothing.
+  - *Run p4 (a rank-4 refusal against a running countdown):* S-0306 scenario P16 part i's
+    landed enemy aircraft and test vehicle, without the test building, the vehicle's weapon given
+    a rate-of-fire delay of 200 ticks in the test map. The vehicle is ordered to attack the
+    aircraft, fires at it once, and the aircraft's owner then orders it up as in that part, to a
+    cell of open ground that the vehicle can reach, within the vehicle's range. Record, every
+    tick, the aircraft's height and the cell under it, and the tick in which the vehicle's
+    countdown runs out. A run
+    counts only if the countdown has not run out at the end of the first tick whose tick number
+    is a multiple of 16 after the tick in which the aircraft reaches its flying height.
+    *Expected:* the vehicle drops the aircraft, while its countdown still runs, in a tick whose
+    tick number is a multiple of 16, no later than that tick, as claim 29's phase rule gives
+    whether the refusal begins before or after the vehicle's turn. A run that does not count, or
+    in which the vehicle misses its turn in a tick of that span (S-0203 claim 10), decides
+    nothing.
+  - *Run p5 (the drop on *impossible*):* the vehicle *D* of run p2, with its rate-of-fire delay of
+    200 ticks, and an enemy vehicle *X* of the computer house that is unarmed, of a type that does
+    not cloak by itself and whose armour class is not that of run p1's *X*, so that *H* gives it
+    100 % and the firing check refuses it for no versus reason. *X* stands 3 cells from *D*, on
+    open ground that *D* can reach, within *W*'s range, in the field of a cloaking building of its
+    owner, fully cloaked. A sensor vehicle of *D*'s house
+    stands next to *D*, so that *X*'s cell is sensed by *D*'s house, and no other object is within
+    *D*'s scan reach. *D* first fires at an armed-and-legal enemy vehicle *Y*, which is then
+    removed by the test map's trigger, and is ordered by scripted input to attack *X* while its
+    countdown runs. While the sensor is next to it, *X* is shown to *D*'s house, the attack cursor
+    appears on it without force-fire, and the order is accepted (S-0304 claim 2 does not apply,
+    since *X* is not illegal). Record that *D* holds *X* from the order's tick. The sensor is then
+    moved away by scripted input, starting in the tick after the order is accepted, until *X*'s
+    cell is no longer sensed by *D*'s house. Record the refusal's tick, the first tick at the end
+    of which *X*'s cell is not sensed by *D*'s house (the recorder reads the cell's sensed state
+    for that house each tick; *X* is no longer drawn for it from the next frame), and the tick in
+    which *D*'s countdown runs out. A run counts only if the refusal's tick is at least 17 ticks
+    before *D*'s countdown runs out, so that the first tick after it whose tick number is a
+    multiple of 16 comes while the countdown still runs. From then on *X*
+    is hidden from *D*'s house, the firing check answers *impossible* for it (S-0516 claim 24,
+    rank 4, above the countdown's rank 5), and no search of *D* can pick it again, since table C's
+    cloak row rejects it. *Expected:* *D* drops *X* in a tick whose tick number is a multiple of
+    16, no later than the first such tick after the refusal's tick, and holds no target at the
+    end of that tick or of any later tick of the run; it makes no shot at *X*. Were the hiding no
+    refusal, *D* would keep *X* and fire at it once its countdown had run out. The run lasts until
+    50 ticks after that countdown has run out. *Falsified if:* *D* still holds *X* at the end of
+    the first such tick after the refusal's tick, or makes a shot at *X*. A run in which *D* does
+    not hold *X* after the order, or that does not count, decides nothing. A run in which *X* starts
+    uncloaking or *D*'s house senses *X*'s cell again before that check tick decides nothing. An
+    earlier drop is treated as *Earlier drops* below gives.
+  - *Run p6 (the shared phase):* run p1's map with the vehicle *D*, and for *D*'s house a war
+    factory and the credits to build vehicles of *D*'s type, whose weapon is *W* in the test map.
+    *D*'s house builds such a vehicle *E*. Record the tick *c* in which *E* first appears in the
+    recorder's list of objects. Repeat the build until two values of *c* are recorded whose
+    remainders when divided by 16 are not 0 and differ from each other. After each such build,
+    once *E* has left the factory and stopped, *D* and *E* are ordered together by scripted input
+    to attack *X* with force-fire held, the order being applied in a tick whose tick number
+    leaves the remainder 1 when divided by 16. *Expected:* *D* and *E* drop *X* in the same tick,
+    15 ticks after the order's tick, whose tick number is a multiple of 16. *Falsified if:* *E*
+    drops *X* in the tick that a check counted from its creation tick would give (the first tick
+    after the order's tick whose tick number leaves *c*'s remainder when divided by 16), or drops
+    it earlier in another tick, as *Earlier drops* below gives. A run in which *D* or *E* misses
+    its turn in that tick (S-0203 claim 10) decides nothing.
+    Then repeat run p6 with run p1's infantry *D* in place of the vehicle, and for *D*'s house a
+    barracks and the credits to train infantry of *D*'s type in place of the war factory. The
+    house trains such an infantry unit *E*, and the record of *c*, the repeats until two non-zero
+    remainders that differ, the order once *E* has left the barracks and stopped, and the
+    *Expected:* are as above. *Falsified if:* the infantry *E* drops *X* in the tick that a check
+    counted from its creation tick would give, or drops it earlier in another tick, as *Earlier
+    drops* below gives. A run in which either misses its turn in that tick decides nothing.
+  - *Earlier drops.* In every run of this part the holder is human-controlled, in *attack*, not
+    berserk, with a weapon that does damage, and its target is an enemy on open ground that it can
+    reach, or, in run p4, an aircraft above such ground. No start-of-turn drop other than claim
+    29's reaches such a holder and target (medium, `measurable` by these runs). So a drop of the
+    target in a tick whose tick number is not a multiple of 16, no later than the tick by which
+    the run expects the drop (in run p3, in any tick of the run), falsifies claim 29's cadence.
+    The one exception is run p4 while the cell under the aircraft is one the vehicle cannot reach,
+    such as the pad it lifts off from: there the drop for a target the holder can neither reach
+    nor hit from where it stands may apply (Open questions, *Other drops at the start of a turn*),
+    so a drop then is recorded with its tick and decides nothing.
+  - *Falsified if:* *D* fires at *X* in run p1, or a holder still holds its target at the end of
+    the tick in which the run expects the drop, or run p2's *D* drops *X* in a tick whose tick
+    number is a multiple of 16 while its countdown runs. In run p3 a drop of *X* in such a tick
+    falsifies it, and in a run p1 that decides the absence of a timer draw, a draw over 4 to 8
+    ticks in *D*'s turn of the drop tick or a reset of its targeting timer there. Runs p5 and p6
+    have their own falsifiers above.
 - *Falsified if:* any part differs.
 
 **A7: threat preference and distributed fire (claims 13, 17, 20).**
@@ -3165,8 +3474,9 @@ hit or leaves the map. Each part runs 5 times from a fresh game, unless it says 
   with a healing weapon is not given by the combat specs, so whether the fall-back of claim 10 can
   give it a non-allied candidate is open.
 - Whether a target that one search drops and then picks again counts as an opportunity target
-  (claim 24 gives that it does not, because the object is the same as before the search); scenario
-  A6, part f, decides it if a disabled firer still searches.
+  (claim 24 gives that it does not, because the object is the same as before the search). No
+  scenario here is shown to reach it: A6, part f, decides it only if the firer searches within a
+  hidden span that holds no multiple of 16 (low).
 - The limited-scan mark of claim 22 rests on one reading of the driving locomotor; the hovering
   and ship locomotors' conditions were not examined.
   Which behaviour a unit is in when its phasing in ends, and so whether the opportunity
@@ -3197,13 +3507,55 @@ hit or leaves the map. Each part runs 5 times from a fresh game, unless it says 
   established. Scenario A5 part b reads the stock type's flags before its runs and is void if it
   has neither, so until it runs Q-1761 question 1 is answered per case, not for the stock
   building.
-- An earlier drop of a target the firing check refuses. Is a held target that the firing
-  check answers *illegal* or *impossible* for dropped before the attack behaviour's own drop
-  (S-0304 claim 2, S-0215 claim 32) or the firer's next search (claim 19)? If so, on which
-  ticks, and in which behaviours? A measurement should record the tick of every such drop with
-  the target recorder, with the behaviour current at the time, to show whether the drops follow
-  a fixed cadence. Until this is established, scenario A6 part m and S-0306 scenario P16 part i
-  do not judge the tick of the drop.
+- Other drops at the start of a turn. Claim 29's check is not the only rule that can drop a held
+  target at the start of a holder's turn. The others, beyond those S-0215 gives (its claims 18,
+  26 and 33, for behaviours other than *attack*), are not given here (low). They concern
+  holders and targets outside claim 29's measured runs: a holder of a computer-controlled owner
+  whose target is allied to it, a holder whose weapon heals, a holder whose berserk state ends, a
+  holder in a behaviour other than *attack* and *guard*, and a holder that cannot reach its
+  target's place, or rides in an open-topped transport, while its target is out of its weapon's
+  range. Scenario A6 part p assumes that none of them reaches a human-controlled holder in
+  *attack*, not berserk, whose weapon does damage and whose target is an enemy on or above ground
+  that it can reach, and rests its falsifiers on that (part p, *Earlier drops*, rated there). A
+  scenario that sees a held target
+  dropped in a tick that claim 29 and the other claims here do not give should record the
+  holder's owner, its target's owner and the holder's behaviour.
+- A refusal that begins in the holder's turn (claim 29): when a refusal begins inside the
+  holder's own turn of a check tick, for instance through its own behaviour processing or firing
+  step in that turn, whether that turn's check acts on it, or only the check of a later check
+  tick, depends on the check's place in the turn, which *Place of the periodic check* below
+  leaves open too (low, `unmeasured`: no part here starts a refusal inside the holder's turn).
+- Other holders and targets (claim 29): whether the original applies claim 29's rules unchanged
+  to holders whose owner is computer-controlled, and to targets that retaliation or a revert gave,
+  is not established here. In our engine they apply to the holders of every player house, AI
+  houses included (claim 29); this question bears on the neutral and special houses and on those
+  targets. The leaning is that they do (low, `unmeasured`: runs p1 to p6 give only a
+  human-controlled holder with a target from an order or a search).
+- Other behaviours (claim 29): whether a holder whose current behaviour is other than *attack*,
+  *guard*, *capture* and *sabotage* makes claim 29's check, such as one in *hunt*, *area guard* or
+  *move*, or in *enter*, *repair*, *harvest*, *return*, *unload*, *rescue* or *missile*, in which
+  no weapon is aimed at the held target, and what the firing check would then answer for that
+  target, is not specified here (low, `unmeasured`: no part here gives such a holder a target at
+  a check tick). The owning
+  specs of those behaviours (S-0215 and the economy specs) give their targets' handling as they
+  stand.
+- Place of the periodic check (claim 29): where in a holder's turn the check falls, against its
+  behaviour processing, its searches and its firing step (apart from a building's pending delayed
+  shot, which claim 29 places), and so which behaviour counts as current
+  for the *capture* and *sabotage* exception when a queued behaviour starts in that same turn, is
+  not established here (low, `unmeasured`: a target the check refuses is one the firing step does
+  not fire at either, so no shot tells the order apart, and no part here starts a queued behaviour
+  in a check tick).
+- A materialising vehicle or aircraft on which a temporal beam is locked: whether it makes claim
+  29's check in its turns, drops a held target in each of them as one being erased does, or keeps
+  it, is not established here (not rated: no part here gives a target to a materialising holder).
+- Claim 29's check by a materialising vehicle or aircraft on which no temporal beam is locked,
+  when a rank-4 reason that answers *illegal* or *impossible* holds as well as the materialising
+  firer's *rearming*, and no order between the two within rank 4 is given (S-0301 claim 9 ranks
+  the *rearming* above a deactivated firer's *illegal* and the *illegal* against the firer's own
+  current drained building, and S-0513's Changes for S-0301 rank it above the *illegal* for a
+  target with a superweapon warp pending): whether that holder keeps or drops its target is not
+  established here (not rated: no part here gives a target to a materialising holder).
 - Q-2006 question 3, the original's side of one case. A held object that a revert restores after
   it is destroyed or goes off the map (claim 27): what the original's holder does with it while
   it stays in play as a dying object or stays off the map, and what the firing check answers for
@@ -3233,9 +3585,9 @@ placement is known is no longer current. This is proposed backing, not a measure
 No change is needed to its no-link deck-region definition: claims 7 and 11 here explicitly
 omit that comparison when the searcher's own deck read has no link.
 
-S-0306 claim 23 (revision 33, companion of this revision) gains the firing check's water and
-land rows, which depend on the firer's type, and ranks them at rank 4 of S-0301 claim 9; claim
-18 here relies on the land row and on that rank. Its first
+S-0306 claim 23 gives the firing check's water and land rows, which depend on the firer's
+type, and ranks them at rank 4 of S-0301 claim 9; claim 18 here relies on the land row and on
+that rank. Its first
 row's *rearming* answer is limited to the firer's own gripped unit, as S-0301 claim 9 and S-0607
 claim 11 give, so scenario A6 part m here (a held target that lifts off is dropped) agrees with
 it.
@@ -3288,6 +3640,148 @@ failures that do not give the move up.
 
 S-0215 claim 33 already includes the charging break-off exception and its backing through
 scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from timer resets.
+
+S-0304 claim 2: for an actor that claim 29 here covers (a human-controlled holder whose target
+came from an order or a search, as the force-fire order gives), the drop comes at claim 29's
+periodic check here, and for a building in *attack*
+also at its own attack processing (S-0215 claim 32), whichever comes first. Its sentence "It
+drops the object as its target, and stops the attack, at the first check of its attack behaviour
+whose answer is *illegal*." becomes "It drops the object as its target at the first of two
+occasions at which the answer is *illegal*: the periodic held-target check of S-0309 claim 29, in
+its turn of a tick whose tick number is a multiple of 16, and, for a building, a processing of its
+*attack* behaviour (S-0215 claim 32). An actor that drops it at the periodic check stops the
+attack at its attack behaviour's next processing after the drop." Its sentence "So the target is
+dropped at the first check of the attack when none of those answers holds then, and otherwise
+at the first check after they have ended (for the countdown,
+after it has run out)." becomes "So the target is dropped at the first such occasion at which none
+of those answers holds. For a vehicle or infantry unit that takes a checking turn in every tick,
+that is 1 to 16 ticks after the tick in which the order is applied (orders are applied after the
+turn pass, S-0203 claim 7) when none holds then, and otherwise the first tick whose tick number is
+a multiple of 16 after they have ended (for the countdown, after it has run out). A building,
+which processes *attack* every tick or every other tick (S-0215 claim 32), normally drops it at
+that processing first." In scenario V1, run 4b's expected "drops it at the first check after that"
+becomes, for its vehicle and infantry defenders, "drops it at the first tick after that whose tick
+number is a multiple of 16", with the tick numbers recorded. Level: high for the drop at the first
+such tick when no higher answer holds, for vehicle and infantry actors; medium for the part that
+rests on the ranks (*rearming*) for vehicle actors, which claim 29 here rates medium, low for that
+part for infantry actors, as claim 29 here rates the rank-5 keep for an infantry holder, and medium
+for aircraft and building actors, including a building's drop at its own processing (claim 29
+here rates building holders medium). Backing: `measurable` (scenario A6 part p here, runs p1 and p2,
+which reuse V1 runs 4 and 4b with tick numbers, for vehicle and infantry actors, and in which a drop
+off a multiple of 16 before the expected tick falsifies the cadence). For buildings, the drop at the
+building's own processing rests on S-0215 claim 32's backing, and the periodic check for a building
+or an aircraft is `unmeasured` (medium) as claim 29 here gives. Claim 2's Confidence line "follows
+the attack behaviour's handling of an illegal target and has not been observed" becomes "follows
+S-0309 claim 29's periodic check, and for a building also S-0215 claim 32's attack processing", and
+its Open questions line "Claim 2's handling after the force-fire order (dropping the target at the
+first check that answers *illegal*) should be checked against S-0215's attack behaviour, for
+vehicles and infantry as well as buildings." is removed, since claim 29 here and S-0215 claim 32
+give that handling for every holder kind that claim 29 here covers. Level: as given just above for
+the parts of claim 2. Backing: as given just above.
+
+S-0306 claim 23: its text, its Backing and two items of its Confidence line leave to S-0309
+whether another rule drops earlier a held target that its first row refuses. Claim 29 here
+gives that drop. The quoted lines become:
+- Its text, "For a building the drop is rated as S-0215 claim 32 rates it, and for a unit low
+  (`unmeasured`). Whether another rule can drop such a target earlier is an open question of
+  S-0309.", becomes "For a building the drop is rated as S-0215 claim 32 rates it. A unit that
+  S-0309 claim 29 covers drops it at that claim's periodic check, no later than its first
+  checking turn at the first check tick in which its turn comes after the refusal begins, as
+  that claim's Phase rule gives. Other drops at the start of a turn are listed in S-0309's Open
+  questions (*Other drops at the start of a turn*)." Level: medium for a vehicle holder in
+  *attack* or *guard* that takes a checking turn in every tick, for the drop no later than that
+  turn, and low for other units. Backing: `measurable` for that vehicle (scenario A6 part p run
+  p4 here, in *attack*, and part m, in *guard*), `unmeasured` for other units (no part here
+  gives one a target that lifts off).
+- Its Backing's "but cannot tell the first row's refusal from an earlier drop by another rule,
+  an open question of S-0309" becomes "but does not judge the tick of the drop; S-0309 scenario
+  A6 part p run p4 and part m judge it for a vehicle holder", and its "`unmeasured` for a unit's
+  deadline for the drop (no later than the first *illegal* answer): part i does not judge the
+  tick of the drop" becomes "`measurable` for a vehicle holder's deadline for the drop, through
+  S-0309 scenario A6 part p run p4 and part m, and `unmeasured` for other units, which no
+  scenario of either spec gives a target that lifts off". Level and backing: as in the items of
+  its Confidence line below.
+- Its Confidence items "low: that the first row is what refuses it, rather than another rule
+  dropping it earlier (part i cannot tell the two apart, see the backing)" and "low: a unit's
+  deadline for that drop, no later than the first *illegal* answer (`unmeasured`)" become "medium:
+  that the first row's refusal is what drops it, at S-0309 claim 29's periodic check, for a vehicle
+  holder in *attack* (S-0309 scenario A6 part p run p4); low for other units, and for a vehicle
+  holder in *guard*, whose drop S-0309 scenario A6 part m allows at a search too" and "medium: a
+  vehicle holder's deadline for that drop, S-0309 claim 29's Phase rule, in *attack* or *guard*
+  (S-0309 scenario A6 part p run p4 and part m); low for other units (`unmeasured`)". Level: as each
+  item gives. Backing: `measurable` for the vehicle holder in the runs each item names, `unmeasured`
+  for the low items.
+
+S-0215 claim 32: no change needed. A building in *attack* still drops a refused target at its
+own processing; for a building that claim 29 here covers, the periodic check can come first.
+S-0215's *attack* and *guard* could point to claim 29 here for the drop of a held target that
+the firing check refuses. Its other behaviours, and the economy specs' behaviours, need no
+change: whether a holder in them makes the check is left open here (Open questions, *Other
+behaviours*).
+
+S-0516 claim 14 and scenario CS9 part c: a holder that claim 29 here covers and that keeps a
+cloaking target under that claim's exceptions can lose it at claim 29's check here, at the first
+tick whose tick number is a multiple of 16 at which the firing check refuses it, for example by
+S-0516 claim 24's hidden-target refusal. In CS9 part c the refusal cases therefore end with that
+drop. Its sentence "a lost target makes that trial inconclusive" can say that a loss at such a tick
+in a refusal case is expected, and that shot creation is judged in the turns before it. Level:
+medium (claim 29 here, for a refusal by rank). Backing: `measurable` (that part, with tick numbers).
+
+S-0501 (the aircraft's take-off): "An aircraft that is taking off keeps its target unchanged
+until its height reaches half its cruise height" is a rule of its movement, and claim 29 here
+does not change it. An aircraft that claim 29 here covers can still lose a target that the
+firing check answers *illegal* or *impossible* for at claim 29's check in that time, at a tick whose
+tick number is a multiple of 16. The sentence gains that exception: "An aircraft that is taking off
+keeps its target unchanged until its height reaches half its cruise height, except that S-0309 claim
+29's periodic check can drop it in that time." Level: medium (aircraft holders, claim 29 here).
+Backing: `unmeasured` (no part here gives an aircraft that is taking off a refused target).
+
+S-0310 claim 11 and scenario T10 part d: for a healer that claim 29 here covers (T10's healers
+hold targets from orders), the reply "keeps it and does nothing in this step" lasts only to
+claim 29's next check here: at the first tick whose tick number is a multiple of 16 at
+which the firing check answers *illegal* (no higher-ranked answer holding),
+the healer drops the target. T10 part d's expected "it holds
+the target and does nothing" holds only up to that tick, and its falsifier "(d) drops it" should
+except a drop at such a tick. Level: medium. Backing: `measurable` (that part, with tick numbers).
+
+S-0310 claim 11 and scenario T10 parts g and h: its sentence "What the infantry unit does with
+the answer belongs to its attack behaviour (S-0215), not to this spec." becomes "An infantry unit
+whose default weapon is a healing weapon replies to *illegal* in its own firing step, in each of
+its turns, by the table above with *infantry* in place of *a vehicle in the glossary sense*: it
+drops a target that is not infantry or is at full health, and keeps an infantry target below
+full health and does nothing in that step." So T10 parts g and h stand unchanged: claim 29 here
+does not delay them, since that firing step drops the vehicle, and the infantry target once it
+is at full health, in the healer's first turn in which the answer holds, and the infantry
+healer's *illegal* outranks *rearming*. Its keep of an infantry target below full health that
+still gives *illegal* (for instance by a versus value of exactly 0) lasts only to claim 29's
+next check here, as for the vehicle healer of part d. Its Confidence item "low (that the
+infantry answer shows through its reply as S-0215 gives it)" becomes "medium, `unmeasured` (the
+infantry healer's reply in its firing step; not measured: no part sets up the wrong-kind or
+full-health cases with the order accepted)". Level: medium. Backing: `unmeasured` (not
+measured: no part sets up the wrong-kind or full-health cases with the order accepted; T10 parts
+g and h are evidence only if their orders are accepted, as S-0310 claim 11's Backing gives).
+
+S-0513 claim 39: a warp member's *illegal* answer
+from the launch until its departure update makes every holder that claim 29 here covers and that
+takes its checks drop
+it at its first checking turn in a check tick after the launch, unless an exception of claim 29
+holds there. Such a holder holds the member without a break from the launch to the departure
+only if an exception held at each of its checking turns in the check ticks among the 62 ticks
+that follow the launch tick, in the last of them those of its turns that come before the
+member's update (S-0513 claim 39). Level:
+medium (the rank of that answer, S-0301's, and claim 29's exceptions). Backing: `measurable` (S-0513
+scenario SW12 parts i and j, for infantry and vehicle holders).
+
+S-0513 claims 48, 51 and 52 and S-0203 claim 4: a
+warp member's own check as a holder is claim 29's *Warp members* rule here. In the original it
+is not settled here: S-0513 claims 48 and 52 own what is established about the ordinary work of
+a member's warp turns. Our engine's warp turn contract (S-0513 claim 51) lists this check among
+the ordinary work it suppresses from the first pending update through the arrival effects, and
+S-0203 claim 4's list of that work gains it: "the periodic held-target check (S-0309 claim
+29)". Level: low for the original, whose handling of this check in those turns is unsettled, high as
+design for our engine's suppression. Backing: `unmeasured` for the original (no part here gives a
+warp member a refused held target at a check tick), `measurable` in our engine (S-0513 scenario SW23
+part f).
 
 ## Questions for the project lead
 
