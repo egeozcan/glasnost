@@ -40,6 +40,7 @@ use super::cursor::{self, Offer};
 use super::paint::Painter;
 use super::play::{Button, GROUPS, Play, Reach, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
+use super::sidebar_art::{self, SidebarArt};
 use super::status_font;
 use crate::mapview::build::{self, GameMode, Inputs, Options};
 use crate::mapview::combat::CURSOR_PALETTE;
@@ -124,6 +125,11 @@ pub struct Session {
     alt_icon_ids: BTreeMap<TypeRef, u32>,
     /// The icon palette's RGBA (S-0103 claim 13).
     icon_palette: Option<[u8; 1024]>,
+    /// The install's sidebar button images and palette, read at the game's
+    /// start (S-0411 claim 19); `None` without the palette.
+    sidebar_art: Option<SidebarArt>,
+    /// The button images the sidebar draws and lays out (S-0411 claim 19).
+    buttons: hud::ButtonArt,
     pointer: Option<Point>,
     /// Edge momentum and its retained direction (S-0101 F9).
     edge: EdgeScroll,
@@ -298,7 +304,47 @@ impl Session {
             watch,
         )?;
         s.play.capture.layers = layers;
+        // spec: S-0411 claim 19 (the button images resolved with the local player's side group mounted, S-0005 claims 13 and 13a)
+        if let Some(side) = s.local_side(watch) {
+            let theater = glasnost_convert::map::to_vfs_theater(s.loaded.map.theater);
+            sidebar_art::mount_side(vfs, theater, side).await;
+        }
+        s.set_sidebar_art(sidebar_art::read(vfs).await);
         Ok(s)
+    }
+
+    /// The side index whose group the game mounts for the local player
+    /// (S-0005 claim 13a): that of the local house's country, or, for a
+    /// watched game, of the country of registration index 0 (an observing
+    /// local player). `None` for a country with no side.
+    fn local_side(&self, watch: bool) -> Option<u32> {
+        let w = &self.play.game.world;
+        let country = if watch {
+            // spec: S-0005 claim 13a (an observing local player counts as playing the country of registration index 0)
+            0
+        } else {
+            // spec: S-0005 claim 13a (the country the local player plays)
+            usize::try_from(w.houses.get(usize::from(self.play.local.0))?.country).ok()?
+        };
+        let side = w
+            .rules()
+            .econ
+            .tech
+            .country_side
+            .get(country)
+            .copied()
+            .flatten()?;
+        u32::try_from(side).ok()
+    }
+
+    /// Takes the game's sidebar button images (S-0411 claim 19); every
+    /// frame counts as drawable until the painter registers them.
+    pub fn set_sidebar_art(&mut self, art: Option<SidebarArt>) {
+        self.buttons = art
+            .as_ref()
+            .map(|a| sidebar_art::button_art(a, |_, _| true))
+            .unwrap_or_default();
+        self.sidebar_art = art;
     }
 
     /// A game on `loaded`, a map loaded without art (the synthetic
@@ -441,6 +487,8 @@ impl Session {
             alt_icons,
             alt_icon_ids: BTreeMap::new(),
             icon_palette,
+            sidebar_art: None,
+            buttons: hud::ButtonArt::default(),
             pointer: None,
             edge: EdgeScroll::default(),
             edge_live: true,
@@ -710,8 +758,24 @@ impl Session {
     }
 
     /// The sidebar's layout in the interface's logical pixels.
-    fn layout(&self) -> Layout {
-        Layout::new(self.ui.ui)
+    pub fn layout(&self) -> Layout {
+        Layout::with_buttons(self.ui.ui, &self.buttons)
+    }
+
+    /// The scroll button (0 up, 1 down) whose press is in progress with
+    /// the pointer over it (S-0411 claim 19, frame 1): a press that started
+    /// on it with the pointer on it now, so exactly when a release would
+    /// act (claim 18).
+    pub(crate) fn scroll_pressed(&self) -> Option<usize> {
+        let (start, _) = self.press?;
+        let p = self.pointer?;
+        match self.hud_at(start) {
+            // spec: S-0411 claim 19 (a scroll button's press in progress, with the pointer over it) and claim 18 (a page button acts on release over the button after a press there)
+            Some(HudHit::Scroll(d)) if self.hud_at(p) == Some(HudHit::Scroll(d)) => {
+                Some(usize::from(d > 0))
+            }
+            _ => None,
+        }
     }
 
     /// The interface scale.
@@ -927,6 +991,23 @@ impl Session {
 
     /// Registers the icon frames with the painter (once per game).
     pub fn register_art(&mut self, painter: &mut Painter) {
+        if let Some(art) = &self.sidebar_art {
+            // spec: S-0411 claim 19 (every one of these images drawn with the dedicated sidebar palette)
+            let row = painter.add_palette(art.palette);
+            let mut ok = std::collections::BTreeSet::new();
+            for (k, f) in art.files.iter().enumerate() {
+                let Some(f) = f else { continue };
+                for (i, img) in f.frames.iter().enumerate() {
+                    if let Some(img) = img {
+                        let id = sidebar_art::BUTTON_SPRITES + k as u32;
+                        if painter.add_sprite(id, i as u32, img, row) {
+                            ok.insert((k, i));
+                        }
+                    }
+                }
+            }
+            self.buttons = sidebar_art::button_art(art, |k, i| ok.contains(&(k, i)));
+        }
         let Some(pal) = self.icon_palette else {
             return;
         };
@@ -2480,6 +2561,8 @@ impl Session {
             Some((id, 0, img.width() as i32, img.height() as i32))
         };
         let mut model = self.play.hud_model(&name, &art);
+        model.buttons = self.buttons;
+        model.scroll_pressed = self.scroll_pressed();
         model.view_box = self.radar_view_box();
         model.focus_cameo = match self.hud_focus.at {
             Some(HudHit::Cameo(n)) if self.hud_focus.shown => Some(n),

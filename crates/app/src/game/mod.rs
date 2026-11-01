@@ -34,6 +34,7 @@ pub mod pump;
 pub mod report;
 pub mod scroll;
 pub mod session;
+pub mod sidebar_art;
 pub mod status_font;
 pub mod window;
 

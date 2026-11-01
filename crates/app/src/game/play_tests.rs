@@ -325,6 +325,49 @@ fn right_click_cancels_a_mode_before_deselecting() {
     assert_eq!(p.game.replay().orders.len(), orders);
 }
 
+/// spec: S-0411 claim 19 (Mode buttons: a click on the sell or repair button while its mode is
+/// active ends that mode, as a click while inactive enters it, S-0214 claim 13; Mode lighting:
+/// our engine shows frame 1 in every frame drawn while the mode is active, however it was
+/// entered, and frame 0 otherwise)
+#[test]
+fn s0411_claim19_a_mode_buttons_click_ends_its_active_mode() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
+    let frame = |p: &Play| {
+        let m = p.hud_model(&|_| String::new(), &|_| None);
+        [Mode::Sell, Mode::Repair].map(|x| hud::mode_frame(m.mode == Some(x)))
+    };
+    assert_eq!(frame(&p), [0, 0]);
+    p.mode_click(Mode::Sell);
+    assert_eq!(p.tool, Tool::Mode(Mode::Sell));
+    assert_eq!(frame(&p), [1, 0]);
+    p.mode_click(Mode::Repair);
+    assert_eq!(
+        p.tool,
+        Tool::Mode(Mode::Repair),
+        "the other mode replaces it"
+    );
+    assert_eq!(frame(&p), [0, 1]);
+    p.mode_click(Mode::Repair);
+    assert_eq!(
+        p.tool,
+        Tool::Select,
+        "a click on the active mode's button ends it"
+    );
+    assert_eq!(frame(&p), [0, 0]);
+    // A mode entered another way shows frame 1 too.
+    p.tool = Tool::Mode(Mode::Sell);
+    assert_eq!(frame(&p), [1, 0]);
+    p.mode_click(Mode::Sell);
+    assert_eq!(p.tool, Tool::Select);
+    assert_eq!(frame(&p), [0, 0]);
+}
+
 /// spec: S-0214 claim 19 (with force-select eligible objects are added, not toggled: a selected one inside stays selected, and ineligible candidates clear nothing)
 #[test]
 fn claim_19_force_select_adds() {
