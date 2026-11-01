@@ -57,7 +57,7 @@ old text and is removed.
 | Departure clears no holder's target and takes no holder timer draw over 4 to 8 ticks, whatever the timer shows (more than 10 ticks left and at most 10) | tested | `claim39_departure_clears_no_holder_and_takes_no_timer_draw`: *h*1 with 50 ticks left and *h*2 with 10; the member's departure update alone. Both still hold *m*, both timers are unchanged, and the stream equals that of a control world whose holders hold nothing (here the warp-out animation has a constant delay, so the update takes no draw at all) |
 | A holder with an override in effect does not revert at the departure (S-0215 claim 10 Changes) and keeps the member and its suspended behaviour | tested | `claim39_departure_reverts_no_overridden_holder`. The departure is no longer among `combat::held`'s revert causes, because nothing is called there |
 | A projectile in flight towards the member keeps it as its target object; its target does not become the old cell (S-0306 claim 17 Changes) | tested | `claim39_a_projectile_in_flight_keeps_the_member`: an arcing shot fired at *m* before departure still has `Target::Object(m)` after the member's departure update |
-| Where that projectile flies while the member waits to land, and whether it can hit it | request | Open question in the spec. **Q-2212**. Interim: the projectile's own next update finds the target object off the map and drops it, as for any off-map target object, and flies to its stored point (`combat::projectile`, comment at the off-map drop) |
+| Where that projectile flies while the member waits to land, and whether it can hit it | tested (intake 64) | **Q-2212**, answered by S-0306 r57 claim 17 and built at intake 64 ([intake64-S-0306.md](intake64-S-0306.md)): the projectile keeps the member, reads its departure position until it appears, then turns to the landing point; the area damage misses it off the map. Intake 60's interim (the projectile's own next update dropped the off-map target object) is gone |
 | A holder's own processing after departure: whether it drops the member, and whether it may fire at it while it phases in | request | Open question in the spec. **Q-2211**. Interim: S-0309 claim 27's DECIDED rule. `held::firing_target` treats the off-map member as no target, and `held::turn_start_drop` drops it at the start of the holder's next turn, with no draw and no revert. `claim39_whole_tick_holder_first_then_the_interim_drop` (one infantry holder, made before the member) shows both halves: in the departure tick the holder's turn comes first and it still holds *m* at the end of the tick, with its timer unchanged; in the next tick its turn drops it, with the timer still unchanged (no draw) |
 | "A change is the member's step's only when it is made in the member's own update" | tested | The tests' reads between `warp::turn` calls (above) |
 | The later warp steps (a failed or redirected landing check, placement, arrival effects) do not themselves clear holders' targets | tested | `claim39_placement_and_arrival_effects_clear_no_holder` and `claim39_a_failed_and_a_redirected_landing_check_clear_no_holder` (an unprotected TOWER on the landing cell, as in SW13 part b). Before each of the member's lone updates (departure, the failed check at departure, the redirected check, placement, arrival effects), *h*1 is set to hold *m* with 50 ticks left and *h*2 with 8. After the update both still hold it, the timers are unchanged, and the stream equals that of a control world whose holders hold nothing. Only lone updates are run, so the Q-2211 turn-start drop does not take part |
@@ -103,7 +103,7 @@ old text and is removed.
 | Item | Status | Tests / notes |
 |---|---|---|
 | S-0309 claim 27: the drop, timer reset and projectile rule do not apply to the departure, then or while the member waits to land; a member destroyed by its landing check is a destroyed object | tested | The departure and killed-member tests above. `combat::held` doc comments name the departed member and the Q-2211 interim |
-| S-0306 claim 17: the departure is not a loss of target | tested | The projectile test above. Flight afterwards: **Q-2212** |
+| S-0306 claim 17: the departure is not a loss of target | tested | The projectile test above. Flight afterwards: **Q-2212**, answered by S-0306 r57 (intake 64) |
 | S-0207 claim 20 (e): the own jump's drops take no timer draw | tested | The own-jump test above. No change of behaviour (`targeters_drop` took none) |
 | S-0301: the leaving-stage answer | tested | The leaving-stage tests above |
 | S-0215 claim 10: the off-map revert cause does not include the departure | tested | The override test above |
@@ -123,7 +123,8 @@ intake's.
   kinds, firing during the phase-in, the override revert). Interim: the turn-start drop.
 - **Q-2212**: where a projectile aimed at a departed warp member flies, whether it can hit, and
   its target after a landing-check kill. Interim: the projectile's own update drops the off-map
-  target object.
+  target object. Answered by S-0306 r57 claim 17 and built at intake 64
+  ([intake64-S-0306.md](intake64-S-0306.md)); the interim is gone.
 - **Q-2213**: the leaving-stage answer for a member that a temporal beam holds. Interim: the same
   answer.
 

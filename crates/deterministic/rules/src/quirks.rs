@@ -868,6 +868,10 @@ pub struct Quirks {
     // spec: S-0306 claim 11
     #[serde(default = "on")]
     pub vertical_speed_uncapped: bool,
+    /// A warp member that departed from a high-bridge deck counts as airborne for a projectile until it appears.
+    // spec: S-0306 claim 17 and Edge cases
+    #[serde(default = "on")]
+    pub warp_deck_departure_airborne: bool,
     /// A garrisoned building's range replaces the weapon range and its air bonus.
     // spec: S-0307 claim 4
     #[serde(default = "on")]
@@ -2404,6 +2408,7 @@ impl Default for Quirks {
             stored_target_point: true,
             origin_as_missing_target_point: true,
             vertical_speed_uncapped: true,
+            warp_deck_departure_airborne: true,
             garrison_range_drops_air_bonus: true,
             range_target_on_deck: true,
             elevation_deck_cell_level: true,
@@ -3227,6 +3232,10 @@ impl Quirks {
                 self.origin_as_missing_target_point,
             ),
             ("vertical_speed_uncapped", self.vertical_speed_uncapped),
+            (
+                "warp_deck_departure_airborne",
+                self.warp_deck_departure_airborne,
+            ),
             (
                 "garrison_range_drops_air_bonus",
                 self.garrison_range_drops_air_bonus,

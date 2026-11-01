@@ -11120,6 +11120,11 @@
           "type": "boolean",
           "default": true
         },
+        "warp_deck_departure_airborne": {
+          "description": "A warp member that departed from a high-bridge deck counts as airborne for a projectile until it appears.",
+          "type": "boolean",
+          "default": true
+        },
         "warp_hold_persists": {
           "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp.",
           "type": "boolean",

@@ -186,7 +186,8 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
         ob.combat.killed = true;
         ob.combat.delay_kill_until = None;
     }
-    let airborne = crate::combat::weapon::airborne_by_height(w, id);
+    // spec: S-0306 claim 17 (a warp member killed by its landing check leaves the game before it appears: the cell it stood in at departure, or nothing when it counts as airborne by claim 17's count; quirks.warp_deck_departure_airborne)
+    let airborne = crate::combat::projectile::target_airborne(w, id);
     for p in w.projectiles.values_mut() {
         if p.attacker == Some(id) {
             // spec: S-0302 claim 1 (a firer killed since the shot: neither attacker nor attacking house)

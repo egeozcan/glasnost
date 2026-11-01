@@ -177,6 +177,10 @@ fn claim39_a_projectile_in_flight_keeps_the_member() {
     assert_eq!(aimed(&w), 1);
     warp::turn(&mut w, m);
     assert_eq!(aimed(&w), 1, "still aimed at the member object");
+    // spec: S-0306 claim 17 (r57, Q-2212: the projectile keeps the departed member through its own update until the member appears)
+    let id = *w.projectiles.keys().next().unwrap();
+    glasnost_sim::combat::projectile::turn(&mut w, id);
+    assert_eq!(aimed(&w), 1, "its own update keeps the member too");
 }
 
 #[test]
