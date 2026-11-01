@@ -1047,7 +1047,7 @@ impl Session {
         self.right =
             (b == Button::Right && !self.paused && on_map).then(|| band::RightDrag::armed(p));
         self.route.pressed = None;
-        // design (Q-2193): only a left press is a route-mode press for the kind test and the point tests (S-0213 claim 16d says "every route-mode press on the battlefield" without naming the button); a right press keeps claim 16h's rules
+        // spec: S-0213 claim 16d, When the tests are made (revision 84, Q-2193: only left-button presses are tested; a right press or right click is never tested for kind, whatever is selected, and acts as claim 16h gives) and claim 16h (a right click while the key is held acts as outside route mode)
         if self.route.held && b == Button::Left && !self.paused && on_map {
             self.route_press(p);
         }
@@ -2048,9 +2048,9 @@ impl Session {
                     Offer::AttackMove
                 } else {
                     let action = targeting::cursor(w, local, sel, on, mods);
-                    // spec: S-0214 table VD row VD1, table I rows v2 and I22 (route mode held: no-deploy)
+                    // spec: S-0214 table VD row VD1, table I rows v2 and I22 (route mode held: no-deploy); S-0213 claim 16b (revision 87: not a building's deploy)
                     let action = if self.route.held {
-                        targeting::in_route_mode(action)
+                        targeting::in_route_mode(w, sel, on, action)
                     } else {
                         action
                     };

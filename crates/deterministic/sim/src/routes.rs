@@ -89,22 +89,34 @@ pub struct Route {
     /// The points still to issue, in the order they will next be issued
     /// (claim 16c).
     pub steps: Vec<Step>,
-    /// The loop's first step, when the route has a loop: the steps from it
-    /// to [`Route::loop_to`] repeat.
+    /// The loop's first step, when the route has a loop: once the steps
+    /// before it have been issued, every step from it to the route's end
+    /// repeats (claim 16c, *A loop that ends early*).
     pub loop_from: Option<usize>,
-    /// The step after the loop's last, when the loop ends before the
-    /// route's last point (claim 16b: a press's copy whose loop begins at
-    /// one of the object's own points); `None` when the loop runs to the
-    /// route's end.
+    /// The number of points the loop was given, when the route has a loop
+    /// (claim 16c): the route's steps from the loop's first, unless the
+    /// loop ends early (claim 16b), when it is fewer. It plays no part in
+    /// the order of issue; it counts for a point delete (claim 16e) and a
+    /// join's copy (claim 16b, *Joins*).
     #[serde(default)]
-    pub loop_to: Option<usize>,
+    pub loop_len: Option<usize>,
 }
 
 impl Route {
-    /// The loop's steps as a range, when the route has a loop.
-    pub fn loop_range(&self) -> Option<std::ops::Range<usize>> {
-        let from = self.loop_from?;
-        Some(from..self.loop_to.unwrap_or(self.steps.len()))
+    /// Whether the route's loop ends before the route's last point (S-0213
+    /// claim 16c, *A loop that ends early*): its number of points is less
+    /// than the route's steps from its first.
+    pub fn loop_ends_early(&self) -> bool {
+        match (self.loop_from, self.loop_len) {
+            (Some(l), Some(n)) => n < self.steps.len().saturating_sub(l),
+            _ => false,
+        }
+    }
+
+    /// Sets the route's loop: its first step and its number of points.
+    fn set_loop(&mut self, lp: Option<LoopSpan>) {
+        self.loop_from = lp.map(|(f, _)| f);
+        self.loop_len = lp.map(|(_, n)| n);
     }
 
     /// The point's first place in the route (S-0213 claim 16b, *A point
@@ -161,8 +173,8 @@ pub struct RouteWorld {
 /// 16b and 16d): one that no point's click area takes or refuses.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RouteClick {
-    /// The orders to issue: point adds, and a detonate sent as outside
-    /// route mode (claim 16b).
+    /// The orders to issue: point adds, and a detonate or a building's rally
+    /// point on a cell sent as outside route mode (claim 16b).
     Orders(Vec<Order>),
     /// Refused, with the string-table label of the message; no order.
     Refused(&'static str),
@@ -171,8 +183,8 @@ pub enum RouteClick {
     /// order is given.
     Ordinary,
     /// A click whose orders route mode gives none of (a deploy, or an order
-    /// other than a behaviour order or a detonate): no order, no point, no
-    /// message and no selection change.
+    /// other than a behaviour order, a detonate or a rally point on a cell): no
+    /// order, no point, no message and no selection change.
     Ignored,
 }
 
@@ -212,9 +224,34 @@ pub enum RouteNote {
     Selected(u32),
 }
 
-/// The step's place.
-fn place(s: &Step) -> Option<Target> {
-    s.target.or(s.dest)
+/// The place of a behaviour order a route-mode click `on` gave (S-0213
+/// claim 16b): its target's; for a *move* order, which names no target,
+/// the clicked cell, or for a click on an object the cell that object
+/// stands on at the click; for any other order that names no target, its
+/// destination's. An order with neither a target nor a destination has no
+/// place.
+pub fn order_place(
+    w: &World,
+    on: ClickOn,
+    behaviour: Behaviour,
+    attack_move: bool,
+    target: Option<Target>,
+    dest: Option<Target>,
+) -> Option<Target> {
+    if let Some(t) = target {
+        // spec: S-0213 claim 16b (revision 84: the place of the target that the click gave the order)
+        return Some(t);
+    }
+    // design (Q-2230): an attack-move order is not a *move* order here: it is claim 6's distinct order, so it has its destination's place as any other order that names no target
+    if behaviour == Behaviour::Move && !attack_move {
+        // spec: S-0213 claim 16b (revision 84: a move order's place is the clicked cell's, or for a click on an object that of the cell the object stands on at the click, whatever the move's destination, also one the nearby-cell search found)
+        return match on {
+            ClickOn::Cell(c) => Some(Target::Cell(c)),
+            ClickOn::Object(x) => w.obj(x).map(|o| Target::Cell(o.pos.cell())),
+        };
+    }
+    // spec: S-0213 claim 16b (revision 84: any other order that names no target has its destination's place; one with neither a target nor a destination has no place)
+    dest
 }
 
 /// The cell of a place.
@@ -467,7 +504,7 @@ pub fn press_kind_refusal(
         // spec: S-0213 claim 16d (with nothing selected, no object is tested)
         return None;
     }
-    // design (Q-2193): "inside a click area" for the kind test counts the same points as the press's own test (any house's, drawn or not under quirks.hidden_point_refuses_click on)
+    // spec: S-0213 claim 16d, When the tests are made (revision 84, Q-2193: the click areas here are those of every point of every house, drawn for the player or not; with quirks.hidden_point_refuses_click off, only those drawn for the player) and Edge cases (with that switch off, a press inside only the click areas of points not drawn for the player counts as one outside every click area)
     let inside = tested(w, house, under).next().is_some();
     // spec: S-0213 claim 16d, When the tests are made (a press inside a click area is not tested for kind) and Edge cases (quirks.click_area_skips_kind_test off: every route-mode battlefield press with objects selected meets the kind test first)
     if inside && w.rules().quirks.click_area_skips_kind_test {
@@ -577,8 +614,7 @@ fn end(w: &mut World, id: ObjectId) {
     let house = r.house;
     let held = !r.steps.is_empty();
     r.steps.clear();
-    r.loop_from = None;
-    r.loop_to = None;
+    r.set_loop(None);
     if held {
         // spec: S-0213 claim 16f (an object whose route still holds a point stops being a route holder and lowers the count by 1 at once)
         lower(w, house);
@@ -640,14 +676,20 @@ fn note(w: &mut World, house: HouseId, note: RouteNote) {
 
 /// Applies a point add (S-0213 claims 16a and 16b): the refusals are made
 /// now, and an accepted point is added at the order's place to the end of
-/// the actor's route.
-pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
-    let Some(o) = w.obj(actor) else { return };
-    // spec: S-0213 claim 16d (outside a click area only vehicles and infantry pass the kind test); design (Q-2192): a point add for an aircraft or building, which only a press inside a click area can send, is dropped (claim 16d leaves what such a press gives them unstudied)
-    if !matches!(o.kind, Kind::Vehicle | Kind::Infantry) {
+/// the actor's route, recording the order for the actor.
+pub fn apply_point(
+    w: &mut World,
+    house: HouseId,
+    actor: ObjectId,
+    step: Step,
+    place: Option<Target>,
+) {
+    // spec: S-0213 claim 16d (revision 84, Q-2192: an aircraft or a building is a route holder like any other object; only claim 16b's four refusals apply to its point adds)
+    if w.obj(actor).is_none() {
         return;
     }
-    let Some(at) = place(&step) else { return };
+    // spec: S-0213 claim 16b (revision 84: an order that names neither a target nor a destination has no place: when applied it adds no point, with no message and no sound, and has no other effect)
+    let Some(at) = place else { return };
     let cell = place_cell(w, at).unwrap_or(CellXY::new(0, 0));
     if let Some(r) = w.routes.routes.get(&actor) {
         // spec: S-0213 claim 16b, A point that a route holds twice (the action read at the last point is the one recorded at that point's earliest place still in the route)
@@ -700,7 +742,7 @@ pub fn apply_point(w: &mut World, house: HouseId, actor: ObjectId, step: Step) {
         house,
         steps: Vec::new(),
         loop_from: None,
-        loop_to: None,
+        loop_len: None,
     });
     let first = r.steps.is_empty();
     r.house = house;
@@ -750,9 +792,9 @@ fn join_point(w: &World, house: HouseId, point: u32, place: Target) -> Option<u3
     }
 }
 
-/// A loop as its first step and, when it ends before the route's last
-/// point, the step after its last ([`Route::loop_from`], [`Route::loop_to`]).
-type LoopSpan = (usize, Option<usize>);
+/// A loop as its first step and its number of points ([`Route::loop_from`],
+/// [`Route::loop_len`]).
+type LoopSpan = (usize, usize);
 
 /// The copy a join gives (S-0213 claim 16b, *Joins*): the steps of the
 /// point's longest holder's route from the point's first place to its end,
@@ -771,26 +813,16 @@ fn join_copy(
     let i = src.first_place(point)?;
     // spec: S-0213 claim 16b (the copy runs from the joined point's first place in that route to the end of that route as it then stands, with the actions recorded there for that holder)
     let mut steps: Vec<Step> = src.steps[i..].to_vec();
-    let lp = match (src.loop_from, src.loop_to) {
-        // spec: S-0213 claim 16b (that route has no loop: the copy has none)
-        (None, _) => None,
-        // spec: S-0213 claim 16b (its loop's first point is the joined point or a later one: the copy has the same loop, from the same first point)
-        (Some(l), to) if l >= i => Some((l - i, to.map(|t| t - i))),
-        // spec: S-0213 claim 16b (its loop's first point comes before the joined point: the copy goes on, after that route's last point, with the loop's points from its first point up to the one before the joined point, and its loop is the whole copy, beginning at the joined point)
-        (Some(l), None) => {
+    let lp = match (src.loop_from, src.loop_len) {
+        // spec: S-0213 claim 16b, Joins (its loop's first point is the joined point or a later one: the copy has the same loop, from the same first point) and revision 84 (Q-2191: the copy's loop is given as many points as that route's loop has, also when that loop ends early, so when the joined point comes before the loop's first point the copy's loop begins at that point's place in the copy and ends early as the source loop does)
+        (Some(l), Some(n)) if l >= i => Some((l - i, n)),
+        // spec: S-0213 claim 16b, Joins (revision 84, Q-2191: its loop's first point comes before the joined point: the copy goes on, after that route's last point, with that route's points from its loop's first point up to the one before the joined point; the copy's loop begins at the joined point and is given the source loop's number of points, so it is the whole copy unless the source loop ends early, when it ends early too)
+        (Some(l), Some(n)) => {
             steps.extend_from_slice(&src.steps[l..i]);
-            Some((0, None))
+            Some((0, n))
         }
-        // design (Q-2191): a loop that ends before the route's last point and the joined point after it: the copy runs to the route's end with no loop
-        (Some(_), Some(t)) if i >= t => None,
-        // design (Q-2191): a loop that ends before the route's last point and holds the joined point after its first: the copy is the loop entered at the joined point (the loop's points from it to the loop's last, then from its first up to the one before it), then the points after the loop, and its loop is the loop's points
-        (Some(l), Some(t)) => {
-            let mut c: Vec<Step> = src.steps[i..t].to_vec();
-            c.extend_from_slice(&src.steps[l..i]);
-            c.extend_from_slice(&src.steps[t..]);
-            steps = c;
-            Some((0, Some(t - l)))
-        }
+        // spec: S-0213 claim 16b (that route has no loop: the copy has none)
+        _ => None,
     };
     Some((steps, lp))
 }
@@ -811,8 +843,9 @@ pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32, pl
         && let Some(i) = r.first_place(point)
     {
         // spec: S-0213 claims 16b and 16c (it closes a loop when, at the order's application, the point is in the actor's route: from the point's first place to the route's last point, with no test, replacing any loop the route already has)
-        r.loop_from = Some(i);
-        r.loop_to = None;
+        let n = r.steps.len() - i;
+        r.set_loop(Some((i, n)));
+        loop_attack_moves(w, house, actor);
         // spec: S-0213 claim 16c (closing a loop shows an information message)
         note(w, house, RouteNote::Looped);
         return;
@@ -842,41 +875,66 @@ pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32, pl
     let mut steps = own;
     // spec: S-0213 claim 16b (the copy is added after the actor's own points, whatever their number; a join is not tested for the point add refusals)
     steps.extend(copy);
-    let (loop_from, loop_to) = match lp {
+    let lp = match lp {
         // spec: S-0213 claim 16b (its route then has the copy's loop in place of any loop it had, or no loop when the copy has none)
-        None => (None, None),
-        Some((cf, ct)) if !ignores => {
-            // spec: S-0213 Edge cases (quirks.press_copy_ignores_route_state off: the copy's loop always begins in the copy, at the copied loop's first point)
-            (Some(n + cf), ct.map(|t| n + t))
+        None => None,
+        Some((cf, cn)) if !ignores => {
+            // spec: S-0213 Edge cases (quirks.press_copy_ignores_route_state off: the copy's loop always begins in the copy, at the copied loop's first point) and claim 16b, Joins (revision 84: with the copied loop's number of points)
+            Some((n + cf, cn))
         }
-        Some((cf, ct)) => {
+        Some((cf, cn)) => {
             let first = steps[n + cf].point;
-            let len = ct.unwrap_or(steps.len() - n) - cf;
-            // spec: S-0213 claim 16b, A point that a route holds twice (the copy's loop begins at the first place, in the joining holder's route, of the copied loop's first point)
+            // spec: S-0213 claim 16b, A point that a route holds twice (the copy's loop begins at the first place, in the joining holder's route, of the copied loop's first point; when that is one of its own points, the loop has as many points as the copied loop, so it ends before its route's last point) and Joins (revision 84: the copy's loop is given the copied loop's number of points in every case)
             let j = steps
                 .iter()
                 .position(|s| s.point == first)
                 .unwrap_or(n + cf);
-            if j >= n {
-                // spec: S-0213 claim 16b (when the loop's first point is not one its own points hold, the loop is the copy's own)
-                (Some(j), ct.map(|t| n + t))
-            } else {
-                // spec: S-0213 claim 16b (when the copied loop begins at a later point that its own points also hold, the loop begins at that own point and has as many points as the copied loop, so it ends before its route's last point)
-                (Some(j), Some(j + len))
-            }
+            Some((j, cn))
         }
     };
     let r = w.routes.routes.entry(actor).or_insert(Route {
         house,
         steps: Vec::new(),
         loop_from: None,
-        loop_to: None,
+        loop_len: None,
     });
     r.house = house;
     r.steps = steps;
-    r.loop_from = loop_from;
-    r.loop_to = loop_to;
+    r.set_loop(lp);
     // spec: S-0213 claim 16f (a point join that gives an object its first points does not raise the count, under quirks.route_holder_count_drift)
+}
+
+/// The attack moves of a loop just closed on `actor`'s route (S-0213 claim
+/// 16c, *Attack moves in a loop*): when any holder of the loop's first
+/// point is of a type eligible for attack moves (claim 6), every point from
+/// the loop's first point to the route's end whose recorded order for a
+/// holder is a *move* becomes an attack-move order with the same
+/// destination, for each such holder of that point.
+fn loop_attack_moves(w: &mut World, house: HouseId, actor: ObjectId) {
+    let Some(r) = w.routes.routes.get(&actor) else {
+        return;
+    };
+    let Some(l) = r.loop_from else { return };
+    let Some(first) = r.steps.get(l).map(|s| s.point) else {
+        return;
+    };
+    // spec: S-0213 claim 16c (revision 84: from the loop's first point to the route's end, a loop that ends early included; points before the loop's first point keep their orders)
+    let points: std::collections::BTreeSet<u32> = r.steps[l..].iter().map(|s| s.point).collect();
+    // spec: S-0213 claim 16c (revision 84: whether a type is eligible is read from the holders of the loop's first point only, when the loop-close order is applied) and claim 6 (S-0214 claim 5's eligibility)
+    if !holders_of(w, house, first)
+        .into_iter()
+        .any(|h| orders::attack_move_eligible(w, h))
+    {
+        return;
+    }
+    for (_, hr) in w.routes.routes.iter_mut().filter(|(_, r)| r.house == house) {
+        for s in hr.steps.iter_mut().filter(|s| points.contains(&s.point)) {
+            // spec: S-0213 claim 16c (revision 84: the test is made per holder: each holder whose recorded order at the point is a move gets an attack-move order with the same destination; each whose order there is not a move keeps it)
+            if s.behaviour == Behaviour::Move && !s.attack_move {
+                s.attack_move = true;
+            }
+        }
+    }
 }
 
 /// Applies a commit (S-0213 claim 16c): every point of the house becomes
@@ -940,31 +998,27 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
     }
     let next = next_after(w, house, point);
     for r in w.routes.routes.values_mut() {
-        let len = r.steps.len();
-        let mut kept = Vec::with_capacity(len);
-        let (mut from, mut to) = (r.loop_from, r.loop_from.map(|_| r.loop_to.unwrap_or(len)));
+        let mut kept = Vec::with_capacity(r.steps.len());
+        let (mut from, mut n) = (r.loop_from, r.loop_len);
+        let l0 = r.loop_from;
         // spec: S-0213 claim 16b, A point that a route holds twice (a point delete removes the point from every place in every route that holds it)
         for (i, s) in r.steps.drain(..).enumerate() {
             if s.point == point {
-                from = from.map(|l| if i < l { l - 1 } else { l });
-                to = to.map(|t| if i < t { t - 1 } else { t });
+                match l0 {
+                    // spec: S-0213 claim 16e (a point before the loop's first point: the loop keeps its points)
+                    Some(l) if i < l => from = from.map(|f| f - 1),
+                    // spec: S-0213 claim 16e (revision 84: deleting any point at or after the loop's first point lowers the loop's number of points by 1, a point after a loop that ends early included)
+                    Some(_) => n = n.map(|n| n.saturating_sub(1)),
+                    None => {}
+                }
                 continue;
             }
             kept.push(s);
         }
-        let ends_route = r.loop_to.is_none();
         r.steps = kept;
-        if let (Some(l), Some(t)) = (from, to)
-            && t.saturating_sub(l) < MIN_LOOP
-        {
-            // spec: S-0213 claim 16e (a loop left with fewer than 3 points is cancelled; the remaining points form an ordinary route)
-            from = None;
-        }
-        r.loop_from = from;
-        r.loop_to = match from {
-            Some(_) if !ends_route => to,
-            _ => None,
-        };
+        // spec: S-0213 claim 16e (a loop left with fewer than 3 points is cancelled; the remaining points form an ordinary route) and revision 84 (on a loop that ends early, once its number of points is below 3)
+        let lp = from.zip(n).filter(|&(_, n)| n >= MIN_LOOP);
+        r.set_loop(lp);
     }
     // spec: S-0213 claim 16f (deleting a route's last remaining point ends holding but does not lower the count, under quirks.route_holder_count_drift; off, the count is the holders')
     w.routes.points.remove(&point);
@@ -981,9 +1035,9 @@ fn next_after(w: &World, house: HouseId, point: u32) -> Option<u32> {
     let h = holders_of(w, house, point).into_iter().next()?;
     let r = &w.routes.routes[&h];
     let i = r.first_place(point)?;
-    let j = match r.loop_range() {
-        // spec: S-0213 claim 16e (going round a loop: after the loop's last point comes its first)
-        Some(l) if l.contains(&i) && i + 1 == l.end => l.start,
+    let j = match r.loop_from {
+        // spec: S-0213 claim 16e (going round a loop: after the loop's last point comes its first); design (Q-2226): on a route whose loop ends early, after the route's last point comes the loop's first too, as the holder goes round (claim 16c, revision 84; claim 16e leaves which point such a delete selects open)
+        Some(l) if i >= l && i + 1 == r.steps.len() => l,
         _ => i + 1,
     };
     r.steps.get(j).map(|s| s.point).filter(|&n| n != point)
@@ -1009,12 +1063,30 @@ pub fn follows(w: &World, id: ObjectId) -> bool {
 /// whose next point is committed gives up its behaviour and issues the
 /// point's action as an order.
 pub fn fall_back(w: &mut World, id: ObjectId) {
-    // spec: S-0215 claim 13 (it follows a route and is not in a patrol that has already begun: it issues the action of the next route point as an order; not an immediate destination assignment) and S-0213 claim 16c (uncommitted points are not followed: the holder waits for a commit)
-    if follows(w, id) {
-        // spec: S-0213 claim 16c and Changes for other specs (S-0215 claim 13: each issue at a fall-back is preceded by the queue of wait with an immediate start, so a ready holder's rest table finds wait current and queues no guard)
-        wait(w, id);
-        issue_next(w, id);
+    // spec: S-0213 claim 16d (revision 84, Q-2192: an aircraft issues no route point when it falls back to rest; a building's moments are its own) and Changes for other specs (S-0215 claim 13's route row: infantry units and vehicles only)
+    if !w
+        .obj(id)
+        .is_some_and(|o| matches!(o.kind, Kind::Infantry | Kind::Vehicle))
+    {
+        return;
     }
+    // spec: S-0215 claim 13 (it follows a route and is not in a patrol that has already begun: it issues the action of the next route point as an order; not an immediate destination assignment) and S-0213 claim 16c (uncommitted points are not followed: the holder waits for a commit)
+    issue_later(w, id);
+}
+
+/// A holder's issue of its next route point at one of the moments of S-0213
+/// claims 16c and 16d (an infantry unit's or vehicle's fall-back to rest,
+/// an aircraft's flight end, a building's *attack* without a target): when
+/// its next point is committed, it queues *wait* with an immediate start
+/// and issues the point. Returns whether it issued one.
+pub fn issue_later(w: &mut World, id: ObjectId) -> bool {
+    if !follows(w, id) {
+        return false;
+    }
+    // spec: S-0213 claim 16c and Changes for other specs (S-0215 claim 13: each issue at a fall-back is preceded by the queue of wait with an immediate start, so a ready holder's rest table finds wait current and queues no guard) and revision 84 (an aircraft or building holder issues its later points at the moments of claim 16d instead; each such issue is preceded by the same queue of wait)
+    wait(w, id);
+    issue_next(w, id);
+    true
 }
 
 /// Issues the next point of the object's route (S-0213 claim 16c): a point
@@ -1032,86 +1104,30 @@ fn issue_next(w: &mut World, id: ObjectId) {
     }
     let house = r.house;
     let step = r.steps.remove(0);
-    match (r.loop_from, r.loop_to) {
-        // spec: S-0213 claim 16c (issuing a point of a loop moves it to the end of the route, so a looping holder's route holds its points in the order it will next issue them)
-        (Some(0), None) => r.steps.push(step.clone()),
-        // design (Q-2191): a loop that ends before the route's last point (S-0213 claim 16b) is gone round as any loop: the issued point moves to the loop's end, and the points after the loop are never issued
-        (Some(0), Some(t)) => r.steps.insert(t - 1, step.clone()),
+    match r.loop_from {
+        // spec: S-0213 claim 16c (issuing a point of a loop moves it to the end of the route, so a looping holder's route holds its points in the order it will next issue them) and revision 84 (Q-2191, A loop that ends early: once the points before the loop's first point have all been issued, every issued point, of the loop or after it, moves to the end of the route; the loop's number of points plays no part in the order of issue)
+        Some(0) => r.steps.push(step.clone()),
         // spec: S-0213 claim 16c (issuing a point takes it off the front of the route; points before the loop's first point are issued once)
-        (l, t) => {
-            r.loop_from = l.map(|l| l - 1);
-            r.loop_to = t.map(|t| t - 1);
-        }
+        Some(l) => r.loop_from = Some(l - 1),
+        None => {}
     }
     let used_up = r.steps.is_empty();
     if used_up {
         // spec: S-0213 claim 16f (a route without a loop is used up when its last point is issued: the holder stops holding and lowers the count then)
         lower(w, house);
     }
-    let order = point_order(w, owner, id, &step);
+    // spec: S-0213 claim 16b (revision 84: the order a holder issues for a point is the one recorded for it at the add, or copied to it at a join, as changed by a loop's attack-move change; it is not classified anew when it is issued) and Changes for other specs (S-0215 claim 13: the route row's object classification, service and alliance guards and cell-action fallback do not apply to these points)
+    let order = Order::Behaviour {
+        actor: id,
+        behaviour: step.behaviour,
+        attack_move: step.attack_move,
+        target: step.target,
+        dest: step.dest,
+    };
     // spec: S-0213 claim 16f (a point issued from a route without a loop or before a loop's first point that no route holds any more is deleted at once)
     drop_orphans(w);
-    if let Some(o) = order {
-        // spec: S-0215 claim 13 (the route point issues an order through the ordinary order timing of S-0213 claim 1) and S-0213 claim 17 (orders a route issues for its points do not end it)
-        orders::issue(w, owner, Order::Routed(Box::new(o)));
-    }
-}
-
-/// The order a holder issues for a route point (S-0215 claim 13's
-/// route-point selection rule): an object point is classified anew as an
-/// ordinary object click with the actor owner's house acting, under the
-/// service and alliance guards, else the cell action; a cell point issues
-/// the action its click recorded.
-fn point_order(w: &World, owner: HouseId, id: ObjectId, step: &Step) -> Option<Order> {
-    let cell = w
-        .routes
-        .points
-        .get(&step.point)
-        .map(|p| point_cell(w, p))
-        .or_else(|| place(step).and_then(|t| place_cell(w, t)));
-    let cell_action = |c: CellXY| {
-        // spec: S-0215 claim 13 (the cell-action fallback: the actor's action on the point's cell)
-        targeting::click(w, owner, &[id], ClickOn::Cell(c), Modifiers::default())
-            .orders
-            .into_iter()
-            .next()
-    };
-    let Some(Target::Object(t)) = step.target.filter(|_| !step.attack_move) else {
-        // spec: S-0215 claim 13 (a point with no object uses the cell action): the cell action the click gave the holder
-        return Some(Order::Behaviour {
-            actor: id,
-            behaviour: step.behaviour,
-            attack_move: step.attack_move,
-            target: step.target,
-            dest: step.dest,
-        });
-    };
-    let Some(to) = w.obj(t) else {
-        return cell.and_then(cell_action);
-    };
-    let on = ClickOn::Object(t);
-    let action = targeting::cursor(w, owner, &[id], on, Modifiers::default());
-    let allied = w.allied(Some(owner), to.owner);
-    let object_ok = if allied {
-        // spec: S-0215 claim 13 (for an object the owner counts as allied: only a service building, a unit repair building for a damaged non-infantry actor or a unit reload building for an actor short of ammunition, whose owner counts the actor's owner allied too, and not select or toggle select)
-        let service = targeting::service_building_for(w, t, id);
-        service
-            && w.allied(to.owner, Some(owner))
-            && !matches!(action, Action::Select | Action::ToggleSelect)
-    } else {
-        // spec: S-0215 claim 13 (for an object the owner does not count as allied, select, toggle select, move and no-move use the cell fallback)
-        !matches!(
-            action,
-            Action::Select | Action::ToggleSelect | Action::Move | Action::NoMove
-        )
-    };
-    if object_ok {
-        let orders = targeting::click(w, owner, &[id], on, Modifiers::default()).orders;
-        if let Some(o) = orders.into_iter().next() {
-            return Some(o);
-        }
-    }
-    cell.and_then(cell_action)
+    // spec: S-0215 claim 13 (the route point issues an order through the ordinary order timing of S-0213 claim 1) and S-0213 claim 17 (orders a route issues for its points do not end it)
+    orders::issue(w, owner, Order::Routed(Box::new(order)));
 }
 
 /// An ordinary route-mode click by `house` with `selection`, at its release
@@ -1133,11 +1149,15 @@ pub fn click(
     if selection.is_empty() || plain.orders.is_empty() {
         return RouteClick::Ordinary;
     }
-    // spec: S-0213 claim 16b and S-0214 table VD row VD1, table I rows v2 and I22 (the deploy action is refused in route mode: no-deploy, no order)
+    // spec: S-0213 claim 16b and S-0214 table VD row VD1, table I rows v2 and I22 (for a vehicle or infantry unit the deploy action is refused in route mode: no-deploy, no order) and revision 84 (an aircraft's deploy is not refused for kind: its unload order has no place and adds no point when applied)
     let deploying: Vec<ObjectId> = selection
         .iter()
         .copied()
-        .filter(|&id| targeting::action_of(w, house, selection, id, on, mods) == Action::Deploy)
+        .filter(|&id| {
+            w.obj(id)
+                .is_some_and(|o| matches!(o.kind, Kind::Vehicle | Kind::Infantry))
+                && targeting::action_of(w, house, selection, id, on, mods) == Action::Deploy
+        })
         .collect();
     let mut out = Vec::new();
     for o in plain.orders {
@@ -1158,10 +1178,33 @@ pub fn click(
                 attack_move,
                 target,
                 dest,
+                place: order_place(w, on, behaviour, attack_move, target, dest),
             }),
             // spec: S-0213 claim 16b (a route-mode click that would order a detonate adds no point: when claim 16d's tests pass, the detonate order is sent at the release, as outside route mode, with no route-mode message)
             Order::Detonate { .. } => out.push(o),
-            // design (Q-2192): an order of another kind a route-mode click could give (S-0213 claim 16b leaves aircraft and buildings unstudied) is not sent and adds no point
+            // spec: S-0213 claim 16b (revision 84, Q-2192 question 3: a click on a cell that sets a factory's rally point sends that order directly, adds no point and takes effect when applied; revision 87: so does a building's *move* on an object, the guard-spot order of S-0214 table M part 3, which then acts as claim 20 says; each meets claim 16d's release-time tests and is sent at the release)
+            Order::GuardSpot { actor, .. }
+                if w.obj(actor).is_some_and(|x| x.kind == Kind::Building) =>
+            {
+                out.push(o)
+            }
+            // spec: S-0213 claim 16b (revision 87: a building's deploy action is not refused in route mode; its primary order, claim 13, when the building is factory-marked, is sent directly with no point, at the release after claim 16d's tests)
+            Order::Primary { actor } if w.obj(actor).is_some_and(|x| x.kind == Kind::Building) => {
+                out.push(o)
+            }
+            // spec: S-0213 claim 16b (revision 87: a building is given its deploy action only by a click on the building itself, and each behaviour order *unload* that the action gives names the building itself as its target, so it has the building's own place and is a point add there; its points are issued as claim 16d says) and Changes for other specs (S-0214 table M part 3, deploy row)
+            Order::Deploy { actor } if w.obj(actor).is_some_and(|x| x.kind == Kind::Building) => {
+                let target = Some(Target::Object(actor));
+                out.push(Order::RoutePoint {
+                    actor,
+                    behaviour: Behaviour::Unload,
+                    attack_move: false,
+                    target,
+                    dest: None,
+                    place: target,
+                })
+            }
+            // spec: S-0213 claim 16b (an action that S-0214 gives no order for gives none here either and adds no point; the clicks of S-0214 give no other order kinds)
             _ => {}
         }
     }

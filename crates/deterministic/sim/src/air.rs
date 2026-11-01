@@ -2224,6 +2224,10 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         set_dest(w, id, Some(next));
         return;
     }
+    // spec: S-0213 claim 16d (revision 84, Q-2192: an aircraft issues its next route point when a flight ends, at the moment it would begin to land, unless its behaviour is then enter) and Changes for other specs (S-0215 claim 13); design (Q-2229): the moment is the landing trigger, before the pad-bound test, and an aircraft that issues a point does not also begin to land in that tick
+    if o.beh.current != Some(Behaviour::Enter) && crate::routes::issue_later(w, id) {
+        return;
+    }
     // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead)
     // design: S-0501 Open question 26 (a pad-bound aircraft released from a docking position outside the foundation that took its destination without a behaviour order still holds its contact in flight: in a destination cell holding no building it is in contact with it falls back, and T2's after-the-row enter is claim 24's, which takes the pad as its destination; in a destination cell of the pad it is in contact with the restriction does not hold, so it starts to land and its touchdown docks it there, claim 24)
     if t.bound && !o.contact.is_some_and(|k| pad_cell(w, k, id)) {

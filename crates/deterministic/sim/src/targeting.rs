@@ -1946,9 +1946,13 @@ pub fn action_of(
 /// row v2, row I22 and table VD row VD1: route mode held gives no-deploy
 /// where the action would be deploy). Route mode is the client's input
 /// state, so its rows are applied to the action the tables give without it.
-pub fn in_route_mode(a: Action) -> Action {
+/// A building's deploy action stays deploy (S-0213 claim 16b, revision 87).
+pub fn in_route_mode(w: &World, sel: &[ObjectId], on: ClickOn, a: Action) -> Action {
+    // spec: S-0213 claim 16b (revision 87: a building's deploy action is not refused in route mode) and S-0214 table G row G5 (a building's deploy is a click on itself, its only selected object)
+    let buildings_own = matches!((sel, on), ([s], ClickOn::Object(t)) if *s == t
+        && w.obj(t).is_some_and(|o| o.kind == Kind::Building));
     // spec: S-0214 table I row v2, row I22 and table VD row VD1 (route mode held: no-deploy)
-    if a == Action::Deploy {
+    if a == Action::Deploy && !buildings_own {
         Action::NoDeploy
     } else {
         a

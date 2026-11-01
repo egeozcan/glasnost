@@ -99,8 +99,7 @@ pub fn held(w: &World, id: ObjectId, place: Place) -> Option<ObjectId> {
 /// weapon has is alive on the firer (*rearming*, rank 5).
 pub fn own_effect_alive(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     let wr = w.rules().combat.weapon(weapon);
-    // spec: S-0301 claim 5 (a live effect of any kind whose effect flag the asked weapon has: rearming) and Terms (revision 58: a matched emitter is alive until it is let go or its system leaves play, whichever comes first, which is while its place holds it)
-    // design: Q-2181 (interim: an emitter that is not matched is alive while its place holds it, as a matched one)
+    // spec: S-0301 claim 5 (a live effect of any kind whose effect flag the asked weapon has: rearming) and Terms (revision 63, Q-2181: every emitter, matched or not, is alive while its place holds it; claim 5's place-and-kind rule gives when the place is freed)
     any_held(w, firer, wr)
 }
 
@@ -209,7 +208,12 @@ pub fn effect_weapon_emitter(
             // spec: S-0616 claim 1 (owner object: the firer; no first particle) and Terms (a system with an owner object takes the owner's current target as its target object; a railgun turn uses only its fixed target point)
             s.owner_object = Some(firer);
             s.target = point;
-            s.target_object = object;
+            // spec: S-0301 Changes for other specs, S-0616 (c) (revision 63: the place, not the system's kind, sets the creation: the fire or spark place passes the shot's target object, the railgun place passes none)
+            s.target_object = if place == Place::Railgun {
+                None
+            } else {
+                object
+            };
         }
         let Some(ob) = w.obj_mut(firer) else { return };
         // spec: S-0616 Terms (the emitter is held in the place of its kind)
@@ -234,8 +238,31 @@ pub fn let_go_fire(w: &mut World, owner: ObjectId) {
     let Some(e) = w.obj_mut(owner).and_then(|o| o.combat.fire_emitter.take()) else {
         return;
     };
-    // spec: S-0616 claim 1 (a fire emitter is marked and let go)
+    // spec: S-0616 claim 1 (a fire emitter is marked and let go) and S-0301 claim 5, place-and-kind rule (revision 63: a let-go of the fire place marks the system that place holds, whatever its kind, and the place is freed at the let-go)
     crate::particles::mark(w, e.system);
+}
+
+/// S-0301 claim 5's place-and-kind rule for a system held in its owner's
+/// fire place whose kind is not fire: the fire place's let-go events of a
+/// retarget to a target not within reach and of the firer's death apply to
+/// it as to a fire-kind system (S-0616 claim 1), whose own turn makes those
+/// tests ([`retarget_let_go`], `crate::particles::fire_turn`). Called in
+/// the system's turn after its kind's own work.
+pub fn fire_place_let_go(w: &mut World, sys: ObjectId) {
+    let Some(owner) = w.gas.systems.get(&sys).and_then(|s| s.owner_object) else {
+        return;
+    };
+    if held(w, owner, Place::Fire) != Some(sys) {
+        return;
+    }
+    let alive = w.obj(owner).is_some_and(|o| o.health > 0);
+    if !alive {
+        // spec: S-0301 claim 5, place-and-kind rule (revision 63: the fire place's let-go events are a retarget to a target not within reach, a move order and the firer's death; a let-go marks the system the place holds, whatever its kind)
+        let_go_fire(w, owner);
+        return;
+    }
+    // spec: S-0301 claim 5, place-and-kind rule (revision 63: a retarget to a target not within reach lets the fire place go whatever the kind of the system it holds); design: the test is made in the held system's own turn, after its kind's work, as a fire-kind system makes it in its turn (S-0616 claim 1 gives no tick for the test)
+    retarget_let_go(w, owner, sys);
 }
 
 /// S-0616 claim 1, the retarget let-go: in the fire system's turn, an owner

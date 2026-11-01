@@ -340,7 +340,14 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         let Some(t) = crate::combat::held::firing_target(w, &o) else {
             // spec: S-0518 claim 10 (a prism master's attack processed with no target resets its support count)
             crate::linked::reset_count(w, id);
-            // spec: S-0215 claim 32 (no target: queues guard and starts it at once, 1 tick)
+            // spec: S-0213 claim 16d (revision 84, Q-2192: a building without the SAM flag issues its next route point only when its attack has no target, first, with claim 16c's queue of wait with an immediate start; when wait is then current it queues no guard) and Changes for other specs (S-0215 claim 32)
+            if crate::routes::issue_later(w, id)
+                && w.obj(id)
+                    .is_some_and(|x| x.beh.current == Some(Behaviour::Wait))
+            {
+                return 1; // spec: S-0215 claim 32 (the no-target case's delay: 1 tick)
+            }
+            // spec: S-0215 claim 32 (no target: queues guard and starts it at once, 1 tick; also when the building has no route point to issue or wait is not current, S-0213 claim 16d)
             if let Some(ob) = w.obj_mut(id) {
                 ob.beh
                     .queue_and_start_at_once(Behaviour::Guard, tick, stale);

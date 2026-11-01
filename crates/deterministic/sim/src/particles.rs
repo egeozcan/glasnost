@@ -626,9 +626,11 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
     });
     if !alive {
         mark(w, sys);
-        if let Some(o) = owner {
-            // spec: S-0616 claim 1 (a fire emitter is marked and let go when its firer dies)
-            crate::emitters::release_places(w, o, sys);
+        if let Some(o) = owner
+            && crate::emitters::held(w, o, crate::emitters::Place::Fire) == Some(sys)
+        {
+            // spec: S-0616 claim 1 (a fire emitter is marked and let go when its firer dies) and S-0301 claim 5, place-and-kind rule (revision 63: only the fire place is let go; a fire-kind system held in the spark or railgun place is marked by its own turn and frees that place when it leaves play)
+            crate::emitters::let_go_fire(w, o);
         }
     }
     let mut swept = false;
