@@ -7,10 +7,10 @@
 //! shortening of F3 applies only through the infantry close-range flag; no
 //! actor is ever rearming). Approaching a target is the approach step of
 //! [`crate::approach`] (claim 37), whose position search (S-0307) finds
-//! nothing yet. The behaviours that other topics own (claim 34) and *hunt*,
-//! *capture*, *sabotage*, *enter*, and *unload* for vehicles, are processed as behaviours
-//! without a processing rule until their topics are implemented; that is
-//! recorded as a note on the world.
+//! nothing yet. *Capture*, *sabotage* and *eaten* share claim 28's table
+//! ([`process_capture`]). A behaviour whose processing is not built yet is
+//! processed as a behaviour without a processing rule; that is recorded as
+//! a note on the world.
 //!
 //! Gates (claim 35): a gate's *open* runs its stages here, the door moves at
 //! every turn of the gate before its per-tick start and processing (claim
@@ -736,6 +736,14 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         }
         (Some(Behaviour::AreaGuard), Kind::Infantry | Kind::Vehicle) => process_area_guard(w, id),
         (Some(Behaviour::Hunt), Kind::Infantry | Kind::Vehicle) => process_hunt(w, id),
+        // spec: S-0215 claim 28 and claim 5 (capture; sabotage is processed exactly as capture)
+        (Some(Behaviour::Capture | Behaviour::Sabotage), Kind::Infantry | Kind::Vehicle) => {
+            process_capture(w, id, false)
+        }
+        // spec: S-0215 claim 4 and table T1 (capture, sabotage and eaten have no processing rule for buildings: nothing, 450 ticks, no draw)
+        (Some(Behaviour::Capture | Behaviour::Sabotage | Behaviour::Eaten), Kind::Building) => {
+            NO_RULE_DELAY
+        }
         (Some(Behaviour::Unload), Kind::Infantry) => process_unload_infantry(w, id),
         // spec: S-0402 State and ordering (a harvester's harvest, enter and unload); claim 22 (a slave master's harvest)
         (Some(Behaviour::Harvest), Kind::Vehicle)
@@ -1326,6 +1334,82 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
         }
     }
     // spec: S-0215 claim 27 (the standard delay with the rate of the behaviour current once the outcome took effect)
+    standard_delay(w, id)
+}
+
+/// Whether an actor is a building taker (S-0215 claim 28): an infantry unit
+/// with explosive charges, an engineer, an occupier, an assaulter or an
+/// infiltrator. For *eaten* (`eaten`) occupiers, assaulters and
+/// infiltrators do not count.
+fn building_taker(w: &World, id: ObjectId, eaten: bool) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0215 Import mapping (C4, Engineer, Occupier, Assaulter and Infiltrate are infantry type fields)
+    if o.kind != Kind::Infantry {
+        return false;
+    }
+    // spec: S-0215 claim 28 (an infantry unit with explosive charges or an engineer)
+    if crate::bomb::has_charges(w, id) || crate::structures::engineer::is_engineer(w, id) {
+        return true;
+    }
+    if eaten {
+        // spec: S-0215 claim 28 (for eaten, occupiers, assaulters and infiltrators do not count as building takers)
+        return false;
+    }
+    // spec: S-0215 claim 28 (an occupier, an assaulter or an infiltrator); S-0510 Import mapping (Infiltrate absent: no)
+    crate::structures::garrison::occupier(w, id)
+        || crate::structures::garrison::assaulter(w, id)
+        || w.rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.infiltrate.unwrap_or(false))
+}
+
+/// The processing of *capture* and *sabotage*, and with `eaten` of *eaten*
+/// (S-0215 claim 28; claim 5: *sabotage* is processed as *capture*), for
+/// infantry, vehicles and aircraft. The row is chosen by the destination
+/// and target the actor has when the processing begins, and only that row
+/// applies. Returns the delay.
+pub(crate) fn process_capture(w: &mut World, id: ObjectId, eaten: bool) -> i32 {
+    let Some(o) = w.obj(id).cloned() else {
+        return NO_RULE_DELAY;
+    };
+    if o.dest.is_none() {
+        let target_building = match o.target {
+            Some(Target::Object(t)) => w
+                .obj(t)
+                .is_some_and(|x| x.kind == Kind::Building && x.on_map),
+            _ => false,
+        };
+        if target_building && building_taker(w, id, eaten) {
+            // spec: S-0215 claim 28 row 1 (no destination; the target a building and the actor a building taker: the target becomes its destination)
+            crate::econ::assign_destination(w, id, o.target);
+        } else {
+            // spec: S-0215 claim 28 row 2 (no destination, any other case: it falls back to rest, claims 14 and 15, S-0501 claim 18 for an aircraft)
+            fall_back(w, id, false);
+            // spec: S-0215 claim 28 (the cell tested is the one that holds the actor's position after its fall-back to rest)
+            let on_building = w.obj(id).is_some_and(|x| {
+                x.on_map
+                    && w.cells
+                        .list(x.pos.cell(), Layer::Ground)
+                        .iter()
+                        .any(|&b| w.obj(b).is_some_and(|y| y.kind == Kind::Building))
+            });
+            if on_building {
+                // spec: S-0215 claim 28 (the scatter off a building: no threat point, forced, not move-anywhere; infantry judge it by S-0208 claims 11 and 13, a vehicle by S-0207 claim 16 without a draw, claim 19; Q-2251: an aircraft's answer is S-0501's, which states none, so it has no effect)
+                crate::scatter::request(
+                    w,
+                    id,
+                    crate::scatter::ScatterRequest {
+                        threat: None,
+                        forced: true,
+                        anywhere: false,
+                    },
+                );
+            }
+            // spec: S-0215 claim 28 (hunt rule: in our engine it never applies, so the actor is left as the fall-back and the scatter leave it; for eaten it never applies in the original either)
+        }
+    }
+    // spec: S-0215 claim 28 rows 3 and 4 (a destination: no change; row 4's hunt rule never applies in our engine)
+    // spec: S-0215 claim 28 and T2 (the delay is always the standard delay, with the rate of the behaviour current now, claim 6)
     standard_delay(w, id)
 }
 

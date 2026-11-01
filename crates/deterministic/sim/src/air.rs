@@ -3144,6 +3144,12 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         Some(Behaviour::ParadropOverfly) => crate::paradrop::overfly(w, id),
         // spec: S-0507 claim 13 (an air transport in unload)
         Some(Behaviour::Unload) => crate::transport::process_air_unload(w, id),
+        // spec: S-0215 claim 28, claim 5 and table T1 (an aircraft's capture and sabotage are claim 28's table; its fall-back is claim 18 here)
+        Some(Behaviour::Capture | Behaviour::Sabotage) => {
+            crate::process::process_capture(w, id, false)
+        }
+        // spec: S-0215 claim 28 and table T1 (an aircraft's eaten: the same table with its eaten differences; S-0603 claim 3)
+        Some(Behaviour::Eaten) => crate::structures::grinder::process_eaten(w, id),
         _ => NO_RULE_DELAY,
     }
 }
