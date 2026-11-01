@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 62
+revision: 63
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2872,7 +2872,12 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   cell beyond the copy's weapon range but within its sight limit (S + 0.5 cells, S-0215 claim
   18).
   Observable: whether the copy moves toward the attacker within 300
-  ticks of the first hit, 3 runs each. Expected: the mode-0 copy retaliates and approaches (S-0309
+  ticks of the first hit, 3 runs each. Retaliation does not restart the copy's processing timer
+  (S-0215 claim 10), so its first processing in *attack* can wait until the *guard* processing
+  delay then running ends. Before the runs, check in the behaviour data (S-0215 Import mapping)
+  that the upper bound of that delay (S-0215 claim 6) is below 300 ticks; if it is not, the
+  deadline is that bound plus 300 ticks. The copy has not fired before the first hit, so no
+  rearm countdown adds to it. Expected: the mode-0 copy retaliates and approaches (S-0309
   claim 18; its firing check without range has no refusal); the mode-1 copy stays where it is.
   Falsified if the mode-1 copy approaches: its land-row refusal is then not one that stops
   retaliation. If the mode-0 copy does not approach, the run is void: this part judges whether
