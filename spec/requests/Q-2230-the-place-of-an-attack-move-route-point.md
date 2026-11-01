@@ -1,9 +1,9 @@
 ---
 id: Q-2230
 title: The place of a route point added by an attack-move click
-status: open
+status: answered
 related: [S-0213, S-0214]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
