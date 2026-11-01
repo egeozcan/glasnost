@@ -3,7 +3,7 @@ id: Q-2238
 title: Which install images draw the sidebar's command buttons and tab buttons, and in which states
 status: open
 related: [S-0411, S-0410]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need
