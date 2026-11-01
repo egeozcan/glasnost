@@ -62,6 +62,9 @@ Requests filed: **Q-2261** to **Q-2264**.
 - The check tick is `w.tick % 16 == 0` read in the holder's own turn. An order given between
   steps while `w.tick` is *n* is applied in tick *n* after the turn pass (S-0203 claim 7), so its
   drop comes 1 to 16 ticks later; the tests count from that tick.
+- In our engine an attack order queues *attack* behind the current *guard*, which starts it at
+  its next processing. In run p1 a check tick can come while *guard* is still current; both
+  behaviours check, so the drop tick is the same.
 - The behaviour gate reads `beh.current` at the start of the turn, before `process::head` can
   start a queued behaviour (Q-2261 question 3).
 - The neutral and special houses keep S-0304 claim 2's attack-processing drop rather than losing
@@ -100,6 +103,8 @@ Requests filed: **Q-2261** to **Q-2264**.
 | Constants, held-target check period 16 ticks | tested | `held::CHECK_PERIOD`, used by every test above |
 | 4 r70, the drop on an unusable target can come earlier at a check tick | tested | through the part m test |
 | 4 r70, a spawner's keep of an *impossible* target ends at the first check tick | by construction | No spawner exception in `periodic_check`; no test (the spec rates the keep `unmeasured`) |
+| 4 r70 and A6 part f's new reading: a firer that is not a spawner drops an *impossible* target at a search and picks it again in that search (the hidden span with no check tick) | partly | Built at intake 52b and earlier (`acquire`'s claim 4 drop, table C not rejecting on *impossible*), no change. The spec rates the case `unmeasured`, since no setup is shown to put a search in a hidden span with no check tick; no new test |
+| 4 and 19 r70, Backing and Confidence wording (the spawner's keep, its controller reset and released missiles now `unmeasured`, medium) | wording only | No code |
 | 19 r70, an opportunity target's drop can come at a check tick before the next search | tested | `m_a_searched_target_in_guard_is_dropped_at_the_check_tick_before_the_next_search` |
 | 28 r70, a holder kept under an exception can still lose the target at claim 29's check | by construction | The check reads the firing check; the cloak keep is S-0516 claim 14's. Intake 52b's `claim_28_cloak_drops_reset_the_timer` still passes |
 | Changes, S-0304 claim 2: a covered actor drops the force-fire *illegal* target at the first check tick after the order's tick (1 to 16 ticks), not at its attack processing; after a countdown, at the first check tick after it | tested | the p1 and p2 tests; `an_attack_on_an_illegal_target_never_fires` and `an_illegal_target_is_kept_while_rearming` (`claims_s0304_s0305.rs`) now expect a check tick |
@@ -116,7 +121,24 @@ Requests filed: **Q-2261** to **Q-2264**.
 
 ## Tests changed
 
-TESTS_CHANGED
+- `claims_s0304_s0305.rs`: `an_attack_on_an_illegal_target_never_fires` now expects the drop in
+  a check tick, and `an_illegal_target_is_kept_while_rearming` expects it at the first check
+  tick after the countdown runs out (S-0304 claim 2 as r70 changes it). These are expectation
+  updates.
+- `claims_s0513_r43.rs`: `claim39_whole_tick_holder_first_then_the_interim_drop`. The infantry
+  holder in *guard* used to keep the leaving member through the whole leaving stage. It now drops
+  it at the first check tick after the launch, with no draw (S-0513 r62 claim 39). The test then
+  gives it the member again after the last check tick before the departure, and the departure
+  part runs as before. It asserts that the departure tick is not a check tick in this setup.
+- `claims_s0607_release.rs`: `claim_9_no_destination_flies_to_the_found_point`. **This is a
+  setup change, not only an expectation update.** The lifter used to drop the airborne victim,
+  which its firing check answers *illegal* for, at its attack processing. It now keeps it until
+  the check tick (tick 96 in this test). That shifts its fall-back to *area guard* and that
+  behaviour's search, which picks the victim again (tick 156) and grips it as it lands (tick
+  185), so the victim ends up near the lifter instead of at its found point. That follows from
+  claim 29 and the existing search rules. The claim under test is the victim's own jumpjet stop
+  (S-0607 claim 9), so the test now removes the lifter from play once the grip has ended.
+  Nothing tests what the lifter does after a release with r70's timing.
 
 ## Earlier rows
 
@@ -154,8 +176,46 @@ No quirk added; r70 adds none.
 ## Formats
 
 No new state: the check reads `w.tick` and the existing target and behaviour. The save format
-(92), the AI game format (54) and the wire version are unchanged. GOLDENS
+(92), the AI game format (54) and the wire version are unchanged. `GLASNOST_UPDATE_GOLDEN=1` on
+the gate crate moved seven goldens, all state-hash lists that change from the first check tick
+at which a holder drops a refused target: `duel.txt`, `duel-diagonal.txt`, `duel-m6c.txt`,
+`duel-m7a.txt`, `duel-m7b.txt`, `duel-naval.txt` and `skirmish.txt`.
 
 ## Lanes
 
-LANES
+Before is main at ccf5c34. Main then moved to 7f7ce87 (intake 67), and this branch was rebased
+onto it. Intake 67 left the sweeps and the arena unchanged but moved the quick lane, so the quick
+lane's before is intake 67's own after run (`local-lane/m8/intake67/after/quick`, the same sim
+code as 7f7ce87). After is this branch at a4e198a. Outputs are in `local-lane/m8/intake68/`,
+which is git-ignored.
+
+| Lane | Before | After |
+|---|---|---|
+| M6c sweep, seeds 1–16 (29 counts) | passes | passes; 25 counts move. Lower minimums: garrison orders 22 → 13, spy infiltrations 6 → 5, chrono erasure orders 24 → 23, erasures begun 6 → 5, disarm orders 5 → 4, suicide orders 15 → 14, crate orders 78 → 37, crates picked up 10 → 5 |
+| M7a sweep, seeds 1–16 (26 counts) | passes | passes; 24 counts move. Lower minimums: berserk weapon orders 11 → 7, units made berserk 18 → 14, slave-miner buildings placed or deployed 13 → 5, vehicles bunkered 5 → 4, bunker exit orders 4 → 3, seized units dropped 5 → 4 |
+| M7b sweep, seeds 1–16 (34 counts) | passes | passes; 10 counts move, with only drained-building ticks lower at the minimum (19 182 → 19 169) |
+| Arena `--record all`, scored as intake 47 / A6: M-0001 | 9 of 96 failing | 9 of 96, `ours-M-0001.csv` byte-identical |
+| M-0002 | 1 of 24 | 1 of 24, identical |
+| M-0003 | 1 of 35 | 1 of 35, identical |
+| Arena total | 11 of 155 | 11 of 155 |
+| `glasnost-ai --include-ignored` (release) | 239 pass | 239 pass |
+| AI quick lane, seeds 7–10, maps 0, 2 and 8 | 36 games, all ended; house 0 won 17, house 1 won 19; median 45 620 ticks | 36 games, all ended; 1 identical (31 221 ticks), 35 end at another tick; house 0 won 16, house 1 won 20; median 46 317 ticks |
+
+The sweep games are AI games, and a drop that moves by up to 15 ticks changes their course, so
+the counts move both ways. Every sweep test passes with its minimums.
+
+The 11 failing arena pairings, each unchanged (same rows, same verdict): DISK–FV, LTNK–E1,
+CAOS–APOC, CAOS–TTNK, TELE–APOC, TELE–TTNK, TELE–V3, CAOS–E1, CAOS–V3, INIT–E2 and ROBO–HTK.
+The three `ours-M-000x.csv` files are byte-identical before and after: no arena game's outcome
+changes.
+
+## Checks
+
+- `cargo test -p glasnost-sim` (debug): passes.
+- `cargo test --release -p glasnost-sim -- --include-ignored`: only the two expected failures,
+  `pathing_c7p4::diag` and `claims_s0213_r89::claim_16b_a_vehicle_with_a_copied_capture_never_attacks_x`.
+- `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`: clean.
+- `cargo xtask check`: stock-guard's 105 known problems, nothing else. `cargo xtask gate`: ok.
+- `cargo test --workspace`: **not run to the end.** The run was stopped by the session's memory
+  guard while other intakes were building, and was not restarted. The other crates' changes are
+  the seven goldens, which `xtask gate` and the gate crate's own tests cover.
