@@ -1,9 +1,9 @@
 ---
 id: Q-2237
 title: Which animation an aircraft's damage smoke shows, where, and what its creation takes
-status: open
+status: answered
 related: [S-0501, S-0109, S-0312]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
