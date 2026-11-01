@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 43
+revision: 62
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-01
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213]
 supersedes: []
 ---
 
@@ -989,7 +989,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
       later, in tick *t*_L + 61 (an engine constant, not the rules' teleport delay). It still
       stays at its old position throughout that expiry update and departs on the following
       update. It counts as *being erased* from its update in *t*_L + 1 until departure in
-      *t*_L + 62, including the expiry update; S-0214 and S-0301 give what that refuses,
+      *t*_L + 62, including the expiry update; S-0214 gives what that refuses for orders,
     - disappears from its old position in its update of tick *t*_L + 62: it leaves the cell it stood
       in and is off the map (glossary) until it appears at its landing point, while it stays in
       play. The warp-out animation and departure sound play at its old position. Parasite release at
@@ -1045,65 +1045,183 @@ presentation and swept-layer rules below also apply where those specs cite them.
     landing check, its placement and its arrival effects) do not themselves clear holders' targets.
     Here a change is the member's step's only when it is made in the member's own update; a change
     made in a holder's own update in the same tick, a search at its timer's expiry included, is the
-    holder's own processing. Whether a holder's own target checks drop the member after departure is
-    left open (Open questions).
+    holder's own processing. What that processing does with the member after departure is left
+    open (Open questions).
 
     The teleporting locomotor's own jump (S-0207 claim 20 e) never gives a holder the ranged draw
     over 4 to 8 ticks either: its drops are not S-0309 claim 27's or claim 28's, and S-0309 claim
     27 gives its timer reset only to those drops, so a holder that drops the jumper keeps its
     timer, whatever it shows (Changes for other specs).
 
-    A projectile already in flight towards the member does not lose it at departure: its target
-    does not become the cell the member stood in, as S-0306 claim 17 gives for a target that
-    becomes untargetable, and it keeps the member as its target object (Changes for other specs).
-    It goes on as S-0306 gives for a projectile whose target is an object. Where it then flies
-    while the member waits to land, and whether it can hit the member, are left open (Open
-    questions).
+    A projectile already in flight towards the member does not lose it at departure: it keeps the
+    member as its target object, and its target does not become the cell the member stood in
+    (S-0306 claim 17).
+    It goes on as S-0306 claim 17 gives for a projectile whose target object is a departed warp
+    member.
 
-    Before departure, a holder can lose the member by its own processing. Throughout the leaving
-    stage, a firing check asked about the member answers *illegal*, unless the asking weapon is a
-    temporal weapon (S-0301 Terms) or a reason ranked above it applies. It is a rank-4 reason of
-    S-0301 claim 9, placed within that rank as Changes for other specs gives. In particular it
-    outranks a running rearm countdown, so a holder that is rearming gets *illegal*, not *rearming*,
-    for the member. A holder whose weapon is not a temporal weapon and whose member is an
-    opportunity target therefore drops it at its next search in the leaving stage (S-0309 claims 4
-    and 19). Such a drop is not claim 27's and takes no draw over 4 to 8 ticks. An infantry holder
-    whose weapon does not heal keeps the member when its firing step gets this answer. Other drops
-    by a holder's own processing in the leaving stage are left open (Open questions).
-    - Backing for the holders: `measurable` (SW12 part i) for infantry holders at departure, at a
-      failed or redirected landing check, at placement and arrival effects, and for an infantry
-      holder's leaving-stage drop of an opportunity target and for an infantry holder's not dropping
-      the member in a leaving-stage firing step. That the keeping follows this particular answer is
-      `unmeasured`: part i records no firing-check answers. Whether the member's departure, failed
-      or redirected check, placement or arrival effects clear a holder's target, part i decides only
-      with reads just before and just after the member's update, which set a holder's own
-      processing, its expiry search included, apart from the member's step. The departure's lack of
-      a holder timer draw is decided with either kind of read. The same rules for vehicle, building
-      and aircraft holders, the opportunity-target drop included, are `unmeasured`: SW12 part i has
-      infantry holders only. The holders' drop of a member killed by the landing check or destroyed
-      by claim 38's fate in its arrival effects is `unmeasured`, and so is the place of a killed
-      member's holders' draws after the warp-out animation's draws and in the landing check's
-      listing order: no part here records the holders of such a member. The projectile that keeps
-      the member as its target is `unmeasured`: no part
-      here fires at a member as it departs. The leaving-stage answer's *illegal* label and its rank
-      are `unmeasured`: part i records no firing-check answers, and a drop at a search fits more
-      than one refusal. The holder with an override in effect is `unmeasured`: no part here puts an
-      override in effect for a holder of the member. The temporal-weapon exception is `unmeasured`:
-      no part here gives a holder a temporal weapon during a warp. The own jump's lack of a draw is
-      `unmeasured`: no part here jumps a held object with its own locomotor while a holder's timer
-      is read.
-    - Confidence: medium that departure itself clears no holder's target and takes no holder timer
-      draw, for every holder kind; medium that a failed or redirected landing check, placement and
-      arrival effects do not drop it, for every holder kind; medium for the opportunity-target drop
-      with no draw over 4 to 8 ticks by infantry holders (SW12 part i, holder H3), and for the
-      infantry holder's not dropping it in a leaving-stage firing step; medium, unmeasured, for the
-      same opportunity-target drop by vehicle, building and aircraft holders, for that keeping
-      following the *illegal* answer, for the drop of a member killed by the landing check or
-      destroyed by claim 38's fate in its arrival effects, for the place of the killed member's
-      holders' draws after the warp-out animation's draws and in the landing check's listing order,
-      for the projectile that keeps the member,
-      for the *illegal* label, for its rank, for the holder with an override in effect, for the
-      temporal-weapon exception and for the own jump's lack of a draw
+    Before departure, a holder can lose the member by its own processing. From the launch until the
+    member's departure update, a firing check asked about the member answers *illegal* for every
+    weapon, a temporal weapon (S-0301 Terms) included, unless a reason ranked above it applies. The
+    test is made on the pending warp itself, apart from the member's being erased, and makes no
+    exception for a temporal weapon. This
+    covers the turns of tick *t*_L + 1 that come before the member's first warp update as well as
+    the whole leaving stage. It is a rank-4 reason of S-0301 claim 9, placed within that rank as
+    Changes for other specs gives. In particular it outranks a running rearm countdown, so a
+    holder that is rearming gets *illegal*, not *rearming*, for the member. For a firer that has
+    no temporal beam attached to the member, a beam of another firer on it, if one is
+    established (below), does not change the answer. A firer that has a temporal beam attached to
+    the
+    member (S-0514 Terms) gets S-0514 claim 19's *rearming*, which ranks above. A beam begun before
+    the launch never holds a member: an object on which a temporal beam is locked is being erased
+    (S-0514 claim 4 and the glossary), so claim 34 leaves it in place, out of the group.
+    Possible delivery routes of a beam to a member include shots
+    made without a
+    firing check (S-0301 claim 9's exceptions) and temporal shots made before the launch but
+    delivered at their detonation (S-0514 claim 1) after it. Whether either can establish a beam
+    on a member is open (Open questions).
+    Consequences, none of which is S-0309 claim 27's drop or takes a draw over 4 to 8 ticks:
+    - every holder of the member among the holders to which S-0309 claim 29's rules apply, of any
+      kind, drops it at S-0309 claim 29's periodic check, *attack* included except where S-0309
+      claim 29's exceptions hold: at its first checking turn (that claim's Phase rule) in the
+      check ticks of S-0309 claim 29 that fall after the launch; for a holder that takes a
+      checking turn in every tick, that is the first such check tick. A holder for which one of the
+      exceptions of S-0309 claim 29 holds on a check tick keeps the member then and is checked again
+      at the next one. Those exceptions, and the turns that drop a target anyway, are that claim's,
+      with its ratings. That claim gives its rules for holders of human-controlled owners with a
+      target from an order or a search, which in our engine are the holders of every player house,
+      and leaves the original's other holders and targets to its Open questions (low); so does this
+      claim. A reason ranked above this one gives its own answer, and that claim keeps the target
+      unless that answer is *illegal* or *impossible*. Such reasons include the *rearming* of a
+      firer that has a temporal beam attached to the member (above) and the others that Changes for
+      other specs, S-0301, ranks above this one. An attacking holder then stops its attack at its
+      next processing (S-0309 claim 29),
+    - before its first check tick, a holder whose member is an opportunity target drops it at its
+      next search if that comes first (S-0309 claims 4 and 19), whatever its weapon, except where
+      a reason ranked above this one gives an answer for which S-0309 claim 4 keeps the target at
+      a search (for example *busy*, of a spawner launching its aircraft, or the *rearming* of a
+      materialising firer). A holder that controls spawned aircraft and for which a reason ranked
+      above this one answers *impossible* (the hidden-target one, for example) keeps the member at
+      that search, as S-0309 claim 4 gives, only to its next checking turn in a check tick,
+    - before its first check tick, an infantry holder whose weapon does not heal keeps the member
+      when its firing step gets this answer, and makes no shot at it.
+
+    The answer holds in every holder's turn of the 61 ticks from *t*_L + 1 to *t*_L + 61, and in
+    tick *t*_L + 62 before the member's update. Any 61 consecutive ticks hold at least three tick
+    numbers that are multiples of 16, and the first check tick is at most *t*_L + 16. So a holder
+    among the holders to which S-0309 claim 29's rules apply holds the member without a break from
+    the launch to departure only if an exception held for it at each of its checking turns in the
+    check ticks among the ticks *t*_L + 1 to *t*_L + 62, in *t*_L + 62 those of its turns that
+    come before the member's update. A holder that dropped the member may take it again, by an
+    order or by
+    a search where S-0309 and S-0215 allow it. Such a holder is checked again at its next checking
+    turn in a check tick. Other drops at the start of a holder's turn may come earlier where
+    S-0309 does not exclude them (S-0309 Open questions, *Other drops at the start of a turn*).
+
+    **After departure.** From the member's departure update on, no step of the warp acts on its
+    holders, of any kind, except the death that the landing check (claim 37) or claim 38's fate
+    can give it and the sinking that claim 38 can set (above). So a holder that holds the member
+    at departure, by the exceptions above or by taking it again after its last check, can lose it
+    while it waits to land, at its appearance or at its arrival effects by its own processing, by
+    an order or by another rule of S-0309, such as claim 28's drops, or when the landing check or
+    claim 38's fate destroys it there or claim 38 sets it sinking (S-0504 claim 5's, which leaves
+    open when its holders drop a sinking member). The warp's steps do not act on it otherwise.
+    What the firing check answers for a member that has departed, while it is off the map waiting
+    to land and while it is phasing in, and so whether such a holder's own processing keeps the
+    member, drops it or fires at it then, is left open (Open questions). Such a shot's projectile
+    follows S-0306 claim 17. The departure itself makes no revert, so
+    a holder that holds the member through it holds a target that no revert gave back, and S-0309
+    claim 27's rule for a held object that a revert gave back while it is off the map does not
+    apply to it (Changes for other specs). A holder that a revert gives the member back, at one of
+    S-0215 claim 10's causes while the member is off the map, is the case of S-0309 claim 27's
+    rule, which applies to it. A drop by a
+    holder's own processing takes no
+    timer-reset draw over 4 to 8 ticks, since that reset belongs to the drops of S-0309 claims 27
+    and 28.
+
+    **Overrides.** A holder with an override in effect reverts, while it holds the member, only at
+    S-0215 claim 10's causes. The member's destruction by its landing check or by claim 38's fate
+    reverts it at the killing hit, as that claim's destruction cause gives. Clearing the target
+    through the holder's own processing (at S-0309 claim 29's check, at a search or in a firing
+    step, for example), a leash or an order does not itself revert the override (S-0215 claim 10:
+    clearing the target by another rule does not revert). S-0215 claim 10's other revert causes,
+    such as the target's change of owner or its start of cloaking, remain applicable, with that
+    claim's exceptions. Neither the launch, the departure, the placement nor the arrival effects
+    is a revert cause.
+    - Backing for the holders: `measurable` (SW12 part i) for infantry holders in *guard*: the
+      drop of the member at the first check tick with no draw over 4 to 8 ticks, by a holder that
+      still holds it there, and an opportunity target's drop at a search before that tick.
+      `measurable` (SW12 part j) for an infantry holder in *attack* and for vehicle holders in
+      *guard* and *attack*: the same drop at the first check tick. Their making no shot at the
+      member from the launch to that tick is `unmeasured`: SW12 part j does not establish an
+      otherwise eligible firing opportunity in that interval. Their drop's taking no draw over 4 to
+      8 ticks is `unmeasured`: part j does not condition their timers in that tick, so it does not
+      tell a drop with no draw from one whose timer had 10 ticks or fewer left. A vehicle holder's
+      drop of an opportunity member at a search before that tick is `unmeasured`: part j's *V*1 has
+      a 200-tick targeting delay, so no search of it falls before that tick. An infantry holder's
+      not dropping the member in a firing
+      step before that tick is `unmeasured`: parts i and j read a holder between updates only, and
+      an earlier drop at the start of a turn, where S-0309 does not exclude one, would look the
+      same, so
+      they record such a drop but judge none. That the drop follows this particular answer is
+      `unmeasured`: parts i and j record no firing-check answers. The exceptions are S-0309 claim
+      29's, with that claim's backing. Departure's not clearing a holder's target and taking no
+      holder draw, a failed or redirected landing check's, placement's and arrival effects' not
+      dropping it, and the absence of any other warp step acting on a holder after departure, are
+      `unmeasured`: no part here judges a holder that holds the member at departure. A holder's
+      taking the member again after a drop, and its check after that, are `unmeasured`: parts i
+      and j record a re-taking with its tick but judge none. A temporal firer's making no shot
+      before departure is `unmeasured`: SW12 part k records such a firer, but it does not control
+      the firer's facing, turning or first firing step and has no control run, so its outcome
+      fits more than one rule. That a beam begun before the launch never holds a member is
+      `unmeasured`, as claim 34's exclusion of an object being erased is. Whether a delivery
+      route can establish a beam on a
+      member is open (Open questions) and is not rated. That another firer's beam on a member does
+      not change the answer is `unmeasured`: no part here sets up a beam on a member. What the firing check answers for a
+      departed member, and what its holders' own processing does with it, are open (Open
+      questions) and are not rated. Building
+      and aircraft holders are `unmeasured`: SW12 parts i to k have infantry and vehicle holders
+      only. The holders' drop of a member killed by the landing check or destroyed by claim 38's
+      fate in its arrival effects is `unmeasured`, and so is the place of a killed member's
+      holders' draws after the warp-out animation's draws and in the landing check's listing
+      order: no part here records the holders of such a member. The projectile that keeps the
+      member as its target, and a shot's projectile after departure, have S-0306 claim 17's
+      backing. A
+      holder's keep at a search on a higher-ranked answer that S-0309 claim 4 keeps, and a spawner
+      holder's keep there on a higher-ranked *impossible*, are `unmeasured`: no part here has a
+      holder that controls spawned aircraft, a materialising firer or a hidden member. The answer's
+      *illegal* label and its rank are `unmeasured`: no part here records firing-check answers, and
+      a drop at a check tick or a shot not made fits more than one refusal. The holder with an
+      override in effect, the causes that revert it while it holds the member, and a revert that
+      gives the member back while it is off the map, are `unmeasured`: no part here puts an override
+      in effect for a holder of the member. The own jump's lack of a draw is `unmeasured`: no part
+      here jumps a held object with its own locomotor while a holder's timer is read.
+    - Confidence: medium for the drop at the first check tick, for infantry and vehicle holders in
+      *guard* and *attack* (SW12 parts i and j: at most S-0309 claim 29's levels for the drop on
+      *illegal*, and the rank of this answer, S-0301's, is medium here), and for its taking no draw over 4 to
+      8 ticks, for infantry holders in *guard* (SW12 part i); medium for the opportunity-target
+      drop at a search before that tick, for infantry holders in *guard* (SW12 part i). The
+      exceptions are S-0309
+      claim 29's, rated there, and the projectile that keeps the member, or that a shot after
+      departure fires, is S-0306 claim 17's, rated there. Medium, unmeasured, for a holder's keep at
+      a search on a higher-ranked answer that S-0309 claim 4 keeps and a spawner holder's keep there
+      on a higher-ranked *impossible*, for the infantry holder's not dropping it in a firing step
+      before that tick, for the holders of SW12 part j making no shot at it before that tick, for
+      the drop's taking no draw for an infantry holder in *attack* and for vehicle holders, for a
+      vehicle holder's opportunity-target drop at a search before that tick, for a firer with a
+      temporal weapon making no shot at it before departure, that departure itself clears no
+      holder's target and takes no holder timer draw, for every holder kind, that a failed or
+      redirected landing check, placement and arrival effects do not drop it, that no other warp
+      step acts on a holder after departure, for the same rules for building and aircraft holders,
+      for that drop following the *illegal* answer, for a temporal weapon's getting the same answer,
+      for another firer's beam on the member not changing it, for a beam begun before the launch
+      never holding a member (claim 34's exclusion of an object being erased), for a holder's taking
+      the member again and its check after that, for the drop of a
+      member killed by the landing check or destroyed by claim 38's fate in its arrival effects,
+      for the place of the killed member's holders' draws after the warp-out animation's draws and
+      in the landing check's listing order, for the
+      *illegal* label, for its rank, for the holder with an override in effect, the causes that
+      revert it and a revert that gives the member back while it is off the map, and for the own
+      jump's lack of a draw
 
 40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
     *held delay*, in ticks. With one update per tick, phasing in ends in tick
@@ -1397,8 +1515,10 @@ presentation and swept-layer rules below also apply where those specs cite them.
     ammunition reload update and firing-frame advancement (S-0301 claims 11 and 13),
     attached parasite step (S-0614 claim 18), the member's own economy and power work,
     depot queued-entry retry, expected-health turn bookkeeping, protection-brightness
-    phase processing, the berserk countdown (S-0610 claim 5) and the mind-control overload
-    update (S-0601 claim 16). The berserk countdown and the overload countdown are update counts,
+    phase processing, the berserk countdown (S-0610 claim 5), the mind-control overload
+    update (S-0601 claim 16) and the member's own periodic held-target check (S-0309 claim
+    29).
+    The berserk countdown and the overload countdown are update counts,
     not elapsed-tick clocks, so neither takes a step in a suppressed update, and no missed step of
     either is made up later. The elapsed-tick clocks below (protection duration, reload countdown,
     shot cooldown) keep running in suppressed updates. S-0203 claim 4's list of suppressed ordinary
@@ -1572,10 +1692,10 @@ Absent-key defaults are in Import mapping.
 
 | State | Event | Result |
 |---|---|---|
-| examined | joins the group (claim 34) | warp pending; landing point fixed |
+| examined | joins the group (claim 34) | warp pending; landing point fixed; until departure a firing check about it answers *illegal* for every weapon (claim 39) |
 | warp pending | update in *t*_L + 1 | leaving stage; counts as being erased; fixed wait starts |
 | leaving stage, waiting | update in *t*_L + 61, 60 elapsed ticks after the wait starts | remains at old position and still counts as being erased; target search if targetless |
-| leaving stage, wait expired | update in *t*_L + 62 | disappears from its old position and is off the map until it appears; being-erased state ends; phasing in; landing check; the departure itself clears no holder's target and takes no holder timer draw (claim 39) |
+| leaving stage, wait expired | update in *t*_L + 62 | disappears from its old position and is off the map until it appears; being-erased state ends; phasing in; landing check; the departure itself clears no holder's target and takes no holder timer draw; what a firing check about it answers from then on is open (claim 39) |
 | check failed | each update | redirected search and check again; held delay set to the teleport delay |
 | check passed | next update | placed at the landing point |
 | placed | next update | arrival effects; arrival hold starts (claim 40) |
@@ -2214,46 +2334,103 @@ is not under test.
   (i) Holders of a warp member (Q-2156), on S-0309 scenario A18 part d's recorder. The human
   launches the warp on a block holding one tank of the computer house as its only member, set up
   as in part (d), which cannot fire (a test copy). A run in which the tank moves before departure
-  decides nothing. Three human-owned armed infantry holders stand within range of the tank, with
-  the normal targeting delay given a test value of 100 ticks and weapons that cannot kill it
-  during the run, none of them a temporal or healing weapon. *H*1 and *H*2 in *guard* pick the
-  tank by their own search (S-0309 claims 1 to 4) before the launch, at ticks chosen so that
-  neither targeting timer runs out between the launch and departure, and at departure *H*1's timer
-  has more than 10 ticks left and *H*2's at most 10. *H*3 in *guard* picks it before the launch at
-  a tick chosen so that its timer runs out in the leaving stage, and its weapon has a rearm delay
-  of 1 tick in the test map, so that rearming does not decide its answer. A run in which *H*1's or
-  *H*2's timer ran out between the launch and departure, or in which a holder did not hold the
-  tank at the launch, decides nothing for that holder. A run counts for *H*3 only if *H*3 held the
-  tank at the launch and its recorded timer ran out in the leaving stage; any other run decides
-  nothing for *H*3. Repeat until each of *H*1, *H*2 and *H*3 has at least five runs that count for
-  it; this count replaces the three runs of the scenario's preamble for this part. Record each
-  holder's target, targeting timer and behaviour in every tick from the launch to the end of the
-  arrival effects, just before and just after the member's update where the recorder allows reads
-  between updates, and otherwise at the end of the tick. A change between the reads just before
-  and just after the member's update is the member's; a change at any other point of the tick, a
-  holder's search at its own timer's expiry included, is the holder's own processing and decides
-  nothing for the member's warp steps. With end-of-tick reads only, this part decides nothing on
-  whether the member's departure, placement, arrival-effects, failed-check or redirected-check
-  update clears a holder's target; the draw lists still decide the departure's draws. List the
-  scenario-stream draws with their ranges in the member's departure update and in *H*3's update at
-  its timer's expiry, where the recorder allows it, otherwise those of the whole tick, with draws
-  that the other specs predict set aside. Expected: *H*1 and *H*2 hold the tank at the reads just
-  before and just after its departure update where read between updates, each timer counting down
-  from its value before departure; *H*3 drops it at its expiry in the leaving stage, and no holder
-  drops it in its firing step in the leaving stage; no list has a draw over 4 to 8 ticks that
-  another spec does not predict. Where read between updates, no holder's target changes between
-  the reads just before and just after the member's placement or arrival-effects update. Repeat
-  with an unprotected building on the landing cell, as in SW13 part (b), so that the first landing
-  check fails and a redirected check follows: expected the same, and no holder's target changes
-  between the reads just before and just after the member's update of a failed or redirected
-  check. Falsified if *H*1 or *H*2 shows a draw over 4 to 8 at departure (for *H*1, with its timer
-  then equal to that draw), if either holds the tank at the read just before the departure update
-  and no target at the read just after it, if *H*3 still holds the tank at departure in a run that
-  counts for it, if *H*1 or *H*2 drops it before departure in a tick in which its timer did not
-  run out, or if a holder's target is cleared between the reads just before and just after the
-  member's update of a later warp step. Part (i) records no firing-check answers, so no outcome
-  here falsifies the *illegal* label or its rank: *H*3's drop and the firing-step keeping test only
-  what claim 39 says that answer causes, and the label and rank stay `unmeasured` there.
+  decides nothing. Call *c* the first tick after the launch whose tick number is a multiple of
+  16 (the first check tick, claim 39). Three human-owned armed infantry holders stand within
+  range of the tank, with the normal targeting delay given a test value of 100 ticks and weapons
+  that cannot kill it during the run, none of them a temporal or healing weapon. *H*1 and *H*2
+  in *guard* pick the tank by their own search (S-0309 claims 1 to 4) before the launch, at ticks
+  chosen so that neither targeting timer runs out from the launch to the end of tick *c*, and in
+  tick *c* *H*1's timer has more than 10 ticks left and *H*2's at most 10. *H*3 in *guard* picks it
+  before the launch at a tick chosen so that its timer runs out after the launch and before tick
+  *c*, and its weapon has a rearm delay of 1 tick in the test map, so that rearming does not
+  decide its answer. A run decides nothing for a holder that did not hold the tank at the launch,
+  nothing for *H*1 or *H*2 if its timer ran out from the launch to the end of tick *c*, and nothing
+  for *H*3 unless its recorded timer ran out after the launch and before tick *c*. Repeat until
+  each of *H*1, *H*2 and *H*3 has at least five runs that count for it; this count replaces the
+  three runs of the scenario's preamble for this part. Record each holder's target, targeting
+  timer and behaviour, and the tick number, in every tick from the launch to the end of the
+  arrival effects, at the end of the tick and, where the recorder allows reads between updates,
+  just before and just after each holder's update. List the scenario-stream draws with their
+  ranges in each holder's update of tick *c* and in *H*3's update at its timer's expiry, where
+  the recorder allows it, otherwise those of the whole tick, with draws that the other specs
+  predict set aside. A drop of the tank before tick *c* by *H*1 or *H*2, or by *H*3 before its
+  expiry, is recorded with its tick and the holder's owner and behaviour: S-0309 does not exclude
+  such earlier drops for a holder in *guard* (S-0309 Open questions, *Other drops at the start of
+  a turn*), so it
+  neither confirms nor falsifies this part, and the run then decides nothing for that holder's
+  later expectations. A run in which an object is removed from play in tick *c*, or in the tick
+  of *H*3's expiry, decides nothing for that tick's expectations, since a holder may then miss its
+  turn there (S-0203 claim 10); no holder here travels through a tunnel, plays its death frames or
+  is being erased, so no holder's turn is cut short (S-0309 claim 29). Expected: *H*1 and *H*2,
+  holding the tank at their updates of tick *c*, drop it there, each timer counting on from its
+  value before, without a reset; *H*3, holding
+  it at its expiry, drops it there, before tick *c*; no holder holds the tank without a break
+  from the launch to the member's departure update; no list has a draw over 4 to 8 ticks that
+  another spec does not predict. A holder's taking the tank again after its drop, by a search or
+  an order, is recorded with its tick and neither confirms nor falsifies this part. Falsified if
+  *H*1 or *H*2 shows a draw over 4 to 8 ticks in its update of tick *c* (for *H*1, with its timer
+  then equal to that draw), if either, holding the tank just before its update of tick *c*, still
+  holds it just after that update, if *H*3, holding the tank just before its update of the tick of
+  its expiry, still holds it just after that update in a run that counts for it, or if any holder
+  holds the
+  tank without a break from the launch to the departure update in a run that counts for it and
+  in which no object is removed from play in a tick of that span whose tick number is a multiple
+  of 16. Each of these applies only to a tick whose expectations the run decides. Part (i) records
+  no firing-check answers, so no outcome here falsifies the *illegal* label. The drops test only
+  what claim 39 says that answer causes, and the label and rank stay `unmeasured` there, since a
+  drop fits more than one refusal.
+  (j) Holders in *attack* and vehicle holders, on part (i)'s set-up, recorder and tick
+  *c*, with these changes. *H*3 is left out, part (i)'s conditions on *H*1's and *H*2's timers in
+  tick *c* do not apply, the normal targeting delay is given a test value of 200 ticks, and every
+  holder's weapon has a rearm delay of 1 tick in the test map. *H*4, a fourth human-owned armed
+  infantry holder of the same kind within range of the tank, is ordered by the human to attack it
+  before the launch. *V*1 and *V*2, human-owned armed vehicles of a stock type whose weapon cannot
+  kill the tank during the run and is neither a temporal nor a healing weapon, stand within range
+  of it: *V*1 in *guard* picks it by its own search before the launch, and *V*2 is ordered by the
+  human to attack it before the launch. A run counts for *H*1, *H*2 or *V*1 only if that holder
+  held the tank at the launch and its targeting timer did not run out from the launch to the end
+  of tick *c*, and for *H*4 or *V*2 only if it held the tank at the launch. Any other run decides
+  nothing for that holder, and each holder needs at least five runs that count for it. Record as
+  in part (i), from the launch to the end of the arrival hold, with every shot each holder makes
+  and its tick. A drop of the tank before tick *c* is recorded with its tick and the holder's
+  owner and behaviour, as in part (i), and neither confirms nor falsifies this part, whose drop
+  item is medium and which records no firing-check answers. For *H*4 and *V*2, holders in
+  *attack* for which S-0309 excludes the other start-of-turn drops, such a drop is reported
+  against that exclusion (S-0309 Open questions, *Other drops at the start of a turn*). A run in
+  which
+  an object is removed from play in tick *c* decides nothing for that tick's expectations, as in
+  part (i). Expected: no
+  holder makes a shot at the tank from tick *t*_L + 1 to the end of tick *c*; each holder that holds
+  the tank at its update of tick *c* drops it there; *H*4's
+  and *V*2's behaviour then leaves *attack* at its next processing, as S-0215 gives for that
+  behaviour with no target; no holder holds the tank without a break from the launch to the
+  departure update. A holder's taking the tank again after its drop, by a search or an order, is
+  recorded with its tick and neither confirms nor falsifies this part. Falsified if a holder makes
+  a shot at the tank from tick *t*_L + 1 to the end of tick *c*, or, holding the tank just before
+  its update of tick *c*, still holds it just after that update. Each of these applies to a run
+  that counts for that holder and, for the second, decides tick *c*'s expectations. The shots and drops
+  do not record the firing-check answers: the
+  label and rank stay `unmeasured` here too.
+  (k) A firer with a temporal weapon (Q-2213), on part (d)'s set-up and part (i)'s recorder. A
+  human-owned infantry unit *T* with a temporal weapon is ordered by the human to attack the tank
+  before the launch from beyond its weapon's range. Its start is chosen so that its approach
+  brings it within range in the leaving stage, before part (i)'s first check tick *c*, at which
+  *T* drops the tank (claim 39). A run in which *T* fires at the tank before the launch decides
+  nothing, since a beam then locked on the tank makes it being erased (S-0514 claim 4), claim 34
+  then leaves it out of the group, and part (d)'s departure need not follow. Otherwise a run counts
+  only if, in the leaving stage
+  and before tick *c*, *T* held the tank at one of its turns while within its weapon's range of
+  it; at least five runs must count. Record *T*'s target, position and shots in every tick from
+  the launch to the tank's departure, with the tank's being-erased state, read-only, and its
+  departure tick. The span of the expectations ends at the tank's departure update: a shot or a
+  beam later in that tick is outside it. This part is a recorded run, not a test: it does not
+  control *T*'s facing, turning or first firing step and has no control run, so a run with no shot
+  fits more than one rule. Claim 39 predicts that *T* makes no shot at the tank in that span,
+  drops it in its update of tick *c* if it still holds it there, that no beam holds the tank, and
+  that the tank departs in *t*_L + 62 as in part (d). A shot or a beam in that span contradicts
+  claim 39 and is reported; a run without one confirms nothing, since it fits more than one rule,
+  and no outcome tells *illegal* from another refusal: the temporal firer's making no shot and
+  the label stay `unmeasured`.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -2381,10 +2558,14 @@ is not under test.
   observation that cannot separate same-tick events is inconclusive, not confirmation.
   (f) Engine-only contract test, not an oracle expectation: arrange a due, otherwise
   eligible heal, visible behaviour action, movement, shot, turret turn and, for a member
-  that is an unlimited controller (S-0601 claim 16), its overload update, independently at
-  every row of claim 51 for each applicable kind. Expect zero ordinary work in all
-  five columns through arrival effects, with no overload step in those rows, and ordinary
-  eligibility after the hold-end test. Confirm one warp update per tick and immediate route, queued-destination and
+  that is an unlimited controller (S-0601 claim 16), its overload update, and, for a member given
+  directly a held target that the firing check refuses, S-0309 claim 29's periodic check in a
+  check tick, independently at every row of claim 51 for each applicable kind, the leaving row
+  excepted for that check (claim 48's leaving-stage rule drops the target there anyway). Expect
+  zero ordinary work in the five columns of claim 51's table through arrival effects, with no
+  overload step and no drop of that target by the periodic check in those rows (the leaving row
+  excepted for the check), and ordinary eligibility of both after the hold-end test. Confirm one
+  warp update per tick and immediate route, queued-destination and
   driving-step clearing at launch. Any contrary event falsifies the engine contract.
   Compare the same witnesses in (a) to (e) against the original: a heal, due action,
   movement, shot or turret turn in a suppressed row, retained route or multiple warp
@@ -2494,13 +2675,17 @@ for these two kinds.
 - Q-0742 questions 1 to 3 are answered by S-0214 claim 31, table CS; question 5 belongs to
   S-0512 claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
-- What a holder of a warp member does with it in the leaving stage other than an opportunity
-  target's drop at a search, while it is off the map after departure, and after it appears at its
-  landing point: whether its own processing drops it (an attack behaviour, for example), and whether
-  it may fire at it while it is phasing in, which begins at departure, after the leaving stage
-  (claim 39).
-- Where a projectile that keeps a warp member as its target flies while the member waits to
-  land, and whether it can hit the member then or after it appears (claim 39).
+- What the firing check answers for a warp member that has departed, while it is off the map
+  waiting to land and while it is phasing in (S-0306 claim 23's rows other than its render-layer
+  row, which does not hold for a member in the ground render layer (S-0306 claim 17), and the hidden
+  and cloaked tests among the candidates), and so whether a holder that holds it through its
+  departure keeps it, drops it at S-0309 claim 29's check or another own drop, or may fire at it
+  then, and, while it keeps it, whether it moves towards the member's new position when that is
+  out of its weapon's range (claim 39, Q-2211 question 3).
+- Whether a shot made without a firing check (S-0301 claim 9's exceptions), or a temporal shot
+  made before a warp launch and delivered at its detonation after the launch (S-0514 claim 1), can
+  establish a beam on a member, and what then happens to that member's warp (claim 39). S-0514
+  claim 3's lock refusals name no pending warp.
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
 - Q-0738 is accounted for question by question in claim 48: leaving exclusions, stopped
@@ -2554,49 +2739,85 @@ for these two kinds.
   withholds only the protection masks, so the two agree. No further change to S-0519 is needed.
 - **S-0309 claim 27.** A superweapon warp member goes off the map at its departure (S-0513 claim
   39), but this claim's drop, its timer reset and its rule for a projectile in flight do not
-  apply to the departure. The claim gains, after its list of objects that go off the map: "A
-  member of a superweapon warp group goes off the map at its departure, but this claim's drop,
-  its timer reset and its rule for a projectile in flight do not apply to the departure, then or
-  while it waits to land (S-0513 claim 39). A member destroyed by its landing check is a
-  destroyed object here." Level: medium. Backing: `measurable` (S-0513 SW12 part i) for infantry
-  holders; `unmeasured` for the other holder kinds (SW12 part i has infantry holders only), for
-  the projectile rule (no part of S-0513 fires at a member as it departs) and for the member
-  destroyed by its landing check (no part of S-0513 records its holders).
-- **S-0306 claim 17.** The departure of a superweapon warp member (S-0513 claim 39) is not a
-  loss of target: a projectile in flight towards the member keeps it as its target object, and
-  its target does not become the cell the member stood in. "Becomes untargetable (for example by
-  being teleported)" covers the teleporting locomotor's own jump (P11 run d), not that departure.
-  The claim may gain: "The departure of a superweapon warp member is not such a loss (S-0513
-  claim 39)." Level: medium. Backing: `unmeasured`, because no part of S-0513 fires at a member
-  as it departs.
+  apply to the departure. The claim gains two passages. After its list of objects that go off
+  the map: "A member of a superweapon warp group goes off the map at its departure, but this
+  claim's drop, its timer reset and its rule for a projectile in flight do not apply to the
+  departure, then or while it waits to land (S-0513 claim 39). A member destroyed by its landing
+  check is a destroyed object here. Among the holders to which claim 29's rules apply, a holder
+  that holds the member through its departure is rare: only claim 29's exceptions, or a
+  re-taking after the holder's last check, let such a holder hold the member at departure
+  (S-0513 claim 39)." After "What the original does with such a target until its removal, and
+  what its firing check answers for it, is not established (Open questions).": "A superweapon
+  warp member that a holder holds through its departure is not such a target, since the
+  departure makes no revert. What the firing check answers for it while it waits to land and
+  while it is phasing in is open (S-0513 claim 39). A member that a revert gives back to a
+  holder while it is off the map is such a target." Level of both passages: medium. Backing:
+  `unmeasured`, because no part of S-0513 judges a holder that holds the member at departure
+  (its holders among those to which S-0309 claim 29's rules apply drop it at that claim's check
+  before then, S-0513 claim 39, and a later re-taking is recorded but not judged), fires at a
+  member as it departs, records the holders of a member destroyed by its landing check, or puts
+  an override in effect for a holder of the member.
+- **S-0309 claim 29.** The periodic held-target check
+  that claim 39 relies on: at its checking turns in every tick whose tick number is a multiple of
+  16, a holder in *attack* or *guard* drops a target that the firing check,
+  without the range test, answers *illegal* or *impossible* for, with no timer draw and no
+  revert. Its rules are given for holders of human-controlled owners (in our engine, of every
+  player house) with a target from an order or a search; a holder in *capture* or *sabotage*
+  makes no check, and whether a holder in another
+  behaviour makes it is left open there. Its *Warp members* rule points to claims 48 and 52 here for
+  a warp member's own check as a holder in the original, which stays unsettled, and gives our
+  engine's suppression of that check from the first pending update through the arrival effects
+  (claim 51). No further change to S-0309 is needed for the warp. Level and backing of that claim
+  itself: at the levels S-0309 claim 29 gives (`measurable`, S-0309 scenario A6 part p). For
+  a warp member's holders here the level is medium, not high, since the rank of the warp-pending
+  *illegal* is S-0301's and rated medium (claim 39); backing `measurable` (SW12 parts i and j).
+  For a member's own check in the original: unsettled, low, `unmeasured` (claims 48 and 52 list
+  no row for it); high as design for our engine's suppression, `measurable` in our
+  engine (SW23 part f).
+- **S-0203 claim 4.** Its engine contract's list of suppressed ordinary work gains "the periodic
+  held-target check (S-0309 claim 29)", after the overload update of an unlimited mind
+  controller, as claim 51 here gives. Level: high as design. Backing: `measurable` in our engine
+  (SW23 part f).
 - **S-0207 claim 20 (e).** The drops at the teleporting locomotor's own jump are not S-0309 claim
   27's or claim 28's, so they take no targeting-timer draw, whatever a holder's timer shows. This
   follows the committed text of S-0309 claim 27 ("This reset belongs to the drops of this claim
   and of claim 28"); part (e) may say so for clarity. No change of behaviour. Level: medium.
   Backing: `unmeasured` here, since no part here jumps a held object with its own locomotor
   while a holder's timer is read.
-- **S-0301, the firing check.** The answer list gains a target test: a target in the leaving stage
-  of a superweapon warp (S-0513 claim 39) answers *illegal* unless the asking weapon is a temporal
-  weapon (Terms). Whether a target held by a temporal beam gets the same answer is not settled here.
-  It is a rank-4 reason. Within rank 4 it comes after every other reason listed there, except the
-  following, which it outranks: the spawner-weapon answers (S-0506 claim 10: the parasite-hold
-  *impossible* and the *rearming* when no spawned aircraft is alive), the *impossible* of the other
-  weapon's live effect, every row of S-0306 claim 23, and the magnetic-beam *rearming* against a
-  target other than the gripped unit (S-0607 claim 11). So it comes after, among others, the firer's
-  own-state refusals, the early *rearming* of a materialising firer, of its own gripped unit and of
-  a target it already holds with a temporal weapon, the drain and berserk refusals, the
-  hidden-target, absent-weapon and power-sensitive-weapon *impossible*, an infantry healer's
-  *illegal* and a building's pending delayed shot. A building's answers of S-0405 table T1 also come
-  before it. It outranks every reason of ranks 5 and 7 to 16 (rank 6 is not used), so a firer
-  whose rearm countdown is running,
-  or whose weapon's own effect is alive, gets *illegal* for such a target. Level: medium. Backing:
-  `unmeasured` for the *illegal* label, the temporal-weapon exception and the rank, because S-0513
-  SW12 part i records no firing-check answers. The drops and keeps that the answer causes are S-0513
-  claim 39's (medium: `measurable`, SW12 part i, for infantry holders, and `unmeasured` for other
-  holders).
+- **S-0301, the firing check.** The answer list gains a target test: a target that has a
+  superweapon warp pending, from the launch until its departure (S-0513 claim 39), answers
+  *illegal* for every weapon, a temporal weapon (Terms) included. The rank-4 row gains, after
+  "the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6),", the words "the *illegal* answer, with any
+  weapon, for a target that has a superweapon warp pending, until its departure (S-0513 claim
+  39),". It is a rank-4 reason. Within rank 4 it comes after every other reason listed there,
+  except the following, which it outranks: the spawner-weapon answers (S-0506 claim 10: the
+  parasite-hold *impossible* and the *rearming* when no spawned aircraft is alive), the other
+  weapon's live-effect *impossible*, every row of S-0306 claim 23, and the magnetic-beam *rearming*
+  against a target other than the gripped unit (S-0607 claim 11). So it comes after, among others,
+  the *illegal* of a firer bound to a slave master, deactivated or sinking, the materialising
+  firer's *rearming*, the own-gripped-unit *rearming*, the held-temporal-target *rearming* (S-0514
+  claim 19), the drain and berserk refusals, and the hidden-target, absent-weapon and
+  power-sensitive-weapon *impossible*. An infantry healer's *illegal* (S-0310 claim 11) and a
+  building's answers of S-0405 table T1, its pending delayed shot's *rearming* included, come
+  before it too. It also outranks every reason of ranks 5 and 7 to 16 (rank 6 is not used). So a
+  firer whose rearm countdown is running, or whose weapon's own effect is alive, gets *illegal* for
+  such a target. This test is not the test of a target being erased: what that one answers for a
+  target that a temporal beam holds outside a warp is not settled here. Level: medium. Backing:
+  `unmeasured` for the *illegal* label and the rank, because no part of S-0513 records firing-check
+  answers. `measurable` (S-0513 SW12 parts i and j) for the drops that the answer causes in
+  infantry and vehicle holders. `unmeasured` for the shots not made, since SW12 part j does not
+  establish an otherwise eligible firing opportunity before the first check tick, for a temporal
+  weapon's making no shot at such a target, since SW12 part k is a recorded run whose
+  outcome fits more than one rule, and for building and aircraft holders.
 - **S-0215 claim 10.** The cause "the target goes off the map" does not include the departure of
   a superweapon warp member (S-0513 claim 39). An actor with an override in effect whose target is
   that member does not revert at the departure, keeps the member as its target and keeps its
   suspended behaviour. The claim gains, after its off-map cause: "This cause does not include the
-  departure of a superweapon warp member (S-0513 claim 39)." Level: medium. Backing: `unmeasured`,
-  because no part of S-0513 puts an override in effect for a holder of a warp member.
+  departure of a superweapon warp member (S-0513 claim 39)." While such an actor holds the member,
+  only this claim's causes revert it. The member's destruction by its landing check or by S-0513
+  claim 38's fate reverts it at the killing hit, under "the target is destroyed: the revert comes
+  at the killing hit, on the tick of that hit". A later drop of the member by the actor's own
+  processing does not, as "Clearing the target by another rule, apart from the centre-cell event
+  above (for example the leash of claim 26 or an order), does not revert." gives. No further
+  wording change is needed for that. Level: medium. Backing: `unmeasured`, because no part of
+  S-0513 puts an override in effect for a holder of a warp member.
