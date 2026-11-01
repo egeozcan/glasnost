@@ -62,25 +62,25 @@ damage, animation and debris do not read it.
 | Claim 17: while off the map, neither T1's proximity row nor the area damage finds the member | tested | the old-position test: the member's health is unchanged, a vehicle now in the cell it left is damaged. No code change (the cell lists) |
 | Claim 17: after it appears it is found in its landing cell, and its phasing in does not stop a hit | tested | `claim17_a_hit_while_the_member_phases_in_after_it_appears` (stage Placed, `warp::phasing` true before and after the hit) |
 | Claim 17: a landing-check kill gives the departure cell, or nothing for a member counted as airborne | tested | `claim17_a_member_killed_by_its_landing_check_leaves_its_departure_cell` (at departure, and at a later retry after the projectile kept the member through its own turn); the deck cases below |
-| Claim 17: the airborne count of a departed member (not S-0307's off-map rule; height above the surface beneath its kept position; on a deck once a check passed for a deck cell) | tested | `claim17_a_member_departed_from_the_ground_is_not_airborne`, `claim17_a_passed_landing_check_for_a_deck_cell_stands_the_member_on_a_deck`, and the switch tests below. A placement refused after a passed check (S-0513 claim 50): **Q-2232** |
+| Claim 17: the airborne count of a departed member (not S-0307's off-map rule; height above the surface beneath its kept position; on a deck once a check passed for a deck cell) | tested | `claim17_a_member_departed_from_the_ground_is_not_airborne`, `claim17_a_passed_landing_check_for_a_deck_cell_stands_the_member_on_a_deck`, and the switch tests below. A placement refused after a passed check (S-0513 claim 50): **Q-2232**, answered by S-0306 r62 (intake 65: the interim is claim 17's engine-design rule, [intake65-S-0306.md](intake65-S-0306.md)) |
 | Claim 17 (claim 15): a steering projectile left without target by a deck member's kill climbs | tested | `quirk_warp_deck_departure_airborne_on_a_deck_member_killed_leaves_no_target` |
 | A departed member removed from the game | tested | `claim17_a_departed_member_removed_from_the_game_leaves_its_departure_cell` |
 | `quirks.warp_deck_departure_airborne` on (default) | tested | `quirk_warp_deck_departure_airborne_on_a_deck_member_killed_leaves_no_target`, `quirk_warp_deck_departure_airborne_on_the_anti_air_row_finds_the_member` |
 | `quirks.warp_deck_departure_airborne` off | tested | `quirk_warp_deck_departure_airborne_off_a_deck_member_killed_leaves_its_deck_cell`, `quirk_warp_deck_departure_airborne_off_the_anti_air_row_does_not`. Rules: `every_spec_quirk_has_a_switch` (green); schema regenerated |
-| Open question: the target-object effects of a detonation (S-0514 claim 20's special hits, S-0516 claim 31's disguise) on a departed member, off the map and phasing in | request | **Q-2231**. Interim (`combat::projectile::effect_target`): none acts on the member while it is off the map, the selected row still replaces ordinary damage; after it appears it is a target like any other |
-| Open question: claim 20 (c)'s threshold for a deck-departed member counted as airborne (its render layer) | request | **Q-2231**. Interim: the layer its kept state gives (`temporal::ground_layer`), so a vehicle from a deck gets 42, an aircraft member above the ground 128 |
+| Open question: the target-object effects of a detonation (S-0514 claim 20's special hits, S-0516 claim 31's disguise) on a departed member, off the map and phasing in | answered (intake 65) | **Q-2231**, answered by S-0306 r62. Intake 64's interim (`combat::projectile::effect_target`: none acted on the member while it was off the map) is replaced: each row acts by its own tests, no locomotor seizing from departure until the hold ends ([intake65-S-0306.md](intake65-S-0306.md)) |
+| Open question: claim 20 (c)'s threshold for a deck-departed member counted as airborne (its render layer) | answered (intake 65) | **Q-2231**, answered by S-0306 r62: a warp member is in the ground render layer until at least the end of its hold, so 42 (`warp::in_ground_layer`; intake 64's interim gave an aircraft member above the ground 128) |
 | Changes for other specs: S-0307 Terms (the exception for a departed member) | built here | `target_airborne` is the exception, used only by S-0306's rules; S-0307 itself has not been revised |
 | Changes for other specs: S-0513 claim 39's open question settled here | built here | Intake 60's Q-2212 rows now point here ([intake60-S-0513.md](intake60-S-0513.md)) |
 
 ## Requests
 
 - **Q-2231**: what a projectile's target-object effects do to a departed warp member (off the map,
-  and phasing in), and which render layer a deck-departed member is in for claim 20 (c). Interim
-  above.
+  and phasing in), and which render layer a deck-departed member is in for claim 20 (c). Answered
+  by S-0306 r62 (intake 65).
 - **Q-2232**: whether a departed member still stands on a deck after its placement on a deck
   is refused (S-0513 claim 50), and after a later check for another cell. Interim: only while a
   passed check for a deck cell waits for its placement (`Stage::Away`); a refusal takes it back to
-  the count by height.
+  the count by height. Answered by S-0306 r62 (intake 65): the interim is the engine-design rule.
 
 ## Intake 63 (run in parallel)
 
