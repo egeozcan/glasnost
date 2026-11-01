@@ -1,9 +1,9 @@
 ---
 id: Q-2227
 title: A building's other route-mode actions on an object, and a copied action a click would not give
-status: open
+status: answered
 related: [S-0213, S-0214]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
