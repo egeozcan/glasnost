@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 62
+revision: 86
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-02
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276]
 supersedes: []
 ---
 
@@ -1068,17 +1068,15 @@ presentation and swept-layer rules below also apply where those specs cite them.
     the whole leaving stage. It is a rank-4 reason of S-0301 claim 9, placed within that rank as
     Changes for other specs gives. In particular it outranks a running rearm countdown, so a
     holder that is rearming gets *illegal*, not *rearming*, for the member. For a firer that has
-    no temporal beam attached to the member, a beam of another firer on it, if one is
-    established (below), does not change the answer. A firer that has a temporal beam attached to
+    no temporal beam attached to the member, a beam of another firer on it (claim 39a) does not
+    change the answer. A firer that has a temporal beam attached to
     the
     member (S-0514 Terms) gets S-0514 claim 19's *rearming*, which ranks above. A beam begun before
     the launch never holds a member: an object on which a temporal beam is locked is being erased
     (S-0514 claim 4 and the glossary), so claim 34 leaves it in place, out of the group.
-    Possible delivery routes of a beam to a member include shots
-    made without a
-    firing check (S-0301 claim 9's exceptions) and temporal shots made before the launch but
-    delivered at their detonation (S-0514 claim 1) after it. Whether either can establish a beam
-    on a member is open (Open questions).
+    A beam can still be locked on a member from the launch on, by the routes that claim 39a gives
+    (*The lock routes*: a temporal projectile still in flight at the launch, or a fragment), and
+    claim 39a gives what then follows.
     Consequences, none of which is S-0309 claim 27's drop or takes a draw over 4 to 8 ticks:
     - every holder of the member among the holders to which S-0309 claim 29's rules apply, of any
       kind, drops it at S-0309 claim 29's periodic check, *attack* included except where S-0309
@@ -1087,14 +1085,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
       checking turn in every tick, that is the first such check tick. A holder for which one of the
       exceptions of S-0309 claim 29 holds on a check tick keeps the member then and is checked again
       at the next one. Those exceptions, and the turns that drop a target anyway, are that claim's,
-      with its ratings. That claim gives its rules for holders of human-controlled owners with a
-      target from an order or a search, which in our engine are the holders of every player house,
-      and leaves the original's other holders and targets to its Open questions (low); so does this
-      claim. A reason ranked above this one gives its own answer, and that claim keeps the target
-      unless that answer is *illegal* or *impossible*. Such reasons include the *rearming* of a
-      firer that has a temporal beam attached to the member (above) and the others that Changes for
-      other specs, S-0301, ranks above this one. An attacking holder then stops its attack at its
-      next processing (S-0309 claim 29),
+      with its ratings. That claim covers every holder, whatever its owner, in every current
+      behaviour but *capture* and *sabotage*, and whatever gave the target, which in our engine
+      are the holders of every house; so does this claim. A reason ranked above this one gives its
+      own answer, and that claim keeps the target unless that answer is *illegal* or *impossible*.
+      Such reasons include the *rearming* of a firer that has a temporal beam attached to the member
+      (above) and the others that Changes for other specs, S-0301, ranks above this one. An
+      attacking holder then stops its attack at its next processing (S-0309 claim 29),
     - before its first check tick, a holder whose member is an opportunity target drops it at its
       next search if that comes first (S-0309 claims 4 and 19), whatever its weapon, except where
       a reason ranked above this one gives an answer for which S-0309 claim 4 keeps the target at
@@ -1173,10 +1170,10 @@ presentation and swept-layer rules below also apply where those specs cite them.
       before departure is `unmeasured`: SW12 part k records such a firer, but it does not control
       the firer's facing, turning or first firing step and has no control run, so its outcome
       fits more than one rule. That a beam begun before the launch never holds a member is
-      `unmeasured`, as claim 34's exclusion of an object being erased is. Whether a delivery
-      route can establish a beam on a
-      member is open (Open questions) and is not rated. That another firer's beam on a member does
-      not change the answer is `unmeasured`: no part here sets up a beam on a member. What the firing check answers for a
+      `unmeasured`, as claim 34's exclusion of an object being erased is. The routes to a beam on
+      a member are claim 39a's, rated there. That another firer's beam on a member does not change
+      the answer is `unmeasured`: SW12 part l locks a beam on a member but has no other holder of
+      it. What the firing check answers for a
       departed member, and what its holders' own processing does with it, are open (Open
       questions) and are not rated. Building
       and aircraft holders are `unmeasured`: SW12 parts i to k have infantry and vehicle holders
@@ -1222,6 +1219,277 @@ presentation and swept-layer rules below also apply where those specs cite them.
       *illegal* label, for its rank, for the holder with an override in effect, the causes that
       revert it and a revert that gives the member back while it is off the map, and for the own
       jump's lack of a draw
+
+39a. **A temporal beam locked on a warp member (Q-2276).** *t*_L and the tick labels are claim 39's,
+    *d* is the tick of a detonation, and *k* is S-0514 F3's number of erasure updates.
+    - **The lock routes.** From the launch until its departure update, no shot of any kind is made
+      at a member. A shot that asks the firing check gets claim 39's *illegal* or a reason ranked
+      above it, and none of them is *can fire*. Each of S-0301 claim 9's unchecked shots is made
+      only in a processing whose own firing check answered *can fire*: a building's paired
+      primary and secondary shots (S-0215 claim 32, whose anti-air pair also needs a target in
+      the air, which a member never is, claim 34), and an aircraft's full burst, whose shots are
+      all made in the tick of its first (S-0501 claim 12). A building's animation-delayed shot
+      that is pending at the launch is dropped by its end-of-delay firing check, which gets the
+      same answer (S-0301 claim 14). So from the launch until its departure update, a beam can be
+      locked on a member only by the detonation at it of a projectile that no firing check stops:
+      - the projectile of a temporal shot made in tick *t*_L or earlier that is still in flight at
+        the launch (S-0514 claim 1)
+      - a fragment (S-0318), which is not a shot (S-0306 claim 1) and asks no firing check. It
+        locks a beam on a member when S-0318 claim 3 launches it at the member, its warhead selects
+        temporal erasure (S-0514 claim 20), and its attacker, the bursting projectile's firer
+        (S-0318 claim 5), is still present and holds a temporal beam (S-0514 claims 1 and 21).
+        The bursting projectile is any projectile with a fragment weapon whose own detonation
+        selects no special hit (S-0318 claim 1 (a)), so not a temporal one. The bursting
+        projectile can be that of a shot made after *t*_L at a target that is not a member, which
+        the warp does not stop, or a fragment itself (S-0318 claim 7). Its fragments are launched at
+        its burst, in whatever tick that is.
+
+      A fragment that S-0318 claim 4 aims at a random cell, like an airburst child aimed at a cell
+      (S-0306 claim 21), has a cell as its target and locks nothing: it only makes its attacker's
+      old beam let go (S-0514 claim 1). An invisible projectile can take the first route too. It
+      detonates in its first turn (S-0306 claim 9), which is the tick it is fired in unless a
+      removal earlier in the turn pass delays it to a later tick (S-0306, *Ordering*). So an
+      invisible temporal shot whose first turn removals delay past tick *t*_L detonates at the
+      member in tick *t*_L + 1 or later. One whose first turn is in tick *t*_L or earlier detonates
+      before the launch: a target it locks is being erased at the launch, and claim 34 leaves it out
+      of the group.
+    - **The lock.** When such a projectile or fragment detonates at a member in a tick *d* from
+      *t*_L + 1 to *t*_L + 62, before the member's departure update, the lock attaches by S-0514
+      claims 1 to 4 alone, and has their effects. Neither the pending warp nor the leaving stage is
+      one of S-0514 claim 3's refusals. The lock does not depend on whether the firer still holds
+      the member. The projectile or fragment normally entered play after the member, so its
+      detonation in tick *d* comes after the member's turn of that tick (S-0514 claim 8). Should the
+      order of turns have changed (S-0203 claims 10 and 11), the lock can come before the member's
+      turn of tick *d*. That changes only the turn of the member's first erasure update, and so the
+      removal tick below.
+    - **The warp goes on.** The beam neither stops nor delays the warp. A member that the erasure
+      does not remove keeps claim 39's timeline: it departs in *t*_L + 62, appears and has its
+      arrival effects as claim 39 gives.
+    - **The erasure goes on.** In each turn of the member after the lock, at every stage of the
+      warp (leaving, the expiry, the departure, off the map, appearance, arrival effects, the hold
+      and after it), the turn has its erasure update (S-0514 claim 7), and that update comes
+      before the turn's warp step. The erasure update is one of the intrinsic exceptions to
+      claim 51's whole-member-turn contract (Changes for other specs, S-0203 claim 4). So with no
+      release and no further lock before the departure, the member is removed at its *k*-th
+      erasure update after the lock (S-0514 claims 7, 8 and 12), whatever its stage then. With
+      one turn in every tick, as claim 39's
+      labels assume, call the removal tick *r*. A member removed this way takes no warp step in
+      that update or later (the no-step rule, ours: *Departure from the original*). The tick *r*
+      depends on where the lock falls in tick *d*.
+      - Lock after the member's turn of tick *d*, the normal case: the first erasure update is in
+        tick *d* + 1, and *r* = *d* + *k* (S-0514 claim 8).
+      - Lock before the member's turn of tick *d*: that turn's erasure update, before its warp
+        step, is the first, and *r* = *d* + *k* − 1.
+      - More than one lock before the departure: a later projectile of this route can detonate
+        at the member before its departure update, in a tick *d*′. Its hit first makes its
+        firer's old beam let go, wherever that beam is (S-0514 claims 2 and 14), and its lock is
+        then judged by S-0514 claim 4 on the beam that remains. Which case applies depends on
+        the firer.
+        - A firer not on the member's beam joins without resetting *R* and adds its amount to
+          the beam's step (S-0514 claim 4 and S-0514 F2), except where the 51-joiner limit of
+          S-0514 F2 leaves out an earlier joiner's amount. Any beam it held on another target lets
+          go there.
+        - A firer already on the beam, and its only attacker, lets it go first. That is the last
+          release (S-0514 claim 10): the member stops being erased and loses all progress. The
+          new lock then makes the firer leader again and sets *R* afresh by S-0514 F1 (S-0514 claim
+          4), and the member is being erased again. The removal comes as for a single lock made in
+          tick *d*′: *r* = *d*′ + *k*, or *d*′ + *k* − 1 for a lock before the member's turn of
+          tick *d*′, with *k* taken from that firer's amount.
+        - A firer already on the beam, with other attackers on it, also lets it go first. If it
+          was the leader, the most recent remaining joiner becomes leader with the same *R*
+          (S-0514 claim 9) and is the one credited (S-0514 claim 13). The firer then joins again
+          as the most recent joiner without resetting *R* (S-0514 claim 4). The step stays the
+          same sum, except where the 51-joiner limit of S-0514 F2 now counts the firer in place of
+          an earlier joiner, so the removal tick is the one the beam had before the hit unless that
+          limit changes the sum.
+        In every case the removal comes at the first erasure update whose resulting signed *R* is
+        at most 0, with *R* as a leader's lock last set it afresh (S-0514 F1), kept through any
+        handover (S-0514 claim 9), and the step in force at each
+        update (S-0514 claims 7 and 8 and S-0514 F3), and *r* is the tick of that update. The two
+        formulas above hold only for a single lock before the departure, or for the lock that
+        follows a last release.
+    - **Departure.** The departure releases no beam and keeps the erasure amount. From its
+      departure update, though, the member is no longer being erased, while the beam stays
+      attached. S-0302 claim 8's protection of an object being erased, and any firing-check
+      answer that rests on its being erased, no longer apply to it, and it has no being-erased
+      drawing or sparkles (S-0514 claims 18 and 27), only those of phasing in while it phases in.
+      While it phases in, a vehicle or aircraft with a temporal beam attached has its turns cut
+      short whether or not it is being erased: it clears its target and destination and takes no
+      ordinary behaviour, movement, turning or firing. An infantry unit's turns are cut short only
+      while it is being erased. So from its departure update, a vehicle or aircraft member takes
+      no ordinary turn while it phases in, and an infantry member takes the turns of a phasing-in
+      infantry unit with no beam attached (`quirks.phase_in_beam_spares_infantry`, Edge cases).
+      Once its hold has ended, a member of any kind takes ordinary turns with the beam still
+      attached, and the erasure still removes it in tick *r* unless the beam lets go first or a
+      later lock changes its state (*A lock after the departure*). A handover of the beam's
+      leadership after the departure and before such a lock (S-0514 claim 9) leaves the member not being erased: only a
+      lock makes it being erased again.
+    - **A lock after the departure.** From its departure update on, the pending warp no longer makes
+      a member's firing check *illegal* (claim 39). What the firing check answers while the member
+      is off the map waiting to land and while it phases in is claim 39's open question. Once it has
+      ended phasing in, other shots can again be made at it. A temporal shot that is made and
+      detonates at it locks by S-0514 claims 1 to 4 alone, while it phases in or after: the attached
+      beam is not one of S-0514 claim 3's refusals, which reads a beam on the firer, not on the
+      target. Each such hit first makes its firer's old beam let go (S-0514 claims 2 and 14), as
+      before the departure. With a beam still attached, a firer not on it joins without resetting
+      *R* (S-0514 claim 4). A firer already on it has the two cases of a firer already on the beam
+      in *More than one lock before the departure*. As the beam's only attacker it leads again after
+      the last release, with *R* set afresh by S-0514 F1 (S-0514 claims 10 and 4), and the member is
+      removed in tick *d*′ + *k*, or *d*′ + *k* − 1 for a lock before the member's turn of tick
+      *d*′, with *d*′ the tick of that lock and *k* taken from its amount. With other attackers on
+      it, it joins again after any handover of leadership, with the same *R* (S-0514 claims 9 and
+      4), and the removal tick stays the one the beam had before the hit unless the 51-joiner limit
+      changes the sum. In the cases that keep *R*, each erasure update from then on reduces *R* by
+      the beam's step, S-0514 F2's sum over the leader and at most the 51 most recent joiners
+      (S-0514 claim 7). That sum counts every firer already on the beam that this limit leaves in,
+      including any that joined before the departure: more than one projectile of this route can detonate at the member (*The
+      lock*). The removal then comes at the update that S-0514 claims 7 and 8 give for the new step.
+      Let *R*′ be *R* just before the first erasure update that counts the new firer or firers, *S*
+      the beam's step before that lock and *S*′ its step after it, S-0514 F2's sum over the leader
+      and the 51 most recent joiners as they stand after the lock. A firer that was not on the beam
+      adds its amount, and the 51-joiner limit may leave out an earlier joiner. A firer that joins
+      again was counted in *S* if it was the leader or one of the 51 most recent joiners, and its
+      new lock then leaves the sum unchanged. Otherwise it is counted now, as the most recent
+      joiner, and the limit leaves out the earliest joiner that *S* counted. With both steps
+      constant and both *S* and *S*′ positive, the removal comes earlier than tick *r* exactly when
+      ⌈*R*′ / *S*′⌉ < ⌈*R*′ / *S*⌉, in tick *r* when the two counts are equal (as for a new firer
+      whose amount is 0 or too small to save a whole update, one that only takes the place of an
+      equal joiner left out by the limit, or a firer that joins again while counted in *S*), and
+      later when the first is greater. That
+      comparison applies to a positive *S*′ only. With *S*′ = 0 and *R*′ positive the erasure never
+      completes (S-0514 claim 7). A negative *S*′ raises *R* at each update until it wraps or a
+      later change comes (S-0514 F3), and the removal comes at the first update whose resulting
+      signed *R* is at most 0 (S-0514 claim 7). The leader stays the leader and is credited (S-0514
+      claim 13), unless the new lock is its own: then leadership passes as above, or it leads again
+      after the last release. With no beam attached, the new firer is the leader and sets *R*
+      afresh. In every case the lock makes the member being erased again, with every effect of that
+      state: S-0302 claim 8's protection, the firing-check answers that rest on it, S-0514 claim
+      17's skipped turns for every kind of member, its drawing and sparkles (S-0514 claims 18 and
+      27). The departure's ending of that state applies only to the beam locked before the
+      departure, and only up to such a later lock.
+    - **Release.** The beam lets go only at S-0514's causes (claims 10, 11, 14 and 15).
+      Outside an open-topped transport, distance does not release it (S-0514 claim 11), wherever
+      the member lands. A firer in *attack* that takes the approach step (S-0215 claim 37) and
+      whose member lands beyond its weapon's range moves towards it, because its attack
+      behaviour's approach tests range alone. It lets go at its first arrival in a new cell
+      (S-0514 claim 14). If it was the last attacker, the member loses all progress (S-0514
+      claim 10). Some firers take no approach step (S-0215 claim 37 g): a building never does,
+      and a deployed infantry unit of a human-controlled owner takes none while deployed. An
+      aircraft firer's approach is the aircraft specs'. A firer that does not move, those
+      included, keeps its beam on the member until one of those causes or the member's removal.
+    - **The firer.** While its beam is attached, a firer's firing check about the member answers
+      S-0514 claim 19's *rearming*, both before the departure, where it ranks above claim 39's
+      *illegal*, and after it, unless an answer that S-0301 claim 9 ranks above that *rearming*
+      holds. A deactivated firer's *illegal* is one (S-0301 claim 9, deactivated firers within
+      rank 4). With *rearming*, the firer makes no further shot at the member and keeps it at
+      S-0309 claim 29's checks. With an outranking *illegal*, that check drops the member as its
+      target (S-0309 claim 29). Dropping the target does not itself release the beam: it lets
+      go only at the causes of the Release item above (S-0514 claim 14).
+    - **Switch.** `quirks.warp_departure_keeps_beam`, default on (the original), covers the lock
+      on a member (*The lock*), the erasure updates and removal that follow it (*The erasure goes
+      on*, its no-step rule aside), the departure's keeping of the beam (*Departure*), the
+      release causes (*Release*) and the firer's answers (*The firer*). *The lock routes*, *The
+      warp goes on* and *A lock after the departure* hold in both settings. With the switch off no
+      beam of these routes is attached, so the first lock after the departure is a leader's lock,
+      and later locks on that beam follow S-0514 claims 2 and 4 as usual.
+      Off: a target with a superweapon warp pending, from the
+      launch until its departure update, is one more lock refusal of S-0514 claim 3. The
+      detonation has S-0514 claim 2's refused-hit side effects and locks no beam, so no member
+      has an erasure update, a removal, a beam kept at the departure, a release or a firer's
+      *rearming* from this route, and the warp goes on as claim 39 gives. The no-step rule of *The
+      erasure goes on* is ours in both settings: it is the departure below, with no switch, and
+      with the switch off no member is removed this way.
+    - **Departure from the original (no switch).** In the original, a member that the erasure
+      removes in its expiry update still makes that update's target search. One removed in its
+      departure update still departs, with the departure animation, sound and landing check, and
+      one removed in a placement update is still placed. Our engine gives a removed member no
+      warp step, because the original's handling of a removed object is not safe to copy. Level:
+      low for the original's observables. Backing: `unmeasured`, since no part here removes a
+      member in those updates: such a run might not be safe.
+    - Backing: `measurable` (SW12 part l) for a lock after the member's turn of tick *d*, by which
+      that turn's warp update has been made, the unchanged departure tick, the removal in tick
+      *d* + *k* for a lock after the member's turn, in the leaving stage and after the hold, the
+      firer's making no further shot, ordinary turns and ordinary damage after the hold, and the
+      release by a firer that moves. The removal after the hold (SW12 part l1) counts an erasure
+      update in every turn from the lock on in the stages l1 reaches, since a turn without one would
+      move tick *r*: a tank member, part (d)'s empty flat destination and one warp with no failed
+      landing check, no placement failure and a hold of one update. For a failed landing check, a
+      placement failure, a longer hold and an infantry or aircraft member, the erasure update in
+      every turn is `unmeasured`: no part of SW12 locks a beam on a member that reaches those stages
+      or is of those kinds, and a rule that differed only there would give the same l1 result. SW12
+      part l records which case of the removal tick a run has. The order of the erasure update
+      before the warp step within one turn is `unmeasured` for the original: it shows only in a turn
+      whose warp step has an observable (the expiry search, the departure, a placement, arrival
+      effects), and no part here removes a member in such a turn, since that run might not be safe.
+      In our engine the order and the no-step rule are design, tested by variant l4. The approach
+      exceptions follow from S-0215 claim 37 g, and the answers that outrank the firer's *rearming*
+      from S-0301 claim 9, and take their backing: no part here has a building, deployed infantry or
+      deactivated firer. The routes follow from S-0215 claim 32, S-0501 claim 12 and S-0301 claim 14
+      and take their backing: no part here sets up a building or aircraft firer. The fragment route
+      of *The lock routes* follows from S-0318 claims 1, 3, 5 and 7 and S-0514 claims 1, 20 and 21,
+      and is `unmeasured`: no part here gives a firer that holds a temporal beam a fragment weapon.
+      The invisible route
+      follows from S-0306's *Ordering* and is `unmeasured`: no part here removes an object to delay
+      a projectile's first turn. A lock before the member's turn of tick *d*, while that turn's warp
+      update is still to come, and the removal tick of such a lock are `unmeasured`: no part here
+      orders a projectile's turn before its target's. The vehicle's and aircraft's turns cut short
+      while phasing in after the departure and the infantry member's ordinary turns then are
+      `unmeasured`: no part here holds an infantry member, SW12 part l has a tank only, and its
+      hold of one update is too short to tell a turn cut short from an ordinary one. The lapse of
+      protection and drawing while phasing in is `unmeasured` for the same reason. The switch's off
+      setting and the no-step rule are `design`, tested in our engine by SW12 part l (variant l4 for
+      the no-step rule). The off setting of `quirks.phase_in_beam_spares_infantry` is `design`, and
+      `unmeasured` in our engine, since no part here holds an infantry member. A joining lock after
+      the departure, the member's being erased again, its protection, skipped turns and drawing
+      then, and a removal before tick *r*, with the first firer credited, are `measurable`
+      (SW12 part l5), for a beam that holds the leader alone before the new lock. The exact tick
+      that the new step gives (S-0514 claims 7 and 8) is `unmeasured`: part l5 tells a removal
+      before tick *r* from one in tick *r* or later, not one tick before *r* from another, and it
+      records neither the remaining amount nor the steps it would be read from. The removal in
+      tick *r* or later for a new step that does not save a whole update, the cases of a zero or
+      negative new step, and a beam with joiners before the new lock, more than one new firer or a
+      joiner left out by the 51-joiner limit, are `unmeasured`: part l5's *V* is chosen to save at
+      least one update and joins a beam that holds *T* alone. A lock after the departure while the
+      member phases in, and a leader's lock after the departure, are `unmeasured`: no part here
+      times a detonation inside the phasing-in hold or locks a member with no beam attached. More
+      than one lock before the departure is `unmeasured`: every part of SW12 part l has a single
+      lock then. A lock by a firer already on the beam, before or after the departure, with its
+      release, the fresh *R* after a last release, the handover, the rejoining and the credit that
+      follows, is `unmeasured`: no firer of part l locks the tank twice while on its beam, since
+      part l falsifies a second shot of *T* then, and *V* in part l5 is not on the beam before its
+      lock. A handover after the departure, which leaves the member not being erased, is
+      `unmeasured`: no part here has a beam with a joiner before the departure.
+    - Confidence: high for a lock after the member's turn of tick *d*. Medium, unmeasured, for the
+      fragment route of *The lock routes*, a fragment's lock in any tick from *t*_L + 1 to the
+      departure update included. Medium, unmeasured, for a
+      lock before that turn, while its warp update is still to come. Medium for the unchanged warp,
+      an erasure update in every turn of the stages SW12 part l1 reaches and the removal tick
+      *d* + *k* in the normal case (S-0514 claim 8's calendar application is medium), the
+      departure's ending being erased while the beam stays, ordinary turns and damage after the
+      hold, the release, the approach exceptions, the firer's no further shot, the answers that
+      outrank its *rearming* and the routes. Low, unmeasured, for the original's order of the
+      erasure update before the warp step within a turn. Medium, unmeasured, for the erasure update
+      in every turn after a failed landing check or a placement failure, in a longer hold and for an
+      infantry or aircraft member. Medium, unmeasured, for the invisible route, the removal tick
+      *d* + *k* − 1 of a lock before the member's turn, the turns cut short and the ordinary turns
+      while phasing in, the lapse of protection and drawing then, and the member's state after a
+      handover after the departure. Medium for the off setting of
+      `quirks.phase_in_beam_spares_infantry`, as design. High for the switch's off setting, the
+      order of the erasure update before the warp step in our engine and the no-step rule, as
+      design. Medium for a joining lock after the departure making the member being erased again,
+      with its protection, skipped turns and drawing, and a removal before tick *r*, with the first
+      firer credited. Medium, unmeasured, for the exact removal tick by the new step. Medium,
+      unmeasured, for the removal tick after more than one lock
+      before the departure, at the reading of S-0514 claim 4 and S-0514 F2. Medium, unmeasured, for
+      a lock by a firer already on the beam, before or after the departure: its release first, the
+      fresh *R* and removal tick after a last release, the handover, the rejoining with the same
+      *R* and the credit, at the reading of S-0514 claims 2, 4, 9 and 10 that the hit's release
+      comes before its lock is judged. Medium, unmeasured, for the
+      removal in tick *r* or later, the cases
+      of a zero or negative new step, and the sum over earlier joiners, several new firers and the
+      51-joiner limit, at the reading of S-0514 claim 7 and S-0514 F2. Medium, unmeasured, for
+      such a lock while the member phases in and for a leader's
+      lock after the departure.
 
 40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
     *held delay*, in ticks. With one update per tick, phasing in ends in tick
@@ -1516,8 +1784,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
     attached parasite step (S-0614 claim 18), the member's own economy and power work,
     depot queued-entry retry, expected-health turn bookkeeping, protection-brightness
     phase processing, the berserk countdown (S-0610 claim 5), the mind-control overload
-    update (S-0601 claim 16) and the member's own periodic held-target check (S-0309 claim
-    29).
+    update (S-0601 claim 16), the member's own periodic held-target check (S-0309 claim
+    29) and the drop of an allied held target that comes at that check's place (S-0309 claim 25
+    part k).
     The berserk countdown and the overload countdown are update counts,
     not elapsed-tick clocks, so neither takes a step in a suppressed update, and no missed step of
     either is made up later. The elapsed-tick clocks below (protection duration, reload countdown,
@@ -1538,6 +1807,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
     and placement succeed without interruption. The conditional target searches and
     sensor update intrinsic to the warp (claim 39), elapsed protection duration,
     placement and arrival-fate tests are not ordinary work suppressed by this table.
+    Nor is the erasure update of a temporal beam attached to the member (claim 39a), which
+    comes before the warp work in each of the member's turns (Changes for other specs, S-0203
+    claim 4). While it phases in, a vehicle or aircraft member with an attached beam, being erased
+    or not, gets none of the hold row's behaviour processing, movement, turning or firing (claim
+    39a). Nor does an infantry member while it is being erased, or, with
+    `quirks.phase_in_beam_spares_infantry` off, while a beam is attached to it. The hold
+    row's other operations, ordinary self-healing among them, keep their hold-row eligibility.
     Elapsed-tick countdowns retain their clocks: skipping reload work prevents granting
     ammunition or restarting its countdown, not the passage of its elapsed time. Likewise
     it prevents firing-frame advancement, not the passage of time on a shot cooldown.
@@ -1743,6 +2019,23 @@ Absent-key defaults are in Import mapping.
 - **`quirks.warp_redirect_as_tracked`** (claim 37). Default on.
 - **`quirks.warp_naval_road_cell`** (claim 38). Default on.
 - **`quirks.warp_hold_persists`** (claim 40). Default on.
+- **`quirks.warp_departure_keeps_beam`** (claim 39a). Default on = original: a temporal projectile
+  in flight at a warp launch, or a fragment (claim 39a, *The lock routes*), locks a beam on a
+  member, the warp and the erasure both go on, and
+  from its departure the member is no longer being erased while the beam stays attached, so after
+  its hold it takes ordinary turns until the erasure removes it, the beam lets go or a later lock
+  after the departure makes it being erased again (claim 39a). Off: a
+  pending warp is one more lock refusal of S-0514 claim 3. Backing: `measurable` (SW12 part l).
+  Confidence: medium.
+- **`quirks.phase_in_beam_spares_infantry`** (claim 39a). Default on = original: while it phases
+  in, a vehicle or aircraft with a temporal beam attached has its turns cut short whether or not
+  it is being erased, and an infantry unit only while it is being erased, so after its departure
+  an infantry warp member takes the turns of a phasing-in infantry unit with no beam attached.
+  Off: an infantry unit with an attached beam has its turns cut short while it phases in as
+  well. The switch matters only with `quirks.warp_departure_keeps_beam` on. Backing:
+  `unmeasured` (claim 39a) for the original, `design` for the off setting. Confidence: medium.
+- **A member removed by erasure during its warp** takes no further warp step (claim 39a). No
+  switch: the original's handling is given in claim 39a's *Departure from the original*.
 - **`quirks.spy_plane_count_from_paradrop_list`** (claim 43). Default on.
 - **Departures (no switch):** the storm outage after the local player's defeat (claim 15); the
   post-launch computer draw (claim 6); the firing answer against protected objects (claim 28); unsafe
@@ -2431,6 +2724,117 @@ is not under test.
   claim 39 and is reported; a run without one confirms nothing, since it fits more than one rule,
   and no outcome tells *illegal* from another refusal: the temporal firer's making no shot and
   the label stay `unmeasured`.
+  (l) A beam locked on a member (claim 39a, Q-2276), on part (k)'s set-up and recorder with these
+  changes. So that a shot made before the launch detonates after it, the test data give *T*'s
+  temporal weapon a projectile that flies for 2 to 10 ticks before it detonates at the tank, and
+  a rearm delay of 1 tick. Its damage field *D* sets *k* = ⌈10 *S* / *D*⌉ (S-0514 F3), where *S*
+  is the tank type's strength field. *T* stands still within its weapon's range of the tank's old
+  position and is ordered to attack the tank by the human of part (k), in (l1) with force-fire
+  held, as given there. The harness applies the launch in the
+  tick of *T*'s first shot, after that tick's turns, so the shot is made before the launch. A run
+  counts only if that shot's projectile detonates at the tank in a tick *d* from *t*_L + 1 to
+  the tick before part (i)'s first check tick *c*, nothing but *U* in (l1) hits the tank before its
+  removal or the end of the run, and *T* stays in play, with no other cause of S-0514 claim 14
+  for letting go, until the tank's removal or, in (l3), its first arrival in a new cell. Each
+  variant needs at least five runs that count. Record the tick of each shot of *T* and of each
+  detonation, the tank's departure, appearance, arrival-effects and phasing-end ticks, its
+  health, cell and drawing in each tick, the tick of its removal, its warp-away animation, and
+  who is credited. The launch comes in the tick of *T*'s first shot and no shot is made at the
+  tank from then until its departure update (claim 39a, *The lock routes*), so that shot's
+  projectile is the only lock before the departure. No fragment locks one: *T* is the only firer
+  here that holds a temporal beam before the departure, and the detonation of its temporal
+  projectile launches no fragments (S-0318 claim 1 (a)). A run in which *T* makes a shot with
+  another weapon decides nothing. A run in which *T* makes more than one shot
+  before the launch decides nothing, so in a run that counts that shot is its only one before the
+  launch. No variant has a second
+  lock by *T* while its beam is attached: a shot of *T* at the tank from the launch until its
+  departure update contradicts claim 39a's *The lock routes*, and one after it while *T*'s beam is
+  attached contradicts *The firer*. Either is reported and falsifies the variant. Call *r* the
+  removal tick of claim 39a's
+  single-lock case: *d* + *k* when the detonation in tick *d* comes after the tank's update of
+  that tick, and *d* + *k* − 1 when it comes before.
+  Record which case a run has: whether *T*'s beam is attached to the tank, read-only, just
+  before the tank's update of tick *d*, as part (i)'s recorder allows (attached means the
+  second case). The tank's being-erased state cannot tell the cases, since it holds all through
+  the leaving stage. The projectile entered play after the tank, so the first case is expected.
+  A run whose record cannot tell the case decides nothing for the removal tick.
+  - (l1) The landing point is within *T*'s weapon range of *T*, and *D* makes *r* fall from
+    *t*_L + 80 to *t*_L + 120. The test data leave the tank unarmed. In (l1) the tank is of the
+    human's house, as *T* is, and the human launches the warp: every object given an order is
+    the human's, and every order is the human's, by scripted input, as in part (k). *T*'s attack
+    order on the tank is given with force-fire held (S-0214 claim 6, part (a)), and a lock has
+    no owner condition (S-0514 claims 1 to 4). *U*, an armed vehicle of the human's, with an
+    ordinary weapon that cannot kill the tank, is ordered with force-fire held to attack it in
+    *t*_L + 66, and in *t*_L + 66 the tank is ordered to move to a neighbouring cell that is also
+    within *T*'s weapon range of *T*. A run in which an object of a computer player acts on *T*,
+    *U* or the tank decides nothing (S-0309 scenario A11's rule for computer activity). The tank
+    is unarmed, so it makes no target search of its own here, and it does not retaliate against
+    *U*, which is allied with it as well (S-0309 claim 18). *U*'s hits may send it a scatter
+    request (S-0215 claim 19): a scatter is recorded with its tick and cells, and the run still
+    counts, since no expectation of (l1) depends on the tank's cell after its ordered move.
+    Expected: no second shot of *T* after its first; departure in *t*_L + 62, appearance in
+    *t*_L + 63, arrival effects in *t*_L + 64 and phasing end in *t*_L + 65, as in part (d); the
+    tank drawn without see-through from phasing end on; the tank moving to its ordered cell and
+    *U*'s hits lowering its health; the tank removed in tick *r* with the warp-away animation,
+    *T* credited. Falsified by a second shot of *T*, by a departure in another tick or none, by a
+    removal in another tick or none, or by a tank that neither moves nor loses health from *U*'s
+    hits after phasing end.
+  - (l2) *D* makes *r* fall from *t*_L + 5 to *t*_L + 55. Expected: the tank removed in tick
+    *r* at its old position with the warp-away animation, *T* credited, and no
+    departure animation, sound or landing in *t*_L + 62. Falsified by a removal in another tick,
+    or by any departure or landing of the tank.
+  - (l3) As (l1), without *U* or the move order, and on part (k)'s houses: the tank is not of
+    *T*'s house, and *T*'s attack order is given without force-fire, as in part (k), so its
+    approach is its own attack order's. The landing point is beyond *T*'s weapon range of *T*
+    by two cells or more, and *T* is free to move. Record the tick at which *T* first enters a new
+    cell, and in each tick *T*'s destination and its *attack* processing ticks, as S-0215 scenario
+    B32's recorder logs them. The release and the approach are judged apart. A run counts for the
+    release only if *T* first enters a new cell before tick *r*. A run in which it does so in tick
+    *r* or later, or not at all, is recorded and judges nothing for the release. *T* takes the
+    approach step only at its *attack* processings (S-0215 claim 37 part a), so a run counts for
+    the approach only if one of them falls from the tank's appearance to the tick before its
+    removal or the end of the run, with *T* still holding the tank as its target there and the
+    tank beyond *T*'s weapon range of *T* then, as the recorded positions show. A run with none
+    judges nothing for the approach. (l3) needs at least five runs that count for each.
+    Expected: at the first such processing *T* takes a
+    destination (S-0215 claim 37 parts a, d and f) and from then moves towards the tank, and in a
+    run that counts for the release the tank is not removed in tick *r*. A later shot of *T* at
+    the tank after its beam has let go, and what follows it, is recorded and judges nothing.
+    Falsified, for the release, by a removal of the tank in tick *r* in a run that counts for it,
+    and, for the approach, by a *T* with no destination just after that processing in a run that
+    counts for the approach.
+  - (l4) Our engine only, as (l2) but with *D* making *r* equal *t*_L + 62, and in a second
+    run *t*_L + 61, with the tank holding no target and more than 10 ticks on its targeting timer
+    just before the expiry, as in part (d)'s draw witness. Expected: the tank removed in that
+    tick, with no departure animation, sound or landing check in the first run and no expiry
+    search draw in the second (claim 39a's no-step rule). Any of them falsifies that rule.
+  - (l5) As (l1), with a second temporal firer *V* of the human's house, a test copy with a
+    temporal weapon of its own whose projectile also flies for 2 to 10 ticks and whose amount (the
+    raw damage S-0514 claim 7 counts) is at least that of *T*'s temporal weapon, standing still
+    within its weapon's range of the landing point, and *D* making *r* fall from *t*_L + 120 to
+    *t*_L + 160. *V* is ordered with force-fire held to attack the tank in *t*_L + 66. *U*'s
+    attack order and the tank's move order are given in *t*_L + 90
+    instead. *V*'s order comes after the tank's phasing end in *t*_L + 65. Part l's counting
+    condition is read with "nothing but *U* and *V* hits the tank" in place of "nothing but *U*
+    in (l1) hits the tank", *V*'s projectile being the one other hit allowed. Record the tick *v*
+    in which *V*'s projectile detonates at the tank, and whether *V*'s beam is attached just
+    after it. A run counts only if *v* comes before *t*_L + 90 and the tank is still in play in
+    *t*_L + 95. Part l's counting condition lets no shot but *T*'s first lock the tank before
+    *V*'s, so the beam holds *T* alone, its step *S* is *T*'s amount, and *V*'s lock makes it
+    *S* plus *V*'s amount, at least 2*S*. Since *v* comes before *t*_L + 90 and *r* after
+    *t*_L + 119, more than one erasure update remains at the lock, so ⌈*R*′ / *S*′⌉ is less than
+    ⌈*R*′ / *S*⌉ and *V*'s amount saves at least one of them (claim 39a's condition). Expected:
+    from the tank's update after the lock on, the
+    tank drawn see-through, not moving to its ordered cell and its health not lowered by *U*'s
+    hits; the tank removed before tick *r* with the warp-away animation, *T* credited. Falsified
+    by a tank that moves to its ordered cell or loses health to *U* after the lock, by a tank
+    drawn without see-through after the lock, by a removal in tick *r* or later, or by *V*
+    credited.
+  Our engine runs the same input with `quirks.warp_departure_keeps_beam` off. Expected there:
+  *T*'s first shot locks no beam, the tank is not removed in tick *r* in (l1) to (l4), and in
+  (l1), (l2), (l4) and (l5) it warps as in part (d). In (l5) *V*'s lock is a leader's lock: the
+  tank is being erased from it on, as S-0514 gives, and is removed at the tick *V*'s own erasure
+  gives, with *V* credited. No removal in (l5) is tied to tick *r*.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -2560,11 +2964,14 @@ is not under test.
   eligible heal, visible behaviour action, movement, shot, turret turn and, for a member
   that is an unlimited controller (S-0601 claim 16), its overload update, and, for a member given
   directly a held target that the firing check refuses, S-0309 claim 29's periodic check in a
-  check tick, independently at every row of claim 51 for each applicable kind, the leaving row
-  excepted for that check (claim 48's leaving-stage rule drops the target there anyway). Expect
-  zero ordinary work in the five columns of claim 51's table through arrival effects, with no
-  overload step and no drop of that target by the periodic check in those rows (the leaving row
-  excepted for the check), and ordinary eligibility of both after the hold-end test. Confirm one
+  check tick, and, for a member of a computer-controlled owner given directly a held target
+  allied with it to which none of S-0309 claim 25 part k's exceptions applies, that part's drop
+  at the check's place in a tick that is not a check tick, independently at every row of claim
+  51 for each applicable kind, the leaving row excepted for both drops (claim 48's leaving-stage
+  rule drops the target there anyway). Expect zero ordinary work in the five columns of claim
+  51's table through arrival effects, with no overload step and no drop of either target by the
+  periodic check or by the allied-target drop in those rows (the leaving row excepted for both),
+  and ordinary eligibility of all three after the hold-end test. Confirm one
   warp update per tick and immediate route, queued-destination and
   driving-step clearing at launch. Any contrary event falsifies the engine contract.
   Compare the same witnesses in (a) to (e) against the original: a heal, due action,
@@ -2681,11 +3088,10 @@ for these two kinds.
   and cloaked tests among the candidates), and so whether a holder that holds it through its
   departure keeps it, drops it at S-0309 claim 29's check or another own drop, or may fire at it
   then, and, while it keeps it, whether it moves towards the member's new position when that is
-  out of its weapon's range (claim 39, Q-2211 question 3).
-- Whether a shot made without a firing check (S-0301 claim 9's exceptions), or a temporal shot
-  made before a warp launch and delivered at its detonation after the launch (S-0514 claim 1), can
-  establish a beam on a member, and what then happens to that member's warp (claim 39). S-0514
-  claim 3's lock refusals name no pending warp.
+  out of its weapon's range (claim 39, Q-2211 question 3). A firer in *attack* whose temporal beam
+  stays attached is not part of this question: claim 39a (*Release*) gives its approach.
+- What else the original does for a member that the erasure removes in its expiry, departure
+  or a placement update, beyond the observables in claim 39a's *Departure from the original*.
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
 - Q-0738 is accounted for question by question in claim 48: leaving exclusions, stopped
@@ -2759,25 +3165,48 @@ for these two kinds.
   an override in effect for a holder of the member.
 - **S-0309 claim 29.** The periodic held-target check
   that claim 39 relies on: at its checking turns in every tick whose tick number is a multiple of
-  16, a holder in *attack* or *guard* drops a target that the firing check,
-  without the range test, answers *illegal* or *impossible* for, with no timer draw and no
-  revert. Its rules are given for holders of human-controlled owners (in our engine, of every
-  player house) with a target from an order or a search; a holder in *capture* or *sabotage*
-  makes no check, and whether a holder in another
-  behaviour makes it is left open there. Its *Warp members* rule points to claims 48 and 52 here for
+  16, a holder, whatever its owner, in every current behaviour but *capture* and *sabotage*, and
+  whatever gave the target, drops a target that the firing check, without the range test,
+  answers *illegal* or *impossible* for, with no timer draw and no revert. Its *Warp members*
+  rule points to claims 48 and 52 here for
   a warp member's own check as a holder in the original, which stays unsettled, and gives our
   engine's suppression of that check from the first pending update through the arrival effects
-  (claim 51). No further change to S-0309 is needed for the warp. Level and backing of that claim
-  itself: at the levels S-0309 claim 29 gives (`measurable`, S-0309 scenario A6 part p). For
-  a warp member's holders here the level is medium, not high, since the rank of the warp-pending
-  *illegal* is S-0301's and rated medium (claim 39); backing `measurable` (SW12 parts i and j).
-  For a member's own check in the original: unsettled, low, `unmeasured` (claims 48 and 52 list
-  no row for it); high as design for our engine's suppression, `measurable` in our
-  engine (SW23 part f).
+  (claim 51). In its *Turns cut short* rule, the sentence "So does a materialising
+  infantry unit, vehicle or aircraft on which a temporal beam is locked, which is being erased
+  (glossary): it drops its target in each of its turns, whatever the tick number, and that turn
+  ends there with no check." becomes: "So does a materialising infantry unit, vehicle or aircraft
+  that is being erased with a temporal beam locked on it (glossary): it drops its target in each
+  of its turns, whatever the tick number, and that turn ends there with no check. So does a
+  materialising vehicle or aircraft whose temporal beam stays attached while it is not being
+  erased, as a superweapon warp member's is after its departure (S-0513 claim 39a). A
+  materialising infantry unit in that state makes the check, as one on which no temporal beam is
+  locked does (S-0513 `quirks.phase_in_beam_spares_infantry`, default on; off: it drops its
+  target as the vehicle does)." Level of the amended sentence: as the claim gives for an object
+  being erased, and medium for the vehicle, aircraft and infantry unit not being erased. Backing:
+  `unmeasured` (S-0513 claim 39a: no part there holds an infantry member, and SW12 part l's tank has
+  a hold of one update). Level and backing of that claim itself: at the levels S-0309 claim 29 gives
+  (`measurable`, S-0309 scenario A6 part p). For a warp member's holders here the level is medium,
+  not high, since the rank of the warp-pending *illegal* is S-0301's and rated medium (claim
+  39); backing `measurable` (SW12 parts i and j). For a member's own check in the original:
+  unsettled, low, `unmeasured` (claims 48 and 52 list no row for it); high as design for our
+  engine's suppression, `measurable` in our engine (SW23 part f).
 - **S-0203 claim 4.** Its engine contract's list of suppressed ordinary work gains "the periodic
-  held-target check (S-0309 claim 29)", after the overload update of an unlimited mind
-  controller, as claim 51 here gives. Level: high as design. Backing: `measurable` in our engine
+  held-target check (S-0309 claim 29) and the drop of an allied held target at its place (S-0309
+  claim 25 part k)", after the overload update of an unlimited mind controller, as claim 51 here
+  gives. Level: high as design. Backing: `measurable` in our engine
   (SW23 part f).
+- **S-0203 claim 4, intrinsic exceptions.** The engine contract's list "Intrinsic warp target
+  searches, sensor updates, elapsed protection duration, placement and arrival-fate tests are
+  not suppressed ordinary work" gains "and neither is the erasure update of a temporal beam
+  attached to the member (S-0514 claim 7), which comes before the warp work in each of the
+  member's turns (S-0513 claim 39a)". So in our engine a member being erased makes erasure
+  progress in every warp turn, and S-0513 claim 39a's removal tick holds. Level: high as design
+  for our engine. That the original does the same is rated as S-0513 claim 39a rates it: medium,
+  `measurable` (S-0513 SW12 part l1) in the stages l1 reaches (a tank member, part (d)'s empty
+  flat destination and one warp with no failed landing check, no placement failure and a hold of
+  one update), and medium, `unmeasured`, for a failed landing check, a placement failure, a
+  longer hold and an infantry or aircraft member. Backing for our engine: `measurable` (SW12
+  part l1); the order within the turn is design, tested in our engine by SW12 part l4.
 - **S-0207 claim 20 (e).** The drops at the teleporting locomotor's own jump are not S-0309 claim
   27's or claim 28's, so they take no targeting-timer draw, whatever a holder's timer shows. This
   follows the committed text of S-0309 claim 27 ("This reset belongs to the drops of this claim
@@ -2809,6 +3238,51 @@ for these two kinds.
   establish an otherwise eligible firing opportunity before the first check tick, for a temporal
   weapon's making no shot at such a target, since SW12 part k is a recorded run whose
   outcome fits more than one rule, and for building and aircraft holders.
+- **S-0215 claim 2.** Its exclusions from processing do not cover an actor that is phasing in with
+  a temporal beam attached while it is not being erased, as a superweapon warp member is from its
+  departure update (S-0513 claim 39a). Four passages change:
+  - The bullet "it is not an infantry unit or vehicle that is being erased, or that is in the
+    leaving stage of a chrono move (Terms)." becomes "it is not an infantry unit or vehicle that
+    is being erased, or that is in the leaving stage of a chrono move (Terms), nor a vehicle that
+    is phasing in with a temporal beam attached while it is not being erased, as a superweapon
+    warp member is after its departure (S-0513 claim 39a). With S-0513
+    `quirks.phase_in_beam_spares_infantry` off, an infantry unit in that state is excluded as
+    well." The sentences that follow in that bullet, on dropping the target and the destination,
+    apply to the added cases too.
+  - The bullet "it is not a landed aircraft being erased." becomes "it is not a landed aircraft
+    being erased, nor a landed aircraft phasing in with a temporal beam attached while it is not
+    being erased (S-0513 claim 39a)." The sentences that follow in that bullet apply to the added
+    case too.
+  - The sentence "On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the
+    last three bullets above), no per-tick start of claim 11 takes effect" gains, after "(the last
+    three bullets above)", the words "the phasing-in cases added to them included".
+  - The sentence "A teleporting locomotor's own phase-in does not stop processing: the actor
+    processes under the ordinary eligibility rules." becomes "A teleporting locomotor's own
+    phase-in does not by itself stop processing: the actor processes under the ordinary
+    eligibility rules, the exclusions above for an actor phasing in with a temporal beam attached
+    included."
+
+  In the paragraph *Superweapon warp, engine design*, the sentence "During arrival hold, the
+  hold-end test precedes ordinary behaviour eligibility: processing and per-tick starts regain
+  their usual eligibility both while the hold continues and on its expiry turn." gains: "That
+  usual eligibility includes the exclusions above: while it phases in, a vehicle or landed
+  aircraft member with a temporal beam attached, being erased or not, neither processes nor takes
+  a per-tick start, and neither does an infantry member while it is being erased or, with S-0513
+  `quirks.phase_in_beam_spares_infantry` off, while a beam is attached to it (S-0513 claims 39a
+  and 51)." Level of every amended passage: medium for the actor not being erased, and as the
+  claim gives for an actor being erased. Backing: `unmeasured` (S-0513 claim 39a: no part there
+  holds an infantry member, SW12 part l has a tank only, and its hold of one update is too short
+  to tell a turn cut short from an ordinary one), `design` for the switch's off setting.
+- **S-0306 claim 17.** In *Special hits on a warp member*, the temporal-erasure row's sentence
+  "What the lock then does to the member's warp is not established (Open questions)" is replaced
+  by: "A lock made while the member phases in, or after, has S-0513 claim 39a's effects (*A lock
+  after the departure*): the member is being erased again, with that state's protection, skipped
+  turns and drawing, and is removed at the update S-0514 claims 7 and 8 give. What a lock made
+  while the member is off the map does to its warp is not established (Open questions)." The
+  Open questions item (Q-2231) is unchanged: its sentence on a lock on a member that is off the
+  map stays open. Level and backing: those of S-0513 claim 39a (medium, `unmeasured` for a lock
+  while the member phases in, by its stated reason; medium, `measurable` by SW12 part l5 for a
+  lock after the phasing-in hold, with the exact removal tick `unmeasured`).
 - **S-0215 claim 10.** The cause "the target goes off the map" does not include the departure of
   a superweapon warp member (S-0513 claim 39). An actor with an override in effect whose target is
   that member does not revert at the departure, keeps the member as its target and keeps its
@@ -2821,3 +3295,52 @@ for these two kinds.
   above (for example the leash of claim 26 or an order), does not revert." gives. No further
   wording change is needed for that. Level: medium. Backing: `unmeasured`, because no part of
   S-0513 puts an override in effect for a holder of a warp member.
+- **S-0514 claim 3.** After "the beam-free leaving stage alone is not this refusal." the claim
+  gains: "A target's pending superweapon warp, its leaving stage included, is not a refusal
+  either: a temporal projectile in flight at the launch, or a fragment (S-0318), that detonates
+  at a member before its departure locks a beam on it (S-0513 claim 39a). With
+  `quirks.warp_departure_keeps_beam` off, a pending warp is one more refusal, from the launch until
+  the member's departure update." Level: high for a lock after the member's turn of the detonation
+  tick, medium for one before that turn, while its warp update is still to come, medium for a
+  fragment's lock, high as design for the off setting. Backing: `measurable` (S-0513 SW12 part l)
+  for the first, `unmeasured` for the second, since no part of S-0513 orders a projectile's turn
+  before its target's, and for a fragment's lock, since no part of S-0513 gives a firer that holds a
+  temporal beam a fragment weapon.
+- **S-0514 claim 9.** The claim gains, after "The target stays being erased and a building's
+  switch is unchanged.": "Exception: a superweapon warp member that stopped being erased at its
+  departure while its beam stays attached (S-0513 claim 39a) stays not being erased through such
+  a handover, up to a later lock after the departure (S-0513 claim 39a)." Level: medium. Backing: `unmeasured` (no part of S-0513 SW12 has a beam with a joiner
+  before the departure).
+- **S-0514 claim 14.** The claim gains, after "Arrival by teleport follows the new-cell rule.":
+  "The target's own superweapon warp, its departure included, is not a release cause (S-0513
+  claim 39a)." Level: medium. Backing: `measurable` (S-0513 SW12 part l, variant l1).
+- **S-0514 claim 17.** The claim gains: "A superweapon warp member whose beam was locked before
+  its departure is no longer being erased from its departure update, while the beam stays
+  attached (S-0513 claim 39a). While it phases in, a vehicle or aircraft member still clears its
+  target and destination and skips ordinary movement, turning and firing as above, because a
+  materialising vehicle or aircraft with an attached beam does so whether or not it is being
+  erased. An infantry member does not, since an infantry unit does so only while it is being
+  erased (S-0513 `quirks.phase_in_beam_spares_infantry`). Once its hold has ended, a member of any
+  kind takes ordinary turns while the beam stays attached, up to a later lock after the departure.
+  From such a lock on, the member is being erased again and skips its turns as above (S-0513 claim
+  39a, *A lock after the departure*)." Level: medium for the turns after the hold, medium
+  (unmeasured) for the turns while phasing in, medium for the skipped turns from a later lock.
+  Backing: `measurable` (S-0513 SW12 part l, variant l1) for the turns after the hold, and variant
+  l5 for the skipped turns from a later lock; `unmeasured` while phasing in, since no part there
+  holds an infantry member and the hold in part l lasts one update.
+- **Glossary, *being erased*.** The entry gains: "Exception: a superweapon warp member whose beam
+  was locked before its departure stops being erased at its departure update, while that beam
+  stays attached and the erasure goes on (S-0513 claim 39a), up to a later lock after the
+  departure. From such a lock on, the member is being erased again (S-0513 claim 39a, *A lock
+  after the departure*)." Level: medium, and medium for the being erased again from a later lock.
+  Backing: `measurable` (S-0513 SW12 part l, variant l1), and variant l5 for the being erased
+  again from a later lock.
+- **S-0302 claim 8.** After "Being erased includes both an attached temporal beam and the
+  beam-free leaving stage (S-0514 claims 4 and 10; S-0513 claim 39)." the claim gains: "It does
+  not include a superweapon warp member from its departure update when its beam was locked
+  before the departure: that member takes ordinary hits, while the beam stays attached (S-0513
+  claim 39a), up to a later lock after the departure. From such a lock on, the member is being
+  erased again and this claim's protection applies to it (S-0513 claim 39a, *A lock after the
+  departure*)." Level: medium for hits after the hold, medium (unmeasured) while it phases in,
+  medium for the protection from a later lock. Backing: `measurable` (S-0513 SW12 part l, variant
+  l1) for hits after the hold, and variant l5 for the protection from a later lock.
