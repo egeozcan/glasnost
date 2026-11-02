@@ -1,9 +1,9 @@
 ---
 id: Q-2262
 title: Whether holders in behaviours other than attack and guard make the periodic held-target check
-status: open
+status: answered
 related: [S-0309, S-0215]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
