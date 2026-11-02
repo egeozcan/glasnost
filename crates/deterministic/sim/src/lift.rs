@@ -897,7 +897,7 @@ fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
     }
     let above = crate::jump::height_above(w, x) >= 1; // spec: S-0607 claim 9 (revision 8: in the air is a height above the surface of 1 lepton or more)
     if was_moving && !lifter_ended && above {
-        // spec: S-0607 claim 9 (revision 8, design: no cell found with quirks.jumpjet_no_cell_self_destruct off, in the air: it re-enters hovering over its current cell with no movement point and no commitment, neither descends nor flies anywhere, and stays set down and seized; claim 20 retries the search at each fall-back to rest) and S-0502 Edge cases (revision 16)
+        // spec: S-0607 claim 9 (revision 8, design: no cell found with quirks.jumpjet_no_cell_self_destruct off, in the air: it re-enters hovering over its current cell with no movement point and no commitment, neither descends nor flies anywhere, and stays set down and seized; claim 20 retries the search at the end of each of its turns, not at a fall-back to rest, `end_of_turn`) and S-0502 Edge cases (revision 21: the retry at the end of each of its turns, S-0203)
         return;
     }
     if above {
@@ -1167,7 +1167,9 @@ pub fn given_no_destination(w: &mut World, id: ObjectId) {
 /// 9, `econ::assign_destination`): a non-empty one is ignored; an empty
 /// one is let through, so a gripped unit that had a destination is set down
 /// by [`steer`]. S-0502 claim 28's balloon-hover retention is the callers'
-/// (`jump::clear_rejected`), tested before this (claim 9, revision 33).
+/// (`jump::clear_rejected`), tested before this (claim 9, revision 33;
+/// S-0502 claim 28, revision 21: the rule applies to a seized vehicle too,
+/// before these refusals).
 pub fn refuses_destination(w: &World, id: ObjectId, dest: Option<Target>) -> bool {
     // spec: S-0607 claim 9 (a seized unit ignores every new destination; no destination is the exception)
     seized(w, id) && dest.is_some()
