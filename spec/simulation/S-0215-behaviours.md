@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 103
+revision: 104
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -3062,8 +3062,10 @@ apply in our engine to the actors of every player house.
       that would end the grip (S-0607 claim 12). Part h is decided before this, so a lifter type
       with one of part h's approaches could still take its gripped unit as destination (medium,
       `unmeasured`: no scenario here gives a lifter a part h approach). When the actor is a seized
-      unit and its target is its own lifter, the step runs as for any target. A destination it
-      gives has no effect, since a seized unit ignores destinations (S-0607 claim 9).
+      unit and its target is its own lifter, the step runs as for any target. A destination it gives
+      has no effect, since a seized unit ignores destinations (S-0607 claim 9). The step's drop
+      (part d) and its failed search with no nearby cell (S-0307 claim 17) give a gripped unit no
+      destination, so while the unit has a destination they end its grip (S-0607 claim 9).
     - (d) **Whether the actor keeps its target.** A target in range is never dropped by the
       approach step. A target out of range is kept or dropped as the table says. Here an actor
       *may approach* when its type has the can-approach property (Import mapping) and it is not
@@ -3101,15 +3103,17 @@ apply in our engine to the actors of every player house.
       | yes | in range | any | kept |
       | no | either | any | kept |
 
-      The can-recalculate property is described in words in the Import mapping. A kept
-      destination ends the step for an actor that is not in the air (S-0307's airborne test):
-      nothing else happens in this step, **also when the target is in range**. The approach step
-      never clears a destination because the target came in range; movement outcomes are
-      part i's pointers. An actor in the air that keeps its destination is treated by part f as if
-      it had none. So a target that moves is followed by renewing the destination only at
-      processings of the behaviour (part a), and only once it is more than the threshold away
-      from the destination; the per-tick case of part a never renews a destination, because it
-      applies only to an actor without one.
+      The can-recalculate property is described in words in the Import mapping. A kept destination
+      ends the step for an actor that is not in the air (S-0307's airborne test): nothing else
+      happens in this step, **also when the target is in range**. The approach step never clears a
+      destination because the target came in range; movement outcomes are part i's pointers. An
+      actor in the air that keeps its destination is treated by part f as if it had none. So a
+      target that moves is followed by renewing the destination only at processings of the behaviour
+      (part a), and only once it is more than the threshold away from the destination; the per-tick
+      case of part a never renews a destination, because it applies only to an actor without one.
+      Part e's clearing removes the destination directly, not by an assignment of an empty
+      destination, so it is not an effective clear in S-0502 claim 24's sense and no jumpjet stop
+      follows it (S-0607 claim 9).
     - (f) **No destination.** For an actor that kept its target and has no destination (none to
       start with, or cleared by part e), or that is in the air:
 
@@ -3192,6 +3196,10 @@ apply in our engine to the actors of every player house.
       an indistinguishable evaluation.
       Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and
       confidence. Part c's magnetic-beam case is `measurable` (S-0607 scenario L17), not yet run.
+      Part c's drop and failed search that end a grip, and part e's direct removal with no effective
+      clear and no jumpjet stop, have S-0607 claim 9's backing: `unmeasured`, since no S-0607
+      scenario makes a gripped unit take the approach step, and no scenario here records whether
+      a jumpjet actor of any other kind stops at part e's removal.
       These parts are `unmeasured`: the part h exception to that case (no scenario here gives a
       lifter a part h approach); the draining case of part d (the
       draining link belongs to the structures and combat topics, and no scenario establishes
@@ -3206,15 +3214,17 @@ apply in our engine to the actors of every player house.
       of parts d and g, because B32 tests human-controlled attackers only and supplies neither
       a computer-controlled non-approaching hunting unit nor a deployed computer-controlled
       unit at an identified approach step.
-    - Confidence: high (parts a, b, c apart from its magnetic-beam case, d, e and the outcomes of
-      part f); medium (part c's magnetic-beam case and its part h exception, as S-0607 claim 11
-      rates them, the per-tick rule of part a, the in-the-playfield mark, part f2, part g's deployed
-      infantry and zero-speed types). High for part a2's ordering and independent eligibility.
-      Part a1: medium for the comparison and its deck reads through an enabled link. Low for its
-      deck reads through a link that is not enabled or with no link found, and for two cells of
-      no reach region or two off-map cells, as S-0212 claim 4 rates them. Low for the three
-      exceptions: S-0212 claim 6 rates them medium for path computations, but none of that
-      claim's backing concerns the per-tick rule and no scenario here tests them. Low for a
+    - Confidence: high (parts a, b, c apart from its magnetic-beam case and its grip-ending drop and
+      failed search, d, e apart from its direct removal, and the outcomes of part f); medium (part
+      c's magnetic-beam case and its part h exception, as S-0607 claim 11 rates them, part c's
+      grip-ending drop and failed search and part e's direct removal with no effective clear and no
+      jumpjet stop, as S-0607 claim 9 rates them, the per-tick rule of part a, the in-the-playfield
+      mark, part f2, part g's deployed infantry and zero-speed types). High for part a2's ordering
+      and independent eligibility. Part a1: medium for the comparison and its deck reads through an
+      enabled link. Low for its deck reads through a link that is not enabled or with no link found,
+      and for two cells of no reach region or two off-map cells, as S-0212 claim 4 rates them. Low
+      for the three exceptions: S-0212 claim 6 rates them medium for path computations, but none of
+      that claim's backing concerns the per-tick rule and no scenario here tests them. Low for a
       moving actor's cell.
 
 38. **House-selected centre after path give-up (Q-0238 and Q-0312).** This complements
