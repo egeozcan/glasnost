@@ -127,6 +127,16 @@
       // states that attackers that keep it as their target "can then fail to destroy it for the
       // rest of the game" (a stuck attacker). Acts only on switched-off hovering targets.
       "switched_off_hover_lead": false,
+      // S-0501 claims 4, 10 and 51 and Edge cases (quirks.aircraft_edge_hold off): an aircraft
+      // that may leave the map now is not pushed back at the legal map's boundary, whatever its
+      // flags, so it takes no candidate and no draw there, and one that claim 10 would not remove
+      // before it leaves the legal map is removed in the update tick in which its position leaves
+      // it. On (the original), one with the fly-back flag, or with neither flag at an edge where
+      // the usable area's boundary lies on or beyond the legal map's, is never removed there: a
+      // spy plane in spy-plane overfly "stays at the edge it met for the rest of the game"
+      // (claim 51, Q-2291), with a scenario draw in each tick its step would leave the map.
+      // Acts only on aircraft that may leave the map now.
+      "aircraft_edge_hold": false,
     },
   },
 }
