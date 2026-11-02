@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 63
+revision: 64
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232]
 supersedes: []
@@ -807,8 +807,11 @@ S-0501 claim 20.
     - electric charging (S-0518 claim 11): nothing happens, since it acts on buildings only, and
       the member's health is unchanged,
     - temporal erasure (S-0514 claims 1 to 4): the lock attaches, by those claims' tests. Its
-      ground-layer test (S-0514 claim 1) passes, by the next paragraph. What the lock then does
-      to the member's warp is not established (Open questions),
+      ground-layer test (S-0514 claim 1) passes, by the next paragraph. A lock made while the member
+      phases in, or after, has S-0513 claim 39a's effects (*A lock after the departure*): the member
+      is being erased again, with that state's protection, skipped turns and drawing, and is
+      removed at the update S-0514 claims 7 and 8 give. What a lock made while the member is off
+      the map does to its warp is not established (Open questions),
     - locomotor replacement: nothing happens to the member from its departure until its arrival
       hold ends. This is our engine's design, not a reproduction claim, and has no quirk switch:
       in the original what the seizure then does
@@ -837,6 +840,10 @@ S-0501 claim 20.
       (run j's threshold 42 holds either way). That S-0307's off-the-map rule does not apply is
       `unmeasured` as well.
       The special hits are `measurable` by run g (off the map) and run h (phasing in). The
+      effects of an erasure lock made while the member phases in, or after, are S-0513 claim
+      39a's: `unmeasured` for a lock while it phases in, by that claim's stated reason, and
+      `measurable` by S-0513 SW12 part l5 for a lock after the phasing-in hold, within the limits
+      that claim gives for part l5, with the exact removal tick `unmeasured`. The
       refusal rule of the deck count is
       `measurable` in our engine by run i; the original has no refused placement to compare. The
       rule of no seizing is `measurable` in our engine by run h part h run there; run in the
@@ -848,7 +855,8 @@ S-0501 claim 20.
       medium, unmeasured, for the position read while the member is off the map, for the lack of
       area damage to it then, for the hit while it phases in, for the loss when its landing check
       kills it, for the deck rule and for the airborne count of a departed member. Medium for each
-      special-hit row on a departed member (runs g and h), medium for the threshold 42 (run j),
+      special-hit row on a departed member (runs g and h), medium for an erasure lock's effects
+      while the member phases in or after (S-0513 claim 39a), medium for the threshold 42 (run j),
       medium, unmeasured, for the ground render layer lasting until the arrival hold ends, and high
       for the two engine-design rules (the deck count after a refused placement, and no seizing
       of a member from its departure until its arrival hold ends) as design contracts
