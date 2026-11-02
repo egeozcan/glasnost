@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 40
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -411,32 +411,50 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
    economy and power work, depot queued-entry retries, expected-health turn bookkeeping,
    protection-brightness phase processing, the berserk countdown (S-0610 claim 5) and the
    overload update of an unlimited mind controller (S-0601 claim 16), whose countdown and
-   pulse timing stay as they are through the warp, because they count the controller's overload updates, not ticks (S-0601 claim 16). No step is made up later. In arrival hold, including its expiry turn, the hold-end test precedes all these ordinary opportunities, each still subject
-   to its own eligibility. No deferred ordinary updates are replayed in a catch-up burst.
-   Launch immediately clears the old path, queued destinations and driving step; none
-   resumes after the warp. Target and current destination retain claim 48's leaving-stage
-   clearing rather than an added launch-time clearing. Intrinsic warp target searches,
-   sensor updates, elapsed protection duration, placement and arrival-fate tests are not
-   suppressed ordinary work. Elapsed-tick clocks keep running: suppressed reload work
-   grants no ammunition and restarts no countdown, but its elapsed time still passes.
-   Skipping firing-frame advancement likewise does not freeze a shot cooldown.
-   Independent house updates, other objects' updates, immediate damage and explicit
-   event-driven effects remain eligible. In particular, launch/departure parasite
-   releases and arrival sensor transfer still occur; skipping expected-health turn
-   bookkeeping does not cancel actual damage or death.
-   These restrictions are not missed turns under claim 10
-   and create no separate global tick part. The update count makes S-0513 claim 39's
-   timeline applicable in our engine for uninterrupted successful landing and placement.
-   It does not settle the original's per-kind update count or continuation gaps above.
-   This is an engine design rule, not a reproduction claim, and has no quirk switch.
+   pulse timing stay as they are through the warp, because they count the controller's overload
+   updates, not ticks (S-0601 claim 16). The periodic held-target check (S-0309 claim 29) and the
+   drop of an allied held target at its place (S-0309 claim 25 part k) are suppressed as well. No
+   step is made up later. In arrival hold, including its expiry turn, the hold-end test precedes all
+   these ordinary opportunities, each still subject to its own eligibility. No deferred ordinary
+   updates are replayed in a catch-up burst. Launch immediately clears the old path, queued
+   destinations and driving step; none resumes after the warp. Target and current destination retain
+   claim 48's leaving-stage clearing rather than an added launch-time clearing. Intrinsic warp
+   target searches, sensor updates, elapsed protection duration, placement and arrival-fate tests
+   are not suppressed ordinary work, and neither is the erasure update of a temporal beam attached
+   to the member (S-0514 claim 7), which comes before the warp work in each of the member's turns
+   (S-0513 claim 39a). So in our engine the erasure update of a member being erased runs in every
+   warp turn, and S-0513 claim 39a's removal tick holds. Elapsed-tick clocks keep running:
+   suppressed reload work grants no ammunition and restarts no countdown, but its elapsed time still
+   passes. Skipping firing-frame advancement likewise does not freeze a shot cooldown. Independent
+   house updates, other objects' updates, immediate damage and explicit event-driven effects remain
+   eligible. In particular, launch/departure parasite releases and arrival sensor transfer still
+   occur; skipping expected-health turn bookkeeping does not cancel actual damage or death. These
+   restrictions are not missed turns under claim 10 and create no separate global tick part. The
+   update count makes S-0513 claim 39's timeline applicable in our engine for uninterrupted
+   successful landing and placement. It does not settle the original's per-kind update count or
+   continuation gaps above. This is an engine design rule, not a reproduction claim, and has no
+   quirk switch.
    - Backing for this contract: `measurable` in our engine (S-0513 scenario SW23 part f). For
      the berserk countdown in warp, which S-0513 does not mention, the backing is S-0610
      scenario P9 part e, also measurable in our engine (S-0610 claim 5).
      The overload update in warp is a design rule of our engine, `measurable` in our engine (SW23 part f, which the Measurement scenarios extend to the overload countdown).
-     The original-side gaps retain claim 48's `unmeasured` backing. The original's behaviour
-     in the warp updates other than the leaving stage is an open question of S-0610
+     The suppression of the periodic held-target check and of the allied held-target drop is a
+     design rule of our engine, `measurable` in our engine (S-0513 SW23 part f). The erasure update
+     in warp turns is `measurable` in our engine (S-0513 SW12 part l1). That the original also
+     makes that update in every warp turn is `measurable` (S-0513 SW12 part l1) in the stages l1
+     reaches (a tank member, an empty flat
+     destination and one warp with no failed landing check, no placement failure and a hold of one
+     update), and `unmeasured` for a failed landing check, a placement failure, a longer hold and an
+     infantry or aircraft member, as S-0513 claim 39a gives. Its order within the turn, before the
+     warp work, is design, tested in our engine by S-0513 SW12 part l4; that the original keeps
+     that order is `unmeasured`, as S-0513 claim 39a gives. The original-side gaps retain claim
+     48's `unmeasured` backing. The original's behaviour in the warp updates other than the leaving
+     stage is an open question of S-0610
    - Confidence for this contract: high as design; low for matching the original's
-     unresolved rows, as in S-0513 claim 51
+     unresolved rows, as in S-0513 claim 51. The suppression of the held-target check and drop:
+     high as design. The erasure update in warp turns: high as design for our engine; for the
+     original, medium in every stage that it makes the update, and low for its order before the
+     warp work (S-0513 claim 39a)
 
    - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
      after its own turn: claim 11's backing (`unmeasured`).
