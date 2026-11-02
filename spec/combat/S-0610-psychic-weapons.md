@@ -2,11 +2,11 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0661, Q-1166, Q-1180, Q-1526]
 supersedes: []
@@ -83,8 +83,10 @@ skirmish only; network games and campaigns are out of scope.
   or vehicle (travelling through a tunnel, being erased, or in the leaving stage of a chrono move, in the sense of S-0513 claim 39: from the member's first
   update after launch until departure, including the update where its wait expires),
   or a landed aircraft's update while it is being erased (S-0215 claim 2 excludes its behaviour
-  processing; the countdown part of that exclusion is this spec's choice, claim 5). A warp-only update
-  is one of a superweapon-warp member on which S-0513 claim 51 suppresses its ordinary work (claim 5).
+  processing; the countdown part of that exclusion is this spec's choice, claim 5), or an update of
+  a superweapon-warp member phasing in with a temporal beam attached that S-0215 claim 2 excludes
+  (S-0513 claim 39a; claim 5). A warp-only update is one of a superweapon-warp member on which
+  S-0513 claim 51 suppresses its ordinary work (claim 5).
 
 ## Behaviour
 
@@ -143,10 +145,16 @@ skirmish only; network games and campaigns are out of scope.
    - in the original, a unit that belongs to a team leaves that team (see *team member* —
      the original's team system is out of scope).
    A berserk hit on a unit that is already berserk only sets its remaining time to the new *T*
-   (S-0302 claim 10). Nothing else changes: its target and behaviour stay.
+   (S-0302 claim 10). Nothing else changes: its target and behaviour stay. Both rules hold for the
+   berserk effect only. When the same hit gives a vehicle the crush response of S-0215 claim 39,
+   that response follows the berserk entry and queues *move* in place of the *hunt* queued above,
+   and on a vehicle that is already berserk it still gives the vehicle a destination and queues
+   *move* (S-0215 claim 39).
    - Backing: `measurable` (P2 for entry, target loss, queued behaviour and re-hit).
      Team departure is `unmeasured` here because the original's team system is out of scope.
-   - Confidence: high
+     The crush-response cases are backed as S-0215 claim 39 backs them (S-0210 scenario K15).
+   - Confidence: high, except the crush-response cases, which take S-0215 claim 39's levels (medium
+     for the replacement of the queued *hunt*)
 
 5. **Countdown and the end of berserk.** In each countdown update a berserk unit's remaining time
    goes down by 1. In the update where it reaches 0 or less, the berserk state ends, the remaining
@@ -175,23 +183,28 @@ skirmish only; network games and campaigns are out of scope.
      of an open-topped transport stays in play and does take updates (S-0203 claim 3), so its
      countdown continues.
    - **Excluded updates.** The updates of S-0215 claim 2 on which the unit is travelling through a
-     tunnel, is being erased by a temporal weapon or is in the leaving stage of a chrono move (S-0513 claim 39). Such
-     an update takes no countdown step; the remaining time is kept. For a landed aircraft being
-     erased, the countdown is not established: S-0514 claim 17 excludes its movement, turning and
-     firing, and S-0215 claim 2 excludes its behaviour processing, but neither mentions the
-     countdown. Until a measurement settles it, this spec takes no countdown step there (Open
-     questions). No part of P9 tests that case, and no setup is known for a berserk aircraft
-     (claim 7), so it is `unmeasured`.
+     tunnel, is being erased by a temporal weapon or is in the leaving stage of a chrono move
+     (S-0513 claim 39), and the updates in which a superweapon-warp member phases in that S-0215
+     claim 2 excludes: those of a vehicle or landed aircraft member with a temporal beam attached,
+     being erased or not, and those of an infantry member while it is being erased or, with S-0513
+     `quirks.phase_in_beam_spares_infantry` off, while a beam is attached to it (S-0513 claim 39a).
+     Such an update takes no countdown step; the remaining time is kept. For a landed aircraft being
+     erased, and so for a landed aircraft member phasing in with a beam attached, the countdown is
+     not established: S-0514 claim 17 excludes its movement, turning and firing, and S-0215 claim 2
+     excludes its behaviour processing, but neither mentions the countdown. Until a measurement
+     settles it, this spec takes no countdown step there (Open questions). No part of P9 tests that
+     case, and no setup is known for a berserk aircraft (claim 7), so it is `unmeasured`.
    - **Warp-only updates** of a superweapon-warp member of a kind that S-0513 claim 51 names
      (vehicles, teleporter infantry, landed aircraft) (S-0513 claim 51; S-0203 claim 4). In the
      original the leaving-stage updates are the excluded ones above. In our engine the countdown
      joins the ordinary work that claim 51 suppresses from the first pending update through
      arrival effects: no step is taken, none is made up later, and the remaining time is kept. In
      arrival hold it runs in each update after that update's hold-end test, whether the hold is
-     still holding or expiring, as S-0513 claim 51 gives the other ordinary work.
-     This is a departure of design scope: for the updates before arrival hold, the original's
-     continuation is unresolved (S-0513 claim 52), so it may run the countdown in them, and our
-     engine does not. It has no quirk switch. An unlimited controller (Terms) has an overload update
+     still holding or expiring, as S-0513 claim 51 gives the other ordinary work, except in those
+     excluded phasing-in updates, which take no countdown step and keep the remaining time. This is
+     a departure of design scope: for the updates before arrival hold, the original's continuation
+     is unresolved (S-0513 claim 52), so it may run the countdown in them, and our engine does not.
+     It has no quirk switch. An unlimited controller (Terms) has an overload update
      (S-0601 claim 16) in the same set of updates as this countdown, read without the berserk
      condition: every update that is in play and is neither excluded nor warp-only. In the warp-only
      updates the overload update is suppressed and its timing is kept, as the countdown is. S-0601
@@ -245,13 +258,19 @@ skirmish only; network games and campaigns are out of scope.
      established, since claim 4 does not say what a berserk hit does to a current behaviour that
      takes a unit inside. The non-leaving warp-only rule is a design rule of our engine, checked by
      replaying P9 part e on our engine; the original's leaving stage is `measurable` (P9 part e).
+     The phasing-in exclusion of a superweapon-warp member with a temporal beam attached is
+     `unmeasured`: no scenario makes a berserk warp member phase in with a beam attached. The off
+     setting of S-0513 `quirks.phase_in_beam_spares_infantry` is design.
    - Confidence: high (countdown and expiry effects); medium (order of the step and the firing check,
      pending P9 parts a and b; the start of the queued behaviour in the expiry update, pending S-0215 B46 (see
      Open questions); the erasing and leaving-stage exclusions of the countdown, pending P9
-     parts d and e; tunnel exclusion, unmeasured; the open-topped passenger case); medium (the *T* ≤ 0 case); low (landed aircraft
-     exclusion, unmeasured; that the original takes the step in the non-leaving warp updates, which our
-     engine suppresses by design; the out-of-play rule: derived from the update order, unmeasured, and
-     not known to be reachable in ordinary play)
+     parts d and e; tunnel exclusion, unmeasured; the open-topped passenger case); medium
+     (the *T* ≤ 0 case; the phasing-in exclusion of a superweapon-warp member with a temporal beam
+     attached, unmeasured, except for a landed aircraft member); low (landed aircraft exclusion,
+     unmeasured, and the phasing-in exclusion of a landed aircraft member, as for that
+     exclusion; that the original takes the step in the non-leaving warp updates, which our engine
+     suppresses by design; the out-of-play rule: derived from the update order, unmeasured, and not
+     known to be reachable in ordinary play)
 
 6. **While berserk.** A berserk unit takes no orders (S-0214 claim 15), fires with the halved rearm
    time (S-0301 claim 8) and searches for targets with the friendly-row exceptions of S-0309. In
@@ -765,7 +784,8 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
   claim 51).
 - Whether the original runs the countdown of a landed aircraft being erased. S-0514 claim 17 and
   S-0215 claim 2 exclude its movement, turning, firing and behaviour processing, and say nothing of the
-  countdown. Until a measurement settles it, claim 5 takes no countdown step there.
+  countdown. Until a measurement settles it, claim 5 takes no countdown step there. The same holds
+  for a landed aircraft warp member phasing in with a temporal beam attached (S-0513 claim 39a).
 - (Low) Whether a psychic sensor that leaves the map but is not destroyed stays a sensor of its
   owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
 - Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
