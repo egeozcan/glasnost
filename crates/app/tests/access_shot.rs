@@ -181,7 +181,7 @@ fn the_game_draws_at_twice_the_size_with_the_keyboard_marks() {
     let mut c = client(200);
     start(&mut c);
     // Deploy the base unit and build the first icon (synthetic rules).
-    let local = c.session.as_ref().unwrap().play.local;
+    let local = c.session.as_ref().unwrap().play.me();
     let own = |c: &Client, kind: Kind| {
         let p = &c.session.as_ref().unwrap().play;
         p.world()

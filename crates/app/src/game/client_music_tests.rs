@@ -362,7 +362,7 @@ fn end_screen_after(verdict: Verdict) {
     c.focus(false);
     let s = c.session.as_mut().expect("a game");
     let tick = s.play.world().tick;
-    let local = s.play.local;
+    let local = s.play.me();
     s.play.outcome = Some(Outcome {
         ended: tick,
         over: tick,

@@ -17,7 +17,8 @@ use std::collections::BTreeMap;
 use glasnost_map::{CellXY, Theater};
 use glasnost_sim::econ::minimap::{self, Arrivals, Bits, Grid, Image, PointSource, Rgb, View};
 use glasnost_sim::econ::radar;
-use glasnost_sim::world::{HouseId, World};
+use glasnost_sim::rules::Kind;
+use glasnost_sim::world::{HouseId, Object, World};
 
 /// The radar map's size in pixels (S-0410 Constants).
 pub const SIZE: (i32, i32) = (140, 108); // spec: S-0410 Constants (radar map 140 × 108 pixels)
@@ -94,20 +95,30 @@ impl Radar {
         })
     }
 
-    /// Observes the arrivals after a tick (S-0410 claim 8).
-    pub fn observe(&mut self, w: &World, house: HouseId) {
-        self.arrivals.observe(w, house, &self.grid, &self.img);
+    /// Observes the arrivals after a tick (S-0410 claim 8); a watch game
+    /// (`None`) keeps none, as [`Radar::watch_pixels`] reads no arrival.
+    pub fn observe(&mut self, w: &World, house: Option<HouseId>) {
+        match house {
+            Some(h) => self.arrivals.observe(w, h, &self.grid, &self.img),
+            None => self.arrivals = Arrivals::default(),
+        }
     }
 
     /// The radar map of `house` as RGBA pixels of [`SIZE`]: black outside
     /// the radar image, and all black while the house has no radar
-    /// (S-0410 claim 1).
-    pub fn rgba(&self, w: &World, house: HouseId) -> Vec<u8> {
+    /// (S-0410 claim 1). With no house (a watch game) it is the whole map
+    /// with every object, by [`Radar::watch_pixels`].
+    pub fn rgba(&self, w: &World, house: Option<HouseId>) -> Vec<u8> {
         let (mw, mh) = SIZE;
         let mut out = vec![0u8; (mw * mh * 4) as usize];
         for px in out.as_chunks_mut::<4>().0 {
             px[3] = 255;
         }
+        let Some(house) = house else {
+            let pixels = self.watch_pixels(w);
+            self.blit(&pixels, &mut out);
+            return out;
+        };
         if !radar::available(w, house) {
             return out;
         }
@@ -149,17 +160,77 @@ impl Radar {
                 &self.terrain,
             )
         };
+        self.blit(&pixels, &mut out);
+        out
+    }
+
+    /// Copies the radar image's pixels into the RGBA map of [`SIZE`].
+    fn blit(&self, pixels: &[minimap::RadarColour], out: &mut [u8]) {
+        let (mw, mh) = SIZE;
         for q in 0..self.img.height {
             for p in 0..self.img.width {
                 let (x, y) = (self.img.left + p, self.img.top + q);
                 if !(0..mw).contains(&x) || !(0..mh).contains(&y) {
                     continue;
                 }
-                let c = pixels[(q * self.img.width + p) as usize];
+                let Some(c) = pixels.get((q * self.img.width + p) as usize) else {
+                    continue;
+                };
                 let at = ((y * mw + x) * 4) as usize;
                 for ch in 0..3 {
                     // Back to 8 bits for the screen: the channel's high bits.
                     out[at + ch] = (c[ch] << (8 - DISPLAY_BITS.0[ch])) as u8;
+                }
+            }
+        }
+    }
+
+    /// The radar image of a watch game, row-major.
+    ///
+    /// design: watch mode (lead request 2026-11-02, an extra not in the
+    /// original): no house is shown, so nothing is shrouded and no gap
+    /// field halves a pixel; every point shows its terrain colour. Each
+    /// radar object is shown as its own house sees it: on the map, inside
+    /// the image, not of an invisible type, and not insignificant unless
+    /// radar-visible or owned by an active country (the tests of S-0410
+    /// claim 7 that do not depend on the shown house). A building takes its
+    /// F8 pixel set and anything else its F4 pixel unclamped. Where several
+    /// objects meet at one pixel, the one with the highest object id is
+    /// shown (our order: the radar's arrival order is kept per house).
+    pub fn watch_pixels(&self, w: &World) -> Vec<minimap::RadarColour> {
+        let mut out: Vec<minimap::RadarColour> = self
+            .terrain
+            .iter()
+            .map(|&t| minimap::radar_colour(t, DISPLAY_BITS))
+            .collect();
+        let size = (self.img.width.max(0) * self.img.height.max(0)) as usize;
+        out.resize(size, [0, 0, 0]);
+        // The objects in id order, a later one painting over an earlier.
+        for o in w.objects.values() {
+            if !watch_listed(w, o) {
+                continue;
+            }
+            // spec: S-0410 claim 8 (a shown object in its owner's house colour; the neutral colour without an owner)
+            let c = o.owner.map_or(self.neutral, |h| {
+                self.colours
+                    .get(usize::from(h.0))
+                    .copied()
+                    .unwrap_or(NO_HOUSE_COLOUR)
+            });
+            let rc = minimap::radar_colour(c, DISPLAY_BITS);
+            let pixels = if o.kind == Kind::Building {
+                // spec: S-0410 F8 (around the unclamped F4 pixel of its stored position)
+                let top = minimap::object_pixel(&self.grid, &self.img, o.pos.x, o.pos.y, false);
+                minimap::building_pixels(&self.img, top, o.foundation)
+            } else {
+                vec![minimap::object_pixel(
+                    &self.grid, &self.img, o.pos.x, o.pos.y, false,
+                )]
+            };
+            for (p, q) in pixels {
+                // spec: S-0410 F8 (pixels outside the radar image are omitted, never clamped)
+                if (0..self.img.width).contains(&p) && (0..self.img.height).contains(&q) {
+                    out[(q * self.img.width + p) as usize] = rc;
                 }
             }
         }
@@ -209,4 +280,40 @@ impl Radar {
         let shift = w.rules().quirks.radar_pixel_cell_shift;
         Some(minimap::cell_at_pixel(&self.grid, &self.img, p, q, shift))
     }
+}
+
+/// Whether a watch game's radar shows an object ([`Radar::watch_pixels`]):
+/// S-0410 claim 7's tests that do not depend on the shown house.
+fn watch_listed(w: &World, o: &Object) -> bool {
+    let r = w.rules();
+    let (econ, insignificant) = match o.kind {
+        // spec: S-0410 Terms (only radar objects: infantry, vehicles, aircraft, buildings)
+        Kind::Terrain => return false,
+        Kind::Building => match r.buildings.get(o.type_index as usize) {
+            Some(b) => (Some(&b.raw.econ), b.raw.combat.insignificant),
+            None => (None, None),
+        },
+        _ => match r.unit(o.kind, o.type_index) {
+            Some(u) => (Some(&u.raw.econ), u.raw.combat.insignificant),
+            None => (None, None),
+        },
+    };
+    // spec: S-0410 Import mapping (Invisible, RadarVisible, Insignificant absent: no)
+    let invisible = econ.and_then(|e| e.invisible).unwrap_or(false);
+    let radar_visible = econ.and_then(|e| e.radar_visible).unwrap_or(false);
+    // spec: S-0410 claim 7 (on the map, not inside a transport or building, type not invisible)
+    if !o.on_map || invisible {
+        return false;
+    }
+    // spec: S-0410 claim 7 (insignificant, unless radar-visible or owned by a house whose country is not passive)
+    if insignificant.unwrap_or(false) && !radar_visible {
+        let active_owner = o.owner.is_some_and(|ow| {
+            w.houses
+                .get(usize::from(ow.0))
+                .and_then(|h| r.countries.get(h.country as usize))
+                .is_some_and(|c| !c.passive)
+        });
+        return active_owner;
+    }
+    true
 }

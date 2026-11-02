@@ -20,4 +20,5 @@ pub mod settings;
 pub mod setup;
 pub mod shell;
 pub mod status;
+pub mod watch;
 pub mod widget;

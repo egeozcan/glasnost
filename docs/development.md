@@ -3268,6 +3268,34 @@ Checks (main 299ddf4 before and after): the oracle arena's CSVs are byte-identic
 - *The order counts differ by row.* In the browser runs one row gave 453 orders and another 9 in the same game; it was not looked into.
 - *A `+dirty` build id* never matches a clean one, so the halves of a split game must come from the same tree state; the lab and browser runs used one dirty build on one machine.
 
+## Watch an AI-only game (M8 extra; S-0412, S-0414)
+
+A skirmish whose rows are all computers' is started from the setup screen and watched until it ends. The game itself is the S-0412 Terms case with no human participant: every player house is an AI house, there is no observer's house (S-0009 claim 22), and the game ends by S-0414 claims 6 and 9 like any other. The simulation and AI are unchanged. Everything below is a design rule of the interface, cited in code as `// design: watch mode (lead request 2026-11-02, an extra not in the original)`.
+
+**The model.** `Play.local` is an `Option<HouseId>`; `None` is a watch game. The setup derives it (no person-played house), so saves and replays carry nothing new and the formats are unchanged. `Play::watching()` tells the case apart; `Play::me()` is the local house and panics in a watch game, so code that only runs with a played house says so; `Play::eye(id)` is the house whose sight an object is drawn for (the local house, or in a watch game the object's owner). `Session::start` and `bare` keep their signatures: `None` with no person's house is a watch game. The bench (`watch: true`) still looks through the first player house.
+
+**Setup.** The first row's kind cycles Human and Computer like the others. With no Human row Start starts a watch game. A new problem, *Computers on one team cannot end the game*, refuses a watch game whose rows all share one team: such a game has no hostile pair, and the end test runs only after a defeat (S-0412 claim 8, S-0414 claim 6). Every other choice works as before.
+
+**The view.**
+
+- No shroud and no fog anywhere: `Session::shroud_covers` is empty, so the map, the lighting and every object's visibility are the whole world's.
+- The radar is always on (no radar-building condition) and shows the whole map: `Radar::watch_pixels` paints the terrain, then every object the radar would list for its owner (S-0410's listing rules, the owner's sight left out) in its owner's colour, in object-id order, so where objects share a pixel the highest id shows.
+- The sidebar is the watch panel (`crates/ui/src/watch.rs`): the Options button, the radar, and each player house's swatch, name and credits, or *defeated*; below them the selected object's type, owner and health.
+- Mind-control links and rings are drawn everywhere; rally lines are drawn for the selected building's owner; psychic intent lines (an enemy's warning to the local house) are not drawn.
+- The audio starts with no local house, which `glasnost-audio` already allows: the world's sounds play, the sounds and announcements for the local house's own objects and economy do not, and the voice set is the one for no side (S-0701 claim 26).
+
+**No orders.** A left click on any house's selectable object selects that one object for looking; any other click clears the selection. Box selection, every key command, the cameos and build tabs, control groups, type selection, route mode, delete and the command buttons do nothing. The cursor is the select cursor over an object and the plain arrow elsewhere. The options menu offers the speed control, pause and *Leave* (no surrender, since no house is played). The speed change is an order in the first player house's name (S-0201 claim 17), so a replay plays at the same speeds.
+
+**The end.** The end screen's headline names the winners, *Winner: X*, *Winners: X, Y* or *No winner*, instead of VICTORY or DEFEAT, and the table is the same as any skirmish's (S-0414 claim 7). Leaving it returns to the menu.
+
+**Tests.** `crates/ui/src/setup.rs` (`the_first_row_can_be_a_computer_for_a_watch_game`, `a_watch_game_of_one_team_is_refused`, `with_no_person_the_house_order_is_the_computer_rows`), `crates/ui/src/watch.rs` (the panel lists each house and offers no order), `crates/ui/src/end.rs` (`with_no_local_row_the_winners_are_named`) and `crates/app/src/game/client_watch_tests.rs`: a watch game started from the setup screen on the synthetic fixture, with no shroud and the whole radar, no order from any input, and a game played to its end that saves, loads and replays to the same states.
+
+**Seams and limits.**
+
+- *The replay comparison stops at the end.* The final tick leaves the tick number where it was (S-0201 claim 1), and once play stops the interface writes the statistics into the world (S-0414 claim 19), which a replay does not; the test compares each tick's state while the game runs, as it would for a played skirmish.
+- *No view through one house* and no observer's house: switching the view to one house's sight, and network watch rooms, are out of scope.
+- *No defeat notice.* A house's defeat shows only as *defeated* in the panel.
+
 ## M6c, M7a and M7b step ledgers
 
 Moved to [step-ledgers-m6c-m7.md](step-ledgers-m6c-m7.md) (the *M6c step ledger*, *M7a step ledger* and *M7b step ledger* sections).

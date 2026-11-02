@@ -192,6 +192,8 @@ pub enum Problem {
     SameColour,
     /// A country index outside the list.
     NoCountry,
+    /// A watch game whose computers are all on one team.
+    AllAllied,
 }
 
 impl std::fmt::Display for Problem {
@@ -203,6 +205,7 @@ impl std::fmt::Display for Problem {
             Self::SameStart => "Two players share a start position",
             Self::SameColour => "Two players share a colour",
             Self::NoCountry => "Unknown country",
+            Self::AllAllied => "Computers on one team cannot end the game",
         })
     }
 }
@@ -337,7 +340,24 @@ impl Setup {
                 }
             }
         }
+        if self.watching() {
+            // spec: S-0412 claim 8 (players with the same lobby team number start allied; no team is no team) and S-0414 claim 6 (the end test runs only after a defeat, and the game ends when no hostile pair remains)
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): computers all on one team start with no hostile pair, so no one would be watched to win; such a watch game is refused
+            let first = ps.first().and_then(|s| s.team);
+            if first.is_some() && ps.iter().all(|s| s.team == first) {
+                return Some(Problem::AllAllied);
+            }
+        }
         None
+    }
+
+    /// Whether this setup starts a watch game: players, none of them a
+    /// person's (S-0412 Terms, *human participant*).
+    ///
+    /// design: watch mode (lead request 2026-11-02, an extra not in the
+    /// original): the game is played by computers only and watched.
+    pub fn watching(&self) -> bool {
+        self.players().next().is_some() && self.players().all(|(_, s)| s.kind == SlotKind::Ai)
     }
 
     /// Gives every occupied row whose colour is on "random", person or
@@ -497,8 +517,15 @@ impl Setup {
                     }
                 }
             }
+            SetupHit::Kind(0, d) if d != 0 => {
+                // design: watch mode (lead request 2026-11-02, an extra not in the original): the first row is the person's or a computer's; with no person's row the game is watched
+                self.slots[0].kind = match self.slots[0].kind {
+                    SlotKind::Human => SlotKind::Ai,
+                    _ => SlotKind::Human,
+                };
+            }
             SetupHit::Kind(i, d) if i > 0 => {
-                // The first row is always the person's (interim UI rule).
+                // Every other row is a computer's or closed (interim UI rule).
                 let order = [SlotKind::Ai, SlotKind::Closed];
                 let k = order
                     .iter()
@@ -638,10 +665,11 @@ impl Setup {
                 SlotKind::Closed => "Closed",
             };
             let r = Rect::new(x0, y, 70, 16);
-            // A skirmish's first row is the person's; in a room the host
+            // In a skirmish every row's kind is set (the first row's to the
+            // person or a computer, for a watch game); in a room the host
             // sets the kind of every row nobody has taken.
             let kind_editable = match room {
-                None => i > 0,
+                None => true,
                 Some(f) => f.host && name.is_none(),
             };
             if !kind_editable {
@@ -984,11 +1012,85 @@ mod tests {
         assert_eq!(s.slots[0].team, Some(1));
         s.apply(&SetupHit::Start(0, -1), &r, &maps());
         assert_eq!(s.slots[0].start, Some(1));
-        // The first row stays the person's.
+        // The first row is the person's or a computer's, never closed.
         s.apply(&SetupHit::Kind(0, 1), &r, &maps());
+        assert_eq!(s.slots[0].kind, SlotKind::Ai);
+        s.apply(&SetupHit::Kind(0, -1), &r, &maps());
         assert_eq!(s.slots[0].kind, SlotKind::Human);
         s.apply(&SetupHit::Kind(2, 1), &r, &maps());
         assert_eq!(s.slots[2].kind, SlotKind::Ai);
+    }
+
+    /// The setup of a watch game: the first row a computer's too.
+    fn watch_setup(r: &SetupRules) -> Setup {
+        let mut s = Setup::new(r);
+        s.apply(&SetupHit::Kind(0, 1), r, &maps());
+        s
+    }
+
+    // design: watch mode (lead request 2026-11-02, an extra not in the original): with the first row a computer's and no person's row, the setup starts a watch game
+    #[test]
+    fn the_first_row_can_be_a_computer_for_a_watch_game() {
+        let r = rules();
+        let s = Setup::new(&r);
+        assert!(!s.watching());
+        let s = watch_setup(&r);
+        assert_eq!(s.slots[0].kind, SlotKind::Ai);
+        assert!(s.watching());
+        assert_eq!(s.problem(&r, &maps()), None);
+        // The skirmish view offers the first row's kind control.
+        let (_, t) = s.view((800, 600), &r, &maps(), None);
+        assert!(t.rect_of(&SetupHit::Kind(0, 1)).is_some());
+        // Closing every row leaves no player and no watch game.
+        let mut none = s.clone();
+        for slot in &mut none.slots {
+            slot.kind = SlotKind::Closed;
+        }
+        assert!(!none.watching());
+        assert_eq!(none.problem(&r, &maps()), Some(Problem::TooFewPlayers));
+    }
+
+    // spec: S-0412 claim 8 (the same lobby team number starts allied; no team is not a team) and S-0414 claim 6 (the end test runs only after a defeat)
+    // design: watch mode (lead request 2026-11-02, an extra not in the original): computers all on one team are refused
+    #[test]
+    fn a_watch_game_of_one_team_is_refused() {
+        let r = rules();
+        let mut s = watch_setup(&r);
+        s.slots[0].team = Some(2);
+        s.slots[1].team = Some(2);
+        assert_eq!(s.problem(&r, &maps()), Some(Problem::AllAllied));
+        assert!(s.lobby(&r, &maps()).is_err());
+        // Another team, or no team, gives a hostile pair.
+        s.slots[1].team = Some(3);
+        assert_eq!(s.problem(&r, &maps()), None);
+        s.slots[1].team = None;
+        s.slots[0].team = None;
+        assert_eq!(
+            s.problem(&r, &maps()),
+            None,
+            "two on no team are not allied"
+        );
+        // With a person's row the rule does not apply.
+        let mut p = Setup::new(&r);
+        p.slots[0].team = Some(1);
+        p.slots[1].team = Some(1);
+        assert_eq!(p.problem(&r, &maps()), None);
+    }
+
+    // spec: S-0009 claim 19 (the persons first, then the computer players in lobby-slot order)
+    #[test]
+    fn with_no_person_the_house_order_is_the_computer_rows() {
+        let r = rules();
+        let mut s = watch_setup(&r);
+        s.apply(&SetupHit::Map(1), &r, &maps());
+        s.slots[3].kind = SlotKind::Ai;
+        s.slots[0].colour = Some(5);
+        s.slots[3].colour = Some(1);
+        assert_eq!(s.house_order(), vec![0, 1, 3]);
+        let lobby = s.lobby(&r, &maps()).expect("a watch game starts");
+        assert!(lobby.players.iter().all(|p| p.ai));
+        let names: Vec<String> = lobby.players.iter().map(|p| p.name.clone()).collect();
+        assert_eq!(names, vec![ai_name(0), ai_name(1), ai_name(2)]);
     }
 
     #[test]

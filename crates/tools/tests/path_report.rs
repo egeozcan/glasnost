@@ -71,7 +71,7 @@ fn start() -> Play {
             }
         }
     }
-    Play::new(game, local)
+    Play::new(game, Some(local))
 }
 
 fn step(p: &mut Play, n: i32) {
@@ -89,7 +89,7 @@ fn mobile(p: &Play) -> Vec<ObjectId> {
         .objects
         .values()
         .filter(|o| {
-            o.owner == Some(p.local) && o.on_map && matches!(o.kind, Kind::Vehicle | Kind::Infantry)
+            o.owner == p.local && o.on_map && matches!(o.kind, Kind::Vehicle | Kind::Infantry)
         })
         .map(|o| o.id)
         .collect()
@@ -121,7 +121,7 @@ fn played() -> (Play, Bundle) {
     p.capture.mark(mark);
     step(&mut p, 120);
     let look = Look {
-        local: p.local.0,
+        local: p.local.map(|h| h.0),
         selection: p.selection.iter().map(|o| o.0).collect(),
         speed: p.capture.speed,
         ..Default::default()
@@ -331,7 +331,7 @@ fn lane_capture_on_the_install() {
         panic!("no two-player map in the install");
     });
     let local = glasnost_sim::world::HouseId(0);
-    let mut p = Play::new(game, local);
+    let mut p = Play::new(game, Some(local));
     let speed = p.capture.speed;
     // Play, timing every tick's ring work, with and without a snapshot.
     let mut ring_ns: Vec<u128> = Vec::new();
@@ -380,7 +380,7 @@ fn lane_capture_on_the_install() {
     p.capture.mark(mark);
     play(&mut p, 150);
     let look = Look {
-        local: 0,
+        local: Some(0),
         selection: p.selection.iter().map(|o| o.0).collect(),
         speed,
         ..Default::default()

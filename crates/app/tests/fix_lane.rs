@@ -191,7 +191,7 @@ fn start(size: (i32, i32)) -> Option<(Client, Shots)> {
 /// (S-0409 claim 15), so that the edges are drawn.
 fn reveal(c: &mut Client) {
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     glasnost_sim::econ::shroud::defeat_reveal(&mut s.play.game.world, local);
 }
 
@@ -238,7 +238,7 @@ fn centre_of(c: &mut Client, obj: ObjectId) -> Option<Point> {
 fn deploy(c: &mut Client, clock: &mut i64) -> CellXY {
     ticks(c, clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let mcv = s
         .play
         .world()
@@ -266,7 +266,7 @@ fn rally_point_from_a_factory() {
     let mut clock = 0i64;
     let base = deploy(&mut c, &mut clock);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     // The first ground vehicle factory type, placed beside the base.
     let w = s.play.world();
     let names: Vec<String> = w
@@ -449,7 +449,7 @@ fn rally_point_from_a_factory() {
 
 fn own_vehicles(c: &Client) -> Vec<ObjectId> {
     let s = c.session.as_ref().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     s.play
         .world()
         .objects
@@ -560,7 +560,7 @@ fn infantry_on_a_bridge_deck() {
     };
     println!("bridge from {a:?} to {b:?}");
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = s.play.world();
     let walker = w
         .rules()
@@ -657,7 +657,7 @@ fn mouse_controls() {
     let mut clock = 0i64;
     ticks(&mut c, &mut clock, 5);
     let s = c.session.as_ref().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let (mcv, at) = s
         .play
         .world()
@@ -738,7 +738,7 @@ fn spawner_weapon_attack() {
     reveal(&mut c);
     ticks(&mut c, &mut clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = s.play.world();
     let r = w.rules();
     let spawners: Vec<String> = r
@@ -816,7 +816,7 @@ fn harvester_mining() {
     let mut clock = 0i64;
     let base = deploy(&mut c, &mut clock);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = s.play.world();
     let r = w.rules();
     let (harv, dock) = r

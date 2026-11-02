@@ -203,7 +203,7 @@ fn centre_of(c: &mut Client, obj: ObjectId) -> Option<Point> {
 fn deploy(c: &mut Client, clock: &mut i64) -> CellXY {
     ticks(c, clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let mcv = s
         .play
         .world()
@@ -248,7 +248,7 @@ fn round_5_notes_on_the_real_data() {
     let mut clock = 0i64;
     let base = deploy(&mut c, &mut clock);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = s.play.world();
     let r = w.rules();
     let sw_rules = &r.superweapons;

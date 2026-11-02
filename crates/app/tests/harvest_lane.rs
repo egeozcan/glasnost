@@ -542,7 +542,7 @@ fn start(dir: &std::ffi::OsStr, allied: bool) -> (Client, i64, HouseId) {
     let mut clock = 0i64;
     ticks(&mut c, &mut clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = s.play.world();
     println!(
         "map {map}, local house {} country {} human {}",

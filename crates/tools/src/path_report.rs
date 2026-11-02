@@ -530,7 +530,9 @@ pub fn analyse(b: &Bundle, inputs: &Inputs, o: &Options) -> Result<Analysis, Ref
             "skirmish"
         },
         b.look.speed,
-        b.look.local
+        b.look
+            .local
+            .map_or_else(|| "none (a watch game)".to_string(), |h| h.to_string())
     );
     let _ = writeln!(text, "Rules: {}", b.layers.describe());
     let _ = writeln!(

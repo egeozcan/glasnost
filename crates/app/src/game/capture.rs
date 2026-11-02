@@ -124,8 +124,9 @@ pub struct ViewRect {
 /// What the person was looking at when the report was saved.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Look {
-    /// The person's house.
-    pub local: u8,
+    /// The person's house; `None` in a watch game, where no house is
+    /// played (an older report's number reads as `Some`).
+    pub local: Option<u8>,
     /// The selection, in selection order (object ids).
     pub selection: Vec<u32>,
     /// The view.

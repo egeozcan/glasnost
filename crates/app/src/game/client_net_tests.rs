@@ -269,7 +269,7 @@ fn script(c: &mut Client, tick: i32, n: &mut u64) -> usize {
     let Some(s) = c.session.as_mut() else {
         return 0;
     };
-    let house = s.play.local;
+    let house = s.play.me();
     let units: Vec<_> = s
         .play
         .game
@@ -395,8 +395,8 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
         assert!(s.play.outbox.is_some());
     }
     assert_ne!(
-        a.session.as_ref().unwrap().play.local,
-        b.session.as_ref().unwrap().play.local,
+        a.session.as_ref().unwrap().play.me(),
+        b.session.as_ref().unwrap().play.me(),
         "each plays its own house"
     );
 
@@ -1066,7 +1066,7 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
     // leaves once her surrender order has been carried out, and the others
     // hold her house marked to die from that tick, not from a drop's grace.
     // spec: S-0201 claim 15 (while at least two human houses, the player's own among them, are undefeated: two choices that send the surrender order, one then leaving the game) and S-0414 claim 11 (the surrender marks the house to die)
-    let ann = usize::from(a.session.as_ref().unwrap().play.local.0);
+    let ann = usize::from(a.session.as_ref().unwrap().play.me().0);
     assert!(a.session.as_mut().unwrap().open_options());
     let _ = a.frame();
     let r = a
