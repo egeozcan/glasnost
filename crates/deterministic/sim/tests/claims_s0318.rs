@@ -918,7 +918,7 @@ fn sh1n_radiation_of_shot_and_fragment() {
     assert_eq!(lost, vec![FRAG, FRAG, FRAG, 0, 0]);
 }
 
-// spec: S-0318 claim 5 and S-0306 claim 8 (revision 45, Changes for other specs: a fragment whose burst point is not above the terrain starts 1 lepton above it, at the same x and y; a burst above the terrain is kept; an invisible fragment's move to K is not raised; the walk's X₁ is the burst point)
+// spec: S-0318 r27 claims 1 and 5 (placed at the burst point, raised as S-0306 claim 8 gives: a fragment whose burst point is not above the terrain starts 1 lepton above it, at the same x and y, so a burst at height 0 gives fragments that start at height 1) and S-0306 claim 8 (revision 45, Changes for other specs: a fragment whose burst point is not above the terrain starts 1 lepton above it, at the same x and y; a burst above the terrain is kept; an invisible fragment's move to K is not raised; the walk's X₁ is the burst point)
 #[test]
 fn s0306_claim8_fragments_start_above_the_ground() {
     let mut r = base(1);
@@ -952,7 +952,7 @@ fn s0306_claim8_fragments_start_above_the_ground() {
     );
 }
 
-// spec: S-0318 claims 5 and 6 (launched from the burst point towards the aim point's reference point, climbing at about 45°) and S-0306 claim 8 (revision 45: a burst point at the surface gives a start 1 lepton above it; Changes for other specs)
+// spec: S-0318 r27 claims 5 and 6 (a fragment starts from its starting position, claim 5, and is launched towards its aim point's reference point, climbing at about 45°; the direction is taken from the burst point as it is, not from the raised starting position) and S-0306 claim 8 (revision 45: a burst point at the surface gives a start 1 lepton above it; Changes for other specs)
 #[test]
 fn claim6_visible_fragment_direction() {
     let mut r = base(1);

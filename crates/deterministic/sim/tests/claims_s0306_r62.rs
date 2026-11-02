@@ -520,6 +520,7 @@ fn claim17_p11_controls_each_part_acts_on_a_member_with_no_warp() {
 #[test]
 fn claim17_p11_run_g_special_hits_act_on_a_member_off_the_map() {
     // spec: S-0306 claim 17 (takeover, bomb planting, bomb disarming, air-strike designation, disguise-making and the erasure lock act on the projectile's target object, so a departed member off the map receives them by each row's own tests; electric charging acts on buildings only, so it does nothing; in every case the selected row still replaces ordinary damage) and scenario P11 run g
+    // spec: S-0601 r21 claim 5, S-0519 r18 claims 2, 7 and 16 and S-0516 r13 claim 31 (a departed superweapon warp member that is the target, off the map, is an ordinary target for the takeover, the bomb, the disarm hit, the designation and the disguise copy, by each claim's own tests; S-0306 scenario P11 run g)
     for part in PARTS {
         let h = hit(part, Timing::Away);
         assert!(d3(h.at, h.kept) < 256, "{part:?}: at V's old position");
@@ -541,6 +542,7 @@ fn claim17_p11_run_g_special_hits_act_on_a_member_off_the_map() {
 #[test]
 fn claim17_p11_run_h_special_hits_act_on_a_member_phasing_in() {
     // spec: S-0306 claim 17 (a member phasing in, appeared at its landing point and until its arrival hold ends, receives the special hits by each row's own tests; electric charging does nothing; the selected row replaces ordinary damage) and scenario P11 run h
+    // spec: S-0601 r21 claim 5, S-0519 r18 claims 2, 7 and 16 and S-0516 r13 claim 31 (a departed superweapon warp member that is the target, phasing in after it appears, is an ordinary target for the takeover, the bomb, the disarm hit, the designation and the disguise copy, by each claim's own tests; S-0306 scenario P11 run h)
     for timing in [Timing::Placed, Timing::Hold] {
         for part in PARTS {
             let h = hit(part, timing);

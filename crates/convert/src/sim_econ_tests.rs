@@ -662,7 +662,7 @@ fn deploy_direction_and_jumpjet_controls() {
     assert_eq!(s.general.economy.deploy_dir, None);
 }
 
-// spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
+// spec: S-0004 r20 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; an absent key is kept as absent here, and the simulation gives it the default by kind: yes for an aircraft type, no for a vehicle type, S-0501 Import mapping)
 #[test]
 fn considered_aircraft_flag() {
     let base = "[VehicleTypes]\n0=CARA\n1=CARB\n[AircraftTypes]\n0=PLANEA\n[CARA]\nConsideredAircraft=yes\n\

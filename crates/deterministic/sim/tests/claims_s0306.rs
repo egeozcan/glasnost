@@ -4055,7 +4055,7 @@ fn claim3b_a_switched_off_hover_holding_rho_zero_is_not_moved() {
     assert_eq!(led, rp, "ρ = 0: no lead");
 }
 
-// spec: S-0306 claim 3 (b) (r62: a switched-off hovering vehicle keeps its heading point, S-0503 claims 16 and 19, and is led while it has a destination or a heading point; one that arrives at its heading point with no destination and no stored step loses the point, S-0503 claim 15, and is no longer led; scenario P45 part a)
+// spec: S-0306 claim 3 (b) (r62: a switched-off hovering vehicle keeps its heading point, S-0503 claims 16 and 19, and is led while it has a destination or a heading point; one that arrives at its heading point with no destination and no stored step loses the point, S-0503 claim 15, and is no longer led; scenario P45 part a) and S-0503 r28 claim 10 (one that has a destination or a heading point when it is switched off is moving, and shots at it are led while it keeps either; one that arrives at its heading point by claim 7's test with no destination and no stored step left is not moving, so shots at it are not led)
 #[test]
 fn claim3b_a_switched_off_hover_that_arrives_is_no_longer_led() {
     let (mut s, h) = travelling_hover(true, true);
@@ -4091,6 +4091,32 @@ fn claim3b_a_switched_off_hover_that_arrives_is_no_longer_led() {
     let rp = s.w.reference_point(h);
     let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
     assert_eq!(led, rp, "not moving: not led");
+}
+
+// spec: S-0503 r28 claim 10 (losing the heading point alone, as at a refused step, claim 12, leaves a switched-off hovering vehicle moving while it keeps its destination, so shots at it are still led; one with neither is not moving and is not led) and S-0306 claim 3 (b) (quirks.switched_off_hover_lead on)
+#[test]
+fn claim3b_a_switched_off_hover_that_loses_only_its_heading_point_is_still_led() {
+    let (mut s, h) = travelling_hover(true, true);
+    // Set up directly: a destination D that the stop request did not clear,
+    // and no heading point or retained point, as a refused step leaves it.
+    {
+        let o = s.w.obj_mut(h).unwrap();
+        o.dest = Some(Target::Cell(cell_of(3, 12)));
+        let hv = o.hover.as_mut().unwrap();
+        hv.stopped = None;
+        hv.point = None;
+        hv.retained = None;
+    }
+    assert!(glasnost_sim::hover::switched_off(&s.w, h));
+    assert!(glasnost_sim::hover::moving(&s.w, h), "D kept: moving");
+    let rp = s.w.reference_point(h);
+    let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+    assert_ne!(led, rp, "moving with D alone: led");
+    // Without D as well it is not moving and is not led.
+    s.w.obj_mut(h).unwrap().dest = None;
+    assert!(!glasnost_sim::hover::moving(&s.w, h));
+    let led = glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(h));
+    assert_eq!(led, s.w.reference_point(h), "neither: not led");
 }
 
 /// The cart ordered to attack the buggy 5 cells away with `Shot` on an

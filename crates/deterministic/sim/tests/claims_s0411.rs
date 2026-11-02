@@ -721,7 +721,7 @@ fn s0407_claim_17_kinds_by_factory_acquisition() {
     }
 }
 
-// spec: S-0004 claim 11 rule 3 and open question 2, S-0501 Import mapping (ConsideredAircraft absent: yes for an aircraft type, so an aircraft type that leaves the key out ranks as air, after a ground vehicle tied with it on every other key; scenario AC30 part j); the control sets the key to no, and the tie then puts the later offer first (S-0407 claim 17)
+// spec: S-0004 r20 claim 11 rule 3 and Import mapping (an aircraft type whose data leaves the counts-as-aircraft key out has the flag, so, unless it also has the naval flag, it ranks as air; open question 2 resolved) and S-0501 Import mapping (ConsideredAircraft absent: yes for an aircraft type, so an aircraft type that leaves the key out ranks as air, after a ground vehicle tied with it on every other key; scenario AC30 part j); the control sets the key to no, and the tie then puts the later offer first (S-0407 claim 17)
 #[test]
 fn absent_counts_as_aircraft_ranks_an_aircraft_as_air() {
     for flag in [None, Some(false)] {

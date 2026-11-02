@@ -1240,7 +1240,9 @@ pub fn reset(w: &mut World, spawner: ObjectId) {
 }
 
 /// The controller clears its slots (S-0506 claim 13), in descending slot
-/// index.
+/// index. The controller target is left as it is (S-0506 r20 claim 13:
+/// clearing the slots does not change it, and the controller's passes go
+/// on while the spawner is seized).
 pub fn clear_slots(w: &mut World, spawner: ObjectId) {
     let t = w.tick;
     let q = w.rules().quirks;

@@ -806,7 +806,7 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
 /// the landing check kills it (S-0306 claim 17, revision 57;
 /// `combat::projectile::target_airborne`).
 pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
-    // spec: S-0513 claim 39 and S-0309 claim 27 (the own jump's drops take no targeting-timer draw: the reset belongs to claim 27's and claim 28's drops only)
+    // spec: S-0207 r83 claim 20 (e), S-0513 claim 39 and S-0309 claim 27 (the own jump's drops take no targeting-timer draw: the reset belongs to claim 27's and claim 28's drops only)
     let Some(pos) = w.obj(id).map(|o| o.pos) else {
         return;
     };

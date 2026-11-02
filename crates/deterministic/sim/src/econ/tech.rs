@@ -293,7 +293,7 @@ impl Rules {
                         tab,
                         // spec: S-0004 Import mapping (naval = Naval; absent: no)
                         naval: u.combat.naval.unwrap_or(false),
-                        // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft) and S-0501 Import mapping (absent: yes for an aircraft type, no for other types; S-0004 open question 2 leaves the aircraft default to S-0501)
+                        // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft) and S-0501 Import mapping (absent: yes for an aircraft type, no for other types) and S-0004 r20 Import mapping (the same default; open question 2 resolved by S-0501)
                         considered_aircraft: u.econ.considered_aircraft.unwrap_or(air_default),
                         ..Default::default()
                     };

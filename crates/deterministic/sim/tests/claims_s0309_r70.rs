@@ -629,10 +629,10 @@ fn a_neutral_holder_makes_the_check_and_no_processing_drop() {
 }
 
 // ---------------------------------------------------------------------------
-// Healers (S-0309 r70's Changes for S-0310 claim 11).
+// Healers (S-0310 r8 claim 11, from S-0309 r70's Changes for S-0310).
 // ---------------------------------------------------------------------------
 
-// spec: S-0309 r70's Changes for S-0310 claim 11 (an infantry unit whose default weapon heals replies to illegal in its own firing step, in each of its turns: it drops a target that is not infantry, also off the check phase) and S-0310 T10 parts g and h
+// spec: S-0310 r8 claim 11 (an infantry unit whose default weapon heals replies to illegal in its own firing step, in each of its turns: it drops a target that is not infantry, also off the check phase) and S-0310 T10 parts g and h
 #[test]
 fn an_infantry_healer_drops_a_vehicle_target_in_its_firing_step() {
     let mut w = testkit::game_with(&rules(), SIZE, 1);
@@ -648,7 +648,7 @@ fn an_infantry_healer_drops_a_vehicle_target_in_its_firing_step() {
     assert_eq!(drop_tick(&mut w, h, v, 10), Some(n), "in its first turn");
 }
 
-// spec: S-0309 r70's Changes for S-0310 claim 11 (an infantry healer keeps an infantry target below full health that still gives illegal, here by a versus value of exactly 0, and does nothing in that step; the keep lasts only to claim 29's next check) and claim 29
+// spec: S-0310 r8 claim 11 (an infantry healer keeps an infantry target below full health that still gives illegal, here by a versus value of exactly 0, and does nothing in that step; that keep lasts only to S-0309 claim 29's next check) and S-0309 claim 29
 #[test]
 fn an_infantry_healers_keep_lasts_to_the_check_tick() {
     let mut w = testkit::game_with(&rules(), SIZE, 1);
@@ -670,7 +670,7 @@ fn an_infantry_healers_keep_lasts_to_the_check_tick() {
     assert_eq!(shots_by(&w, h), 0);
 }
 
-// spec: S-0309 r70's Changes for S-0310 claim 11 and scenario T10 part d (a vehicle healer's keep of a vehicle target below full health on illegal, "keeps it and does nothing in this step", lasts only to claim 29's next check, at which it drops it)
+// spec: S-0310 r8 claim 11 and scenario T10 part d (a vehicle healer's keep of a vehicle target below full health on illegal, "keeps it and does nothing in this step", lasts only to S-0309 claim 29's next check: at the first tick whose tick number is a multiple of 16 at which the check answers illegal, it drops it)
 #[test]
 fn a_vehicle_healers_keep_lasts_to_the_check_tick() {
     let mut w = testkit::game_with(&rules(), SIZE, 1);
