@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 31
+revision: 32
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061, Q-0614]
 supersedes: []
@@ -93,15 +93,18 @@ addition:
 - **Nullified detonation.** A detonation that claim 15 restricts to objects under the invulnerability
   effect.
 - **Tracked flying object.** An object registered for the flying-object search: an aircraft-kind
-  object in ordinary flight, a unit moving with the jumpjet locomotor, including a seized unit
-  (S-0502 claim 29), or a rocket missile from the end of its tilt or raise phase until it
-  detonates (S-0506 claims 15 and 19). Also included is any unit placed on the map while airborne
-  whose type has the counts-as-aircraft flag (Import mapping; S-0502 claim 29). Such placement
-  registration lasts until it goes off the map, unless its movement ends registration earlier.
-  Registration during jumpjet movement follows all the boundaries and exceptions of S-0502 claim 29, not merely
-  its height or flight state. Rocket missiles cease to be tracked before their own detonation's
-  area damage. Each is registered in a *sector* (Formulas F7), updated at the movement events
-  that its movement spec defines; S-0502 claim 29 owns these events for jumpjet movement.
+  object in ordinary flight (S-0501 claim 47 gives the events for an aircraft), a unit moving
+  with the jumpjet locomotor,
+  including a seized unit (S-0502 claim 29), or a rocket missile from the end of its tilt or raise
+  phase until it detonates (S-0506 claims 15 and 19). Also included is any unit placed on the map
+  while airborne whose type has the counts-as-aircraft flag (Import mapping; S-0502 claim 29). Such
+  placement registration lasts until it goes off the map, unless its movement ends registration
+  earlier. An aircraft placed in the air with that flag ends it at touchdown like any other aircraft
+  (S-0501 claim 47). Registration during jumpjet movement follows all the boundaries and exceptions
+  of S-0502 claim 29, not merely its height or flight state. Rocket missiles cease to be tracked
+  before their own detonation's area damage. Each is registered in a *sector* (Formulas F7), updated
+  at the movement events that its movement spec defines; S-0502 claim 29 owns these events for
+  jumpjet movement.
 - **Sector.** One of the 20 × 20 rectangles of whole cells into which F7 divides the map for the
   flying-object search.
 - **Turn.** In claim 1, an object's share of one tick (S-0203, Terms), not an amount of rotation.
@@ -998,7 +1001,7 @@ warnings above are design rules, not claimed oracle observations.
 |---|---|---|---|
 | rules, warhead section, `CellSpread` | spread *S* | decimal (single) | 0 |
 | no user-data key | within-sector arrival order and alternative global tracking order (claim 11, F7) | fixed behaviour; `quirks.flying_search_sectors` is an engine option, not an imported field | sector search on |
-| rules, unit type section, `ConsideredAircraft` | counts-as-aircraft flag: registration when placed airborne (Terms; S-0502 claim 29) | boolean | no |
+| rules, unit type section, `ConsideredAircraft` | counts-as-aircraft flag: registration when placed airborne (Terms; S-0502 claim 29) | boolean | yes for an aircraft type, no for every other type (S-0501 Import mapping) |
 | rules, warhead section, `Parasite` | parasite flag: projectile area damage replaced by attachment (claim 2; S-0614 claim 1) | boolean | no |
 | rules, warhead section, `ElectricAssault` | electric-charge effect: when selected, replaces projectile area damage but preserves shared effects (claim 2; S-0518 claim 11) | boolean | no |
 | rules, warhead section, `Airstrike` | air-strike flag: designation projectiles make no area hits but preserve shared effects (claim 2; S-0519 claim 16) | boolean (S-0003) | no |
