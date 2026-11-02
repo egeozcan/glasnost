@@ -90,7 +90,7 @@ They are re-armed or re-timed, and no assertion is loosened:
 | 29, behaviours in which no weapon is aimed, a weaponless holder (*impossible*) | Built. Tested: `claims_s0522::a_weaponless_paradrop_plane_drops_its_cell_and_retreats`; fixtures above |
 | 29, a second turn in a check tick checks too | Built by construction (`held::turn` runs in every turn reaching the place). Not tested: no setup here gives a holder a second turn |
 | 29, Turns cut short: a building being erased makes no check; a mobile holder being erased drops its target each turn (S-0215 claim 2) | Existing; the place keeps both (`behaves`, the `temporal::turn` return) |
-| 29, Turns cut short, a materialising holder with a temporal beam attached (Q-2264) | Seam: intake 75 (S-0513 claim 39a, `phase_in_beam_spares_infantry`) |
+| 29, Turns cut short, a materialising holder with a temporal beam attached (Q-2264) | Intake 75 (S-0513 claim 39a, merged before this branch): the check skips a turn that `temporal::cut_short` cuts short, `phase_in_beam_spares_infantry` included. In the rebase the allied drop takes the same test in place of `temporal::erased`. Tested by intake 75's `claims_s0513_r86.rs` |
 | 29, a materialising holder with no beam gets *rearming*, first in rank 4 | Existing answer in `check::check`; the new precedence over the other rank-4 refusals is S-0301's change (run p10a). Seam: intake 79 |
 | 29, Warp members (S-0203 claim 4): no check in the warp turns | Existing (intake 71); tested by `claims_s0513_r62::claim51_sw23_f_the_members_own_periodic_check_is_suppressed_through_arrival_effects` |
 | 25 part k, the allied drop: computer owners, own house included, any tick, any behaviour | Built. Tested: `claims_s0309_r94::p9b_a_computer_owned_holder_drops_a_target_of_its_own_house_off_the_check_phase` (neutral and special), `the_allied_drop_is_made_in_every_behaviour` (capture and sabotage included), `a_computer_owned_holder_keeps_an_enemy_target` |
@@ -153,12 +153,49 @@ S-0607 claim 9 (r38). Backing: unmeasured, confidence medium.
 |---|---|
 | 5 and Edge cases: the switch covers S-0214 F1 and F9 | Built and tested (S-0214 row above) |
 
+## Lanes
+
+The real-install lanes ran on the first base (0cb93b5), before and after this intake's code, so
+they show this intake alone. The goldens, the gate and the AI tests ran again on the final base,
+main 23869cf, which has intakes 75 and 76.
+
+- **Goldens.** Seven moved against main and were regenerated: duel, duel-diagonal, duel-naval,
+  duel-m6c, duel-m7a, duel-m7b and skirmish. On the first base the naval duel ran its full
+  40,000 ticks undecided, where before it had ended at about 24,840. On the final base it ends
+  at 2569 hash lines, against 2561 on main, so it is decided again. `xtask gate` passes, native
+  and wasm.
+- **Arena** (`arena --record all`). Failing pairings went from 13 to 10.
+  - Now passing: CAOS–V3, TELE–TTNK, YURI–GGI and YURI–SHK.
+  - Newly failing: MIND–E1 (stock 12/12, ours 11/12; one side's outcome differs).
+  - Still failing: DISK–FV, TELE–V3, CAOS–E1, LTNK–E1, TELE–APOC, CAOS–APOC, CAOS–TTNK,
+    INIT–E2 and ROBO–HTK.
+- **Sweeps.** All exit 0. Seeds with no counter below 3: M6c 7 → 8, M7a 0 → 1, M7b 16 → 16.
+  - M6c minima: garrison occupants 6 → 4, sabotage orders 0 → 8, suicide orders 4 → 11, crate
+    orders 10 → 40, radiation exits 1 → 7, disarm orders 6 → 4, bombs planted 12 → 10.
+  - M7a: berserk orders median 20 → 16, absorber entries min 2 → 1, grinder entries min 8 → 6,
+    vehicles seized max 114 → 188. Infantry absorbed min stays 0.
+  - M7b: small moves only.
+- **AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games). Every game ends, before and
+  after.
+  - The winner changed in 8 of the 36 games.
+  - Total ticks went from 1,507,624 to 1,774,001. The longest game went from 78,529 to 91,418
+    ticks.
+  - Paradrop launches went from 218 to 243 and spy-plane launches from 211 to 268. No warnings
+    were logged. The lane has no per-mission counter, so a mission that ended early would not
+    show here; no evidence of one turned up.
+- **`cargo test --release -p glasnost-ai -- --include-ignored`.** First base: 246 passed, 0
+  failed. Final base: 246 passed, 0 failed, in 33 binaries.
+
 ## Seams
 
 - **Intake 75** (S-0513, S-0514, S-0610): S-0309 claim 29's materialising holder with a beam
   attached, S-0215 claim 2's phasing-in exclusions and `quirks.phase_in_beam_spares_infantry`,
-  S-0203 claim 4's erasure update before the warp work.
-- **Intake 76** (S-0501, S-0502): S-0215's aircraft items, S-0213 r96's pad-bound scenario, the
+  S-0203 claim 4's erasure update before the warp work. Merged on main (23869cf) before this
+  branch's last rebase. Both sides are kept in `tick::object_turn`: the member's erasure update
+  (`temporal::member_update`) and its early return come right after `held::turn_start_drop`
+  and before the warp step, and `held::turn` stays after `process::head`. The check skips turns
+  that `temporal::cut_short` cuts short, and the allied drop now does too.
+- **Intake 76** (S-0501, S-0502), merged on main (3ec77d6): S-0215's aircraft items, S-0213 r96's pad-bound scenario, the
   aircraft's in-air drop against the check (S-0501 claim 32), and the aircraft cloak drop of
   S-0516 claim 25, which runs in `cloak::late_turn` after movement where S-0501 claim 32 says
   before processing (the end state against the check is the same).

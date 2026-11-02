@@ -2528,7 +2528,14 @@ S-0309 r94 answers intake 68's four interims, and `combat::held::turn` replaces 
 - **Representative distance.** S-0214 F1's representative distance (`targeting::rep_distance`, now public) follows `quirks.table_root_distance` (S-0204 claim 5 r10).
 - **The approach step in the grip (S-0215 r104, claim 37 parts c and e).** Our code already did what r104 says, so this adds cites and tests and no code. The drop of part d and a failed search with no nearby cell write an empty destination. While the gripped unit had a destination, `lift::steer` and `lift::enforce` read that as the end of the grip. Part e's clearing goes through `lift::destination_removed`, so it is no effective clear: the grip holds and no jumpjet stop follows. Tests: `claims_s0215_r104.rs`.
 
-No new quirk switch and no new state: save format 92, AI game format 55. No requests filed. The `phase_in_beam_spares_infantry` clauses belong to intake 75. Tests: `claims_s0309_r94.rs`, plus the revised `claims_s0309_r70.rs`. Ledger: [m8-claims/intake74.md](m8-claims/intake74.md).
+No new quirk switch and no new state, so the formats are unchanged: save format 93 and AI game format 56 on main after intake 75. No requests filed. The `phase_in_beam_spares_infantry` clauses belong to intake 75. In the rebase over it, the check and the allied drop both skip the turns that `temporal::cut_short` cuts short.
+
+Lanes (this intake alone, on base 0cb93b5):
+- Arena: failing pairings went from 13 to 10. MIND–E1 is newly failing.
+- AI quick lane: all 36 games still end. The winner changed in 8, and the games are longer.
+- Goldens: seven moved. The naval duel is decided on the final base.
+
+The ledger has the full figures. Tests: `claims_s0309_r94.rs`, plus the revised `claims_s0309_r70.rs`. Ledger: [m8-claims/intake74.md](m8-claims/intake74.md).
 
 ### A warp member's holders from the launch on, and the arena's set-up (M8 step A3 intake 71; S-0513 r62, S-0216 r37; Q-2211 in part, Q-2213, Q-2096, Q-2098 and Q-2099 in part answered)
 
