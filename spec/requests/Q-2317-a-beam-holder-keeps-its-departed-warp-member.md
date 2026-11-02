@@ -1,9 +1,9 @@
 ---
 id: Q-2317
 title: Whether a firer whose temporal beam is attached keeps a departed warp member as its target
-status: open
+status: answered
 related: [S-0513, S-0514, S-0309]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
