@@ -1,9 +1,9 @@
 ---
 id: Q-2266
 title: Whether palette index 0 of the sidebar button images is transparent, and whether their colours go through the 16-bit step
-status: open
+status: answered
 related: [S-0411, S-0103]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need
