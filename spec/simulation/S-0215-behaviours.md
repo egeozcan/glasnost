@@ -2,11 +2,11 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 91
+revision: 95
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171]
 supersedes: []
@@ -572,22 +572,31 @@ Terms used by this spec:
    - its processing timer has expired,
    - it is not an infantry unit or vehicle travelling through a tunnel,
    - it is not an infantry unit or vehicle that is being erased, or that is in the leaving stage of a
-     chrono move (Terms). Such an actor also drops its target on each such tick, and drops its
+     chrono move (Terms), nor a vehicle that is phasing in with a temporal beam attached while it
+     is not being erased, as a superweapon warp member is after its departure (S-0513 claim 39a).
+     With S-0513 `quirks.phase_in_beam_spares_infantry` off, an infantry unit in that state is
+     excluded as well. Such an actor also drops its target on each such tick, and drops its
      destination on each such tick, except that a vehicle under a pending point suppression
      (S-0207 claim 27) keeps its destination, whether it is being erased or in the leaving stage.
-     The target is dropped in every case, and the exclusion from processing is unchanged,
-   - it is not a landed aircraft being erased. Such an aircraft drops its target and destination
+     The target is dropped in every case, and the exclusion from processing is unchanged. These
+     sentences apply to the phasing-in cases of this bullet too,
+   - it is not a landed aircraft being erased, nor a landed aircraft phasing in with a temporal
+     beam attached while it is not being erased (S-0513 claim 39a). Such an aircraft drops its
+     target and destination
      and skips ordinary movement, turning, firing and behaviour processing for that turn
-     (S-0514 claim 17). This does not exclude its erasure update or presentation effects.
+     (S-0514 claim 17). This does not exclude its erasure update or presentation effects. These
+     sentences apply to the phasing-in case of this bullet too.
 
    On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last three bullets
-   above), no per-tick start of claim 11 takes effect (the first start, and for infantry and vehicles
-   also the late start defined there), and neither does the berserk countdown
-   (S-0610 claim 5), which does not otherwise depend on the processing timer being due. Subject also to the superweapon-warp
-   design exclusion below, on every other tick on which the actor does not process, the
-   per-tick starts still take effect: for example on a tick on which only the
-   timer has not expired (claim 3a, scenario B3, case k). A teleporting locomotor's own
-   phase-in does not stop processing: the actor processes under the ordinary eligibility rules.
+   above, the phasing-in cases added to them included), no per-tick start of claim 11 takes effect
+   (the first start, and for infantry and vehicles also the late start defined there), and neither
+   does the berserk countdown (S-0610 claim 5), which does not otherwise depend on the processing
+   timer being due. Subject also to the superweapon-warp design exclusion below, on every other tick
+   on which the actor does not process, the per-tick starts still take effect: for example on a tick
+   on which only the timer has not expired (claim 3a, scenario B3, case k). A teleporting
+   locomotor's own phase-in does not by itself stop processing: the actor processes under the
+   ordinary eligibility rules, the exclusions above for an actor phasing in with a temporal beam
+   attached included.
 
    **Superweapon warp, engine design.** S-0513 claim 51 excludes ordinary behaviour processing
    and the per-tick behaviour start of claim 11 for vehicles, teleporter infantry and landed
@@ -596,7 +605,12 @@ Terms used by this spec:
    processing nor a per-tick start occurs before or after warp work on those turns, even for
    a survivor of the arrival effects. During arrival hold, the hold-end test precedes ordinary
    behaviour eligibility: processing and per-tick starts regain their usual eligibility both
-   while the hold continues and on its expiry turn. This is not permission to ignore
+   while the hold continues and on its expiry turn. That usual eligibility includes the
+   exclusions above: while it phases in, a vehicle or landed aircraft member with a temporal beam
+   attached, being erased or not, neither processes nor takes a per-tick start, and neither does
+   an infantry member while it is being erased or, with S-0513
+   `quirks.phase_in_beam_spares_infantry` off, while a beam is attached to it (S-0513 claims 39a
+   and 51). This is not permission to ignore
    another exclusion, nor does it suppress the target searches or sensor update intrinsic to
    the warp (S-0513 claim 39). It is an engine design rule, not confirmed original behaviour,
    and has no quirk switch. S-0513 claims 48 and 52 retain the original-side uncertainty about
@@ -640,13 +654,20 @@ Terms used by this spec:
      the reason: no setup is known). The exclusion of the late start of claim 11 on those ticks is
      `unmeasured`: B46 uses an expiry tick on which none of those exclusions holds, and no setup
      is known that puts the expiry on an excluded tick together with a ready, queued unit.
+     The phasing-in cases with a temporal beam attached are `unmeasured` for an actor that is
+     not being erased (S-0513 claim 39a: no part there holds an infantry member, SW12 part l has
+     a tank only, and its hold of one update is too short to tell a turn cut short from an
+     ordinary one), and take this claim's backing for an actor being erased. The off setting of
+     S-0513 `quirks.phase_in_beam_spares_infantry` is `design`.
    - Confidence: high (alive, health, timer, parasite ordering and the engine design contract),
      medium (the tunnel, erasing and leaving-stage exclusions, including landed-aircraft erasure,
      and locomotor phase-in not excluding processing, and the composed field-arrival timing); low
      (the second-turn case and
      matching the original's unresolved superweapon-warp continuation); the berserk countdown on
      the tunnel, erasing and leaving-stage ticks medium, and on the landed-aircraft tick low (S-0610
-     claim 5); the exclusion of the late start medium
+     claim 5); the exclusion of the late start medium; the phasing-in cases with a temporal beam
+     attached medium for an actor that is not being erased, and as the erasing exclusion for an
+     actor being erased
    - Pending-suppression exception (the vehicle clause of the erasing and leaving-stage bullet):
      Backing: `unmeasured`. S-0207 claim 27 finds its reachability not established (its Reachability
      paragraph and its table row for a suppressed vehicle in any state, including one being erased),
@@ -865,7 +886,8 @@ Terms used by this spec:
       playing its death sequence; glossary, *in play … destroyed, removed*), not later when the
       target is removed,
     - the target goes off the map (for example it enters a transport or a building), or is
-      removed,
+      removed. This cause does not include the departure of a superweapon warp member (S-0513
+      claim 39),
     - the target makes its teleporting locomotor's own jump (S-0207 claim 20 e), except for an
       attacker whose strike target is the living jumping object (S-0519 Terms,
       S-0207 claim 20 e). Other attackers
@@ -882,6 +904,13 @@ Terms used by this spec:
     target (S-0519 claims 18 and 20), so no strike need be in progress. They test the strike's
     target, not whether its aircraft still attack that object.
 
+    An actor with an override in effect whose target is a superweapon warp member does not revert
+    at the member's departure: it keeps the member as its target and keeps its suspended
+    behaviour. While it holds the member, only the causes above revert it. The member's
+    destruction by its landing check or by S-0513 claim 38's fate reverts it at the killing hit,
+    as the destruction cause gives. A later drop of the member by the actor's own processing does
+    not revert it (see below on clearing the target by another rule).
+
     A mobile actor also reverts when its attack target is exactly the detonation's centre
     cell of a successful area-damage bridge attempt (S-0511 claim 22). The revert restores
     the suspended behaviour and put-aside target and destination. If the restored target
@@ -893,7 +922,8 @@ Terms used by this spec:
     objects standing on the centre cell do not acquire this revert cause merely by
     being part of the affected bridge.
 
-    The destruction and off-map/removal causes have no exception: they revert the actor whoever owns the target and
+    The destruction and off-map/removal causes have no exception apart from that departure: they
+    revert the actor whoever owns the target and
     whatever covers its cell. An erasing attacker has no exception to owner-change target loss:
     dropping its ordinary target does not itself detach its beam (S-0514 claim 16).
     The revert brings back the target that the override put aside even
@@ -902,7 +932,9 @@ Terms used by this spec:
     human-controlled): after a revert by destruction, off-map/removal or cloak/underground that object is the
     actor's target again, and after a revert by an owner change or locomotor jump the actor has
     no such target. What the
-    actor then does with such a target belongs to the target-acquisition specs. Clearing the target by
+    actor then does with such a target belongs to the target-acquisition specs: S-0309 claim 27
+    gives that the removal of such an object drops it again, and our engine's rule for such a
+    target while it stays off the map or in play after its killing hit. Clearing the target by
     another rule, apart from the centre-cell event above (for example the leash of claim 26
     or an order), does not revert. Other users of override and
     revert are outside this spec: team logic, and some movement situations, among them S-0207
@@ -926,6 +958,8 @@ Terms used by this spec:
         strike ends normally, because each needs a living object held as the strike target at
         the moment of that event, and no setup here establishes that timing. Erasing attackers' owner-change target loss and beam retention
         instead inherit S-0514 claim 16's measurable backing (E10 part h),
+      - a warp member's departure, which does not revert, because no part of S-0513 puts an
+        override in effect for a holder of a warp member,
       - a removal that follows neither a killing hit nor going off the map, because every removal
         that a setup here can make comes after one of those, which has already caused the revert,
       The suspended slot retained across a force is `measurable` (B45 f): a control-centre
@@ -935,7 +969,8 @@ Terms used by this spec:
       and on going off the map, the centre-cell revert and exact-cell matching, and an
       override staying in effect until a revert, so that a later
       target's causes revert it); medium (the owner change, the cloak and underground cause and
-      their exceptions, the target brought back, and the list of users)
+      their exceptions, the target brought back, a warp member's departure not reverting, and
+      the list of users)
 
 11. **Ready to change, and the per-tick start.** On each tick on which its update runs, an infantry
     unit, vehicle or building that is ready to change and has a behaviour queued makes it current
@@ -2448,6 +2483,11 @@ apply in our engine to the actors of every player house.
       weapon's own effect still being alive. While the check answers *rearming*, for any cause, the
       building keeps its target.
 
+      For a building that S-0309 claim 29 covers, that claim's periodic held-target check can
+      drop a target that the firing check refuses before this processing does. A holder in any
+      behaviour of this spec other than *capture* and *sabotage* makes that check, whether or
+      not it aims a weapon at the target (S-0309 claim 29). No rule of this spec changes for it.
+
       **Upgrade weapon gate.** For a non-SAM building the gate applies only when its
       upgrade count is nonzero and upgrade position 1 is occupied (S-0406 claim 12).
       A zero count or empty position 1 bypasses it, even if higher positions hold upgrades.
@@ -2583,12 +2623,16 @@ apply in our engine to the actors of every player house.
         whether it uncloaks to fire, is owned by S-0516, and no scenario here isolates a
         building's *cloaked* answer at a known processing. The row keeps
         the table total.
+      The periodic held-target check of S-0309 claim 29 takes that claim's backing: `measurable`
+      for *area guard* and *move* (S-0309 scenario A6 part p, run p8), `unmeasured` for the
+      other behaviours, as that claim gives.
     - Confidence: high (upgrade gate applicability, predicate, suppression, paired-attempt
       order, empty-secondary no-op and animation-delay priority),
       medium (armed and unarmed *guard*, the ready mark, non-SAM *attack* and its delay
       table, a pending animation-delayed shot's *rearming* against a target out of range,
       which is medium because no scenario here makes that case, SAM *attack* every tick and its
-      stages, firing both weapons); low (the turret snap and
+      stages, firing both weapons, and the periodic held-target check of S-0309 claim 29 as
+      that claim rates it); low (the turret snap and
       its bound F8, the SAM aiming tolerance, the power condition and the out-of-stage rule)
 
 33. **Automatic search under behaviours.** Separately from processing, on every tick an actor
@@ -5970,6 +6014,20 @@ checks, not additional rules of this spec.
   target and behaviour stay") holds for the berserk effect only: the same hit's crush response
   then gives the crusher a destination and queues *move* (claim 39). S-0610 should point here for
   both cases.
+
+- **S-0610 (approved, revision 11), claim 5, "Which updates are countdown updates".** In the
+  *Excluded updates* bullet, after "or is in the leaving stage of a chrono move (S-0513 claim
+  39)", add: ", and the updates in which a superweapon-warp member phases in that claim 2 here
+  excludes: those of a vehicle or landed aircraft member with a temporal beam attached, being
+  erased or not, and those of an infantry member while it is being erased or, with S-0513
+  `quirks.phase_in_beam_spares_infantry` off, while a beam is attached to it (S-0513 claim 39a)".
+  In the *Warp-only updates* bullet, after "whether the hold is still holding or expiring, as
+  S-0513 claim 51 gives the other ordinary work", add: ", except in those excluded phasing-in
+  updates, which take no countdown step and keep the remaining time". Level: medium, and low for
+  a landed aircraft member, as S-0610 claim 5 rates the countdown of a landed aircraft being
+  erased (its Open questions) and claim 2 here rates the landed-aircraft tick. Backing:
+  `unmeasured`, since no scenario makes a berserk warp member phase in with a beam attached; the off
+  setting of the switch is design.
 
 ## Questions for the project lead
 
