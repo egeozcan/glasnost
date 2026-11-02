@@ -3,7 +3,7 @@ id: Q-2277
 title: Where did the records' infantry stand in their cells at tick 0, given that YURI against GGI and SHK turns on it in our arena?
 status: open
 related: [S-0216, S-0208, M-0002, M-0006]
-answered-by: [M-0019]
+answered-by: [M-0019, S-0216]
 ---
 
 ## Need
