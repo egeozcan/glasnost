@@ -2,11 +2,11 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796]
 supersedes: []
@@ -730,8 +730,13 @@ Two kinds of rule are kept apart throughout.
     The weapon's range and its targeting are the ordinary ones (S-0307, S-0309). There is no
     disguise-specific range; a weapon with S-0307's unlimited range disguises from any distance
     without moving.
-    - Backing: `measurable` (CS13, part a)
-    - Confidence: high (infantry); medium (vehicle)
+
+    A departed superweapon warp member that is the target, off the map or phasing in after it
+    appears, is an ordinary target: the firer copies it as above (S-0306 claim 17).
+    - Backing: `measurable` (CS13, part a; S-0306 scenario P11 run g, off the map, and run h,
+      phasing in, for a departed warp member target)
+    - Confidence: high (infantry); medium (vehicle); medium for a departed warp member target, as
+      S-0306 claim 17 rates it
 
 32. **Permanent disguise.** A unit whose type can disguise and disguises permanently is created
     disguised, as follows:
