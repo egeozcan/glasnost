@@ -18,6 +18,7 @@ use glasnost_rules::schema::Ruleset;
 use glasnost_sim::combat::check::{Answer, check};
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::combat::held;
+use glasnost_sim::combat::projectile;
 use glasnost_sim::orders;
 use glasnost_sim::rules::Behaviour;
 use glasnost_sim::superweapons::warp::Stage;
@@ -247,7 +248,7 @@ fn claim39_a_temporal_firer_without_a_beam_drops_the_member_at_the_check_tick() 
     let h = spawn(&mut w, "CART", ALPHA, 0, 3);
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
     // h makes no shot before the launch: a temporal shot in flight at the launch locks a beam
-    // on the member at its detonation (interim Q-2276), and h would then get S-0514 claim 19's
+    // on the member at its detonation (S-0513 r86 claim 39a), and h would then get S-0514 claim 19's
     // rearming. The countdown itself ranks below the warp-pending answer.
     let t0 = w.tick;
     w.obj_mut(h).unwrap().combat.rearm_until = t0 + 1000;
@@ -266,15 +267,21 @@ fn claim39_a_temporal_firer_without_a_beam_drops_the_member_at_the_check_tick() 
 
 #[test]
 fn claim39_a_firer_whose_beam_holds_the_member_gets_rearming_and_keeps_it() {
-    // spec: S-0513 r62 claim 39 (a firer that has a temporal beam attached to the member gets S-0514 claim 19's rearming, which ranks above; for a firer with no beam attached to it, another firer's beam on the member does not change the answer) and S-0309 r70 claim 29 (a rearming answer keeps the target at the check tick)
+    // spec: S-0513 r62 claim 39 (a firer that has a temporal beam attached to the member gets S-0514 claim 19's rearming, which ranks above; for a firer with no beam attached to it, another firer's beam on the member does not change the answer) and S-0309 r70 claim 29 (a rearming answer keeps the target at the check tick); S-0513 r86 claim 39a (The firer; The erasure goes on: removal at the k-th update, r = d + k − 1 for a lock before the member's turn of tick d)
     let mut w = ready(&temporal_rules());
     let h = spawn(&mut w, "CART", ALPHA, 0, 3);
     let h2 = spawn(&mut w, "CART", ALPHA, 3, 0);
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
     let tl = launch_at(&mut w, 4);
-    // A beam on the member after the launch. Whether a delivery can establish one is open
-    // (S-0513 r62 Open questions); our engine's lock refusals name no pending warp (interim
-    // Q-2276), so the delivery made here locks it.
+    // The firers' own opportunity shots at the member, made before the launch, are taken out of
+    // play: a detonation would lock a beam again (S-0514 claim 4) and restart the amount.
+    let shells: Vec<ObjectId> = w.projectiles.keys().copied().collect();
+    for p in shells {
+        projectile::remove(&mut w, p);
+    }
+    // A beam on the member after the launch: this delivery stands for the detonation of a
+    // temporal projectile in flight at the launch (S-0513 r86 claim 39a, The lock routes; the
+    // pending warp is no refusal of S-0514 claim 3), made before the member's turn of t_L + 1.
     temporal::deliver(&mut w, Some(h), Some(Target::Object(m)));
     assert!(temporal::holds(&w, h, m));
     hold(&mut w, h, m, Behaviour::Guard);
@@ -294,12 +301,18 @@ fn claim39_a_firer_whose_beam_holds_the_member_gets_rearming_and_keeps_it() {
     assert_eq!(target(&w, h), Some(Target::Object(m)), "kept: rearming");
     assert_eq!(target(&w, h2), None, "dropped: illegal");
     assert!(matches!(stage(&w, m), Some(Stage::Leaving(_))));
-    // Interim Q-2276: the warp goes on unchanged and the erasure makes no progress while the
-    // member's turn is its warp update alone (S-0513 claim 51).
-    run_through(&mut w, tl + 62);
-    assert_eq!(stage(&w, m), Some(Stage::Away), "departed in t_L + 62");
-    assert!(temporal::erased(&w, m), "the lock is kept");
-    assert_eq!(w.temporal.locks[&m].amount, amount, "no erasure progress");
+    // S-0513 r86 claim 39a (The erasure goes on): an erasure update in each member turn, from
+    // t_L + 1, before its warp step; the Gun's raw damage is 30 (S-0514 claim 7).
+    assert_eq!(
+        w.temporal.locks[&m].amount,
+        amount - 30 * (next_check(tl) - tl)
+    );
+    // R₀ = 1200 (S-0514 F1): k = 40 updates; a lock before the member's turn of d = t_L + 1
+    // removes it in d + k − 1 = t_L + 40, in its leaving stage.
+    run_through(&mut w, tl + 39);
+    assert!(w.obj(m).is_some());
+    run_through(&mut w, tl + 40);
+    assert!(w.obj(m).is_none(), "removed in t_L + 40");
 }
 
 #[test]

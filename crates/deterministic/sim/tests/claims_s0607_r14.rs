@@ -231,6 +231,7 @@ fn claim_20_not_restored_while_being_erased() {
             joiners: Vec::new(),
             amount: 1_000_000,
             was_off: false,
+            suspended: false,
         },
     );
     run(&mut w, 30);

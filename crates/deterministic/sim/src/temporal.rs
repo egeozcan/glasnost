@@ -33,6 +33,12 @@ pub struct Lock {
     /// Whether a building was switched off before the first lock (for
     /// `quirks.erasure_release_switches_on` off).
     pub was_off: bool,
+    /// Whether the target, a superweapon warp member, stopped being erased
+    /// at its departure while this beam stays attached (S-0513 claim 39a):
+    /// set by the departure, kept through a leadership handover (S-0514
+    /// claim 9), cleared by any later lock.
+    #[serde(default)]
+    pub suspended: bool,
 }
 
 /// A beam attached to a target.
@@ -77,9 +83,37 @@ pub fn type_beam(w: &World, id: ObjectId) -> bool {
 }
 
 /// Whether the object is being erased by a beam (the beam-free leaving
-/// stage of S-0513 claim 39 is `superweapons::being_erased`'s).
+/// stage of S-0513 claim 39 is `superweapons::being_erased`'s): a beam is
+/// attached and the target has not stopped being erased at a warp
+/// departure (S-0513 claim 39a).
 pub fn erased(w: &World, id: ObjectId) -> bool {
+    w.temporal.locks.get(&id).is_some_and(|l| !l.suspended)
+}
+
+/// Whether a temporal beam is attached to the object (S-0514 Terms),
+/// being erased or not.
+pub fn attached(w: &World, id: ObjectId) -> bool {
     w.temporal.locks.contains_key(&id)
+}
+
+/// Whether the object's turns are cut short by a beam (S-0514 claim 17,
+/// S-0215 claim 2): while it is being erased, and while it phases in with
+/// a beam attached for a vehicle or aircraft, or for an infantry unit with
+/// `quirks.phase_in_beam_spares_infantry` off (S-0513 claim 39a).
+pub fn cut_short(w: &World, id: ObjectId) -> bool {
+    if erased(w, id) {
+        return true;
+    }
+    if !attached(w, id) || !crate::teleport::phasing_in(w, id) {
+        return false;
+    }
+    match w.obj(id).map(|o| o.kind) {
+        // spec: S-0513 claim 39a (Departure: while it phases in, a vehicle or aircraft with a temporal beam attached has its turns cut short whether or not it is being erased) and S-0514 claim 17
+        Some(Kind::Vehicle | Kind::Aircraft) => true,
+        // spec: S-0513 claim 39a and Edge cases (an infantry unit's turns are cut short only while it is being erased; quirks.phase_in_beam_spares_infantry off: also while a beam is attached)
+        Some(Kind::Infantry) => !w.rules().quirks.phase_in_beam_spares_infantry,
+        _ => false,
+    }
 }
 
 /// Whether `holder`'s beam is attached to `target` (S-0301 Terms, *holding
@@ -185,8 +219,14 @@ fn refusal(w: &World, firer: ObjectId, target: ObjectId) -> bool {
     {
         return true;
     }
-    // spec: S-0514 claim 3 (a beam already attached to the firer refuses the new lock; the firer's own old beam was let go before)
-    erased(w, firer)
+    // spec: S-0514 claim 3 and S-0513 claim 39a (quirks.warp_departure_keeps_beam off: a target's pending superweapon warp, from the launch until its departure update, is one more refusal; on, it is none)
+    if !w.rules().quirks.warp_departure_keeps_beam
+        && crate::superweapons::warp_pending_or_leaving(w, target)
+    {
+        return true;
+    }
+    // spec: S-0514 claim 3 (a beam already attached to the firer refuses the new lock, being erased or not; the firer's own old beam was let go before)
+    attached(w, firer)
 }
 
 /// Claim 2's target side effects.
@@ -213,6 +253,8 @@ fn lock(w: &mut World, f: ObjectId, x: ObjectId) {
     if let Some(l) = w.temporal.locks.get_mut(&x) {
         // spec: S-0514 claim 4 (a lock on an erased target joins without resetting the amount)
         l.joiners.push(f);
+        // spec: S-0513 claim 39a (A lock after the departure: the lock makes the member being erased again)
+        l.suspended = false;
         // spec: S-0514 claim 4 and S-0609 claim 11 (a joining lock also gives a gattling target one spin-down update with multiplier 1)
         crate::gattling::temporal_lock(w, x);
     } else {
@@ -230,6 +272,7 @@ fn lock(w: &mut World, f: ObjectId, x: ObjectId) {
                 // spec: S-0514 F1 (R₀ = 10 × S, wrapping; the type's strength, not the current health, claim 6)
                 amount: strength.wrapping_mul(10),
                 was_off,
+                suspended: false,
             },
         );
         if w.obj(x).is_some_and(|o| o.kind == Kind::Building) {
@@ -268,7 +311,7 @@ pub fn let_go(w: &mut World, holder: ObjectId) {
         return;
     }
     if let Some(next) = l.joiners.pop() {
-        // spec: S-0514 claim 9 (the most recent remaining joiner leads, with the same amount)
+        // spec: S-0514 claim 9 (the most recent remaining joiner leads, with the same amount; exception: a warp member that stopped being erased at its departure stays not being erased, S-0513 claim 39a)
         l.leader = next;
         return;
     }
@@ -308,26 +351,56 @@ fn too_far(w: &World, attacker: ObjectId, target: ObjectId) -> bool {
 
 /// A target's erasure update and presentation (claims 7, 8, 11, 17, 18),
 /// in its own turn. Returns whether the rest of an infantry unit's,
-/// vehicle's or aircraft's turn is skipped (claim 17); a building skips its
-/// behaviour processing and firing through [`building_erased`].
-pub fn turn(w: &mut World, id: ObjectId) -> bool {
-    let Some(l) = w.temporal.locks.get(&id).cloned() else {
+/// vehicle's or aircraft's turn is skipped (claim 17, and S-0513 claim 39a
+/// for a member phasing in with a beam attached: [`cut_short`]); a
+/// building skips its behaviour processing and firing through
+/// [`building_erased`]. `update` is false when the turn's erasure update
+/// was already made before its warp step ([`member_update`]).
+pub fn turn(w: &mut World, id: ObjectId, update: bool) -> bool {
+    if !attached(w, id) {
         return false;
-    };
+    }
     let kind = w.obj(id).map_or(Kind::Terrain, |o| o.kind);
-    sparkle(w, id);
+    if erased(w, id) {
+        // spec: S-0513 claim 39a (from its departure a member no longer being erased has no being-erased sparkles, only those of phasing in) and S-0514 claim 18
+        sparkle(w, id);
+    }
+    let short = cut_short(w, id) && kind != Kind::Building;
     // spec: S-0215 claim 2 and S-0514 claim 17 (a vehicle under a pending point suppression, S-0207 claim 27, keeps its destination; the target is dropped in every case)
     let keeps = crate::refresh::suppression_pending(w, id);
-    if kind != Kind::Building
-        && let Some(ob) = w.obj_mut(id)
-    {
-        // spec: S-0514 claim 17 and S-0215 claim 2 (a mobile object being erased drops its target and destination on each such tick)
+    if short && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0514 claim 17 and S-0215 claim 2 (a mobile object being erased drops its target and destination on each such tick) and S-0513 claim 39a (so does a vehicle or aircraft phasing in with a beam attached)
         crate::spawn::clear_own_target(ob);
         if !keeps {
             ob.dest = None;
             ob.path.steps.clear();
         }
     }
+    if update {
+        erasure_update(w, id);
+    }
+    short
+}
+
+/// The erasure update of a warp member with a beam attached, made before
+/// its turn's warp step (S-0513 claim 39a, *The erasure goes on*; S-0203
+/// claim 4's intrinsic exception). Returns whether an update was made, so
+/// that the turn's [`turn`] makes no second one.
+pub fn member_update(w: &mut World, id: ObjectId) -> bool {
+    // spec: S-0513 claim 39a (in each turn of the member after the lock, at every stage of the warp, the turn has its erasure update, before the turn's warp step) and S-0203 claim 4 (an intrinsic exception to claim 51's whole-member-turn contract)
+    if !attached(w, id) || !crate::superweapons::warp::is_member(w, id) {
+        return false;
+    }
+    erasure_update(w, id);
+    true
+}
+
+/// The erasure update proper (claims 7, 8 and 11): the open-topped
+/// distance release, or the reduction and any completion.
+fn erasure_update(w: &mut World, id: ObjectId) {
+    let Some(l) = w.temporal.locks.get(&id).cloned() else {
+        return;
+    };
     // spec: S-0514 claim 11 (a leading attacker inside an open-topped transport lets go when its distance exceeds the warp distance; that update makes no reduction, even if another attacker becomes leader; quirks.erasure_distance_leader_only off checks every open-topped passenger)
     let all = !w.rules().quirks.erasure_distance_leader_only;
     let checked: Vec<ObjectId> = if all { attackers(&l) } else { vec![l.leader] };
@@ -339,7 +412,7 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
         }
     }
     if released {
-        return kind != Kind::Building;
+        return;
     }
     // spec: S-0514 claim 7 and F2 (D = the sum of the raw damages of the leader and the 51 most recent joiners)
     let contributors: Vec<ObjectId> = attackers(&l).into_iter().take(52).collect(); // spec: S-0514 Constants (52 contributors: the leader and 51 joiners)
@@ -347,14 +420,23 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
         .iter()
         .fold(0i32, |s, &a| s.wrapping_add(raw_damage(w, a)));
     let Some(lock) = w.temporal.locks.get_mut(&id) else {
-        return kind != Kind::Building;
+        return;
     };
     // spec: S-0514 F3 (R ← R − D, signed 32-bit with wrap; completion when the result is at most 0)
     lock.amount = lock.amount.wrapping_sub(step);
     if lock.amount <= 0 {
         complete(w, id);
     }
-    kind != Kind::Building
+}
+
+/// A warp member departs (S-0513 claim 39a, *Departure*): the departure
+/// releases no beam and keeps the amount, but from its departure update
+/// the member is no longer being erased while the beam stays attached.
+pub fn departed(w: &mut World, id: ObjectId) {
+    if let Some(l) = w.temporal.locks.get_mut(&id) {
+        // spec: S-0513 claim 39a (Departure: no longer being erased from its departure update, the beam attached and the amount kept) and S-0514 claim 14 (the target's own superweapon warp is no release cause)
+        l.suspended = true;
+    }
 }
 
 /// Whether a building's behaviour processing and firing are skipped by an

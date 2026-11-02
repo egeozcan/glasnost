@@ -738,6 +738,7 @@ fn claim_10_erasure_skips_the_payout() {
             joiners: Vec::new(),
             amount: 0,
             was_off: false,
+            suspended: false,
         },
     );
     drain::building_turn(&mut w, b);
@@ -1122,6 +1123,7 @@ fn claim_15_an_erased_drainer() {
                 // The remaining amount (S-0514 F3): far from completion.
                 amount: 1_000_000,
                 was_off: false,
+                suspended: false,
             },
         );
     };

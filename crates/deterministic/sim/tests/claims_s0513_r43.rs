@@ -391,7 +391,7 @@ fn claim39_a_temporal_weapon_gets_illegal_too() {
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
     // h makes no shot before the launch: a temporal shot in flight at the
     // launch that locks a beam on the member at its detonation would give h
-    // S-0514 claim 19's rearming, which ranks above (interim Q-2276).
+    // S-0514 claim 19's rearming, which ranks above (S-0513 r86 claim 39a).
     let t0 = w.tick;
     w.obj_mut(h).unwrap().combat.rearm_until = t0 + 1000;
     let tl = launch(&mut w);
