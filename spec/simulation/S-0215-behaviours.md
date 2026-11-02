@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 102
+revision: 103
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -3472,16 +3472,16 @@ The charging break-off search of S-0518 claim 15 leaves this timer unchanged and
 targeting-timer draw (claim 33). Apart from searches, a holder that drops its target by the drops
 of S-0309 claims 27 and 28 with more than 10 ticks left on this timer resets it with one ranged
 draw *U*(4, 8) ticks, inside the action that drops it, not at a search. With at most 10 ticks
-left it takes no draw. An aircraft holder takes no such draw while the scenario is being set up
-(S-0501 claim 37). Each case of this reset has its owner's backing and level. At the drops
+left it takes no draw. No holder of any kind takes such a draw during game set-up (S-0309
+claim 27, S-0501 claim 37). Each case of this reset has its owner's backing and level. At the drops
 of S-0309 claim 27 that S-0309 scenario A18 runs, it is `measurable` by A18 part d, medium. At
 the drops that S-0309 claim 27 rates `unmeasured`, among them every drop by a building or
 aircraft holder (a building's pending delayed shot included), the reset is `unmeasured` with
 them, since no part of S-0309 scenario A18 or of scenario B7 here runs those drops. Medium. At
 the cloak drops and the underground drop of S-0309 claim 28 it is `unmeasured`, as S-0309 claim
 28 rates it: no scenario there records the holder's targeting timer at those drops. Medium. The
-set-up exception for an aircraft holder is `unmeasured`: no scenario here makes an aircraft lose
-its target while the scenario is being set up. Medium.
+set-up exception is `unmeasured`, as S-0309 claim 27 rates it: no scenario here makes a holder
+lose its target during game set-up. Medium.
 
 **F7. Retaliation reach for human-controlled owners.** The actor overrides to *attack* against an
 attacker it cannot reach if ρ₃(actor, attacker) ≤ (*S* + 0.5) × 256, *S* the type's sight in cells
