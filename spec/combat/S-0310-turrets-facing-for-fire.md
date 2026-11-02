@@ -2,11 +2,11 @@
 id: S-0310
 title: Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving)
 topic: combat
-revision: 5
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0601]
 supersedes: []
@@ -246,7 +246,7 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    | *not facing* | without the deploy-to-fire flag, without the turret flag, with no destination, and not being moved by its locomotor | its body's target facing becomes the direction of the target, and its turret follows (S-0206, claim 9) |
    | *not facing* | without the deploy-to-fire flag, without the turret flag, with a destination or being moved by its locomotor | none |
    | *cloaked* | any | starts to uncloak when it is able to (S-0301, claim 12) |
-   | *illegal* | default weapon is a healing weapon | may drop its target (claim 11) |
+   | *illegal* | default weapon is a healing weapon | drops its target or keeps it, as claim 11's table gives |
    | *still turning*, *moving*, *rearming*, *must deploy* and every other answer | any | none here, apart from what other specs own |
 
    The deploy-to-fire rows use S-0517 claim 13's rules and `quirks.deploy_to_fire_repacks`:
@@ -302,21 +302,36 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 
     The last row covers a target below full health that still gives *illegal*, for instance one
     whose type is marked non-vehicle (a target that does not count as a vehicle) or a versus
-    value of exactly 0. An infantry unit whose default weapon is a healing weapon gets
+    value of exactly 0. For a healer that S-0309 claim 29 covers, the keep of that row lasts
+    only to that claim's next check: at the first tick whose tick number is a multiple of 16 at
+    which the firing check answers *illegal* (no higher-ranked answer holding), the healer drops
+    the target. An infantry unit whose default weapon is a healing weapon gets
     *illegal* when its target is absent, is not infantry, or is at full health. This answer
     outranks every answer of the general part (S-0301, claim 9, ranks 4 to 10, such as *rearming* and *out of
     range*) and the *moving* answer; a vehicle healer's *illegal* ranks below the general part
     instead (S-0301, rank 12). So an infantry healer with a full-health target does not wait for its
-    rearm countdown to end before the answer shows. What the infantry unit does with the answer
-    belongs to its attack behaviour (S-0215), not to this spec.
+    rearm countdown to end before the answer shows. An infantry unit whose default weapon is a
+    healing weapon replies to *illegal* in its own firing step, in each of its turns, by the table
+    above with *infantry* in place of *a vehicle in the glossary sense*: it drops a target that is
+    not infantry or is at full health, and keeps an infantry target below full health and does
+    nothing in that step. That keep, of an infantry target below full health that still gives
+    *illegal* (for instance by a versus value of exactly 0), lasts only to S-0309 claim 29's next
+    check, as for a vehicle healer.
     - Backing: `measurable` (scenario T10: parts a to e for vehicles, f to h for infantry).
       Absent targets, aircraft and building targets, and a damaged vehicle made illegal only
       by a zero versus value are `unmeasured`: T10 provides no accepted-order case isolating
       those checks or replies. Parts c, d and g are evidence only if their orders are accepted.
       Otherwise their wrong-kind or non-vehicle-marked cases remain `unmeasured`, because no
-      ordinary order reaching the firing check in those states has been established.
+      ordinary order reaching the firing check in those states has been established. The keep
+      row's limit at S-0309 claim 29's check is `measurable` (part d, with tick numbers). The
+      infantry healer's reply in its firing step, and its keep's limit at that check, are
+      `unmeasured`: not measured, since no part
+      sets up the wrong-kind or full-health cases with the order accepted (parts g and h are
+      evidence only if their orders are accepted).
     - Confidence: medium (the vehicle rule and the infantry rule, including its rank above the
-      general part); low (that the infantry answer shows through its reply as S-0215 gives it)
+      general part); medium (the keep row's limit at S-0309 claim 29's check); medium,
+      `unmeasured` (the infantry healer's reply in its firing step and its keep's limit at that
+      check)
 
 ## Formulas
 
@@ -639,22 +654,28 @@ the scenario's orders.
   record the part as unmeasured rather than treating cursor refusal as a firing-check result.
   For b and e, keep recording until the general check's refusals have ended.
 - Observable: whether the healer still holds the target after a few ticks, and any shot; in part
+  d, the tick number of each tick in which it holds the target and of the tick in which it drops
+  it; in part
   h, the tick at which the healer stops attacking, against the tick its target reaches full health
   and the tick its countdown ends.
 - Expected: (a) it heals; (b) it drops the target at its first firing step after full health in
   which the general check no longer refuses firing; (c) it drops the target; (d) it holds the
-  target and does nothing; (e) it drops the full-health target despite its destination once
-  the general check passes. (f) it heals; (g) it does not heal the vehicle and does not keep attacking it
-  (S-0215 gives the reply to *illegal*); (h) it stops attacking within a tick or two of full
-  health, before its countdown ends.
+  target and does nothing, up to the first tick whose tick number is a multiple of 16 at which
+  the firing check answers *illegal* (S-0309 claim 29), where it drops it; (e) it drops the
+  full-health target despite its destination once the general check passes. (f) it heals; (g) it
+  does not heal the vehicle and does not keep attacking it (claim 11 gives the reply to
+  *illegal*); (h) it stops attacking within a tick or two of full health, before its countdown ends.
 - Falsified if: (a) or (f) fails to heal with all other refusals absent; (b) keeps the target
-  once the general check allows firing after full health, or (c) keeps the target, or (d) drops it,
-  (e) keeps the target once the general check passes; an accepted order in (g) heals the vehicle
-  or keeps attacking it; (h) waits until the countdown ends.
+  once the general check allows firing after full health, or (c) keeps the target, or (d) drops it
+  at a tick other than such a multiple of 16 or keeps it past the first such tick at which the
+  check answers *illegal*, (e) keeps the target once the general check passes; an
+  accepted order in (g) heals the vehicle or keeps attacking it; (h) waits until the countdown ends.
 
 ## Changes for other specs
 
-No cross-spec changes are required. S-0215 claim 32, its supporting definition and import mapping, and its snap scenario use the building type's rules voxel-turret flag, consistent with claim 4 here and S-0313 claim 10. The art settings do not supply a separate value or fallback.
+No cross-spec changes are required. S-0215 claim 32, its supporting definition and import mapping,
+and its snap scenario use the building type's rules voxel-turret flag, consistent with claim 4 here
+and S-0313 claim 10. The art settings do not supply a separate value or fallback.
 
 ## Open questions
 
