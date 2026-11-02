@@ -2504,6 +2504,31 @@ S-0411 r28 claim 19, client only. At each game's start, after the game is assemb
 
 S-0309 r70 claim 29: `combat::held::periodic_check`, called in `tick::object_turn` right after the warp update (so S-0513 claim 51's warp turns take none, and the arrival hold takes it after the hold-end test). In a tick whose tick number is a multiple of 16 (`held::check_tick`, the global tick, a shared phase), an infantry unit, vehicle, aircraft or building of a player house (`held::periodic_covers`, AI houses included) whose current behaviour is *attack* or *guard*, and that is not being erased, asks `check::check` about its target for the slot `weapon::would_use` gives, without the range test. On *illegal* or *impossible* it drops the target through `spawn::clear_own_target` and resets its burst: no draw, no revert, no behaviour change, no spawner exception. The call comes before the behaviour start and processing, the searches and the firing step, and before a building's pending delayed shot counts down, which then still answers *rearming*. `process::process_attack` keeps S-0304 claim 2's drop of an *illegal* target only for actors that claim 29 does not cover (the neutral and special houses); a building's own drop (S-0215 claim 32) is unchanged. `behave::infantry_step` now replies to *illegal* when its default weapon heals, as the vehicle healer does (S-0310 claim 11, r70's Changes): it drops a target that is not infantry or is at full health. Interims: **Q-2261** (place in the turn), **Q-2262** (no check in other behaviours), **Q-2263** (no check for the neutral and special houses), **Q-2264** (materialising holders). No quirk and no state: save format 92, AI game format 54. Tests: `claims_s0309_r70.rs`. Ledger: [m8-claims/intake68-S-0309.md](m8-claims/intake68-S-0309.md).
 
+### The held-target check for every holder, and the allied drop (M8 step A3 intake 74; S-0309 r94, S-0215 r103, S-0214 r68, S-0213 r96, S-0203 r42, S-0204 r10; Q-2261 to Q-2264 answered)
+
+S-0309 r94 answers intake 68's four interims, and `combat::held::turn` replaces the bare `periodic_check` call:
+- **Place.** `tick::object_turn` calls it after `process::head` (the turn's first per-tick start, S-0215 claim 11) instead of right after the warp update. A queued behaviour that the start makes current is the one that decides. The warp turns and the turns cut short still never reach it.
+- **Holders.** `periodic_covers` is gone. Every infantry unit, vehicle, aircraft and building of every house makes the check, in every behaviour but *capture* and *sabotage* (read through `beh.seen()`). That includes behaviours that aim no weapon, such as *move*, *hunt*, *area guard*, *missile* and the aircraft missions.
+- **Weaponless holders.** A holder with no weapon answers *impossible* (S-0301 claim 9). It therefore drops a held target at its first check tick.
+- **Fixtures changed.** Several synthetic fixtures had weaponless holders hold a cell, so these were re-armed or re-timed:
+  - The S-0522 paradrop plane is now armed.
+  - The S-0506 rocket of `claim_26_release_deadline_and_order` is now armed.
+  - The spy plane without a weapon (S-0513 claim 44) gets a 4-tick camera cadence and a launch just after a check tick.
+  - The HUT of S-0406 claim 15 has no build-up sprite, and is placed just after a check tick.
+  - The M-0011 berserk crusher is placed just after a check tick. Its crushing approach takes the mite as its destination before the drop.
+  - `a_weaponless_paradrop_plane_drops_its_cell_and_retreats` pins the weaponless outcome.
+- **Attack processing.** `process::process_attack` no longer drops an *illegal* target for the neutral and special houses (r94's Changes for S-0304 claim 2).
+- **Allied drop (claim 25 part k).** `held::allied_drop` runs at the same place in every turn that reaches it, whatever the tick number and the behaviour, ahead of the check. A holder whose owner is not human-controlled drops an allied object target, unless an exception applies:
+  - it is berserk;
+  - it is an engineer;
+  - it is infantry that may enter the building it targets;
+  - its second weapon is an electric-assault weapon, against an overpowerable building.
+
+  "Not human-controlled" means the neutral and special houses, or a marked test house. For a passenger of a mind-controlled open-topped transport, the controlling house decides.
+- **Representative distance.** S-0214 F1's representative distance (`targeting::rep_distance`, now public) follows `quirks.table_root_distance` (S-0204 claim 5 r10).
+
+No new quirk switch and no new state: save format 92, AI game format 55. No requests filed. The `phase_in_beam_spares_infantry` clauses belong to intake 75. Tests: `claims_s0309_r94.rs`, plus the revised `claims_s0309_r70.rs`. Ledger: [m8-claims/intake74.md](m8-claims/intake74.md).
+
 ### A warp member's holders from the launch on, and the arena's set-up (M8 step A3 intake 71; S-0513 r62, S-0216 r37; Q-2211 in part, Q-2213, Q-2096, Q-2098 and Q-2099 in part answered)
 
 S-0513 r62 claim 39: from the launch until the member's departure update, `combat::check::check` answers *illegal* about a warp member for every weapon, a temporal one included (`superweapons::warp_pending_or_leaving`; before, only the leaving stage, and a temporal weapon was excepted). The test keeps its place in rank 4, so S-0514 claim 19's *rearming* for a firer whose beam holds the member still ranks above it. With intake 68's periodic check (`held::periodic_check`), a holder in *attack* or *guard* of a player house drops the member at its first check tick after the launch with no draw and no revert; an attacker's own processing drops it the same way, and an opportunity target goes at the next search. The member's own check is suppressed through its warp turns (claim 51). Intake 70's `emitters::retarget_let_go` is not involved: the drop is a clear, not a retarget. Interims: **Q-2211 question 3** (the holder that keeps a departed member: our turn-start drop, as before) and **Q-2276** (a beam locked on a member after the launch: S-0514 claim 3's refusals only, the warp goes on, the erasure makes no progress while the warp update is the member's whole turn; answered by S-0513 r86 claim 39a and replaced in intake 75, below).
