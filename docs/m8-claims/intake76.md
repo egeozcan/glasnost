@@ -42,7 +42,9 @@ part named left untested or not built), **seam** (not built; the reason is given
   first calls `seek_pad` (claim 21, with its contact request): granted, the pad and *enter*;
   otherwise the row's F8 spot and *move*.
 
-No state is added, so the save format (92) and the AI game format (55) are unchanged.
+No state is added, so the save format (92) and the AI game format (55) are unchanged. The
+changed aircraft play moves five sim-gate goldens, regenerated: `skirmish`, `duel`,
+`duel-diagonal`, `duel-naval` and `duel-m6c` (each first differs mid-game).
 
 ## Claims
 
