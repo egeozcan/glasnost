@@ -1,4 +1,4 @@
-# S-0309 r94, S-0215 r103, S-0214 r68, S-0213 r96, S-0203 r42, S-0204 r10: claim ledger, M8 step A3 intake 74
+# S-0309 r94, S-0215 r103 and r104, S-0214 r68, S-0213 r96, S-0203 r42, S-0204 r10: claim ledger, M8 step A3 intake 74
 
 - **S-0309** r70 to r94 (28fbbcc, from 5f2b926). Answers **Q-2261** to **Q-2264**, intake 68's
   interims for claim 29 (the periodic held-target check), and adds claim 25 part k (the allied
@@ -48,7 +48,7 @@ start, changes no outcome (below), so it needs no question.
   the root under `quirks.table_root_distance`; it used the table root always. F9's group centre
   already did.
 
-No new state and no new switch: save format 92, AI game format 55.
+No new state and no new switch, so this intake leaves the formats unchanged: save format 93 and AI game format 56 on main after intake 75. The check's skip and the allied drop's skip of a turn cut short (`temporal::cut_short`) are redundant guards: `temporal::turn` returns for every mobile holder's cut-short turn, and a building being erased has `behaves` false, so neither is reached. The change from `temporal::erased` to `cut_short` in the rebase changes no outcome.
 
 ## Fixtures changed by the wider check
 
