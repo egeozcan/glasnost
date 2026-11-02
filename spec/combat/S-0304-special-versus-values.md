@@ -2,11 +2,11 @@
 id: S-0304
 title: Special versus values (what zero and small versus values mean for firing, retaliation and automatic targeting)
 topic: combat
-revision: 2
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-11-02
 measurements: []
 requests: []
 supersedes: []
@@ -65,22 +65,97 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    - Backing: `measurable` (scenario V1, runs 1 and 4)
    - Confidence: high (medium for other kinds of object, which no scenario here covers)
 
-2. **A force-fire order on an illegal target is accepted but never fires.** S-0214 (claim 6(e))
-   lets force-fire bypass the cursor's legality test, so with force-fire held the attack cursor
-   appears on an object that claim 1 makes illegal, and the order is accepted. The actor then never
-   fires at it. It drops the object as its target, and stops the attack, at the first check of its
-   attack behaviour whose answer is *illegal*. In the precedence of the firing check's answers
-   (S-0301, claim 9), *rearming*, *out of ammunition* and *cloaked* come before *illegal*: while
-   the actor's rearm countdown is running, or it is out of ammunition or cloaked, the answer is
-   *rearming*, *out of ammunition* or *cloaked* and not *illegal*. So the target is dropped at the
-   first check of the attack when none of those answers holds then, and otherwise at the first
-   check after they have ended (for the countdown, after it has run out). Until then the actor
-   keeps the target, and it never fires. Without force-fire the
+2. **A force-fire order on an illegal target is accepted but never fires.** S-0214 (claim 6(e)) lets
+   force-fire bypass the cursor's legality test, so with force-fire held the attack cursor appears
+   on an object that claim 1 makes illegal, and the order is accepted. The actor then never fires at
+   it. It drops the object as its target at the first occasion at which the answer is *illegal* (at
+   a building's attack processing, as its own table gives, below): the periodic held-target check of
+   S-0309 claim 29, in its turn of a tick whose tick number is a multiple of 16, for a building also
+   a processing of its *attack* behaviour (S-0215 claim 32), and for a healer also its firing step,
+   where its own reply to *illegal* drops the target by S-0310 claim 11's reply table. That table
+   keeps a target of the kind the healer heals that is below full health and still gives *illegal*,
+   for instance by a versus value of exactly 0, so for such a target the firing step is no such
+   occasion and the periodic check drops it. An actor that drops it at the periodic check stops the
+   attack at its attack behaviour's next processing after the drop. In the precedence of the firing
+   check's answers (S-0301, claim 9), *rearming*, *out of ammunition* and *cloaked* come before
+   *illegal*: while the actor's rearm countdown is running, or it is out of ammunition or cloaked,
+   the answer is *rearming*, *out of ammunition* or *cloaked* and not *illegal*. The exception is an
+   infantry healer whose own *illegal* holds (its target absent, not infantry or at full health):
+   that answer outranks them (S-0310 claim 11), so it gets *illegal* while its countdown runs. So
+   the periodic check and a healer's firing step drop the target at the first such occasion at which
+   none of those answers holds. For a vehicle or infantry unit that takes a checking turn in every
+   tick, that is 1 to 16 ticks after the tick in which the order is applied (orders are applied
+   after the turn pass, S-0203 claim 7) when none holds then, and otherwise the first tick whose
+   tick number is a multiple of 16 at which they have ended (for the countdown, the first such tick
+   at whose turn it has run out, the tick in which it runs out included). A healer can drop it
+   earlier, at its firing step, where its reply table drops it. A building, which processes *attack*
+   every tick or every other tick (S-0215 claim 32), normally drops it at that processing first. A
+   building's attack processing drops it by S-0215 claim 32's tables. A building without the SAM
+   flag drops it there on *out of ammunition* as well as on *illegal*, so at the first processing at
+   which the answer is either. A building with the SAM flag drops a target that is not an aircraft
+   in the air at its first processing in the *aiming* stage, without a firing check, except while
+   its type needs power and drains power and its owner is short of power: such a processing does
+   nothing and drops no target (S-0215 claim 32's power row), so the building keeps the target until
+   a processing at which its owner is no longer short of power, or until another occasion drops it.
+   In its *aimed* stage it drops a target that is no longer a suitable target, or whose answer is
+   *illegal*, *impossible* or *out of range*, and keeps it on every other answer, for instance *out
+   of ammunition*, *rearming* or *cloaked*: S-0215 claim 32's table for a building with the SAM flag
+   gives every row. Until then the actor keeps the target, and it never fires.
+
+   This holds for every actor, whatever its owner (S-0309 claim 29 covers every holder of every
+   owner, in every behaviour but *capture* and *sabotage*, whatever gave its target): the drop
+   comes at S-0309 claim 29's periodic check, for a building in *attack* also at its own attack
+   processing (S-0215 claim 32), and for a healer also at its firing step, whichever comes first.
+   The attack processing's drop is a building's only, for every owner, so a unit of the neutral or
+   special house that is not a healer has no drop at the attack processing or the firing step: it
+   drops the target at the periodic check, besides S-0309 claim 29's drop in each turn of a holder
+   being erased and the other target-loss rules. An actor of a computer-controlled owner whose
+   target is allied with it drops it earlier, whatever gave it the target: in its first turn after
+   the order is applied (for a target from an order), or after it took the target (for one it
+   picked itself), that is not cut short and not a warp turn (S-0309 claim 25 part k and claim
+   29), unless one of S-0309 claim 25 part k's exceptions holds: it is berserk, it is an infantry
+   unit that can occupy the target building, it is an infantry unit of an engineer type, or its
+   second weapon is an electric-charge weapon and the target a building of an overpowerable type.
+   With such an exception it keeps the target to the first of those same occasions: the periodic
+   check, a building's attack processing or a healer's firing-step drop. Without force-fire the
    attack cursor does not appear on such an object (S-0214).
-   - Backing: `measurable` (scenario V1, run 4)
-   - Confidence: medium (the illegality is certain; that the target is dropped at the first
-     check that answers *illegal*, rather than kept, follows the attack behaviour's handling of an
-     illegal target and has not been observed; the order of answers is S-0301 claim 9's)
+   - Backing: `measurable` (scenario V1, run 4, and S-0309 scenario A6 part p, runs p1 and p2, which
+     reuse V1 runs 4 and 4b with tick numbers, for vehicle and infantry actors; a drop off a
+     multiple of 16 before the expected tick falsifies the cadence; S-0309 scenario A6 part p, run
+     p9a, for the periodic check by an actor of a computer-controlled owner, and run p9b, for the
+     earlier drop of an allied target that the actor picked itself). The infantry healer's *illegal*
+     ahead of *rearming* rests on S-0310 claim 11's backing. For buildings, the drop at the
+     building's own processing rests on S-0215 claim 32's backing. For a building without the SAM
+     flag, that is the backing of its rows for a building without the flag: `measurable` for *out of
+     ammunition* (S-0215 scenario B45 case e), `unmeasured` for *illegal*, as that claim gives. For
+     a building with the SAM flag, the *aiming* drop of a target that is not an aircraft in the air
+     involves no firing check and no *illegal* answer: it is the row for no suitable target,
+     `measurable` by S-0215 scenario B16 case c (the return to *guard* after the target's loss) and
+     the control of case j (once the target has landed, *guard* current at most 2 ticks later). The
+     power row's exception is `measurable` by B16 case j. The *aimed* drop of a target that is no
+     longer suitable is B16 case c's target loss. The *aimed* keep on *rearming* rests on S-0215
+     claim 32's backing for that row. The *aimed* drop on *illegal*, *impossible* or *out of range*
+     and the keep on each other answer are `unmeasured`, as S-0215 claim 32 gives for the SAM
+     answer-specific transitions. `unmeasured`: the periodic check for a building or an aircraft, as
+     S-0309 claim 29 gives; the earlier drop of an allied target from an order, since scripted input
+     reaches only the human's objects and no part orders a computer-controlled actor; the
+     exceptions, as S-0309 claim 25 part k gives; an infantry healer's firing-step drop and its keep
+     row's target left to the periodic check, as S-0309 claim 29 gives. A vehicle healer's
+     firing-step drop rests on S-0310 claim 11's backing.
+   - Confidence: high for the illegality, and for the drop at the first such tick when no higher
+     answer holds, for vehicle and infantry actors. Medium for the part that rests on the ranks
+     (*rearming*) for vehicle actors, as S-0309 claim 29 rates it. Low for that part for infantry
+     actors, as S-0309 claim 29 rates the rank-5 keep for an infantry holder. Medium for aircraft
+     and building actors, including a building's drop at its own processing (S-0309 claim 29 rates
+     building holders medium). For a building with the SAM flag: medium for the *aiming* drop of a
+     target that is not an aircraft in the air and for the *aimed* rows, as S-0215 claim 32 rates
+     SAM *attack* and its stages, and low for the power row's exception, as that claim rates the
+     power condition. Medium for actors of computer-controlled owners, with the earlier drop of an
+     allied target and its exceptions. Vehicle healers' firing-step drop at S-0310 claim 11's level.
+     Medium for infantry healers' firing-step drop. The infantry healer's *illegal* ahead of
+     *rearming*, *out of ammunition* and *cloaked*: at S-0310 claim 11's level. The drop follows
+     S-0309 claim 29's periodic check, and for a building also S-0215 claim 32's attack processing.
+     The order of answers is S-0301 claim 9's.
 
 3. **Retaliation needs a versus value above τ<sub>r</sub>.** An actor that the other rules of
    S-0309 would let retaliate does so only when the versus value of the weapon it would use against
@@ -196,7 +271,7 @@ For reference, `1%` gives the double 0.0100000000000000002081668…, and `2%` gi
 | Situation | *v* of the weapon it would use | Result |
 |---|---|---|
 | Actor given an attack order on an object, no force-fire | 0 | No attack cursor (S-0214); no order |
-| Actor given an attack order on an object, force-fire held | 0 | Order accepted; never fires; target dropped at the first check that answers *illegal* (claim 2) |
+| Actor given an attack order on an object, force-fire held | 0 | Order accepted; never fires; target dropped at the first occasion that drops it: an *illegal* answer, or a building's attack processing by S-0215 claim 32's tables (claim 2) |
 | Actor given an attack order on an object | ≠ 0 | Attacks normally |
 | Actor damaged by an attacker, other rules of S-0309 allow retaliation | > τ<sub>r</sub> | Retaliates |
 | Same | ≤ τ<sub>r</sub> | Does not retaliate |
@@ -278,8 +353,10 @@ types below.
   | 0.025 | yes | yes | yes |
 
   Run 4: the cursor appears, *D* never fires, and *D* has dropped *X* as its target. Run 4b: *D*
-  never fires at *X*, and keeps *X* as its target until the countdown ends and drops it at the
-  first check after that.
+  never fires at *X*, and keeps *X* as its target until the countdown ends; a vehicle or infantry
+  defender drops it at the first tick whose tick number is a multiple of 16 at whose turn the
+  countdown has run out, the tick in which it runs out included, with the tick numbers
+  recorded.
 - *Falsified if:* any cell of the table differs. In particular, run 2 with 1 % not retaliating
   falsifies claim 3 as written (it would mean the threshold is at or above 1 %), and run 3 with
   2 % not firing falsifies claim 4. Run 2 with 0.005 retaliating falsifies claim 3 (the threshold
@@ -303,6 +380,4 @@ does not fire in the first run, or fires the zero-value weapon in either run.
 
 - Whether every automatic search of S-0309 uses the shared candidate check of claim 4. The
   original's searches found so far all do; S-0309 should confirm it for each search it lists.
-- Claim 2's handling after the force-fire order (dropping the target at the first check that
-  answers *illegal*) should be checked against S-0215's attack behaviour, for vehicles and
-  infantry as well as buildings.
+
