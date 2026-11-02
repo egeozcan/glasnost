@@ -315,7 +315,15 @@ fn claim44_no_primary_weapon_gives_no_camera_and_warns() {
     // spec: S-0513 claim 44 (a spy type with no primary weapon gives no camera; our engine warns)
     let mut r = ruleset();
     r.sim.aircraft.get_mut("SPYP").unwrap().primary = None;
+    // The weaponless plane answers *impossible* (S-0301 claim 9) and drops
+    // its target at its first check tick (S-0309 claim 29 r94), so the
+    // camera processing that warns must come first: a short camera frame
+    // count, and a launch just after a check tick.
+    r.sim.general.economy.spy_plane_camera_frames = Some(4);
     let mut w = game(&r);
+    while w.tick % 16 != 1 {
+        run(&mut w, 1);
+    }
     planes::spy_plane(&mut w, BETA, at(0, 0));
     w.effects.clear();
     run(&mut w, 300);

@@ -270,7 +270,7 @@ pub fn selectable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
 /// pass it over, also while it falls. It is still found as the clicked
 /// object ([`clickable_by`]): S-0214 Terms, *clicked object*, is unchanged.
 fn seized_out(w: &World, id: ObjectId) -> bool {
-    // spec: S-0607 claim 5 (revision 33: while it is seized it cannot be selected at all, until it is no longer seized, claim 20; never again for a stand-in claim 24 never restores)
+    // spec: S-0607 claim 5 (revision 33: while it is seized it cannot be selected at all, until it is no longer seized, claim 20; never again for a stand-in claim 24 never restores) and S-0214 Terms (revision 68, *can be selected*: a seized unit cannot be selected by any selecting input until it is no longer seized)
     crate::lift::seized(w, id)
 }
 
@@ -2025,8 +2025,9 @@ fn rank(w: &World, id: ObjectId) -> u8 {
     }
 }
 
-/// The representative distance (S-0214 F1).
-fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
+/// The representative distance (S-0214 F1) from object `id` to the click
+/// `on`, in whole leptons.
+pub fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
     let a = w.reference_point(id);
     let b = match on {
         ClickOn::Object(t) => w.reference_point(t),
@@ -2036,8 +2037,12 @@ fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
     let dx = i64::from(a.x - b.x);
     let dy = i64::from(a.y - b.y);
     let dz = i64::from(a.z - b.z);
-    // spec: S-0214 F1 (d = ⌊r(n)⌋, the table square root)
-    root_floor((dx * dx + dy * dy + dz * dz) as u64, true, w.rules().mode)
+    // spec: S-0214 F1 (d = ⌊r(n)⌋, the table square root) and S-0204 claim 5 revision 10 (quirks.table_root_distance covers S-0214's representative distance; off: the exact integer square root)
+    root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        w.rules().quirks.table_root_distance,
+        w.rules().mode,
+    )
 }
 
 /// The representative (S-0214 claim 1): highest rank, then nearest to the

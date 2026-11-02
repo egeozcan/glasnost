@@ -246,8 +246,6 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::combat::fire::reload_elapsed(w, id);
         return;
     }
-    // spec: S-0309 claim 29 (the periodic held-target check in the holder's own turn of a check tick; its place in the turn is open, interim Q-2261: here, before the behaviour processing, searches and firing step, and before a building's pending delayed shot counts down) and S-0513 claim 51 with S-0203 claim 4 (suppressed in the warp turns above; in the arrival hold after the hold-end test)
-    crate::combat::held::periodic_check(w, id);
     // spec: S-0608 claims 12 and 15 (Q-1440: a vehicle drainer's position check samples its position before that turn's behaviour start, behaviour processing, movement and firing, and before its erasure exit; the warp-only stages, which returned above, exclude it, S-0513 claim 51; a pulse-disabled drainer still checks)
     crate::drain::position_check(w, id);
     if !crate::temporal::cut_short(w, id) {
@@ -304,6 +302,10 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     if behaves && !early {
         // The behaviour start (the first per-tick start and the countdown); an unlimited controller ran it before its overload update.
         process::head(w, id);
+    }
+    if behaves {
+        // spec: S-0309 claim 29 (Place in the turn, revision 94, Q-2261 answered: after the turn's first per-tick start of an infantry unit, vehicle or building, S-0215 claim 11, so the behaviour it makes current decides; after a falling holder's fall step and landing hit; before the behaviour processing, its searches, the per-tick search, the movement and the firing step, and before a building's pending delayed shot counts down; an aircraft, which has no start here, before its processing, the behaviour current at its turn's start deciding) and claim 25 part k (the allied drop at that place, ahead of the check); S-0513 claim 51 with S-0203 claim 4 revision 42 (both suppressed in the warp turns above; in the arrival hold after the hold-end test); a turn cut short returned above (S-0215 claim 2) or is a building being erased (`behaves` false). The berserk countdown, which also follows the first per-tick start (S-0610 claim 5), comes before it here; the order changes no outcome, since a countdown that ends berserk drops the target itself (S-0610 claim 5) and one that does not leaves the holder berserk for claim 25 part k's keep either way
+        crate::combat::held::turn(w, id);
     }
     if kind == Kind::Building && w.obj(id).is_some() {
         // spec: S-0515 claim 5 (the income cycle, in the building's own turn) and S-0608 claim 15 (Q-1440: the payout follows the due periodic income, so income available in that turn can be taken by it)

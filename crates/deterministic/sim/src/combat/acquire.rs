@@ -551,7 +551,7 @@ fn friendly_exception(w: &World, a: ObjectId) -> bool {
 /// The house that controls the open-topped transport searcher `a` rides
 /// in, when that transport is mind-controlled (S-0309 Terms, claim 10,
 /// table C row "controller's allies").
-fn controlled_carrier_house(w: &World, a: ObjectId) -> Option<Option<HouseId>> {
+pub(crate) fn controlled_carrier_house(w: &World, a: ObjectId) -> Option<Option<HouseId>> {
     let t = crate::transport::open_topped_carrier(w, a)?;
     crate::mind::mind_controlled(w, t).then(|| w.obj(t).and_then(|o| o.owner))
 }

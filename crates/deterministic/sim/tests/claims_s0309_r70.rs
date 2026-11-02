@@ -482,16 +482,16 @@ fn capture_and_sabotage_make_no_check() {
     assert!(kept_in(Behaviour::Sabotage));
 }
 
-// spec: S-0309 claim 29 (Behaviours: whether a holder in another behaviour makes the check is not specified; Open questions, Other behaviours) - interim Q-2262: no check in any behaviour other than attack and guard
+// spec: S-0309 claim 29 revision 94 (Behaviours, Q-2262 answered: a holder makes the check in every behaviour but capture and sabotage)
 #[test]
-fn other_behaviours_make_no_check_interim() {
+fn other_behaviours_make_the_check() {
     for b in [
         Behaviour::Hunt,
         Behaviour::AreaGuard,
         Behaviour::Sticky,
         Behaviour::Move,
     ] {
-        assert!(kept_in(b), "{b:?}");
+        assert!(!kept_in(b), "{b:?}");
     }
 }
 
@@ -594,14 +594,13 @@ fn the_check_and_its_drop_take_no_draw() {
     assert_eq!(w.rng, control.rng, "the check and the drop took no draw");
 }
 
-// spec: S-0309 claim 29 (in our engine every holder of a player house, AI houses included; whether the original applies it to holders of computer-controlled owners is open, Open questions, Other holders and targets) - interim Q-2263: a holder of the neutral or special house makes no periodic check and keeps S-0304 claim 2's drop at its attack processing
+// spec: S-0309 claim 29 revision 94 (Owners and targets, Q-2263 answered: every holder of every house, the neutral and special houses included) and r94's Changes for S-0304 claim 2 (the attack processing's drop is a building's only: a unit of any owner drops an illegal target at the periodic check, not at its attack processing)
 #[test]
-fn a_neutral_holder_keeps_the_attack_processing_drop_interim() {
+fn a_neutral_holder_makes_the_check_and_no_processing_drop() {
     let mut w = testkit::game_with_non_players(&rules(), SIZE, 1);
     let d = put(&mut w, Kind::Vehicle, "DEF", NEUTRAL, -1, 0);
     let x = put(&mut w, Kind::Vehicle, "TARGET", BETA, 2, 0);
-    assert!(!held::periodic_covers(&w, d));
-    // In guard, with its processing held back, it keeps the target through a check tick.
+    // In guard, with its processing held back, it drops the target at the check tick.
     while w.tick.rem_euclid(PERIOD) != PERIOD - 1 {
         step(&mut w);
     }
@@ -609,18 +608,17 @@ fn a_neutral_holder_keeps_the_attack_processing_drop_interim() {
     no_processing(&mut w, d);
     step(&mut w);
     step(&mut w);
-    assert_eq!(target(&w, d), Some(Target::Object(x)), "no periodic check");
-    // In attack, its next processing drops it (S-0304 claim 2), off the check phase.
+    assert_eq!(target(&w, d), None, "dropped at the periodic check");
+    // In attack, its next processing keeps it; the check tick drops it.
     while w.tick.rem_euclid(PERIOD) != 4 {
         step(&mut w);
     }
     let n = w.tick;
     hold(&mut w, d, Target::Object(x), Behaviour::Attack, false);
     w.obj_mut(d).unwrap().beh.expired = true;
-    assert_eq!(drop_tick(&mut w, d, x, 40), Some(n));
-    // A player holder's attack processing does not drop it: claim 29 covers it.
+    assert_eq!(drop_tick(&mut w, d, x, 40), Some(n + 12));
+    // A player holder's alike.
     let (mut w, p, x) = duel(Kind::Vehicle, "DEF");
-    assert!(held::periodic_covers(&w, p));
     while w.tick.rem_euclid(PERIOD) != 4 {
         step(&mut w);
     }

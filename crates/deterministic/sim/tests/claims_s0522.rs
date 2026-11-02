@@ -39,6 +39,12 @@ fn reg(r: &mut Ruleset, registry: &str, name: &str) {
 /// The superweapon ruleset with this file's additions.
 fn rules() -> Ruleset {
     let mut r = ruleset();
+    // The paradrop plane is armed, as the aircraft weapon rows of S-0522's
+    // Import mapping and S-0501 claim 20 take it to be: a weaponless one
+    // answers *impossible* at its target cell (S-0301 claim 9) and drops it
+    // at its first check tick (S-0309 claim 29 r94; the test
+    // `a_weaponless_paradrop_plane_drops_its_cell_and_retreats` below).
+    r.sim.aircraft.get_mut("PDPLANE").unwrap().primary = Some("Gun".into());
     r.sim.animations.insert(
         "CHUTE".into(),
         AnimationType {
@@ -216,6 +222,27 @@ fn claim6_no_target_loses_destination_and_retreats() {
     let o = w.obj(p).unwrap();
     assert_eq!(o.dest, None);
     assert_eq!(o.beh.queued, Some(Behaviour::Retreat));
+}
+
+// spec: S-0309 claim 29 r94 (every aircraft makes the check in its own behaviours, those in which no weapon is aimed at the held target included; illegal or impossible drops it at a check tick, with no draw) and S-0301 claim 9 (no weapon in the slot: impossible)
+// spec: S-0522 claim 6 (with no target the plane loses its destination and its next behaviour is retreat)
+#[test]
+fn a_weaponless_paradrop_plane_drops_its_cell_and_retreats() {
+    let mut r = rules();
+    r.sim.aircraft.get_mut("PDPLANE").unwrap().primary = None;
+    let mut w = game(&r);
+    let p = launch(&mut w);
+    let launched = w.tick;
+    let after = until(&mut w, 40, |w| w.obj(p).is_none_or(|o| o.target.is_none()));
+    let dropped = after - 1;
+    assert_eq!(dropped % 16, 0, "dropped in a check tick");
+    assert!(dropped - launched < 16, "at the first check tick");
+    assert_eq!(transport::count(&w, p), 3, "nobody dropped");
+    until(&mut w, 20, |w| {
+        w.obj(p).is_none_or(|o| {
+            o.beh.current == Some(Behaviour::Retreat) || o.beh.queued == Some(Behaviour::Retreat)
+        })
+    });
 }
 
 // --- Claim 7 -----------------------------------------------------------------
