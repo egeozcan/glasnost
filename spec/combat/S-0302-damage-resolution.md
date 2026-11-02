@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
 supersedes: []
@@ -557,8 +557,13 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    | 4 | The amount is 0 after claims 5 to 7 | yes | yes | yes |
 
    Being erased includes both an attached temporal beam and the beam-free leaving stage
-   (S-0514 claims 4 and 10; S-0513 claim 39). Its stage 1 row stops ordinary damage, healing and berserk
-   hits before either side effect of claim 10. It does not stop a hit that ignores defences.
+   (S-0514 claims 4 and 10; S-0513 claim 39). It does not include a superweapon warp member from
+   its departure update when its beam was locked before the departure: that member takes
+   ordinary hits, while the beam stays attached (S-0513 claim 39a), up to a later lock after the
+   departure. From such a lock on, the member is being erased again and this claim's protection
+   applies to it (S-0513 claim 39a, *A lock after the departure*). The being-erased stage 1 row
+   stops ordinary damage, healing and berserk hits before either side effect of claim 10.
+   It does not stop a hit that ignores defences.
    That hit is still subject to every other applicable row. Temporal erasure itself is not a
    health-damage hit: its delivery, lock refusals and progress belong to S-0514 claims 1 to 8.
 
@@ -608,14 +613,18 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      bunkered-unit row stops it first, so health does not tell the two apart. For those two rows
      the bullet states the rule that no row reading the warhead holds without one, as the
      measured rows show for the others, with no scenario of its own; the prone factor of claim 5
-     for such a hit is the one departure (Edge cases)
+     for such a hit is the one departure (Edge cases). For the warp member that is not being
+     erased: `measurable` (S-0513 SW12 part l, variant l1) for hits after the hold, and variant l5
+     for the protection from a later lock; `unmeasured` while it phases in, since the hold in
+     part l lasts one update
    - Confidence: high for the + column except the no-health rows and for the − and I entries that D6, D8, D16,
      D17 and D26 test; medium for the stages of the rows that only D16 and D17 test, and for the
      vehicle-factory, laser-fence and bridge-repair-hut rows (the conditions are clear; D16 is
      their first measurement); low for the no-health rows (their stages included) and the − entry of
      the self-damage row and other entries without a scenario; medium for a hit without a
      warhead, until D34 parts a to e run, and medium for the rows that no scenario can tell
-     apart (`unmeasured`, above)
+     apart (`unmeasured`, above); medium for the warp member that is not being erased: hits
+     after the hold, hits while it phases in, and the protection from a later lock
 
 9. **What ignoring defences skips.** A hit that ignores defences skips the defences of claim 5
    (including the minimum of 1 and the prone factor), every part of claim 6 (inert map, falloff,
