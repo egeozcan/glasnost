@@ -1,9 +1,9 @@
 ---
 id: Q-2264
 title: The periodic held-target check by a materialising vehicle or aircraft
-status: open
+status: answered
 related: [S-0309, S-0301, S-0514, S-0207]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
