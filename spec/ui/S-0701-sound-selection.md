@@ -2,11 +2,11 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671, Q-1735]
 supersedes: []
@@ -357,16 +357,25 @@ normalisation N of its Formulas F3. In addition:
     a deactivated object (one that has lost what it needs to operate) uses its deactivated selection
     list; if the list that applies is empty the object says nothing, without falling back to the
     normal list. When one input selects several objects (a band box, a group recall), only the
-    first object that becomes selected speaks; selecting all objects of a type gives no response at
-    all. A plain click on an object deselects everything first, so clicking an already selected
-    object makes it speak again; a modifier-click that removes an object from the selection gives no
-    response. Selecting an object of a passive house takes the raw value but gives no response.
-    An ordinary other house's object, enemy or allied, takes no selection-response draw and gives
-    no response. An empty applicable list takes no draw for any owner. These rules also apply
-    to individually selectable buildings; group-selectability does not change the owner test.
-    - Backing: `measurable` (scenarios D2, D3)
-    - Confidence: high (draw, first-object rule, type-select silence); medium (which objects count
-      as slaves and as deactivated, band-box order, re-click)
+    first object that becomes selected speaks. A tap of the type-select role (S-0214 claim 32) is
+    such an input: it gives one selection response, that of the first object it adds, and none if it
+    adds nothing. With the type-select role held, its clicks and drags (S-0214 claims 29 and 32)
+    give no response at all. The tap's single response is our engine's rule (S-0214 claim 32): the
+    original instead lets every object a tap adds queue a selection response of its own. Responses
+    are presentation only, so no switch. A plain click on an object deselects everything first, so
+    clicking an already selected object makes it speak again; a modifier-click that removes an
+    object from the selection gives no response. Selecting an object of a passive house takes the
+    raw value but gives no response. An ordinary other house's object, enemy or allied, takes no
+    selection-response draw and gives no response. An empty applicable list takes no draw for any
+    owner. These rules also apply to individually selectable buildings; group-selectability does not
+    change the owner test.
+    - Backing: `measurable` (scenarios D2, D3). The tap's single response in our engine is a
+      design rule (S-0214 claim 32), not an oracle claim. The original's per-object responses
+      to a tap are `measurable` by D3, which records each response heard.
+    - Confidence: high (draw, first-object rule, the held type-select role's silence, the tap's
+      single response in our engine); medium (which objects count as slaves and as deactivated,
+      band-box order, re-click, the original's per-object responses to a tap, as S-0214 claim 32
+      rates them)
 
 18. **Orders.** For ordinary immediate battlefield clicks (not the planning-mode path), only the first
     object in selection order can respond. If that object receives no order from the click,
@@ -1024,7 +1033,7 @@ normalisation N of its Formulas F3. In addition:
     | Q-0264, 4: owner and audibility | claims 20 to 22 and 37: death response local only, death sound/report/animation/building fallback any owner, all positional; claims 6 and 7 still govern actual audibility, not ownership alone |
     | Q-0265, 1: each order and empty-list fallback | claim 18 and F6 give every requested ordinary order kind, weapon-specific singles and repair exception, fallback exhaustion means silence, never the selection list; Import mapping: order lists and single responses; building unload/deploy exceptions remain unmeasured below |
     | Q-0265, 2: choice algorithm | claim 18 and F5: exactly one unsynchronised raw value modulo list length, including a one-entry list; none for an empty list or a single response reference; claims 13 and 14 govern separate playback draws |
-    | Q-0265, 3: selection and repeat selection | claims 16 and 17: first newly selected object only, specialised selection lists, ordinary re-click versus modifier deselection and type-select silence; claim 18 gives resulting selection order for subsequent orders; Import mapping: the three selection lists |
+    | Q-0265, 3: selection and repeat selection | claims 16 and 17: first newly selected object only, specialised selection lists, ordinary re-click versus modifier deselection, the held type-select role's silence and a type-select tap's single response (S-0214 claim 32); claim 18 gives resulting selection order for subsequent orders; Import mapping: the three selection lists |
 
     **Unsettled parts are not silence or substitute rules.** For Q-0260, the complete
     delayed attack/decay sequence, terminal lifetime and draw totals are `unmeasured`, low
@@ -1751,9 +1760,13 @@ first and last: the latest positive-primary-damage type responds; with no such t
 earliest selected responds. An empty list on the first responder does not hand speech to
 another. *Falsified if:* any identity, order or choice draw differs.
 
-**D3. Selection variants.** Select an enslaved miner, a type-select (all of a type) and click an
-already selected unit. *Expected:* enslaved list (or silence), no response for type-select, a response
-on re-click. Add a deactivated unit with a distinguishable deactivated list, then repeat
+**D3. Selection variants.** Select an enslaved miner, select with the type-select role held (a
+held click and a held drag, S-0214 claims 29 and 32), tap the type-select role, and click an
+already selected unit. *Expected:* enslaved list (or silence); no response for the held role's
+click and drag; for the tap, in our engine one response, from the first object it adds, and none
+when it adds nothing, while the original gives each added object its own selection response
+(S-0214 claim 32), so record each response heard and each selection-response choice draw; a
+response on re-click. Add a deactivated unit with a distinguishable deactivated list, then repeat
 with each specialised list empty: expect the matching list, then silence without normal-list
 fallback. Modifier-click a selected unit to remove it: expect no selection response or choice
 draw. Recall a group: only its first newly selected object responds. Finally click a selectable

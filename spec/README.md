@@ -74,7 +74,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 4 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 21 | approved | — |
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 12 | approved | — |
-| [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 35 | approved | — |
+| [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 36 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 94 | approved | — |
 | [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 8 | approved | — |
 | [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 29 | approved | — |
