@@ -8620,6 +8620,11 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_edge_hold": {
+          "description": "An aircraft that may leave the map now and lacks the fly-by flag is pushed back at the legal map's boundary, with the side rule and the fallback draw, so with the fly-back flag (or where the usable area's boundary lies on or beyond the legal map's) it is never removed there; off: it is not pushed back, takes no candidate and no draw, and is removed in the update tick in which its position leaves the legal map.",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_endless_refire": {
           "description": "With the re-approach flag off, an ordinary non-fighter, non-strafer repeats burst-plus-single-shot cycles without spending its pending round; off: each such cycle ends as one run.",
           "type": "boolean",
@@ -10927,6 +10932,11 @@
         },
         "two_sound_cues": {
           "description": "At most two sound cues per sequence entry.",
+          "type": "boolean",
+          "default": true
+        },
+        "unarmed_pad_bound_hover": {
+          "description": "An unarmed pad-bound aircraft with dock types that falls back to rest in flight with no contact makes no pad search: it takes an F8 landing spot and move, and hovers there; off: T2's last in-flight row first looks for a pad and asks it for contact, and when the pad grants it, it takes the pad as destination with enter and docks; otherwise the landing spot and move, with no crash. Only a landable type is affected.",
           "type": "boolean",
           "default": true
         },

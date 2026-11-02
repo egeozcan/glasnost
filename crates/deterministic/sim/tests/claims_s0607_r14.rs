@@ -260,7 +260,7 @@ fn dry(w: &mut World, c: CellXY, tile: i32) {
     glasnost_sim::load::recalc_cells(w, &[c]);
 }
 
-// spec: S-0607 claim 20 (revision 14, the hovering set-down unit, design: restoration is not tested for it, neither at the end of a turn nor at a fall-back to rest; at the end of each of its turns it repeats the stop's search instead; a cell found, it flies there, lands and is restored at the end of the turn in which it lands) and claim 9 (revision 14: no cell found, it searches again at the next test, so it lands once a cell becomes free); S-0607 Changes for other specs (S-0502 Edge cases and J27 c: the retry at the end of each turn, not at a fall-back to rest)
+// spec: S-0607 claim 20 (revision 14, the hovering set-down unit, design: restoration is not tested for it, neither at the end of a turn nor at a fall-back to rest; at the end of each of its turns it repeats the stop's search instead; a cell found, it flies there, lands and is restored at the end of the turn in which it lands) and claim 9 (revision 14: no cell found, it searches again at the next test, so it lands once a cell becomes free); S-0607 Changes for other specs (S-0502 Edge cases and J27 c: the retry at the end of each turn, not at a fall-back to rest); S-0502 Edge cases and J27 (revision 21: the retry at the end of each of its turns, S-0203, not at a fall-back to rest)
 #[test]
 fn claim_20_hovering_set_down_retries_at_the_end_of_each_turn() {
     let mut w = world(quirk_off);

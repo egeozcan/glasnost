@@ -1530,6 +1530,14 @@ pub struct Quirks {
     // spec: S-0501 claim 48 (c) and (e), Edge cases
     #[serde(default = "on")]
     pub aircraft_released_above_pad: bool,
+    /// An unarmed pad-bound aircraft with dock types that falls back to rest in flight with no contact makes no pad search: it takes an F8 landing spot and move, and hovers there; off: T2's last in-flight row first looks for a pad and asks it for contact, and when the pad grants it, it takes the pad as destination with enter and docks; otherwise the landing spot and move, with no crash. Only a landable type is affected.
+    // spec: S-0501 claim 50, Edge cases
+    #[serde(default = "on")]
+    pub unarmed_pad_bound_hover: bool,
+    /// An aircraft that may leave the map now and lacks the fly-by flag is pushed back at the legal map's boundary, with the side rule and the fallback draw, so with the fly-back flag (or where the usable area's boundary lies on or beyond the legal map's) it is never removed there; off: it is not pushed back, takes no candidate and no draw, and is removed in the update tick in which its position leaves the legal map.
+    // spec: S-0501 claims 4, 10 and 51, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_edge_hold: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -2567,6 +2575,8 @@ impl Default for Quirks {
             crash_drops_planted_bomb: true,
             aircraft_corner_sector_untracked: true,
             aircraft_released_above_pad: true,
+            unarmed_pad_bound_hover: true,
+            aircraft_edge_hold: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -3661,6 +3671,8 @@ impl Quirks {
                 "aircraft_released_above_pad",
                 self.aircraft_released_above_pad,
             ),
+            ("unarmed_pad_bound_hover", self.unarmed_pad_bound_hover),
+            ("aircraft_edge_hold", self.aircraft_edge_hold),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
             (
