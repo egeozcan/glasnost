@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 86
+revision: 87
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1574,9 +1574,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
 
 45. **Nothing else is special.** The camera adds no detection of cloaked or disguised objects
     (S-0516). A spy plane shot down before the target reveals nothing more. Its route and exit are
-    S-0501's (claims 10 and 34).
-    - Backing: `measurable` (scenario SW15 part d)
-    - Confidence: medium
+    S-0501's (claims 4, 10, 34 and 51). After its target it keeps its approach heading and is not
+    steered toward its exit cell.
+    - Backing: `measurable` (scenario SW15 part d). The heading kept after the target, with no
+      steering toward the exit cell, has S-0501 claim 51's backing: `measurable` (S-0501 scenario
+      AC32).
+    - Confidence: medium. High for the heading kept after the target and the lack of a turn toward
+      the exit cell, as S-0501 claim 51 rates them.
 
 46. **Cloud playback and the weather observation boundary (Q-0732).** The cloud uses ordinary
     animation playback, not a separate one-frame-per-tick storm clock. The storm tests its
