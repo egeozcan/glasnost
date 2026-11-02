@@ -447,13 +447,16 @@ fn stale_guard_target(w: &World, o: &Object) -> bool {
 /// weapon it would use against it (S-0308 claim 3) passes the firing check
 /// without the range test, short of an illegal target or an impossible
 /// shot (S-0301 claim 9). An aircraft out of a ground weapon's reach is
-/// not worth a unit's attention.
+/// not worth a unit's attention. Reloading does not count (S-0214 claim 6
+/// (e)): a unit whose countdown runs is asked as if it had none, so that
+/// the rearming answer does not hide an illegal target.
 pub(crate) fn can_attack(w: &World, id: ObjectId, e: ObjectId) -> bool {
     let t = Some(Target::Object(e));
     let (slot, weapon) = weapon::would_use(w, id, t);
+    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the check without the reasons of the moment of ranks 5 to 8)
     weapon.is_some()
         && !matches!(
-            check::check(w, id, t, slot, false),
+            check::check_lasting(w, id, t, slot),
             check::Answer::Illegal | check::Answer::Impossible
         )
 }
@@ -2655,5 +2658,37 @@ mod place_cell_tests {
             "{found} of {compared}"
         );
         assert!(unblocked > 0);
+    }
+}
+
+#[cfg(test)]
+mod can_attack_tests {
+    use super::*;
+    use glasnost_sim::testkit::{self, mid, spawn};
+
+    const SIZE: i32 = 32;
+
+    // spec: S-0214 claim 6 (e) (the attack a person could order: the firing rules must not rule the target illegal; reasons of the moment, reloading among them, do not count), S-0304 claim 1 (a versus value of exactly zero: illegal, S-0301 claim 9 rank 9) and S-0304 claim 2 (rearming comes before illegal; without force-fire the attack cursor does not appear on such an object)
+    #[test]
+    fn a_reloading_unit_cannot_attack_a_target_its_weapon_may_not_hurt() {
+        let mut r = testkit::combat_ruleset();
+        // The gun's warhead does nothing to class light (index 3, the cart's).
+        r.sim
+            .warheads
+            .get_mut("HE")
+            .unwrap()
+            .verses
+            .as_mut()
+            .unwrap()[3] = glasnost_rules::sim::Decimal("0".into());
+        let mut w = testkit::game_with(&r, SIZE, 7);
+        let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(SIZE, 0, 0), 0);
+        let cart = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 3, 0), 0);
+        let heavy = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, mid(SIZE, 0, 3), 0);
+        assert!(!can_attack(&w, tank, cart));
+        assert!(can_attack(&w, tank, heavy));
+        let tick = w.tick;
+        w.obj_mut(tank).unwrap().combat.rearm_until = tick + 50;
+        assert!(!can_attack(&w, tank, cart));
+        assert!(can_attack(&w, tank, heavy));
     }
 }

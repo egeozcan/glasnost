@@ -410,3 +410,43 @@ fn row_b7_pulse_cannon_and_building_being_sold() {
     assert!(glasnost_sim::econ::tech::being_sold(w.obj(tower).unwrap()));
     assert_eq!(act(&w, tower, ClickOn::Object(cart)), Action::Nothing);
 }
+
+// spec: S-0214 claim 6 (e) (the firing rules must not rule the target illegal for the weapon the actor would use; other reasons for not firing at this moment, reloading among them, do not count), S-0304 claim 1 (a versus value of exactly zero: illegal at S-0301 claim 9 rank 9) and S-0304 claim 2 (rearming and out of ammunition come before illegal in the check; without force-fire the attack cursor does not appear on such an object)
+#[test]
+fn claim_6e_reloading_neither_gives_nor_takes_the_attack() {
+    use glasnost_sim::combat::check::{self, Answer};
+    let mut r = testkit::combat_ruleset();
+    // The gun's warhead does nothing to class light (index 3, the cart's).
+    r.sim
+        .warheads
+        .get_mut("HE")
+        .unwrap()
+        .verses
+        .as_mut()
+        .unwrap()[3] = glasnost_rules::sim::Decimal("0".into());
+    let mut w = game(&r);
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(SIZE, 0, 0), 0);
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 3, 0), 0);
+    let heavy = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, mid(SIZE, 0, 3), 0);
+    let at = |w: &World, t| check::check(w, tank, Some(Target::Object(t)), 0, false);
+    let lasting = |w: &World, t| check::check_lasting(w, tank, Some(Target::Object(t)), 0);
+    assert_eq!(at(&w, cart), Answer::Illegal);
+    assert_eq!(lasting(&w, cart), Answer::Illegal);
+    assert_ne!(act(&w, tank, ClickOn::Object(cart)), Action::Attack);
+    assert_eq!(act(&w, tank, ClickOn::Object(heavy)), Action::Attack);
+    // Reloading: the countdown runs well past this tick.
+    let tick = w.tick;
+    w.obj_mut(tank).unwrap().combat.rearm_until = tick + 50;
+    assert_eq!(at(&w, cart), Answer::Rearming);
+    assert_eq!(lasting(&w, cart), Answer::Illegal);
+    assert_ne!(lasting(&w, heavy), Answer::Illegal);
+    assert_ne!(act(&w, tank, ClickOn::Object(cart)), Action::Attack);
+    assert_eq!(act(&w, tank, ClickOn::Object(heavy)), Action::Attack);
+    // Out of ammunition, also a reason of the moment.
+    w.obj_mut(tank).unwrap().combat.rearm_until = tick;
+    w.obj_mut(tank).unwrap().combat.ammo = 0;
+    assert_eq!(at(&w, cart), Answer::OutOfAmmo);
+    assert_eq!(lasting(&w, cart), Answer::Illegal);
+    assert_ne!(act(&w, tank, ClickOn::Object(cart)), Action::Attack);
+    assert_eq!(act(&w, tank, ClickOn::Object(heavy)), Action::Attack);
+}

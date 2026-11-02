@@ -1130,8 +1130,9 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
         let (slot, x) = weapon::would_use(w, actor, Some(Target::Object(t)));
         // Without a weapon there is no firing rule to rule the target illegal.
         // spec: S-0214 claim 6 (e) (other reasons for not firing at this moment do not count; the falling firer's refusal of S-0301 claim 9 rank 4 is a firing rule, so a falling actor fails (e) unless force-fire or the infiltrator exception) and S-0522 claim 17 (an ordinary click over an enemy during the fall gives the move of table M, a force-fire click an attack order)
+        // spec: S-0214 claim 6 (e) (reloading does not count: the check without the reasons of ranks 5 to 8, which would answer ahead of the target tests of rank 9)
         x.is_none()
-            || check::check(w, actor, Some(Target::Object(t)), slot, false) != Answer::Illegal
+            || check::check_lasting(w, actor, Some(Target::Object(t)), slot) != Answer::Illegal
     };
     a && b && c && d && e
 }

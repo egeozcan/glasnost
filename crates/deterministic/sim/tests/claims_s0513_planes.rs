@@ -322,3 +322,27 @@ fn claim44_no_primary_weapon_gives_no_camera_and_warns() {
     assert!(!events(&w).iter().any(|e| e.0 == SwEvent::Camera));
     assert!(w.notes.iter().any(|n| n.contains("claim 44")));
 }
+
+// spec: S-0501 claim 10 (a visiting aircraft in spy-plane overfly that has entered the usable area since it appeared may leave the map now: removed, without dying, when its position leaves the usable area) and claim 34 (the overfly flies to its exit edge); the entry its own forward step marks is kept by that movement update
+#[test]
+fn s0501_claim10_spy_plane_entering_from_outside_is_removed_after_its_overfly() {
+    // The exit edge's cells lie outside the usable area (S-0522 claim 4).
+    let mut w = banded_game(&ruleset());
+    let s = planes::spy_plane(&mut w, BETA, at(0, 0))[0];
+    let first = w.obj(s).unwrap().pos.cell();
+    assert!(!w.cells.usable(first), "appears outside the usable area");
+    let mut inside = false;
+    let mut overfly = false;
+    for _ in 0..3000 {
+        let Some(o) = w.obj(s) else { break };
+        assert!(o.health > 0, "alive");
+        inside |= w.cells.usable(o.pos.cell());
+        overfly |= o.beh.current == Some(Behaviour::SpyPlaneOverfly);
+        if inside {
+            assert!(o.air.as_ref().unwrap().entered, "the entry is kept");
+        }
+        step(&mut w);
+    }
+    assert!(inside && overfly, "flew in and over its target");
+    assert!(w.obj(s).is_none(), "removed once it has left");
+}

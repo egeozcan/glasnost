@@ -244,9 +244,9 @@ fn defence_answers(w: &World, house: HouseId, id: ObjectId, d: ObjectId) -> bool
     if wp.is_none() {
         return false;
     }
-    // spec: S-0301 claim 9 (the firing check without the range test; rearming, facing and the like pass, and rank 5's rearming would hide rank 9's range answer, so the range is tested on its own below)
+    // spec: S-0301 claim 9 and S-0214 claim 6 (e) (the firing check without the range test and without the reasons of the moment of ranks 5 to 8, so that rank 5's rearming hides neither rank 9's target tests nor its range answer, which is tested on its own below)
     if matches!(
-        check::check(w, id, t, slot, false),
+        check::check_lasting(w, id, t, slot),
         Answer::Illegal | Answer::Impossible
     ) {
         return false;
@@ -337,9 +337,9 @@ fn unit_answers(w: &World, home: Option<CellXY>, id: ObjectId, d: ObjectId) -> b
     let t = Some(Target::Object(d));
     let (slot, wp) = weapon::would_use(w, id, t);
     let Some(wp) = wp else { return false };
-    // spec: S-0301 claim 9 (the firing check without the range test, as the economy defence asks it)
+    // spec: S-0301 claim 9 and S-0214 claim 6 (e) (the firing check without the range test and without the reasons of the moment, as the economy defence asks it)
     !matches!(
-        check::check(w, id, t, slot, false),
+        check::check_lasting(w, id, t, slot),
         Answer::Illegal | Answer::Impossible
     ) && gets_there(w, id, d, wp)
         && !stands_off(w, id, d, slot)
@@ -538,7 +538,8 @@ pub fn probe(script: &Script, w: &World) -> Probe {
             let t = Some(Target::Object(d));
             let (slot, wp) = weapon::would_use(w, id, t);
             let Some(wp) = wp else { continue };
-            let answer = check::check(w, id, t, slot, false);
+            // spec: S-0301 claim 9 and S-0214 claim 6 (e) (as unit_answers asks it)
+            let answer = check::check_lasting(w, id, t, slot);
             if matches!(answer, Answer::Illegal | Answer::Impossible) {
                 refused = refused.or(Some((tech::type_of(o), slot, answer)));
                 continue;
@@ -565,8 +566,9 @@ pub fn probe(script: &Script, w: &World) -> Probe {
                 continue;
             }
             passed(&mut defences, &mut n);
+            // spec: S-0301 claim 9 and S-0214 claim 6 (e) (as defence_answers asks it)
             if matches!(
-                check::check(w, id, t, slot, false),
+                check::check_lasting(w, id, t, slot),
                 Answer::Illegal | Answer::Impossible
             ) {
                 continue;

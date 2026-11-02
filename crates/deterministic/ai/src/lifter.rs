@@ -168,8 +168,9 @@ fn liftable(w: &World, l: ObjectId, e: ObjectId) -> bool {
         return false;
     };
     let damage = w.rules().combat.weapon(wp).damage;
+    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the check without the reasons of the moment of ranks 5 to 8, so that reloading does not hide an illegal target)
     lift::eligible(w, e, damage)
-        && check::check(w, l, Some(Target::Object(e)), 0, false) != Answer::Illegal
+        && check::check_lasting(w, l, Some(Target::Object(e)), 0) != Answer::Illegal
 }
 
 impl Special {
