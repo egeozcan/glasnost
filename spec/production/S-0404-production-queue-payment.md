@@ -2,11 +2,11 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226]
 supersedes: []
@@ -498,7 +498,7 @@ addition:
     | Ground vehicle factory (vehicle factory flag, not naval) | When *K*'s current behaviour is *unloading* (it is still letting out an earlier vehicle), the release passes to the first other building of the house, in acquisition order, of the same building type whose current behaviour is guard; that building releases the unit by this row and its result is the result. Its power switch and claim 7's conditions are not judged. With no such building the result is *busy*. Otherwise the unit appears inside *K* at its *exit point*: *K*'s position (the centre of its top-left cell) plus the type's exit displacement (three integers in leptons), or *c* when the displacement is (0, 0, 0). It faces 16384 (map east). *K* then queues unloading under S-0417 claims 2 to 8, without starting it synchronously; the unit saves *K*'s rally point (S-0213, claim 20) as its guard spot, with the ordinary arrival-report destination governed by S-0417 claim 8. For jumpjet ascent, S-0417 claim 15 instead governs contact and tether release and the subsequent destination; the factory does not wait for touchdown. Result *released*. |
     | Naval vehicle factory | When *K* has no unit in contact, *K* queues unloading under S-0417 claim 9, which commands no exit movement on the released ship. With a rally point, take the 8-direction *e* = the direction from *c* to the rally point rounded to 8 steps, and step from *c*'s cell in direction *e* (S-0204, claim 9) until the first cell not covered by *K*. That cell is the exit cell when it is water (S-0211), holds no unit, infantry, aircraft or building, and is usable (S-0009, claim 4). Otherwise, or with no rally point, the exit cell is the nearby-cell search of S-0212 (claim 25) around *c*'s cell for the unit's movement kind. The unit appears at the exit cell's centre facing 16384 and, with a rally point, gets a move order to it. Result *released*. |
     | Infantry factory, and cloning building (claim 14) | *K* has max(*d*, 1) contact places, where *d* is the imported docking-place count (S-0417 claim 14). When none is free, the result is *busy*. Otherwise the exit cell is the first candidate below that passes S-0417 claim 14's legal-cell and free-entry-result test; with none, *failed*. Candidates: first, for a type with a barracks door kind, its door cell: (*x*₀ + 1, *y*₀ + 2) for the first kind, (*x*₀ + 2, *y*₀ + 2) for the second, (*x*₀ + 2, *y*₀ + 1) for the third, tried in that order when a type has several kinds; then the cells of the foundation's exit list (Constants), each (*x*₀ + *a*, *y*₀ + *b*), in list order. No other cell is tried: a foundation with an empty list (0 × 0) and no legal door candidate gives *failed*, and no cell toward the rally point is preferred. The unit appears at the centre of the cell obtained by adjusting each exit-cell coordinate one cell toward the foundation rectangle: an x coordinate at or above *x*₀ + *W* is reduced by 1, one below *x*₀ is raised by 1, and otherwise it is unchanged; y uses *y*₀ and *H* in the same way. These are integer cell operations with no rounding. For a nonempty foundation this is the neighbouring foundation cell; the same adjustment defines a door release for the 0 × 0 word without presuming a foundation cell exists. When the exit cell is the door cell of a door kind the type has, the type's exit displacement is added. Its facing is the direction from *c* to the exit cell's centre, rounded to 256 steps. It saves *K*'s rally point as guard spot; contact, tether and subsequent destinations follow S-0417 claim 10, with jumpjet ascent reports governed by S-0417 claim 15. With a rally point outside the unit's own cell, ordinary infantry walks first to the exit cell and then to the rally point. Infantry of a jumpjet type and types marked as teleporting head straight to the rally point. With no rally point, or one in the unit's own cell, the release gives no destination; any later walk-out remains S-0417 Open question 3. Result *released*. |
-    | Aircraft factory | When *K* has a docking place that is empty or already in contact with this aircraft, the aircraft appears docked at the position of claim 15, facing the game-wide pose direction (Import mapping) × 256 units. With a rally point, a type that need not return to a dock gets a move order to it. Result *released*. Otherwise a type that must return to a dock (S-0407, Import mapping) gives *failed*. Any other aircraft enters from the edge of the local area (S-0009, claim 4: (*L*ₓ, *L*ᵧ, *L*w, *L*h) and map width *M*). Let *Q* = (*L*ₓ + *L*ᵧ + 1, *M* − *L*ₓ + *L*ᵧ), and let (*b*ₓ, *b*ᵧ) be *c*'s cell. Define the start cell *S* by these cases:
+    | Aircraft factory | When *K* has a docking place that is empty or already in contact with this aircraft, the aircraft appears docked at the position of claim 15, facing the game-wide pose direction (Import mapping) × 256 units. With a rally point, a type that need not return to a dock gets a move order to it. That move order is the release's own: the release gives the aircraft the rally point as its destination and queues *move*, and it is not a behaviour order of S-0213 claim 5 (S-0501 claim 48 (d)). Result *released*. Otherwise a type that must return to a dock (S-0407, Import mapping) gives *failed*. Any other aircraft enters from the edge of the local area (S-0009, claim 4: (*L*ₓ, *L*ᵧ, *L*w, *L*h) and map width *M*). Let *Q* = (*L*ₓ + *L*ᵧ + 1, *M* − *L*ₓ + *L*ᵧ), and let (*b*ₓ, *b*ᵧ) be *c*'s cell. Define the start cell *S* by these cases:
 
 | Condition | Start cell *S* |
 |---|---|
@@ -546,12 +546,17 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
       Unloading, initial infantry destinations and post-contact rules inherit S-0417's backing
       (claims 10 to 12, scenarios U10 and U12); jumpjet ascent release and destination
       effects inherit S-0417 claim 15's backing and limitations (U14).
-      The contact count, exit-candidate entry test
-      and nearby-aircraft destination inherit claim 14's backing and U13 scenarios.
+      The contact count, exit-candidate entry test and nearby-aircraft destination inherit claim
+      14's backing and U13 scenarios. That the aircraft factory row's rally move is the release's
+      own assignment and not a behaviour order has S-0501 claim 48's backing: `unmeasured`, since no
+      part of S-0501 scenario AC30 sets up a type that need not return to a dock released with a
+      rally point.
     - Confidence: medium (the results, the hand-off between vehicle factories, the appearance
       points and facings, the exit lists, the aircraft edge entry and its draw); low (the door
       cells); contact count, entry test and nearby destination inherit S-0417 claim 14's confidence.
-      The jumpjet ascent consequences inherit S-0417 claim 15's confidence.
+      The jumpjet ascent consequences inherit S-0417 claim 15's confidence. Medium for the aircraft
+      factory row's rally move being the release's own assignment and not a behaviour order, as
+      S-0501 claim 48 rates that routing.
 
 14. **Cloning buildings copy released infantry.** When an infantry factory building that is not
     itself a cloning building releases a unit by claim 13 and has found its exit cell, each
@@ -585,20 +590,28 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
     contact place for its final position in the release tick; it does not stay at the
     undisplaced centre merely because it was not yet in contact before release.
 
-    All coordinates and displacements are signed 32-bit integers in leptons. Addition wraps
-    into that range as S-0205 claim 1 specifies; there is no floating-point calculation or
-    rounding. The displacement is not rotated by the aircraft's pose facing, and the exit
-    displacement used for vehicles or infantry does not contribute. Choosing this position
-    takes no random draw. Claim 13 still governs failed placement and full docks, and
-    S-0417 claim 11 governs contact and tether timing.
+    All coordinates and displacements are signed 32-bit integers in leptons. Addition wraps into
+    that range as S-0205 claim 1 specifies; there is no floating-point calculation or rounding. The
+    displacement is not rotated by the aircraft's pose facing, and the exit displacement used for
+    vehicles or infantry does not contribute. Choosing this position takes no random draw. Claim 13
+    still governs failed placement and full docks, and S-0417 claim 11 governs contact and tether
+    timing. This claim governs the release only: the height component is applied only at a factory
+    release, which puts the aircraft at this position, height included, and S-0501 claim 48 governs
+    what follows. An aircraft that docks by landing is moved toward the docking position
+    horizontally and rests at the landing height (S-0501 claim 24).
     - Backing: `measurable` (scenario P13) for ordinary release positions and tested import
       branches. The zero-count and out-of-count contact-index fallbacks are `unmeasured`:
       no P13 release establishes an aircraft contact in either state, so a failed release
       or an edge entry cannot confirm which pad position that contact would select.
       The no-draw assertion for position selection alone is `unmeasured`: P13 cannot
       distinguish such a draw from unresolved initial-placement draws during the same release.
+      That docking by landing moves the aircraft horizontally and leaves the height component
+      unapplied has S-0501 claim 24's backing: `measurable` (S-0501 scenarios AC30 part k (1) and
+      AC14).
     - Confidence: high (position formula, flags, count branches and no position-selection draw),
-      medium (contact-place selection and final position within the release tick)
+      medium (contact-place selection and final position within the release tick); medium, until
+      S-0501 scenarios AC30 part k (1) and AC14 run, for docking by landing's horizontal move and
+      unapplied height, as S-0501 claim 24 rates them
 
 ## Formulas
 
