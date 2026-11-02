@@ -669,12 +669,7 @@ pub fn spawn_in_play(
         .unwrap_or_else(|| panic!("no {kind:?} type {name}"));
     let id = crate::objects::create(w, kind, ti, Some(HouseId(house)));
     if !crate::objects::place_in_play(w, id, cell, v) {
-        let made: Vec<ObjectId> = w.objects.range(id..).map(|(&k, _)| k).collect();
-        for x in made {
-            w.mind.controllers.remove(&x);
-            w.spawned.launcher.remove(&x);
-            w.objects.remove(&x);
-        }
+        crate::objects::discard_unplaced(w, id);
         return None;
     }
     if let Some(o) = w.obj_mut(id) {
