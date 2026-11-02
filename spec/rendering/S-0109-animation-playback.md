@@ -2,11 +2,11 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 41
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425, Q-1716, Q-1717]
 supersedes: []
@@ -819,6 +819,7 @@ pass* and *update order* as in S-0203.
     | Projectile trailer | during the projectile's turn, before its movement and any detonation that turn (S-0306 claim 16); its creator gives it an initial loop delay of 1 update, repeat factor 1 and no reverse request |
     | Moving ship's wake | during the ship's own turn, after locomotor movement (S-0504 claim 2) |
     | In-place vehicle deploy or undeploy presentation | during the vehicle's turn, with no initial loop delay and repeat factor 1; no reverse request for deploy, a reverse request for undeploy (S-0517 claim 7); the type's own reverse flag still applies (claim 8) |
+    | Aircraft damage smoke (S-0501 claim 37) | during the aircraft's own turn, right after its smoke chance draw, at the aircraft's position when that draw is taken, after the aircraft's own movement in that tick; created with no initial loop delay, repeat factor 1, no reverse request and no attachment (claim 22); its creation draws are claim 3's delay draw and claim 13's start-event draws, at the creation |
 
     Death and detonation therefore have no unconditional before/during/after classification.
     A projectile kill, an animation's damaging advance, or a death completed during an
@@ -852,8 +853,13 @@ pass* and *update order* as in S-0203.
       4, 5 and 8, S-0306 claim 16, S-0312 claim 1 and S-0504 claim 2's backing.
       Shot-animation creator settings and attachment have S-0301 claim 22's backing and
       confidence. Vehicle deploy presentations have S-0517 claim 7's backing (P1 C).
-    - Confidence: high for creation placement and the conditional rule; medium for the
-      minimal explosion/removal fixture before measurement
+      Aircraft damage smoke has S-0501 claim 37's backing: `measurable` (S-0501 scenario AC5
+      parts b to d) for its row and its delay draw. Its start-event draws are `unmeasured`
+      here: their composition belongs to claim 13.
+    - Confidence: high for creation placement and the conditional rule, aircraft damage smoke's
+      row and delay draw included; medium for the minimal explosion/removal fixture before
+      measurement, and for aircraft damage smoke's start-event draws, as S-0501 claim 37 rates
+      them
 
 ## Formulas
 
