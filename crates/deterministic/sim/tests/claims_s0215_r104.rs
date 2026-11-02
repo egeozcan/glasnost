@@ -18,7 +18,7 @@ use glasnost_rules::sim::WeaponType;
 use glasnost_sim::jump;
 use glasnost_sim::lift;
 use glasnost_sim::rules::{Behaviour, Kind};
-use glasnost_sim::world::{Layer, ObjectId, Target, World};
+use glasnost_sim::world::{Layer, ObjectId, Pos, Target, World};
 use lift_common::*;
 
 /// LIFTER (house 0) at (0, 0) grips VICT (house 1, computer-controlled) at
@@ -64,6 +64,11 @@ fn in_the_air_hunting_its_lifter() -> (World, ObjectId, ObjectId) {
     (w, l, v)
 }
 
+/// The jumpjet movement point.
+fn point(w: &World, v: ObjectId) -> Option<Pos> {
+    w.obj(v).unwrap().jump.as_ref().unwrap().dest
+}
+
 /// Claims every cell for a vehicle (`on`), so that no nearby cell
 /// qualifies for S-0307 claim 17's search, or releases those claims.
 fn block_every_cell(w: &mut World, on: bool) {
@@ -104,15 +109,14 @@ fn part_e_clearing_is_no_effective_clear_and_no_stop_follows() {
     // A destination farther from the target than m × r′: part e clears it.
     w.obj_mut(v).unwrap().dest = Some(Target::Cell(at(20, 20)));
     let moving = jump::moving(&w, v);
+    assert!(moving, "pulled in: a commitment to keep");
+    let before = point(&w, v);
     glasnost_sim::approach::step(&mut w, v);
     let o = w.obj(v).unwrap();
     assert!(o.lift.grip_without_dest, "part e's direct removal");
     run(&mut w, 1);
     assert!(lift::grips(&w, l, v), "the grip holds");
     assert_eq!(w.obj(v).unwrap().dest, None, "and it has no destination");
-    assert_eq!(
-        jump::moving(&w, v),
-        moving,
-        "no stop: the commitment is kept"
-    );
+    assert!(jump::moving(&w, v), "no stop: the commitment is kept");
+    assert_eq!(point(&w, v), before, "and the movement point");
 }
