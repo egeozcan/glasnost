@@ -2,11 +2,11 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 82
+revision: 83
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759]
 supersedes: []
@@ -1216,6 +1216,9 @@ The *order-level destination* is the destination that behaviours and factory rep
       When an override is in effect and that exception does
       not hold, the attacker reverts on the jump tick: it drops the jumping object if that object
       remains its target, but keeps a different target restored by the revert (S-0215 claim 10).
+      These drops are not S-0309 claim 27's or claim 28's, so they take no targeting-timer draw,
+      whatever a holder's timer shows (S-0309 claim 27: that reset belongs to the drops of those two
+      claims).
       Every projectile aimed at the jumping object loses its target, so a shot already in flight
       towards it misses (the same effect as becoming untargetable). A warp animation plays at the
       old point, then the departure sound at the old point. A parasite inside it exits before
@@ -1385,6 +1388,8 @@ The *order-level destination* is the destination that behaviours and factory rep
       the movement update after a jump, and D22 run 2 makes a single docking jump. The
       seize-time no-cell case in part b inherits
       S-0607 claim 23's `unmeasured` backing: no setup establishing it is known.
+      That part e's drops take no targeting-timer draw is `unmeasured`: no part here jumps a held
+      object with its own locomotor while a holder's timer is read.
     - Confidence: the seize-time no-cell case in part b inherits S-0607 claim 23's
       low confidence. Part a's vehicle destination restriction inherits S-0517 claim 9's
       confidence (high for refusal, low for the carried exception); jumpjet landing cancellation
@@ -1404,7 +1409,8 @@ The *order-level destination* is the destination that behaviours and factory rep
       in for a harvester-flag object; part c
       inherits S-0208 claims 19–20's confidence, high for
       position choice and draws and medium for search choices, bridge consequences and placement
-      conditions; low for part j's statement that nothing else changes
+      conditions; low for part j's statement that nothing else changes. Medium, not part e's
+      high, for its drops taking no targeting-timer draw (`unmeasured`, as above)
 
 21. **Teleporting locomotion after temporary driving (Q-0233).** The temporary drive of
     S-0417 claim 5 suspends the object's own teleporting movement; it does not make a new,
