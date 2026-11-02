@@ -1,9 +1,9 @@
 ---
 id: Q-2316
 title: Sparkles and target clearing of a warp member being erased, in its warp-only turns
-status: open
+status: answered
 related: [S-0513, S-0514, S-0203]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
