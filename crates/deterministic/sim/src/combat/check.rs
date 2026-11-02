@@ -327,6 +327,34 @@ pub fn check(
     slot: usize,
     with_range: bool,
 ) -> Answer {
+    answer(w, firer, target, slot, with_range, true)
+}
+
+/// The firing check without the range test and without the reasons of the
+/// moment that rank ahead of the target tests: the rearm countdown and the
+/// other rearming gates of rank 5, ammunition 0 (rank 7) and the cloak
+/// (rank 8). It answers whether the firing rules rule the target illegal,
+/// or the shot impossible, for the weapon in `slot`, as the attack rule of
+/// S-0214 claim 6 (e) asks: "other reasons for not firing at this moment
+/// (facing, reloading, rotating, range and so on) do not count". The
+/// ordinary check answers *rearming*, *out of ammunition* or *cloaked*
+/// ahead of the target tests of rank 9 (S-0301 claim 9; S-0304 claim 2),
+/// so it cannot answer that; without force-fire the attack cursor does not
+/// appear on an object those tests make illegal (S-0304 claim 2).
+pub fn check_lasting(w: &World, firer: ObjectId, target: Option<Target>, slot: usize) -> Answer {
+    answer(w, firer, target, slot, false, false)
+}
+
+/// The firing check, with the reasons of ranks 5 to 8 asked (`moment`) or
+/// passed over (S-0214 claim 6 (e)).
+fn answer(
+    w: &World,
+    firer: ObjectId,
+    target: Option<Target>,
+    slot: usize,
+    with_range: bool,
+    moment: bool,
+) -> Answer {
     let Some(o) = w.obj(firer) else {
         return Answer::Impossible;
     };
@@ -503,31 +531,34 @@ pub fn check(
     }
     let t = w.tick;
     let c = &o.combat;
-    // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
-    let sync = sync_tick(w, firer, slot, weapon);
-    // spec: S-0301 claim 1 and claim 9 rank 5 (the countdown runs below t + D, except in the sync tick)
-    if t < c.rearm_until && !sync {
-        return Answer::Rearming;
-    }
-    // spec: S-0301 claim 5 (a live effect of the asked weapon's own kind: rearming, rank 5)
-    if crate::emitters::own_effect_alive(w, firer, weapon) {
-        return Answer::Rearming;
-    }
-    // spec: S-0301 claim 13 (with a sync frame, the primary weapon gets rearming until the counter equals it)
-    if slot == 0 && gate_closed(w, firer, weapon) {
-        return Answer::Rearming;
-    }
-    // spec: S-0518 claim 6 (a supporter's pending beam: rearming; a building's pending delayed shot is answered at rank 4 above, S-0301 claim 9)
-    if c.support_beam.is_some() {
-        return Answer::Rearming;
-    }
-    // spec: S-0301 claim 9 rank 7 (ammunition 0)
-    if c.ammo == 0 {
-        return Answer::OutOfAmmo;
-    }
-    // spec: S-0301 claim 9 rank 8 and claim 12 (a weapon that needs the firer uncloaked: cloaked; an aircraft only while fully cloaked)
-    if crate::cloak::machine::needs_uncloak(w, firer, wr.decloak_to_fire) {
-        return Answer::Cloaked;
+    // spec: S-0214 claim 6 (e) and S-0304 claim 2 (reloading and the other reasons of the moment do not count against the attack rule, and without force-fire the cursor does not appear on an illegal object: ranks 5 to 8, the rearming, out-of-ammunition and cloaked answers that come before illegal, are passed over when it asks, so the target tests of rank 9 answer)
+    if moment {
+        // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
+        let sync = sync_tick(w, firer, slot, weapon);
+        // spec: S-0301 claim 1 and claim 9 rank 5 (the countdown runs below t + D, except in the sync tick)
+        if t < c.rearm_until && !sync {
+            return Answer::Rearming;
+        }
+        // spec: S-0301 claim 5 (a live effect of the asked weapon's own kind: rearming, rank 5)
+        if crate::emitters::own_effect_alive(w, firer, weapon) {
+            return Answer::Rearming;
+        }
+        // spec: S-0301 claim 13 (with a sync frame, the primary weapon gets rearming until the counter equals it)
+        if slot == 0 && gate_closed(w, firer, weapon) {
+            return Answer::Rearming;
+        }
+        // spec: S-0518 claim 6 (a supporter's pending beam: rearming; a building's pending delayed shot is answered at rank 4 above, S-0301 claim 9)
+        if c.support_beam.is_some() {
+            return Answer::Rearming;
+        }
+        // spec: S-0301 claim 9 rank 7 (ammunition 0)
+        if c.ammo == 0 {
+            return Answer::OutOfAmmo;
+        }
+        // spec: S-0301 claim 9 rank 8 and claim 12 (a weapon that needs the firer uncloaked: cloaked; an aircraft only while fully cloaked)
+        if crate::cloak::machine::needs_uncloak(w, firer, wr.decloak_to_fire) {
+            return Answer::Cloaked;
+        }
     }
     if let Some(tg) = target {
         // spec: S-0301 claim 9 rank 9 (a seeker type answers out of range, whatever the distance)
