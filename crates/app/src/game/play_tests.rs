@@ -1516,6 +1516,42 @@ fn claim_32_a_tap_widens_from_the_screen_to_the_map() {
     assert_eq!(said(&p), "MSG:NothingSelected");
 }
 
+/// spec: S-0701 claim 17 (r36: a tap that adds several objects gives one selection response, the first added object's, so one choice draw; none and no draw when it adds nothing) and S-0214 claim 32
+#[test]
+fn claim_17_a_tap_adding_several_objects_gives_one_response() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let (g1, g2) = (m[1], m[3]);
+    let far = own_gunr(&mut p, 9);
+    p.selection = vec![g1];
+    p.selected.clear();
+    // Two unselected candidates on the screen: both join, one response.
+    tap(&mut p, &[g1, g2, far], Reach::Screen);
+    assert!(p.selection.contains(&g2) && p.selection.contains(&far));
+    assert_eq!(p.selected, vec![g2], "the first added object only");
+    // A tap that adds nothing: no response entry, so no draw.
+    p.selected.clear();
+    tap(&mut p, &[], Reach::Map);
+    assert!(p.selected.is_empty());
+}
+
+/// spec: S-0701 claim 17 (r36: with the type-select role held, a click gives no response) and S-0214 claim 32 (held select, toggle select adding and removing)
+#[test]
+fn claim_17_a_held_type_select_click_is_silent() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let g1 = m[1];
+    let pool = m.clone();
+    p.selected.clear();
+    p.clear_selection();
+    assert!(p.expand_types(&[g1], &pool, false), "it adds objects");
+    assert!(p.selected.is_empty(), "held select");
+    p.expand_types(&[g1], &pool, false);
+    assert!(p.selected.is_empty(), "held toggle select, adding");
+    p.expand_types(&[g1], &pool, true);
+    assert!(p.selected.is_empty(), "held toggle select, removing");
+}
+
 /// spec: S-0214 claim 32 (if the selection is a single object that is not own, the tap first removes it)
 #[test]
 fn claim_32_a_single_foreign_object_is_removed_first() {
