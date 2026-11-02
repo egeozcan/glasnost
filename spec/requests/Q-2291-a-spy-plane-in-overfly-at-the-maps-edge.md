@@ -1,9 +1,9 @@
 ---
 id: Q-2291
 title: A spy plane in overfly at the map's edge, its heading, and the fly-back flag
-status: open
+status: answered
 related: [S-0501, S-0513, S-0522, Q-1776]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
