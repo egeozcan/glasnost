@@ -15,7 +15,8 @@
 //!    the `glasnost-synthetic:` marker.
 //! 3. Nothing under `measurements/local/` is tracked, and measurement
 //!    records with `value-visibility: local` show no numbers in the value and
-//!    spread columns of their Result table.
+//!    spread columns of their Result table. Labels there, such as `run 1`,
+//!    `Procedure step 4` or `E1`, are not numbers.
 //! 4. No real-install or home-directory paths in text files, and no
 //!    `LOCAL.md` or `.claude/settings.local.json`.
 //! 5. No file larger than 1 MiB.
@@ -265,7 +266,7 @@ pub fn check_measurement(path: &str, text: &str) -> Vec<String> {
         for &i in &columns {
             if cells
                 .get(i)
-                .is_some_and(|c| c.chars().any(|ch| ch.is_ascii_digit()))
+                .is_some_and(|c| without_labels(c).chars().any(|ch| ch.is_ascii_digit()))
             {
                 out.push(format!(
                     "{path}:{}: value-visibility is local, but the Result table shows a number; \
@@ -273,6 +274,97 @@ pub fn check_measurement(path: &str, text: &str) -> Vec<String> {
                     n + 1
                 ));
             }
+        }
+    }
+    out
+}
+
+/// Words whose following number names a run, step or seed of the record's
+/// own procedure, not a measured value. The plural forms may take a list
+/// ("attempts 1 and 3", "launches 1, 2, 3").
+const LABEL_WORDS: &[&str] = &["run", "step", "attempt", "seed", "launch"];
+const LABEL_WORDS_PLURAL: &[&str] = &["runs", "steps", "attempts", "seeds", "launches"];
+
+/// `cell` with its labels blanked out, so that only numbers that may be
+/// values remain. Labels are names that carry a digit (`E1`, `P3`,
+/// `special-1`, `S-0202`) and the numbers right after a label word
+/// (`run 1`, `Procedure step 4`, `attempts 1 and 3`). A number written in
+/// groups (`seed 39 557 213`) is a value, not a label.
+fn without_labels(cell: &str) -> String {
+    // Tokens: runs of ASCII letters and digits, with inner hyphens.
+    let mut tokens: Vec<(usize, usize)> = Vec::new();
+    let mut start = None;
+    for (i, ch) in cell.char_indices().chain([(cell.len(), ' ')]) {
+        let part = ch.is_ascii_alphanumeric() || (ch == '-' && start.is_some());
+        match (start, part) {
+            (None, true) => start = Some(i),
+            (Some(s), false) => {
+                let end = s + cell[s..i].trim_end_matches('-').len();
+                tokens.push((s, end));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    let text = |t: (usize, usize)| &cell[t.0..t.1];
+    let gap = |a: (usize, usize), b: (usize, usize)| cell[a.1..b.0].trim();
+    let is_number = |t: (usize, usize)| {
+        let w = text(t);
+        w.starts_with(|c: char| c.is_ascii_digit())
+            && w.chars().all(|c| c.is_ascii_digit() || c == '-')
+    };
+
+    let mut blank = vec![false; tokens.len()];
+    for (k, &t) in tokens.iter().enumerate() {
+        let w = text(t);
+        if w.starts_with(|c: char| c.is_ascii_alphabetic()) && w.chars().any(|c| c.is_ascii_digit())
+        {
+            blank[k] = true;
+            continue;
+        }
+        let lower = w.to_ascii_lowercase();
+        let plural = LABEL_WORDS_PLURAL.contains(&lower.as_str());
+        if !plural && !LABEL_WORDS.contains(&lower.as_str()) {
+            continue;
+        }
+        let mut last = k;
+        let mut taken = Vec::new();
+        while let Some(&t) = tokens.get(last + 1) {
+            let mut num = last + 1;
+            if !taken.is_empty() {
+                // A list goes on after a comma, a dash, "and" or "to".
+                let sep = gap(tokens[last], t);
+                if !plural {
+                    break;
+                }
+                if sep.is_empty() && matches!(text(t), "and" | "to") {
+                    num += 1;
+                } else if !matches!(sep, "," | "–") {
+                    break;
+                }
+            }
+            let Some(&n) = tokens.get(num) else { break };
+            let space_only = taken.is_empty() || num > last + 1;
+            if !is_number(n) || (space_only && !gap(tokens[num - 1], n).is_empty()) {
+                break;
+            }
+            taken.push(num);
+            last = num;
+        }
+        let grouped = tokens
+            .get(last + 1)
+            .is_some_and(|&n| !taken.is_empty() && is_number(n) && gap(tokens[last], n).is_empty());
+        if !grouped {
+            for j in taken {
+                blank[j] = true;
+            }
+        }
+    }
+
+    let mut out = cell.to_owned();
+    for (k, &(s, e)) in tokens.iter().enumerate() {
+        if blank[k] {
+            out.replace_range(s..e, &" ".repeat(e - s));
         }
     }
     out
@@ -417,6 +509,44 @@ mod tests {
         let committed = record("| rate | ticks/s | 20 | 15 | 0 | 0 |")
             .replace("local # kept local", "committed");
         assert!(check_measurement("m.md", &committed).is_empty());
+    }
+
+    #[test]
+    fn labels_in_value_cells_are_not_numbers() {
+        let record = |value: &str| {
+            format!(
+                "---\nid: M-0001\nvalue-visibility: local\n---\n\n# M-0001: x\n\n\
+                 ## Result\n\n| Quantity | Value |\n|---|---|\n| q | {value} |\n"
+            )
+        };
+        for label in [
+            "equal to the control in run 1 (lists local)",
+            "as in Procedure step 4",
+            "in A5, B3 and B5 (counts local)",
+            "*special-1* starts; *active-1* stops",
+            "see S-0202, attempts 1 and 3, launches 1–2 and 2–3, Runs 4, 5",
+            "local in seed 0",
+        ] {
+            assert!(
+                check_measurement("m.md", &record(label)).is_empty(),
+                "{label}"
+            );
+        }
+        for value in [
+            "45",
+            "run 1: 45",
+            "56 in seed 0, 52 in seed 1",
+            "seed 39 557 213",
+            "launch 1: seed 39 556 602",
+            "every 2-shot burst",
+            "from 0 to 2 (Procedure step 4)",
+        ] {
+            assert_eq!(
+                check_measurement("m.md", &record(value)).len(),
+                1,
+                "{value}"
+            );
+        }
     }
 
     #[test]
