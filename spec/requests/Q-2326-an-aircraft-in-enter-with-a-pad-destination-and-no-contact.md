@@ -1,9 +1,9 @@
 ---
 id: Q-2326
 title: What a processing of enter does for an aircraft with a pad destination and no pad contact
-status: open
+status: answered
 related: [S-0501, S-0215]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
