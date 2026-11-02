@@ -2,11 +2,11 @@
 id: S-0204
 title: Coordinates, distance and facing
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0077, Q-0610]
 supersedes: []
@@ -128,11 +128,12 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
    squares of cell differences, and *r*(65536 × *m*) = 256 × *r*(*m*) exactly. For *m* below 16384
    (pairs of cell centres less than 128 cells apart) the result equals ⌊√*n*⌋. From *m* = 16393 on
    it is often short, and the first *m* that is 2 leptons or more short is 32770: of the 82489
-   non-zero values of *m* that cells up to 511 apart can give, 23995 are exact, 22923 are one lepton short and the rest
-   are 2 to 8 leptons short. Our engine reproduces the table square root by default
-   (`quirks.table_root_distance`). That one switch covers every use of the table square root that
-   measures a distance: the object distances of this spec and the farthest-sum start-position rule
-   of S-0009, which measures each pair of start positions with the same table.
+   non-zero values of *m* that cells up to 511 apart can give, 23995 are exact, 22923 are one lepton
+   short and the rest are 2 to 8 leptons short. Our engine reproduces the table square root by
+   default (`quirks.table_root_distance`). That one switch covers every use of the table square root
+   that measures a distance: the object distances of this spec, among them S-0214's representative
+   distance and group centre point (S-0214 F1 and F9), and the farthest-sum start-position rule of
+   S-0009, which measures each pair of start positions with the same table.
    - Backing: `unmeasured` for the shortfall and exact arithmetic properties, including F1's
      rounding-mode dependence: no verified legal placement and range-source combination isolates
      the needed lepton-scale boundary. C3 is a conditional proposal, not established measurement
@@ -540,10 +541,10 @@ moment a rule asks for them; the order of the rules within a tick is S-0203's.
 
 ## Edge cases and quirks
 
-- **`quirks.table_root_distance`** (default: on, the original). Distances use the table square
-  root (claim 5, F1). Off: ⌊√*n*⌋, the exact integer square root. The switch is owned here and
-  covers both the object distances and the farthest-sum start-position rule of S-0009, which
-  has no switch of its own.
+- **`quirks.table_root_distance`** (default: on, the original). Distances use the table square root
+  (claim 5, F1). Off: ⌊√*n*⌋, the exact integer square root. The switch is owned here and covers
+  both the object distances (S-0214 F1 and F9 included) and the farthest-sum start-position rule of
+  S-0009, which has no switch of its own.
 - **`quirks.table_direction`** (default: on, the original). Directions follow F3 exactly: the
   tabulated arctangent with its index step and the 50 table exceptions, the single-precision π/2 on
   the north–south axis, and the scale −32767/π with truncation, so that the axis directions are 0,
