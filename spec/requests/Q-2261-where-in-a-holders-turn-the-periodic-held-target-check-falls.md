@@ -1,9 +1,9 @@
 ---
 id: Q-2261
 title: Where in a holder's turn the periodic held-target check falls
-status: open
+status: answered
 related: [S-0309, S-0215, S-0301, S-0203]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
