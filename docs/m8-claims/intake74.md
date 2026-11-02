@@ -3,7 +3,7 @@
 - **S-0309** r70 to r94 (28fbbcc, from 5f2b926). Answers **Q-2261** to **Q-2264**, intake 68's
   interims for claim 29 (the periodic held-target check), and adds claim 25 part k (the allied
   held-target drop) with scenario A6 part p runs p8 to p10.
-- **S-0215** r91 to r103 (593d891).
+- **S-0215** r91 to r103 (593d891), and r104 (5917193, pushed during the intake).
 - **S-0214** r64 to r68 (24207de).
 - **S-0213** r94 to r96 (529b790).
 - **S-0203** r40 to r42 (f1a50d1).
@@ -115,6 +115,16 @@ They are re-armed or re-timed, and no assertion is loosened:
 | 32, the periodic check note | By construction (S-0309 claim 29 above) |
 | F6, the reset at the drops of claims 27 and 28, none during game set-up | Existing (`held::timer_draw`); no holder holds a target during our set-up, so the set-up exception holds by construction |
 | B16 part e: maximum ammunition 0, no initial value | Tested: `claims_s0301::s0215_b16_e_zero_maximum_ammunition_returns_to_guard` (out of ammunition from the attack order; target cleared, guard current, 1 tick, no draw) |
+
+### S-0215 r104
+
+r103 to r104 (5917193), pushed during the intake. It adds two sentences to claim 37, both citing
+S-0607 claim 9 (r38). Backing: unmeasured, confidence medium.
+
+| claim | status |
+|---|---|
+| 37 part c: the step's drop (part d) and its failed search with no nearby cell (S-0307 claim 17) give a gripped unit no destination, so while it has one they end its grip | Existing: both write an empty destination (`approach::step`, `approach::search`), and `lift::steer` (jumpjet) and `lift::enforce` (stand-in) end a grip whose unit has no destination unless part e removed it (`grip_without_dest`). Cited. Tested: `claims_s0215_r88::a_seized_unit_hunting_its_lifter_drops_it_and_the_grip_ends` (part d), new `claims_s0215_r104::a_failed_search_with_no_nearby_cell_ends_the_grip` (an armed victim in the air hunting its lifter, out of range, part e keeping the grip's destination, every cell claimed for the search: target dropped, no destination, the grip ends, the unit still seized, the lifter keeps its target) |
+| 37 part e: the clearing removes the destination directly, no effective clear in S-0502 claim 24's sense, no jumpjet stop | Existing (`lift::destination_removed`). Cited. Tested: `claims_s0607_r33::claim_9_part_e_clearing_keeps_the_grip_and_the_pull`, new `claims_s0215_r104::part_e_clearing_is_no_effective_clear_and_no_stop_follows` (in the air: the grip holds, no destination, the commitment unchanged) |
 
 ### S-0214 r68
 
