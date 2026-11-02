@@ -224,17 +224,52 @@ fn a_unit_heading_for_a_crate_in_guard_is_on_its_way() {
     assert_eq!(moves(&brain.think(&w), c).len(), 1, "a unit is sent again");
 }
 
-// S-0520, PLAN §4.7 (design: a unit that did not keep its crate order is not sent at that crate again for a while, M8 AI seams): a unit that leaves its cell for the crate and drops the order on the way each time is not sent at the crate again every think.
+/// Puts a second crate (place `key`) on `c`, explored for house 0.
+fn add_crate(w: &mut World, key: u16, c: CellXY) {
+    let o = w
+        .rules()
+        .overlays
+        .iter()
+        .position(|o| o.crate_)
+        .map(|i| i as u8);
+    if let Some(o) = o
+        && let Some(cell) = w.cells.grid.get_mut(c)
+    {
+        cell.overlay = o;
+    }
+    w.crates.places.insert(
+        key,
+        Place {
+            cell: c,
+            start: w.tick,
+            life: 100_000,
+            trigger: false,
+        },
+    );
+    glasnost_sim::econ::shroud::area_reveal(w, HouseId(0), Pos::centre(c, 0), 2);
+}
+
+// S-0520, PLAN §4.7 (design: a unit that did not keep its crate order is sent at no crate for a while, M8 AI seams): a unit that leaves its cell for the crate and drops the order on the way each time is not sent at the crate again every think, nor at another crate instead.
 #[test]
 fn a_unit_that_keeps_dropping_the_order_is_not_resent_every_think() {
     let g = game();
     let (mut w, unit, c) = scene(&g, true);
     let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
     let mut sent = 0;
+    let other = CellXY::new(c.x - 4, c.y + 3);
     for step in 0..10 {
-        if moves(&brain.think(&w), c).contains(&unit) {
+        if step == 4 {
+            add_crate(&mut w, 1, other);
+            assert!(glasnost_sim::crates::is_crate(&w, other));
+        }
+        let orders = brain.think(&w);
+        if moves(&orders, c).contains(&unit) {
             sent += 1;
         }
+        assert!(
+            !moves(&orders, other).contains(&unit),
+            "sent at the other crate at step {step}"
+        );
         // It walks a cell, then drops the order there and stands in guard,
         // free again (the memory does not block it: it left its cell).
         let o = w.obj_mut(unit).unwrap();
@@ -252,7 +287,10 @@ fn a_unit_that_keeps_dropping_the_order_is_not_resent_every_think() {
     // After a while it may be tried again.
     w.tick += 15 * 600;
     let orders = brain.think(&w);
-    assert!(moves(&orders, c).contains(&unit), "{orders:?}");
+    assert!(
+        moves(&orders, c).contains(&unit) || moves(&orders, other).contains(&unit),
+        "{orders:?}"
+    );
 }
 
 // S-0520, PLAN §4.7: it sees only what its house has explored.
