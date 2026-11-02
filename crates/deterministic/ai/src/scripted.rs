@@ -57,7 +57,7 @@ use std::collections::BTreeMap;
 
 use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;
-use glasnost_sim::combat::{check, weapon};
+use glasnost_sim::combat::{check, range, weapon};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
@@ -425,7 +425,10 @@ pub fn idle(w: &World, id: ObjectId) -> bool {
 /// unit stays where it is (guard never pursues, S-0215 claim 24). A person
 /// sees such a unit standing still and gives it an order; so does the
 /// script, which would otherwise leave a home guard idle while the enemy
-/// destroys the base.
+/// destroys the base. Whether the target is stale is asked whatever the
+/// moment (M8 AI seams): a unit that is rearming would otherwise answer
+/// *rearming* ahead of the target tests and the range test, and keep a
+/// target its weapon may not hurt, or one out of its range.
 fn stale_guard_target(w: &World, o: &Object) -> bool {
     let resting = matches!(
         o.beh.current,
@@ -435,12 +438,16 @@ fn stale_guard_target(w: &World, o: &Object) -> bool {
     if !resting {
         return false;
     }
-    let (slot, weapon) = weapon::would_use(w, o.id, Some(t));
-    weapon.is_none()
+    let t = Some(t);
+    let (slot, wp) = weapon::would_use(w, o.id, t);
+    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the firing check without the range test and without the reasons of the moment of ranks 5 to 8, so that rank 5's rearming hides neither rank 9's target tests, a seeker's out-of-range answer among them, nor the range answer, which is tested on its own below)
+    wp.is_none()
         || matches!(
-            check::check(w, o.id, Some(t), slot, true),
+            check::check_lasting(w, o.id, t, slot),
             check::Answer::OutOfRange | check::Answer::Illegal | check::Answer::Impossible
         )
+        // spec: S-0307 claims 1 to 11 (the range test of the weapon it would use)
+        || !range::in_range(w, o.id, wp, t, None)
 }
 
 /// Whether unit `id` can attack enemy `e` at all, as its cursor shows: the
