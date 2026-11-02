@@ -2,11 +2,11 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 37
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
 Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
@@ -566,11 +566,19 @@ New terms:
     - **Against its gripped unit.** A firing check by the lifter against its own gripped unit
       answers *rearming*, with any weapon. This answer comes ahead of every test of the target's
       layer, height, kind or armour and of every projectile test, so a gripped unit that is in the
-      air never gets *illegal* or *impossible* from its lifter. Of S-0301 claim 9's rank-4 answers
-      it is preceded only by the materialising firer's *rearming* and by the refusal of a firer that
-      is bound to a slave master. The lifter therefore keeps the gripped unit as its target through
-      the pull: neither that check nor any other rule of this spec drops it. S-0215 claim 37
-      part a's per-tick drop can (below), and the grip lasts until an event of claim 12.
+      air never gets *illegal* or *impossible* from its lifter through those tests. Of S-0301 claim
+      9's rank-4 answers it is preceded only by the materialising firer's *rearming*, by the refusal
+      of a firer that is bound to a slave master and, for an infantry lifter, by the answers that an
+      infantry firer is asked first (S-0301 claim 9, *Grip refusals within rank 4*): the infantry
+      healer's *illegal* (S-0310 claim 11), the keep-acting *illegal* against a vehicle that is
+      melee-linked to an object other than the lifter, and any answer that S-0310's open question on
+      dying and falling sequences settles as asked first. A lifter that gets none of those keeps the
+      gripped unit as its target through the pull: neither that check nor any other rule of this
+      spec drops it, though S-0215 claim 37 part a's per-tick drop can (below). An infantry lifter
+      that gets one of those *illegal* answers against its gripped unit drops it as its target as
+      S-0301 claim 9 gives for that firer, at S-0309 claim 29's check or through its firing step's
+      reply. The grip stays, as claim 12 has no row for a target change. In every case the grip
+      lasts until an event of claim 12.
     - **No approach against its gripped unit.** A mobile lifter takes no approach step against
       the unit it grips while that unit is its target, in every behaviour, unless one of the
       crushing or balloon-hover approaches of S-0215 claim 37 part h applies to the lifter. Those
@@ -609,15 +617,18 @@ New terms:
       own-effect gates of rank 5. It comes after the target's layer and projectile tests, so
       against an airborne target the beam cannot hit, that refusal wins.
     - Backing: `measurable` (scenario L9 parts c, d and f) for firing, target retention and
-      wave/grip outcomes. The absence of an approach step is `measurable`
-      (scenario L17) and not yet measured: M-0015 records neither destinations nor what ended a
-      hold. The part h exception and the per-tick drop are `unmeasured` here: they apply S-0215
-      claim 37 parts h and a unchanged (backed there, part a by its scenario B32 case d), and no
-      scenario of this spec gives a lifter a part h approach or makes its gripped unit's cell
-      unreachable while the unit is out of range. Exact precedence between refusal reasons with
-      identical observable effects is
-      `unmeasured`: those scenarios do not distinguish their rank.
-    - Confidence: high (the conditions, the gripped-unit answer and its precedence); medium (no
+      wave/grip outcomes. The absence of an approach step is `measurable` (scenario L17) and not yet
+      measured: M-0015 records neither destinations nor what ended a hold. The part h exception and
+      the per-tick drop are `unmeasured` here: they apply S-0215 claim 37 parts h and a unchanged
+      (backed there, part a by its scenario B32 case d), and no scenario of this spec gives a lifter
+      a part h approach or makes its gripped unit's cell unreachable while the unit is out of range.
+      Exact precedence between refusal reasons with identical observable effects is `unmeasured`:
+      those scenarios do not distinguish their rank. An infantry lifter's answers ahead of the
+      gripped-unit *rearming* and the drop they cause are `unmeasured`: no scenario of this spec
+      gives a lifter an infantry type.
+    - Confidence: high (the conditions, the gripped-unit answer and its precedence); low (an
+      infantry lifter's answers ahead of the gripped-unit *rearming* and the drop they cause, as
+      S-0301 claim 9 rates them); medium (no
       approach against the gripped unit, the part h exception, the per-tick drop, the
       building-attack sequence)
 
