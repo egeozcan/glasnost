@@ -2,11 +2,11 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 64
+revision: 66
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140]
 supersedes: []
@@ -2338,11 +2338,13 @@ cell, by table GC). Falsified if any of these differs.
   enemy tank out of range, no attack with or without force-fire: force-fire satisfies part (a)
   only and does not lift part (d), so the generic result is *nothing* (row G9), and no order is
   recorded. In range, an attack with or without force-fire (an attack order). (e): a test file
-  gives an own unit a weapon that cannot hit ground targets. Expected: without force-fire the
-  unit shows no attack (the fallback move, shown as no-move), and with force-fire it shows attack.
-  Falsified by an attack where this says none (in particular an attack out of range with
-  force-fire held), or none where it says attack. The bunker case is `measurable` only if a tank can be put in a bunker by the test map,
-  and otherwise the record says so and part (d) stays open (Open questions).
+  gives an own unit a weapon that cannot hit ground targets, and gives the unit's type
+  land-targeting mode 1 (with mode 0, the default, such a weapon is offered the attack on an
+  object target: S-0306 claim 23). Expected: without force-fire the unit shows no attack (the
+  fallback move, shown as no-move), and with force-fire it shows attack. Falsified by an attack
+  where this says none (in particular an attack out of range with force-fire held), or none where
+  it says attack. The bunker case is `measurable` only if a tank can be put in a bunker by the
+  test map, and otherwise the record says so and part (d) stays open (Open questions).
 - *Part D, a falling actor (claim 6 (e)).* Use S-0522 scenario P10's setup for orders during the
   fall (fresh human-owned payload infantry, scripted input, the record each tick), with an armed
   payload infantry type and an enemy building in weapon range of the predicted landing cell that
