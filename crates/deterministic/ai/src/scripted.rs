@@ -1873,7 +1873,7 @@ impl Script {
                 let pick = *picks.entry(key).or_insert_with(|| {
                     by_home
                         .iter()
-                        .find(|&&(e, c)| self.reaches(w, id, region, c) && can_attack(w, id, e))
+                        .find(|&&(e, c)| can_attack(w, id, e) && self.reaches(w, id, region, e, c))
                         .map(|&(_, c)| c)
                 });
                 let goal = pick.or_else(|| {
@@ -1926,10 +1926,22 @@ impl Script {
     }
 
     /// Whether unit `id`, in reach region `region` ([`Script::reach_region`]),
-    /// goes for an enemy at cell `c`: `c` lies in that region, or the unit
+    /// goes for enemy `e` at cell `c`: `c` lies in that region, or the unit
     /// has none, or it is a ship (it fires from the water nearest the
-    /// enemy, as a person sends ships to the water off an enemy base).
-    fn reaches(&self, w: &World, id: ObjectId, region: Option<u32>, c: CellXY) -> bool {
+    /// enemy, as a person sends ships to the water off an enemy base), or
+    /// `e` stands on the land of another region and the unit's weapon
+    /// reaches it from a cell of its own region (a person drives
+    /// a long-range gun to the shore facing an enemy across the water;
+    /// [`Script::reachable`] then sends it to the region's cell nearest
+    /// `c`, which is in range if any is).
+    fn reaches(
+        &self,
+        w: &World,
+        id: ObjectId,
+        region: Option<u32>,
+        e: ObjectId,
+        c: CellXY,
+    ) -> bool {
         let Some(r) = region else { return true };
         let Some(zone) = w
             .obj(id)
@@ -1938,8 +1950,33 @@ impl Script {
         else {
             return true;
         };
-        zone == glasnost_rules::sim::MovementZone::Water
+        if zone == glasnost_rules::sim::MovementZone::Water
             || regions::reach_in(w, c, zone) == Reach::Region(r)
+        {
+            return true;
+        }
+        // design: a ground unit whose weapon reaches an enemy on the land of another region from a usable cell of its own region goes for it, so that a long-range gun is not left at home on an island map (M8 AI seams: the launcher of the island tech climb sat 22 cells from enemies on the far shore while a shore cell had them at 10); an enemy on the water is not one (a person does not send a tank to stand at the shore by a ship)
+        if !matches!(regions::reach_in(w, c, zone), Reach::Region(_)) {
+            return false;
+        }
+        let (slot, wp) = weapon::would_use(w, id, Some(Target::Object(e)));
+        if wp.is_none() {
+            return false;
+        }
+        // spec: S-0307 claim 13 (the firer's weapon range, leptons)
+        let range = i64::from(range::firer_weapon_range(w, id, slot));
+        // spec: S-0204 claim 2 (a cell is 256 leptons)
+        let lepton = 256i64;
+        let cells = (range + lepton - 1) / lepton;
+        let span = i32::try_from(cells).unwrap_or(i32::MAX);
+        (-span..=span).any(|dy| {
+            (-span..=span).any(|dx| {
+                let k = CellXY::new(c.x + dx, c.y + dy);
+                dist2(k, c) * lepton * lepton <= range * range
+                    && w.cells.usable(k)
+                    && regions::reach_in(w, k, zone) == Reach::Region(r)
+            })
+        })
     }
 
     /// Whether unit `id` is infantry that cannot walk to `goal`: it stands
