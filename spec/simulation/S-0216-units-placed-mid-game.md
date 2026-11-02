@@ -2,13 +2,13 @@
 id: S-0216
 title: Units placed after the game has started
 topic: simulation
-revision: 37
+revision: 59
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
-measurements: [M-0001, M-0002, M-0003, M-0006, M-0017]
-requests: [Q-1711, Q-1713, Q-2096, Q-2098, Q-2099]
+approved-on: 2026-11-02
+measurements: [M-0001, M-0002, M-0003, M-0006, M-0017, M-0019]
+requests: [Q-1711, Q-1713, Q-2096, Q-2098, Q-2099, Q-2277]
 supersedes: []
 ---
 
@@ -20,9 +20,11 @@ What placing a newly created vehicle or infantry unit on the map does once the g
 ended: the facings it starts with, where an infantry unit stands in its cell, which random draws the
 placement takes and in which order, the entry test that can refuse it, and which behaviour is
 current before the unit's first update. It answers Q-1711 questions 2 and 3 for units placed by a
-play-time placement. Question 5, how the measurement records' units were placed, is open: M-0006
-shows that they were in play from tick 0 and where the archived logs place them, not how they
-came there (claim 7). Questions 1, 4 and 5 need an oracle run (Open questions). It answers
+play-time placement. Question 5, how the measurement records' units were placed, is answered in
+part: M-0006 shows that they were in play from tick 0 and where the archived logs place them,
+and M-0019 that their standing positions in the all-infantry games are claim 2's and that the raw
+values before tick 0 fit claim 3's draws (claim 7).
+Questions 1, 4 and the rest of 5 need an oracle run (Open questions). It answers
 Q-1713 in part (claim 6). For question 1, in the records' games no unit was placed on the cliff
 cells, since every unit stated on one was placed on a neighbouring cell (M-0006), so the
 request's premise does not hold for them. What ends those games stays open (Open questions).
@@ -34,7 +36,16 @@ take, and question 5 (which units stood off their stated cells in the records' g
 as M-0006 does. It answers Q-2098 in part: what our arena loads on the bunker cells, while the
 bunkers' kind and their fate in a stock game stay open. It answers Q-2099 in part: how our arena
 settles exact halves in its group counts, while question 1, what the records' harness gave, stays
-open. It leaves the records' own harness open. Placement by the map during the
+open. It answers Q-2277 question 1, except for several infantry units on one cell, and question
+2: the records' infantry stood at the standing positions of claim 2 in the all-infantry games,
+each at its own draw's, and in the other games, at tick 0, at positions of S-0208 table P, never
+the centre,
+and the totals of raw values count, before each unit, one try's for each cell of claim 8's
+order before its own, as
+claim 8 takes them (M-0019, the tries' attribution to cells inferred). Where several infantry units
+on one cell stood in the records stays open: M-0019 gives no finding of its own for that case,
+and PT2 part b tests claim 2's occupancy part (`measurable`, medium). Q-2277 question 3 stays open.
+Placement by the map during the
 game's set-up is S-0009's and S-0208's (claim 5), and is restated here only as a contrast.
 Skirmish only: campaigns and network games are out of scope.
 
@@ -119,17 +130,32 @@ S-0208 claim 3 reads it. In addition:
      names and takes no placement draw (S-0208 claim 5; S-0202 claim 10, map-loading table).
    - The choice for a unit placed above the ground of its cell (on a bridge deck) is not
      established (Open questions).
-   - Backing: `measurable` (scenario PT2 parts a and b for usable cells, part d for a cell holding a
-     vehicle, part e for a full row). The object-present refusal and its open-gate exception are
-     `unmeasured` here, as in S-0208 claim 3: no part of PT2 isolates them. The cell outside the
-     usable area is `unmeasured`: a placement there that is refused (S-0209 claim 4, part 4a) shows
-     no position, and whether one is refused is not established. PT2 part c records the outcome,
-     including whether a draw is taken.
-   - Confidence: medium for the usable-cell rule until PT2 runs: the table and its draw are
-     S-0208 claim 3's, but only S-0614 claim 20 states that a placement makes this choice, and
-     only for a returning parasite, as for claim 5. Medium for the failed placements and for the
-     object-present refusal and its open-gate exception (as in S-0208 claim 3); low for the cell
-     outside the usable area.
+   - Backing: `measured` (M-0019) for the usable-cell rule in the placements that put the records'
+     units on the map (claim 7) in the all-infantry games: in all 192 games of M-0002 with infantry
+     on both sides, every
+     placed infantry unit stands at tick 0 where this rule puts it for its draw R(0, 3), the last
+     of the scenario stream's raw values that its draws take (claim 3), at the right, left or
+     bottom position and never at the centre or top position. In the records' games with
+     vehicles every placed infantry unit stands at a position of S-0208 table P, never the centre,
+     and the raw values match claim 3's draws by their count only: that each unit stands at its
+     own draw's position is a reading there (claim 7). `measurable` for other placing steps
+     and for the occupancy record's part (units already standing in the cell), on which M-0019
+     gives no separate finding
+     (scenario PT2 parts a and b for usable cells, part d for a cell holding a vehicle, part e for
+     a full row). The object-present refusal and its open-gate exception are `unmeasured` here, as
+     in S-0208 claim 3: no part of PT2 isolates them, and M-0019's placements do not show them. The
+     cell outside the usable area is `unmeasured`: a placement there that is refused (S-0209
+     claim 4, part 4a) shows no position, and whether one is refused is not established. PT2 part
+     c records the outcome, including whether a draw is taken.
+   - Confidence: high for the usable-cell rule (the draw and the rows of table O) in the
+     placements of the records' units in the all-infantry games, as M-0019 measures it. Medium in
+     the records' games with vehicles, where the match of each position to its own draw is a
+     reading. Medium for the occupancy record's
+     part until PT2 part b runs. Medium for other placing steps until PT2 runs: they share the
+     rule, but only the records' placements and S-0614 claim 20's returning parasite show that a
+     placement makes this choice. Medium for the failed placements and for the object-present
+     refusal and its open-gate exception (as in S-0208 claim 3); low for the cell outside the
+     usable area.
 
 3. **Draws of a play-time placement, and their order.** A play-time placement takes, at the
    moment of placement, these draws from the scenario random stream, by kind of unit:
@@ -144,15 +170,65 @@ S-0208 claim 3 reads it. In addition:
    - any other vehicle: no draw.
 
    No other draw of the placement's own choices is known. Each placed unit's creation draw (S-0202
-   claim 10) comes before its placement draws, at its creation. So a placing step that creates and
-   places units one at a time takes, per unit and in its placing order: the creation draw, then
-   that unit's placement draw if any. Every one of these draws falls before the first tick at which
+   claim 10) comes before its placement draws, at its creation. A unit whose creation also makes
+   other objects, its initial slot objects (S-0506 claim 1) and any initial slave group (S-0402
+   claim 19), takes their creation draws as part of its creation, after its own and before its
+   placement draw, in S-0611 claim 14's order. So a placing step that creates and places units
+   one at a time takes, per unit and in its placing order: the creation draws, then that unit's
+   placement draw if any. Every one of these draws falls before the first tick at which
    the placed units are updated when the step runs between ticks, and they shift every later draw
    of the scenario stream. The land recompute that putting the unit into its cell makes (S-0211
    claim 5) keeps its own effects and draws, which this claim does not restate.
-   - Backing: `measurable` (scenario PT3)
-   - Confidence: medium for the standing-position draw and its order after the creation draw,
-     until PT3 runs, as claim 2 rates the rule. Medium for the visceroid draw at a play-time
+   - The records' units (M-0019). M-0019 counts the scenario stream's raw values (S-0202), not
+     draws. A creation draw (S-0202 claim 10) and the draw R(0, 3) (S-0202 claim 4) take exactly
+     one raw value each, and a draw R(0, 29) as many as S-0202 claim 4 takes at its place. So where
+     a run holds only creation draws and draws R(0, 3), they are as many as its raw values, in the
+     same order. Before tick 0 of the records' games, the raw values after the game-start ones
+     (claim 8's acceptance item) are as many as this claim's draws take for every object created,
+     each of the set-up's objects left off the map counted as claim 8 counts a refused try. In the
+     all-infantry games each infantry unit's draws took consecutive raw values, before the next
+     unit's, and its standing position is given by the draw R(0, 3) at the last of them (claim 2).
+     In the games with vehicles M-0019 compares that count only. Some games hold spawned objects
+     (M-0019's class: objects of a type no set-up entry names, created after the set-up's first
+     object, off the map at tick 0). That these are objects made by a unit's creation, S-0506's
+     slot objects or an initial slave group, is a reading, not identified by the recording, and
+     M-0019 relies on it for no count: its count takes the made objects' creation draws from the
+     creating unit's type. M-0019 does not attribute raw values to vehicles ("Which object took
+     which raw value is not identified in the games with vehicles"). In the all-infantry games the
+     placement draw of the last object placed takes the last raw value before tick 0 when that
+     object is an infantry unit.
+   - Backing: `measured` (M-0019) for the records' units. In all 1860 replays the count of raw
+     values from the seeding to the first tick equals the game-start count (claim 8's acceptance
+     item, *N*₀, found per seed in the all-infantry fits and taken by seed in the games with
+     vehicles) plus the raw values of this claim's draws, summed over every object created, the
+     objects that refused cells leave off the map counted as claim 8's tries. In the 192
+     all-infantry games a model with this claim's draws per object, consecutive and in creation
+     order, fits every standing position with one start only, the draw R(0, 3) at the last of each
+     object's raw values giving the position, and the last object's last raw value is the last
+     before tick 0. A model with one raw value fewer, or one more, for every object fits in no
+     game. The recording does not show which raw value each creation or placement took. That an
+     infantry object's raw values before its R(0, 3) are its creation draws is inferred from the
+     counts and the fit. M-0019 classes the spawned objects by creation order only; their being
+     objects made by a unit's creation is a reading, on which no count depends. `measurable` for
+     the visceroid draw and its count of raw values (scenario PT3's second run, and PT5 for its
+     place after the entry test): M-0019 does not attribute raw values to vehicles. `measurable`
+     for other placing steps (scenario PT3).
+     Where the made objects' draws fall, after the unit's own creation draw and before its
+     placement draw, follows from S-0506 claim 1 and S-0402 claim 19, which make them at the unit's
+     creation. It is not measured here (the records' totals do not order them). It is `measurable`:
+     for slot objects by scenario PT3's third run, for an
+     initial slave group by its fourth run.
+   - Confidence: high in the all-infantry games of the records: each infantry object's draws on
+     consecutive raw values in creation order, the standing-position draw last (M-0019). High that
+     in every game the raw values after the game-start ones are as many as this claim's draws take
+     for every object created, as claim 8 counts a refused try (M-0019). Medium that the spawned
+     objects are objects made by a unit's creation, a reading. Medium for the order of these draws
+     per object in the games with vehicles, where only the count is compared. Medium that an
+     infantry unit's raw values before its R(0, 3) are its creation draws (inferred).
+     Medium for other placing steps until PT3 runs, as claim 2 rates the rule there. Medium for
+     where slot objects' draws fall, until PT3's third run, and for where an initial slave
+     group's fall, until its fourth run. Medium for
+     the visceroid draw at a play-time
      placement and for its coming only after the entry test has accepted the vehicle, until PT3
      and PT5 run: no other spec states this order (S-0009 claim 46 gives the set-up draw, where
      the test is skipped, as `unmeasured`, and rates medium that it is the only draw of a
@@ -303,17 +379,34 @@ S-0208 claim 3 reads it. In addition:
 
 7. **Units of the measurement records.** The units of M-0001, M-0002 and M-0003 were in play in the
    tick-0 state of the 32 replayed games of M-0006 (the replays' per-tick records hold them from
-   tick 0). How they came to be there is not observed, so whether the game placed them by a
-   play-time placement, and so whether claims 1 to 5 hold for them, is open (Open questions, *Q-1711
-   question 5*).
+   tick 0). M-0019 reads their tick-0 state in all 1860 replays. In the all-infantry games every
+   placed infantry unit stands at one of claim 2's standing positions, each where claim 2 puts it
+   for its draw, and the raw values taken before tick 0 hold each infantry object's draws
+   consecutively in creation order, the last giving the standing-position draw (claim 3). That the
+   raw values before it are the creation draws is claim 3's inference. In the other games every
+   placed infantry unit stands at a position of S-0208 table P, never the centre, the raw values
+   match claim 3's draws by their count, and that each infantry unit stands at its own draw's
+   position is a reading.
+   Before each unit there are as many of the
+   set-up's objects off the map at tick 0, created after the previous unit (spawned objects,
+   M-0019's class, are not among them), as there are cells before its own in claim 8's order. None
+   of them is present at the next tick, each is of that unit's type and house, and the count of
+   raw values takes each as claim 8 takes a refused try, in every game. That each such object is the
+   try of one
+   refused cell, and which cells were tried, are read from that count, not identified by the
+   recording. So the records' units of the all-infantry games were placed as claims 2 and 3 give a
+   play-time placement, and the other games' positions and totals agree with it. Whether claim 5's
+   entry test refused their cells, and whether claims 1 and 4 hold for them, is not observed (Open
+   questions, *Q-1711 question 5*).
    - Moved units. M-0006 reads every unit's placed cell from the archived logs of all 1860 games. In
      some games some side-A units were placed on a cell next to their stated cell. No side-B unit
      was moved, and every unit was placed. M-0001's Setup says that a unit that its stated cell does
      not take stands on a free neighbouring cell, and that infantry take one cell each. The logs
      place more than one unit on some cells (M-0006), so the one-cell-each statement does not hold
      for those cells, and a "free" neighbouring cell there is one that accepts the unit, not an
-     empty one. Several infantry units in one cell are consistent with claim 2: a placement into a
-     cell that already holds infantry takes a free standing position of its row. Which nearby
+     empty one. Several infantry units in one cell do not contradict claim 2, by which a placement
+     into a cell that already holds infantry takes a free standing position of its row, but no
+     record gives which position such a unit took (Open questions). Which nearby
      cell each moved unit was placed on is a fact of the records' Setup,
      not a rule of the game.
    - Why those stated cells were taken M-0006 does not record. For the five *rock* cells of
@@ -325,19 +418,37 @@ S-0208 claim 3 reads it. In addition:
      (M-0006).
    - Backing: `measured` (M-0006) for the units' being in play at tick 0 in the 32 replayed games,
      from the replays' records, and for the stated and placed cells of the moved units that M-0006
-     lists, from the logs. `unmeasured` for the method by which the game placed the records'
-     units: no run observes how the archived games placed them, and M-0006 does not record why
-     units moved. PT5 part d tests claim 5's refusal rule itself, not that method.
+     lists, from the logs. `measured` (M-0019) for the standing positions, the raw values of the
+     draws, the count
+     of the set-up's objects off the map before each unit and their being of that unit's type and
+     house. For the raw values that is their grouping per object in creation order in the
+     all-infantry games, the raw values before an infantry object's R(0, 3) being its creation
+     draws inferred, and only their count in the games with vehicles (claim 3). That each off-map
+     object is one refused cell's try, and which cells were tried, are inferred from that count, not
+     identified by the recording. `unmeasured` for why a cell refused a unit: M-0006
+     does not record why units moved. PT5 part d tests claim 5's refusal rule itself.
    - Confidence: high for the units' being in play at tick 0 in the 32 replayed games and for the
-     moves from the five *rock* cells that M-0006 lists, as it reads them from the logs. Low that
-     the moves from the five *rock* cells are entry test refusals: that is inferred, and it does not
-     explain the other moves.
+     moves from the five *rock* cells that M-0006 lists, as it reads them from the logs. High for
+     the standing positions at claim 2's positions in the all-infantry games, and in the other
+     games for positions of S-0208 table P, never the centre, and medium there that each unit
+     stands at its own draw's position (a reading). High for the count of the objects off the map
+     and their being of the unit's type and house (M-0019). Medium that each is one refused cell's
+     try (inferred). For the
+     raw values: high for their count and grouping in the all-infantry games (each infantry
+     object's draws consecutive, in creation order, the standing-position draw last) and for their
+     count in every game. Medium that the raw values before an infantry object's R(0, 3) are its
+     creation draws, and medium for their per-object order in the games with vehicles, as claim 3
+     rates them. Low
+     that the moves from the five *rock* cells are entry test refusals: that is inferred, and it
+     does not explain the other moves.
 
 8. **Our arena's set-up (design).** Our engine's arena, the tool that sets up the games of the
    measurement records M-0001 to M-0003 and M-0017 on their map, follows the rules below. They are
-   rules of our own, not claims about the original: how the records' harness placed its units and
-   counted its groups is not established (claim 7, Open questions). They have no quirk switch.
-   M-0006's committed outcomes are their acceptance check.
+   rules of our own, not claims about the original. The records' placement is known by its
+   observed effects at tick 0 (claim 7, M-0019): the order, the draws, the standing positions and
+   the draws of refused cells below reproduce those effects. How the records counted their groups
+   is not established (Open questions). The rules have no quirk switch. M-0006's and M-0019's
+   committed outcomes are their acceptance check.
    - **Map objects (Q-2098, in part).** The arena loads the records' map as any game on that map
      is loaded (S-0009): every map entry that S-0009's loading creates is in play from tick 0 as
      the map gives it, the neutral house's buildings and vehicles and the terrain objects
@@ -348,13 +459,21 @@ S-0208 claim 3 reads it. In addition:
      in the arena's tick-0 state a building of the neutral house covers each of those four cells,
      whether one building or several. What the records' games had there, and what a stock game
      on the map does with them, stay open (Open questions).
-   - **Order.** The arena creates and places the units one at a time: side A's units first, in
-     increasing unit index *i* (the index of M-0006's stated-cell formula), then side B's in the
-     same way. Each unit is created, then tested and placed as below, before the next unit is
-     created. So the scenario stream takes, per unit and in this order, its creation draw and
-     then its placement draw if any (claim 3), and no unit's creation draw falls between another
-     unit's creation draw and that unit's placement draw. Each unit is first tried on its stated
-     cell.
+   - **Order.** The arena creates and places the units one at a time: the group of the row type of
+     the game's pairing first (the type that heads the pairing's row in M-0001 to M-0003, and
+     in M-0017), on whichever side it plays, in increasing unit index *i* (the index of
+     M-0006's stated-cell formula), then the other group in the same way. So in a game with the
+     row type on side B, side B's units come first (M-0019). Each unit is created, then tested and
+     placed as below, before the next unit is created. So the scenario stream takes, per unit and
+     in this order, its creation draws and then its placement draw if any (claim 3), and no draw
+     of another of the set-up's units falls between a unit's creation draw and its placement draw.
+     The objects that a unit's creation makes with it, its initial slot objects (S-0506 claim 1)
+     and any initial slave group (S-0402 claim 19), are not placed by this step: their creation
+     draws come with the unit's own, after it and before its placement draw, in S-0611 claim
+     14's order, for every kind of unit. Each object created, the unit and each object made with
+     it, takes one creation number right after its own creation draw, in that order (S-0611
+     F5), so later objects' identifiers follow from the order. Each unit is first tried on its
+     stated cell.
    - **The take test.** A cell *takes* a unit when the cell is inside the map's usable area by
      S-0009 claim 4's height-aware test (as S-0009 claim 5a applies it to object placement), the
      unit's entry outcome there, asked as claim 5 asks it, is *clear*, and:
@@ -366,9 +485,31 @@ S-0208 claim 3 reads it. In addition:
 
      A cell outside the usable area never takes a unit, so the case that claim 2 leaves open
      does not arise in the arena. A group of an aircraft-kind type is not covered here (Open
-     questions). The test is asked before the unit is placed and takes no random draw. So,
-     unlike claim 5's order for an ordinary play-time placement, a cell that refuses an infantry
-     unit leaves no standing-position draw behind.
+     questions). The test itself takes no random draw.
+   - **Draws of a refused cell.** Each cell that refuses the unit costs the draws of one try, a
+     unit of the unit's own type created for that cell, in this order and before the next cell is
+     tried: the try's creation draws as in *Order* (the unit's own, then those of the objects its
+     creation makes with it), then, for an infantry unit, one draw R(0, 3), taken whether or not
+     claim 2's first row would refuse the cell, whose result is not used. So for an infantry unit
+     of a spawner type, its slot objects' draws fall between its creation draw and that R(0, 3)
+     draw, as at a placement. The unit of a refused try never enters play: at the next tick no
+     object of it exists. Our engine keeps no object for it (design, a documented departure with
+     no switch, listed under *Edge cases and quirks*, as S-0611 claim 11 builds none for a unit
+     that is never placed), only the try's draws and its creation numbers. As S-0611 claim 11
+     retains them for its never-placed units, a refused try reserves one creation number for the
+     try's unit and one for each object its creation makes, each right after its own creation
+     draw, in *Order*'s sequence, as if the try's objects were built. So the creation numbers,
+     and with them the order of later objects' identifiers, are those of a set-up that built
+     every try's objects, as the original builds the try's unit off the map (Backing).
+     Whether the original's
+     off-map object has any other effect in tick 0, on a house's counts for instance, is
+     `unmeasured`, as there. The next cell is then tried as a new try, with its own creation draw,
+     and the unit that a cell takes has the draws of claim 3 there. So a unit placed on the *p*-th
+     cell of the order below (0 for its stated cell) is preceded by *p* refused tries. For a unit
+     whose creation makes no other object they take 2*p* draws for infantry and *p* for a vehicle.
+     A unit whose creation makes other objects adds, for each try, the creation draws of those
+     objects. M-0019's count of raw values takes each off-map object of the records as such a
+     try (claim 7).
    - **Moving on.** A unit that its stated cell does not take is tried on the eight neighbouring
      cells of its stated cell (*x*, *y*), in this order: (*x* − 1, *y* − 1), (*x*, *y* − 1),
      (*x* + 1, *y* − 1), (*x* − 1, *y*), (*x* + 1, *y*), (*x* − 1, *y* + 1), (*x*, *y* + 1),
@@ -390,6 +531,23 @@ S-0208 claim 3 reads it. In addition:
      lands on the cell the table names if the test refuses the cliff cells and the cell 126,79,
      and takes the cell the table names when its turn comes. Infantry sharing a cell fits
      M-0006's placed cells that hold more than one unit.
+   - **Acceptance (M-0019).** With the records' seeds 0 to 5, the first object's creation draw
+     (the first unit's, or its first try's when the first unit has refused tries) takes the
+     scenario stream's raw value at place *N*₀ of M-0019 (S-0202's stream sequence, x₀
+     at place 0). That is, the stream has taken 706, 709, 711, 718, 706 and 701 raw values since
+     the seeding, in every pairing. These count raw values, not draws: a ranged draw before the
+     set-up may take more than one (S-0202 claim 4), so the number of draws before the first
+     creation draw is not given. From there each draw takes the raw values S-0202 claim 4 gives it
+     (one each for a creation draw and a draw R(0, 3), claim 3), so every unit's draws and every
+     infantry unit's standing position at tick 0 follow from the raw values in order (each unit's
+     draws as claim 3 gives them, each refused try's draws as above, and claim 2's position).
+     M-0019 measures this per object in the records' all-infantry games, its model counting any
+     refused try as above. In the games
+     with vehicles it measures the count of raw values only, and the per-object order there rests
+     on claim 3's medium order. Draws taken
+     before the set-up are those of our engine's map loading and game start, as S-0202 claim 10
+     (its map-loading table) and claim 14 order them, which this claim does not restate. M-0019
+     counts their raw values only: which draws take them is not identified.
    - **Group counts (Q-2099, in part).** A group's count is its budget divided by its type's
      cost, rounded to the nearest integer, then held to the records' minimum and infantry cap
      (M-0001 Setup). An exact half goes to the even one of the two counts (Formulas). The rule is
@@ -401,13 +559,60 @@ S-0208 claim 3 reads it. In addition:
      engine's arena with test data, reaches the exact half, the minimum, the cap, the error stop
      and raised cells at the usable area's top and bottom edges, where the height-aware test and
      the plain test differ, which the records' groups need not reach. The acceptance items for
-     the arena's other groups are `unmeasured`. Whether the records' harness used
-     the same test, order, draws and rounding is `unmeasured` (Open questions).
+     the arena's other groups are `unmeasured`. `measured` (M-0019) for the records' side of the
+     order in the all-infantry games, per object (claim 3). In the games with vehicles the order is
+     a reading, `unmeasured`: M-0019 fits no per-object places there and does not attribute raw
+     values to vehicles. Also
+     `measured` (M-0019): the totals of raw values that the refused cells' tries and the placed
+     units give, the
+     M-0019 acceptance item,
+     and a count: in all 1860 replays, the set-up's objects left off the map before each unit
+     (spawned objects, M-0019's class, are not among them) equal the place
+     of its cell in the neighbour order, for every set-up entry, and the counts of raw values and
+     the standing positions fit claims 2 and 3 with these draws (S-0202 claim 4 for their raw
+     values). The count fits
+     the neighbour order, but it
+     does not show which cells were tried, so the neighbour order itself is `unmeasured` in the
+     records. Each off-map object is of the unit's type and house (M-0019); that each is one
+     refused cell's try is inferred from the count (medium for the records).
+     Whether the records' harness refused the same cells by the same test, and its rounding, are
+     `unmeasured` (Open questions). The draws of the objects made with a refused unit's creation
+     (a spawner's slot objects, a slave group), and their place before an infantry unit's R(0, 3)
+     draw, are `unmeasured`, design: no committed record gives a finding on them
+     (Open questions). The order of the objects' identifiers is `measured` (M-0019 reads it in
+     all its games as the order of the numbers the recording gives the objects, its creation
+     order) and is the order of objects above. In the games with vehicles that measures the
+     objects' order, not the draws' places in the stream, which stay a reading there.
+     The creation numbers' values, and that a refused try reserves them as if its objects were
+     built, are `unmeasured`, design: M-0019 uses the identifiers only for their order and for
+     which objects exist at the next tick, not for their values.
    - Confidence: high for the order (each unit created, tested and placed before the next is
-     created), the neighbour order and the count rule with its exact-half tie, as design rules of
-     our engine. The draws that this order interleaves are at claim 3's level (medium). Medium for
-     the take test, first come first served and the error stop, since they act on the take test's
-     result on a given cell, which rests on claim 5's entry outcome and on claim 2's first-row
+     created, the pairing's row type's group first), the neighbour order, the draws of refused
+     cells (for a unit whose creation makes no other object, two for an infantry unit and one
+     for a vehicle) and the count rule with its exact-half tie, as design rules of our
+     engine. Medium, design, for keeping no object for a refused try, its other effects in the
+     original `unmeasured`. High for the identifiers' order (M-0019). Medium, design
+     (`unmeasured`), for the creation numbers' values, a refused try's reserved as if its objects
+     were built. Medium for the
+     draws of the objects made with a try's
+     creation,
+     and for their falling before an infantry unit's R(0, 3) draw (design, `unmeasured`). M-0019
+     measures in the records the order per object in the all-infantry games (high there), and the
+     order in the games with vehicles is medium, a reading (claim 3), since M-0019 fits no
+     per-object places there. M-0019 measures the totals of raw values in all games together, which
+     include the refused cells' tries, and a
+     count of off-map objects per unit that fits the neighbour order without showing which cells
+     were tried. Medium that each such object is one refused cell's try of the unit's type, in
+     the records (inferred). For the records' per-object grouping of raw values: high in the
+     all-infantry games, the raw values before an infantry object's R(0, 3) being its creation
+     draws medium, and medium in the games with vehicles, where only the count is compared
+     (claim 3).
+     High for the values of the M-0019 acceptance item, counts of raw values that M-0019
+     measures. Whether our arena
+     reaches them rests on our engine's game-start draws (S-0202), at their levels. The draws
+     that this order interleaves are at claim 3's levels. Medium for the take test,
+     first come first served and the error stop, since they act on the take test's result on a
+     given cell, which rests on claim 5's entry outcome and on claim 2's first-row
      refusals and free standing positions (medium, with the object-present refusal `unmeasured`
      there), and, for the usable-area part, on S-0009 claim 4's height-aware test as S-0009 claim
      5a applies it to object placement (medium there). For the placement on the cell that takes
@@ -459,13 +664,19 @@ S-0208 claim 3 reads it. In addition:
 | placed, behaviour queued | first update at which it is ready and no S-0215 claim 2 exclusion holds, at the first per-tick start | queued behaviour current and processed in that update (claim 4) |
 | placed, behaviour queued | first update at which it is ready and no S-0215 claim 2 exclusion holds, only at the late start | queued behaviour current; first processed at the next update (claim 4) |
 
-Ordering: for units created and placed one at a time, each unit's creation draw, then its
+Ordering: for units created and placed one at a time, each unit's creation draws, then its
 placement draw if any, in the order the placing step places them (claim 3).
 
 ## Edge cases and quirks
 
-None found. A placed infantry unit not standing at the centre of its cell follows the same
+No quirk switch. A placed infantry unit not standing at the centre of its cell follows the same
 standing-position rule a walker uses, and is not a fault.
+
+**Departure from the original (no switch).** In our arena's set-up (claim 8) a refused try keeps
+no object of the unit, only the try's draws and creation numbers, where the original leaves an
+object of it off the map. This is a documented departure with no switch, as S-0611 claim 11's
+for a unit that is never placed. Medium, design; the original object's other effects in tick 0
+are `unmeasured`.
 
 ## Import mapping
 
@@ -480,7 +691,12 @@ PT5, a small
 purpose-made map, flat (except PT5 part d's cliff cell) and with all its cells usable unless a
 part says otherwise, and a measurement
 harness that places units after the game has started, before the first tick at which they are
-updated, with stated cells and facing values. That harness is an exception to the glossary's
+updated, with stated cells and facing values. Every type that PT1 to PT5 place makes no other
+object at its creation: its data name no spawned type with a spawn count of at least 1 (S-0506
+claim 1) and no slave type with a slave count of at least 1 (S-0402 claim 19). The only
+exceptions are the test copies that PT3's
+third and fourth runs name for one slot each. So each placed unit takes one creation draw only,
+and the exact sequences below hold. That harness is an exception to the glossary's
 measurement setup: it puts units into a running game, which the setup otherwise excludes. Game
 speed does not matter; record by tick. The
 random-state recorder (glossary) logs the scenario stream's state with the tick number, so that
@@ -535,10 +751,22 @@ that update may start a turn).
     separately and are not a falsifier.
 
 **PT3: draw count and order (claim 3).** Place, at play time, with a placing step that creates
-and places each unit before it creates the next, in this order: a vehicle of a type
+and places each unit before it creates the next, with types that make no other object at
+their creation (the condition above), in this order: a vehicle of a type
 with neither visceroid flag, an infantry unit, a second vehicle without the flags, a second
 infantry unit, all on empty usable cells. Repeat with a vehicle type that has a visceroid flag
-placed in the third slot instead (test type data). Run 3 seeds each. Record with the recorder
+placed in the third slot instead (test type data). In a third run, the second slot's infantry
+type is a test copy whose data name a spawned type and a spawn count of at least 1, so that its
+creation makes slot objects (S-0506 claim 1). The spawned type's own data name no spawned type
+and no slave type (a test copy where needed), so its slot objects make no objects at their
+creation and the window holds their creation draws only. In a fourth run, the first slot's
+vehicle type is a test copy without the visceroid flags whose data name a slave infantry type
+and a slave count of
+at least 1, so that its creation makes an initial slave group (S-0402 claim 19). The slave type's
+own data name no spawned type and no slave type (a test copy where needed), so the creation set
+of S-0611 claim 14 holds the slaves and nothing made by them. Every other slot of the four
+runs, the second run's visceroid vehicle included, keeps the condition above. Run 3 seeds each.
+Record with the recorder
 every scenario-stream draw from just before the first creation to just before the first update
 of any placed unit. Draws taken by that update (such as an idle action's) are outside the window.
 The cells used hold no tile that the land recompute of a unit entering its cell could start an
@@ -546,8 +774,13 @@ animation on (S-0010 claim 19), so no tile animation's creation draws fall in th
 result is a property of such a map.
 - *Expected:* for the first run, in order: creation draw, creation draw, R(0, 3), creation draw,
   creation draw, R(0, 3). For the second run, R(0, 29) right after the visceroid vehicle's
-  creation draw. No other draw in the window. A draw there that another system of S-0202 claim 10
-  accounts for, unrelated to the placed units, is reported and not counted as a placement draw.
+  creation draw. For the third run, the second slot's creation draw, then its slot objects'
+  creation draws in S-0506 claim 1's order, then its R(0, 3). For the fourth run, the first slot's
+  creation draw, then one creation draw per slave in S-0611 claim 14's order, then the second
+  slot's creation draw: the slaves stay inside and take no R(0, 3) (S-0402 claim 19). No other
+  draw in the window. A
+  draw there that another system of S-0202 claim 10 accounts for, unrelated to the placed units,
+  is reported and not counted as a placement draw.
 - *Falsified if:* a draw is missing, an extra draw appears at a placement, or the order differs.
 
 **PT4: behaviour before the first update (claim 4).** Place, at play time, a vehicle and an
@@ -601,9 +834,14 @@ and placed cell, every scenario-stream draw from the first creation to the first
 building of the neutral house with the cells it covers.
 - *Expected (rules):* units placed in the order of claim 8; every moved unit on the first cell
   of claim 8's neighbour order that takes it; the draws in claim 8's interleaved order, each
-  unit's creation draw followed by its own placement draw if any before the next unit's creation
-  draw; exactly one draw R(0, 3) after the creation draw of each infantry unit placed, and none
-  at a cell the take test refuses; and group counts as claim 8's rounding gives them.
+  unit's creation draws (its own, then those of the objects its creation makes, claim 8's
+  *Order*) followed by its own placement draw if any before the next unit's creation
+  draw; exactly one draw R(0, 3) after the creation draws of each infantry unit placed; for each
+  cell the take test refuses, the try's creation draws and, for infantry, one draw R(0, 3),
+  before the next try; the first object's creation draw (the first try's when the first unit
+  has refused tries) at claim 8's M-0019 raw-value place for the seed, and every
+  infantry unit's standing position the one claim 2 gives for its draw, as in M-0019; and group
+  counts as claim 8's rounding gives them.
 - *Expected (acceptance):* every unit placed; no side-B unit moved; every move to a neighbouring
   cell; a neutral building covering each of M-0006's four bunker cells (each medium); and,
   wherever a run's group states a unit on a cell of M-0006's cliff-cell table, that unit on the
@@ -611,12 +849,13 @@ building of the neutral house with the cells it covers.
 - *Falsified if:* a unit stands off the cell that claim 8's take test and neighbour order give it on
   the map as recorded; the draws come in another order, for example all creation draws first and
   then the placement draws; an infantry unit's placement has other than exactly one draw R(0, 3)
-  after its creation draw (a draw at a refused cell shows as a second one); or a group's count
+  after its creation draws; a refused cell takes other than claim 8's draws for it; the first
+  creation draw takes another raw value, or a standing position differs from claim 2's for its
+  draw, while the draws before the set-up match our engine's game start (S-0202); or a group's count
   differs from claim 8's rounding. A unit left unplaced (the error stop), a side-B unit moved, a
-  move beyond a neighbouring cell, a cliff-cell unit on another cell than M-0006's table gives,
-  or a bunker cell with no neutral building fails the acceptance check and is reported against
-  that item's level in claim 8 (medium, or low for the cliff-cell table), not against claim 8's
-  rules.
+  move beyond a neighbouring cell, a cliff-cell unit on another cell than M-0006's table gives, or a
+  bunker cell with no neutral building fails the acceptance check and is reported against that
+  item's level in claim 8 (medium, or low for the cliff-cell table), not against claim 8's rules.
 
 **PT7: our arena's edge rules (claim 8, our engine).** This part runs our engine's arena with
 test data of our own, not stock data and not the records' groups. Parts a to c use a small flat
@@ -674,16 +913,35 @@ stated and placed cell.
   below). An oracle run is needed for the rest (backlog).
 - **Q-1711 question 4.** Whether the units of a group take the same paths and move off in the
   same order in every game. Needs the same oracle run.
-- **Q-1711 question 5.** How the measurement records' units were put on the map: by a play-time
-  placement with its entry test (claims 1 to 5), or otherwise. M-0006 shows only that they were
-  in play at tick 0 and where the archived logs place them (claim 7). It needs a run that
-  observes the placement itself (backlog). Our arena's own placement is claim 8's (design), and
-  does not depend on this answer.
-- **The records' harness (Q-2096, Q-2098, Q-2099).** Whether the records' harness used claim 8's
-  test, order, neighbour order, placement draws and rounding, and whether it removed or changed
-  any map entry (the neutral house's other map objects, the bunkers' "in play from tick 0" among
-  its listed changes), are not established (low). Our arena does not need them: claim 8's rules are our own,
-  and a difference shows only as a failed acceptance check.
+- **Q-1711 question 5.** Whether the measurement records' units were put on the map with claim
+  5's entry test, and with claims 1 and 4's facings and fall-back. M-0019 shows that their
+  standing positions in the all-infantry games are claim 2's and that the raw values before tick 0
+  fit claim 3's draws (claim 7). The rest needs a run that
+  observes the placement itself (backlog). Our arena's own placement is claim 8's (design).
+- **The records' harness (Q-2096, Q-2098, Q-2099).** Whether the records' harness refused cells
+  by claim 8's take test, its rounding, and whether it removed or changed any map entry (the
+  neutral house's other map objects, the bunkers' "in play from tick 0" among its listed
+  changes), are not established (low). Its count of off-map objects per unit (equal to the
+  place of the unit's cell in claim 8's neighbour order) and the totals of raw values of placed
+  units and those objects are measured (M-0019, claim 8), and so is its order in the all-infantry
+  games. In the games with vehicles its order is a reading, `unmeasured` (claim 8). That each
+  object is one refused cell's try is inferred (medium), and which cells it tried is not
+  observed. Claim 8's rules are
+  our own, and a difference shows as a failed acceptance check.
+- **Q-2277 question 1, several infantry units on one cell.** Which position an infantry unit
+  placed on a cell already holding infantry took in the records, where any was, is not
+  established: M-0019 gives no finding of its own for that case. Claim 2 gives our arena's rule
+  (the first free position of the unit's own draw's row), medium until scenario PT2 part b runs.
+- **Q-2277 question 3.** Whether moving the side-A units of the M-0002 pairing that Q-2277 names
+  between the centre and another standing position of their cells changes which side wins in a
+  stock game is not established. It needs an oracle run in which only the positions differ
+  between two arms (units put at named positions by map entries, which take no draw: claim 2).
+- **Objects created along with a refused unit.** Whether the records' harness, when it refuses a
+  try of a unit whose creation makes other objects (a spawner of any kind, S-0506 claim 1, or a
+  type with a slave group, S-0402 claim 19), also makes them, with their creation draws, is not
+  observed: no committed record gives a finding on it. Claim 8 gives our arena's try that full
+  creation, as for any created unit, with an infantry unit's R(0, 3) draw after those draws
+  (medium that the records' harness did the same).
 - **Aircraft-kind groups (Q-2096 question 1, in part).** How our arena tests and places a group of
   an aircraft-kind type, if a record has one, is not given here (low): claims 1 to 5 cover
   vehicles and infantry only.
@@ -712,7 +970,10 @@ stated and placed cell.
 - **A failed placement.** What a placing step does with a unit whose placement fails (claims 2
   and 5): whether it tries another cell, keeps the unit off the map or removes it. This
   belongs to the step, not to the placement rule; PT2 parts d and e and PT5 record what the
-  measurement harness does.
+  measurement harness does. In the records' set-up, before each unit, as many of the set-up's
+  objects stood off the map at tick 0 as there are cells before its own in claim 8's order, none
+  present at the next tick (M-0019, claim 7). That each was a refused cell's try, and the unit
+  stood on a later cell, is the inferred reading of that count (medium).
 - **Tile animations started by the placement.** Where the creation draws of a tile animation that
   the land recompute of a placement starts (S-0211 claim 5, S-0010 claim 19) fall relative to the
   placement draws of claim 3. PT3's map has no cell that could start one.
