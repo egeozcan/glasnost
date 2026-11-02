@@ -1483,6 +1483,11 @@ fn paradrop_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
             speed: Some(30),
             rot: Some(12),
             locomotor: Some(Locomotor::Fly),
+            // Armed, as S-0522's Import mapping and S-0501 claim 20 take a
+            // paradrop plane to be: a weaponless one answers *impossible*
+            // at its target cell (S-0301 claim 9) and drops it at its first
+            // check tick (S-0309 claim 29 r94), then retreats.
+            primary: Some("Gun".into()),
             ..Default::default()
         },
     );

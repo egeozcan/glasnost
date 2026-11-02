@@ -8,7 +8,7 @@
 
 use crate::combat::check::Answer;
 use crate::rules::{Behaviour, Kind};
-use crate::world::{Object, ObjectId, Target, World};
+use crate::world::{HouseId, HouseRole, Object, ObjectId, Target, World};
 
 // spec: S-0309 claim 29 and Constants (held-target check period 16 ticks: checks fall in the ticks whose tick number is a multiple of it)
 const CHECK_PERIOD: i32 = 16;
@@ -135,21 +135,6 @@ pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
         .filter(|t| !matches!(*t, Target::Object(x) if left(w, x)))
 }
 
-/// Whether claim 29's periodic check covers holder `id` by its owner
-/// (S-0309 claim 29): every holder of a human-controlled owner, which in
-/// our engine is every player house, AI houses included (S-0309 Terms,
-/// *Houses in our engine*). Whether the original applies the check to
-/// holders of the neutral and special houses is open (S-0309 Open
-/// questions, *Other holders and targets*): interim Q-2263, they are not
-/// checked and keep S-0304 claim 2's drop at their attack processing. The
-/// check is the same whatever gave the target (an order, a search, a
-/// retaliation or a revert: the engine does not record which; the last two
-/// are open in the same question, interim Q-2263, checked).
-pub fn periodic_covers(w: &World, id: ObjectId) -> bool {
-    // spec: S-0309 claim 29 (holders of a human-controlled owner: every player house in our engine) and Terms (Test-only exception: a marked player house takes the computer-owner rules)
-    crate::combat::acquire::player_owned(w, id)
-}
-
 /// Whether tick number `t` is a check tick of claim 29: a multiple of the
 /// check period, the same ticks for every object (shared phase).
 pub fn check_tick(t: i32) -> bool {
@@ -157,47 +142,143 @@ pub fn check_tick(t: i32) -> bool {
     t.rem_euclid(CHECK_PERIOD) == 0
 }
 
+/// Whether `o` is a holder kind of claims 25 part k and 29: an infantry
+/// unit, vehicle, aircraft or building.
+fn holder_kind(o: &Object) -> bool {
+    // spec: S-0309 claim 29 (every infantry unit, vehicle, aircraft and building that holds a target)
+    matches!(
+        o.kind,
+        Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+    )
+}
+
+/// The house whose owner test and alliance claim 25 part k reads for
+/// holder `id`: the house that controls the open-topped transport it rides
+/// in when that transport is under mind control, else its own owner.
+fn deciding_house(w: &World, id: ObjectId) -> Option<HouseId> {
+    // spec: S-0309 claim 25 part k (for a passenger of an open-topped transport that is under mind control, both the owner test and the alliance are those of the house that controls the transport)
+    crate::combat::acquire::controlled_carrier_house(w, id)
+        .unwrap_or_else(|| w.obj(id).and_then(|o| o.owner))
+}
+
+/// Whether house `h` is human-controlled for the unit rules (S-0309 Terms,
+/// *Houses in our engine* and *Test-only exception*): every player house
+/// but a marked test-only computer-controlled one.
+fn human_house(w: &World, h: Option<HouseId>) -> bool {
+    h.and_then(|h| w.houses.get(usize::from(h.0)))
+        // spec: S-0309 Terms (Houses in our engine: a rule for a human-controlled owner applies to every player house, AI houses included; Test-only exception: a marked player house takes the computer-owner rules)
+        .is_some_and(|h| h.role == HouseRole::Player && h.human)
+}
+
+/// Whether one of claim 25 part k's exceptions lets holder `id` keep the
+/// allied target `t`.
+fn allied_keep(w: &World, id: ObjectId, t: ObjectId) -> bool {
+    let (Some(o), Some(to)) = (w.obj(id), w.obj(t)) else {
+        return true;
+    };
+    // spec: S-0309 claim 25 part k (kept when the holder is berserk, S-0610)
+    if crate::psychic::berserk(w, id) {
+        return true;
+    }
+    let building = to.kind == Kind::Building;
+    if o.kind == Kind::Infantry {
+        // spec: S-0309 claim 25 part k (kept when the holder is an infantry unit of an engineer type)
+        if crate::structures::engineer::is_engineer(w, id) {
+            return true;
+        }
+        // spec: S-0309 claim 25 part k (kept when the holder is an infantry unit, the target a building and the holder can occupy it: the structures specs' test, S-0508 claim 1 and S-0214 row I8)
+        if building && crate::structures::garrison::may_enter(w, id, t) {
+            return true;
+        }
+    }
+    // spec: S-0309 claim 25 part k (kept when the holder's second weapon is an electric-charge weapon, S-0518, and the target a building of an overpowerable type)
+    building
+        && crate::linked::overpowerable(w, t)
+        && crate::combat::weapon::slot_weapon(w, id, 1)
+            .and_then(|x| w.rules().combat.warhead_of(x))
+            .is_some_and(|h| h.electric_assault)
+}
+
+/// The drop of an allied held target by a holder of a computer-controlled
+/// owner (S-0309 claim 25 part k), in holder `id`'s own turn. In our engine
+/// those owners are the neutral and special houses and a marked test-only
+/// house; a holder of a player house keeps an allied target here. The drop
+/// is made in every turn that reaches the check's place, whatever the tick
+/// number and whatever the behaviour (*capture* and *sabotage* included),
+/// ahead of the check. Like claim 29's drop it takes no draw, causes no
+/// revert and changes no behaviour.
+pub(crate) fn allied_drop(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if !holder_kind(o) {
+        return;
+    }
+    let Some(Target::Object(t)) = o.target else {
+        return;
+    };
+    // spec: S-0309 claim 25 part k (not in a turn cut short, claim 29 Turns cut short: a building being erased; an erased mobile holder's turn ends at its own drop, S-0215 claim 2) and S-0513 claim 39a (a warp member phasing in with a beam attached: as for the check)
+    if crate::temporal::cut_short(w, id) {
+        return;
+    }
+    let h = deciding_house(w, id);
+    // spec: S-0309 claim 25 part k (a holder of a human-controlled owner has no such drop: in our engine the holders of every player house keep an allied target)
+    if human_house(w, h) {
+        return;
+    }
+    // spec: S-0309 claim 25 part k (a target allied with the holder, its own house included, S-0209 Terms)
+    if !w.allied(h, w.obj(t).and_then(|x| x.owner)) || allied_keep(w, id, t) {
+        return;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0309 claim 25 part k (the drop has claim 29's consequences: claim 24's for a setting that leaves no target, no timer draw, no revert and no change of behaviour by itself)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+}
+
+/// The held-target work at claim 29's place in holder `id`'s own turn
+/// (S-0309 claim 29, *Place in the turn*): claim 25 part k's allied drop,
+/// then the periodic check. The callers place it after the turn's first
+/// per-tick start (an infantry unit, vehicle or building: S-0215 claim 11)
+/// and after a falling holder's fall step and landing hit (S-0511 claim
+/// 10), before the behaviour processing, its searches, the per-tick search
+/// (S-0215 claim 33), the movement and the firing step, and before a
+/// building's pending delayed shot counts down; an aircraft, whose per-tick
+/// start follows its processing and movement, before its processing. A
+/// warp turn (S-0513 claim 51, S-0203 claim 4) and a turn cut short never
+/// reach it.
+pub(crate) fn turn(w: &mut World, id: ObjectId) {
+    // spec: S-0309 claim 25 part k (at claim 29's place in the turn, ahead of the check where one is made)
+    allied_drop(w, id);
+    periodic_check(w, id);
+}
+
 /// The periodic held-target check (S-0309 claim 29), in holder `id`'s own
-/// turn. In a check tick, a covered infantry unit, vehicle, aircraft or
-/// building whose current behaviour is *attack* or *guard* asks the firing
-/// check about its target, without the range test, for the weapon it would
-/// use against it; on *illegal* or *impossible* it drops the target. The
+/// turn. In a check tick, an infantry unit, vehicle, aircraft or building
+/// of any house, in any behaviour but *capture* and *sabotage*, asks the
+/// firing check about its target, without the range test, for the weapon
+/// it would use against it; on *illegal* or *impossible* it drops the
+/// target. The check reads only the held target, so it is the same
+/// whatever gave it (an order, a search, retaliation or a revert). The
 /// drop takes no targeting-timer draw, causes no revert and changes no
 /// behaviour; a spawner gets no exception (claim 4's keep on *impossible*
-/// ends here).
-///
-/// The caller places it at the start of the turn, after the warp update
-/// (S-0513 claim 51 and S-0203 claim 4: a warp member takes no check from
-/// its first pending update through its arrival effects; in the arrival
-/// hold it comes after the hold-end test) and before the behaviour
-/// processing, the searches and the firing step. Where in the turn the
-/// check falls against those is open (S-0309 Open questions, *Place of the
-/// periodic check*, and *A refusal that begins in the holder's turn*):
-/// interim Q-2261, this place. Against a building's pending delayed shot it
-/// comes first, as claim 29 requires: that shot still answers *rearming*.
-pub(crate) fn periodic_check(w: &mut World, id: ObjectId) {
+/// ends here). Its place in the turn is [`turn`]'s. A holder that takes a
+/// second turn in a check tick (S-0203 claim 11) checks in that turn too.
+fn periodic_check(w: &mut World, id: ObjectId) {
     if !check_tick(w.tick) {
         return;
     }
     let Some(o) = w.obj(id) else { return };
-    // spec: S-0309 claim 29 (every infantry unit, vehicle, aircraft and building)
-    if !matches!(
-        o.kind,
-        Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
-    ) {
+    if !holder_kind(o) {
         return;
     }
     let Some(t) = o.target else { return };
-    // spec: S-0309 claim 29 (Behaviours: a holder whose current behaviour is attack or guard makes the check; capture and sabotage make none; the others are open, S-0309 Open questions, Other behaviours: interim Q-2262, no check)
-    if !matches!(o.beh.current, Some(Behaviour::Attack | Behaviour::Guard)) {
+    // spec: S-0309 claim 29 (Behaviours: a holder whose current behaviour is capture or sabotage makes no check; every other behaviour makes it, those in which no weapon is aimed at the held target included; the behaviour current when the check is made counts) and S-0215 claim 1 (with no current behaviour, rules that ask for its behaviour see the queued one)
+    if matches!(o.beh.seen(), Some(Behaviour::Capture | Behaviour::Sabotage)) {
         return;
     }
-    // spec: S-0309 claim 29 (Turns cut short: a building being erased makes no check; an infantry unit, vehicle or landed aircraft being erased drops its target instead in each of its turns, S-0215 claim 2; a materialising holder on which a temporal beam is locked is open, interim Q-2264: being erased, no check)
+    // spec: S-0309 claim 29 (Turns cut short: a building being erased makes no check; an infantry unit, vehicle or landed aircraft being erased, a materialising one with a temporal beam locked on it included, drops its target instead in each of its turns, S-0215 claim 2, and that turn ends there with no check)
     // spec: S-0513 claim 39a (a warp member phasing in with a beam attached has its turns cut short as a vehicle or aircraft, and as an infantry unit only while being erased or with quirks.phase_in_beam_spares_infantry off; otherwise it takes the turns of a phasing-in unit with no beam attached)
     if crate::temporal::cut_short(w, id) {
-        return;
-    }
-    if !periodic_covers(w, id) {
         return;
     }
     // spec: S-0309 claim 29 (the weapon it would use against the target, S-0308 and S-0304 claim 6)

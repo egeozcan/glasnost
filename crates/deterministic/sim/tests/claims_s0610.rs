@@ -544,6 +544,7 @@ fn m0011_a_berserk_crusher_never_searches_out_a_berserk_friendly_enemy() {
 // spec: S-0210 claims 3 and 4 (crushed at the cell centre: removed on the same tick, no damage, the crush sound)
 // spec: S-0610 claims 6 and 8 (the berserk crusher never fires at the berserk-friendly target it holds)
 // spec: S-0309 claim 27 (a crusher that drives over the object it holds drops it in its movement and makes no shot in that tick's firing step)
+// spec: S-0309 claim 29 (the illegal held target is dropped at a check tick in hunt too, so the hold starts just after one; the drop changes no destination, claim 29 The drop)
 // measure: M-0011 (How the drones leave play: no damage event, while a grounded fortress that had the drone as its target stood on its position)
 #[test]
 fn m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it() {
@@ -551,6 +552,16 @@ fn m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it() {
     let mut w = testkit::game_with(&mite_rules(), SIZE, 1);
     // A test-only computer-controlled player house, as the arena's.
     w.houses[usize::from(ALPHA)].human = false;
+    // The held mite is illegal for the berserk crusher (S-0610 claim 6),
+    // so its first check tick drops it in *hunt* too (S-0309 claim 29
+    // r94, Behaviours). The pair is placed just after a check tick, so
+    // that the crusher's first processing, in its first turn, takes the
+    // held mite as its destination (the crushing approach) before that
+    // drop; the drop leaves the destination, and the crusher drives over
+    // the mite.
+    while w.tick % 16 != 1 {
+        testkit::run(&mut w, 1);
+    }
     let crusher = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, 0, 0);
     let mite = put(&mut w, Kind::Vehicle, "MITE", BETA, 1, 0);
     psychic::enter(&mut w, crusher, 10_000);

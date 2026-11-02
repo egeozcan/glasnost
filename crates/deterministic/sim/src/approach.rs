@@ -87,6 +87,7 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
         // spec: S-0307 claim 17 (a hunter-seeker or vehicle thief takes the target object as destination and keeps the target)
         Approach::TargetItself => ob.dest = t,
         // spec: S-0307 claim 17 (any other actor drops the target; the destination becomes the nearby cell, or none)
+        // spec: S-0215 claim 37 (c) (revision 104: with no nearby cell a gripped unit is given no destination, so while it has one its grip ends, S-0607 claim 9; a nearby cell is a new destination it ignores)
         Approach::Drop(n) => {
             crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
@@ -309,6 +310,7 @@ pub fn step(w: &mut World, id: ObjectId) {
         };
         if !keep {
             // spec: S-0215 claim 37 (d) (dropping clears the target and the destination at once; nothing else of the step happens)
+            // spec: S-0215 claim 37 (c) (revision 104: the drop gives a gripped unit no destination, so while it has one its grip ends, S-0607 claim 9; `lift::steer` and `lift::enforce` read the empty destination)
             if let Some(ob) = w.obj_mut(id) {
                 crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
@@ -336,6 +338,7 @@ pub fn step(w: &mut World, id: ObjectId) {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.dest = None;
                 }
+                // spec: S-0215 claim 37 (e) (revision 104: no effective clear in S-0502 claim 24's sense, so no jumpjet stop follows)
                 // spec: S-0215 claim 37 (e) and S-0607 claim 9 (revision 33, Q-2151: part e removes the destination directly, not by an assignment of an empty destination: no effective clear in S-0502 claim 24's sense and not claim 9's exception, so a gripped unit's grip holds)
                 crate::lift::destination_removed(w, id);
                 cleared = true;

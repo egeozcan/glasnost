@@ -404,7 +404,6 @@ fn claim51_sw23_f_the_members_own_periodic_check_is_suppressed_through_arrival_e
         let mut w = ready(&rules());
         let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
         let x = spawn(&mut w, "CART", ALPHA, -6, 6);
-        assert!(held::periodic_covers(&w, m));
         // The unarmed member answers impossible about any target (S-0301 claim 9 rank 4: no weapon in the slot), so a check would drop it.
         assert_eq!(
             check(&w, m, Some(Target::Object(x)), 0, false),
@@ -441,6 +440,39 @@ fn claim51_sw23_f_the_members_own_periodic_check_is_suppressed_through_arrival_e
             assert_eq!(checked, None, "{row}: checked and dropped");
         }
     }
+}
+
+#[test]
+fn claim51_sw23_f_the_members_allied_drop_is_suppressed_through_arrival_effects() {
+    // spec: S-0203 claim 4 (revision 42: the drop of an allied held target at the periodic check's place, S-0309 claim 25 part k, is suppressed in the warp turns as the check is; in the arrival hold after the hold-end test) and S-0513 claim 51, SW23 part f; S-0309 claim 25 part k (not in a warp turn; in a tick of any number otherwise) and Terms (Test-only exception: the marked house takes the computer-owner rules)
+    // Each row's tick t_L + k is not a check tick, so only the allied drop could clear the target.
+    let run = |k: i32| {
+        let mut w = ready(&rules());
+        w.houses[usize::from(BETA.0)].human = false;
+        let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+        let z = spawn(&mut w, "CART", BETA, -6, 6);
+        let at = k + 8;
+        let rem = (PERIOD - at.rem_euclid(PERIOD)).rem_euclid(PERIOD);
+        let tl = launch_at(&mut w, rem);
+        assert!(!held::check_tick(tl + k));
+        run_through(&mut w, tl + k - 1);
+        hold(&mut w, m, z, Behaviour::Guard);
+        step(&mut w);
+        (stage(&w, m), target(&w, m))
+    };
+    for (k, row) in [
+        (2_i32, "leaving"),
+        (40, "leaving"),
+        (61, "wait expiry"),
+        (62, "departure"),
+        (64, "arrival effects"),
+    ] {
+        let (_, kept) = run(k);
+        assert!(kept.is_some(), "{row} (tick t_L + {k}): no allied drop");
+    }
+    let (stage_e, dropped) = run(65);
+    assert_eq!(stage_e, None, "the hold has ended");
+    assert_eq!(dropped, None, "hold end: the allied target is dropped");
 }
 
 // --- After departure (Q-2211 question 3, open) ------------------------------------------

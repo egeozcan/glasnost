@@ -1685,6 +1685,28 @@ fn s0215_claim_32_attack_answer_table() {
     assert_eq!(w.obj(t).unwrap().beh.current, Some(Behaviour::Guard));
 }
 
+// spec: S-0215 claim 32 and scenario B16 part e (revision 103: a maximum ammunition of 0 and no initial-ammunition value, so that every attempt answers out of ammunition, S-0301 claim 10; at the first such answer from the attack order: target cleared, guard current by the immediate start, a 1-tick delay with no delay draw)
+#[test]
+fn s0215_b16_e_zero_maximum_ammunition_returns_to_guard() {
+    let mut r = tower_rules(0);
+    r.sim
+        .buildings
+        .get_mut("TOWERZ")
+        .unwrap()
+        .combat
+        .initial_ammo = None;
+    let (mut w, t, _) = tower_duel(&r);
+    assert_eq!(w.obj(t).unwrap().combat.ammo, 0);
+    assert_eq!(ask(&w, t, 0), Answer::OutOfAmmo);
+    attack(&mut w, t);
+    let rng = w.rng.clone();
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    let o = w.obj(t).unwrap();
+    assert_eq!(o.target, None);
+    assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_eq!(w.rng, rng, "no delay draw");
+}
+
 /// TOWERZ with a turret (turn-rate field `rot`), voxel or sprite.
 fn turret_tower(rot: i32, voxel: bool) -> Ruleset {
     let mut r = tower_rules(-1);

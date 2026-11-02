@@ -451,14 +451,25 @@ fn claim_15_gate_range() {
 }
 
 // spec: S-0406 claim 15 (the handover does not clear the building's target)
+// spec: S-0309 claim 29 (a weaponless holder drops its target at a check tick, so none falls in the construction)
 #[test]
 fn claim_15_target_kept() {
-    let r = rules();
+    // The weaponless HUT answers *impossible* (S-0301 claim 9) and drops a
+    // held target at a check tick (S-0309 claim 29 r94), so the short
+    // construction of a type with no build-up sprite (H = T + 3, F6 and
+    // F7) is placed just after a check tick, with none before the handover.
+    let mut r = rules();
+    r.sim.buildings.get_mut("HUT").unwrap().econ.buildup = None;
     let mut w = game(&r);
-    let (id, _) = lone_placed(&mut w, "HUT");
+    while w.tick % 16 != 1 {
+        testkit::run(&mut w, 1);
+    }
+    let (id, t) = lone_placed(&mut w, "HUT");
     let aim = glasnost_sim::world::Target::Cell(c(4, 4));
     w.obj_mut(id).unwrap().target = Some(aim);
-    construction_ticks(&mut w, id);
+    let k = construction_ticks(&mut w, id);
+    assert_eq!(k.h, t + 3);
+    assert!((t..=k.h).all(|n| n % 16 != 0), "no check tick");
     assert_eq!(w.obj(id).unwrap().target, Some(aim));
 }
 

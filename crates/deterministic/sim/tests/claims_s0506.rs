@@ -1882,7 +1882,11 @@ fn claim_26_empty_cadence() {
 // spec: S-0506 claims 12 and 26 (a release at r replaces the deadline with r + 2: no order in r or r + 1; in r + 2 ammunition 1, the release cell as target and attack queued, then every 30 ticks)
 #[test]
 fn claim_26_release_deadline_and_order() {
-    let r = rules();
+    let mut r = rules();
+    // An armed rocket, as scenario R21 arms its flagged ordinary-flight aircraft: a weaponless
+    // one answers *impossible* at its release cell (S-0301 claim 9) and drops it at a check tick
+    // (S-0309 claim 29 r94, which covers the missile behaviour)
+    r.sim.aircraft.get_mut("RKA").unwrap().primary = Some("Gun".into());
     let mut w = game(&r);
     let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
     let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);

@@ -561,6 +561,26 @@ fn claim23_cursor_offers_no_attack_to_mode_one() {
     }
 }
 
+// spec: S-0214 claim 6 (e) and scenario T4 part (e) (revision 68: an own unit whose type has land-targeting mode 1 and a weapon that cannot hit ground targets shows no attack without force-fire and an attack with it, in range)
+#[test]
+fn s0214_t4_e_mode_one_shows_attack_with_force_fire() {
+    let (w, a, near) = duel("AAV", 1, 0, "TGT", land::CLEAR);
+    let plain = targeting::action(
+        &w,
+        HouseId(0),
+        a,
+        ClickOn::Object(near),
+        Modifiers::default(),
+    );
+    assert_ne!(plain, Action::Attack, "without force-fire: {plain:?}");
+    let forced = Modifiers {
+        force_fire: true,
+        ..Modifiers::default()
+    };
+    let act = targeting::action(&w, HouseId(0), a, ClickOn::Object(near), forced);
+    assert_eq!(act, Action::Attack, "with force-fire");
+}
+
 // spec: S-0306 claim 23 (rank of the water and land rows: rank 4 of S-0301 claim 9, ahead of cloaked (rank 8): a cloaked firer is answered illegal against a target the land row refuses, and cloaked against the same target with mode 0)
 #[test]
 fn claim23_rows_outrank_a_cloaked_firer() {
