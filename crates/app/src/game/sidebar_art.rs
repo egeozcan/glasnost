@@ -11,7 +11,7 @@
 //! the session is not claimed (S-0411 claim 19), so reading them per game
 //! is our design.
 
-use glasnost_fmt::image::IndexedImage;
+use glasnost_fmt::image::{IndexedImage, Rgb8};
 use glasnost_fmt::pal::Palette6;
 use glasnost_fmt::shp::Shp;
 use glasnost_ui::hud::{ButtonArt, ButtonImage, TABS as TAB_COUNT};
@@ -68,6 +68,15 @@ pub struct SidebarArt {
 /// The sidebar palette's colours from its file (S-0411 Import mapping:
 /// file byte *c* gives the component (4·*c*) mod 256), as RGBA. `None`
 /// for a file that is not 768 bytes.
+///
+/// Each converted colour is shown packed by S-0103 claim 9's 16-bit step
+/// (S-0411 claim 19 *Pixels*, Q-2266): packed into 5-6-5 and widened back
+/// by repeating the top bits, as the painter shows every hi-colour pixel
+/// (`compose::expand565`; the low-bit fill is the display path's, which
+/// S-0103 claim 9 leaves open). Nothing else enters: no house colour, no
+/// cell light, no map tint, no global effect and no button state (claim
+/// 19 *Pixels*). Entry 0 is kept but never shown: the painter does not
+/// draw index 0 (`batch2d`), so what lies beneath shows through.
 pub fn palette_rgba(file: &[u8]) -> Option<[u8; 1024]> {
     if file.len() != PALETTE_BYTES {
         return None;
@@ -77,6 +86,9 @@ pub fn palette_rgba(file: &[u8]) -> Option<[u8; 1024]> {
     for (dst, src) in out.as_chunks_mut::<4>().0.iter_mut().zip(pal.colors.iter()) {
         // spec: S-0411 Import mapping (SIDEBAR.PAL: a file byte c gives the palette component (4·c) mod 256)
         let [r, g, b] = src.map(|c| c.wrapping_mul(4));
+        // spec: S-0411 claim 19 Pixels (every index 1 to 255 shows its converted sidebar-palette colour packed by S-0103 claim 9's 16-bit step, opaque; Q-2266)
+        let packed = glasnost_render::palette::hicolor_565(Rgb8::new(r, g, b));
+        let (r, g, b) = glasnost_render::compose::expand565(packed);
         *dst = [r, g, b, 255];
     }
     Some(out)
@@ -239,21 +251,63 @@ mod tests {
         (0..768u32).map(|i| (i % 64) as u8).collect()
     }
 
-    /// spec: S-0411 Import mapping (SIDEBAR.PAL: 768 bytes, a file byte c gives the component (4·c) mod 256)
+    /// spec: S-0411 Import mapping (SIDEBAR.PAL: 768 bytes, a file byte c gives the component (4·c) mod 256) and claim 19 Pixels (shown packed by S-0103 claim 9's 16-bit step)
     #[test]
     fn the_sidebar_palette_converts_each_byte_by_four() {
         let mut file = vec![0u8; 768];
         file[..3].copy_from_slice(&[1, 63, 64]);
         file[765..].copy_from_slice(&[255, 70, 0]);
         let p = palette_rgba(&file).unwrap();
-        assert_eq!(p[..4], [4, 252, 0, 255], "64 · 4 wraps to 0");
-        assert_eq!(
-            p[1020..],
-            [252, 24, 0, 255],
-            "255 · 4 mod 256 = 252, 70 · 4 mod 256 = 24"
-        );
+        // Converted 4, 252, 0 (64 · 4 wraps to 0); packed 0, 63, 0; shown
+        // with the top bits repeated.
+        assert_eq!(p[..4], [0, 255, 0, 255], "64 · 4 wraps to 0");
+        // Converted 252, 24, 0 (255 · 4 mod 256 = 252, 70 · 4 mod 256 = 24).
+        assert_eq!(p[1020..], [255, 24, 0, 255]);
         assert_eq!(palette_rgba(&[0u8; 767]), None);
         assert_eq!(palette_rgba(&[0u8; 769]), None);
+    }
+
+    /// spec: S-0411 claim 19 Pixels (Q-2266: every index 1 to 255 shows its converted
+    /// sidebar-palette colour packed by S-0103 claim 9's 16-bit step, never at full 8-bit
+    /// precision; the colour depends on the palette entry alone, so no house colour, lighting,
+    /// global effect or button state enters), S-0103 claim 9 (5-6-5: red and blue keep their top
+    /// five bits, green its top six)
+    #[test]
+    fn claim_19_pixels_every_index_shows_its_packed_colour() {
+        // An invented test palette in the manner of S15 part c: red and blue
+        // file bytes odd, so that their converted value has low bits the
+        // packing drops, and no converted value from 128 to 159 (bytes 32
+        // to 39), where a top-bit fill would give the value back.
+        let odd = |k: u32| {
+            let c = (k % 28) as u8 * 2 + 1;
+            if c < 32 { c } else { c + 8 }
+        };
+        let file: Vec<u8> = (0..256u32)
+            .flat_map(|i| [odd(i), (i % 64) as u8, odd(i / 3 + 5)])
+            .collect();
+        let p = palette_rgba(&file).unwrap();
+        let src = Palette6::parse(&file).unwrap();
+        for (i, (got, c)) in p
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(src.colors.iter())
+            .enumerate()
+        {
+            let [r, g, b] = c.map(|x| x.wrapping_mul(4));
+            // The packed value: the top bits of each component.
+            assert_eq!(got[0] >> 3, r >> 3, "entry {i} red");
+            assert_eq!(got[1] >> 2, g >> 2, "entry {i} green");
+            assert_eq!(got[2] >> 3, b >> 3, "entry {i} blue");
+            // The low bits are the top bits again, not the converted value's.
+            assert_eq!(got[0] & 7, got[0] >> 5, "entry {i} red fill");
+            assert_eq!(got[2] & 7, got[2] >> 5, "entry {i} blue fill");
+            assert_eq!(got[3], 255, "entry {i} opaque");
+            // An odd file byte converts to a value ending in binary 100,
+            // which no top-bit fill reproduces: never full precision.
+            assert_ne!(got[0], r, "entry {i} red not at full precision");
+            assert_ne!(got[2], b, "entry {i} blue not at full precision");
+        }
     }
 
     /// spec: S-0411 claim 19 and Import mapping (the eight files and their palette, each resolved
@@ -274,8 +328,8 @@ mod tests {
         let art = pollster::block_on(read(&vfs)).unwrap();
         assert_eq!(
             art.palette[4..8],
-            [12, 16, 20, 255],
-            "entry 1: bytes 3, 4, 5"
+            [8, 16, 16, 255],
+            "entry 1: bytes 3, 4, 5, converted 12, 16, 20, shown packed (claim 19 Pixels)"
         );
         let sell = art.files[0].as_ref().unwrap();
         assert_eq!(sell.size, (11, 7));
