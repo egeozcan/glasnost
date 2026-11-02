@@ -2,11 +2,11 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0172, Q-0230, Q-0237, Q-2171]
 supersedes: []
@@ -56,7 +56,14 @@ and *subject to walls*. In addition:
 - **Airborne, floor-bound.** An ordinary object on the map is *airborne* when its height above
   the surface is at least 208 leptons (two height levels), and *floor-bound* otherwise.
   Aircraft use the in-the-air answer of S-0501 claim 18, including its two rocket-type
-  exceptions, as qualified in claim 26 below. An ordinary object not on the map is neither.
+  exceptions, as qualified in claim 26 below. An ordinary object not on the map is neither,
+  with one exception: a superweapon warp member between its departure and its appearance (S-0513
+  claim 39), which is off the map then. For the rules of a projectile's flight and detonation that
+  target it (S-0306 table T1, table T2, claim 20 and claim 17's loss), it is counted by its height
+  above the surface beneath its kept position, so one that departed from a high-bridge deck counts
+  as airborne, except while a landing check that passed for a landing cell on a deck awaits its
+  placement (S-0306 claim 17, `quirks.warp_deck_departure_airborne`, which S-0306 owns). Medium,
+  `unmeasured`, as S-0306 claim 17 rates it.
 - **Measured point** *M*_T. The point of the target that the range test measures to (claim 7). It
   is not S-0306's target point: it has no aim shift, and its height may be replaced.
 - **Source point** *S*. The point of the firer that the range test measures from (claim 8).
