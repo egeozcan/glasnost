@@ -2,11 +2,11 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 94
+revision: 96
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230, Q-2247]
 supersedes: []
@@ -3328,8 +3328,13 @@ Q-1753).**
     pad-bound game), A's type is a pad-bound test copy (test value) and A stands at rest on an
     own pad building of a type that it docks at, far from P₁, and (6)'s steps are made.
     Expected: as above, with A neither turning back towards a pad nor crashing at P₁. Record
-    what A does after P₂. (7) In a network game of two humans not allied (as in
-    part h), with the same set-up for the first player and a vehicle E of the second player's,
+    what A does after P₂. In a last pad-bound game, A's pad-bound test copy also has no weapon, a
+    converted speed of at least 20 and a positive slowdown distance (test values, as in S-0501
+    scenario AC31 part b), and (6)'s steps are made. Expected after P₂: no landing at P₂, a
+    flight to a landing spot near a house building (S-0501 F8), and a hover there at cruise
+    height with *move* and no pad contact (S-0501 claim 50 and AC31 part b, run 2). (7) In a
+    network game of two humans not allied (as in part h), with the same set-up for the first
+    player and a vehicle E of the second player's,
     whose type is a test copy that has no weapon and a strength that no shot of B's can use up
     (test values), kept out of B's range. B's type is a test copy without the turret flag (test
     value). With no target in B's range, select B alone, hold the
