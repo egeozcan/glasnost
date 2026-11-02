@@ -10170,6 +10170,11 @@
           "type": "boolean",
           "default": true
         },
+        "phase_in_beam_spares_infantry": {
+          "description": "While it phases in, a vehicle or aircraft with a temporal beam attached has its turns cut short whether or not it is being erased, and an infantry unit only while it is being erased; off: an infantry unit with an attached beam has its turns cut short while it phases in as well.",
+          "type": "boolean",
+          "default": true
+        },
         "pier_loss_notice_skips_chipped": {
           "description": "A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3.",
           "type": "boolean",
@@ -11132,6 +11137,11 @@
         },
         "warp_deck_departure_airborne": {
           "description": "A warp member that departed from a high-bridge deck counts as airborne for a projectile until it appears.",
+          "type": "boolean",
+          "default": true
+        },
+        "warp_departure_keeps_beam": {
+          "description": "A temporal projectile in flight at a superweapon warp's launch, or a fragment, locks a beam on a member; the warp and the erasure both go on, and from its departure the member is no longer being erased while the beam stays attached, up to a later lock; off: a pending warp, from the launch until the departure update, is one more lock refusal.",
           "type": "boolean",
           "default": true
         },

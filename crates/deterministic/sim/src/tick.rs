@@ -235,6 +235,11 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     crate::emitters::deactivated_sparks(w, id);
     // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r62 claim 39 (a departed warp member held through its departure is not that case: interim Q-2211 question 3, the same drop as our own rule)
     crate::combat::held::turn_start_drop(w, id);
+    // spec: S-0513 claim 39a and S-0203 claim 4 (a warp member's erasure update comes before its warp step in each of its turns; a member that update removes takes no warp step, the no-step rule)
+    let erasure_made = crate::temporal::member_update(w, id);
+    if erasure_made && w.obj(id).is_none() {
+        return;
+    }
     // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and S-0203 claim 4 revision 32: the warp update is the whole member turn, with the intrinsic exceptions)
     if crate::superweapons::warp::turn(w, id) {
         // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)
@@ -245,8 +250,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     crate::combat::held::periodic_check(w, id);
     // spec: S-0608 claims 12 and 15 (Q-1440: a vehicle drainer's position check samples its position before that turn's behaviour start, behaviour processing, movement and firing, and before its erasure exit; the warp-only stages, which returned above, exclude it, S-0513 claim 51; a pulse-disabled drainer still checks)
     crate::drain::position_check(w, id);
-    if !crate::temporal::erased(w, id) {
-        // spec: S-0608 claims 11 and 15 (the alliance test precedes behaviour processing, its shots, movement, separate firing and the controller's overload update; the erasure exit skips it)
+    if !crate::temporal::cut_short(w, id) {
+        // spec: S-0608 claims 11 and 15 (the alliance test precedes behaviour processing, its shots, movement, separate firing and the controller's overload update; the erasure exit skips it, S-0513 claim 39a's cut-short phasing-in turns included)
         crate::drain::alliance_test(w, id);
     }
     // spec: S-0203 claim 4 (expected-health bookkeeping and protection-brightness phase processing are ordinary work: suppressed through arrival effects, eligible in the hold after its hold-end test, with no catch-up)
@@ -258,7 +263,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     crate::mark::turn(w, id);
     // The berserk countdown (S-0610 claim 5) runs in the behaviour part, after the first per-tick start (`process::head`).
     // spec: S-0601 claim 16 (revision 9: the overload update runs in exactly the updates in which the berserk countdown runs: not in an excluded update, S-0215 claim 2's being erased (a tunnel is not built), nor in a warp-only update, which returned above, S-0513 claim 51 and S-0203 claim 4)
-    let early = crate::mind::unlimited(w, id) && !crate::temporal::erased(w, id);
+    // spec: S-0610 r12 claim 5 (the excluded updates include a superweapon-warp member's phasing-in updates that S-0215 claim 2 excludes, S-0513 claim 39a)
+    let early = crate::mind::unlimited(w, id) && !crate::temporal::cut_short(w, id);
     if early {
         // spec: S-0601 claim 16 and State and ordering (revision 9: the overload update follows the berserk countdown of S-0610 claim 5, which follows the first per-tick start, and precedes self-healing, behaviour processing, movement and firing; so an unlimited controller's first per-tick start and countdown come here, ahead of its self-healing, an order S-0610 claim 6 and S-0314 claim 9 leave to the engine)
         process::head(w, id);
@@ -283,7 +289,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     // spec: S-0514 claims 14, 17 and 18 (an attached attacker lets go on arriving in a new cell; a target being erased takes its erasure update and sparkle in its own turn and skips ordinary movement, turning, firing and behaviour; a building skips behaviour processing and firing; a phasing-in unit sparkles)
     crate::temporal::holder_turn(w, id);
     crate::temporal::phasing_sparkle(w, id);
-    if crate::temporal::turn(w, id) {
+    if crate::temporal::turn(w, id, !erasure_made) {
         // spec: S-0525 claims 9 and 11 (the radiation hit in the object's own turn, after its self-healing; S-0514 claim 17's erasure skips behaviour, movement, turning and firing, not the hit)
         crate::radiation::hit_turn(w, id);
         return;

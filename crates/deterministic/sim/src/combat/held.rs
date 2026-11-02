@@ -193,7 +193,8 @@ pub(crate) fn periodic_check(w: &mut World, id: ObjectId) {
         return;
     }
     // spec: S-0309 claim 29 (Turns cut short: a building being erased makes no check; an infantry unit, vehicle or landed aircraft being erased drops its target instead in each of its turns, S-0215 claim 2; a materialising holder on which a temporal beam is locked is open, interim Q-2264: being erased, no check)
-    if crate::temporal::erased(w, id) {
+    // spec: S-0513 claim 39a (a warp member phasing in with a beam attached has its turns cut short as a vehicle or aircraft, and as an infantry unit only while being erased or with quirks.phase_in_beam_spares_infantry off; otherwise it takes the turns of a phasing-in unit with no beam attached)
+    if crate::temporal::cut_short(w, id) {
         return;
     }
     if !periodic_covers(w, id) {
@@ -222,7 +223,10 @@ pub(crate) fn turn_start_drop(w: &mut World, id: ObjectId) {
     let Some(Target::Object(x)) = w.obj(id).and_then(|o| o.target) else {
         return;
     };
-    if !left(w, x) {
+    // spec: S-0513 claim 39a (The firer: while its beam is attached, a firer keeps the member at the checks and makes no further shot at it; Release: the warp is no release cause, and a firer in attack approaches a member that lands beyond range) and S-0514 claim 14; interim Q-2317: a holder whose beam is attached to the departed member keeps it
+    if !left(w, x)
+        || (crate::temporal::holds(w, id, x) && crate::superweapons::warp::departed(w, x))
+    {
         return;
     }
     if let Some(ob) = w.obj_mut(id) {

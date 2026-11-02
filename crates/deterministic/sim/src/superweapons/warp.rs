@@ -112,6 +112,12 @@ fn set_member(w: &mut World, id: ObjectId, m: Option<Member>) {
     }
 }
 
+/// Whether an object is a warp member: from joining the group at launch
+/// until its arrival hold ends (`turn`).
+pub fn is_member(w: &World, id: ObjectId) -> bool {
+    member(w, id).is_some()
+}
+
 /// Whether an object is phasing in by a superweapon warp (Terms).
 pub fn phasing(w: &World, id: ObjectId) -> bool {
     member(w, id).is_some_and(|m| m.phasing())
@@ -499,6 +505,8 @@ fn depart(w: &mut World, id: ObjectId, m: Member) {
     // `combat::held::holders_drop` (S-0309 claim 27 does not apply to it).
     // spec: S-0513 claim 39 (departure clears no holder's target, takes no holder timer draw over 4 to 8 ticks whatever its timer shows, reverts no holder with an override in effect, S-0215 claim 10, and leaves a projectile in flight towards the member aimed at it, S-0306 claim 17)
     lift_off(w, id);
+    // spec: S-0513 claim 39a (Departure: a temporal beam attached to the member stays attached with its amount, and the member is no longer being erased)
+    crate::temporal::departed(w, id);
     // spec: S-0513 claim 39 and T2 (it disappears from its old position and is off the map until it appears; being erased ends; phasing in; the landing check)
     set_member(
         w,

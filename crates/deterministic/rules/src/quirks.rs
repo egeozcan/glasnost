@@ -1762,6 +1762,14 @@ pub struct Quirks {
     // spec: S-0513 claim 40; S-0214 Terms (being erased, phasing in)
     #[serde(default = "on")]
     pub warp_hold_persists: bool,
+    /// A temporal projectile in flight at a superweapon warp's launch, or a fragment, locks a beam on a member; the warp and the erasure both go on, and from its departure the member is no longer being erased while the beam stays attached, up to a later lock; off: a pending warp, from the launch until the departure update, is one more lock refusal.
+    // spec: S-0513 claim 39a and Edge cases; S-0514 claims 3, 9, 14 and 17
+    #[serde(default = "on")]
+    pub warp_departure_keeps_beam: bool,
+    /// While it phases in, a vehicle or aircraft with a temporal beam attached has its turns cut short whether or not it is being erased, and an infantry unit only while it is being erased; off: an infantry unit with an attached beam has its turns cut short while it phases in as well.
+    // spec: S-0513 claim 39a and Edge cases; S-0514 claim 17; S-0610 claim 5
+    #[serde(default = "on")]
+    pub phase_in_beam_spares_infantry: bool,
     /// A deployed deploy-to-fire vehicle with the in-place deploy flag queues *unload* again instead of firing, so it cycles between deploying and undeploying and never fires; off: a deployed deploy-to-fire vehicle fires normally, and only a mobile one queues *unload*. Not implemented yet (wave 2).
     // spec: S-0517 claim 13 and Edge cases; S-0310 claim 9 and Edge cases
     #[serde(default = "on")]
@@ -2633,6 +2641,10 @@ impl Default for Quirks {
             second_stage_order_unchecked: true,
             superweapon_kind_as_list_position: true,
             warp_hold_persists: true,
+            // spec: S-0513 claim 39a and Edge cases (default on = original)
+            warp_departure_keeps_beam: true,
+            // spec: S-0513 claim 39a and Edge cases (default on = original)
+            phase_in_beam_spares_infantry: true,
             deploy_to_fire_repacks: true,
             assaulter_reversed_kill_credit: true,
             erasure_double_experience: true,
@@ -3828,6 +3840,11 @@ impl Quirks {
                 self.superweapon_kind_as_list_position,
             ),
             ("warp_hold_persists", self.warp_hold_persists),
+            ("warp_departure_keeps_beam", self.warp_departure_keeps_beam),
+            (
+                "phase_in_beam_spares_infantry",
+                self.phase_in_beam_spares_infantry,
+            ),
             ("deploy_to_fire_repacks", self.deploy_to_fire_repacks),
             (
                 "assaulter_reversed_kill_credit",

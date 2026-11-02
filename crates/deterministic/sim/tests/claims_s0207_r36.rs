@@ -66,6 +66,7 @@ fn erase(w: &mut World, u: ObjectId) {
             joiners: Vec::new(),
             amount: 1_000_000,
             was_off: false,
+            suspended: false,
         },
     );
 }

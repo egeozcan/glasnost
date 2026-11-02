@@ -615,12 +615,14 @@ fn claim17_a_seizing_hit_after_the_hold_ends_seizes() {
 }
 
 #[test]
-fn claim17_an_erasure_lock_on_a_member_off_the_map_waits_for_the_hold() {
-    // spec: S-0306 claim 17 (the erasure lock acts on a departed member) and S-0513 claim 51 (the warp update is the whole member turn until the arrival hold, so the erasure's updates, S-0514 claim 7, wait for the hold); what the lock does to the warp in the original is an Open question of S-0306, scenario P11 run g part d; this is our engine's behaviour
+fn claim17_an_erasure_lock_on_a_member_off_the_map_makes_progress_in_every_turn() {
+    // spec: S-0306 claim 17 (the erasure lock acts on a departed member) and S-0513 claim 39a (A lock after the departure: a leader's lock, the member being erased; The erasure goes on: an erasure update, S-0514 claim 7, in each member turn at every stage, before the warp step, an intrinsic exception to claim 51's whole-member-turn contract, S-0203 claim 4); what the lock does to the warp in the original is an Open question of S-0306, scenario P11 run g part d
     let mut h = hit(Part::Erase, Timing::Away);
     let amount = |w: &World, v| w.temporal.locks.get(&v).map(|l| l.amount);
     let start = amount(&h.w, h.v).expect("a lock");
+    assert!(glasnost_sim::temporal::erased(&h.w, h.v));
     let (mut appeared, mut held) = (None, None);
+    let mut last = start;
     for i in 0..40 {
         step(&mut h.w);
         let s = stage(&h.w, h.v);
@@ -630,12 +632,9 @@ fn claim17_an_erasure_lock_on_a_member_off_the_map_waits_for_the_hold() {
         if held.is_none() && matches!(s, Some(Stage::Hold(_))) {
             held = Some(i);
         }
-        if held.is_none() {
-            assert_eq!(
-                amount(&h.w, h.v),
-                Some(start),
-                "tick {i}: no erasure update before the hold"
-            );
+        if let Some(a) = amount(&h.w, h.v) {
+            assert!(a < last, "tick {i}: an erasure update in every turn");
+            last = a;
         }
     }
     assert_eq!(
@@ -646,7 +645,7 @@ fn claim17_an_erasure_lock_on_a_member_off_the_map_waits_for_the_hold() {
     assert_eq!(held, Some(1), "its arrival effects in the update after");
     assert!(
         amount(&h.w, h.v).is_none_or(|a| a < start),
-        "the erasure goes on from the hold"
+        "the erasure goes on through the warp"
     );
 }
 

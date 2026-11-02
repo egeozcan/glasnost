@@ -352,3 +352,14 @@ Ledger: [intake76.md](intake76.md). S-0501 r93 adds two quirks, both new switche
 **Version effects.** The layer file changes, so the layered `sim_rules_hash` moves: a save,
 replay, report or room made with the previous layer is refused on the rules hash. Reference files
 are unaffected.
+
+## Intake 75 (S-0513 r86, S-0514 r12, S-0610 r12): two chrono switches judged
+
+Ledger: [intake75.md](intake75.md). S-0513 r86 claim 39a adds two switches.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `warp_departure_keeps_beam` | S-0513 claim 39a, Edge cases; S-0514 claim 3 | rejected (not in the layer) | Condition 1 is met: the spec states the off position (a pending warp is one more lock refusal), and it is built. Condition 2 fails. The quirk text describes a member that warps away while erased, stops being erased at its departure and is still removed later; it names no stuck unit, no give-up and no visible glitch, and no play note or request names the switch. Condition 3 fails too: the off position stops a temporal shot in flight at a warp launch from erasing the member, which changes how chrono weapons and the chronosphere trade against each other. Both positions are tested: `claims_s0513_r86::claim39a_switch_off_a_pending_warp_is_one_more_lock_refusal` and `claim39a_switch_on_a_pending_warp_is_no_lock_refusal`, with the l1 to l5 tests for the on position. |
+| `phase_in_beam_spares_infantry` | S-0513 claim 39a, Edge cases; S-0514 claim 17; S-0610 claim 5 | rejected (not in the layer) | Condition 1 is met: the off position (an infantry unit with an attached beam has its turns cut short while it phases in) is stated and built. Condition 2 fails: the spec gives the difference as which turns an infantry warp member takes during its arrival hold, a few ticks long; it names no stuck unit or glitch, and no play note or request names it. Condition 3: the off position changes a unit's turns, a rule change rather than a fix. Both positions are tested: `claims_s0513_r86::claim39a_an_infantry_member_with_a_beam_phases_in_as_one_with_no_beam_in_both_positions` and `claim39a_the_berserk_countdown_skips_the_cut_short_phasing_in_updates`. |
+
+Intake 75 leaves the layer file unchanged, so it does not move the layered rules hash again.
