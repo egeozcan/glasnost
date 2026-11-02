@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -70,8 +70,16 @@ before joint hand-off.
    A bunkered vehicle is redirected to its bunker. A cell or a non-combat object only makes
    the firer's old beam let go. Temporal erasure replaces ordinary direct and area damage,
    but does not suppress the detonation's other presentation effects.
-   - Backing: `measurable` (E1, E4).
-   - Confidence: high.
+
+   A departed superweapon warp member that is the target, off the map or phasing in after it
+   appears, is an ordinary object target for claims 1 to 4: it passes the ground-layer test by
+   S-0306 claim 17's render-layer rule, and the lock attaches by these claims' tests. What the lock
+   then does to the member is given, and rated, by S-0306 claim 17 and S-0513 claim 39a.
+   - Backing: `measurable` (E1, E4). For a departed warp member target, the lock's attachment is
+     `measurable` by S-0306 scenario P11 run g (off the map) and run h (phasing in). That the member
+     stays in the ground render layer until at least the end of its arrival hold is `unmeasured`, as
+     S-0306 claim 17 rates it: no rule there reads the layer after appearance.
+   - Confidence: high; medium for a departed warp member target, as S-0306 claim 17 rates it.
 
 2. **Refused-hit side effects.** A delivered erasing hit on infantry, a vehicle, aircraft or
    a building clears its spawner slots (S-0506 claim 13) and frees units it mind-controls.
