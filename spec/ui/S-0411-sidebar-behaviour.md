@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 28
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-02
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238, Q-2266]
 supersedes: []
 ---
 
@@ -37,7 +37,8 @@ meter scaling belong to S-0405, radar state to S-0410 and credit values to S-041
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
 
 Drawing the install's command-button and tab images is optional. When the client
-draws them, claim 19 fixes the file, frame and palette for each state (Q-2238).
+draws them, claim 19 fixes the file, frame and palette for each state (Q-2238), and its
+*Pixels* part how those images show their pixels on every side (Q-2266).
 
 **Paired revisions.** S-0404 revision 13 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
@@ -622,6 +623,64 @@ last recheck). In addition:
     side: the copy found by the ordinary precedence. S-0005 claim 22 owns that
     palette's discarding and resolution at each side-group mount.
 
+    *Shell images.* The original also draws the sidebar's shell, the art the buttons are
+    drawn over, from four image files of fixed name, one each, named in Import mapping and
+    resolved by the same precedence as the button files. It draws them with the same sidebar
+    palette as the buttons, so that palette's entries give the shell's colours too, and draws
+    the buttons over them. Which part of the sidebar each file covers, and where, is not
+    claimed: S15 reads where the shell lies beneath a button from run c0d's capture. That
+    some shell file lies beneath a button and shows its pixels in the sidebar palette is
+    rated high once run c0d shows one checkerboard position in black and white. That there
+    are four such files, one each, their names, their resolution and each file's own palette
+    stay medium, since S15 gives all four test files the same checkerboard and a position
+    does not tell which file lies beneath it. Our engine's shell art is its layout's design
+    (*Layout*). The four files enter this spec as
+    S15's test inputs, and our engine need not draw them.
+
+    *Pixels (Q-2266).* These images show their pixels as follows, on every side, with
+    the sidebar palette above (not the icon palette of S-0103 claim 13). Each rating of high
+    in this paragraph holds in each frame that S15 part c's captures show: frames 0, 1 and 2
+    of each tab image, frames 0 and 1 of the sell and repair images, and frames 0, 1 and 2
+    of each scroll image. Two ratings below are scoped further, per frame and position, and
+    hold high only where their scope says. In the lit tab frames 3 and 4, which no capture
+    shows, each of these facts is medium, since such a frame shares its image's drawing. A pixel of
+    palette index 0 is transparent: it is not
+    drawn, so what lies beneath the button shows through (medium), and palette entry
+    0's colour plays no part: what an index-0 pixel shows does not depend on entry 0
+    (high in a captured frame with an index-0 pixel at a checkerboard position of S15 run
+    c0d, medium in any other frame), and it is not one fixed colour (medium; high once S15 run c1d
+    shows it).
+    Every other index, 1 to 255, shows its converted sidebar-palette colour, packed by
+    S-0103 claim 9's 16-bit step: the captured pixel equals that packed colour (high, with
+    which 16-bit layout a display path presents medium, as S-0103 claim 9 rates it).
+    That such a pixel is drawn opaque, taking nothing from what lies beneath, is the
+    statement that no index from 1 to 255 is drawn as a shadow or translucent, and is
+    rated as that statement is: a mixing nearer opaque than S15 run c1d's bound can pack
+    to the same colour and cannot be told from opaque. No index from 1 to 255 is
+    drawn as a shadow or translucent (high only for an index in a captured frame in which S15
+    run c1d shows it at two neighbouring checkerboard positions of run c0d, over black and
+    white, and only for any
+    darkening at an index other than run c1d's black checkerboard entry, since no other
+    entry of that run's test palette packs to black, and for any mixing
+    that keeps no more of the image's own colour than that run's bound *a*ₘ; medium for that
+    index in any other frame, for any other index and for a mixing nearer opaque than the
+    bound); index 0 is not
+    drawn at all, as above (medium). Neither the house colour nor the lighting the map
+    file sets (its ambient level and its red, green and blue tints) changes a button's
+    colours (high, for a tint channel only where S15 run c2 records a captured button pixel
+    whose packed colour has that component above 0, and for the house colour at an index of
+    the remap range only where it records a captured button pixel at that index; medium
+    otherwise). The ion storm (S-0104 claim 3) does not change them either
+    (medium, high once S15 run c3 shows it, at the indices other than 240 to 254), nor does a
+    trigger action that sets a channel of the map tint (S-0104 claim 17) or the base ambient
+    (S-0104 claim 14) (medium, high once S15 run c4 shows it, at the indices other than 240 to
+    254). At indices 240 to 254 both stay medium: a house-colour shade table drawn at its row 6
+    or above keeps those tint-exempt indices at full colour whatever its tint (S-0103 claim 7),
+    so neither run could show a tint there. No other global effect (the nuke
+    flash, the chrono flash and the psychic dominator, S-0104) changes them (medium).
+    A button's state changes only which frame it shows, never the colour of an index
+    (high).
+
     The first row that matches the button's state, read top to bottom, gives the frame.
 
     | Button | State | Frame |
@@ -679,14 +738,98 @@ last recheck). In addition:
     a file or a needed frame cannot be resolved, our engine draws its own symbol for
     that button (design).
     - Backing: `measurable` (scenario S15 part a for the files, frames and palette by
-      opening the install's files; part b for the frame per state in play, during a
+      opening the install's files; part c run c0d for *Shell images*: a single-pixel
+      checkerboard of the test shell images shown through a button's index-0 copy shows some
+      shell file drawn beneath that button, and its colours being the black and white of run
+      c1d's two changed palette entries shows that file drawn with the sidebar palette; the
+      four test files share one checkerboard, so which file it is, and the other files'
+      drawing and palette, are not shown; part c for the
+      pixels of all eight images on each
+      side: index 0 independent of entry 0 (runs c1d and c1b, read at the checkerboard
+      positions of run c0d) and not one fixed colour (run c1d, which changes the shell
+      images; decisive only where a button's index-0 pixels at those positions show both
+      checkerboard colours), every index 1 to 255 shown in its packed colour, the same
+      under a second house colour and the map file's lighting (run c2), during an ion
+      storm (run c3) and after trigger actions that set the map tint and the base
+      ambient (run c4), in frames 0 to 2 of each tab and scroll image and frames 0 and 1
+      of the sell and repair images, each pixel of both scroll images' pressed frame
+      read in at least one capture; part b for the
+      frame per state in play, during a
       held press on every button kind, with the pointer over and off each scroll
       button, for the mode buttons' clicks, each side's images and the original's mode
       lighting, with S8's recorder dating each sidebar update), and `unmeasured` for a
       tab with no icons while lit, which no scenario sets up, and for our engine's mode
       lighting for modes entered other than by their buttons, the scroll frame while the
       pointer is off a pressed button, the power-mode picture, layout and the
-      missing-art symbol, which are design decisions, not behaviour of the original
+      missing-art symbol, which are design decisions, not behaviour of the original.
+      The other global effects (the nuke flash, the chrono flash and the psychic
+      dominator) are `unmeasured`: no run starts them. A trigger action that sets the map
+      tint retints every tintable table, the named palettes included (S-0104 claim 17),
+      and an ion storm rebuilds the same tables (S-0104 claim 3). Whether the sidebar
+      palette is drawn through such a table is not settled by S-0104, whose named-palette
+      backing is `unmeasured` in both claims, so both are medium here: the storm until
+      run c3 shows the buttons unchanged during it, the trigger actions until run c4
+      shows them unchanged after a map-tint action and after a base-ambient action
+      (S-0104 claim 14). What a global effect changes is
+      the tint of S-0104 claim 3's tintable tables, every cell's lighting (S-0104 claims
+      5 and 9) and the ambient through its fade (S-0104 claim 4). This claim draws every
+      button index in its converted sidebar-palette colour, packed and nothing else, so
+      a global effect would reach the buttons only if the sidebar palette were one of
+      those tables, which runs c3 and c4 test. That a button takes no cell's light is
+      this claim's own statement, backed by run c2. Its map-file lighting puts every cell
+      at light level 0 with a map tint of 0 in every channel. A drawing shaded through
+      S-0104 claim 15's rows of a table of two or more shades then takes row 0, which is
+      entirely black, tint-exempt indices (S-0103 claim 7) included (S-0104 claim 15). A
+      table of one shade is its palette times its tint, and brightness does not darken it
+      (S-0104 claims 6 and 15): built with the map tint it is black. The single-shade tables
+      that are never tinted, the single-shade house-colour palettes (S-0104 claim 3), take
+      neither brightness nor tint, so a drawing through one does not depend on the lighting
+      at all, and the house-colour arm below covers it. A drawing through a table built with
+      the map tint loses each channel. No entry of c1's test palette packs to black,
+      so a lighting-dependent drawing would change every nonzero-index pixel, and a
+      single channel's tint every pixel with that packed component above 0. Its house
+      colour's remap ramp packs apart from c1's at every remap-range index other than 31
+      (S-0103), so a house-colour drawing would change every button pixel at such an index.
+      Index 31 is pure black in every house colour's ramp (S-0103 claim 6), and no entry of
+      c1's test palette packs to black, so c1's exact-colour reading already rules out a
+      house-colour drawing at index 31. That no other effect
+      reaches the buttons by another route than those runs c2 to c4 take is not run,
+      hence medium.
+      That no index from 1 to 255 is drawn as a shadow or translucent rests first on
+      c1's exact-colour reading: every pixel at such an index equals its entry's own
+      converted colour, packed. A shadow darkens and a translucent drawing mixes in what
+      lies beneath, so either misses that exact colour, except where what lies beneath
+      already has the entry's colour closely enough that the result packs the same.
+      c1 cannot tell that coincidence apart, since what lies beneath a button is not known
+      there. Run c0d supplies it: its button copies hold index 0 only, so each pixel of a
+      button's rectangle shows what an index-0 pixel shows there. Where that is the
+      single-pixel checkerboard of the test shell images, unbroken around the pixel, it is
+      that checkerboard, which lies beneath. Run c1d settles the coincidence at those
+      positions: there every index stands at two neighbouring pixels, one over black and
+      one over white. Two colours
+      that merely differ would not do, since a blend over each of two nearby colours can
+      pack to the entry's colour twice. Over black and white, a mixing that keeps a weight
+      *a* of the entry's colour gives two results that differ, in every component, by
+      (1 − *a*) times the difference beneath. They pack apart once that is large enough,
+      so at least one pixel misses the entry's colour for every *a* up to the bound
+      *a*ₘ (Formulas). A mixing nearer opaque than *a*ₘ moves a pixel by less than
+      (1 − *a*ₘ) × 255 = 16 × 255 / (*D* − 7) levels over any colour beneath. That is
+      about two packing steps for the black and white checkerboard. Such a mixing can pack
+      to the entry's colour over both checkerboard colours and pass c1 and c1d alike: it
+      keeps medium. A
+      darkening shadow shows black over black, since a darkening never makes a colour
+      lighter. In run c1d only the black checkerboard entry packs to black, so at any other
+      index the pixel over black misses its entry's colour. That entry is not judged for
+      darkening. A checkerboard that is not black and white raises nothing to high, neither
+      for a darkening nor for any mixing. Both readings are made frame by frame: an index
+      keeps medium in a frame in
+      which it stands at no such pair, and entry-0 independence keeps medium in a frame
+      with no index-0 pixel at a checkerboard position. The
+      darkening premise is the ordinary meaning of a shadow and is not measured on its own.
+      That an index-0 pixel shows exactly what lies beneath stays medium. Run c0d is a
+      control, not a view of the region with no button drawn: its copies rest on the same
+      transparency. So part c shows that an index-0 pixel shows what an all-index-0 copy
+      shows there, does not depend on entry 0 and is not one fixed colour.
     - Confidence: high (files, tab numbering, palette name and file form, resolution by
       the ordinary precedence; the tab frames 0 to 2 in the states S15 part b holds; the
       scroll frames except during a press with the pointer off the button; no frame
@@ -696,9 +839,40 @@ last recheck). In addition:
       its button; no frame of its own for a held press on a tab, sell or repair button
       in the states S15 part b holds it); medium (the lit-tab frames 3 and 4 and their
       alternation, at claim 11's toggles, whose timing claim 11 rates medium in
-      part); medium (a lit tab with no icons showing frame 2); medium (the original's last mode
+      part); medium (a lit tab with no icons showing frame 2); medium (*Shell images*: some shell
+      file drawn beneath a button with the sidebar palette, high once run c0d shows a
+      checkerboard position in black and white; the four files, one each, their names and
+      resolution, and each file's own palette, medium); medium (the original's last mode
       row for a mode ended other than by its button, and its second row for an entry
-      other than by the key); medium (design parts)
+      other than by the key); medium (design parts). Pixels, for each of the eight images
+      on each of the three sides, in the frames part c captures (frames 0 to 2 of each
+      tab and scroll image, frames 0 and 1 of the sell and repair images): high (every
+      index 1 to 255 shown in its packed colour, the 16-bit packing, and no change by
+      house colour, by the ambient level and tints the map file sets or by button state
+      other than the frame, for a tint channel only where run c2 records a captured pixel
+      with that packed component above 0 and for the house colour at a remap-range index
+      only where it records a captured pixel at that index, medium otherwise); medium for
+      no change by an ion storm, high once run c3 shows
+      it at the indices other than 240 to 254; medium for no change by a trigger action that
+      sets the map tint or the base ambient, high once run c4 shows it at the indices other
+      than 240 to 254; medium for both at indices 240 to 254 (tint-exempt in a house-colour
+      shade table, S-0103 claim 7); high for an index-0 pixel independent of entry 0
+      in a captured frame with an index-0 pixel at a checkerboard position of run c0d,
+      medium in any other frame; medium for an index-0 pixel not being one fixed colour, high
+      once run c1d shows a button's index-0 pixels at those positions in both
+      checkerboard colours; high for no shadow or translucency at an index in a captured
+      frame in which run c1d shows it at two neighbouring pixels at those positions, over
+      black and white, for any darkening at an index other than run c1d's black checkerboard
+      entry, since no other entry of that run's test palette packs to black, and for any mixing
+      up to the bound *a*ₘ; medium for that index in any other
+      frame and at any other index, where c1's exact colour alone leaves the coincidence
+      case open, and medium for a mixing nearer opaque than *a*ₘ; medium for no change by any other
+      global effect (the nuke flash, the chrono flash and the psychic dominator), which no
+      run starts (S-0104); medium in the lit tab frames 3 and 4, which no capture of part
+      c shows and which share their image's drawing; medium for which 16-bit layout a
+      display path presents, as S-0103 claim 9 rates it; medium that an index-0 pixel
+      shows exactly what lies beneath the button (the transparent drawing the icons
+      use, S-0103 claim 13; run c0d's all-index-0 copies rest on that same drawing)
 
 ## Formulas
 
@@ -720,6 +894,16 @@ last recheck). In addition:
   max(0, *T* − *R*) upward. A wheel event uses 1 row instead of *R*.
   All additions, comparisons and clamping are exact integer operations.
   The end-feedback test uses the starting *T*, not the clamped destination.
+
+- **Mixing bound of S15 run c1d** *a*ₘ = 1 − 16 / (*D* − 7) for *D* > 23 (claim 19), where *D* is
+  the smallest difference, over the three 8-bit components, between the two checkerboard colours as
+  captured. Real arithmetic, no rounding. The 7 is the most a captured 8-bit component can sit above
+  the true value packed into its level, and the 16 is two of S-0103 claim 9's coarsest packing steps
+  of 8 levels: one for the two results to pack apart, one for the mixing's own rounding. For black
+  and white, *D* is 248 with zero low-bit fill and 255 with copied top bits, so *a*ₘ is 1 − 16/241
+  or 1 − 16/248. A mixing keeping a weight *a* ≤ *a*ₘ of the image's colour shows at one pixel of
+  each neighbouring pair. The bound is defined only for *D* > 23, where it lies between 0 and 1.
+  Claim 19's high uses it for the black and white checkerboard only.
 
 ## Constants
 
@@ -808,7 +992,8 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `SELL.SHP`, `REPAIR.SHP` | sell and repair button images | fixed file names, no rules selector; frames 0 and 1 by claim 19; resolved by the ordinary precedence of S-0005 claims 1 and 7, with the local player's side group mounted per S-0005 claims 13 and 13a; unresolved file: our engine's own symbol |
 | `TAB00.SHP`, `TAB01.SHP`, `TAB02.SHP`, `TAB03.SHP` | first to fourth tab images | fixed file names; the two digits are the tab's zero-based position in claim 1's order; frames 0 to 4 by claim 19's first table; resolution as above |
 | `R-UP.SHP`, `R-DN.SHP` | scroll-up and scroll-down button images | fixed file names; frame 0 ready, 1 press in progress over it, 2 disabled (claim 19); resolution as above |
-| `SIDEBAR.PAL` | palette of the sell, repair, tab and scroll images above | fixed file name for every side, no rules selector; discarding and resolution at each side-group mount are S-0005 claim 22's; 768-byte file of 256 entries, each a red, a green and a blue byte; a file byte *c* gives the palette component (4·*c*) mod 256; unresolved file: our engine's own symbols (claim 19) |
+| `SIDEBAR.PAL` | palette of the sell, repair, tab and scroll images above and of the shell images below | fixed file name for every side, no rules selector; discarding and resolution at each side-group mount are S-0005 claim 22's; 768-byte file of 256 entries, each a red, a green and a blue byte; a file byte *c* gives the palette component (4·*c*) mod 256; each high below in each frame S15 part c's captures show (frames 0 to 2 of each tab and scroll image, frames 0 and 1 of the sell and repair images), except where a rating below is scoped per frame and position, medium in the lit tab frames 3 and 4, which no capture shows; index 0 transparent (independent of entry 0: high in a captured frame with an index-0 pixel at a checkerboard position of S15 run c0d, medium in any other frame; not one fixed colour: medium, high once S15 run c1d shows it; showing exactly what lies beneath: medium), every other index shown in its packed colour (high), drawn opaque with no shadow or translucency (high only for an index in a captured frame in which S15 run c1d shows it at two neighbouring checkerboard positions of S15 run c0d, over black and white, for any darkening at an index other than run c1d's black checkerboard entry *p*, which is not judged for darkening, since no other entry of that run's test palette packs to black, and for any mixing up to the bound *a*ₘ; medium for that index in any other frame, for any other index and for a mixing nearer opaque), colours packed by S-0103 claim 9 (high; the 16-bit layout a display path presents: medium, as rated there), unchanged by house colour and by the lighting the map file sets (high, for a tint channel only where S15 run c2 records a captured button pixel whose packed colour has that component above 0 and for the house colour at a remap-range index only where it records a captured button pixel at that index; medium otherwise), by the ion storm (medium, high once S15 run c3 shows it, at indices other than 240 to 254), by a trigger action that sets the map tint or the base ambient (medium, high once S15 run c4 shows it, at indices other than 240 to 254) and by any other global effect (medium) (claim 19 *Pixels*); unresolved file: our engine's own symbols (claim 19) |
+| `SIDE1.SHP`, `SIDE2.SHP`, `SIDE3.SHP`, `ADDON.SHP` | the sidebar's shell images (claim 19 *Shell images*) | fixed file names, resolved as the button files; drawn beneath the buttons with the sidebar palette above (some shell file beneath a button in that palette: medium, high once S15 run c0d shows a checkerboard position in black and white; the four files, one each, and each file's own palette: medium, since the four test files share one checkerboard); what each draws and where is not claimed; S15 runs c1d, c0d and c1b replace them as test inputs; our engine need not draw them |
 | No data key | power-mode button image | no install image is imported; our picture is design (claim 19) |
 | `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
 
@@ -1308,7 +1493,10 @@ the time the script sent a button event, dates a click.
   house, each run the first game of a freshly started session, with S8's recorder,
   which dates each sidebar update and its drawn frame and here also logs per tick
   whether sell mode and repair mode are active. Bind keys to the sell-mode and
-  repair-mode commands in the keyboard options.
+  repair-mode commands in the keyboard options. The map carries S13's named map
+  overrides: one tab offers more icons than fit, so both scroll buttons are enabled
+  while it is shown (claim 18), and another offers fewer than one page, so both are
+  disabled while it is shown.
 - Procedure: (a) for each of the three sides, resolve the sell, repair, four tab and
   two scroll images and the sidebar palette named in Import mapping by the ordinary
   precedence with that side's group mounted; render every frame of each with the
@@ -1361,6 +1549,166 @@ the time the script sent a button event, dates a click.
   mounted side group in the first game of the session, colours included, or a file
   lacks a frame claim 19 uses. One run per side, screen capture plus read-only image
   and palette inspection.
+- Part (c), pixels (claim 19 *Pixels*, Q-2266). Setup: part b's skirmish with a
+  human house on a 5-6-5 display path, as S-0103's *Reading a pixel* requires. Every
+  run below is made once for each side: an Allied, a Soviet and a Yuri human house,
+  each with its side group mounted as S-0005 claims 13 and 13a give.
+  Every run adds loose files, resolved ahead of the stock ones and of every side
+  group's files by S-0005's precedence:
+  - a test copy of each of the eight button images of claim 19 (sell, repair, the four
+    tabs, the two scrolls), each with its stock file's frame count and frame size. Every
+    frame holds every index from 1 to 255 at least once at two horizontally neighbouring
+    pixels, laid out in a pattern of its own, so that a capture tells which frame is
+    shown, and index 0 at the rest of its pixels. Before the runs, check that every
+    stock frame has more than 510 pixels. If one has not, its indices are split over
+    two copies, each index in one copy only, and the runs below are made once with
+    each.
+  - a test copy of the sidebar palette in which, for every entry from 1 to 255, the red
+    and the blue file bytes are odd and their converted value (claim 19's Import
+    mapping) is not from 128 to 159, no two entries pack to the same 16-bit value, and
+    no entry packs to black (every component 0 after S-0103 claim 9's step) or to white
+    (every component at the top of its packed range).
+    Under these rules a red or blue component's full 8-bit value differs from its
+    packed value with either low-bit fill (S-0103 claim 9), so a full-precision drawing
+    shows. Entry 0 holds a test colour.
+  - Run c1: as above.
+    Run c2: c1's files, the human house given in the skirmish setup a house colour whose
+    remap ramp (S-0103) packs to a value other than c1's house colour's ramp at every
+    index of the remap range other than 31 (pure black in every ramp, S-0103 claim 6),
+    both ramps' packed values recorded, on a flat test copy of
+    the map with no light sources whose normal lighting has ambient level 0, ground bias 0,
+    level factor 0 and red, green and blue tints 0. Every cell's light level is then 0
+    (S-0104 claim 9). The run records, for each of the three components, whether a
+    captured nonzero-index button pixel has that packed component above 0, and which
+    remap-range indices the captured button pixels hold. Run c1d: c1's files, plus loose
+    test copies of the four
+    shell images named in Import mapping, each with its stock file's frame count and frame
+    size and every frame filled with a checkerboard of single pixels in two nonzero
+    indices *p* and *q*, and with test palette entries *p* and *q* changed so that they pack
+    to black and to white. These two entries are exempt from c1's palette rules. In c1d,
+    c1b and c0d a button pixel at index *p* or *q* is judged only against that run's own
+    entry, and is left out of the full-precision falsifier and of every comparison with c1.
+    The two checkerboard colours are black and white, as claim 19's *Shell images* gives.
+    If c0d's capture shows the single-pixel checkerboard in two other colours, that
+    falsifies *Shell images*' palette. Those two colours are then recorded and used, and
+    c1d's readings over them raise no rating to high (claim 19). Run c0d: c1d's files, plus
+    loose test copies of the eight button images, each with its stock file's frame
+    count and frame size and index 0 at every pixel. Run c1b: c1d's files, with only
+    entry 0 of the test palette changed to another colour, whose packed value differs
+    from c1's entry 0 in every component.
+    Where the shell images lie beneath the sidebar's pixels is read from c0d's capture,
+    not claimed. A checkerboard position of a button is a pixel of its rectangle at
+    which c0d's capture shows one of the two checkerboard colours and each of its four
+    edge neighbours shows the other. The colour beneath it is c0d's pixel there. Run
+    c3: c1's files on a test copy of the map whose own lighting section sets the ion
+    storm's lighting set to test values, as S-0103's scenario PD does: ambient level 0,
+    ground bias 0, level factor 0 and red, green and blue tints 0. The map starts an ion
+    storm on a fixed tick through its own trigger, and the storm lasts long enough for the
+    current ambient to reach the storm's ambient (S-0104 claim 4) and past the run's last
+    capture. Its captures are all taken during the storm, after the current ambient has
+    reached the storm's. Every tintable table (S-0104 claim 3) is then rebuilt with a tint
+    of 0 in every channel, which is black at every index that is not tint-exempt (S-0104
+    claim 6), and every cell's light falls to level 0. Run c4: c1's files on a test copy of
+    the map with a trigger that, on a fixed tick before the captures, sets each of the
+    three map-tint channels (S-0104 claim 17) and the base ambient (S-0104 claim 14) to 0,
+    so that a table retinted with the map tint is black at every index that is not
+    tint-exempt. Its captures are taken once the ground's light has stopped changing after
+    that tick.
+- Procedure: in each run, captures of the sidebar with the pointer away from it and no
+  tab lit, taken in the same states in every run. One at the start, before any icon
+  exists, where every tab is unavailable (frame 2). Then, once every tab has icons (part
+  b's map gives each tab some), one at rest with each tab shown in turn, the overflowing
+  tab at its top row: the shown tab shows frame 1 and the others frame 0, and the scroll
+  buttons show frame 0 with the overflowing tab shown and frame 2 with the tab of fewer
+  than one page shown. Then, with the overflowing tab shown, one with sell mode entered
+  by its button and one with repair mode entered by its button (sell mode ended first).
+  Every capture shows every button. The scroll frames of the start capture are not
+  read. Then, with part b's overflowing tab shown at its top row, where both scroll
+  buttons are enabled (claim 18), press each of the two scroll buttons in turn, the up
+  button first. For each, two or more captures hold a press on it with the pointer
+  resting on it (frame 1, claim 18), each with the pointer at another place on the
+  button, near its opposite edges first. Each capture is read while the press is held.
+  Each press then ends by moving the pointer off the button and releasing there, which
+  requests no scroll (claim 18), so the page stays at the top row. A capture taken after
+  a release that changed the shown page is not used, and the press is repeated. More
+  places are added until every pixel of each scroll button lies outside the pointer's
+  image in at least one of its captures, so every index of both pressed frames is read.
+  Run c0d presses at the same pointer places as c1d. A
+  run counts only if
+  each capture shows
+  the same frame of each button as the same side's c1 capture in the same state, the
+  sidebar's icons and their states are the same as in that capture, and every sidebar
+  file is the same as in the run's base except the ones the run changes. c1 is the base
+  of c2, c3, c4 and c1d (which changes only the four shell images and
+  test palette entries *p* and *q*). c1d is the base of c0d
+  (only the eight button images) and of c1b (only entry 0 of the test palette). In
+  c0d, whose button frames hold index 0 only, the frame is not read: its captures count
+  when they are taken in the same state and at the same pointer place as c1d's.
+- Observable: per run and per capture, each button's captured pixels, matched pixel by
+  pixel against the frame of its test image that the capture shows, leaving out the
+  pixels under the pointer's image in the pressed-scroll captures (in c0d's or c1d's
+  capture at the same place, when the two are compared). A pixel at an index
+  from 1 to 255 is read by S-0103's *Reading a pixel*, and its full 8-bit value is kept
+  too. *Reading a pixel* leaves out index 0, so an index-0 pixel is read by its own rule:
+  its positions are those the test copy's layout gives index 0 in the frame shown, and at
+  each of those positions the captured screen pixel's three 8-bit components are kept as
+  they are. These
+  values are never compared against a palette entry. In c0d, every pixel of each
+  button's rectangle is kept in the same way, and the checkerboard positions are found
+  from it (Setup). Where a frame's indices are split
+  over two copies (Setup), each copy's runs are read on their own, every index is judged
+  in the copy that holds it, and the index-0 positions of every copy are read.
+- Expected: in every run and capture, every pixel at an index from 1 to 255 equals that
+  entry's converted colour packed by S-0103 claim 9's step, its low bits filled with
+  zeros or with copies of the top bits. On each side, c1d's, c1b's, c2's, c3's and c4's
+  pixels at nonzero indices equal c1's. At each index-0 position that is a checkerboard
+  position, c1d's pixel equals c0d's, and c1b's equals c1d's. Index-0 positions
+  elsewhere are recorded and judge nothing. Where a button's index-0 positions at
+  checkerboard positions include both checkerboard colours in c0d, c1d's index-0
+  pixels there show both colours. A darkened nonzero-index pixel, or one blended
+  keeping a weight of its entry's colour no greater than *a*ₘ, misses its entry's packed
+  colour in c1d at one pixel at least of each of its neighbouring pairs at checkerboard
+  positions, so it fails the first sentence of this Expected, as follows. A blend
+  nearer opaque than *a*ₘ may pack to its entry's colour over both
+  checkerboard colours and pass. Two horizontally neighbouring checkerboard positions
+  stand over both checkerboard colours. Let *D* be the smallest difference over the three components
+  between the two captured checkerboard colours (at least the top of the packed range for black and
+  white). A mixing that keeps a weight *a* of the entry's colour moves each result by (1 − *a*)
+  times what lies beneath, so its two results differ by at least (1 − *a*)(*D* − 7) levels in every
+  component before packing, less up to 8 for the mixing's own rounding. They then pack to different
+  values, so at least one pixel misses the entry's colour, for every *a* up to
+  *a*ₘ = 1 − 16 / (*D* − 7) when *D* > 23 (Formulas). A darkening shadow shows black over
+  black. No entry of c1d's test palette other than *p* packs to black, so at any other
+  index it misses the entry's colour at the pixel over black. Index *p* is not judged for
+  darkening.
+  With split copies, the statements about every index from 1 to 255 hold over the union
+  of the copies' indices, and the statements about index-0 positions hold in every copy.
+- Falsified if: a nonzero-index pixel shows the converted colour at full 8-bit
+  precision, or another colour, in any capture. Also falsified, as a shadow or
+  translucency, if a nonzero-index pixel of c1d differs from the same side's c1. If no
+  index's pair lies at checkerboard positions, that reading is inconclusive and the
+  rating of "no shadow or translucency" stays medium at every index. If the
+  checkerboard is not black and white, that falsifies claim 19's *Shell images* palette, and
+  "no shadow or translucency" stays medium at every index, since claim 19 rates it high
+  only over black and white. If run c2 records no captured nonzero-index pixel with a
+  component above 0, its reading of that component's tint is inconclusive, and if it
+  records no captured pixel at a remap-range index, its house-colour reading there is
+  inconclusive. Also
+  falsified, as a drawing of index 0 that depends on entry 0, if at an index-0 position
+  that is a checkerboard position c1b's pixel differs from c1d's. Also falsified, as a
+  drawing of index 0 other than what an all-index-0 copy shows, if at such a position
+  c1d's pixel differs from c0d's. Also falsified if any nonzero-index pixel of c1b, c2,
+  c3 or c4 differs from the same side's c1. A c3 capture set whose battlefield ground
+  pixels equal c1's in the same state decides nothing, since the storm's set was then not
+  applied, as in S-0103's scenario PD. The same holds for c4 and its trigger action. In c3
+  and c4 a pixel at an index from 240 to 254 that equals c1's raises nothing to high. If an
+  image has no index-0 position at a
+  checkerboard position, the entry-0 reading is inconclusive for that image, and its
+  rating stays medium. If no button's index-0 positions at checkerboard positions
+  include both checkerboard colours, the reading of "not one fixed colour" is
+  inconclusive, and its rating stays medium. One capture set per run, screen
+  capture plus read-only
+  image and palette inspection.
 
 ## Open questions
 
