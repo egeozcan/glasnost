@@ -1,9 +1,9 @@
 ---
 id: Q-2276
 title: Can a temporal beam be established on a superweapon warp member after the launch, and what happens to its warp then?
-status: open
+status: answered
 related: [S-0513, S-0514, S-0301, S-0306]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
