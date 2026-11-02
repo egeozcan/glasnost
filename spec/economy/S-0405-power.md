@@ -2,11 +2,11 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 47
+revision: 51
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-02
 measurements: [M-0005]
 requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505, Q-1710]
 supersedes: []
@@ -791,6 +791,18 @@ house's own update in a tick, which comes after the turn pass and before orders 
       shot damages one: the shells detonate outside every robot tank's damage reach. Whether an
       enabled target would change that is not separated by M-0005, and what sets where the shells
       land is open (Open questions).
+      Shots at a switched-off hovering vehicle that S-0503 counts as moving are led by the ordinary
+      lead rule (S-0306 claims 3 b and 6 a): one with a destination or a heading point is led, one
+      with neither is not. A led arcing shot can be void, and in an ordinary vehicle firing step
+      after the rearm countdown has run out a void launch leaves that countdown unchanged, so the
+      firer attempts the shot again on each later *can fire*. A straight or arcing projectile whose
+      firer is still in play outside any transport and has not been killed or started to cloak that
+      passes below the ground is not detonated there but flies on, so it can detonate away from the
+      vehicle (S-0306 T1 and T2 determine its detonation), unless it is flak-scattering and has a
+      target: where the target's reference point is not below the surface beneath it, T1's flak row
+      then detonates it in the first turn in which it is below the terrain. The lead reads the
+      vehicle's moving state, not its disabled state, so the sentence above that no targeting rule
+      reads the disabled state stays true.
     - **Passengers.** The disabled state of an open-topped transport does not stop its passengers
       from firing out of it.
     - **Drawing.** A voxel vehicle is drawn at half brightness: trunc(*b* / 2), where *b* is the
@@ -802,6 +814,14 @@ house's own update in a tick, which comes after the turn pass and before orders 
       for the damage amount's being that of an enabled vehicle: no scenario part crushes a
       disabled vehicle or compares the damage a disabled and an enabled one take, and both rest on
       no damage or crushing rule's reading the disabled state.
+      The lead of shots at a switched-off hovering vehicle and its below-ground shots are S-0306's
+      and `measurable` by its scenarios P44 and P45. The repeated attempts at a led aim point that
+      create no projectile and leave the rearm countdown unchanged are `measurable` by S-0306
+      scenario P44 part a with a projectile that is not inaccurate, as S-0306 claim 6 (a) gives
+      them. That those attempts reach the launch and are void, rather than refused by the firing
+      check, is `unmeasured` there: no run tells the two apart. The new scatter of each attempt of
+      an inaccurate projectile is `unmeasured` as a repetition, as S-0306 claim 6 (a) gives it: no
+      run repeats a void attempt of an inaccurate projectile.
       Drawing and sounds are `measurable` by inspection in
       W8 part a, whose run records a screenshot and the sounds. The late order is `unmeasured`:
       it needs an order and a disabling in the same tick. Passengers are `unmeasured`: no
@@ -816,14 +836,14 @@ house's own update in a tick, which comes after the turn pass and before orders 
       either. The first state rests on the reading of S-0207 claim 16 case (g) above, which S-0207
       rates low, and is rated low here too, with what follows a request accepted in it; the second
       state and what follows a request accepted in it are rated medium.
-    - Confidence: high (firing and acquisition, the guard reset, deselection, orders refused,
-      being targeted and kept as a target, taking damage and being destroyed); medium (the damage
-      amount's being that of an enabled vehicle, crushing, enabling resets every vehicle of the
-      type, the turn continuing, drawing, sounds, the scatter request accepted by a disabled
-      hovering vehicle after a depot's switch-on and what follows it); low (the scatter request
-      accepted while still above the ground after the switch-off and what follows it, the late
-      order, passengers, no new movement for a vehicle whose locomotor does not itself stop when
-      switched off)
+    - Confidence: high (firing and acquisition, the guard reset, deselection, orders refused, being
+      targeted and kept as a target, taking damage and being destroyed); medium (the damage amount's
+      being that of an enabled vehicle, crushing, enabling resets every vehicle of the type, the
+      turn continuing, drawing, sounds, the scatter request accepted by a disabled hovering vehicle
+      after a depot's switch-on and what follows it, the lead of shots at a switched-off hovering
+      vehicle and its void and below-ground shots); low (the scatter request accepted while still
+      above the ground after the switch-off and what follows it, the late order, passengers, no new
+      movement for a vehicle whose locomotor does not itself stop when switched off)
 
 ## Formulas
 
@@ -1574,9 +1594,14 @@ switched off the house has full power (W3's second pair).
   M-0005 shows it: at the stall each hunter keeps a disabled robot tank as its target and fires at
   it. M-0005 explains the stall as a selection: every stall shell comes from a group of shells that
   never detonates at its target's position and lands outside every robot tank's damage reach. What
-  in the projectile's flight sets where a group's shells land is open: it needs the projectile's
-  position at every tick of its flight. Also unexplained: some hunters at the stall make a fire
-  attempt every tick and no projectile (M-0005).
+  in the projectile's flight sets where a group's shells land, and why some hunters at the stall
+  make a fire attempt every tick and no projectile, M-0005 does not show. S-0306 gives mechanisms
+  for both: a switched-off hovering vehicle that S-0503 counts as moving is led, a led arcing shot
+  can be void and, in an ordinary vehicle firing step, a void launch is attempted again on each
+  later *can fire*, and a straight or arcing shot whose firer is still in play can fly on below the
+  ground and detonate away from the vehicle (claim 20 here gives the conditions). Which of those
+  rules applies to M-0005's hunters follows from their weapon's flags in the imported data, which
+  neither spec states, so both stay open for M-0005's games.
 
 - Claim 10's frame hold for a turret slot or a silo-fill slot, whose image frame S-0108 claims 19
   and 16 set from the turret facing and the fill level: whether such a slot, frozen by a
