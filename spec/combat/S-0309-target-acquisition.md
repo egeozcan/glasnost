@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 93
+revision: 94
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -474,6 +474,10 @@ index 1. This is a design rule, not an additional claim about the original.
    above and uses distance in leptons. Either score can win, and the same object can supply both.
    Without the aircraft search class, the first pass does not run, but a search for vehicles
    still accepts a landed aircraft in the second pass (claim 5), with distance in leptons.
+   The ground-layer pass reads the layer list an object was last filed in (S-0102 claim 4), not
+   the layer its state and height give it at that moment (S-0102 claim 3). The two differ only
+   for an object whose layer changed without a re-file, such as an aircraft released above its
+   pad (S-0501 claim 48).
    The order of the two passes decides ties (claim 17), not which distance unit an aircraft uses.
 
    *Cells of no reach region.* Except for the no-link searcher case below, the connected-region
@@ -554,7 +558,10 @@ index 1. This is a design rule, not an additional claim about the original.
      becomes current after it under a human-controlled owner, and part k, run 4, for a range search
      of *guard* reaching a hovering jumpjet. The original's *area guard* after a give-up is
      `unmeasured` here: S-0212 claim 23a can then give a computer-owned unit a new destination, so
-     no fixture here keeps a hovering jumpjet within its search at will
+     no fixture here keeps a hovering jumpjet within its search at will. The ground-layer pass's
+     reading of the last-filed list is `unmeasured`, as S-0501 claim 48 rates it: no scenario
+     sets up an observable map-wide search against an object whose layer changed without a
+     re-file.
    - Confidence: high (the ground-layer restriction, for a hunting vehicle whose weapon can hit
      aircraft, as parts f and k run 1 have), medium (the ground-layer restriction for other
      searchers, the zone test and the order of the passes),
@@ -562,7 +569,8 @@ index 1. This is a design rule, not an additional claim about the original.
      current after it, and the reach of
      claim 9's airborne scan, rated medium there; the original's *area guard* after it),
      high (cells of no reach region), low (the deck read
-     of the searcher's own cell and the no-link deck exception)
+     of the searcher's own cell and the no-link deck exception), medium (the ground-layer
+     pass's reading of the last-filed list, as S-0501 claim 48 rates it)
 
 8. **Radius of range and area searches.** The radius *R* in leptons, and from it the number of
    rings *n*, follow Formulas F1. For a range search *R* is the type's guard range if that is not 0
@@ -593,7 +601,8 @@ index 1. This is a design rule, not an additional claim about the original.
    miss a tracked flying object that is within the search's reach but lies in another sector, and it
    can find objects that are beyond it; the distance row of table C (F3) rejects those, so range
    is still decided by *R* (or the weapon's reach) and not by the sectors. Of the objects it finds
-   only those that are on the map and not in the ground render layer are looked at, each once, with
+   only those that are on the map and not in the ground render layer (the layer their state and
+   height give them, S-0102 claim 3) are looked at, each once, with
    no one-object-per-cell rule (claim 10), and objects allied with the searcher only when its type
    attacks friendlies, it is berserk or it is a passenger of a mind-controlled open-topped
    transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; registration during jumpjet movement follows S-0502 claim 29, including its placement and touchdown exceptions. In particular, a jumpjet becomes registered in its take-off update, normally at height 0 leptons, without waiting for a rise. Ordinary registration ends at touchdown, crash end or going off the map, not at a height threshold. With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
@@ -615,9 +624,12 @@ index 1. This is a design rule, not an additional claim about the original.
      within 255 leptons of the searcher in another cell, which no placement makes reliable. Also
      `unmeasured`: the rule that leaves out found objects in the ground render layer, because
      S-0502 claim 29 establishes registered jumpjets in that layer during low flight, but A4
-     does not isolate their rejection by the airborne scan from their later cell consideration
+     does not isolate their rejection by the airborne scan from their later cell consideration.
+     The scan's reading of the layer from state and height has S-0501 claim 48's backing
+     (`measurable`, S-0501 scenario AC30 part k (5), for an aircraft released above its pad).
    - Confidence: high for the ring order and the early stops; medium for the airborne scan (the
-     set of tracked objects and F7 are S-0303's, claim 6)
+     set of tracked objects and F7 are S-0303's, claim 6), and for its reading of the layer from
+     state and height, as S-0501 claim 48 rates it
 
 10. **One object per cell.** Each visited cell offers the search at most one object, its *offered
     object*, and only that object can be a candidate from that cell. Which objects of the cell
@@ -1346,10 +1358,12 @@ index 1. This is a design rule, not an additional claim about the original.
     A holder whose targeting timer (S-0215 claim 33) has more than 10 integer ticks left when it
     drops the object resets that timer with one ranged draw from the scenario random stream over
     4 to 8 ticks, both included, as at the phasing-in end of claim 1. With at most 10 ticks left
-    no draw is taken. This reset belongs to the drops of this claim and of claim 28. It is not part
-    of a search (Observable ordering). When several holders drop the same object at once, they
-    take their draws in creation order (Terms), the holder created first drawing first, whatever
-    their update order (S-0203 claim 3) or their distances from the object.
+    no draw is taken. During game set-up no holder takes this draw, whatever its kind (S-0501
+    claim 37 gives the same for an aircraft holder). This reset belongs to the drops of this claim
+    and of claim 28. It is not part of a search (Observable ordering). When several holders drop
+    the same object at once, they take their draws in creation order (Terms), the holder created
+    first drawing first, whatever their update order (S-0203 claim 3) or their distances from the
+    object.
     When one crush removes several objects (S-0210 claims 3 and 4), it removes them one at a time
     in the cell layer's listing order (S-0209 claim 13), and every draw of one removed object
     comes before those of the next: its own animation picks if it is a vehicle (S-0210 claim 4),
@@ -1402,6 +1416,8 @@ index 1. This is a design rule, not an additional claim about the original.
       or of B7 has a building or aircraft holder, or removes the object that a revert named again.
       Our engine's handling of a restored object that stays off the map or in play after its
       killing hit is a design rule (DECIDED above), not a claim about the original.
+      `unmeasured`: the absence of the timer draw during game set-up, since no scenario here
+      makes a holder lose its target during game set-up.
       `unmeasured` for a vehicle or building destroyed by a hit (removed at once, or a building
       staying in play awaiting its removal, S-0312 claim 21) and for a sinking or crashing object
       at its killing hit: parts a and b crush their objects, and the only object killed by a hit,
@@ -1428,7 +1444,7 @@ index 1. This is a design rule, not an additional claim about the original.
       c), medium for one whose object is crushed or goes off the map; the handling of a
       restored object that stays off
       the map or in play after its killing hit is a design rule; medium for the two passages on a
-      superweapon warp member
+      superweapon warp member; medium for the absence of the timer draw during game set-up
 
 28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
     are S-0516 claim 14's: at the start of cloaking and again when the object becomes fully cloaked
@@ -3997,6 +4013,11 @@ for any holder, with the same exceptions as that claim's revert causes.
 S-0215 F6 and table T2: the targeting timer's draws there could add the drop's reset of claims
 27 and 28 here: when a holder drops its target with more than 10 ticks left on that timer, one
 ranged draw over 4 to 8 ticks inside the action that drops it, not at a search.
+
+S-0215 F6: its reset at the drops of claims 27 and 28 here names the game set-up exception for
+an aircraft holder only (S-0501 claim 37). By claim 27 here no holder of any kind takes that draw
+during game set-up, so F6's exception should cover every holder. `unmeasured`, medium, as claim
+27 rates it.
 
 S-0312 claim 1: its ordering table could gain a row for the holders' timer draws of claim 27
 here at a killing hit. Their place is open here (Open questions); the leaning is ahead of the
