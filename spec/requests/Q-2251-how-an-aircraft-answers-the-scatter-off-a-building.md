@@ -1,9 +1,9 @@
 ---
 id: Q-2251
 title: How an aircraft answers the scatter request that capture, sabotage and eaten send off a building
-status: open
+status: answered
 related: [S-0215, S-0501, S-0208, S-0207]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
