@@ -153,34 +153,44 @@ fn opening_by_orders() {
 
 // The tech climb: with the base standing, each house builds the chain
 // RADR then LAB that unlocks the V3-like launcher LNCH, builds launchers
-// and fires their rockets (S-0506) in play.
+// and fires their rockets (S-0506) in play. It is played on the island map
+// (`fixture::map_islands`, as the naval game since M8 step B9) at the
+// plain seed, so that no land war ends the game before the climb: since
+// the M8 AI seams a guard unit drops a target it may not hurt, the waves
+// are stronger, and on the open map the game was won (about tick 13 600)
+// before either house got to the launcher (about tick 16 000 before).
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn climbs_to_the_launcher_and_fires() {
-    let run = run_for(LIMIT);
+    let map = fixture::map_islands();
+    let run = skirmish::run(
+        fixture::rules(),
+        &map,
+        "synthetic-climb",
+        fixture::catalogue(),
+        fixture::setup(SEED),
+        &fixture::plan(),
+        LIMIT,
+    )
+    .expect("the climb skirmish loads");
     let mut most: [BTreeMap<String, usize>; 2] = Default::default();
     let mut first: [BTreeMap<String, i32>; 2] = Default::default();
     let mut rockets = 0usize;
     run.replay
-        .run(
-            fixture::rules(),
-            &fixture::map(),
-            fixture::catalogue(),
-            |w| {
-                for h in 0..2u8 {
-                    for (k, v) in counts(w, h) {
-                        let e = most[usize::from(h)].entry(k.clone()).or_default();
-                        *e = (*e).max(v);
-                        first[usize::from(h)].entry(k).or_insert(w.tick);
-                    }
+        .run(fixture::rules(), &map, fixture::catalogue(), |w| {
+            for h in 0..2u8 {
+                for (k, v) in counts(w, h) {
+                    let e = most[usize::from(h)].entry(k.clone()).or_default();
+                    *e = (*e).max(v);
+                    first[usize::from(h)].entry(k).or_insert(w.tick);
                 }
-                rockets += w
-                    .objects
-                    .values()
-                    .filter(|o| o.on_map && o.rocket.as_ref().is_some_and(|r| r.phase.is_some()))
-                    .count();
-            },
-        )
+            }
+            rockets += w
+                .objects
+                .values()
+                .filter(|o| o.on_map && o.rocket.as_ref().is_some_and(|r| r.phase.is_some()))
+                .count();
+        })
         .expect("the replay runs");
     let mut launchers = 0;
     for h in 0..2 {

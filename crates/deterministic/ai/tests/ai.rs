@@ -1717,3 +1717,86 @@ fn a_wave_goes_for_an_enemy_it_can_reach() {
         "the tank goes toward the enemy base, not to the shore by the ship ({dest:?})"
     );
 }
+
+// A wave sends a ground unit whose weapon reaches across the water to the
+// shore facing a seen enemy it cannot drive to (PLAN §4.7, S-0212 claim 4,
+// S-0307 claim 13; M8 AI seams): on the island map an enemy tank stands on
+// the far shore of the strait. The launcher LNCH (range 18) goes to the cell
+// of its own island nearest the tank, from where the tank is in its range;
+// the tank GUNR (range 5.5) does not, and goes toward the enemy start.
+#[test]
+fn a_wave_sends_a_long_range_unit_to_the_shore_facing_the_enemy() {
+    let map = fixture::map_islands();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-naval",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the island skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()
+        && !of(w, 1, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let mut w = g.world.clone();
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    // The far shore: the first land column east of the strait, well south
+    // of the starts, so that the shore cell facing the enemy start is out
+    // of the launcher's range of it.
+    let shore = glasnost_map::CellXY::new(
+        fixture::at(fixture::STRAIT_HALF + 1, 0).x,
+        fixture::at(0, 24).y,
+    );
+    let enemy_at = free_cells(&w, shore, 1)[0];
+    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, enemy_at, 0);
+    let free = free_cells(&w, glasnost_map::CellXY::new(yard.x, yard.y + 8), 2);
+    let launcher = testkit::spawn(&mut w, Kind::Vehicle, "LNCH", 0, free[0], 0);
+    let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, free[1], 0);
+    shroud::area_reveal(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(enemy_at, 0),
+        3,
+    );
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+    };
+    let range = |id| {
+        let slot = glasnost_sim::combat::weapon::would_use(&w, id, Some(Target::Object(enemy))).0;
+        i64::from(glasnost_sim::combat::range::firer_weapon_range(
+            &w, id, slot,
+        ))
+    };
+    for id in [launcher, tank] {
+        assert!(
+            d2(w.obj(id).unwrap().pos.cell(), enemy_at) * 256 * 256 > range(id) * range(id),
+            "the enemy is out of range where the unit stands"
+        );
+    }
+    let mut plan = glasnost_ai::brain::default_plan();
+    plan.wave = 2;
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), plan);
+    let orders = brain.think(&w);
+    let dest = |unit| {
+        orders.iter().find_map(|o| match o {
+            Order::Behaviour {
+                actor,
+                dest: Some(Target::Cell(c)),
+                ..
+            } if *actor == unit => Some(*c),
+            _ => None,
+        })
+    };
+    let to = dest(launcher).expect("the launcher is sent with the wave");
+    assert!(
+        d2(to, enemy_at) * 256 * 256 <= range(launcher) * range(launcher),
+        "the launcher goes where the enemy tank is in its range ({to:?}, the tank at {enemy_at:?})"
+    );
+    let tank_to = dest(tank).expect("the tank is sent with the wave");
+    assert!(
+        d2(tank_to, enemy_at) * 256 * 256 > range(tank) * range(tank),
+        "the tank is not sent to stand at the shore ({tank_to:?})"
+    );
+}

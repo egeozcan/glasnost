@@ -57,7 +57,7 @@ use std::collections::BTreeMap;
 
 use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;
-use glasnost_sim::combat::{check, weapon};
+use glasnost_sim::combat::{check, range, weapon};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
@@ -425,7 +425,10 @@ pub fn idle(w: &World, id: ObjectId) -> bool {
 /// unit stays where it is (guard never pursues, S-0215 claim 24). A person
 /// sees such a unit standing still and gives it an order; so does the
 /// script, which would otherwise leave a home guard idle while the enemy
-/// destroys the base.
+/// destroys the base. Whether the target is stale is asked whatever the
+/// moment (M8 AI seams): a unit that is rearming would otherwise answer
+/// *rearming* ahead of the target tests and the range test, and keep a
+/// target its weapon may not hurt, or one out of its range.
 fn stale_guard_target(w: &World, o: &Object) -> bool {
     let resting = matches!(
         o.beh.current,
@@ -435,12 +438,16 @@ fn stale_guard_target(w: &World, o: &Object) -> bool {
     if !resting {
         return false;
     }
-    let (slot, weapon) = weapon::would_use(w, o.id, Some(t));
-    weapon.is_none()
+    let t = Some(t);
+    let (slot, wp) = weapon::would_use(w, o.id, t);
+    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the firing check without the range test and without the reasons of the moment of ranks 5 to 8, so that rank 5's rearming hides neither rank 9's target tests, a seeker's out-of-range answer among them, nor the range answer, which is tested on its own below)
+    wp.is_none()
         || matches!(
-            check::check(w, o.id, Some(t), slot, true),
+            check::check_lasting(w, o.id, t, slot),
             check::Answer::OutOfRange | check::Answer::Illegal | check::Answer::Impossible
         )
+        // spec: S-0307 claims 1 to 11 (the range test of the weapon it would use)
+        || !range::in_range(w, o.id, wp, t, None)
 }
 
 /// Whether unit `id` can attack enemy `e` at all, as its cursor shows: the
@@ -1866,7 +1873,7 @@ impl Script {
                 let pick = *picks.entry(key).or_insert_with(|| {
                     by_home
                         .iter()
-                        .find(|&&(e, c)| self.reaches(w, id, region, c) && can_attack(w, id, e))
+                        .find(|&&(e, c)| can_attack(w, id, e) && self.reaches(w, id, region, e, c))
                         .map(|&(_, c)| c)
                 });
                 let goal = pick.or_else(|| {
@@ -1919,10 +1926,22 @@ impl Script {
     }
 
     /// Whether unit `id`, in reach region `region` ([`Script::reach_region`]),
-    /// goes for an enemy at cell `c`: `c` lies in that region, or the unit
+    /// goes for enemy `e` at cell `c`: `c` lies in that region, or the unit
     /// has none, or it is a ship (it fires from the water nearest the
-    /// enemy, as a person sends ships to the water off an enemy base).
-    fn reaches(&self, w: &World, id: ObjectId, region: Option<u32>, c: CellXY) -> bool {
+    /// enemy, as a person sends ships to the water off an enemy base), or
+    /// `e` stands on the land of another region and the unit's weapon
+    /// reaches it from a cell of its own region (a person drives
+    /// a long-range gun to the shore facing an enemy across the water;
+    /// [`Script::reachable`] then sends it to the region's cell nearest
+    /// `c`, which is in range if any is).
+    fn reaches(
+        &self,
+        w: &World,
+        id: ObjectId,
+        region: Option<u32>,
+        e: ObjectId,
+        c: CellXY,
+    ) -> bool {
         let Some(r) = region else { return true };
         let Some(zone) = w
             .obj(id)
@@ -1931,8 +1950,33 @@ impl Script {
         else {
             return true;
         };
-        zone == glasnost_rules::sim::MovementZone::Water
+        if zone == glasnost_rules::sim::MovementZone::Water
             || regions::reach_in(w, c, zone) == Reach::Region(r)
+        {
+            return true;
+        }
+        // design: a ground unit whose weapon reaches an enemy on the land of another region from a usable cell of its own region goes for it, so that a long-range gun is not left at home on an island map (M8 AI seams: the launcher of the island tech climb sat 22 cells from enemies on the far shore while a shore cell had them at 10); an enemy on the water is not one (a person does not send a tank to stand at the shore by a ship)
+        if !matches!(regions::reach_in(w, c, zone), Reach::Region(_)) {
+            return false;
+        }
+        let (slot, wp) = weapon::would_use(w, id, Some(Target::Object(e)));
+        if wp.is_none() {
+            return false;
+        }
+        // spec: S-0307 claim 13 (the firer's weapon range, leptons)
+        let range = i64::from(range::firer_weapon_range(w, id, slot));
+        // spec: S-0204 claim 2 (a cell is 256 leptons)
+        let lepton = 256i64;
+        let cells = (range + lepton - 1) / lepton;
+        let span = i32::try_from(cells).unwrap_or(i32::MAX);
+        (-span..=span).any(|dy| {
+            (-span..=span).any(|dx| {
+                let k = CellXY::new(c.x + dx, c.y + dy);
+                dist2(k, c) * lepton * lepton <= range * range
+                    && w.cells.usable(k)
+                    && regions::reach_in(w, k, zone) == Reach::Region(r)
+            })
+        })
     }
 
     /// Whether unit `id` is infantry that cannot walk to `goal`: it stands

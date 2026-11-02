@@ -192,6 +192,107 @@ fn a_unit_on_its_way_to_a_crate_is_not_given_up() {
     let _ = c;
 }
 
+// S-0520, PLAN §4.7 (design: on its way by its destination, M8 AI seams): a unit that heads for the crate in *guard* with the crate's cell as its destination (a deployer infantry packing up, S-0215 claim 31, takes the move so) is on its way: no second unit is sent.
+#[test]
+fn a_unit_heading_for_a_crate_in_guard_is_on_its_way() {
+    let g = game();
+    let (mut w, unit, c) = scene(&g, true);
+    // A second idle walker near the crate, free to be sent.
+    testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        CellXY::new(c.x - 4, c.y),
+        0,
+    );
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    {
+        let o = w.obj_mut(unit).unwrap();
+        o.dest = Some(Target::Cell(c));
+        o.beh.current = Some(Behaviour::Guard);
+    }
+    let orders = brain.think(&w);
+    assert!(moves(&orders, c).is_empty(), "{orders:?}");
+    assert_eq!(brain.special_uses().crates, 0);
+    // Once it has dropped the destination it is on its way no more.
+    {
+        let o = w.obj_mut(unit).unwrap();
+        o.dest = None;
+    }
+    w.tick += 15;
+    assert_eq!(moves(&brain.think(&w), c).len(), 1, "a unit is sent again");
+}
+
+/// Puts a second crate (place `key`) on `c`, explored for house 0.
+fn add_crate(w: &mut World, key: u16, c: CellXY) {
+    let o = w
+        .rules()
+        .overlays
+        .iter()
+        .position(|o| o.crate_)
+        .map(|i| i as u8);
+    if let Some(o) = o
+        && let Some(cell) = w.cells.grid.get_mut(c)
+    {
+        cell.overlay = o;
+    }
+    w.crates.places.insert(
+        key,
+        Place {
+            cell: c,
+            start: w.tick,
+            life: 100_000,
+            trigger: false,
+        },
+    );
+    glasnost_sim::econ::shroud::area_reveal(w, HouseId(0), Pos::centre(c, 0), 2);
+}
+
+// S-0520, PLAN §4.7 (design: a unit that did not keep its crate order is sent at no crate for a while, M8 AI seams): a unit that leaves its cell for the crate and drops the order on the way each time is not sent at the crate again every think, nor at another crate instead.
+#[test]
+fn a_unit_that_keeps_dropping_the_order_is_not_resent_every_think() {
+    let g = game();
+    let (mut w, unit, c) = scene(&g, true);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let mut sent = 0;
+    let other = CellXY::new(c.x - 4, c.y + 3);
+    for step in 0..10 {
+        if step == 4 {
+            add_crate(&mut w, 1, other);
+            assert!(glasnost_sim::crates::is_crate(&w, other));
+        }
+        let orders = brain.think(&w);
+        if moves(&orders, c).contains(&unit) {
+            sent += 1;
+        }
+        assert!(
+            !moves(&orders, other).contains(&unit),
+            "sent at the other crate at step {step}"
+        );
+        // It walks a cell, then drops the order there and stands in guard,
+        // free again (the memory does not block it: it left its cell).
+        let o = w.obj_mut(unit).unwrap();
+        let at = o.pos.cell();
+        o.pos = Pos::centre(CellXY::new(at.x, at.y + 1), 0);
+        o.dest = None;
+        o.beh.current = Some(Behaviour::Guard);
+        assert!(
+            glasnost_ai::scripted::idle(&w, unit),
+            "free again at step {step}"
+        );
+        w.tick += 15;
+    }
+    assert_eq!(sent, 1, "sent once in ten thinks");
+    // After a while it may be tried again.
+    w.tick += 15 * 600;
+    let orders = brain.think(&w);
+    assert!(
+        moves(&orders, c).contains(&unit) || moves(&orders, other).contains(&unit),
+        "{orders:?}"
+    );
+}
+
 // S-0520, PLAN §4.7: it sees only what its house has explored.
 #[test]
 fn ignores_an_unseen_crate() {
