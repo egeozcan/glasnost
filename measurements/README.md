@@ -37,3 +37,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0008](simulation/M-0008-random-streams-recorder.md) | Random streams with the random-state recorder (seeding, ranges, creation, idle draws) | simulation | confirms | local |
 | [M-0004](combat/M-0004-firing-cycle-recorder.md) | Firing cycle with the random-state recorder (delays, bursts, building rounds, draws) | combat | contradicts | local |
 | [M-0012](rules-import/M-0012-rules-final-line-feed.md) | A rules file's final line feed and a tank's burst firing | rules-import | confirms | local |
+| [M-0019](simulation/M-0019-unit-arena-placements-at-tick-0.md) | Unit arena, the records' placements at tick 0 (standing positions, raw values, refused cells) | simulation | new finding | committed |
