@@ -2,11 +2,11 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159]
 supersedes: []
@@ -308,9 +308,18 @@ above the terrain*.
     regeneration time when the spawner has health below 1 or is no longer in play, and 0 otherwise.
     Slots already empty keep their existing countdowns. After a house change, replacements for
     previously occupied slots therefore appear for the new house at the next pass; a slot already
-    empty can still be waiting for its old regeneration countdown.
-    - Backing: `measurable` (scenario R8)
-    - Confidence: high for the table; medium for the list of events
+    empty can still be waiting for its old regeneration countdown. Clearing the slots does not
+    change the controller target, and the controller's passes go on while the spawner is seized,
+    so the pending target then follows claim 25 alone. S-0607 claim 20 covers the
+    launch that can follow restoration with no new shot.
+    - Backing: `measurable` (scenario R8). The kept controller target and the passes while the
+      spawner is seized have S-0607's backing for them: `measurable` (S-0607 scenario L19 parts b
+      and d for the kept controller target, parts c and d for the passes while seized). The launch
+      after restoration with no new shot has S-0607 claim 20's backing: `measurable` (S-0607
+      scenario L19 part b).
+    - Confidence: high for the table; medium for the list of events; medium for the kept controller
+      target and the passes while seized, as S-0607 rates them; medium for the launch after
+      restoration with no new shot, as S-0607 claim 20 rates it
 
 ### Rocket flight
 
