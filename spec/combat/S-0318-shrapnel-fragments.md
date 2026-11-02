@@ -2,11 +2,11 @@
 id: S-0318
 title: Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go)
 topic: combat
-revision: 25
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-1714, Q-1825]
 supersedes: []
@@ -95,9 +95,11 @@ and S-0316; this spec says which fragments make one (claim 8).
    without a warhead is S-0303's departure and is not covered here.
 
    The burst cell of (b), the ring centre of claim 3, the distance of claim 2 and the fragments'
-   starting position (claims 5 and 6) all use the burst point (Terms), which S-0306 claim 20 (c)
-   does not move; the projectile's own area damage and explosion use the detonation point that (c)
-   gives. The two differ only where (c) changes the point, as for a shot at a building whose art
+   launch direction (claim 6) all use the burst point (Terms), which S-0306 claim 20 (c) does not
+   move. The fragments' starting position (claim 5) is the burst point too, except in height: a
+   burst point that is not above the terrain is raised as claim 5 gives (S-0306 claim 8). The
+   projectile's own area damage and explosion use the detonation point that (c) gives.
+   The two differ only where (c) changes the point, as for a shot at a building whose art
    gives it a non-zero aim shift (S-0306 Terms, *target point*): a shot placed on the building's
    reference point by S-0306 claim 20 (b) does its area damage at the building's target point,
    but bursts from the reference point, inside the building's own cell, where (b) above stops the
@@ -222,19 +224,21 @@ and S-0316; this spec says which fragments make one (claim 8).
    a radiation level: S-0525 claim 1 leaves radiation only where the detonating projectile carries
    a radiation weapon, as for the nine children of an airburst projectile.
 
-   It is placed at the burst point and enters play at once (S-0306 claim 8): it joins the end of
-   the update order during the bursting projectile's turn, the fragments of one burst in launch
-   order (State and ordering), so it is eligible for a turn later in the same turn pass. That
-   projectile then does its area damage and leaves play in the same turn, which is one counting
-   removal of S-0203 claim 10: the object that directly follows it at the end of that turn
-   misses its turn in this tick. When nothing entered play after the projectile before its
-   fragments, that object is the first fragment. An invisible fragment (S-0306
-   claim 9) whose projectile type has an arm time of 0 (S-0306 claim 9: the arm field's
-   absent-key default) detonates in its first turn (S-0306, State and ordering) and leaves play
-   in it, which is again one counting removal, so the fragment that directly follows it misses
-   its turn in that tick too. With S-0203's removal skip (`quirks.update_order_removal_skip`,
-   on by default) and nothing else entering or leaving play, the fragments of one burst therefore
-   detonate as follows, counted in launch order:
+   It is placed at the burst point, raised as S-0306 claim 8 gives: a fragment whose burst point is
+   not above the terrain starts 1 lepton above it, at the same *x* and *y*, so a burst at height 0
+   gives fragments that start at height 1. It enters play at once (S-0306 claim 8): it joins the
+   end of the update order during the bursting projectile's turn, the fragments of one burst in
+   launch order (State and ordering), so it is eligible for a turn later in the same turn pass.
+   That projectile then does its area damage and leaves play in the same turn, which is one
+   counting removal of S-0203 claim 10: the object that directly follows it at the end of that
+   turn misses its turn in this tick. When nothing entered play after the projectile before its
+   fragments, that object is the first fragment. An invisible fragment (S-0306 claim 9) whose
+   projectile type has an arm time of 0 (S-0306 claim 9: the arm field's absent-key default)
+   detonates in its first turn (S-0306, State and ordering) and leaves play in it, which is again
+   one counting removal, so the fragment that directly follows it misses its turn in that tick
+   too. With S-0203's removal skip (`quirks.update_order_removal_skip`, on by default) and nothing
+   else entering or leaving play, the fragments of one burst therefore detonate as follows,
+   counted in launch order:
    - in the tick of the burst, the 2nd, 4th, 6th … fragments, and
    - in each later tick, of the fragments still waiting, the 1st, 3rd, 5th … in launch order,
      each one's removal costing the next waiting fragment its turn.
@@ -255,7 +259,9 @@ and S-0316; this spec says which fragments make one (claim 8).
      scenario captures a visible fragment's brightness), for the attacker object as distinct from
      its house (SH4 part b observes only a house's kill count) and for the speed (an invisible
      fragment's speed has no effect, and SH7 judges only the horizontal direction); `measurable` for
-     the absence of radiation (scenario SH1 part n, run 4)
+     the absence of radiation (scenario SH1 part n, run 4). The raise of a burst point that is not
+     above the terrain is `unmeasured`, as S-0306 claim 8 gives: no scenario places a fragment's
+     start at or below the ground
    - Confidence: high for the damage, the warhead and the credit to the attacker's house; medium
      for the place in the update order until SH1 part a runs (its run 1 alone gives the same result
      for a place right after the bursting projectile when that projectile is last; run 2, whose
@@ -264,21 +270,29 @@ and S-0316; this spec says which fragments make one (claim 8).
      an animation that enters play in a projectile's turn; medium for the turn that the bursting
      projectile's removal costs, as S-0203 claim 10 rates its causes; medium for the resulting ticks until SH1 part a runs,
      since they also rest on the first-turn detonation of S-0306; medium for the brightness flag
-     and the attacker object; high for the absence of radiation; low for the speed, as in claim 6
+     and the attacker object; high for the absence of radiation; low for the speed, as in claim 6,
+     and medium for the raise of a burst point that is not above the terrain, as S-0306 claim 8
+     rates it
 
-6. **Launch direction.** A fragment is launched from the burst point towards its aim point's
-   reference point, climbing at a fixed elevation of about an eighth of a turn (45°), not at the
-   pitch of S-0306 claim 6 (Changes for other specs). For an invisible fragment the velocity has
-   no observable effect (S-0306 claim 9 moves it at once). Only the direction is
-   established; the elevation is not measured. The velocity's length is believed to follow claim 5's speed, with a length of
-   100 in place of a speed of 0 as for a shot (S-0306 claim 2), but how the velocity of a fragment
+6. **Launch direction.** A fragment starts from its starting position (claim 5) and is launched
+   towards its aim point's reference point, climbing at a fixed elevation of about an eighth of a
+   turn (45°), not at the pitch of S-0306 claim 6 (Changes for other specs). The direction is taken
+   from the burst point as it is, not from the raised starting position (S-0306 claim 8). The two
+   differ only in height, and only for a burst point that is not above the terrain. For an
+   invisible fragment the velocity has no observable effect (S-0306 claim 9 moves it at once).
+   Only the direction is established; the elevation is not measured. The velocity's length is
+   believed to follow claim 5's speed, with a length of 100 in place of a speed of 0 as for a
+   shot (S-0306 claim 2), but how the velocity of a fragment
    that is not invisible is formed, its length included, and whether its flight rule keeps that
    velocity in its first turn, are not established (Open questions).
    - Backing: `measurable` (scenario SH7) for the horizontal direction. `unmeasured` for the
      elevation: SH7's first move also depends on the flight rule's first turn, which is not
-     established. `unmeasured` for
-     the velocity's length and the length 100 at a speed of 0, which SH7 does not measure.
-   - Confidence: low
+     established. `unmeasured` for the velocity's length and the length 100 at a speed of 0,
+     which SH7 does not measure. `unmeasured` for the use of the unraised burst point, as S-0306
+     claim 8 gives for its claims 5 to 7: for a burst point at the surface the two points differ by
+     1 lepton, which no recorded direction tells apart.
+   - Confidence: low, except medium for the use of the unraised burst point, as S-0306 claim 8
+     rates it
 
 7. **Fragments of fragments.** A fragment whose own projectile type has a fragment weapon bursts
    in its turn by claims 1 to 6, with the original attacker still as attacker; its fragments are
@@ -854,7 +868,8 @@ fragment side over the run.
 
 **SH7. Launch direction (claim 6).** As SH1 part a, but the test fragment weapon's projectile is a
 slow straight, not invisible, projectile, and the recorder reads every projectile's position in
-leptons each tick. *Expected:* each fragment's first recorded move goes from the burst point
+leptons each tick. *Expected:* each fragment's first recorded move goes from its starting
+position (claim 5: the burst point, raised in height only when it is not above the terrain)
 horizontally towards its target's reference point, and its climb is recorded. *Falsified by:* a first move that heads elsewhere horizontally.
 
 **SH8. What the scan ignores (claim 3, Edge cases).** Each part is as SH1 part a,
