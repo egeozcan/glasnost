@@ -2,11 +2,11 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0984, Q-1522]
 supersedes: []
@@ -86,9 +86,21 @@ before joint hand-off.
    in the cell of the vehicle factory with which it is in contact. A beam already attached
    to the firer also refuses the new lock. This last test reads beam attachment, not the
    general being-erased state: the beam-free leaving stage alone is not this refusal.
+   A target's pending superweapon warp, its leaving stage included, is not a refusal either: a
+   temporal projectile in flight at the launch, or a fragment (S-0318), that detonates at a
+   member before its departure locks a beam on it (S-0513 claim 39a). With
+   S-0513 `quirks.warp_departure_keeps_beam` off, a pending warp is one more refusal, from the
+   launch until the member's departure update.
    - Backing: `measurable` (E4). The leaving-stage distinction is `unmeasured`: no scenario
      here makes a pending shot arrive from that otherwise inactive firer during this stage.
-   - Confidence: high.
+     The pending warp: `measurable` (S-0513 SW12 part l) for a lock after the member's turn of
+     the detonation tick; `unmeasured` for a lock before that turn, while its warp update is
+     still to come, since no part of S-0513 orders a projectile's turn before its target's, and
+     for a fragment's lock, since no part of S-0513 gives a firer that holds a temporal beam a
+     fragment weapon.
+   - Confidence: high. The pending warp: high for a lock after the member's turn of the
+     detonation tick, medium for one before that turn and for a fragment's lock, high as design
+     for the off setting.
 
 4. **A successful lock.** With no beam already attached to the target, the firer becomes
    leader and sets *R* by F1. Otherwise it joins without resetting *R*. The target becomes being erased, is
@@ -140,8 +152,12 @@ before joint hand-off.
 9. **Leader replacement.** If the leader lets go while others remain, the most recent
    remaining joiner becomes leader with the same *R*. The target stays being erased and
    a building's switch is unchanged. A departing joiner simply stops contributing.
-   - Backing: `measurable` (E3).
-   - Confidence: high.
+   Exception: a superweapon warp member that stopped being erased at its departure while its
+   beam stays attached (S-0513 claim 39a) stays not being erased through such a handover, up to
+   a later lock after the departure (S-0513 claim 39a).
+   - Backing: `measurable` (E3). The exception: `unmeasured` (no part of S-0513 SW12 has a beam
+     with a joiner before the departure).
+   - Confidence: high. The exception: medium.
 
 10. **Last release.** When the last attacker lets go before completion, the target stops
     being erased and loses all progress. A later lock starts from F1. A building is switched
@@ -195,8 +211,9 @@ before joint hand-off.
     the common fall-back-to-rest effects, delivering another erasing hit even at the same target, being taken
     under mind control or freed, being locked by another temporal beam, or being removed.
     Gunner exit follows S-0308 claim 6; claim 11 adds the leader's range release. Arrival
-    by teleport follows the new-cell rule. Removing the target invalidates all attached
-    beams and makes their attackers fall back to rest.
+    by teleport follows the new-cell rule. The target's own superweapon warp, its departure
+    included, is not a release cause (S-0513 claim 39a). Removing the target invalidates all
+    attached beams and makes their attackers fall back to rest.
 
     The fall-back release shares S-0215 claim 13's once-per-tick common-effects limit.
     Aircraft early exits that skip those effects do not cause this release. The resulting
@@ -211,11 +228,12 @@ before joint hand-off.
     in play may continue erasing until removal, but this is a hypothesis, not a guaranteed
     lifetime rule.
     - Backing: `measurable` (E10) for ordinary cell arrival, fall-back, mind control, counter-lock,
-      removal, stop-versus-sleep and retained-death tests. Teleport arrival and gunner exit are `unmeasured`
+      removal, stop-versus-sleep and retained-death tests; S-0513 SW12 part l, variant l1, for the
+      target's own superweapon warp. Teleport arrival and gunner exit are `unmeasured`
       here: their complete movement/transfer paths have not been independently retraced.
       The owners above retain their own backings.
-    - Confidence: high (ordinary release paths), medium (teleport, gunner exit),
-      low (continuation after death).
+    - Confidence: high (ordinary release paths), medium (teleport, gunner exit, the target's
+      own superweapon warp), low (continuation after death).
 
 15. **House destruction.** S-0414 claim 5 owns surrender. A trigger that destroys all
     objects of a house detaches the beams on each erased victim and makes their attackers
@@ -242,8 +260,23 @@ before joint hand-off.
     ordinary behaviour processing and firing; this spec does not claim that every auxiliary
     building activity stops. Damage protection and power totals use their owning specs.
     A target with an attached beam cannot itself obtain another lock (claim 3).
-    - Backing: `measurable` (E11 part a).
-    - Confidence: high.
+
+    A superweapon warp member whose beam was locked before its departure is no longer being
+    erased from its departure update, while the beam stays attached (S-0513 claim 39a). While it
+    phases in, a vehicle or aircraft member still clears its target and destination and skips
+    ordinary movement, turning and firing as above, because a materialising vehicle or aircraft
+    with an attached beam does so whether or not it is being erased. An infantry member does
+    not, since an infantry unit does so only while it is being erased (S-0513
+    `quirks.phase_in_beam_spares_infantry`). Once its hold has ended, a member of any kind takes
+    ordinary turns while the beam stays attached, up to a later lock after the departure. From
+    such a lock on, the member is being erased again and skips its turns as above (S-0513 claim
+    39a, *A lock after the departure*).
+    - Backing: `measurable` (E11 part a). The warp member: `measurable` (S-0513 SW12 part l,
+      variant l1) for the turns after the hold, and variant l5 for the skipped turns from a later
+      lock; `unmeasured` while phasing in, since no part there holds an infantry member and the
+      hold in part l lasts one update.
+    - Confidence: high. The warp member: medium for the turns after the hold, for the turns while
+      phasing in and for the skipped turns from a later lock.
 
 18. **Sparkles.** If the imported sparkle animation exists, mobile targets being erased or
     phasing in create it on their turns whose global tick number is divisible by 24.
