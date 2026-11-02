@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 92
+revision: 93
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1333,6 +1333,12 @@ index 1. This is a design rule, not an additional claim about the original.
     claim 7), so its holders keep it. The removals include a dropped unit removed at the end of
     its fall (S-0607 claim 18) and, taken to end like every other removal, erasure by a trigger,
     an exit at the map edge and an engineer used up by its action.
+    A member of a superweapon warp group goes off the map at its departure, but this claim's drop,
+    its timer reset and its rule for a projectile in flight do not apply to the departure, then or
+    while it waits to land (S-0513 claim 39). A member destroyed by its landing check is a destroyed
+    object here. Among the holders to which claim 29's rules apply, a holder that holds the member
+    through its departure is rare: only claim 29's exceptions, or a re-taking after the holder's
+    last check, let such a holder hold the member at departure (S-0513 claim 39).
     A projectile already in flight towards the object loses it as S-0306 claim 17 gives for a
     target that leaves the game or becomes untargetable: its target becomes the cell the object
     stood in, or nothing if the object was in the air. It never flies on towards the object.
@@ -1360,7 +1366,11 @@ index 1. This is a design rule, not an additional claim about the original.
     This drop takes no timer draw and causes no revert (S-0215 claim 10: clearing the target by
     another rule does not revert), and the holder's behaviour then does what it does with no target.
     What the original does with such a target until its removal, and what its firing check answers
-    for it, is not established (Open questions). A crush gives both drops within the crush, and
+    for it, is not established (Open questions). A superweapon warp member that a holder holds
+    through its departure is not such a target, since the departure makes no revert. What the
+    firing check answers for it while it waits to land and while it is phasing in is open (S-0513
+    claim 39). A member that a revert gives back to a holder while it is off the map is such a
+    target. A crush gives both drops within the crush, and
     together they take at most one timer draw: after a first draw at most 8 ticks are left. For an
     aircraft holder, the adjustment of its behaviour that follows belongs to the aircraft specs.
     - Backing: `measurable` (scenario A18: part a for the crusher, part b for a removal by another
@@ -1396,6 +1406,12 @@ index 1. This is a design rule, not an additional claim about the original.
       staying in play awaiting its removal, S-0312 claim 21) and for a sinking or crashing object
       at its killing hit: parts a and b crush their objects, and the only object killed by a hit,
       in part c, is an infantry unit in its death sequence.
+      `unmeasured`: the two passages on a superweapon warp member, since no part of S-0513 judges
+      a holder that holds the member at departure (its holders among those to which claim 29's
+      rules apply drop it at that claim's check before then, S-0513 claim 39, and a later
+      re-taking is recorded but not judged), fires at a member as it departs, records the holders
+      of a member destroyed by its landing check, or puts an override in effect for a holder of
+      the member.
     - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
       infantry and vehicle holders of an object that is crushed, as in A18 parts a and b, or of an
       infantry unit killed in its death sequence, as in part c); medium (the drop's moment inside
@@ -1411,7 +1427,8 @@ index 1. This is a design rule, not an additional claim about the original.
       towards an object removed while airborne or destroyed on the ground (S-0306 P11 runs a and
       c), medium for one whose object is crushed or goes off the map; the handling of a
       restored object that stays off
-      the map or in play after its killing hit is a design rule
+      the map or in play after its killing hit is a design rule; medium for the two passages on a
+      superweapon warp member
 
 28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
     are S-0516 claim 14's: at the start of cloaking and again when the object becomes fully cloaked
@@ -1558,9 +1575,14 @@ index 1. This is a design rule, not an additional claim about the original.
       answers *impossible* (rank 1) for a vehicle playing its death frames, so it drops a held
       target at its first checking turn in a check tick while they play. An infantry unit,
       vehicle or landed aircraft that is being erased drops its target instead in each of its
-      turns (S-0215 claim 2). So does a materialising infantry unit, vehicle or aircraft on which
-      a temporal beam is locked, which is being erased (glossary): it drops its target in each of
-      its turns, whatever the tick number, and that turn ends there with no check. A
+      turns (S-0215 claim 2). So does a materialising infantry unit, vehicle or aircraft that is
+      being erased with a temporal beam locked on it (glossary): it drops its target in each of its
+      turns, whatever the tick number, and that turn ends there with no check. So does a
+      materialising vehicle or aircraft whose temporal beam stays attached while it is not being
+      erased, as a superweapon warp member's is after its departure (S-0513 claim 39a). A
+      materialising infantry unit in that state makes the check, as one on which no temporal beam
+      is locked does (S-0513 `quirks.phase_in_beam_spares_infantry`, default on; off: it drops its
+      target as the vehicle does). A
       materialising infantry unit, vehicle or aircraft on which no temporal beam is locked makes
       the check, and S-0301 claim 9 gives a materialising firer *rearming* within rank 4. That
       *rearming* comes before every other rank-4 reason except the *illegal* of a firer bound to
@@ -1686,7 +1708,10 @@ index 1. This is a design rule, not an additional claim about the original.
       tell the periodic drop apart. The original's checks in a warp member's turns are `unmeasured`:
       no part here gives a warp member a held target that the check refuses at a check tick, and
       S-0513 claims 48 and 52 leave them unsettled. Our engine's suppression of them is `measurable`
-      in our engine (S-0513 scenario SW23 part f).
+      in our engine (S-0513 scenario SW23 part f). The *Turns cut short* rule for a materialising
+      vehicle, aircraft or infantry unit whose temporal beam stays attached while it is not being
+      erased is `unmeasured` (S-0513 claim 39a: no part there holds an infantry member, and SW12
+      part l's tank has a hold of one update).
     - Confidence: high (the cadence of the drops at check ticks, the shared phase, the drop on
       *illegal* of a target given by an order and the absence of a timer draw, for human-controlled
       vehicle and infantry holders in *attack* that take a checking turn in every tick; and the
@@ -1712,7 +1737,9 @@ index 1. This is a design rule, not an additional claim about the original.
       spawned aircraft, which holds whichever of its *rearming* and the rank-2 *busy* comes
       first; the turns cut short, the
       check and drop in a vehicle's earlier death-frame turns, the drop by a holder that is being
-      erased; the materialising cases for vehicles, infantry and aircraft, runs p10a and p10b for a
+      erased; the drop or check of a materialising vehicle, aircraft or infantry unit whose temporal
+      beam stays attached while it is not being erased; the materialising cases for vehicles,
+      infantry and aircraft, runs p10a and p10b for a
       vehicle, with the materialising infantry healer's *illegal* against a full-health target
       and its drop at the check, medium as S-0310 claim 11 rates the infantry rule and its rank,
       its premise; aircraft and
