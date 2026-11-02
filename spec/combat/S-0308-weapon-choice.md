@@ -2,11 +2,11 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0083, Q-0970]
 supersedes: []
@@ -240,13 +240,18 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 11. **Water targets follow the firer's naval targeting.** Against a water target, after the rows
     above it in table P, the slot follows the firer's naval-targeting mode by table N. A result of
     "none" is slot 0 here, the same result as any other slot-0 answer: the choice returns no special
-    "no weapon" value. This spec gives no rule that then forbids the shot; a refusal, if the original
-    has one for these modes, would come from a rule outside the weapon choice (open question). The modes' tests look at the target's type: its underwater flag, organic flag,
-    unnatural flag, its hover speed type, and, for mode 0, its present cloak state.
+    "no weapon" value. The shot is then refused by the firing check, not by the weapon choice:
+    against a water target that is an infantry, vehicle, aircraft or building and for which table N
+    gives "none", the firing check answers *illegal* (S-0306 claim 23, its water row), so the firer
+    does not fire at it. The modes' tests look at the target's type: its underwater flag, organic
+    flag, unnatural flag, its hover speed type, and, for mode 0, its present cloak state.
     - Backing: `measurable` when a shot identifies the slot (scenario W3; scenario W6, parts c
       and d); `unmeasured` for a choice hidden by a refusal to fire: the refusal alone cannot
-      distinguish slot 0 from a separate prohibition outside this spec.
-    - Confidence: high for modes 1, 2, 3, 5, 6 and 7; medium for modes 0 and 4
+      distinguish slot 0 from a separate prohibition outside this spec. The refusal of a "none"
+      result: as S-0306 claim 23 backs it, `measurable` by its scenario P16 part h's water
+      variant for mode 6, and `unmeasured` for mode 2's answer *illegal* and for the mode-0 branch.
+    - Confidence: high for modes 1, 2, 3, 5, 6 and 7; medium for modes 0 and 4. The refusal of a
+      "none" result: medium, and low for the mode-0 branch, as S-0306 claim 23 rates them
 
 ### Buildings
 
@@ -506,7 +511,8 @@ anti-air too (`quirks.secondary_wins_against_air`).
 Every mode gives slot 0 or 1. Where the original's choice answers "no weapon" (mode 0 against an
 underwater target that is cloaking, cloaked or uncloaking, mode 2 against a target whose type is not
 underwater, and mode 6), the result is slot 0, exactly as a slot-0 answer: nothing in the weapon
-choice tells the two apart. The importer need not model "no weapon".
+choice tells the two apart. The importer need not model "no weapon". The firing check refuses
+these cases on a water target by its own test (S-0306 claim 23, claim 11 here).
 
 **Weapon number of a gunner vehicle.**
 
@@ -767,8 +773,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   ordered to attack the building. *Expected:* slot 1.
 - *Part c (mode 0):* firer with naval-targeting mode 0 against an underwater enemy that is
   surfaced (uncloaked) and one that is submerged (cloaked). *Expected:* slot 0 for both; the damage
-  of any shot identifies it. Record also whether a shot is fired at the submerged one (open
-  question: this spec does not predict it).
+  of any shot identifies it. Record also whether a shot is fired at the submerged one.
 - *Part d (mode 4):* firer with mode 4 against a hover vehicle on water, an organic swimmer and a
   ship. *Expected:* 0, 0, 1.
 - *Part e (row 10):* an overpowerable building type with two distinguishable weapons (damages 7 and
@@ -777,8 +782,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   building then attacks the vehicle. *Expected:* hits of 13 while it is overpowered; hits of 7 once
   the state has ended. *Falsified if:* 7 while overpowered, or 13 afterwards.
 - *Falsified if:* any observed weapon differs from the predicted slot. The absence of a shot in
-  part c's submerged case is inconclusive for slot choice, because whether that shot is allowed remains
-  open. Row 12 (kamikaze aircraft) has no scenario (claim 3).
+  part c's submerged case is inconclusive for slot choice. Row 12 (kamikaze aircraft) has no scenario (claim 3).
 
 **W7: passengers of open-topped transports (claims 4 and 10).**
 - *Part a:* an infantry type with two weapons (damages 7 and 13) and passenger weapon index 1,
@@ -972,8 +976,6 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
   10 and 14.
 - Gattling spin is now specified by S-0609 claims 1–4, with ordinary stage-update timing in
   S-0609 claims 5–9; it is no longer an open question here.
-- Whether any rule refuses a shot where table N's "no weapon" answers arise (modes 0, 2 and 6):
-  the weapon choice gives slot 0 and nothing here forbids the shot.
 
 ## Cross-spec changes to confirm
 
