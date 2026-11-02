@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 66
+revision: 68
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -239,15 +239,17 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Free mover.** An actor that is in the air, is an aircraft, is of an underground type or is
   a jumpjet infantry type. For a click on a cell, a jumpjet infantry type counts only while no
   ion storm is active. For a click on an object it counts always.
-- **Can be selected.** An object that a click may put into the selection. Its type's selection
-  flag must permit selection. Zero health alone does not exclude a building still in play
-  (claim 16). Units and buildings can, unless something excludes them; a building whose type is invisible in the game is believed
-  not to be selectable (low). A fully cloaked object that the viewer neither owns nor senses
-  cannot be clicked, even if allied. Drawn fading objects can be clicked, subject to ordinary
-  selection exclusions (S-0516 claim 26). A unit disguised as terrain or an overlay that appears
-  disguised to the viewer cannot be selected (S-0516 claim 36). Whether a unit below the surface
-  can be selected remains unidentified (low; Open questions). Rows G2, G10, claim 3 and claim 12
-  all ask this one question.
+- **Can be selected.** An object that a click may put into the selection. Its type's selection flag
+  must permit selection. Zero health alone does not exclude a building still in play (claim 16).
+  Units and buildings can, unless something excludes them; a building whose type is invisible in the
+  game is believed not to be selectable (low). A seized unit (S-0607 Terms) cannot be selected by
+  any selecting input until it is no longer seized (S-0607 claim 5: high for the control group's
+  refusal during the grip with the jumpjet stand-in, medium and `unmeasured` for the rest). A fully
+  cloaked object that the viewer neither owns nor senses cannot be clicked, even if allied. Drawn
+  fading objects can be clicked, subject to ordinary selection exclusions (S-0516 claim 26). A unit
+  disguised as terrain or an overlay that appears disguised to the viewer cannot be selected (S-0516
+  claim 36). Whether a unit below the surface can be selected remains unidentified (low; Open
+  questions). Rows G2, G10, claim 3 and claim 12 all ask this one question.
 - **Passive neutral house.** A house whose type carries the passive flag (Import mapping). Its
   buildings count as engineer-friendly for table I.
 - **Self-teleporting type.** A type that teleports itself to where it is sent (the teleporter flag of
