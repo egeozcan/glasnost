@@ -6,7 +6,7 @@
 //! design: watch mode (lead request 2026-11-02, an extra not in the
 //! original); the specs cited are the ones the rules come from.
 
-use super::access_tests::{click, client, run_start, session, session_mut};
+use super::access_tests::{click, client, key, run_start, session, session_mut};
 use super::*;
 use glasnost_ai::fixture;
 use glasnost_ai::game::Game;
@@ -121,6 +121,15 @@ fn the_watch_view_draws_no_shroud_and_the_whole_radar() {
             "{hit:?}"
         );
     }
+    // A click on the radar moves the view and gives no order.
+    let r = session(&c)
+        .hud_targets()
+        .rect_of(&HudHit::Radar)
+        .expect("the radar is offered");
+    let before = session(&c).view().origin;
+    click(&mut c, r);
+    assert_ne!(session(&c).view().origin, before, "the view moved");
+    assert!(session(&c).play.game.replay().orders.is_empty());
 }
 
 // design: watch mode (lead request 2026-11-02, an extra not in the original): clicks, keys, the sidebar, groups and route mode give no order; a left click selects any house's object for looking
@@ -171,6 +180,43 @@ fn the_watch_game_takes_no_orders() {
     assert!(s.menu_allowed());
     assert!(s.speed_offered());
     assert_eq!(s.leave_choices(), vec![PauseHit::Leave]);
+}
+
+/// The pathing reports this file's tests saved.
+static WATCH_REPORTS: std::sync::Mutex<Vec<Vec<u8>>> = std::sync::Mutex::new(Vec::new());
+
+fn keep_watch_report(name: &str, bytes: &[u8]) -> Result<String, String> {
+    WATCH_REPORTS.lock().unwrap().push(bytes.to_vec());
+    Ok(name.to_string())
+}
+
+/// The pathing report (M8 A4, our own diagnostics) of a watch game: its
+/// snapshot loads and its view says no house is played.
+// design: watch mode (lead request 2026-11-02, an extra not in the original): a watch game's report says no house is played
+#[test]
+fn a_watch_game_saves_a_pathing_report() {
+    use super::super::capture::Bundle;
+    let mut c = client((1024, 768), 100);
+    c.save_path_report = Some(keep_watch_report);
+    start_watch(&mut c);
+    let ps = players(session(&c));
+    let id = object_of(session(&c), ps[0]);
+    let cell = session(&c).play.world().obj(id).unwrap().pos.cell();
+    session_mut(&mut c)
+        .play
+        .click_map(Button::Left, Some(id), cell, Modifiers::default());
+    // nocite: our own diagnostics (a test length)
+    for _ in 0..20 {
+        session_mut(&mut c).step();
+    }
+    key(&mut c, Key::Char('p'));
+    let saved = WATCH_REPORTS.lock().unwrap().clone();
+    let b = Bundle::from_bytes(saved.last().expect("a report was saved")).unwrap();
+    assert_eq!(b.look.local, None, "no house is played");
+    assert_eq!(b.look.selection, vec![id.0]);
+    assert_eq!(b.capture_hash, session(&c).play.game.state_hash());
+    let loaded = Game::load(&b.snapshot, fixture::rules(), fixture::catalogue());
+    assert!(loaded.is_ok(), "the snapshot loads");
 }
 
 // spec: S-0414 claim 6 (the end test needs no person-played house) and claim 7 (every player house's result)

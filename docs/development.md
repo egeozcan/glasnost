@@ -3288,7 +3288,9 @@ A skirmish whose rows are all computers' is started from the setup screen and wa
 
 **The end.** The end screen's headline names the winners, *Winner: X*, *Winners: X, Y* or *No winner*, instead of VICTORY or DEFEAT, and the table is the same as any skirmish's (S-0414 claim 7). Leaving it returns to the menu.
 
-**Tests.** `crates/ui/src/setup.rs` (`the_first_row_can_be_a_computer_for_a_watch_game`, `a_watch_game_of_one_team_is_refused`, `with_no_person_the_house_order_is_the_computer_rows`), `crates/ui/src/watch.rs` (the panel lists each house and offers no order), `crates/ui/src/end.rs` (`with_no_local_row_the_winners_are_named`) and `crates/app/src/game/client_watch_tests.rs`: a watch game started from the setup screen on the synthetic fixture, with no shroud and the whole radar, no order from any input, and a game played to its end that saves, loads and replays to the same states.
+**Tests.** `crates/ui/src/setup.rs` (`the_first_row_can_be_a_computer_for_a_watch_game`, `a_watch_game_of_one_team_is_refused`, `with_no_person_the_house_order_is_the_computer_rows`), `crates/ui/src/watch.rs` (the panel lists each house and offers no order), `crates/ui/src/end.rs` (`with_no_local_row_the_winners_are_named`) and `crates/app/src/game/client_watch_tests.rs`: a watch game started from the setup screen on the synthetic fixture, with no shroud and the whole radar (a radar click moves the view), no order from any input, a pathing report whose view has no played house and whose snapshot loads, and a game that saves, loads and replays to the same states. The test ends the game with a surrender of the second house that it gives itself, to keep the debug-build test short; the AI houses are not left to play to the end.
+
+The app has no save-loading or replay-viewing screen; a save or replay of a watch game loads through `glasnost_ai::game::Game` like any skirmish's, and the pathing report (M8 A4) is the one app path that writes a snapshot.
 
 **Seams and limits.**
 
