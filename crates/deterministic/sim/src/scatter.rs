@@ -96,8 +96,15 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool
     if o.kind == Kind::Vehicle {
         return vehicle_request(w, id, req);
     }
+    if o.kind == Kind::Aircraft {
+        // spec: S-0501 claim 49 (r93, Q-2251: every request alike, whoever sends it; its threat point, forced and move-anywhere options, the height, the pad contact and the queued behaviour play no part. The current behaviour with the scatter property, or none at all, an exception to S-0215 claim 1: the aircraft falls back to rest, claim 18; otherwise no effect. It never gives a nearby cell as destination and never makes it take off itself)
+        let gate = o.beh.current.is_none_or(|b| w.rules().behaviour(b).scatter);
+        if gate {
+            crate::process::fall_back(w, id, false);
+        }
+        return false;
+    }
     if o.kind != Kind::Infantry {
-        // The aircraft specs own how an aircraft answers a scatter request.
         return false;
     }
     let r = w.rules_arc();

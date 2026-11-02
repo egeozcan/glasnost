@@ -1399,7 +1399,7 @@ pub(crate) fn process_capture(w: &mut World, id: ObjectId, eaten: bool) -> i32 {
                         .any(|&b| w.obj(b).is_some_and(|y| y.kind == Kind::Building))
             });
             if on_building {
-                // spec: S-0215 claim 28 (the scatter off a building: no threat point, forced, not move-anywhere; infantry judge it by S-0208 claims 11 and 13, a vehicle by S-0207 claim 16 without a draw, claim 19; Q-2251: an aircraft's answer is S-0501's, which states none, so it has no effect)
+                // spec: S-0215 claim 28 (the scatter off a building: no threat point, forced, not move-anywhere; infantry judge it by S-0208 claims 11 and 13, a vehicle by S-0207 claim 16 without a draw, claim 19; an aircraft by S-0501 claim 49, r93, Q-2251: a fall-back to rest when its current behaviour, the one the first fall-back left, has the scatter property)
                 crate::scatter::request(
                     w,
                     id,

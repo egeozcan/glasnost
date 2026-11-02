@@ -835,13 +835,41 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
     end_tracking(w, id);
 }
 
+/// Claim 24's contact at acceptance: aircraft `id` that accepts pad `dest`
+/// as its destination while *enter* is current or queued and it holds no
+/// contact at once asks the pad to be loaded; the pad takes it into contact
+/// when it accepts it and has a free place (claims 22 and 23).
+fn pad_accepted(w: &mut World, id: ObjectId, dest: Option<Target>) {
+    let Some(Target::Object(k)) = dest else {
+        return;
+    };
+    let Some(o) = w.obj(id) else { return };
+    let entering =
+        o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter);
+    if !entering || o.contact.is_some() {
+        return;
+    }
+    // spec: S-0501 Terms (a pad: a building whose type is one of the aircraft type's dock types)
+    let pad = w.obj(k).is_some_and(|b| {
+        b.kind == Kind::Building && ty(w, id).is_some_and(|t| t.docks.contains(&b.type_index))
+    });
+    if pad {
+        // spec: S-0501 claim 24 (r93, Q-2251: the contact is made when the pad is accepted as destination while enter is current or queued and no contact is held: it asks the pad to be loaded, claim 23's request)
+        request_contact(w, id, k);
+    }
+}
+
 /// The aircraft took destination `dest` (S-0501 claim 48 (c)): an aircraft
 /// that a factory release has left above its pad ends its pad contact at
 /// the order when the destination is not that pad and the cell holding its
 /// horizontal position belongs to the pad, whatever its height. An
 /// aircraft standing on its pad ends it at its take-off (claim 8).
 pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target>) {
-    if !is_aircraft(w, id) || !st(w, id).released {
+    if !is_aircraft(w, id) {
+        return;
+    }
+    pad_accepted(w, id, dest);
+    if !st(w, id).released {
         return;
     }
     let Some(d) = dest else { return };
@@ -1943,10 +1971,15 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             let mut np = Pos::new(nx, ny, here.z);
             let legal = |p: Pos| w.cells.cell(p.cell()).is_some();
             let may_leave = may_leave_now(w, id, &a);
-            if !legal(np) && may_leave && !t.fly_by {
-                // spec: S-0501 claim 4 (the position shifted 128 leptons in x back toward the map's middle)
-                let middle = w.cells.footprint().width * 256 / 2; // spec: S-0204 claim 2 (256 leptons per cell)
-                let back = if np.x > middle { -128 } else { 128 }; // spec: S-0501 Constants (edge push-back 128 leptons)
+            // spec: S-0501 Edge cases (quirks.aircraft_edge_hold on: the push-back of claim 4; off: an aircraft that may leave the map now is not pushed back, whatever its flags, with no candidate tried and no draw taken, so claim 10's removal on leaving the legal map applies)
+            let hold = w.rules().quirks.aircraft_edge_hold;
+            if !legal(np) && may_leave && !t.fly_by && hold {
+                // spec: S-0501 claim 4 (r93, Q-2291: the side rule: +128 when the new position's cell has local column a < T, else −128)
+                let back = if edge_column_low(w, np.cell()) {
+                    128 // spec: S-0501 Constants (edge push-back 128 leptons)
+                } else {
+                    -128 // spec: S-0501 Constants (edge push-back 128 leptons)
+                };
                 let shifted = Pos::new(np.x + back, np.y, np.z);
                 np = if legal(shifted) {
                     shifted
@@ -2061,6 +2094,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     // Speed fraction (claim 5, F4), at the end of a living movement tick.
     if alive && !a.ground {
         let fixed = full_speed(w, id, &t, &a);
+        // The target of this tick's ordinary calculation, before any approach target replacement.
+        let mut ordinary = None;
         let early_take_off = a.taking_off && height(w, id) < cruise / 2; // spec: S-0501 claim 5 (taking off: the target is kept until half the cruise height)
         if a.landing {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
@@ -2075,6 +2110,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             let (tau, f) = slowing(a.cur, dd, t.slowdown, ar, mode);
             a.tgt = tau;
             a.cur = f;
+            ordinary = Some(tau);
         } else {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
         }
@@ -2104,7 +2140,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         if let Some(ob) = w.obj_mut(id) {
             ob.air = Some(a.clone());
         }
-        landing_trigger(w, id, &t, fixed);
+        landing_trigger(w, id, &t, fixed, ordinary);
     }
     if alive
         && let Some(mut a) = st_opt(w, id).cloned()
@@ -2165,6 +2201,18 @@ fn may_leave_now(w: &World, id: ObjectId, a: &AirState) -> bool {
         )
 }
 
+/// Claim 4's side rule for the edge push-back: whether cell `c` has a local
+/// column below *T*, so the shift is +128 (else −128).
+fn edge_column_low(w: &World, c: CellXY) -> bool {
+    let fp = w.cells.footprint();
+    let lx = fp.local[0];
+    // spec: S-0501 claim 4 (r93, Q-2291: d = cₓ − cᵧ, S-0009 claim 1; a = ⌊(d + W) / 2⌋ − Lx, the inverse of S-0522 F2, floor division)
+    let a = (c.x - c.y + fp.width).div_euclid(2) - lx;
+    // spec: S-0501 claim 4 (r93: T = ⌊(W + H − 1) / 2⌋, half the largest legal cell coordinate, S-0009 claim 2)
+    let t = (fp.width + fp.height - 1).div_euclid(2);
+    a < t
+}
+
 /// The removal tests of claim 10; whether the aircraft was removed.
 fn leave_map_test(w: &mut World, id: ObjectId, t: &Ty) -> bool {
     let Some(o) = w.obj(id) else { return true };
@@ -2188,8 +2236,10 @@ fn leave_map_test(w: &mut World, id: ObjectId, t: &Ty) -> bool {
     gone
 }
 
-/// The landing triggers of claim 6.
-fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
+/// The landing triggers of claim 6. `ordinary` is the target that this
+/// tick's ordinary calculation of claim 5 gave, before any approach target
+/// replacement (none when the calculation did not run).
+fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool, ordinary: Option<F64>) {
     let Some(o) = w.obj(id).cloned() else { return };
     let a = st(w, id);
     if a.holding || a.landing || a.taking_off || a.ground {
@@ -2199,14 +2249,15 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
     if !no_fire {
         return;
     }
-    let trigger = match o.dest {
+    // spec: S-0501 claim 6 (r93, Q-2252: the cell tested is that of the flight point the flight holds, claim 40, not that of the destination object; with no flight point the test does not apply)
+    let trigger = match flight_target(w, id) {
         // spec: S-0501 claim 8 (no destination in flight: it lands where it is) and Terms (claim 48 (c)'s low release at height 0 is on the ground by its height, not in flight, as after its fall-back to rest, which stays at height 0 in its cell)
         None => !low_release_at_height_0(w, id, &a),
         Some(dd) => {
             let p = flight_point(w, id, dd);
             let dist = planar(w, o.pos, p);
-            // spec: S-0501 claim 6 (standing in its destination cell with a target fraction of 0)
-            let exact = o.pos.cell() == p.cell() && a.tgt.eq_num(F64::ZERO);
+            // spec: S-0501 claim 6 (r93, Q-2252: standing in its flight point's cell with the target fraction of the same tick's ordinary calculation of claim 5 at 0; a replacement target is never tested, so within 128 leptons it does not start to land while its ordinary target is positive) and claim 5 (r93: that calculation runs in every tick in which the test can apply)
+            let exact = o.pos.cell() == p.cell() && ordinary.is_some_and(|x| x.eq_num(F64::ZERO));
             // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claims 42 and 48 (c) (At height 0: the close-approach trigger is a request of guidance, which runs only for an aircraft above the terrain, whatever the aircraft; the exact-cell trigger applies at any height, Q-1941)
             let close =
                 dist < 128 && !fixed && a.cur.lt(w.rules().air.twentieth) && height(w, id) > 0;
@@ -2233,7 +2284,7 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
     if o.beh.current != Some(Behaviour::Enter) && crate::routes::issue_later(w, id) {
         return;
     }
-    // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead)
+    // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead: an armed one to a pad or a crash, an unarmed one to an F8 landing spot near which it stays in the air, claim 50)
     // design: S-0501 Open question 26 (a pad-bound aircraft released from a docking position outside the foundation that took its destination without a behaviour order still holds its contact in flight: in a destination cell holding no building it is in contact with it falls back, and T2's after-the-row enter is claim 24's, which takes the pad as its destination; in a destination cell of the pad it is in contact with the restriction does not hold, so it starts to land and its touchdown docks it there, claim 24)
     if t.bound && !o.contact.is_some_and(|k| pad_cell(w, k, id)) {
         if t.docks.is_empty() && armed(w, id) && ammo_left(w, id) {
@@ -3006,16 +3057,33 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
             Some(Behaviour::Move)
         }
     } else {
-        // spec: S-0501 T2 (in flight otherwise: the landing spot; move)
-        let s = landing_spot(w, id);
-        set_dest(w, id, s.map(Target::Cell));
-        Some(Behaviour::Move)
+        // spec: S-0501 Edge cases (quirks.unarmed_pad_bound_hover off: for an unarmed aircraft of a landable pad-bound type with dock types, falling back in flight with no contact, only this last in-flight row changes: it first looks for a pad, claim 21, and asks it for contact as T2's in-flight pad row does; granted: the pad as destination and enter; otherwise the row's landing spot and move, with no crash. A type that is not landable is unchanged)
+        let pad = if !w.rules().quirks.unarmed_pad_bound_hover
+            && t.bound
+            && t.landable
+            && !t.docks.is_empty()
+            && o.contact.is_none()
+        {
+            seek_pad(w, id)
+        } else {
+            None
+        };
+        if let Some(k) = pad {
+            set_dest(w, id, Some(Target::Object(k)));
+            Some(Behaviour::Enter)
+        } else {
+            // spec: S-0501 T2 (in flight otherwise: the landing spot; move) and claim 50 (r93, Q-2252: an unarmed aircraft, pad-bound with dock types included, makes no pad search and never crashes for want of a pad: T2's pad rows and its after-the-row search are for armed aircraft only, so it hovers at its F8 spot)
+            let s = landing_spot(w, id);
+            set_dest(w, id, s.map(Target::Cell));
+            Some(Behaviour::Move)
+        }
     };
     let mut chosen = chosen;
     // spec: S-0501 T2 and its note (after every row from the fourth on, the visiting rows included: no ammunition, armed, no contact: a new pad search, which needs neither height test, claim 18)
     if armed && !ammo_left(w, id) && w.obj(id).is_some_and(|x| x.contact.is_none()) {
-        if let Some(k) = seek_pad(w, id) {
-            // spec: S-0501 claim 18 and T2 (found: the pad as destination, the target forgotten, enter)
+        // spec: S-0501 claim 18 (r93, Q-2251: this search asks the pad for no contact: it only finds a pad that accepts the aircraft, claims 21 and 22)
+        if let Some(k) = find_pad(w, id) {
+            // spec: S-0501 claim 18 and T2 (found: the pad as destination, the target forgotten, enter) and claim 24 (r93: that acceptance makes a contact only when enter is already current or queued, destination_taken)
             set_dest(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
                 crate::spawn::clear_own_target(ob);

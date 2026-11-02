@@ -675,8 +675,17 @@ fn claim_24_docking_steps_are_clamped() {
     let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
     assert_eq!(air::height(&w, a), 0, "the displacement has no height");
     testkit::run(&mut w, 10);
-    // A pad-bound aircraft that reaches its destination looks for a pad and returns (claims 6 and 18).
-    move_to(&mut w, a, testkit::mid(SIZE, 3, 2));
+    // Sent south-east and ordered back to its pad once in the air (claim 24).
+    // spec: S-0501 claim 50 (r93: a type of 10 ≤ V < 20, here 12, can hover short of its destination with a positive fraction at claim 5's stalling facings, as on this south-easterly heading, and claim 6's exact-cell trigger reads the ordinary target, so no refused landing returns it; the order does)
+    let to = testkit::mid(SIZE, 3, 2);
+    move_to(&mut w, a, to);
+    let away = run_until(&mut w, 1000, |w| {
+        let o = w.obj(a).unwrap();
+        let c = o.pos.cell();
+        o.contact.is_none() && c.x >= to.x - 1 && c.y >= to.y - 1
+    });
+    assert!(away, "{}", describe(&w, a));
+    enter(&mut w, a, k);
     let back = run_until(&mut w, 3000, |w| {
         let o = w.obj(a).unwrap();
         o.contact == Some(k) && o.beh.current == Some(Behaviour::Enter) && st(w, a).landing
