@@ -1,9 +1,9 @@
 ---
 id: Q-2263
 title: The periodic held-target check for holders of computer-controlled owners, and for targets from retaliation or a revert
-status: open
+status: answered
 related: [S-0309, S-0304, S-0215]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
