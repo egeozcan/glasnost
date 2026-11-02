@@ -2,11 +2,11 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 27
+revision: 28
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696, Q-1773]
 supersedes: []
@@ -353,6 +353,14 @@ New terms:
     still receives that stop request and loses lift. Re-enabling restores lift without cancelling
     an already active spin, which can continue until its count reaches 0.
 
+    Whether shots at a switched-off hovering vehicle are led follows from whether it is moving
+    (Terms), as S-0306 claim 3 b gives it (quirks.switched_off_hover_lead). One that has a
+    destination or a heading point when it is switched off is moving, and shots at it are led while
+    it keeps either. One that has neither is not moving, so shots at it are not led: for example one
+    that arrives at its heading point by claim 7's test with no destination and no stored step left
+    after that arrival (claim 15). Losing the heading point alone, as at a refused step (claim 12),
+    leaves it moving while it keeps its destination.
+
     Backing and confidence, per sub-claim:
     - *Ordinary disabling: the draws, the spin, the settling-tick rotation cutoff, the stop
       request and the loss and return of lift.* Backing: `measurable` (scenario H7). Confidence:
@@ -387,6 +395,9 @@ New terms:
       the order-level destination on every tick and expects it to be the depot from the arrival
       until the processing that takes the settling step). A repeated switch-off is covered only
       when one falls in that window. Confidence: medium.
+    - *Whether a switched-off vehicle is moving, and so led.* Backing: `measurable` (S-0306 scenario
+      P45 part a, which records the heading point, hover speed and moving state of each vehicle of a
+      switched-off group). Confidence: medium, as for the exceptions above.
 
 11. **Sinking over water.** On the tick on which the spin of claim 10 ends, when the vehicle's cell
     is a water cell and its world height is less than 104 leptons (one level) above the surface,
