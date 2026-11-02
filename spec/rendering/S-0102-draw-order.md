@@ -2,11 +2,11 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 32
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490,
 Q-0520, Q-0580, Q-0742, Q-1560, Q-2176]
@@ -145,7 +145,9 @@ screen rows.
    (S-0301 claim 22). Other animations use their type's layer (default air); particles, voxel animations,
    wave effects and building light effects are in the air layer; particle systems in the ground
    layer; units digging through a tunnel evaluate to the underground layer; the veinhole monster is
-   in no layer.
+   in no layer. A superweapon warp member is in the ground layer from its warp's launch until at
+   least the end of its arrival hold, whatever its height (S-0306 claim 17); when it leaves that
+   layer after the hold is not established.
    - Backing: `measurable`. Coverage by row of the table:
      - walking, driving, hovering, ship and teleport movement: D2, D3, D14, D19 (d).
      - flying movement, in the air and on the ground: D2, D5, D12, D14.
@@ -178,12 +180,16 @@ screen rows.
      - the veinhole monster: no reproducible setup distinguishes this object from an ordinary
        terrain object or identifies its own visible drawing (Open questions), so no expected
        picture can be stated.
+     - a superweapon warp member's ground layer from its warp's launch until at least the end of
+       its arrival hold: as S-0306 claim 17 rates it, no rule there reads the layer after the
+       member appears. When the member leaves the layer after the hold is not claimed here.
    - Confidence: high for the table, except: the tunnel rows (low: tunnelling units may in practice
      stay in the ground list, see Open questions); the jumpjet cruise
      height minimum and the cruise height being also the hover height (medium). The exact
      jumpjet two-height predicate and the distinction between falling and crashing are high
      confidence; the veinhole monster (medium: it is in no layer, and no drawing of it in
-     a drawn frame was found); building light effects (medium)
+     a drawn frame was found); building light effects (medium); a superweapon warp member's
+     ground layer from launch through arrival hold (medium, as S-0306 claim 17 rates it)
 4. **When an object changes layer.** An object's layer is evaluated from the table under *State
    and ordering*, for its state and height at that moment, only at the moments below. Between them
    the object stays in the list it was last put into, even if its height has crossed a threshold
@@ -1260,11 +1266,11 @@ screen rows.
     | Building bib, under-door and under-roof-door images, and the deploying or roof-deploying image drawn in place of the body | S-0513 F9 | force-shield selector for force shield, none for curtain |
     | Protected building's door image while unloading | S-0513 F9 | as the bib (S-0513 claim 29b drawing correction) |
     | Any drawing of a protected object made translucent or rippling by cloaking | S-0513 F9 on the source pixels before F8 | none |
-    | Any drawing of a protected object whose centre cell is shrouded for the local player | S-0513 F9 | none |
+    | Any drawing of a protected object whose centre cell is shrouded for the local player, other than a building's slot animations (the animation rule below) | S-0513 F9 | no protection mask (open for the laser-target mask, below) |
     | Remembered image of a fogged building | no protection adjustment | none |
     | Opaque body sprite of an air-strike-marked building, cell pass and object pass | marking pulse, S-0519 claim 26 and F7 | laser-target selector (S-0519 claim 26), united with the force-shield mask when both apply |
     | Opaque voxel turret and barrel of an air-strike-marked building | marking pulse, S-0519 claim 26 and F7 | as the marked body |
-    | Opaque building animation over an air-strike-marked building's cell | its animation brightness rule | laser-target selector by the cell rule below, united with the force-shield mask |
+    | Opaque building animation over an air-strike-marked building's cell | its animation brightness rule | laser-target selector by the cell rule below, united with the force-shield mask; none while the cell holding the animation's own position is shrouded for the local player (the animation rule below) |
 
     Aircraft without a voxel body remain bodyless under claim 21. Ordinary infantry
     reached by the curtain are killed as S-0513 claim 23 specifies, not given a new
@@ -1273,8 +1279,11 @@ screen rows.
     flash of S-0519 claim 25 adds no mask. The marking rows cover ordinary opaque drawings and
     they make no additional assertion about marked translucent or accessory drawings.
     The protection-specific translucent and shrouded-cell rows override its opaque rows,
-    as S-0513 claim 29b specifies. The corrected door mask follows the bib; the original
-    omitted that mask on a force-shielded door, a drawing-only defect with no switch.
+    as S-0513 claim 29b specifies. The shrouded-cell row withholds only the protection masks:
+    for a protected building that is also air-strike-marked, whether its body, voxel turret and
+    barrel keep the laser-target mask is open (S-0519 claim 26). The corrected door mask follows
+    the bib; the original omitted that mask on a force-shielded door, a drawing-only defect with
+    no switch.
 
     **Animation rule.** A building slot animation is marked as a building animation.
     For such a marked animation, the building occupying the animation's cell supplies
@@ -1283,7 +1292,13 @@ screen rows.
     by union when both apply. Curtain protection supplies no mask. An arbitrary attached animation is not marked merely because it
     is attached, and attachment alone grants neither recolouring nor the host's
     brightness envelope. This colour test uses the building at the animation's cell,
-    not a blanket inheritance from an attachment or slot owner. The normal-light
+    not a blanket inheritance from an attachment or slot owner. While the cell holding the
+    animation's own position is shrouded for the local player, the animation takes no colour
+    mask, neither the force-shield nor the laser-target mask. Brightness follows this claim and
+    S-0519 claim 26 unchanged; the shroud state of its cell does not change it. The centre cell
+    of the building that supplies the masks, the building occupying the animation's cell, plays
+    no part. A cell is shrouded when S-0110 claim 8's point test at its centre finds it so
+    (S-0513 claim 29b). The normal-light
     setting still forces animation brightness to 1000 per-mille. Palette and ordinary
     brightness selection otherwise remain S-0103 claim 8 and S-0104 claim 13.
 
@@ -1296,13 +1311,16 @@ screen rows.
     - Backing: `measurable` (D44, including engine fixtures for the layout correction,
       S-0610 P4 (c) for berserk; S-0519 T27 for marking). Accessory, translucent, shroud-edge
       and remembered drawings follow S-0513 claim 29b: SW10 (i) tests the observable rows, while
-      remembered images remain `unmeasured` because fog of war is off in skirmish.
+      remembered images remain `unmeasured` because fog of war is off in skirmish. The
+      shrouded-cell exception for slot animations is `measurable` by S-0513 SW10 part i for a
+      protected building, and `unmeasured` for a building that is only marked (S-0519 claim 26).
     - Confidence: high for the three colour-source cases in S-0513 claim 29,
       the opaque sprite union after shading, the layout correction and the animation
       cell test; medium for the remaining unit/voxel-part variants and slot-brightness
       refresh, pending the discriminating captures in D44. Berserk and marking retain the
       confidence of S-0610 claim 7 and S-0519 claim 26; the accessory and hidden-drawing
-      distinctions retain that of S-0513 claim 29b
+      distinctions retain that of S-0513 claim 29b; medium for the shrouded-cell exception
+      for slot animations, pending S-0513 SW10 part i
 
 ## Formulas
 
@@ -1584,6 +1602,7 @@ single-layout correction, not the original's stray bits from combining layouts.
 | particle, voxel animation, wave effect, building light effect | always | air |
 | particle system | always | ground |
 | veinhole monster | never in any layer; no step of a drawn frame was found to paint it | — |
+| superweapon warp member, any kind | from its warp's launch until at least the end of its arrival hold, whatever its height; this row comes before every row above (S-0306 claim 17) | ground |
 
 Heights in this table are heights above the terrain (glossary), in leptons, except for the two
 jumpjet heights defined below. A unit's jumpjet cruise height is its type's configured value,
