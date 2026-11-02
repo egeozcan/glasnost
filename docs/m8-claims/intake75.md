@@ -6,7 +6,9 @@ the departure's ending of the being-erased state while the beam stays attached, 
 switches. S-0514 r11 to r12 and S-0610 r11 to r12 take the matching changes (S-0514 claims 3, 9,
 14 and 17; S-0610 Terms and claim 5). The S-0309, S-0215, S-0203 and S-0302 passages that cite
 claim 39a are built here where they read the new state; the rest of those specs' revisions is
-intake 74's. Requests filed: **Q-2316** and **Q-2317**.
+intake 74's. Requests filed: **Q-2316** and **Q-2317**. Two later revisions are folded in:
+S-0514 r13 (claim 1: a departed warp member is an ordinary object target) and S-0513 r87 (claim
+45: the spy plane's heading after its target); neither needs new behaviour.
 
 ## Built
 
@@ -85,6 +87,8 @@ intake 74's. Requests filed: **Q-2316** and **Q-2317**.
 | S-0610 Terms and claim 5: the phasing-in excluded updates take no countdown step | tested | `claim39a_the_berserk_countdown_skips_the_cut_short_phasing_in_updates` (vehicle, infantry both positions) |
 | S-0610 claim 4: the crush response follows the berserk entry (S-0215 claim 39) | seam | intake 74 (S-0215 claim 39) |
 | Q-2316: sparkles and claim 17 clearing in the warp-only turns | request | interim: none; only the erasure update runs there |
+| S-0514 r13 claim 1: a departed warp member, off the map or phasing in, is an ordinary object target for claims 1 to 4 | tested | Already built (`temporal::deliver`'s ground-layer test passes through `warp::in_ground_layer`, S-0306 claim 17); cited r13. Phasing in (P11 run h): `claims_s0513_r86::s0514_r13_claim1_a_member_phasing_in_is_an_ordinary_object_target_for_the_lock`; off the map (run g): `claims_s0306_r62::claim17_an_erasure_lock_on_a_member_off_the_map_makes_progress_in_every_turn` |
+| S-0513 r87 claim 45: after its target the spy plane keeps its approach heading and is not steered toward its exit cell (S-0501 claims 4, 10, 34 and 51) | tested | No new code: S-0501 r93 claim 51 as built by intake 76; cited r87 in `air::spy_overfly`. Test: `claims_s0501_r93_edge::claim_51_the_heading_is_held_and_nothing_ends_overfly` (intake 76's) |
 
 ## Lanes
 

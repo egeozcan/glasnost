@@ -3516,7 +3516,7 @@ fn spy_overfly(w: &mut World, id: ObjectId) -> i32 {
         spy_camera(w, &o, id, false);
     }
     if w.obj(id).is_some_and(|o| o.dest.is_none()) {
-        // spec: S-0501 claim 34 (an absent destination is replaced by a new choice on the exit edge)
+        // spec: S-0501 claim 34 (an absent destination is replaced by a new choice on the exit edge); S-0513 r87 claim 45 (after its target it keeps its approach heading and is not steered toward its exit cell, S-0501 claims 4, 10, 34 and 51)
         let c = arrival_edge_cell(w, id, true);
         set_dest(w, id, c.map(Target::Cell));
     }

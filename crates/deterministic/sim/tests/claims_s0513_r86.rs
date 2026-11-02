@@ -519,6 +519,33 @@ fn claim39a_a_handover_after_the_departure_keeps_the_member_not_erased_up_to_a_l
     assert_eq!(amount(&w, m), rest, "joined without resetting R");
 }
 
+#[test]
+fn s0514_r13_claim1_a_member_phasing_in_is_an_ordinary_object_target_for_the_lock() {
+    // spec: S-0514 r13 claim 1 (a departed superweapon warp member that is the target, phasing in after it appears, is an ordinary object target for claims 1 to 4: it passes the ground-layer test by S-0306 claim 17's render-layer rule, and the lock attaches by these claims' tests) and S-0513 claim 39a (A lock after the departure: being erased, with S-0514 claim 17's turns cut short), S-0306 scenario P11 run h
+    let r = rules();
+    let mut w = ready(&r);
+    let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    // An unprotected TOWER of its owner on the landing cell: the landing is redirected and the
+    // hold is the teleport delay of 7 (S-0513 claims 37 and 40).
+    spawn(&mut w, "TOWER", BETA, 5, 5);
+    fire_now(&mut w, ALPHA, SOURCE, at(0, 0));
+    while orders::blocked(&w) {
+        step(&mut w);
+    }
+    fire(&mut w, ALPHA, WARP, at(5, 5));
+    until(&mut w, 120, |w| matches!(stage(w, m), Some(Stage::Hold(_))));
+    assert!(!temporal::attached(&w, m), "no beam before the hold");
+    // The detonation of f's temporal shot at the member while it phases in.
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::holds(&w, f, m), "the lock attaches");
+    assert_eq!(amount(&w, m), Some(1200), "a leader's lock: R₀ = 10 × 120");
+    assert!(temporal::erased(&w, m), "being erased");
+    ordered_turn(&mut w, m);
+    assert!(matches!(stage(&w, m), Some(Stage::Hold(_))));
+    assert_eq!(w.obj(m).unwrap().dest, None, "its turns are cut short");
+}
+
 // --- The switch -------------------------------------------------------------------------
 
 #[test]
