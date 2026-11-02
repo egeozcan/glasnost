@@ -2,11 +2,11 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0986, Q-1524, Q-1621]
 supersedes: []
@@ -109,8 +109,12 @@ ignores defences*, *quirk switch*. Also used:
    planter's house is the local player, the game-wide bomb-attach sound plays. The accepts-bombs
    flag of the target's type and the bomb-planter flag of the firer's type affect only the cursor
    (S-0214 row I19); planting tests neither.
-   - Backing: `measurable` (scenarios T2 and T24)
-   - Confidence: high
+   A departed superweapon warp member that is the target, off the map or phasing in after it
+   appears, is an ordinary target here: it gets its bomb at the detonation, by these tests (S-0306
+   claim 17).
+   - Backing: `measurable` (scenarios T2 and T24; S-0306 scenario P11 run g, off the map, and run h,
+     phasing in, for a departed warp member target)
+   - Confidence: high; medium for a departed warp member target, as S-0306 claim 17 rates it
 
 3. **When a bomb weapon may fire.** Two more *illegal* answers join the late target tests of the
    firing check (S-0301 claim 9, rank 9). A weapon with a bomb-planting warhead is illegal against
@@ -193,14 +197,20 @@ ignores defences*, *quirk switch*. Also used:
      impact. The falling carrier's health is already 0 (S-0501 claim 46), so the detonation
      cannot kill it again: a bomb set off during the fall makes claim 5's one detonation and is
      then gone.
+
+   A departed superweapon warp member that carries a bomb, off the map or phasing in after it
+   appears, is an ordinary target for a disarm hit: it loses its bomb at the detonation, by these
+   tests (S-0306 claim 17).
    - Backing: `measurable` (scenarios T6, T9 and T24; S-0501 scenario AC29 part i for the bomb
      kept through the fall-back crash's start, removed without effect at impact, and set off by a
      detonate order during the fall). A bomb whose timer comes due during that fall, and its order
      against the impact in the impact tick, are `unmeasured`, as S-0501 claim 46 gives: no normal
-     input places the crash start against the bomb's due tick.
-   - Confidence: high; medium for the carrier destroyed without a hit, as S-0501 claim 46 rates
-     the planted bomb's handling until AC29 part i runs, and for its timer during the fall
-     (`unmeasured`)
+     input places the crash start against the bomb's due tick. The disarm hit on a departed warp
+     member is `measurable` by S-0306 scenario P11 run g (off the map) and run h (phasing in).
+   - Confidence: high; medium for the carrier destroyed without a hit, as S-0501 claim 46 rates the
+     planted bomb's handling until AC29 part i runs, and for its timer during the fall
+     (`unmeasured`); medium for the disarm hit on a departed warp member, as S-0306 claim 17 rates
+     it
 
 8. **Ownership and planter changes.** A change of owner of a unit, infantry unit or aircraft, for
    example by mind control, keeps the bomb, its timer and its planter's house. A garrisonable
@@ -376,8 +386,12 @@ ignores defences*, *quirk switch*. Also used:
     the designation shot detonates, after the firing cadence of S-0301 and the projectile's flight
     (S-0306). The designator need not keep firing once a strike has started, but any change of its
     target cancels the strike (claim 19).
-    - Backing: `measurable` (scenarios T16 and T24)
-    - Confidence: high
+
+    A departed superweapon warp member that is the shot's target, off the map or phasing in after it
+    appears, is an ordinary object target: it is designated, by these tests (S-0306 claim 17).
+    - Backing: `measurable` (scenarios T16 and T24; S-0306 scenario P11 run g, off the map, and run
+      h, phasing in, for a departed warp member target)
+    - Confidence: high; medium for a departed warp member target, as S-0306 claim 17 rates it
 
 17. **Starting a strike.** At the start the designator's rank decides the strike size *n* and the
     strike aircraft type (normal or elite values, Terms). A successful start has these results:

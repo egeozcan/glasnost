@@ -110,7 +110,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 6 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 38 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings, beam drawing) | combat | 6 | approved | — |
-| [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 17 | approved | — |
+| [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 18 | approved | — |
 | [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 27 | approved | — |
 | [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 4 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 12 | approved | — |
