@@ -45,16 +45,20 @@
 //!   to the even number, S-0216 claim 8's Formulas), at least 1, infantry at
 //!   most 60. Unit *i* of side A on cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod
 //!   8)) facing map east, side B on (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8))
-//!   facing map west. Our arena's set-up is S-0216 claim 8 (design): the
-//!   map's objects as any game loads them; side A's units by index, then
-//!   side B's, each created, tested and placed before the next; a unit its
-//!   stated cell does not take ([`takes`]) stands on the first of its eight
-//!   neighbours that does ([`NEIGHBOURS`]), and set-up stops with an error
-//!   when none does ([`placed_cell`]); the placement is a play-time placement
-//!   (S-0216 claims 1 to 4: the facings, an infantry unit's standing
-//!   position with its one draw R(0, 3)), and the group's mission, hunt, is
-//!   then queued as a placing step's behaviour. M-0006's moves are the
-//!   acceptance check, not an input. No order is given.
+//!   facing map west. Our arena's set-up is S-0216 r59 claim 8 (design):
+//!   the map's objects as any game loads them; the row type's group first,
+//!   on whichever side it plays, then the other group, each by index, each
+//!   unit created, tested and placed before the next; each cell that
+//!   refuses a unit ([`takes`]) costs the draws of one try of the unit's
+//!   type (its creation set's draws, then an unused R(0, 3) for infantry),
+//!   whose objects are discarded, and the next of its eight neighbours
+//!   ([`NEIGHBOURS`]) is tried with a new try; set-up stops with an error
+//!   when none takes it ([`place_unit`]); the placement is a play-time
+//!   placement (S-0216 claims 1 to 4: the facings, an infantry unit's
+//!   standing position with its one draw R(0, 3)), and the group's mission,
+//!   hunt, is then queued as a placing step's behaviour. M-0006's moves and
+//!   M-0019's tick-0 findings are the acceptance check, not an input. No
+//!   order is given.
 //! - **Samples**: every [`SAMPLE_PERIOD`] frames (ticks from game start);
 //!   the game is over at the first sample at which only one side owns
 //!   anything (that side wins), or at which neither does (`none`), or at
@@ -1079,6 +1083,10 @@ pub struct Arena {
     /// The units that stand off their stated cell ([`placed_cell`]), in
     /// creation order.
     pub moved: Vec<Moved>,
+    /// The raw values the scenario stream had taken since its seeding when
+    /// the set-up's first object was created: the place of the first
+    /// creation draw (S-0216 claim 8, *Acceptance*: M-0019's *N*₀).
+    pub first_raw: u64,
 }
 
 /// The units off their stated cells, one line each (shown by `--watch` and
@@ -1245,14 +1253,16 @@ pub fn refusal(w: &World, id: ObjectId, kind: Kind, cell: CellXY) -> Option<Stri
     None
 }
 
-/// The cell the created unit `id` stands on, given its stated cell (S-0216
-/// claim 8, *Moving on*, design): the stated cell when it takes the unit
-/// ([`takes`]), else the first of its eight neighbouring cells, in
-/// [`NEIGHBOURS`] order, that does; `None` when none does, and set-up then
-/// stops with an error. First come, first served: no cell is kept for a
-/// later unit, which is tested on its stated cell in turn, so an infantry
-/// unit can still be taken by a cell that holds infantry, and a vehicle is
-/// moved on.
+/// The cell the created unit `id` would stand on, given its stated cell
+/// (S-0216 claim 8, *Moving on*, design), asked without any draw: the
+/// stated cell when it takes the unit ([`takes`]), else the first of its
+/// eight neighbouring cells, in [`NEIGHBOURS`] order, that does; `None`
+/// when none does. The take test does not depend on which object of the
+/// type asks it, so this is the cell [`place_unit`] reaches, though
+/// [`place_unit`] asks each cell with a new try and its draws. First come,
+/// first served: no cell is kept for a later unit, which is tested on its
+/// stated cell in turn, so an infantry unit can still be taken by a cell
+/// that holds infantry, and a vehicle is moved on.
 pub fn placed_cell(w: &World, id: ObjectId, kind: Kind, stated: CellXY) -> Option<CellXY> {
     if takes(w, id, kind, stated) {
         return Some(stated);
@@ -1275,8 +1285,16 @@ fn cost_of(w: &World, id: ObjectId) -> i64 {
     })
 }
 
-/// Sets up the game of `types` (side A's and side B's type) with `seed`.
-pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, String> {
+/// Sets up the game of `types` (side A's and side B's type) with `seed`,
+/// the group of `row_side` (the side the pairing's row type plays) created
+/// and placed first (S-0216 claim 8, *Order*). A game of a type against
+/// itself has no row side of its own: its callers pass [`Side::A`].
+pub fn setup(
+    ground: &Ground,
+    types: [&str; 2],
+    row_side: Side,
+    seed: u32,
+) -> Result<Arena, String> {
     let rules = &ground.rules;
     let players: Vec<Player> = [0, 1]
         .map(|i| Player {
@@ -1337,8 +1355,13 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
     }
     let mut units: [Vec<ObjectId>; 2] = [Vec::new(), Vec::new()];
     let mut moved = Vec::new();
-    // spec: S-0216 claim 8 (Order: side A's units first, in increasing unit index, then side B's; each unit created, then tested and placed, before the next is created)
-    for side in [Side::A, Side::B] {
+    let first_raw = w.rng.taken();
+    // spec: S-0216 claim 8 (Order, r59: the group of the pairing's row type first, on whichever side it plays, then the other group, each in increasing unit index; each unit created, then tested and placed, before the next is created; measure: M-0019, creation order puts the row type's units first)
+    let order = match row_side {
+        Side::A => [Side::A, Side::B],
+        Side::B => [Side::B, Side::A],
+    };
+    for side in order {
         let s = side.index();
         let (kind, n, _) = group(rules, types[s])?;
         let ti = rules
@@ -1371,14 +1394,21 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
         houses,
         units,
         moved,
+        first_raw,
     })
 }
 
 /// Creates one unit of `kind` and type index `ti` for `house` and places it
-/// as S-0216 claim 8 gives (design): created first, with its creation draw;
-/// then tested on its `stated` cell and, if refused, on its eight
-/// neighbours in order ([`placed_cell`]), taking no draw; then placed on the
-/// cell that takes it by a play-time placement with facing value `v`
+/// as S-0216 r59 claim 8 gives (design). Each cell of the order (its
+/// `stated` cell, then its eight neighbours, [`NEIGHBOURS`]) is tried with
+/// a new try: a unit of the type created with its whole creation set (its
+/// own creation draw and creation number, then those of the objects its
+/// creation makes, S-0611 claim 14), then the take test ([`refusal`]),
+/// which takes no draw. A cell that refuses keeps the try's draws, adds an
+/// unused draw R(0, 3) for an infantry unit, and keeps no object: the try's
+/// set is discarded, its creation numbers stay reserved
+/// ([`glasnost_sim::objects::discard_unplaced`]). The cell that takes the
+/// unit gets a play-time placement of that try with facing value `v`
 /// (S-0216 claims 1 to 4: an infantry unit's one draw R(0, 3)); then the
 /// group's mission, hunt, is queued. Returns the unit, its cell, and why its
 /// stated cell refused it when it was moved on. An error when no cell takes
@@ -1391,40 +1421,41 @@ pub fn place_unit(
     stated: CellXY,
     v: u8,
 ) -> Result<(ObjectId, CellXY, Option<String>), String> {
-    // spec: S-0216 claim 8 (the unit is created, its creation draw first, then tested and placed with its placement draw if any, before the next unit is created)
-    let id = glasnost_sim::objects::create(w, kind, ti, Some(house));
+    let mut refused: Vec<String> = Vec::new();
+    let mut why = None;
     // spec: S-0216 claim 8 (Moving on: the stated cell, then its eight neighbours in order; if none takes the unit, set-up stops and reports an error)
-    let Some(cell) = placed_cell(w, id, kind, stated) else {
-        let why: Vec<String> = std::iter::once(stated)
-            .chain(neighbours(stated))
-            .map(|c| {
-                format!(
-                    "({}, {}) {}",
-                    c.x,
-                    c.y,
-                    refusal(w, id, kind, c).unwrap_or_default()
-                )
-            })
-            .collect();
-        return Err(format!(
-            "neither ({}, {}) nor a neighbouring cell takes it: {}",
-            stated.x,
-            stated.y,
-            why.join("; ")
-        ));
-    };
-    let why = (cell != stated).then(|| refusal(w, id, kind, stated).unwrap_or_default());
-    // spec: S-0216 claim 8 (Placement: a play-time placement on the cell that takes the unit, as claims 1 to 4 give it: the facings of claim 1, an infantry unit's standing position of claim 2 with its one draw R(0, 3), claim 3's draws, claim 4's fall-back)
-    if !glasnost_sim::objects::place_in_play(w, id, cell, v) {
-        return Err(format!(
-            "could not be placed on cell ({}, {})",
-            cell.x, cell.y
-        ));
+    for cell in std::iter::once(stated).chain(neighbours(stated)) {
+        // spec: S-0216 claim 8 (Order and Draws of a refused cell, r59: each cell is tried with a new try, a unit of the unit's own type created with its creation draws, its own then those of the objects its creation makes, each with its creation number, before the take test)
+        let id = glasnost_sim::objects::create(w, kind, ti, Some(house));
+        let Some(r) = refusal(w, id, kind, cell) else {
+            // spec: S-0216 claim 8 (Placement: a play-time placement on the cell that takes the unit, as claims 1 to 4 give it: the facings of claim 1, an infantry unit's standing position of claim 2 with its one draw R(0, 3), claim 3's draws, claim 4's fall-back)
+            if !glasnost_sim::objects::place_in_play(w, id, cell, v) {
+                return Err(format!(
+                    "could not be placed on cell ({}, {})",
+                    cell.x, cell.y
+                ));
+            }
+            let o = w.obj_mut(id).ok_or("not created")?;
+            // spec: S-0216 claim 8 and claim 4 (the group's mission is then queued as a placing step's behaviour, S-0215 claim 7, without being started); S-0009 claim 41 (hunt, measure: M-0001)
+            o.beh.queue(Some(Behaviour::Hunt));
+            return Ok((id, cell, why));
+        };
+        if kind == Kind::Infantry {
+            let half = w.rules().quirks.ranged_draw_half_span;
+            // spec: S-0216 claim 8 (Draws of a refused cell, r59: for an infantry unit, one draw R(0, 3) after the try's creation draws, taken whether or not claim 2's first row would refuse the cell, its result not used)
+            let _ = w.rng.ranged(0, 3, half);
+        }
+        // spec: S-0216 claim 8 (Draws of a refused cell, r59: the refused try never enters play and our engine keeps no object of it, a documented departure with no switch; its creation numbers stay reserved, as S-0611 claim 11's never-placed units)
+        glasnost_sim::objects::discard_unplaced(w, id);
+        refused.push(format!("({}, {}) {r}", cell.x, cell.y));
+        why.get_or_insert(r);
     }
-    let o = w.obj_mut(id).ok_or("not created")?;
-    // spec: S-0216 claim 8 and claim 4 (the group's mission is then queued as a placing step's behaviour, S-0215 claim 7, without being started); S-0009 claim 41 (hunt, measure: M-0001)
-    o.beh.queue(Some(Behaviour::Hunt));
-    Ok((id, cell, why))
+    Err(format!(
+        "neither ({}, {}) nor a neighbouring cell takes it: {}",
+        stated.x,
+        stated.y,
+        refused.join("; ")
+    ))
 }
 
 /// What a house owns: the number of its objects with health above 0 (any
@@ -1465,7 +1496,8 @@ pub fn play(
         houses,
         units,
         moved,
-    } = setup(ground, types, seed)?;
+        ..
+    } = setup(ground, types, row_side, seed)?;
     let mut seen = String::new();
     if watch {
         seen.push_str(&moved_text(&moved));
@@ -1680,7 +1712,7 @@ pub fn spread(ground: &Ground, row: &str, col: &str, row_side: Side) -> Result<S
             houses,
             units,
             ..
-        } = setup(ground, types, seed)?;
+        } = setup(ground, types, row_side, seed)?;
         let mut first: Option<(i32, String, String)> = None;
         let mut states = vec![unit_states(&w, houses, &units)];
         let mut t = 0usize;
@@ -2077,7 +2109,7 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
             // The placement on each side, with the type against itself.
             let mut others = None;
             for t in &types {
-                match setup(&ground, [t, t], 0) {
+                match setup(&ground, [t, t], Side::A, 0) {
                     Ok(a) => {
                         let n = |side| a.moved.iter().filter(|m| m.side == side).count();
                         let _ = writeln!(

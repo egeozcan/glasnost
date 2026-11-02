@@ -1,19 +1,23 @@
-//! Our arena's set-up, S-0216 revision 37 claim 8 (design), on test data of
-//! our own (M8 step A3 intake 71; in CI): scenario PT7's edge rules (parts
-//! a to d) and the synthetic part of scenario PT6 (the order of the draws,
-//! the take test, the neighbour order, first come first served). Every
-//! type, cost and map here is invented. The records' map part of PT6 is
-//! the local lane's `m0006_bunkers_and_placed_cells_in_our_setup` in
-//! `tests/arena.rs`. The ledger is `docs/m8-claims/intake71-S-0513-S-0216.md`.
+//! Our arena's set-up, S-0216 revision 59 claim 8 (design), on test data of
+//! our own (M8 step A3 intakes 71 and 77; in CI): scenario PT7's edge rules
+//! (parts a to d) and the synthetic part of scenario PT6 (the order of the
+//! groups and of the draws, the draws of refused cells, the take test, the
+//! neighbour order, first come first served). Every type, cost and map
+//! here is invented. The records' map part of PT6 is the local lane's
+//! `m0006_bunkers_and_placed_cells_in_our_setup` and
+//! `m0019_tick_0_placements_in_our_setup` in `tests/arena.rs`. The ledgers
+//! are `docs/m8-claims/intake71-S-0513-S-0216.md` and
+//! `docs/m8-claims/intake77.md`.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use glasnost_map::{Cell, CellGrid, CellXY, Footprint};
 use glasnost_rules::schema::Ruleset;
+use glasnost_rules::sim::UnitType;
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, World};
+use glasnost_sim::world::{HouseId, ObjectId, World};
 use glasnost_tools::oracle::{self, Ground, Side};
 
 /// The synthetic combat rules with test costs for CART and WALKER.
@@ -42,7 +46,7 @@ fn pt7_a_an_exact_half_goes_to_the_even_count_for_both_kinds() {
         for t in ["CART", "WALKER"] {
             let (_, count, _) = oracle::group(&g.rules, t).unwrap();
             assert_eq!(count, n, "{t} at cost {cost}");
-            let a = oracle::setup(&g, [t, t], 0).unwrap();
+            let a = oracle::setup(&g, [t, t], Side::A, 0).unwrap();
             assert_eq!(a.units[0].len(), n as usize, "{t}: side A");
             assert_eq!(a.units[1].len(), n as usize, "{t}: side B");
         }
@@ -54,7 +58,7 @@ fn pt7_b_the_minimum_and_the_infantry_cap() {
     // spec: S-0216 claim 8 (Group counts: the rounded count held to the records' minimum and infantry cap, M-0001 Setup) and PT7 part b
     let g = ground(20000, 20000);
     for t in ["CART", "WALKER"] {
-        let a = oracle::setup(&g, [t, t], 0).unwrap();
+        let a = oracle::setup(&g, [t, t], Side::A, 0).unwrap();
         assert_eq!(
             a.units[0].len(),
             1,
@@ -62,7 +66,7 @@ fn pt7_b_the_minimum_and_the_infantry_cap() {
         );
     }
     let g = ground(9000, 100);
-    let a = oracle::setup(&g, ["WALKER", "CART"], 0).unwrap();
+    let a = oracle::setup(&g, ["WALKER", "CART"], Side::A, 0).unwrap();
     assert_eq!(
         a.units[0].len(),
         oracle::INFANTRY_CAP as usize,
@@ -138,7 +142,7 @@ fn pt7_d_the_height_aware_test_moves_the_top_edge_vehicle_and_keeps_the_bottom_o
     let bottom = oracle::cell_of(probe.w, Side::B, 0);
     assert_eq!((top.x + top.y, bottom.x + bottom.y), (71, 83));
     let g = edge_ground(&[top, bottom]);
-    let a = oracle::setup(&g, ["CART", "CART"], 0).unwrap();
+    let a = oracle::setup(&g, ["CART", "CART"], Side::A, 0).unwrap();
     let w = &a.world;
     for c in [top, bottom] {
         let cell = w.cells.cell(c).unwrap();
@@ -170,7 +174,7 @@ fn creation_draws(w: &World, kind: Kind, name: &str) -> u64 {
 
 #[test]
 fn pt6_each_unit_takes_its_creation_draw_then_its_one_placement_draw() {
-    // spec: S-0216 claim 8 (Order: each unit created, then tested and placed, before the next is created, so its creation draw is followed by its placement draw; the take test takes no draw, so a refused cell leaves no standing-position draw) and claim 2 (an infantry unit's one draw R(0, 3)); PT6 (exactly one R(0, 3) after each infantry unit's creation draw, none at a refused cell)
+    // spec: S-0216 claim 8 (Order: each unit created, then tested and placed, before the next is created, so its creation draw is followed by its placement draw; r59, Draws of a refused cell: a refused cell costs one try, its creation draw and, for infantry, one R(0, 3)) and claim 2 (an infantry unit's one draw R(0, 3)); PT6 (exactly one R(0, 3) after each placed infantry unit's creation draws; for each refused cell, the try's creation draws and one R(0, 3))
     let mut w = testkit::game_with(&testkit::combat_ruleset(), 30, 3);
     let ti = w.rules().index_of(Kind::Infantry, "WALKER").unwrap();
     let k = creation_draws(&w, Kind::Infantry, "WALKER");
@@ -194,15 +198,205 @@ fn pt6_each_unit_takes_its_creation_draw_then_its_one_placement_draw() {
         points[0] != points[1] && points[1] != points[2] && points[0] != points[2],
         "three standing positions"
     );
-    // A cell that refuses: the take test takes no draw there.
+    // A cell that refuses: its try's creation draw and one R(0, 3), then the
+    // next cell's try.
     let d = testkit::mid(30, 5, 5);
     testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, d, 0);
     let before = w.rng.taken();
     let (_, cell, why) = oracle::place_unit(&mut w, Kind::Infantry, ti, HouseId(0), d, 64).unwrap();
-    assert_eq!(w.rng.taken() - before, k + 1, "no draw at the refused cell");
+    assert_eq!(
+        w.rng.taken() - before,
+        2 * (k + 1),
+        "the refused try's draws, then the placed unit's"
+    );
     // spec: S-0216 claim 8 (Moving on: the first of the eight neighbours, in order, that takes it)
     assert_eq!(cell, CellXY::new(d.x - 1, d.y - 1));
     assert!(why.is_some(), "the vehicle's cell refuses");
+}
+
+/// A world on the 30-cell synthetic map whose stated cell `c` and its
+/// first `p − 1` neighbours in claim 8's order each hold a vehicle of house
+/// 1, so that the `p`-th cell of the order is the first that takes a unit.
+fn blocked(r: &Ruleset, c: CellXY, p: usize) -> World {
+    let mut w = testkit::game_with(r, 30, 3);
+    for b in std::iter::once(c).chain(oracle::neighbours(c)).take(p) {
+        testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, b, 0);
+    }
+    w
+}
+
+/// The objects of house 0.
+fn own(w: &World) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)))
+        .map(|o| o.id)
+        .collect()
+}
+
+#[test]
+fn pt6_a_unit_on_the_p_th_cell_follows_p_refused_tries_and_keeps_no_try() {
+    // spec: S-0216 claim 8 (Draws of a refused cell, r59: a unit placed on the p-th cell of the order is preceded by p refused tries, 2p draws for infantry and p for a vehicle whose creation makes no other object; each try reserves its creation number; no object of a try is kept, a documented departure with no switch)
+    let r = testkit::combat_ruleset();
+    let c = testkit::mid(30, 0, 0);
+    for (kind, t, per_try) in [(Kind::Infantry, "WALKER", 2), (Kind::Vehicle, "CART", 1)] {
+        for p in [1usize, 3, 8] {
+            let mut w = blocked(&r, c, p);
+            let ti = w.rules().index_of(kind, t).unwrap();
+            let half = w.rules().quirks.ranged_draw_half_span;
+            let mut probe = w.rng.clone();
+            let (before, first) = (w.rng.taken(), w.next_id);
+            let (id, cell, _) = oracle::place_unit(&mut w, kind, ti, HouseId(0), c, 64).unwrap();
+            let order: Vec<CellXY> = std::iter::once(c).chain(oracle::neighbours(c)).collect();
+            assert_eq!(cell, order[p], "{t}, p = {p}: the p-th cell");
+            let placement = u64::from(kind == Kind::Infantry);
+            assert_eq!(
+                w.rng.taken() - before,
+                per_try * p as u64 + 1 + placement,
+                "{t}, p = {p}: the tries' draws, then the unit's"
+            );
+            // spec: S-0216 claim 8 (r59: a refused try reserves one creation number, right after its creation draw)
+            assert_eq!(
+                id.0,
+                first + p as u32,
+                "{t}, p = {p}: the tries' numbers reserved"
+            );
+            assert_eq!(own(&w), vec![id], "{t}, p = {p}: no object of a try kept");
+            // The placed unit's creation draw is the raw value after the tries' draws.
+            for _ in 0..p {
+                probe.raw();
+                if kind == Kind::Infantry {
+                    probe.ranged(0, 3, half);
+                }
+            }
+            let want = (probe.raw() & 0xFFFF) as u16;
+            assert_eq!(
+                w.obj(id).unwrap().report_value,
+                want,
+                "{t}, p = {p}: its creation draw follows the tries'"
+            );
+        }
+    }
+}
+
+/// The combat ruleset with an aircraft type DRN, an infantry type SLV, an
+/// infantry spawner NEST (DRN ×2) and a vehicle slave master HERD (SLV ×2):
+/// invented types whose creation makes other objects (S-0506 claim 1,
+/// S-0402 claim 19).
+fn makers() -> Ruleset {
+    let mut r = testkit::combat_ruleset();
+    let push = |r: &mut Ruleset, reg: &str, n: &str| {
+        r.registries.entry(reg.into()).or_default().push(n.into());
+    };
+    push(&mut r, "aircraft", "DRN");
+    push(&mut r, "infantry", "SLV");
+    push(&mut r, "infantry", "NEST");
+    push(&mut r, "vehicles", "HERD");
+    let walker = r.sim.infantry["WALKER"].clone();
+    let cart = r.sim.vehicles["CART"].clone();
+    let s = &mut r.sim;
+    s.aircraft.insert(
+        "DRN".into(),
+        UnitType {
+            strength: Some(50),
+            speed: Some(10),
+            ..Default::default()
+        },
+    );
+    s.infantry.insert("SLV".into(), walker.clone());
+    let mut nest = walker;
+    nest.combat.spawns = Some("DRN".into());
+    nest.combat.spawns_number = Some(2);
+    s.infantry.insert("NEST".into(), nest);
+    let mut herd = cart;
+    herd.econ.enslaves = Some("SLV".into());
+    herd.econ.slaves_number = Some(2);
+    s.vehicles.insert("HERD".into(), herd);
+    r
+}
+
+#[test]
+fn pt6_a_refused_try_makes_its_whole_creation_set_and_keeps_none_of_it() {
+    // spec: S-0216 claim 8 (Draws of a refused cell, r59: the try's creation draws as in Order, the unit's own then those of the objects its creation makes, then, for an infantry unit, one R(0, 3), so a spawner's slot objects' draws fall between its creation draw and that R(0, 3); each object of the try reserves its creation number right after its own creation draw; none of them is kept)
+    let r = makers();
+    let c = testkit::mid(30, 0, 0);
+    for (kind, t, made) in [(Kind::Infantry, "NEST", 2u32), (Kind::Vehicle, "HERD", 2)] {
+        let mut w = blocked(&r, c, 1);
+        let ti = w.rules().index_of(kind, t).unwrap();
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let mut probe = w.rng.clone();
+        let first = w.next_id;
+        let (id, cell, why) = oracle::place_unit(&mut w, kind, ti, HouseId(0), c, 64).unwrap();
+        assert_eq!(cell, oracle::neighbours(c)[0], "{t}: the first neighbour");
+        assert!(why.is_some(), "{t}: moved on");
+        // The try: 1 + made creation draws, then R(0, 3) for infantry.
+        for _ in 0..=made {
+            probe.raw();
+        }
+        if kind == Kind::Infantry {
+            probe.ranged(0, 3, half);
+        }
+        // spec: S-0216 claim 8 (r59: one creation number for the try's unit and one for each object its creation makes)
+        assert_eq!(
+            id.0,
+            first + 1 + made,
+            "{t}: the try's set reserved its numbers"
+        );
+        for n in 0..=made {
+            let x = glasnost_sim::world::ObjectId(id.0 + n);
+            assert_eq!(
+                w.obj(x).unwrap().report_value,
+                (probe.raw() & 0xFFFF) as u16,
+                "{t}: object {n} of the placed unit's set"
+            );
+        }
+        let mut kept = own(&w);
+        kept.sort_unstable();
+        let want: Vec<ObjectId> = (0..=made).map(|n| ObjectId(id.0 + n)).collect();
+        assert_eq!(kept, want, "{t}: only the placed unit's set");
+        if kind == Kind::Infantry {
+            // spec: S-0216 claim 2 (the placed unit's own R(0, 3), after its set's creation draws)
+            probe.ranged(0, 3, half);
+        }
+        assert_eq!(w.rng, probe, "{t}: no other draw");
+        assert!(
+            (first..first + 1 + made).all(|n| w.obj(ObjectId(n)).is_none()),
+            "{t}: no object of the try kept"
+        );
+    }
+}
+
+#[test]
+fn pt6_the_row_types_group_is_created_first_on_whichever_side_it_plays() {
+    // spec: S-0216 claim 8 (Order, r59: the group of the pairing's row type first, on whichever side it plays, then the other group, each in increasing unit index; measure: M-0019, creation order puts the row type's units first)
+    let g = ground(1500, 1500);
+    for (row_side, first) in [(Side::A, 0), (Side::B, 1)] {
+        let a = oracle::setup(&g, ["CART", "WALKER"], row_side, 2).unwrap();
+        let (lead, next) = (&a.units[first], &a.units[1 - first]);
+        assert!(!lead.is_empty() && !next.is_empty());
+        assert!(
+            lead.windows(2).all(|p| p[0] < p[1]) && next.windows(2).all(|p| p[0] < p[1]),
+            "{row_side:?}: each group in increasing index"
+        );
+        assert!(
+            lead.last() < next.first(),
+            "{row_side:?}: the row side's group is created first"
+        );
+        // spec: S-0216 claim 8 (Acceptance, r59: the first object's creation draw takes the scenario stream's raw value at the place the set-up starts from, counted from the seeding)
+        assert!(
+            a.moved.iter().all(|m| m.side != row_side || m.index > 0),
+            "the first unit stands on its stated cell"
+        );
+        let mut fresh = glasnost_sim::rng::Rng::new(2);
+        for _ in 0..a.first_raw {
+            fresh.raw();
+        }
+        assert_eq!(
+            a.world.obj(lead[0]).unwrap().report_value,
+            (fresh.raw() & 0xFFFF) as u16,
+            "{row_side:?}: the first creation draw is at place first_raw"
+        );
+    }
 }
 
 #[test]

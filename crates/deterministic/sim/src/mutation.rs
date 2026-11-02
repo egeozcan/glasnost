@@ -652,14 +652,7 @@ fn place(w: &mut World, unit: ObjectId, p: Pos) -> bool {
 /// removed with the records their creation made; every draw and creation
 /// number of the set stays consumed and is never reused (claim 14, Q-1460).
 fn discard(w: &mut World, unit: ObjectId) {
-    let made: Vec<ObjectId> = w.objects.range(unit..).map(|(&k, _)| k).collect();
-    for id in made {
-        w.mind.controllers.remove(&id);
-        // spec: S-0611 claim 14 (a refused set never enters play: none of it, nor the controllers it carries, acts in a later tick)
-        w.spawned.launcher.remove(&id);
-        w.objects.remove(&id);
-    }
-    // spec: S-0611 claim 14 (one creation number reserved per member of the creation set, a refused attempt included, without reuse: the counter is not rolled back)
+    crate::objects::discard_unplaced(w, unit);
 }
 
 /// One creation attempt at the end of an infantry-making animation

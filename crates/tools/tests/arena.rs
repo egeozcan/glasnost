@@ -13,6 +13,11 @@
 //!   per pairing that stands as stock (M-0017, M-0016): a two-proportion test on
 //!   the row's win proportion at `oracle::ALPHA`, and the same winner on
 //!   every side where every stock seed gave one.
+//! - `m0006_bunkers_and_placed_cells_in_our_setup`,
+//!   `m0019_creation_order_and_positions_in_our_setup` and
+//!   `m0019_the_first_creation_draw_takes_the_raw_value_at_n0`: the local
+//!   lane's acceptance checks of our set-up (S-0216 claim 8) against M-0006
+//!   and M-0019 (never in CI).
 //! - `oracle_records_are_compared`: the oracle comparison on the synthetic
 //!   ground with a temporary record (in CI).
 //! - The other tests cover the synthetic arena of `glasnost_tools::arena`
@@ -355,7 +360,7 @@ fn m0006_bunkers_and_placed_cells_in_our_setup() {
     let mut cliff = Vec::new();
     for t in &types {
         // spec: S-0216 claim 8 (Acceptance: every unit placed; set-up stops with an error otherwise)
-        let a = oracle::setup(&g, [t, t], 0).unwrap();
+        let a = oracle::setup(&g, [t, t], oracle::Side::A, 0).unwrap();
         let w = &a.world;
         let neutral = w
             .houses
@@ -406,6 +411,122 @@ fn m0006_bunkers_and_placed_cells_in_our_setup() {
     }
     assert!(checked, "some group reaches a cell of the placement table");
     assert!(cliff.is_empty(), "the cliff-cell table (low): {cliff:#?}");
+}
+
+/// The local lane's ground of M-0001's map, or why it is skipped.
+fn stock_m0001() -> Option<(Vec<oracle::OracleRecord>, oracle::Ground)> {
+    let records = oracle::load_records(&measurements()).unwrap();
+    let r = oracle::find_record(&records, "M-0001")?.clone();
+    let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+        println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
+        return None;
+    };
+    let g = oracle::stock_ground(Path::new(&dir), &r.map_file, &r.map_sha256).unwrap();
+    Some((records, g))
+}
+
+/// The games of M-0002 whose two types are both infantry: M-0019's
+/// all-infantry subset (row type, column type, row side, seed).
+fn all_infantry(
+    records: &[oracle::OracleRecord],
+    g: &oracle::Ground,
+) -> Vec<(String, String, oracle::Side, u32)> {
+    let infantry = |t: &str| {
+        oracle::group(&g.rules, t).is_ok_and(|(k, _, _)| k == glasnost_sim::rules::Kind::Infantry)
+    };
+    oracle::find_record(records, "M-0002")
+        .map(|r| {
+            r.games
+                .iter()
+                .filter(|x| infantry(&x.row) && infantry(&x.col))
+                .map(|x| (x.row.clone(), x.col.clone(), x.row_side, x.seed))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The local lane's check of our set-up against M-0019's findings that
+/// claim 8's arena may require (S-0216 claim 8, *Order* and *Acceptance*;
+/// M-0019 *Tolerance for tests*; never in CI): in the 192 all-infantry games
+/// of M-0002, the row type's units are created first, on whichever side it
+/// plays (M-0019 step 5), and no placed infantry unit stands at the centre
+/// or the top position at placement (claim 2's rows, M-0019's fit).
+#[test]
+fn m0019_creation_order_and_positions_in_our_setup() {
+    use glasnost_sim::cells::position;
+    let Some((records, g)) = stock_m0001() else {
+        return;
+    };
+    let games = all_infantry(&records, &g);
+    // measure: M-0019 (the all-infantry subset: 192 games)
+    assert_eq!(games.len(), 192, "M-0019's all-infantry subset");
+    let off = [position::CENTRE, position::TOP].map(glasnost_sim::walk::standing_point);
+    let mut bad = Vec::new();
+    for (row, col, side, seed) in &games {
+        let types = match side {
+            oracle::Side::A => [row.as_str(), col.as_str()],
+            oracle::Side::B => [col.as_str(), row.as_str()],
+        };
+        let a = oracle::setup(&g, types, *side, *seed).unwrap();
+        let (lead, next) = (&a.units[side.index()], &a.units[1 - side.index()]);
+        // spec: S-0216 claim 8 (Order, r59: the row type's group first, on whichever side it plays); measure: M-0019 (identifier order puts the row type's units first)
+        if lead.last() >= next.first() {
+            bad.push(format!(
+                "{row}-{col} {side:?} {seed}: the row group is not first"
+            ));
+        }
+        for &u in lead.iter().chain(next) {
+            let p = a.world.obj(u).unwrap().pos;
+            let at = (p.x.rem_euclid(256), p.y.rem_euclid(256));
+            // spec: S-0216 claim 2 (an infantry unit on a usable cell stands at a right, left or bottom position, never the centre or the top); measure: M-0019 (no placed infantry at the centre or top position in the 192 games)
+            if off.contains(&at) {
+                bad.push(format!(
+                    "{row}-{col} {side:?} {seed}: unit #{} at {at:?}",
+                    u.0
+                ));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
+/// The local lane's check of claim 8's M-0019 acceptance item (S-0216
+/// claim 8, *Acceptance*; never in CI): with the records' seeds 0 to 5,
+/// the set-up's first object's creation draw takes the scenario stream's
+/// raw value at place *N*₀ of M-0019, in every pairing. Our place is the
+/// raw values our map loading and game start take (S-0202 claims 10 and
+/// 14); claim 8 adds no draw to reach it. Prints ours beside M-0019's.
+#[test]
+fn m0019_the_first_creation_draw_takes_the_raw_value_at_n0() {
+    let Some((records, g)) = stock_m0001() else {
+        return;
+    };
+    // measure: M-0019 (N₀ by seed 0 to 5: 706, 709, 711, 718, 706, 701 raw values)
+    const N0: [u64; 6] = [706, 709, 711, 718, 706, 701];
+    let mut ours = [None::<u64>; 6];
+    let mut differs = Vec::new();
+    for (row, col, side, seed) in all_infantry(&records, &g) {
+        let types = match side {
+            oracle::Side::A => [row.as_str(), col.as_str()],
+            oracle::Side::B => [col.as_str(), row.as_str()],
+        };
+        let a = oracle::setup(&g, types, side, seed).unwrap();
+        let s = seed as usize;
+        if *ours[s].get_or_insert(a.first_raw) != a.first_raw {
+            differs.push(format!("{row}-{col} {side:?} {seed}: {}", a.first_raw));
+        }
+    }
+    println!("first creation draw's place by seed, ours: {ours:?}; M-0019: {N0:?}");
+    assert!(
+        differs.is_empty(),
+        "the place depends on the pairing: {differs:#?}"
+    );
+    let ours: Vec<u64> = ours.iter().map(|x| x.unwrap_or(0)).collect();
+    // spec: S-0216 claim 8 (Acceptance, r59: the first object's creation draw takes the raw value at place N₀ of M-0019 for the seed, in every pairing)
+    assert_eq!(
+        ours, N0,
+        "our place of the first creation draw against M-0019's N₀"
+    );
 }
 
 /// The local lane's comparison (never in CI): with `GLASNOST_GAME_DIR` set,

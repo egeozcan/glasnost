@@ -75,6 +75,24 @@ pub(crate) fn create_in(
     id
 }
 
+/// Takes a created object that is never placed out of the game again,
+/// with its creation set: our engine keeps no never-placed object (S-0611
+/// claim 11's departure; S-0216 claim 8's refused try). `unit` must be the
+/// newest creation: it and every object created after it (claim 14: its
+/// slot objects, slaves and theirs) are removed with the records their
+/// creation made; every draw and creation number of the set stays
+/// consumed and is never reused (claim 14, Q-1460).
+pub fn discard_unplaced(w: &mut World, unit: ObjectId) {
+    let made: Vec<ObjectId> = w.objects.range(unit..).map(|(&k, _)| k).collect();
+    for id in made {
+        w.mind.controllers.remove(&id);
+        // spec: S-0611 claim 14 (a refused set never enters play: none of it, nor the controllers it carries, acts in a later tick)
+        w.spawned.launcher.remove(&id);
+        w.objects.remove(&id);
+    }
+    // spec: S-0611 claim 14 (one creation number reserved per member of the creation set, a refused attempt included, without reuse: the counter is not rolled back)
+}
+
 /// The initial fill of a new object `id` (S-0611 claim 14 and F5): its
 /// slot objects in slot order, then its slaves in place order, each with
 /// its own creation set before the next.

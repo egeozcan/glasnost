@@ -126,7 +126,7 @@ pub fn trace(
         houses,
         units,
         ..
-    } = oracle::setup(ground, types, seed)?;
+    } = oracle::setup(ground, types, row_side, seed)?;
     let mut out = String::new();
     let all: Vec<ObjectId> = units.iter().flatten().copied().collect();
     let mut prev: BTreeMap<ObjectId, Option<Seen>> =
