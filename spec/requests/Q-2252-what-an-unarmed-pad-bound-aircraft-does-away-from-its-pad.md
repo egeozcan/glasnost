@@ -1,9 +1,9 @@
 ---
 id: Q-2252
 title: What an unarmed pad-bound aircraft with dock types does when a flight ends away from its pad
-status: open
+status: answered
 related: [S-0501, S-0213]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
