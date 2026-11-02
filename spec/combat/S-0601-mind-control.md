@@ -2,11 +2,11 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203]
 supersedes: []
@@ -213,6 +213,9 @@ The glossary also defines *trigger*, used here.
      fault needs no bad data, only a legal one-time trigger on the tag, so it is not reproduced and
      has no quirk switch, by lead decision on Q-1150: a fault of the original (it crashes or hangs)
      on legal data is fixed outright as a departure.
+   A departed superweapon warp member that is the target, off the map or phasing in after it
+   appears, is an ordinary target for this hit: it changes owner at the detonation, by these tests
+   (S-0306 claim 17).
    - Backing: `measurable` (MC3 for target-only, no-damage hits; MC1 for takeover sound,
      MC11 for mixed-effect variants, and MC14 for the order, cause and judging of the two events.
      S-0514 scenario E13 for the remaining special-hit exclusions and independent
@@ -220,9 +223,11 @@ The glossary also defines *trigger*, used here.
      scenario here isolates a delayed shot after firer removal. The removed-tag departure
      is `unmeasured`: the original's fault must not be provoked on the oracle. MC14 part a uses
      only a repeating tag (repeat type 2), which no raise removes, so it cannot provoke the fault,
-     and no scenario here exercises the skipped raise.
-   - Confidence: high; medium for the outcome with special house values (−1 and the
-     player-position values), which MC14 part a tests
+     and no scenario here exercises the skipped raise. The takeover of a departed warp member is
+     `measurable` by S-0306 scenario P11 run g (off the map) and run h (phasing in).
+   - Confidence: high; medium for the outcome with special house values (−1 and the player-position
+     values), which MC14 part a tests; medium for a departed warp member target, as S-0306 claim 17
+     rates it
 
 6. **The takeover.** A successful takeover by controller *C* of object *T* has these results:
    - if *C*'s capacity is exactly 1, *C* first releases its current victim (claim 7),
