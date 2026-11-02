@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 95
+revision: 102
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -519,7 +519,9 @@ Terms used by this spec:
 
    As a general rule, when an actor has no current behaviour, rules that ask for its behaviour
    see the queued one. This does not start that behaviour or fill the current slot: processing
-   still follows claim 4 while the current slot is *none*.
+   still follows claim 4 while the current slot is *none*. Aircraft have one exception: the
+   scatter gate of S-0501 claim 49 never reads the queued behaviour, so an aircraft with no
+   current behaviour falls back to rest on a scatter request whatever is queued.
 
    A building's placement fall-back queues *construction*, rather than choosing a resting
    behaviour, and requests the construction body (S-0406 claim 17). At game set-up it instead
@@ -560,8 +562,10 @@ Terms used by this spec:
      for the other slot rules; S-0406 PL11 for construction entry and the queued-behaviour
      query; scenario B35 for the body and queue at set-up). The human-owner set-up case is `unmeasured`: skirmish drops
      that owner's map building entries, and construction or capture cannot isolate set-up
-     placement.
-   - Confidence: high
+     placement. The aircraft exception is `unmeasured`, as S-0501 claim 49 rates it: no setup
+     is known that sends an aircraft a scatter request before its first turn.
+   - Confidence: high (the slot rules and the set-up and placement rules); medium (the aircraft
+     exception of S-0501 claim 49)
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
    turn in the turn pass of S-0203, tick order, which says which objects
@@ -769,12 +773,17 @@ Terms used by this spec:
    rate, it uses the rate of the behaviour it has just made current. Among the processings that
    this spec describes in full (claims 22 to 28 and 30 to 32), those that can do this are:
    - *hunt*, whose general with-target outcome can start *capture* or *sabotage* (claim 27),
-   - *guard* and *area guard* carrying out one of the two occupy instructions (original only), which can start
-     *capture* (claims 24 and 26, row 3).
+   - *guard* and *area guard* carrying out one of the two occupy instructions (original only),
+     which can start *capture* (claims 24 and 26, row 3),
+   - an aircraft in claim 28's second row, whose fall-back to rest, the first one and the second
+     one at a *scatter off a building* request, makes current the behaviour that S-0501 table T2
+     chooses, for instance *enter* (claim 28, S-0501 claims 18 and 49).
 
    A behaviour that a processing only queues, without making it current, leaves the rate as it
-   was. Each of these starts is readiness-dependent: when the actor is not ready to change, the
-   new behaviour stays queued and the rate is that of the behaviour still current. The infantry
+   was. The starts of *hunt*, *guard* and *area guard* above are readiness-dependent: when the
+   actor is not ready to change, the new behaviour stays queued and the rate is that of the
+   behaviour still current. Which behaviour an aircraft's fall-back leaves current follows
+   S-0501 claim 18's end states. The infantry
    rules of claims 23 and 27 that end with 1 tick take no rate at all.
 
    **Observable random-stream result.** In a processing that takes a delay draw, its delay
@@ -797,8 +806,11 @@ Terms used by this spec:
      following a targetless vehicle's *hunt* search is `measurable` (B45 a). Assignment after
      approaching, infantry idle actions and scatter requests remains `unmeasured`: their
      draw counts are not fully specified by their owning specs, so total stream advance
-     alone cannot identify the draw assigned to each rule.
-   - Confidence: high
+     alone cannot identify the draw assigned to each rule. The aircraft item of the list above is
+     `unmeasured`, as claim 28 and S-0501 claim 49 rate an aircraft's answer: no scenario
+     records the rate taken after an aircraft's fall-back has changed its current behaviour.
+   - Confidence: high, except the aircraft item of the list above (medium, as S-0501 claim 49
+     rates an aircraft's answer, and low for the outcome that claim 28 rates low)
 
 ### Changing behaviours
 
@@ -807,6 +819,7 @@ Terms used by this spec:
 
    | Situation | Queued behaviour afterwards | Immediate start, when asked for |
    |---|---|---|
+   | **aircraft:** the actor is not an airstrike aircraft, its current behaviour is *retreat*, either paradrop behaviour or either spy-plane behaviour, and *b* is none of those five (S-0501 claim 34) | unchanged | none: the request is ignored entirely |
    | the current behaviour is *selling*, or it is *wait* and *b* is *guard* | unchanged | none: the request is ignored entirely |
    | *b* is *none* | unchanged | a start-next (claim 8) if the actor is ready to change (claim 11) |
    | *b* is the current behaviour, and nothing or *b* itself is queued | unchanged | as above |
@@ -822,8 +835,11 @@ Terms used by this spec:
    readiness-dependent start of this claim; and a rule that says only "queues" asks for no
    immediate start (Terms, queueing wording).
    - Backing: `measurable` (scenario B3; case l for the replacement of a queued behaviour, case i
-     for the refusal under *wait*)
-   - Confidence: high
+     for the refusal under *wait*). The aircraft row has S-0501 claim 34's backing: `measurable`
+     by S-0501 scenario AC29 part h for a visiting carrier slot aircraft in *retreat*, and
+     `unmeasured` for the other four behaviours, which no scenario queues anything for, and for
+     the airstrike-aircraft exception.
+   - Confidence: high (the other rows); medium (the aircraft row, as S-0501 claim 34 rates it)
 
 8. **Start-next.** If a behaviour is queued, it becomes current, the queue becomes empty, and the
    behaviour start of claim 3 happens: the timer expires now, the start tick becomes the current
@@ -1692,7 +1708,10 @@ Terms used by this spec:
       *unload* refuses every request, forced or not.
     - For an infantry unit, S-0208 claim 11 gives the whole acceptance rule. There a forced request
       counts as not forced while the unit's locomotor is moving, so the property can refuse it then.
-    - What an aircraft does with a scatter request belongs to the aircraft spec.
+    - An aircraft falls back to rest when its current behaviour has the scatter property, or
+      when it has no current behaviour (claim 1's exception: whatever is queued), and otherwise
+      ignores the request, whatever its options (S-0501 claim 49). The forced option does not
+      decide for an aircraft either.
 
     **Scatter from damage.** The scatter from damage of an infantry unit is owned by S-0208
     (claim 15, request A, with the acceptance and destination in its claims 11 to 13); this
@@ -1730,10 +1749,19 @@ Terms used by this spec:
     other actor).
     - Backing: `measurable` (scenario B6 for vehicles, case 2 in part b, with its variant for the
       original's computer-controlled owners, and case 1 in part d; S-0208 scenario W7 for
-      infantry). Case 1 for aircraft is `unmeasured` here: B6 tests driving vehicles only, and
-      no scenario establishes an aircraft's acceptance or movement following this request.
-      Those outcomes belong to the aircraft topic.
-    - Confidence: high (the gate on requests that are not forced, for vehicles; the options of the
+      infantry). Case 1 for aircraft, apart from the answer that the next sentences back, is
+      `unmeasured` here: B6 tests driving vehicles only, and no scenario establishes the
+      movement that follows an aircraft's acceptance of this request.
+      The aircraft's answer to a scatter request has S-0501 claim 49's backing. It is
+      `measurable` (S-0501 scenario AC31 part e) only for the scatter from damage and a cell's
+      request, sent without the move-anywhere option to a landed aircraft of a human-controlled
+      owner that is armed, has ammunition left and has no contact. Every other case is
+      `unmeasured`, as S-0501 claim 49 rates it: the move-anywhere option, both requests in pad
+      contact, the request of claim 28 (as claim 28 rates it), and an aircraft with no current
+      behaviour, since no setup is known that sends an aircraft a request between its creation
+      and its first turn.
+    - Confidence: medium (the aircraft's answer, as S-0501 claim 49 rates it); high (the gate on
+      requests that are not forced, for vehicles; the options of the
       request from damage); medium (the conditions of the two cases, for non-infantry actors)
 
 20. **Recruitable.** The recruitable property is imported for every behaviour (Import mapping), and
@@ -2074,6 +2102,13 @@ apply in our engine to the actors of every player house.
     The delay is *D* = *k* × *D*<sub>r</sub> + *U*(1, 5), where *k* = 2 for aircraft and 1 for
     every other kind; it becomes trunc(*D* / 6) under the same close-range condition as in *attack*
     (Formulas F3).
+    - **Aircraft** (S-0501 claims 18 and 45, and its table T2): the rows, the tables and the
+      delay of this claim, with *k* = 2, reach an aircraft's *area guard* only at a height other
+      than its cruise height, above or below it, and only when no held target makes it queue
+      *attack* (with a delay of 1 tick). At exactly its cruise height, each processing of an
+      aircraft's *area guard* is instead the fall-back to rest, with a delay of 1 tick. At any
+      other height, an armed aircraft with its ammunition spent and no contact makes the same
+      fall-back first, in the same processing.
     - **Infantry** of a type that deploys: the deployer rules of claim 31 take precedence over every
       row. When one of them applies, it decides the outcome and the delay, and nothing else of this
       claim happens.
@@ -2094,9 +2129,20 @@ apply in our engine to the actors of every player house.
       (S-0309, claim 12, and its State and ordering), so the stream on that tick tells a draw of
       the delay apart from the search's. The newly taken own-cell spot's same-processing
       search, targeting-timer restart, acquisition and idle-action outcomes are `measurable`
-      (scenario B34).
-    - Confidence: high (the guard spot and delay rules and the newly taken spot's same-processing qualification); medium (the leash, the order of leash and
-      search, the slave-master rows, the computer-only rules and the harvester rule)
+      (scenario B34). Of the **Aircraft** bullet, the height test is `measurable` by S-0501
+      scenario AC29 part j, as S-0501 claim 45 backs it. The rest of that bullet is
+      `unmeasured`, as S-0501 claim 45 rates a computer owner's *area guard* in flight apart from
+      its height test, and claim 18 rates T2's computer rows: the fall-back to rest at exactly the
+      cruise height with its delay of 1 tick, the same fall-back made first by an armed aircraft
+      with its ammunition spent and no contact at any other height, and the *attack* queued with
+      a delay of 1 tick for a held target. No setup there can require a computer-controlled
+      owner to perform a specified rest transition.
+    - Confidence: high (the guard spot and delay rules and the newly taken spot's
+      same-processing qualification, except for the **Aircraft** bullet); medium (the leash, the
+      order of leash and search, the slave-master rows, the computer-only rules, the harvester
+      rule and the aircraft's height test, as S-0501 claim 45 rates it); low (the rest of the
+      **Aircraft** bullet, as S-0501 claim 18 rates the in-flight *guard* row's *area guard* for
+      a computer-controlled house)
 
 27. **Hunt.** At each processing, unless the actor's type has the stupid-hunt flag, it runs the
     normal search of the target-acquisition specs from its own position. The search restarts the
@@ -2183,6 +2229,15 @@ apply in our engine to the actors of every player house.
     finds its destination by S-0208 claim 13 (the case without a threat point). For a vehicle the
     scatter property does not decide, since the request is forced (claim 19); its other acceptance
     conditions and its destination are S-0207 claim 16 (the nearby-cell search, without a draw).
+    An aircraft, which is never a building taker, judges the request by S-0501 claim 49. The
+    request gives it no destination and no take-off of its own. Its effect, a second fall-back
+    to rest when its current behaviour after the first one has the scatter property, makes only
+    the choice of S-0501 table T2 again. It leaves the state the first fall-back gave it, except
+    for a landed, armed aircraft with its ammunition spent whose search found a pad: when that
+    second fall-back happens, that aircraft ends with the same pad, *enter* and the pad's
+    contact place held (S-0501 claim 49). The hunt rule then follows for a computer-controlled
+    owner as below, except that an aircraft whose *retreat* from S-0501 table T2 became current
+    at the fall-back ignores the *hunt* request (S-0501 claims 34 and 49).
 
     **Hunt rule (original only):** an actor of a computer-controlled owner, other than one of an
     occupier infantry type, has its destination cleared and queues *hunt*. Where it has fallen back
@@ -2203,8 +2258,19 @@ apply in our engine to the actors of every player house.
     except that occupiers, assaulters and infiltrators do not count as building takers and the hunt
     rule never applies. Its second row sends the same scatter request.
     - Backing: `measurable` (scenario B12; scenario B29, case c, for *eaten* and for the
-      fall-back of a vehicle in *capture*)
-    - Confidence: medium (the table); high (the options of the scatter request)
+      fall-back of a vehicle in *capture*). An aircraft's part of this claim has S-0501 claim
+      49's backing. The first fall-back's outcome on the ground with no pad contact, for an
+      unarmed aircraft, is `measurable` (S-0501 scenario AC31 part a). The rest is `unmeasured`,
+      as S-0501 claim 49 rates it: whether the request is sent and the aircraft's answer to it
+      (no setup is known whose record differs between a sent and an unsent request), the second
+      fall-back's end state with the pad, *enter* and its contact place held, the armed aircraft
+      with its ammunition spent, the pad-contact and in-flight cases, *hunt* queued without an
+      immediate start, and the computer-controlled case in which T2 made *retreat* current,
+      with its *hunt* request ignored.
+    - Confidence: medium (the table, and an aircraft's part of this claim), except the
+      outcome where the first fall-back of an aircraft in flight takes S-0501 table T2's in-flight
+      *guard* row's *area guard* for a computer-controlled house: low, as S-0501 claim 49 rates
+      it; high (the options of the scatter request)
 
 29. **Enter.** An infantry unit or vehicle in *enter* repeats its entry request at each
     processing, to its contact when present, otherwise to the object it remembers entering.
@@ -3403,7 +3469,19 @@ the distance of F4 (with the building reduction) is greater than *L*.
 timer is set to *N* + *U*(0, 2) ticks, where *N* is the area-guard targeting delay (current
 behaviour *area guard*) or the normal targeting delay (otherwise), both integers in ticks.
 The charging break-off search of S-0518 claim 15 leaves this timer unchanged and takes no
-targeting-timer draw (claim 33).
+targeting-timer draw (claim 33). Apart from searches, a holder that drops its target by the drops
+of S-0309 claims 27 and 28 with more than 10 ticks left on this timer resets it with one ranged
+draw *U*(4, 8) ticks, inside the action that drops it, not at a search. With at most 10 ticks
+left it takes no draw. An aircraft holder takes no such draw while the scenario is being set up
+(S-0501 claim 37). Each case of this reset has its owner's backing and level. At the drops
+of S-0309 claim 27 that S-0309 scenario A18 runs, it is `measurable` by A18 part d, medium. At
+the drops that S-0309 claim 27 rates `unmeasured`, among them every drop by a building or
+aircraft holder (a building's pending delayed shot included), the reset is `unmeasured` with
+them, since no part of S-0309 scenario A18 or of scenario B7 here runs those drops. Medium. At
+the cloak drops and the underground drop of S-0309 claim 28 it is `unmeasured`, as S-0309 claim
+28 rates it: no scenario there records the holder's targeting timer at those drops. Medium. The
+set-up exception for an aircraft holder is `unmeasured`: no scenario here makes an aircraft lose
+its target while the scenario is being set up. Medium.
 
 **F7. Retaliation reach for human-controlled owners.** The actor overrides to *attack* against an
 attacker it cannot reach if ρ₃(actor, attacker) ≤ (*S* + 0.5) × 256, *S* the type's sight in cells
@@ -3617,7 +3695,9 @@ draws of the processing itself; a target search it runs adds the search's own dr
 covered by S-0309 claim 4 adds one *U*(0, 2) for the targeting timer (claim 33); the charging
 break-off search of S-0518 claim 15 adds no targeting-timer draw. Candidate draws are those
 S-0309 gives in its claim 12: none for an actor of a player house, and the disguise draws of its
-claim 25, part g, for the neutral and special houses.
+claim 25, part g, for the neutral and special houses. The targeting-timer reset of F6 at a drop
+of S-0309 claims 27 and 28 is taken inside the action that drops the target, so it is no draw of
+a processing here.
 
 | Behaviour | Outcome | Delay (ticks) | Draws |
 |---|---|---|---|
@@ -3657,6 +3737,7 @@ behaviour. For each event, the first row that matches applies (as in claim 7).
 
 | Event | Condition | Result |
 |---|---|---|
+| queue *b* | the actor is an aircraft other than an airstrike aircraft, C is *retreat*, either paradrop behaviour or either spy-plane behaviour, and *b* is none of those five (S-0501 claim 34) | nothing |
 | queue *b* | C is *selling*, or C is *wait* and *b* is *guard* | nothing |
 | queue *b* | *b* is none | nothing |
 | queue *b* | *b* is C, and Q is none or *b* | nothing |
@@ -3671,7 +3752,8 @@ behaviour. For each event, the first row that matches applies (as in claim 7).
 | revert | S = none | nothing |
 
 The queue rows show the slots only. When the request asks for an immediate start, a start-next
-follows as claim 7 says in every queue row except the first, whose request is ignored entirely.
+follows as claim 7 says in every queue row except the first two, whose requests are ignored
+entirely.
 
 **Typical behaviour transitions** (consequences of the claims, for a mobile actor of a
 human-controlled owner):
@@ -5694,11 +5776,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     does not establish unchecked firing for every other refusal category.
 
   - **(e) Non-SAM ammunition exhaustion.** Extend B16 a with named test-map rules
-    giving the building one finite ammunition round and a reload delay longer than
-    the observation. Keep its durable target in range and its facing settled. Record
+    giving the building a maximum ammunition of 0 and no initial-ammunition value, so
+    that every attempt answers *out of ammunition* (S-0301 claim 10). Keep its durable
+    target in range and its facing settled. Record
     ammunition, rearm, firing-check result, ready mark, slots and processing expiry
-    around each processing after the shot, through the first *out of ammunition*
-    answer. Expected at that answer: target cleared, *guard* current by the immediate
+    around each processing from the first attack order, through the first *out of
+    ammunition* answer. Expected at that answer: target cleared, *guard* current by the immediate
     start, and 1-tick processing delay without a delay draw. Retaining *attack* or
     target, merely queueing *guard*, or another delay/draw falsifies the rule. A run
     in which the firing check never returns that answer cannot test this branch.
