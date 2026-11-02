@@ -2,11 +2,11 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0005, Q-0083]
 supersedes: []
@@ -234,6 +234,9 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
        | naval only (naval) | 3 | 3 |
 
        So a new item with both flags is placed like an air item, and an item with both flags already in the tab sits between air and naval items: new ground and air items go before it, new naval items never do.
+
+       An aircraft type whose data leaves the counts-as-aircraft key out has the flag (Import
+       mapping), so, unless it also has the naval flag, it ranks as air (1), not as ground.
     4. Tech level (an integer), lowest first.
     5. Cost to the local player at the time the item is added, in whole credits, lowest first. This is the price the player would pay, country cost multipliers included; how it is computed belongs to the production spec.
     6. Display name, compared as in Formulas. When the names are equal too, the newly added item goes first. So among items identical in every key above, the one that became available last is shown first.
@@ -242,6 +245,8 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
 
     Proposed switches: `quirks.sidebar_tie_newest_first` (default **on**; with it off, a full tie places the new item after the existing equal items) and `quirks.sidebar_both_flags_rank` (default **on** = the two-column rank above; with it off, an item with both flags ranks as air, 1, in both columns).
     - Backing: `measurable` (scenario F): F1 for the ordering cases present in stock data; F2 for the newest-first tie; F3 for the recharge-time key and S-0205 N5 for a positive wrapped key; F4 for the 76-item cap; F5 for the both-flags rank and `quirks.sidebar_both_flags_rank`; F6 for the base-planning-side rule (rule 2) ahead of tech level. F1 samples tab assignment, category, tech level, price and display-name ordering only where stock items differ in those keys. Category parsing is `measurable` by S-0302 D21 part b, recording the building's sidebar tab as well as its damage response. `unmeasured` for negative or extreme recharge-time keys beyond the positive wrapped example (no scenario here isolates them), remaining combinations, non-ASCII display-name comparisons and the same-name/different-type sidebar distinction beyond C2: no scenario isolates those cases. `unmeasured` for "items are not re-sorted later": a re-sort could show only if a sort key of an item already shown changed during a game. The other keys are fields of the type or the local player's side, which this spec treats as fixed for a game. Only the cost depends on the player's state, and whether and when it changes belongs to the production topic, so this spec has no scenario that changes a key in play.
+      S-0501 scenario AC30 part j backs the air rank of an aircraft type without the
+      counts-as-aircraft key.
     - Confidence: medium
 
     These sidebar rules are user-interface behaviour. This claim owns tab capacity, tab assignment and icon sorting and placement. S-0407 claim 17 owns simultaneous admission order; S-0411 owns icon states, clicks, removal and automatic production orders. S-0411 claim 15 owns full-tab offer membership and legality, suppressed-type removal orders and delayed admission.
@@ -506,6 +511,9 @@ Game-wide sections that name types, in the order claim 4 gives them (within one 
 
 Sidebar keys (claim 11): build category = `BuildCat` (combat = `Combat`; accepted words and parsing as S-0302 claim 5 and Import mapping give: 31-byte cut, then trim, whole ASCII-case-insensitive comparison; unknown words give unspecified, absent or empty keeps held, initially unspecified); base-planning side = `AIBasePlanningSide`; counts as aircraft = `ConsideredAircraft`; naval = `Naval`; tech level = `TechLevel`; display name = `UIName` (resolved to text); superweapon recharge time = `RechargeTime` (game minutes).
 
+The absent default of the counts-as-aircraft key is *yes* for an aircraft type and *no* for a
+vehicle type (S-0501 Import mapping).
+
 ## Measurement scenarios
 
 Every scenario runs under the measurement setup (glossary): an unmodified install with no engine add-ons, and no loose override files except the named test files a sub-test lists, which are removed after that sub-test. Where a scenario needs extra rules entries, they go in the override sections of a purpose-made test map in the multiplayer map folder, never in the stock files. Sub-tests A3, D4, D5, E4, E5, F2, G2, G3, G4, I10 (run d) and J2 also use named test files: a loose copy of the base rules, a loose copy of the art file, or loose side archives (S-0005). Unless a sub-test says otherwise, run each variant once at game speed 2, crates off, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with one human house and one bystander computer player. Keep the bystander outside the observed test objects or cells; apply its glossary void rule. Record icons and effects with screen capture, and health or credits with a read-only recorder. Start every run in a fresh session unless the sub-test explicitly prescribes consecutive games in one session; repeat unexpected results in a fresh session. For sidebar tests, grant the observing house the factories, prerequisites and credits needed by the setup. Resource tests unload exactly one full, single-resource load and use S-0402's payout formula, including any harvester income multiplier; record settled credits with no concurrent spending or other income. Test names use plain ASCII unless a test explicitly uses non-ASCII bytes.
@@ -714,7 +722,9 @@ Every scenario runs under the measurement setup (glossary): an unmodified instal
 ## Open questions
 
 1. Where a side's member list (as opposed to each country's own side) is used in play is not covered here. It decides whether the quirk of claim 9 is observable.
-2. The default of the counts-as-aircraft flag for aircraft types decides whether aircraft sort as air or ground in claim 11. It belongs in the aircraft spec.
+2. Resolved by S-0501 (Import mapping, scenario AC30 part j): an aircraft type whose data leaves
+   the counts-as-aircraft key out has the flag, so it ranks as air in claim 11 unless it also has
+   the naval flag.
 3. Which game option selects the mode in which no sidebar items are added (Edge cases) is not established. Confidence: low.
 4. The relative order of types created by different keys of one section (claim 4, "within one section") is left unspecified, except for the crate rules (seen through overlay indices) and for list items and weapon slots (fixed, but visible only through claim 12 in other specs). If some other spec turns out to need more, a measurement through an index-visible effect would have to establish it first.
 5. The order among types created after all rules layers (claim 3: map terrain-object placements, theater tile animations, the fixed particle system) is not established, nor whether the theater's tile animations are created again in every game.
