@@ -383,6 +383,32 @@ pub fn game(r: &Ruleset) -> World {
     w
 }
 
+/// A new game like [`game`] on a map whose usable area leaves a band of
+/// legal cells, two wide, around it (as `banded_game` of claims_s0501.rs),
+/// so that the edge cells lie outside the usable area (S-0522 claim 4) and
+/// S-0501 claim 10's removals outside the usable area can happen before the
+/// map's edge.
+pub fn banded_game(r: &Ruleset) -> World {
+    let mut m = testkit::empty_map(SIZE);
+    let fp = glasnost_map::Footprint::new(SIZE, SIZE, [2, 2, SIZE - 4, SIZE - 4]);
+    let mut cells = glasnost_map::CellGrid::new(fp);
+    let all: Vec<_> = cells.iter().map(|(c, _)| c).collect();
+    for c in all {
+        if let (Some(cell), Some(old)) = (cells.get_mut(c), m.cells.get(c)) {
+            *cell = *old;
+        }
+    }
+    m.footprint = fp;
+    m.cells = cells;
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-test"));
+    let mut w = glasnost_sim::load::new_game(rules, &m, testkit::catalogue(), &testkit::setup(1))
+        .expect("synthetic test game loads");
+    while orders::blocked(&w) {
+        glasnost_sim::tick::step(&mut w);
+    }
+    w
+}
+
 /// The map's middle cell offset by (dx, dy).
 pub fn at(dx: i32, dy: i32) -> CellXY {
     testkit::mid(SIZE, dx, dy)

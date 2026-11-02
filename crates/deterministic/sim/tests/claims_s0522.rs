@@ -255,7 +255,8 @@ fn claim7_no_passenger_left_retreats_without_target() {
 #[test]
 fn claim8_five_failed_passes_then_silent_exit_with_the_paratroopers() {
     // spec: S-0522 claim 8 (five passes without a success, then retreat; paratroopers still on board leave play without a death or loss count)
-    let mut w = game(&rules_with("STUCK", 2));
+    // spec: S-0501 claim 10 (in retreat it is removed once outside the usable area) and claim 4 (one that may leave the map now, without the fly-by flag, is shifted back from the map's edge): on a map whose edge cells are usable it would stay on the map, so the map keeps its edge band outside the usable area (S-0522 claim 4)
+    let mut w = banded_game(&rules_with("STUCK", 2));
     let p = launch(&mut w);
     let ps = transport::passengers(&w, p);
     let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;

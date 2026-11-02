@@ -2030,6 +2030,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             }
         }
     }
+    // spec: S-0501 claim 10 (the aircraft has entered the usable area since it appeared: the mark this update's forward step set is kept when the update's own state is written back)
+    a.entered |= st(w, id).entered;
     if let Some(ob) = w.obj_mut(id) {
         ob.air = Some(a.clone());
     }
