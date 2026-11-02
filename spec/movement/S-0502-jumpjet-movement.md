@@ -2,11 +2,11 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-11-02
 measurements: []
 requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504]
 supersedes: []
@@ -787,7 +787,8 @@ New terms:
     changes alone are not destination clears: S-0213 claims 8 and 10 and S-0215
     claims 13 to 15 and 22 own which orders or processing outcomes assign an empty destination.
     The factory ascent report's direct destination discard is not such an assignment
-    (claim 7; S-0417 claim 15).
+    (claim 7; S-0417 claim 15), and neither is the approach step's direct removal of a
+    gripped unit's destination (S-0215 claim 37 part e; S-0607 claim 9).
 
     **Redundant assignments.** Not every repeated request to assign an empty destination
     is an effective clear. An ordinary jumpjet vehicle ignores an unchanged order-level
@@ -871,6 +872,7 @@ New terms:
       no stock infantry fixture combining those properties is established (J23 diagnostic).
       Claims 27 and 28 give the refresh and balloon-hover rules
       and their separate backing; no balloon-hover destination substitution is asserted.
+      The gripped unit's direct removal is S-0607 claim 9's: `unmeasured` there, medium.
       Original direct-empty and off-map aftermath are
       `unmeasured` (J17 diagnostic): ordinary input cannot independently establish these
       instructions. The refusal is design, not an original-behaviour claim.
@@ -969,7 +971,8 @@ New terms:
 28. **Balloon-hover destination retention, not substitution (Q-1031).** A vehicle of a
     balloon-hover type rejects an assignment of an empty destination when it currently
     has both a nonempty order-level destination and a target, and at least one row below
-    holds. Nonempty assignments do not have this exception.
+    holds. Nonempty assignments do not have this exception. The rule applies to a seized
+    vehicle too, before the seized unit's destination refusals (S-0607 claims 9 and 13).
 
     | Relationship at assignment | Retain destination? |
     |---|---|
@@ -1012,6 +1015,7 @@ New terms:
     - Backing: `measurable` (J25) for ordinary move/attack/stop reachability, retention,
       angle boundary, behaviour result and absence of a reroute. A stock deployable
       balloon-hover fixture remains `unmeasured`: J25 does not assume such a type exists.
+      The seized vehicle's case is S-0607 claim 9's: `unmeasured` there, medium.
     - Confidence: high for predicates and retained values; medium for the stock
       deployable balloon-hover fixture.
 
@@ -1343,9 +1347,12 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   0 leptons or less, it stays put and becomes *grounded*, including from *ascending* at height
   0. For every seized set-down unit in this switch-off outcome, whatever route brought it
   there, S-0607 claims 9 and 20 apply: while hovering it is not restored and retries the
-  search at each fall-back to rest. Claim 17's magnetic-release safety departure overrides
-  both switch settings for lifter-ended release, but not S-0607 claim 9's no-destination exception.
-  Backing and confidence are claim 17's; the off alternative is a design rule.
+  search at the end of each of its turns (S-0203), not at a fall-back to rest. Claim 17's
+  magnetic-release safety departure overrides both switch settings for lifter-ended release,
+  but not S-0607 claim 9's no-destination exception. Backing and confidence are claim 17's,
+  and the off alternative is a design rule. The seized set-down unit's retry cadence is S-0607
+  claim 20's: `unmeasured`, a design rule for the switch-off setting, with medium confidence
+  for the test at the end of every turn.
 - **Falling touchdown keeps registration** (`quirks.jumpjet_falling_touchdown_tracked`,
   default on, YR behaviour). On: a touchdown while the unit is in the bridge or parachute
   falling state, or no longer alive or in play, leaves it registered as a tracked flying object
@@ -1785,12 +1792,17 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     of 1 lepton or more gives *hovering* without descent or onward flight; height 0 leptons
     or less gives *grounded* without moving. Include *ascending* at height 0, and heights
     −1 and 1 leptons as boundary controls. A seized hovering set-down unit is not restored
-    and retries the search at every fall-back to rest under S-0607 claims 9 and 20,
-    regardless of how it reached this outcome. Test both failed and successful retries,
+    and retries the search at the end of each of its turns under S-0607 claims 9 and 20,
+    regardless of how it reached this outcome. Expected retry ticks: the search runs at the
+    end of the unit's turn in every tick from the tick of the no-cell outcome on in which it
+    takes a turn. A cell freed in a tick is found at the end of the unit's turn in that tick
+    when the freeing comes before that turn in the update order, and otherwise at its next
+    retry. Test both failed and successful retries,
     including a set-down unit that retained commitment, flew to its point and reached the
     no-cell outcome through a failed landing or another stop. Descent or onward flight
     before a successful retry, hovering at non-positive height, restoration while still
-    hovering, a route-dependent or missing retry at fall-back, self-destruction on lifter
+    hovering, a route-dependent retry, a turn that ends without a retry, a retry at a
+    fall-back to rest outside that test, self-destruction on lifter
     release, or applying that safety exemption to the switch-on no-destination exception
     falsifies the design rule.
 - **J20 Zero-field engine test.** Named importer test data, not an original-game oracle run:
