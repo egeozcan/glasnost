@@ -200,6 +200,9 @@ pub struct Special {
     /// What the tank bunkers remember between thinks (`bunker`).
     #[serde(default)]
     pub(crate) bunker: crate::bunker::Watch,
+    /// The crate orders given lately (`crates`).
+    #[serde(default)]
+    pub(crate) crate_orders: crate::crates::Sent,
 }
 
 /// The click a person would give `unit` on `target`, as orders, when the
