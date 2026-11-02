@@ -167,7 +167,7 @@ fn check_new_smoke(w: &World, id: ObjectId, at: Pos) {
     assert_eq!(reported(w, id)[0].1, at);
 }
 
-// spec: S-0501 claim 37 (Q-2237: a living aircraft's shown smoke is one animation of the fixed type, found without regard to letter case, at the aircraft's position when u is taken, after its own movement in that tick, height included; not attached, so it stays where it was created while the aircraft flies on; no initial loop delay, repeat factor 1, no reverse request), State and ordering (the smoke draw follows the aircraft's own movement), AC5 parts b and d
+// spec: S-0501 claim 37 (Q-2237: a living aircraft's shown smoke is one animation of the fixed type, found without regard to letter case, at the aircraft's position when u is taken, after its own movement in that tick, height included; not attached, so it stays where it was created while the aircraft flies on; no initial loop delay, repeat factor 1, no reverse request), State and ordering (the smoke draw follows the aircraft's own movement), AC5 parts b and d; S-0109 claim 29 (r42: aircraft damage smoke's creator row, the same placement and settings)
 #[test]
 fn claim_37_a_living_aircrafts_smoke_is_the_fixed_type_where_its_movement_left_it() {
     let mut w = game(&rules(true));
@@ -240,7 +240,7 @@ fn claim_37_a_dead_aircrafts_smoke_is_the_same_type() {
     assert!(made >= 1, "a falling aircraft shows smoke");
 }
 
-// spec: S-0501 claim 37 (Q-2237: the creation's draws, S-0109 claim 3's stage-delay draw for this type, come right after u in the aircraft's own turn; a shown smoke takes u plus them, an unshown one u alone), AC5 part c
+// spec: S-0501 claim 37 (Q-2237: the creation's draws, S-0109 claim 3's stage-delay draw for this type, come right after u in the aircraft's own turn; a shown smoke takes u plus them, an unshown one u alone), AC5 part c; S-0109 claim 29 (r42: its creation draws are claim 3's delay draw and claim 13's start-event draws, at the creation)
 #[test]
 fn claim_37_the_smoke_creation_draws_follow_u() {
     let mut w = game(&rules(true));

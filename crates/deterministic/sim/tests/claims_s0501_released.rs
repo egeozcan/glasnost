@@ -612,7 +612,7 @@ fn claim_48_low_release() {
     assert_eq!(st(&w, a).held, air::cruise_height(&w, a));
 }
 
-// spec: S-0501 claim 48 (c) and (d) and S-0404 claim 13 (with a rally point, a type that need not return to a dock gets a move order to it at the release, which is not a behaviour order: the release gives the rally point as its destination and queues move, which becomes current in its first movement update; its docking position lies in a cell of the pad's foundation, so claim 8's rule ends its contact as it takes that destination; no take-off; its first movement update descends from 100 to 80 by F2, and its second climbs)
+// spec: S-0501 claim 48 (c) and (d) and S-0404 claim 13 (r22 states the routing in its aircraft factory row; with a rally point, a type that need not return to a dock gets a move order to it at the release, which is not a behaviour order: the release gives the rally point as its destination and queues move, which becomes current in its first movement update; its docking position lies in a cell of the pad's foundation, so claim 8's rule ends its contact as it takes that destination; no take-off; its first movement update descends from 100 to 80 by F2, and its second climbs)
 #[test]
 fn claim_48_rally_point_at_the_release() {
     let r = rules();

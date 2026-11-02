@@ -40,6 +40,10 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
     if !o.kind.is_mobile() || !o.on_map {
         return None;
     }
+    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, is in the ground layer from its warp's launch until at least the end of its arrival hold, whatever its height; this row comes before every other row, S-0306 claim 17)
+    if glasnost_sim::superweapons::warp::in_ground_layer(w, id) {
+        return Some(Layer::Ground);
+    }
     let loco = w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor);
     // spec: S-0102 State and ordering (a unit with rocket movement is always in the air layer)
     if o.rocket.is_some() || loco == Some(Locomotor::Rocket) {
@@ -200,6 +204,10 @@ impl Layers {
     /// - **Set-C rocket missiles:** re-filed at their first pause update
     ///   and at their first ascent update, seen from their phase after each
     ///   tick (a missile takes one update per tick).
+    /// - **Superweapon warp members** (S-0102 claim 3): one that is in a
+    ///   list other than ground once its warp has launched is put into the
+    ///   ground layer (interim, Q-2346). After its arrival hold, it stays
+    ///   there until one of claim 4's moments re-files it (Q-2346).
     /// - With `events_only` off (`quirks.layer_change_on_events_only`):
     ///   the checks give way to a sweep after the re-files: every object
     ///   whose evaluated layer differs from the list it is in moves to that
@@ -309,6 +317,16 @@ impl Layers {
                 && let Some(layer) = evaluate(w, id)
             {
                 self.refile(id, layer, &mut placed);
+            }
+        }
+        for &id in &ids {
+            let Some(t) = self.tracks.get(&id).copied() else {
+                continue;
+            };
+            // spec: S-0102 claim 3 (a superweapon warp member is in the ground layer from its warp's launch, whatever its height); claim 4 names no moment at the launch, so a member still in an upper list is put into the ground layer after the launch's tick (interim, Q-2346)
+            if t.layer != Layer::Ground && glasnost_sim::superweapons::warp::in_ground_layer(w, id)
+            {
+                self.refile(id, Layer::Ground, &mut placed);
             }
         }
         if !events_only {
@@ -632,6 +650,113 @@ mod tests {
         lift(&mut w, a, 100);
         off.evaluate_mobiles(&w, true, false, &[]);
         assert_eq!(off.of(a), Some(Layer::Top), "the sweep of the same tick");
+    }
+
+    /// A warp member's state at `stage` (S-0513 T2); the landing point is
+    /// where the object stands.
+    fn warp(w: &mut World, id: ObjectId, stage: Option<glasnost_sim::superweapons::warp::Stage>) {
+        use glasnost_sim::superweapons::warp::Member;
+        let landing = w.obj(id).unwrap().pos;
+        w.obj_mut(id).unwrap().sw.warp = stage.map(|stage| Member {
+            stage,
+            house: glasnost_sim::world::HouseId(0),
+            landing,
+            redirected: false,
+            fell_back: false,
+            refused: false,
+            entry_ok: true,
+        });
+    }
+
+    /// spec: S-0102 claim 3 and State and ordering (a superweapon warp
+    /// member, any kind, is in the ground layer from its warp's launch until
+    /// at least the end of its arrival hold, whatever its height; the row
+    /// comes before every other, the rocket and jumpjet rows included)
+    #[test]
+    fn claim3_a_warp_member_is_in_the_ground_layer_whatever_its_height() {
+        use glasnost_sim::superweapons::warp::Stage;
+        let mut w = world();
+        let jj = spawn(&mut w, Kind::Infantry, "JJ", 0);
+        let jet = spawn(&mut w, Kind::Aircraft, "JET", 2);
+        let cart = spawn(&mut w, Kind::Vehicle, "CART", 4);
+        lift(&mut w, jj, 600);
+        lift(&mut w, jet, 300);
+        w.obj_mut(cart).unwrap().rocket = Some(Default::default());
+        assert_eq!(evaluate(&w, jj), Some(Layer::Top));
+        assert_eq!(evaluate(&w, jet), Some(Layer::Top));
+        assert_eq!(evaluate(&w, cart), Some(Layer::Air));
+        for stage in [
+            Stage::Pending,
+            Stage::Leaving(0),
+            Stage::Expired,
+            Stage::Placed,
+            Stage::Hold(0),
+        ] {
+            for id in [jj, jet, cart] {
+                warp(&mut w, id, Some(stage));
+                assert_eq!(evaluate(&w, id), Some(Layer::Ground), "{stage:?}");
+            }
+        }
+        // The hold over: the ordinary rows again.
+        for id in [jj, jet, cart] {
+            warp(&mut w, id, None);
+        }
+        assert_eq!(evaluate(&w, jj), Some(Layer::Top));
+        assert_eq!(evaluate(&w, jet), Some(Layer::Top));
+        assert_eq!(evaluate(&w, cart), Some(Layer::Air));
+    }
+
+    /// spec: S-0102 claim 3 (a warp member is in the ground layer from its
+    /// warp's launch) and claim 4 (placement re-files; between moments an
+    /// object stays in its list), both positions of
+    /// quirks.layer_change_on_events_only; interim Q-2346 (launch and the
+    /// hold's end name no moment: an upper-list member is put into the
+    /// ground layer after the launch's tick, and after the hold it stays
+    /// there until a moment re-files it)
+    #[test]
+    fn claim4_a_warp_member_leaves_its_upper_list_at_the_launch() {
+        use glasnost_sim::superweapons::warp::Stage;
+        for events_only in [true, false] {
+            let mut w = world();
+            let jj = spawn(&mut w, Kind::Infantry, "JJ", 0);
+            lift(&mut w, jj, 600);
+            let mut l = Layers::default();
+            l.evaluate_mobiles(&w, false, events_only, &[]);
+            assert_eq!(l.list(Layer::Top), [Entrant::Object(jj)]);
+            // The launch: the member joins its group.
+            warp(&mut w, jj, Some(Stage::Pending));
+            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
+            assert_eq!(placed, [(jj, Layer::Ground)], "events only {events_only}");
+            assert!(l.list(Layer::Top).is_empty());
+            // A jumpjet check during the warp: both sides ground, no re-file.
+            assert!(
+                l.evaluate_mobiles(&w, true, events_only, &[(jj, Some((h(600), h(600))))])
+                    .is_empty()
+            );
+            // Departure takes it off the map; it leaves every list.
+            w.obj_mut(jj).unwrap().on_map = false;
+            warp(&mut w, jj, Some(Stage::Away));
+            l.evaluate_mobiles(&w, true, events_only, &[]);
+            assert_eq!(l.of(jj), None);
+            // Its placement at the landing point re-files it, into ground.
+            w.obj_mut(jj).unwrap().on_map = true;
+            warp(&mut w, jj, Some(Stage::Placed));
+            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
+            assert_eq!(placed, [(jj, Layer::Ground)]);
+            warp(&mut w, jj, Some(Stage::Hold(3)));
+            assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
+            // The hold over.
+            warp(&mut w, jj, None);
+            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
+            if events_only {
+                assert!(placed.is_empty(), "no moment: it stays in ground");
+                assert_eq!(l.of(jj), Some(Layer::Ground));
+                l.evaluate_mobiles(&w, true, events_only, &[(jj, None)]);
+                assert_eq!(l.of(jj), Some(Layer::Top), "a re-file moment moves it");
+            } else {
+                assert_eq!(placed, [(jj, Layer::Top)], "the sweep of the same tick");
+            }
+        }
     }
 
     /// spec: S-0102 claim 4 (rocket movement, set C only: re-filed at its

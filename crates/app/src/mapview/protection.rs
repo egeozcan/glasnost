@@ -209,7 +209,7 @@ impl Masks {
         match cell {
             // spec: S-0513 claim 29b (slot animations: with no building in the animation's cell, no mask)
             None => 0,
-            // spec: S-0513 claim 29b (the animation's cell shrouded for the local player: no colour mask at all, neither the force-shield nor the laser-target mask); S-0519 claim 26
+            // spec: S-0513 claim 29b and S-0102 claim 34 (r34: the cell holding the animation's own position shrouded for the local player: no colour mask at all, neither the force-shield nor the laser-target mask; brightness unchanged); S-0519 claim 26
             Some(SlotCell { shrouded: true, .. }) => 0,
             // spec: S-0513 claim 29b (the animation's cell not shrouded: S-0102 claim 34's masks of the occupying building unchanged, the force-shield mask, the laser-target mask and their union; the building's centre cell plays no part)
             Some(SlotCell { look, .. }) => self.building_look(BuildingLook {
@@ -455,7 +455,7 @@ mod tests {
         );
     }
 
-    /// spec: S-0513 claim 29b (slot animations: the animation's own cell decides; not shrouded,
+    /// spec: S-0102 claim 34 (r34, the shrouded-cell exception for slot animations) and S-0513 claim 29b (slot animations: the animation's own cell decides; not shrouded,
     /// S-0102 claim 34's masks of the occupying building, the force-shield mask, the laser-target
     /// mask and their union, whatever the state of that building's centre cell; shrouded, no colour
     /// mask at all; no building in the cell, no mask), S-0519 claim 26
