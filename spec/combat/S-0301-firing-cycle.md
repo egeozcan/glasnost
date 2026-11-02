@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 67
+revision: 69
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-02
 measurements: [M-0004]
 requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246]
 supersedes: []
@@ -507,7 +507,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), or the drain refusals of S-0608 claim 3 (rank 4 below). S-0214, claim 6(e), defers to these for what the check refuses |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), the drain refusals of S-0608 claim 3 (rank 4 below), a target that has a superweapon warp pending, from the launch until its departure, with every weapon, a temporal weapon (Terms) included (S-0513 claim 39), or, for an infantry firer whose type has the keep-acting flag, a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
@@ -530,7 +530,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer of an infantry firer whose type has the keep-acting flag against a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer, with any weapon, for a target that has a superweapon warp pending, until its departure (S-0513 claim 39), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -546,9 +546,13 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    **Grip refusals within rank 4 (S-0607 claim 11).** Against the firer's own gripped unit,
    *rearming* applies with any weapon and outranks every other rank-4 answer except the
-   materialising firer's *rearming* and the *illegal* refusal of a firer bound to a slave
-   master. In particular, target-layer and projectile refusals cannot displace it: the lifter
-   keeps its gripped unit as its target even when its weapon cannot hit an airborne unit.
+   materialising firer's *rearming*, the *illegal* refusal of a firer bound to a slave master
+   and, for an infantry firer, the answers asked of it first: the infantry healer's *illegal*
+   (S-0310 claim 11, which ranks above the general part), the keep-acting *illegal* below and
+   any answer that S-0310's open question on dying and falling sequences settles as asked of an
+   infantry firer before them. In particular, target-layer and projectile refusals cannot
+   displace it: the lifter keeps its gripped unit as its target even when its weapon cannot hit
+   an airborne unit.
    By contrast, the magnetic-beam refusal against another non-building target while a grip
    and live wave coexist follows the target-layer and projectile tests. A failed one of
    those tests therefore gives its refusal rather than this conditional *rearming*.
@@ -560,6 +564,36 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    the held-temporal-target *rearming* and absent-weapon or power-sensitive-weapon
    *impossible*. For vehicles, the earlier tube-transit *impossible*, launching-spawn
    *busy* and melee-link *illegal* answers still take precedence.
+
+   **A materialising firer within rank 4.** A materialising firer gets *rearming* for every
+   target and weapon. It yields only to the *illegal* of a firer bound to a slave master, for
+   vehicles to their answers of ranks 1 to 3 (the *impossible* of a vehicle playing its death
+   frames, the launching-spawn *busy* and the melee-link *illegal*) and the earlier tube-transit
+   *impossible*, and for infantry to the answers that an infantry firer is asked first: the
+   infantry healer's *illegal* (S-0310 claim 11), the *illegal* of an infantry firer whose type has
+   the keep-acting flag (S-0214, Terms, *melee-linked*) against a vehicle target that is
+   melee-linked to an object other than the firer, and any answer that S-0310's open question on
+   dying and falling sequences settles as asked of an infantry firer before them. It outranks
+   every other rank-4 answer, among them a falling vehicle's *illegal*, the hidden-target
+   *impossible* (S-0516 claim 24), the projectile refusals of S-0306 claim 23 and the *illegal*
+   for a parasite warhead against a protected object (S-0513 claim 27), and the own-gripped-unit
+   *rearming*, which *Grip refusals within rank 4* above already puts below the materialising
+   firer's *rearming*. The healer's *illegal* outranks every answer of the general part, the
+   materialising *rearming* among them (S-0310 claim 11). So a firer that meets all three
+   answers gets the healer's *illegal* first, then the materialising *rearming*, then the
+   gripped-unit *rearming*. The three meet only in an infantry firer that heals and holds a unit
+   it seized, since the healer and keep-acting answers are asked only of infantry firers and the
+   gripped-unit *rearming* only of a firer holding a unit it seized (S-0607). Such a firer whose
+   target is the unit it seized gets the healer's *illegal* at S-0309 claim 29's check whenever
+   S-0310 claim 11 gives it, and drops the target there by that claim's rule for *illegal*. Its
+   firing step replies to the same answer by S-0310 claim 11's reply table. A materialising one
+   drops the target at the first of its reply to *illegal* in its firing step and its first
+   checking turn in a check tick (S-0309 claim 29). The keep-acting *illegal* is an answer of its
+   own, asked of an infantry firer before the other rank-4 reasons: an infantry firer whose type
+   has the keep-acting flag gets *illegal* against a vehicle target that is melee-linked to an
+   object other than the firer. This paragraph gives no answer for an infantry unit in a dying
+   or falling sequence: that stays S-0310's open question, so whether a materialising infantry
+   firer that is falling gets *rearming* or its falling answer rests on that question.
 
    **A building's pending delayed shot within rank 4 (claim 14; Q-1770).** While a building's
    delayed shot is pending, its *rearming* yields only to the building's own answers of S-0405
@@ -580,6 +614,23 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    the attempt entirely. This spec assigns neither an answer label nor a rank to erasure,
    and claims no precedence between erasure and the ranked refusals above. This does not
    permit ordinary firing during erasure.
+
+   **Targets with a superweapon warp pending within rank 4 (S-0513 claim 39).** A target that
+   has a superweapon warp pending, from the launch until its departure, answers *illegal* for
+   every weapon, a temporal weapon included. Within rank 4 this answer comes after every other
+   reason listed there, except the following, which it outranks: the spawner-weapon answers
+   (S-0506 claim 10: the parasite-hold *impossible* and the *rearming* when no spawned aircraft is
+   alive), the other weapon's live-effect *impossible*, every row of S-0306 claim 23, and the
+   magnetic-beam *rearming* against a target other than the gripped unit (S-0607 claim 11). So it
+   comes after, among others, the *illegal* of a firer bound to a slave master, deactivated or
+   sinking, the materialising firer's *rearming*, the own-gripped-unit *rearming*, the
+   held-temporal-target *rearming* (S-0514 claim 19), the drain and berserk refusals, and the
+   hidden-target, absent-weapon and power-sensitive-weapon *impossible*. An infantry healer's
+   *illegal* (S-0310 claim 11) and a building's answers of S-0405 table T1, its pending delayed
+   shot's *rearming* included, come before it too. It also outranks every reason of ranks 5 and 7
+   to 16. So a firer whose rearm countdown is running, or whose weapon's own effect is alive,
+   gets *illegal* for such a target. This test is not the test of a target being erased: what
+   that one answers for a target that a temporal beam holds outside a warp is not settled here.
 
    **Drain refusals within rank 4 (S-0608 claim 3).** The refusal against the firer's own
    current drained building and the refusals specific to a draining weapon have different
@@ -700,6 +751,15 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      not a slave-bound lifter. Its confidence is medium. Erasure's firing-check label and
      rank remain open, not rules asserted by this claim; E11 part a establishes only
      ordinary firing inactivity.
+     The materialising firer's precedence within rank 4, the infantry keep-acting *illegal*
+     and its place, and the order and drop for an infantry firer that heals and holds a
+     seized unit are `unmeasured`: no scenario here sets up those overlaps.
+     The warp-pending *illegal* and its rank are `unmeasured`, since no scenario records
+     firing-check answers; the drops that the answer causes in infantry and vehicle holders are
+     `measurable` (S-0513 scenario SW12 parts i and j). The shots not made are `unmeasured`: SW12
+     part j does not establish an otherwise eligible firing opportunity before the first check
+     tick, SW12 part k (a temporal weapon's making no shot at such a target) is a recorded run
+     whose outcome fits more than one rule, and no part sets up building or aircraft holders.
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
      A building's pending delayed shot against every reason other than the water, land,
@@ -732,7 +792,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      and the early *rearming* cases, which other specs own; only the ones relevant to this spec are
      listed; the tether and death-frame reasons); low (ranks 1 to 4 among themselves; rank 3, whose
      cause (S-0214) is itself low; rank 16). The passenger-carrier refusal and its
-     precedence have medium confidence.
+     precedence have medium confidence. The materialising firer within rank 4: medium, and low
+     for its place after a vehicle's answers of ranks 1 to 3 (it rests on the order of ranks 1 to
+     4 among themselves), low for the infantry keep-acting *illegal* and its place (reached only
+     through S-0214's link, whose creation that spec rates low), low for the order given for an
+     infantry firer that heals and holds a seized unit and its drop at the check, and low for a
+     materialising one's drop through its firing step's reply, as S-0310 claim 11 rates that the
+     infantry answer shows through its reply. The warp-pending *illegal*, its rank and the shots
+     it prevents: medium.
 
 ### Ammunition and reloading
 
@@ -2568,6 +2635,26 @@ is absent (the control).
     spark place). Each kind's own marks, the freeing when the system leaves play and the creation
     reading for a matched emitter: as S-0616 backs them (its scenarios P1, P4, P8, P11, P12, P14 and
     P22). Claim 20's fix: a design decision (S-0616 claim 20).
+
+- **S-0607 (approved, revision 37), claim 11, "Against its gripped unit".** Replace "so a
+  gripped unit that is in the air never gets *illegal* or *impossible* from its lifter. Of S-0301
+  claim 9's rank-4 answers it is preceded only by the materialising firer's *rearming* and by the
+  refusal of a firer that is bound to a slave master. The lifter therefore keeps the gripped unit
+  as its target through the pull: neither that check nor any other rule of this spec drops it."
+  with: "so a gripped unit that is in the air never gets *illegal* or *impossible* from its lifter
+  through those tests. Of S-0301 claim 9's rank-4 answers it is preceded only by the materialising
+  firer's *rearming*, by the refusal of a firer that is bound to a slave master and, for an
+  infantry lifter, by the answers that an infantry firer is asked first (S-0301 claim 9, *Grip
+  refusals within rank 4*): the infantry healer's *illegal* (S-0310 claim 11), the keep-acting
+  *illegal* against a vehicle that is melee-linked to an object other than the lifter, and any
+  answer that S-0310's open question on dying and falling sequences settles as asked first. A
+  lifter that gets none of those keeps the gripped unit as its target through the pull: neither
+  that check nor any other rule of this spec drops it. An infantry lifter that gets one of those
+  *illegal* answers against its gripped unit drops it as its target as S-0301 claim 9 gives for
+  that firer, at S-0309 claim 29's check or through its firing step's reply. The grip stays, as
+  claim 12 has no row for a target change." In its Confidence line, add: "low, and its backing
+  `unmeasured`, for an infantry lifter's answers ahead of the gripped-unit *rearming* and the
+  drop they cause, as S-0301 claim 9 rates them".
 
 ## Open questions
 
