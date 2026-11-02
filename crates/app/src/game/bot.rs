@@ -643,13 +643,13 @@ impl Bot {
         };
         let period = net_period_ms(s.speed).max(1);
         self.stats.period_ms = period;
-        self.stats.house = Some(s.play.local.0);
+        self.stats.house = Some(s.play.me().0);
         let world = &s.play.game.world;
-        self.stats.allies = world.houses[usize::from(s.play.local.0)]
+        self.stats.allies = world.houses[usize::from(s.play.me().0)]
             .allies
             .iter()
             .filter(|h| {
-                **h != s.play.local && world.houses[usize::from(h.0)].role == HouseRole::Player
+                **h != s.play.me() && world.houses[usize::from(h.0)].role == HouseRole::Player
             })
             .count();
         let started = *self.started_at.get_or_insert(now);
@@ -675,7 +675,7 @@ impl Bot {
         let w = &s.play.game.world;
         if self.cfg.ai && self.thought != Some(w.tick) && s.play.game.outcome().is_none() {
             self.thought = Some(w.tick);
-            let house = s.play.local;
+            let house = s.play.me();
             let brain = self
                 .brain
                 .get_or_insert_with(|| Brain::new(w, &s.loaded.map, house));
@@ -788,7 +788,7 @@ impl Bot {
         }
         self.seen_transfer = (sent, got);
         if let Some(s) = c.session.as_ref() {
-            let house = s.play.local;
+            let house = s.play.me();
             self.stats.taken = s
                 .play
                 .game

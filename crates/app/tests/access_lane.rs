@@ -183,7 +183,7 @@ fn game(dir: &std::path::Path, scale: u16, blind: bool, map: usize, n: usize) ->
     ticks(&mut c, &mut clock, 5);
     {
         let s = c.session.as_mut().unwrap();
-        let local = s.play.local;
+        let local = s.play.me();
         let mcv = s
             .play
             .world()
@@ -225,7 +225,7 @@ fn colours_and_keyboard_play() {
     key(&mut c, Key::PageDown);
     key(&mut c, Key::Space);
     let s = c.session.as_ref().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let Some(t) = s.play.world().houses[usize::from(local.0)].econ.tech.icons[0]
         .first()
         .map(|i| i.t)

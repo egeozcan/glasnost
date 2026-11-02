@@ -139,8 +139,10 @@ pub enum Reach {
 pub struct Play {
     /// The game.
     pub game: Game,
-    /// The local player's house.
-    pub local: HouseId,
+    /// The local player's house; `None` in a watch game, a game of AI
+    /// houses only that nobody at this machine plays (S-0412 Terms,
+    /// *human participant*: a skirmish with none).
+    pub local: Option<HouseId>,
     /// The selection, in selection order.
     pub selection: Vec<ObjectId>,
     /// The control-group number each object carries (S-0214 claim 33;
@@ -222,6 +224,12 @@ fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
     glasnost_sim::econ::sidebar::icon_state(w, house, t).is_some_and(|s| s.ready)
 }
 
+/// [`Play::eye`] for the played house `local`.
+fn eye_of(w: &World, local: Option<HouseId>, id: ObjectId) -> Option<HouseId> {
+    // design: watch mode (lead request 2026-11-02, an extra not in the original): each object as its own house sees it
+    local.or_else(|| w.obj(id).and_then(|o| o.owner))
+}
+
 /// The person's house of a setup: the first player house without an AI.
 pub fn local_house(setup: &GameSetup) -> Option<HouseId> {
     setup
@@ -232,11 +240,13 @@ pub fn local_house(setup: &GameSetup) -> Option<HouseId> {
 }
 
 impl Play {
-    /// Wraps a started game for the local player's `house`.
-    pub fn new(game: Game, local: HouseId) -> Self {
+    /// Wraps a started game for the local player's `house`, or for no house
+    /// in a watch game (`None`).
+    pub fn new(game: Game, local: Option<HouseId>) -> Self {
         let mut cheer = CheerMemory::default();
         cheer.game_start(&game.world);
-        let radar_on = radar::available(&game.world, local);
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): the whole map's radar, with no radar-building condition
+        let radar_on = local.is_none_or(|h| radar::available(&game.world, h));
         let capture = crate::game::capture::Ring::new(&game);
         Self {
             capture,
@@ -294,6 +304,28 @@ impl Play {
     /// The world.
     pub fn world(&self) -> &World {
         &self.game.world
+    }
+
+    /// Whether this is a watch game: no house is played from here, every
+    /// player house is an AI house (S-0412 Terms, *human participant*).
+    pub fn watching(&self) -> bool {
+        self.local.is_none()
+    }
+
+    /// The played house of a game that has one. Checks and lanes that
+    /// drive a played game use it; it panics in a watch game, so the
+    /// interface itself reads [`Self::local`].
+    #[track_caller]
+    pub fn me(&self) -> HouseId {
+        self.local.expect("a played game, not a watch game")
+    }
+
+    /// The house through whose eyes object `id` is looked at: the played
+    /// house, or in a watch game the object's own house, so that the
+    /// watcher sees, clicks and keeps selected every object as its owner
+    /// does (the drawing's rule with no viewer, `Live::set_viewer`).
+    pub fn eye(&self, id: ObjectId) -> Option<HouseId> {
+        eye_of(&self.game.world, self.local, id)
     }
 
     /// Whether ticks may run: no failure and the game not over.
@@ -402,8 +434,18 @@ impl Play {
         // The pathing report's ring (M8 A4) after the tick, before any
         // order of the next.
         self.capture.after_tick(&self.game);
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): no credit counter, radar sounds, sidebar cues or tools, since no house is played from here
+        if let Some(house) = self.local {
+            self.follow_house(house);
+        }
+        self.follow_world();
+        true
+    }
+
+    /// The played house's interface follows the tick: its credit counter,
+    /// radar, sidebar cues and flashes, and the tools its state ends.
+    fn follow_house(&mut self, house: HouseId) {
         let w = &self.game.world;
-        let house = self.local;
         // spec: S-0416 claim 1 (one counter step per cycle towards the available credits)
         if let Some(t) = self.credits.update(production::available_credits(w, house)) {
             // spec: S-0416 claim 4 (a tick sound when the counter moves)
@@ -456,10 +498,14 @@ impl Play {
                 from_source: true,
             };
         }
-        let local = Some(self.local);
+    }
+
+    /// The selection, the control groups and the outcome follow the tick.
+    fn follow_world(&mut self) {
+        let local = self.local;
         for e in &self.effects {
             if let Effect::Cloak { id, event } = *e
-                && glasnost_sim::cloak::view::deselects(&self.game.world, id, event, local)
+                && glasnost_sim::cloak::view::deselects(&self.game.world, id, event, self.eye(id))
             {
                 // spec: S-0516 claim 26 (a cloak start or re-evaluation takes the object out of a non-owner's selection)
                 self.selection.retain(|&x| x != id);
@@ -487,10 +533,10 @@ impl Play {
             }
         }
         self.captured_yard_cancels_placement();
-        self.selection
-            .retain(|&id| targeting::selectable_by(&self.game.world, id, local));
-        // spec: S-0214 claim 33 (an object leaves its group when it is destroyed and removed from play)
         let w = &self.game.world;
+        self.selection
+            .retain(|&id| targeting::selectable_by(w, id, eye_of(w, local, id)));
+        // spec: S-0214 claim 33 (an object leaves its group when it is destroyed and removed from play)
         self.groups.retain(|&id, _| w.obj(id).is_some());
         self.outcome = self.game.outcome();
         if let Some(o) = &self.outcome {
@@ -498,7 +544,6 @@ impl Play {
             // spec: S-0414 claims 19 and 23, S-0202 claim 16 (the displayed scores, once, after the simulation has stopped)
             glasnost_sim::econ::stats::finish(&mut self.game.world, &listed);
         }
-        true
     }
 
     /// When the new owner of a changed building is the local player's house
@@ -508,7 +553,7 @@ impl Play {
         // spec: S-0509 claim 15 (the new owner is the local player's house and the building a construction yard: the placement in progress is cancelled)
         let gained_yard = self.effects.iter().any(|e| {
             matches!(e, Effect::Captured { of, new, .. }
-                if *new == Some(self.local)
+                if new.is_some() && *new == self.local
                     && of.kind == glasnost_sim::rules::Kind::Building
                     && self.game.world.rules().buildings.get(of.index as usize)
                         .is_some_and(|b| b.raw.construction_yard.unwrap_or(false)))
@@ -526,7 +571,7 @@ impl Play {
     fn source_aim(&self) -> Option<u32> {
         let picked = self.effects.iter().any(|e| {
             matches!(e, Effect::Superweapon { event: SwEvent::SourceMarker, house, .. }
-                if *house == Some(self.local))
+                if house.is_some() && *house == self.local)
         });
         if !picked {
             return None;
@@ -559,12 +604,16 @@ impl Play {
     /// lockstep session; the order then runs on every peer at a later tick,
     /// and is taken as given here (the simulation judges it when it runs).
     fn give(&mut self, o: Order) -> bool {
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): no house is played from here, so no order is given, whatever input asks for one
+        let Some(house) = self.local else {
+            return false;
+        };
         match self.outbox.as_mut() {
             Some(out) => {
                 out.push(o);
                 true
             }
-            None => self.game.issue(self.local, o),
+            None => self.game.issue(house, o),
         }
     }
 
@@ -572,7 +621,7 @@ impl Play {
     /// finds, else the cell.
     pub fn target(&self, object: Option<ObjectId>, cell: CellXY) -> ClickOn {
         // spec: S-0214 Terms (clicked object; a fully cloaked object the viewer neither owns nor senses cannot be clicked) and S-0516 claims 26 and 36 (a unit disguised as scenery is still clicked: it cannot be selected, and the kind tables and the disguise rule of S-0214 claim 6 decide the rest)
-        match object.filter(|&id| targeting::clickable_by(&self.game.world, id, Some(self.local))) {
+        match object.filter(|&id| targeting::clickable_by(&self.game.world, id, self.eye(id))) {
             Some(id) => ClickOn::Object(id),
             None => ClickOn::Cell(cell),
         }
@@ -583,9 +632,10 @@ impl Play {
     /// accepted cell click in route mode uses the marker rule of a click
     /// outside it (S-0214 claim 30).
     pub fn issue_route_click(&mut self, orders: Vec<Order>, on: ClickOn, mods: Modifiers) {
+        let Some(house) = self.local else { return };
         let w = &self.game.world;
         // spec: S-0214 claim 30 (an accepted cell click in route mode uses the same feedback rule: the first selected object, a mobile actor, takes the action move on a cell)
-        let marker = targeting::click(w, self.local, &self.selection, on, mods).marker;
+        let marker = targeting::click(w, house, &self.selection, on, mods).marker;
         let at = match on {
             ClickOn::Cell(c) if marker => Some(targeting::move_marker_at(w, c)),
             _ => None,
@@ -610,10 +660,14 @@ impl Play {
             object: object.map(|o| o.0),
         });
         let on = self.target(object, cell);
+        let Some(house) = self.local else {
+            self.look_click(button, on);
+            return;
+        };
         match (self.tool, button) {
             (Tool::Place(t), Button::Left) => {
                 let w = &self.game.world;
-                match sidebar::place(w, self.local, t, cell) {
+                match sidebar::place(w, house, t, cell) {
                     Some(o) => {
                         if self.issue(vec![o]) > 0 {
                             self.tool = Tool::Select;
@@ -638,7 +692,7 @@ impl Play {
             }
             (Tool::Superweapon { sw, .. }, Button::Left) => self.aim(sw, on, cell),
             (Tool::Mode(m), Button::Left) => {
-                match modes::order(&self.game.world, self.local, m, on) {
+                match modes::order(&self.game.world, house, m, on) {
                     Some(o) => {
                         self.issue(vec![o]);
                     }
@@ -654,6 +708,22 @@ impl Play {
             }
             // spec: S-0214 claim 26 (a right-button release without a scroll drag clears the selection in ordinary mode, over an object or the ground; it never gives an order)
             (Tool::Select, Button::Right) => self.clear_selection(),
+        }
+    }
+
+    /// A battlefield click in a watch game, which only looks: a left click
+    /// on an object that can be selected selects it alone, any other click
+    /// clears the selection. No order is given.
+    fn look_click(&mut self, button: Button, on: ClickOn) {
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): selection only for looking (health bars and the selected object's details), one object at a time, any house's
+        match (button, on) {
+            (Button::Left, ClickOn::Object(id))
+                if targeting::selectable_by(&self.game.world, id, self.eye(id)) =>
+            {
+                self.selection = vec![id];
+                self.sel_reset = true;
+            }
+            _ => self.clear_selection(),
         }
     }
 
@@ -676,10 +746,13 @@ impl Play {
         let ClickOn::Object(id) = on else {
             return false;
         };
+        let Some(local) = self.local else {
+            return false;
+        };
         w.obj(id).is_some_and(|o| {
             o.kind == glasnost_sim::rules::Kind::Building
                 && o.owner
-                    .is_some_and(|h| h == self.local || w.allied(Some(self.local), Some(h)))
+                    .is_some_and(|h| h == local || w.allied(Some(local), Some(h)))
         })
     }
 
@@ -747,9 +820,13 @@ impl Play {
     }
 
     fn apply_click(&mut self, mut sel: Vec<ObjectId>, on: ClickOn, mods: Modifiers) {
+        let Some(house) = self.local else {
+            self.selection = sel;
+            return;
+        };
         let w = &self.game.world;
-        sel.retain(|&id| targeting::selectable_by(w, id, Some(self.local)));
-        let r = targeting::click(w, self.local, &sel, on, mods);
+        sel.retain(|&id| targeting::selectable_by(w, id, Some(house)));
+        let r = targeting::click(w, house, &sel, on, mods);
         // spec: S-0701 claim 17 (the first object the input selects speaks; one already in the selection the click acted on does not)
         if let Some(new) = &r.selection
             && let Some(&first) = new.iter().find(|id| !sel.contains(id))
@@ -802,8 +879,11 @@ impl Play {
     /// as a counted modifier. Returns whether the release continues as the
     /// ordinary release click at the final pixel.
     pub fn select_box(&mut self, candidates: &[ObjectId], force_select: bool) -> bool {
+        let Some(local) = self.local else {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no band box; the release is a looking click at its pixel
+            return true;
+        };
         let w = &self.game.world;
-        let local = self.local;
         if candidates.is_empty() {
             // spec: S-0214 claim 19 (with force-select an empty box performs no fallback)
             if force_select {
@@ -897,7 +977,7 @@ impl Play {
             return;
         }
         let w = &self.game.world;
-        let local = Some(self.local);
+        let local = self.local;
         // spec: S-0213 claim 16h (selecting, while the key is held, an object whose route holds a point also selects every other object whose route holds that route's last point, added right after that object in the order in which they were given that point, any already selected being left where it is; one round only) and claim 16d (objects carried inside a transport cannot be selected, S-0214)
         for h in glasnost_sim::routes::also_selected(w, id) {
             if !self.selection.contains(&h) && targeting::selectable_by(w, h, local) {
@@ -915,8 +995,10 @@ impl Play {
     /// map); each addition follows claim 12's front/end rule. Silent
     /// (S-0701 claim 17). Returns whether an object was added.
     pub fn expand_types(&mut self, seeds: &[ObjectId], pool: &[ObjectId], remove: bool) -> bool {
+        let Some(local) = self.local else {
+            return false;
+        };
         let w = &self.game.world;
-        let local = self.local;
         let key = |id: ObjectId| w.obj(id).map(|o| (o.kind, o.type_index));
         let mut types = Vec::new();
         for &id in seeds {
@@ -956,7 +1038,9 @@ impl Play {
     /// tap leaves. The caller has already decided that the release is a
     /// tap and that the reach is kept or set to *screen*.
     pub fn type_tap(&mut self, screen: &[ObjectId], reach: Reach) -> Reach {
-        let local = self.local;
+        let Some(local) = self.local else {
+            return reach;
+        };
         let own = |w: &World, id: ObjectId| w.obj(id).is_some_and(|o| o.owner == Some(local));
         // spec: S-0214 claim 32 (if the selection is a single object that is not own, the tap first removes it)
         if let [only] = self.selection[..]
@@ -1021,8 +1105,10 @@ impl Play {
     /// `quirks.group_kept_on_owner_change` off, only the local player's own
     /// marks count.
     pub fn group(&self, g: usize) -> Vec<ObjectId> {
+        let Some(local) = self.local else {
+            return Vec::new();
+        };
         let w = &self.game.world;
-        let local = self.local;
         let kept = w.rules().quirks.group_kept_on_owner_change;
         self.groups
             .iter()
@@ -1047,8 +1133,8 @@ impl Play {
         if g >= GROUPS {
             return;
         }
+        let Some(local) = self.local else { return };
         let w = &self.game.world;
-        let local = self.local;
         let own = |id: ObjectId| w.obj(id).is_some_and(|o| o.owner == Some(local));
         if w.rules().quirks.group_kept_on_owner_change {
             // spec: S-0214 claim 33 (every own object in group N leaves it; objects of other houses that carry the number keep it)
@@ -1086,14 +1172,15 @@ impl Play {
     /// only selection response (S-0214 claim 33). Returns whether one was
     /// added.
     fn add_members(&mut self, g: usize) -> bool {
+        let Some(local) = self.local else {
+            return false;
+        };
         let w = &self.game.world;
-        let local = Some(self.local);
         let members: Vec<ObjectId> = self
             .group(g)
             .into_iter()
-            .filter(|&id| targeting::selectable_by(w, id, local))
+            .filter(|&id| targeting::selectable_by(w, id, Some(local)))
             .collect();
-        let local = self.local;
         let mut first = None;
         for id in members {
             // spec: S-0214 claim 33 (add group: when the selection holds another house's object, the first member added replaces it, by the owner rule of toggle select, claim 12)
@@ -1179,11 +1266,11 @@ impl Play {
 
     /// A key command for the selection (S-0213 table T2).
     pub fn key(&mut self, cmd: KeyCommand) {
+        let Some(house) = self.local else { return };
         let w = &self.game.world;
-        let local = Some(self.local);
         self.selection
-            .retain(|&id| targeting::selectable_by(w, id, local));
-        let list = targeting::key_command(w, self.local, &self.selection, cmd);
+            .retain(|&id| targeting::selectable_by(w, id, Some(house)));
+        let list = targeting::key_command(w, house, &self.selection, cmd);
         // spec: S-0701 claim 19 (an empty selection requests no command sound)
         if self.selection.is_empty() {
             return;
@@ -1211,25 +1298,47 @@ impl Play {
     }
 
     /// The options menu's speed change, as an order of the local house
-    /// (S-0201 claims 8 and 17); returns whether it was taken or sent.
+    /// (S-0201 claims 8 and 17); returns whether it was taken or sent. In a
+    /// watch game, which has no local house, the order goes in the name of
+    /// the first player house in house order.
     pub fn change_speed(&mut self, speed: u8) -> bool {
-        self.give(Order::GameSpeed { speed })
+        let order = Order::GameSpeed { speed };
+        if self.local.is_some() {
+            return self.give(order);
+        }
+        // spec: S-0201 claim 17 (the speed order is a house order with no actor, carried out whoever sent it)
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): the watcher has no house, so the order is given in the name of the first player house in house order and recorded in the replay like any order
+        let first = self
+            .game
+            .world
+            .houses
+            .iter()
+            .position(|h| h.role == HouseRole::Player);
+        match first {
+            Some(i) if self.outbox.is_none() => self.game.issue(HouseId(i as u8), order),
+            _ => false,
+        }
     }
 
     /// The tab shown (S-0411 claim 2).
     pub fn shown_tab(&self) -> usize {
-        hud::shown_tab(&self.game.world, self.local, self.tab)
+        self.local
+            .map_or(self.tab, |h| hud::shown_tab(&self.game.world, h, self.tab))
     }
 
-    /// The sidebar model.
+    /// The sidebar model; an empty one in a watch game, whose sidebar is
+    /// the house panel instead ([`glasnost_ui::watch`]).
     pub fn hud_model(
         &self,
         name: &dyn Fn(TypeRef) -> String,
         art: &dyn Fn(hud::Entry) -> Option<(u32, u32, i32, i32)>,
     ) -> HudModel {
+        let Some(local) = self.local else {
+            return HudModel::default();
+        };
         let mut m = hud::model(
             &self.game.world,
-            self.local,
+            local,
             self.tab,
             self.credits.shown,
             name,
@@ -1286,7 +1395,9 @@ impl Play {
     }
 
     fn shown_icon_count(&self) -> usize {
-        hud::entries(&self.game.world, self.local, self.shown_tab()).len()
+        self.local.map_or(0, |h| {
+            hud::entries(&self.game.world, h, self.shown_tab()).len()
+        })
     }
 
     /// A click on a mode button: the mode, or back to selecting when it is
@@ -1302,8 +1413,9 @@ impl Play {
     /// A click on the `n`-th icon of the shown tab (S-0411 claims 4 and 5;
     /// a superweapon icon, S-0512 claim 16).
     pub fn cameo_click(&mut self, n: usize, button: Button, shift: bool) {
+        let Some(local) = self.local else { return };
         let w = &self.game.world;
-        let t = match hud::entries(w, self.local, self.shown_tab()).get(n) {
+        let t = match hud::entries(w, local, self.shown_tab()).get(n) {
             Some(hud::Entry::Type(t)) => *t,
             Some(hud::Entry::Superweapon(sw)) => {
                 // spec: S-0512 claim 25 (every left click on a superweapon icon of the local player's strip requests the game-wide build click, the input's first request, whatever the icon's state)
@@ -1311,7 +1423,7 @@ impl Play {
                     self.cues.push(UiCue::SuperweaponClick);
                 }
                 // spec: S-0512 claim 16 (selecting an icon that offers targeting arms that type, by its registration index)
-                if button == Button::Left && charge::offers_targeting(w, self.local, *sw) {
+                if button == Button::Left && charge::offers_targeting(w, local, *sw) {
                     let sw = *sw;
                     let no_action = w
                         .rules()
@@ -1345,14 +1457,13 @@ impl Play {
             Button::Left => Click::Left,
             Button::Right => Click::Right,
         };
-        let held =
-            glasnost_sim::econ::sidebar::icon_state(w, self.local, t).is_some_and(|s| s.on_hold);
+        let held = glasnost_sim::econ::sidebar::icon_state(w, local, t).is_some_and(|s| s.on_hold);
         // spec: S-0411 claim 12 (training for infantry, building for every other kind)
         let infantry = t.kind == glasnost_sim::rules::Kind::Infantry;
         // spec: S-0411 claim 12 (an already active line: the click adds a queued copy)
-        let active = glasnost_sim::econ::production::line_of(w, self.local, t)
-            .is_some_and(|l| l.item.is_some());
-        match sidebar::click(w, self.local, t, click, shift) {
+        let active =
+            glasnost_sim::econ::production::line_of(w, local, t).is_some_and(|l| l.item.is_some());
+        match sidebar::click(w, local, t, click, shift) {
             Action::Order(o) => {
                 // spec: S-0411 claim 12 (start, queue, resume, hold and cancel clicks play interface sounds)
                 let cue = match &o {
@@ -1380,8 +1491,8 @@ impl Play {
     /// The placement preview at `cell`: the foundation and whether the
     /// building would be placed there.
     pub fn preview(&self, cell: CellXY) -> Option<(Vec<CellXY>, bool)> {
-        match self.tool {
-            Tool::Place(t) => Some(sidebar::preview(&self.game.world, self.local, t, cell)),
+        match (self.tool, self.local) {
+            (Tool::Place(t), Some(h)) => Some(sidebar::preview(&self.game.world, h, t, cell)),
             _ => None,
         }
     }
@@ -1411,7 +1522,7 @@ impl Play {
     pub fn end(&self) -> Option<End> {
         self.outcome
             .as_ref()
-            .map(|o| End::from_world(&self.game.world, o, Some(self.local), self.clock_units))
+            .map(|o| End::from_world(&self.game.world, o, self.local, self.clock_units))
     }
 }
 

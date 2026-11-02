@@ -202,7 +202,7 @@ fn centre_of(c: &mut Client, obj: ObjectId) -> Option<Point> {
 fn deploy(c: &mut Client, clock: &mut i64) -> CellXY {
     ticks(c, clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let mcv = s
         .play
         .world()
@@ -253,7 +253,7 @@ fn note_40_an_aircraft_shot_down() {
     };
     let mut clock = 0;
     let home = deploy(&mut c, &mut clock);
-    let local = c.session.as_ref().unwrap().play.local;
+    let local = c.session.as_ref().unwrap().play.me();
     let w = world(&c);
     let r = w.rules_arc();
     let picked = (0..r.aircraft.len()).find(|&i| {
@@ -400,7 +400,7 @@ fn intake_67_a_damaged_and_a_crashing_aircraft() {
     };
     let mut clock = 0;
     let home = deploy(&mut c, &mut clock);
-    let local = c.session.as_ref().unwrap().play.local;
+    let local = c.session.as_ref().unwrap().play.me();
     let r = world(&c).rules_arc();
     let picked = (0..r.aircraft.len()).find(|&i| {
         let voxel = c
@@ -545,7 +545,7 @@ fn notes_41_to_43_the_sidebar_and_the_rally_point() {
     };
     let mut clock = 0;
     let home = deploy(&mut c, &mut clock);
-    let local = c.session.as_ref().unwrap().play.local;
+    let local = c.session.as_ref().unwrap().play.me();
 
     // Note 41: the mode and tab buttons, zoomed.
     let _ = c.frame();

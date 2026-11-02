@@ -403,7 +403,7 @@ impl MapPane {
                     shown.house,
                 ));
             if let Some(r) = shown.radar.as_mut() {
-                r.observe(&live.world, shown.house);
+                r.observe(&live.world, Some(shown.house));
             }
         }
         shown.paused = true;
@@ -483,7 +483,7 @@ impl MapPane {
             if shown.radar_tick != live.world.tick || shown.radar_texture.is_none() {
                 let img = egui::ColorImage::from_rgba_unmultiplied(
                     [radar::SIZE.0 as usize, radar::SIZE.1 as usize],
-                    &r.rgba(&live.world, house),
+                    &r.rgba(&live.world, Some(house)),
                 );
                 match &mut shown.radar_texture {
                     Some(t) => t.set(img, TextureOptions::NEAREST),
@@ -1153,7 +1153,7 @@ fn run_ticks(ctx: &egui::Context, shown: &mut Shown) {
                 shown.house,
             ));
         if let Some(r) = shown.radar.as_mut() {
-            r.observe(&live.world, shown.house);
+            r.observe(&live.world, Some(shown.house));
         }
     }
 }

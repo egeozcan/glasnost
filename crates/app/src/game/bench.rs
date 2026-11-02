@@ -735,7 +735,8 @@ impl Bench {
         };
         let (left, right, top, bottom) = extent(s);
         let w = &s.play.game.world;
-        let local = s.play.local;
+        // The benchmark watches through its first house (M8 step C4).
+        let local = s.play.me();
         let at = |o: &glasnost_sim::world::Object| project_lifted(o.pos.x, o.pos.y, o.pos.z);
         let in_view =
             |a: (i32, i32), b: (i32, i32)| (a.0 - b.0).abs() * 2 < vw && (a.1 - b.1).abs() * 2 < vh;

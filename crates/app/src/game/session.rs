@@ -32,6 +32,7 @@ use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::geom::{Point, Rect, Scale};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
 use glasnost_ui::modes::{self, Mode};
+use glasnost_ui::watch;
 use glasnost_ui::widget::{Focus, Nav, Targets};
 use glasnost_vfs::{FileRef, Vfs};
 
@@ -246,7 +247,9 @@ pub enum SessionEvent {
 impl Session {
     /// Loads the map file `file` of the mounted install and starts the game
     /// `make` sets up from the map's rules, played from house `local` (a
-    /// network game's slot), else from the first person's house. `cursor`
+    /// network game's slot), else from the first person's house, else, when
+    /// the setup has no person's house, watched from no house (a watch
+    /// game, [`Play::watching`]). `cursor`
     /// is the session's cursor palette keep (S-0111 claim 19a);
     /// `colour_blind` draws the player houses in our colour-blind colours
     /// (presentation only, M8 step C3). With `watch`, `local` may be an AI
@@ -319,12 +322,12 @@ impl Session {
     /// local player). `None` for a country with no side.
     fn local_side(&self, watch: bool) -> Option<u32> {
         let w = &self.play.game.world;
-        let country = if watch {
-            // spec: S-0005 claim 13a (an observing local player counts as playing the country of registration index 0)
-            0
-        } else {
+        let country = match self.play.local {
             // spec: S-0005 claim 13a (the country the local player plays)
-            usize::try_from(w.houses.get(usize::from(self.play.local.0))?.country).ok()?
+            Some(h) if !watch => usize::try_from(w.houses.get(usize::from(h.0))?.country).ok()?,
+            // spec: S-0005 claim 13a (an observing local player counts as playing the country of registration index 0)
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): the watcher of a watch game is mounted as an observer is
+            _ => 0,
         };
         let side = w
             .rules()
@@ -349,7 +352,8 @@ impl Session {
 
     /// A game on `loaded`, a map loaded without art (the synthetic
     /// scenarios of tests: nothing is drawn, everything else runs), played
-    /// from house `local`, else from the first person's house.
+    /// from house `local`, else from the first person's house, else watched
+    /// from no house.
     pub fn bare(loaded: Loaded, map_id: String, local: Option<HouseId>) -> Result<Self, String> {
         Self::assemble(
             loaded,
@@ -424,23 +428,29 @@ impl Session {
                     .get(usize::from(h.0))
                     .is_some_and(|x| watch || !x.ai) =>
             {
-                h
+                Some(h)
             }
             Some(h) => return Err(format!("house {} is no person's house", h.0)),
-            None => local_house(&setup)
-                .or_else(|| {
-                    // A watched game's first player house (M8 step C4).
-                    let first = setup
-                        .houses
-                        .iter()
-                        .position(|h| h.role == HouseRole::Player);
-                    first.filter(|_| watch).map(|i| HouseId(i as u8))
-                })
-                .ok_or("the setup has no person's house")?,
+            None if watch => {
+                // A watched game's first player house (M8 step C4).
+                let first = setup
+                    .houses
+                    .iter()
+                    .position(|h| h.role == HouseRole::Player);
+                Some(
+                    local_house(&setup)
+                        .or(first.map(|i| HouseId(i as u8)))
+                        .ok_or("the setup has no player house")?,
+                )
+            }
+            // spec: S-0412 Terms (human participant: our setup may start a skirmish with none, every player house an AI house)
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): a setup with no person's house is watched from no house at all
+            None => local_house(&setup),
         };
         if let Some(l) = loaded.live.as_mut() {
             // spec: S-0516 claims 28 and 29 (the battlefield drawn through the local player's eyes)
-            l.set_viewer(Some(local));
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): with no viewer every object is drawn as its own house sees it, with no shroud
+            l.set_viewer(local);
         }
         let house_colours = loaded.house_radar_colours(&game.world);
         if let Some(l) = loaded.live.as_mut() {
@@ -455,11 +465,19 @@ impl Session {
             loaded.neutral_radar_colour(),
         );
         let speed = game.world.game_speed;
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): the view starts over the first player house's objects
+        let looked_at = local.or_else(|| {
+            let first = setup
+                .houses
+                .iter()
+                .position(|h| h.role == HouseRole::Player);
+            first.map(|i| HouseId(i as u8))
+        });
         let start = game
             .world
             .objects
             .values()
-            .find(|o| o.owner == Some(local) && o.on_map)
+            .find(|o| o.owner.is_some() && o.owner == looked_at && o.on_map)
             .map(|o| project_lifted(o.pos.x, o.pos.y, o.pos.z));
         let mut s = Self {
             loaded,
@@ -678,7 +696,7 @@ impl Session {
             .filter(|p| m.contains(*p))
             .map(|p| self.under(p).0);
         super::capture::Look {
-            local: self.play.local.0,
+            local: self.play.local.map(|h| h.0),
             selection: self.play.selection.iter().map(|o| o.0).collect(),
             view: super::capture::ViewRect {
                 origin: v.origin,
@@ -925,23 +943,21 @@ impl Session {
     }
 
     /// The light-alpha values of the view after the local player's shroud
-    /// covers (S-0110).
+    /// covers (S-0110); in a watch game after none.
     pub fn light_alpha(&self) -> Vec<u8> {
-        cover::light_alpha(
-            &self.play.game.world,
-            self.play.local,
-            &self.view(),
-            &self.loaded.covers,
-            &ShroudQuirks::default(),
-        )
+        self.light_alpha_of(&self.shroud_covers())
     }
 
     /// The local player's shroud covers of the view (S-0110), from which
     /// [`Session::light_alpha_of`] gives the light-alpha values.
     pub fn shroud_covers(&self) -> Vec<glasnost_render::shroud::Cover> {
+        let Some(house) = self.play.local else {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no house is played, so no shroud and no fog is drawn anywhere
+            return Vec::new();
+        };
         cover::covers(
             &self.play.game.world,
-            self.play.local,
+            house,
             &self.view(),
             &ShroudQuirks::default(),
         )
@@ -977,6 +993,51 @@ impl Session {
         self.radar
             .as_ref()
             .map(|r| r.rgba(&self.play.game.world, self.play.local))
+    }
+
+    /// The watch panel's model of a watch game ([`watch::view`]): each
+    /// player house's row, the radar's view outline and what the selected
+    /// object is.
+    ///
+    /// design: watch mode (lead request 2026-11-02, an extra not in the
+    /// original): the selected object's lines are its type's name, its
+    /// owner's name and its health against its strength.
+    pub fn watch_model(&self) -> watch::WatchModel {
+        let w = &self.play.game.world;
+        let colours = &self.house_colours;
+        let houses = watch::house_rows(w, |h| {
+            colours
+                .get(usize::from(h.0))
+                .copied()
+                .unwrap_or([255, 255, 255])
+        });
+        let selected = self
+            .play
+            .selection
+            .first()
+            .and_then(|&id| w.obj(id).map(|o| (id, o)))
+            .map(|(id, o)| {
+                let rules = w.rules();
+                let owner = o
+                    .owner
+                    .and_then(|h| w.houses.get(usize::from(h.0)))
+                    .map_or_else(|| "No owner".to_string(), |h| h.name.clone());
+                vec![
+                    live::type_name(rules, o.kind, o.type_index),
+                    owner,
+                    format!(
+                        "Health {} / {}",
+                        o.health,
+                        glasnost_sim::combat::damage::strength(w, id)
+                    ),
+                ]
+            })
+            .unwrap_or_default();
+        watch::WatchModel {
+            houses,
+            view_box: self.radar_view_box(),
+            selected,
+        }
     }
 
     /// The icon frame read for type `t` (palette indices), for checks.
@@ -1138,9 +1199,12 @@ impl Session {
     /// and 16h): claim 16d's kind test first, then what the press does with
     /// the points whose click areas hold the cursor.
     fn route_press(&mut self, p: Point) {
+        let Some(local) = self.play.local else {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no route is laid where no house is played
+            return;
+        };
         let under = self.points_under(p);
         let w = &self.play.game.world;
-        let local = self.play.local;
         let sel = self.play.selection.clone();
         if let Some(m) = glasnost_sim::routes::press_kind_refusal(w, local, &sel, &under) {
             // spec: S-0213 claim 16d, When the tests are made (the kind test is made when the button is pressed, whatever the click would do; a refused press ends the click: the selection is kept, and no order, point or band box follows)
@@ -1187,10 +1251,11 @@ impl Session {
     /// highlight (S-0213 claim 16b).
     fn route_hover(&self) -> Option<u32> {
         let p = self.pointer.filter(|&p| self.map_rect().contains(p))?;
+        let local = self.play.local?;
         let under = self.points_under(p);
         glasnost_sim::routes::highlighted(
             &self.play.game.world,
-            self.play.local,
+            local,
             &self.play.selection,
             &under,
         )
@@ -1336,8 +1401,9 @@ impl Session {
         let ClickOn::Object(t) = on else {
             return None;
         };
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): the type-select role selects nothing more where no house is played
+        let local = self.play.local?;
         let w = &self.play.game.world;
-        let local = self.play.local;
         let sel = &self.play.selection;
         // spec: S-0214 claim 12 (toggle select acts only when the first selected object is the acting house's own, and otherwise acts as select)
         let first_own = sel
@@ -1355,6 +1421,10 @@ impl Session {
     /// A sidebar control pressed with button `b` (a click, or the
     /// keyboard's press of the focused control).
     fn hud_hit(&mut self, hit: HudHit, b: Button, shift: bool) {
+        if self.play.watching() && hit != HudHit::Options {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): the watch panel has no tab, cameo or mode button; only the options button acts
+            return;
+        }
         match hit {
             HudHit::Tab(i) => self.play.tab_click(i),
             HudHit::Cameo(n) => self.play.cameo_click(n, b, shift),
@@ -1500,9 +1570,11 @@ impl Session {
     /// Moves the sidebar focus; past the last or first shown icon the grid
     /// moves one row, silently, as the wheel does (S-0411 claim 18).
     fn sidebar_step(&mut self, forward: bool) {
-        if let Some(HudHit::Cameo(n)) = self.hud_focus.target(&self.targets) {
+        if let Some(HudHit::Cameo(n)) = self.hud_focus.target(&self.targets)
+            && let Some(local) = self.play.local
+        {
             let w = &self.play.game.world;
-            let count = hud::entries(w, self.play.local, self.play.shown_tab()).len();
+            let count = hud::entries(w, local, self.play.shown_tab()).len();
             let next = if forward { n + 1 } else { n.wrapping_sub(1) };
             if next < count && self.targets.rect_of(&HudHit::Cameo(next)).is_none() {
                 let rows = self.layout().rows();
@@ -1519,8 +1591,11 @@ impl Session {
     /// Shows the next or previous tab that has icons and focuses its first
     /// icon.
     fn sidebar_tab(&mut self, d: i32) {
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): the watch panel has no tabs
+        let Some(local) = self.play.local else {
+            return;
+        };
         let w = &self.play.game.world;
-        let local = self.play.local;
         let shown = self.play.shown_tab() as i32;
         let tabs = hud::TABS as i32;
         let found = (1..=tabs)
@@ -1677,7 +1752,11 @@ impl Session {
         self.type_select.held = false;
         // spec: S-0214 claim 32 and Constants (a tap: release time minus press time, whole milliseconds, at most 500; a longer hold does nothing at its release; after the acting player's defeat a tap does nothing)
         let tap = (0..=TYPE_SELECT_TAP_MS).contains(&(now - self.type_select.pressed));
-        if !tap || self.paused || victory::defeated(&self.play.game.world, self.play.local) {
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): no acting player, so a tap does nothing
+        let Some(local) = self.play.local else {
+            return;
+        };
+        if !tap || self.paused || victory::defeated(&self.play.game.world, local) {
             return;
         }
         // spec: S-0214 claim 32 (a tap keeps the reach only when nothing was added to the selection and it was not cleared since the last tap; otherwise it first sets it to screen)
@@ -1719,6 +1798,10 @@ impl Session {
         if self.paused || g >= GROUPS {
             return;
         }
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): no house's groups, so the group keys do nothing
+        let Some(local) = self.play.local else {
+            return;
+        };
         let now = self.clock_ms;
         let centre = match cmd {
             GroupCommand::Make => {
@@ -1733,7 +1816,6 @@ impl Session {
             GroupCommand::Centre => self.play.centre_group(g),
             GroupCommand::Select => {
                 let members = self.play.group(g);
-                let local = self.play.local;
                 let w = &self.play.game.world;
                 let mut own: Vec<ObjectId> = self
                     .play
@@ -1787,6 +1869,10 @@ impl Session {
     /// The route-mode key went down or up (S-0213 claims 16 and 22):
     /// held, clicks build routes; released, the routes are committed.
     pub fn route_key(&mut self, down: bool) {
+        if self.play.watching() {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no house is played, so route mode is never entered
+            return;
+        }
         if down {
             // spec: S-0213 claim 16h, End of route mode (after the local player's house is defeated, route mode cannot be entered again)
             if !self.paused && !self.route.ended {
@@ -1812,8 +1898,11 @@ impl Session {
     /// house's defeat ends it for good, with the commit, and a point delete
     /// of the local house selects the point after the deleted one.
     fn route_after_tick(&mut self) {
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): route mode is never entered, and no house's route notes are shown
+        let Some(local) = self.play.local else {
+            return;
+        };
         let w = &self.play.game.world;
-        let local = self.play.local;
         if !self.route.ended && victory::defeated(w, local) {
             // spec: S-0213 claim 16h, End of route mode (route mode ends, with the commit, when the local player's house is defeated, after which it cannot be entered again)
             self.route.ended = true;
@@ -1910,6 +1999,10 @@ impl Session {
         mods: Modifiers,
     ) -> bool {
         use glasnost_sim::routes::{Press, RouteClick};
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): route mode is never entered, so the release is an ordinary one
+        let Some(local) = self.play.local else {
+            return false;
+        };
         match press {
             Press::Take(n) if self.play.selection.is_empty() => {
                 if self.play.game.world.routes.points.contains_key(&n) {
@@ -1923,7 +2016,7 @@ impl Session {
                 let w = &self.play.game.world;
                 let sel = self.play.selection.clone();
                 // spec: S-0213 claims 16b and 16d (a press that takes a point sends its join and loop-close orders, which meet no test of claim 16d)
-                let orders = glasnost_sim::routes::press_orders(w, self.play.local, &sel, n);
+                let orders = glasnost_sim::routes::press_orders(w, local, &sel, n);
                 self.play.issue(orders);
                 true
             }
@@ -1939,7 +2032,7 @@ impl Session {
                 let on = self.play.target(object, cell);
                 let w = &self.play.game.world;
                 let sel = self.play.selection.clone();
-                match glasnost_sim::routes::click(w, self.play.local, &sel, on, mods) {
+                match glasnost_sim::routes::click(w, local, &sel, on, mods) {
                     RouteClick::Orders(o) => {
                         self.play.issue_route_click(o, on, mods);
                         self.show_markers();
@@ -2011,7 +2104,7 @@ impl Session {
         }
         // spec: S-0201 claim 15 (in a network game, after resigning through the menu it does not open again until the player's house is defeated, S-0414 claims 5 and 11; a defeated player watching a network game can open it)
         // design: in a skirmish the menu opens again after our surrender (S-0201 claim 15 states the refusal for a network game only, the skirmish menu's abort being no resignation, S-0703 claim 13), so that the person watching on can still leave or change the speed
-        !self.network || !self.resigned || victory::defeated(w, self.play.local)
+        !self.network || !self.resigned || self.play.local.is_some_and(|h| victory::defeated(w, h))
     }
 
     /// Whether the options menu offers the speed control (S-0201 claim 17):
@@ -2020,13 +2113,21 @@ impl Session {
     /// on after the defeat.
     pub fn speed_offered(&self) -> bool {
         // spec: S-0201 claim 17 (in a network game the control is offered as long as the player's own house has not been defeated; in a skirmish watched on after the human player's defeat our engine shows it, and a change takes effect as in claim 8, by the project lead's ruling of 2026-10-24)
-        !self.network || !victory::defeated(&self.play.game.world, self.play.local)
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): a watch game is a skirmish, so the control is offered
+        !self.network
+            || self
+                .play
+                .local
+                .is_some_and(|h| !victory::defeated(&self.play.game.world, h))
     }
 
     /// The options menu's leave choices, in order (S-0201 claims 1 and 15).
     pub fn leave_choices(&self) -> Vec<PauseHit> {
         let w = &self.play.game.world;
-        let local = self.play.local;
+        let Some(local) = self.play.local else {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no house to surrender, so the menu offers the leave only, which ends the game at once as a skirmish's does (S-0703 claim 13)
+            return vec![PauseHit::Leave];
+        };
         let undefeated = !victory::defeated(w, local);
         if self.network {
             // spec: S-0201 claim 15 (while at least two houses of human participants are undefeated, the player's own among them, and the player is not an observer: two choices that send the surrender order, one then leaving the game, one keeping the player watching; otherwise a leave only, sending no surrender order; our engine has no observers, S-0009 claim 28)
@@ -2075,7 +2176,19 @@ impl Session {
         let (cell, object) = self.under(p);
         let on = self.play.target(object, cell);
         let w = &self.play.game.world;
-        let local = self.play.local;
+        let Some(local) = self.play.local else {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no order is offered; over an object a click would select, the cursor offers select, elsewhere the ordinary arrow; nothing is shrouded
+            let action = match on {
+                ClickOn::Object(_) => targeting::Action::Select,
+                ClickOn::Cell(_) => targeting::Action::Nothing,
+            };
+            let offer = Offer::Action {
+                action,
+                in_range: false,
+                shroud_moves: false,
+            };
+            return Some((offer, false));
+        };
         let tc = match on {
             ClickOn::Object(id) => w.obj(id).map_or(cell, |o| o.pos.cell()),
             ClickOn::Cell(c) => c,
@@ -2286,11 +2399,12 @@ impl Session {
             let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
             diamond(&mut d, sx, sy, AIM_INK, m);
         }
-        if self.route.held {
+        if self.route.held
+            && let Some(local) = self.play.local
+        {
             // spec: S-0213 claim 16g (route points and the routes through them are drawn only while the viewer holds the route-mode key, for the viewer's own house and allied houses; each point with a marker, each holder's route as lines from the holder through its points); design: their look is ours (not studied)
             let hover = self.route_hover();
             let w = &self.play.game.world;
-            let local = self.play.local;
             let at_cell = |c: CellXY| {
                 let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
                 let (qx, qy) = project_lifted(256 * c.x + 128, 256 * c.y + 128, 0);
@@ -2407,7 +2521,8 @@ impl Session {
         let rally_phase = (self.clock_ms / DASH_MS).rem_euclid(2 * DASH) as i32;
         for &id in &self.play.selection {
             let Some(o) = w.obj(id) else { continue };
-            if o.owner != Some(self.play.local) || !targeting::holds_rally_point(w, id) {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): a selected object's rally point shows as its own house would see it
+            if o.owner != self.play.eye(id) || !targeting::holds_rally_point(w, id) {
                 continue;
             }
             let (cell, to) = match o.guard_spot {
@@ -2443,7 +2558,13 @@ impl Session {
         }
         // spec: S-0610 claims 10 and 11 (the hostile-intent lines the local player's psychic sensors show: from the unit's firing point to its target's aim point or to its destination, a 3 × 3 square in the unit owner's house colour at both ends, the dashes moving with real time)
         let phase = (self.clock_ms / DASH_MS).rem_euclid(2 * DASH) as i32;
-        for l in glasnost_sim::psychic::intent_lines(w, self.play.local) {
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): no house's psychic sensors are the viewer's, so no intent line is shown
+        let intents = self
+            .play
+            .local
+            .map(|h| glasnost_sim::psychic::intent_lines(w, h))
+            .unwrap_or_default();
+        for l in intents {
             let screen = |p: glasnost_sim::world::Pos| {
                 let (qx, qy) = project_lifted(p.x, p.y, p.z);
                 world_to_screen(qx, qy)
@@ -2473,9 +2594,12 @@ impl Session {
             {
                 continue;
             }
-            // Our own: no line into or out of cells the local player has not explored.
+            // Our own: no line into or out of cells the local player has not
+            // explored (in a watch game, where nothing is shrouded, every line).
             let seen = |p: glasnost_sim::world::Pos| {
-                glasnost_sim::econ::shroud::explored(w, self.play.local, p.cell())
+                self.play
+                    .local
+                    .is_none_or(|h| glasnost_sim::econ::shroud::explored(w, h, p.cell()))
             };
             if !(seen(l.from) && seen(l.to)) {
                 continue;
@@ -2496,9 +2620,13 @@ impl Session {
         }
         // spec: S-0601 claim 18 (the control ring on a controlled object, the permanent ring on a permanently controlled one, raised by the ring height; on a building in front of it). Seam: the ring animations' art is not drawn yet; a marker stands in at the ring's place.
         for o in w.objects.values() {
-            // Our own: no ring on objects in cells the local player has not explored.
-            if !o.on_map || !glasnost_sim::econ::shroud::explored(w, self.play.local, o.pos.cell())
-            {
+            // Our own: no ring on objects in cells the local player has not
+            // explored (in a watch game, where nothing is shrouded, on every one).
+            let seen = self
+                .play
+                .local
+                .is_none_or(|h| glasnost_sim::econ::shroud::explored(w, h, o.pos.cell()));
+            if !o.on_map || !seen {
                 continue;
             }
             let Some(ring) = glasnost_sim::mind::ring(w, o.id) else {
@@ -2551,7 +2679,8 @@ impl Session {
         let art = |t: hud::Entry| {
             // spec: S-0007 claim 25 (the alternate icon exactly when the type has one, is trainable and the local house has infiltrated the matching factory; chosen each time the sidebar shows the icon)
             if let hud::Entry::Type(ty) = t
-                && glasnost_sim::structures::spy::alternate_icon(world, local, ty)
+                && local
+                    .is_some_and(|h| glasnost_sim::structures::spy::alternate_icon(world, h, ty))
                 && let (Some(&id), Some(img)) = (alt_ids.get(&ty), alt_icons.get(&ty))
             {
                 return Some((id, 0, img.width() as i32, img.height() as i32));
@@ -2560,17 +2689,23 @@ impl Session {
             let img = icons.get(&t)?;
             Some((id, 0, img.width() as i32, img.height() as i32))
         };
-        let mut model = self.play.hud_model(&name, &art);
-        model.buttons = self.buttons;
-        model.scroll_pressed = self.scroll_pressed();
-        model.view_box = self.radar_view_box();
-        model.focus_cameo = match self.hud_focus.at {
-            Some(HudHit::Cameo(n)) if self.hud_focus.shown => Some(n),
-            _ => None,
-        };
         let pointer = self.pointer;
         let hover = pointer.map(|p| self.ui.to_ui(p));
-        let (hud_list, targets) = hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover);
+        let (hud_list, targets) = if self.play.watching() {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): the watch panel in the sidebar's place
+            let radar = self.radar.is_some().then_some(RADAR_IMAGE);
+            watch::view(&self.watch_model(), self.ui.ui, radar, hover)
+        } else {
+            let mut model = self.play.hud_model(&name, &art);
+            model.buttons = self.buttons;
+            model.scroll_pressed = self.scroll_pressed();
+            model.view_box = self.radar_view_box();
+            model.focus_cameo = match self.hud_focus.at {
+                Some(HudHit::Cameo(n)) if self.hud_focus.shown => Some(n),
+                _ => None,
+            };
+            hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover)
+        };
         ui.extend(hud_list);
         self.targets = targets;
         if self.paused {

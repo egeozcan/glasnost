@@ -140,7 +140,7 @@ pub async fn run_job(job: Job) -> Done {
             .await;
             let mut voices = SoundBank::new();
             if let Ok(s) = &r {
-                let set = local_voice_set(&s.play.game.world, Some(s.play.local));
+                let set = local_voice_set(&s.play.game.world, s.play.local);
                 // spec: S-0701 claim 34 (each announcement a separate file, opened through the file lookup, never from the bank)
                 for name in speech.files(set) {
                     if let Some(f) = glasnost_convert::inputs::read(&vfs, &name).await {
@@ -562,7 +562,7 @@ impl Client {
         );
         // spec: S-0703 claim 11 (the map theme names the first track)
         audio.set_theme(s.loaded.theme.clone());
-        audio.start(w, Some(s.play.local));
+        audio.start(w, s.play.local);
         if let Some(m) = audio.music() {
             for warning in m.warnings() {
                 log::warn!("{warning}");
@@ -1507,3 +1507,7 @@ mod music_tests;
 #[cfg(test)]
 #[path = "client_play_notes_tests.rs"]
 mod play_notes_tests;
+
+#[cfg(test)]
+#[path = "client_watch_tests.rs"]
+mod watch_tests;

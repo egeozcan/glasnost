@@ -205,7 +205,7 @@ fn centre_of(c: &mut Client, obj: ObjectId) -> Option<Point> {
 fn deploy(c: &mut Client, clock: &mut i64) -> CellXY {
     ticks(c, clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let mcv = s
         .play
         .world()
@@ -514,7 +514,7 @@ fn note_38_ore_near_mines() {
     // 12 clear flat cells in a screen row ((x + i, y − i)) near the mine,
     // none of them or their neighbours under the shroud; each cell's shown
     // pixels are counted.
-    let local = c.session.as_ref().unwrap().play.local;
+    let local = c.session.as_ref().unwrap().play.me();
     let strip = {
         let w = world(&c);
         let open = |cc: CellXY| {
@@ -650,7 +650,7 @@ fn note_39_walking_vehicles() {
     };
     let mut clock = 0;
     let home = deploy(&mut c, &mut clock);
-    let local = c.session.as_ref().unwrap().play.local;
+    let local = c.session.as_ref().unwrap().play.me();
     // Candidates: vehicle types whose rules name the parasite weapon's
     // walking locomotor or any type whose art is a voxel body with a
     // motion file of several frames.

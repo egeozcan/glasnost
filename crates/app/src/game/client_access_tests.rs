@@ -208,7 +208,7 @@ pub(super) fn own(c: &Client, kind: Kind) -> Vec<ObjectId> {
     p.world()
         .objects
         .values()
-        .filter(|o| o.owner == Some(p.local) && o.kind == kind && o.on_map)
+        .filter(|o| o.owner == Some(p.me()) && o.kind == kind && o.on_map)
         .map(|o| o.id)
         .collect()
 }
@@ -248,7 +248,7 @@ pub(super) fn deploy_base(c: &mut Client) {
     steps(c, 400, |c| !own(c, Kind::Building).is_empty());
     steps(c, 50, |c| {
         let p = &session(c).play;
-        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+        !p.world().houses[usize::from(p.me().0)].econ.tech.icons[0].is_empty()
     });
     let _ = c.frame();
 }
@@ -629,7 +629,7 @@ fn a_building_is_built_and_placed_by_keyboard() {
     let orders = |c: &Client| session(c).play.game.replay().orders.clone();
     assert_eq!(orders(&kb), orders(&ptr), "the same production order");
     assert!(!orders(&kb).is_empty());
-    let local = session(&kb).play.local;
+    let local = session(&kb).play.me();
     let t = session(&kb).play.world().houses[usize::from(local.0)]
         .econ
         .tech
@@ -860,7 +860,7 @@ fn press_pause(c: &mut Client, hit: PauseHit) {
 /// The local house's pending orders.
 fn pending(c: &Client) -> Vec<Order> {
     let p = &session(c).play;
-    p.world().houses[usize::from(p.local.0)].pending.clone()
+    p.world().houses[usize::from(p.me().0)].pending.clone()
 }
 
 /// A skirmish's speed control: closing the menu with the index in force
@@ -965,7 +965,7 @@ fn the_menu_is_refused_after_the_end_and_offers_the_speed_after_the_defeat() {
     );
     press_pause(&mut c, PauseHit::Resume);
     session_mut(&mut c).step();
-    let local = usize::from(session(&c).play.local.0);
+    let local = usize::from(session(&c).play.me().0);
     session_mut(&mut c).play.game.world.houses[local]
         .econ
         .result
@@ -998,7 +998,7 @@ fn the_menu_is_refused_after_the_end_and_offers_the_speed_after_the_defeat() {
 fn a_network_menu_offers_the_surrenders_while_two_humans_stand() {
     let mut c = client((1024, 768), 100);
     start_by_keyboard(&mut c);
-    let local = usize::from(session(&c).play.local.0);
+    let local = usize::from(session(&c).play.me().0);
     let other = usize::from(local == 0);
     {
         let s = session_mut(&mut c);

@@ -88,6 +88,30 @@ impl End {
         }
     }
 
+    /// The line under the title: the local player's [`End::headline`], or
+    /// with no local player (a watch game) the winners by name.
+    ///
+    /// design: watch mode (lead request 2026-11-02, an extra not in the
+    /// original): no one is told they won or lost; the winning houses are
+    /// named in house order, and a game that ends with no winner (S-0414
+    /// claim 6) says so.
+    pub fn result_line(&self) -> String {
+        if self.rows.iter().any(|r| r.local) {
+            return self.headline().to_string();
+        }
+        let winners: Vec<&str> = self
+            .rows
+            .iter()
+            .filter(|r| r.won)
+            .map(|r| r.name.as_str())
+            .collect();
+        match winners.as_slice() {
+            [] => "No winner".to_string(),
+            [one] => format!("Winner: {one}"),
+            many => format!("Winners: {}", many.join(", ")),
+        }
+    }
+
     /// Draws the screen.
     pub fn view(&self, size: (i32, i32), hover: Option<Point>) -> (DrawList, Targets<()>) {
         let (w, h) = size;
@@ -101,13 +125,14 @@ impl End {
             320.min(h),
         );
         widget::panel(&mut d, outer, Some("GAME OVER"));
-        let head = self.headline();
-        let good = head == "VICTORY";
-        d.text_centred(
-            Rect::new(outer.x, outer.y + 24, outer.w, 20),
-            head,
-            if good { colour::GOOD } else { colour::BAD },
-        );
+        let head = self.result_line();
+        let ink = match head.as_str() {
+            "VICTORY" => colour::GOOD,
+            "DEFEAT" | "GAME OVER" => colour::BAD,
+            // A watch game's winner line is neither good nor bad news.
+            _ => colour::ACCENT,
+        };
+        d.text_centred(Rect::new(outer.x, outer.y + 24, outer.w, 20), &head, ink);
         let (hh, mm, ss) = self.duration();
         let time = format!("Game time {hh}:{mm:02}:{ss:02} ({} ticks)", self.ticks);
         d.text_centred(
@@ -218,6 +243,24 @@ mod tests {
         let mut e = end(true);
         e.rows[0].local = false;
         assert_eq!(e.headline(), "GAME OVER");
+    }
+
+    // design: watch mode (lead request 2026-11-02, an extra not in the original): with no local row the winners are named, or no winner
+    #[test]
+    fn with_no_local_row_the_winners_are_named() {
+        let mut e = end(true);
+        assert_eq!(e.result_line(), "VICTORY");
+        e.rows[0].local = false;
+        assert_eq!(e.result_line(), "Winner: Player");
+        e.rows[1].won = true;
+        assert_eq!(e.result_line(), "Winners: Player, Computer");
+        e.rows[0].won = false;
+        e.rows[1].won = false;
+        assert_eq!(e.result_line(), "No winner");
+        let (d, _) = e.view((800, 600), None);
+        let texts = d.texts();
+        assert!(texts.contains(&"No winner"));
+        assert!(!texts.contains(&"VICTORY") && !texts.contains(&"DEFEAT"));
     }
 
     #[test]

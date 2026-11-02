@@ -183,7 +183,7 @@ fn centre_of(c: &mut Client, obj: ObjectId) -> Option<Point> {
 fn deploy(c: &mut Client, clock: &mut i64) -> CellXY {
     ticks(c, clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let mcv = s
         .play
         .world()
@@ -274,7 +274,7 @@ fn note_26_superweapon_buildings() {
     let base = deploy(&mut c, &mut clock);
     let doc = art_doc(&c);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let r = s.play.world().rules().clone();
     let sw_types: Vec<(usize, u32)> = (0..r.buildings.len())
         .filter_map(|i| Some((i, r.superweapons.building_sw.get(i)?[0]?)))
@@ -434,7 +434,7 @@ fn note_28_repair_wrench() {
     let mut clock = 0i64;
     let base = deploy(&mut c, &mut clock);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let r = s.play.world().rules().clone();
     let wm = &mut s.play.game.world;
     wm.houses[usize::from(local.0)].credits = 100_000;

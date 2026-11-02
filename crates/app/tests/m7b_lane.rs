@@ -3290,7 +3290,7 @@ impl Lane {
             dir: out,
         };
         let s = lane.c.session.as_mut().unwrap();
-        let local = s.play.local;
+        let local = s.play.me();
         glasnost_sim::econ::shroud::defeat_reveal(&mut s.play.game.world, local);
         before(&mut lane);
         lane.ticks(5);
@@ -3316,7 +3316,7 @@ impl Lane {
     }
 
     fn local(&self) -> HouseId {
-        self.c.session.as_ref().unwrap().play.local
+        self.c.session.as_ref().unwrap().play.me()
     }
 
     /// The cell of the local house's first object on the map (its start).

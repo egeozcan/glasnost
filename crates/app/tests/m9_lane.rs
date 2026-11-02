@@ -195,7 +195,7 @@ fn script(c: &mut Client, tick: i32, n: &mut u64) -> usize {
     let Some(s) = c.session.as_mut() else {
         return 0;
     };
-    let house = s.play.local;
+    let house = s.play.me();
     let units: Vec<_> = s
         .play
         .game

@@ -75,7 +75,7 @@ fn granted_countdowns_show_on_the_battlefield() {
     start_by_keyboard_with(&mut c, countdown_rules());
     let s = session_mut(&mut c);
     assert!(s.countdown_rows().is_empty(), "nothing granted yet");
-    let local = s.play.local;
+    let local = s.play.me();
     glasnost_sim::superweapons::charge::permanent_grant(&mut s.play.game.world, local, 0);
     let rows = s.countdown_rows();
     // spec: S-0512 claim 18 (each granted record with the countdown flag has a row, the name in its house's colour)
@@ -124,7 +124,7 @@ fn an_armed_superweapon_offers_its_aim_image() {
     // spec: S-0214 claim 31 and table CS (the image by aim action: nuclear strike)
     assert_eq!(s.offer(p).map(|o| o.0), Some(Offer::Aim(Aim::Nuke)));
     // spec: S-0513 claim 1 (while units are selected, the cursor offers their actions)
-    let local = s.play.local;
+    let local = s.play.me();
     s.play.selection = s
         .play
         .world()
@@ -157,7 +157,7 @@ fn an_armed_superweapon_offers_its_aim_image() {
 fn three_gunrs(c: &mut Client) -> [ObjectId; 3] {
     let base = *own(c, Kind::Vehicle).first().expect("a base unit");
     let s = session_mut(c);
-    let local = s.play.local;
+    let local = s.play.me();
     let w = &mut s.play.game.world;
     let at = w.obj(base).unwrap().pos.cell();
     let far = if at.x < fixture::SIZE { 30 } else { -30 };
@@ -381,7 +381,7 @@ fn route_mode_adds_points_and_commits_on_release() {
             .replay()
             .orders
             .iter()
-            .filter(|(_, h, _)| *h == s.play.local)
+            .filter(|(_, h, _)| *h == s.play.me())
             .map(|(_, _, o)| o.clone())
             .collect()
     };
@@ -572,7 +572,7 @@ fn route_orders(c: &Client) -> Vec<glasnost_sim::orders::Order> {
         .replay()
         .orders
         .iter()
-        .filter(|(_, h, _)| *h == s.play.local)
+        .filter(|(_, h, _)| *h == s.play.me())
         .map(|(_, _, o)| o.clone())
         .collect()
 }
@@ -688,7 +688,7 @@ fn route_mode_tests_kind_at_the_press() {
     start_by_keyboard(&mut c);
     let (_, [p1, _, _]) = routed(&mut c);
     let s = session_mut(&mut c);
-    let local = s.play.local;
+    let local = s.play.me();
     let w = &mut s.play.game.world;
     let t = w
         .rules()
@@ -771,7 +771,7 @@ fn route_mode_ends_at_the_defeat() {
     for _ in 0..4 {
         session_mut(&mut c).step();
     }
-    let local = session(&c).play.local;
+    let local = session(&c).play.me();
     assert!(glasnost_sim::econ::victory::defeated(
         session(&c).play.world(),
         local
@@ -838,7 +838,7 @@ fn a_selected_factory_shows_its_rally_point() {
     let mut c = client((800, 600), 100);
     start_by_keyboard(&mut c);
     let s = session_mut(&mut c);
-    let local = s.play.local;
+    let local = s.play.me();
     let at = s.under(s.map_rect().centre()).0;
     let w = &mut s.play.game.world;
     let f = glasnost_sim::testkit::spawn(w, Kind::Building, "FACT", local.0, at, 0);
@@ -868,7 +868,7 @@ fn a_scroll_buttons_press_frame_follows_the_press_over_it() {
     super::access_tests::deploy_base(&mut c);
     let s = session(&c);
     let l = s.layout();
-    let n = hud::entries(s.play.world(), s.play.local, s.play.shown_tab()).len();
+    let n = hud::entries(s.play.world(), s.play.me(), s.play.shown_tab()).len();
     assert!(
         hud::overflows(n, l.rows()),
         "{n} icons in {} rows",

@@ -37,7 +37,7 @@ fn start() -> Play {
     )
     .expect("the synthetic skirmish loads");
     assert_eq!(game.ai_houses().len(), 1, "only the machine is an AI house");
-    let mut p = Play::new(game, local);
+    let mut p = Play::new(game, Some(local));
     p.status_font = Some(test_font());
     p
 }
@@ -69,7 +69,7 @@ fn own(p: &Play, kind: Kind) -> Vec<ObjectId> {
     p.world()
         .objects
         .values()
-        .filter(|o| o.owner == Some(p.local) && o.kind == kind && o.on_map)
+        .filter(|o| o.owner == Some(p.me()) && o.kind == kind && o.on_map)
         .map(|o| o.id)
         .collect()
 }
@@ -135,17 +135,17 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     let first_buildings = own(&p, Kind::Building).len();
     // A building icon appears; a left click starts it.
     step_until(&mut p, 50, |p| {
-        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+        !p.world().houses[usize::from(p.me().0)].econ.tech.icons[0].is_empty()
     });
     p.tab_click(0);
-    let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
+    let t = p.world().houses[usize::from(p.me().0)].econ.tech.icons[0][0].t;
     p.cameo_click(0, Button::Left, false);
     assert!(
         p.cues.contains(&UiCue::BuildStarted { infantry: false }),
         "the click started the item: {:?}",
         p.cues
     );
-    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.local, t));
+    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.me(), t));
     assert!(p.cues.contains(&UiCue::ConstructionComplete));
     // A left click on the ready icon enters placement mode.
     p.cameo_click(0, Button::Left, false);
@@ -154,7 +154,7 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     // spec: S-0411 claim 10 (a battlefield right click without a scroll drag ends placement mode and keeps the completed item ready: no place or cancel order, no refund; clicking the ready icon again re-enters placement mode)
     let orders = p.game.replay().orders.len();
     let selection = p.selection.clone();
-    let credits = p.world().houses[usize::from(p.local.0)].credits;
+    let credits = p.world().houses[usize::from(p.me().0)].credits;
     let yard_cell = p
         .world()
         .obj(own(&p, Kind::Building)[0])
@@ -166,8 +166,8 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     assert_eq!(p.game.replay().orders.len(), orders);
     assert_eq!(p.selection, selection);
     p.step();
-    assert_eq!(p.world().houses[usize::from(p.local.0)].credits, credits);
-    assert!(icon_ready(p.world(), p.local, t));
+    assert_eq!(p.world().houses[usize::from(p.me().0)].credits, credits);
+    assert!(icon_ready(p.world(), p.me(), t));
     p.cameo_click(0, Button::Left, false);
     assert_eq!(p.tool, Tool::Place(t));
     // Find a cell the preview shows green, then place there.
@@ -235,14 +235,14 @@ fn start_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Play {
         s,
     )
     .expect("the synthetic skirmish loads");
-    Play::new(game, local)
+    Play::new(game, Some(local))
 }
 
 fn others(p: &Play) -> Vec<ObjectId> {
     p.world()
         .objects
         .values()
-        .filter(|o| o.owner != Some(p.local) && o.on_map && o.kind != Kind::Terrain)
+        .filter(|o| o.owner != Some(p.me()) && o.on_map && o.kind != Kind::Terrain)
         .map(|o| o.id)
         .collect()
 }
@@ -257,7 +257,7 @@ fn claim_19_box_takes_own_mobile_objects() {
     assert_eq!(p.selected.len(), 1);
     for id in &p.selection {
         let o = p.world().obj(*id).unwrap();
-        assert_eq!(o.owner, Some(p.local));
+        assert_eq!(o.owner, Some(p.me()));
         assert!(o.kind.is_mobile());
     }
 }
@@ -376,7 +376,7 @@ fn claim_19_force_select_adds() {
         .world()
         .objects
         .values()
-        .filter(|o| o.owner == Some(p.local) && o.on_map && o.kind.is_mobile())
+        .filter(|o| o.owner == Some(p.me()) && o.on_map && o.kind.is_mobile())
         .map(|o| o.id)
         .collect();
     let mut inside = units.clone();
@@ -394,7 +394,7 @@ fn claim_19_force_select_adds() {
 /// and these as the own mobiles.
 fn mixed_mobiles(p: &mut Play) -> Vec<ObjectId> {
     let mut mobiles = own(p, Kind::Vehicle);
-    let local = p.local;
+    let local = p.me();
     let w = &mut p.game.world;
     let base = w.obj(mobiles[0]).unwrap().pos.cell();
     for (i, n) in ["GUNR", "MINR", "GUNR", "MINR"].into_iter().enumerate() {
@@ -528,11 +528,14 @@ fn page_requests_and_wheel_on_an_overflowing_strip() {
     step_until(&mut p, 10, |p| p.world().tick >= 4);
     p.key(KeyCommand::Deploy);
     step_until(&mut p, 400, |p| {
-        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+        !p.world().houses[usize::from(p.me().0)].econ.tech.icons[0].is_empty()
     });
     p.tab_click(0);
     // Five icons on the shown tab, one row visible: N = 5, R = 1, E = 2.
-    let icons = &mut p.game.world.houses[usize::from(p.local.0)].econ.tech.icons[0];
+    let icons = &mut p.game.world.houses[usize::from(p.local.unwrap().0)]
+        .econ
+        .tech
+        .icons[0];
     let first = icons[0];
     while icons.len() < 5 {
         icons.push(first);
@@ -574,7 +577,7 @@ fn surrender_ends_the_game_with_an_end_screen() {
     assert_eq!(end.headline(), "DEFEAT");
     assert!(!p.running());
     // spec: S-0414 claims 19 and 23 (the displayed scores are fixed once play has stopped)
-    let local = p.local;
+    let local = p.me();
     assert!(
         glasnost_sim::econ::stats::of(p.world(), local)
             .shown
@@ -752,16 +755,16 @@ fn s0411_claim_17_production_adds_no_status_line() {
     p.key(KeyCommand::Deploy);
     step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
     step_until(&mut p, 50, |p| {
-        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+        !p.world().houses[usize::from(p.me().0)].econ.tech.icons[0].is_empty()
     });
     p.tab_click(0);
-    let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
+    let t = p.world().houses[usize::from(p.me().0)].econ.tech.icons[0][0].t;
     p.messages.clear();
     for b in [Button::Left, Button::Right, Button::Left] {
         p.cameo_click(0, b, false);
         p.step();
     }
-    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.local, t));
+    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.me(), t));
     p.cameo_click(0, Button::Right, false);
     p.step();
     for cue in [
@@ -793,7 +796,14 @@ fn a_left_click_sets_a_rally_point_that_new_vehicles_drive_to() {
     let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
     let c = p.world().obj(mcv).unwrap().pos.cell();
     let at = CellXY::new(c.x - 6, c.y - 6);
-    let fact = testkit::spawn(&mut p.game.world, Kind::Building, "FACT", p.local.0, at, 0);
+    let fact = testkit::spawn(
+        &mut p.game.world,
+        Kind::Building,
+        "FACT",
+        p.local.unwrap().0,
+        at,
+        0,
+    );
     p.click_map(Button::Left, Some(fact), at, Modifiers::default());
     assert_eq!(p.selection, vec![fact]);
     p.cues.clear();
@@ -807,7 +817,7 @@ fn a_left_click_sets_a_rally_point_that_new_vehicles_drive_to() {
         Some(Target::Cell(to))
     );
     let gi = p.world().rules().index_of(Kind::Vehicle, "GUNR").unwrap();
-    p.game.world.houses[usize::from(p.local.0)].credits = 100_000;
+    p.game.world.houses[usize::from(p.local.unwrap().0)].credits = 100_000;
     let what = glasnost_sim::econ::TypeRef {
         kind: Kind::Vehicle,
         index: gi as u32,
@@ -851,8 +861,8 @@ fn sw_start(kind: &str, extra: &[(&str, &str)], list_position: bool) -> Play {
 /// fully; returns the silo.
 fn ready_silo(p: &mut Play) -> ObjectId {
     let silo = granted_silo(p);
-    charge::set_charge(&mut p.game.world, p.local, 0, 100);
-    step_until(p, 10, |p| charge::offers_targeting(p.world(), p.local, 0));
+    charge::set_charge(&mut p.game.world, p.local.unwrap(), 0, 100);
+    step_until(p, 10, |p| charge::offers_targeting(p.world(), p.me(), 0));
     silo
 }
 
@@ -862,7 +872,7 @@ fn granted_silo(p: &mut Play) -> ObjectId {
     step_until(p, 10, |p| p.world().tick >= 4);
     let mcv = *own(p, Kind::Vehicle).first().expect("a base unit");
     let c = p.world().obj(mcv).unwrap().pos.cell();
-    let local = p.local.0;
+    let local = p.me().0;
     testkit::spawn(
         &mut p.game.world,
         Kind::Building,
@@ -880,7 +890,7 @@ fn granted_silo(p: &mut Play) -> ObjectId {
         0,
     );
     step_until(p, 10, |p| {
-        charge::get(p.world(), p.local, 0).is_some_and(|r| r.granted)
+        charge::get(p.world(), p.me(), 0).is_some_and(|r| r.granted)
     });
     silo
 }
@@ -890,7 +900,7 @@ fn fired(p: &Play) -> Vec<Order> {
         .replay()
         .orders
         .iter()
-        .filter(|(_, h, o)| *h == p.local && matches!(o, Order::FireSuperweapon { .. }))
+        .filter(|(_, h, o)| *h == p.me() && matches!(o, Order::FireSuperweapon { .. }))
         .map(|(_, _, o)| o.clone())
         .collect()
 }
@@ -900,7 +910,7 @@ fn fired(p: &Play) -> Vec<Order> {
 fn s0512_claim_16_icon_arms_and_a_click_fires() {
     let mut p = sw_start("MultiMissile", &[], true);
     ready_silo(&mut p);
-    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let entries = hud::entries(p.world(), p.me(), hud::SW_TAB);
     let n = entries
         .iter()
         .position(|e| *e == hud::Entry::Superweapon(0))
@@ -931,7 +941,7 @@ fn a_superweapon_icon_without_an_aim_action_fires_at_cell_zero() {
         "synthetic-skirmish",
     )));
     ready_silo(&mut p);
-    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let entries = hud::entries(p.world(), p.me(), hud::SW_TAB);
     let n = entries
         .iter()
         .position(|e| *e == hud::Entry::Superweapon(0))
@@ -960,14 +970,14 @@ fn a_superweapon_icon_without_an_aim_action_fires_at_cell_zero() {
 fn s0512_claim_25_icon_clicks_request_the_click_then_the_announcement() {
     let mut p = sw_start("MultiMissile", &[], true);
     granted_silo(&mut p);
-    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let entries = hud::entries(p.world(), p.me(), hud::SW_TAB);
     let n = entries
         .iter()
         .position(|e| *e == hud::Entry::Superweapon(0))
         .expect("the silo's superweapon in the 2nd tab");
     p.tab = hud::SW_TAB;
     // A charging icon: the click sound only, no arming, no selection change.
-    assert!(!charge::offers_targeting(p.world(), p.local, 0));
+    assert!(!charge::offers_targeting(p.world(), p.me(), 0));
     p.selection = own(&p, Kind::Vehicle);
     let kept = p.selection.clone();
     p.cues.clear();
@@ -976,9 +986,9 @@ fn s0512_claim_25_icon_clicks_request_the_click_then_the_announcement() {
     assert_eq!(p.tool, Tool::Select);
     assert_eq!(p.selection, kept);
     // A ready icon with an aim action: the click, then the announcement.
-    charge::set_charge(&mut p.game.world, p.local, 0, 100);
+    charge::set_charge(&mut p.game.world, p.local.unwrap(), 0, 100);
     step_until(&mut p, 10, |p| {
-        charge::offers_targeting(p.world(), p.local, 0)
+        charge::offers_targeting(p.world(), p.me(), 0)
     });
     p.cues.clear();
     p.cameo_click(n, Button::Left, false);
@@ -1070,7 +1080,7 @@ fn s0513_claim_1_a_selection_takes_precedence() {
 fn arming_from_the_icon_clears_the_selection_and_the_next_click_fires() {
     let mut p = sw_start("MultiMissile", &[], true);
     ready_silo(&mut p);
-    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let entries = hud::entries(p.world(), p.me(), hud::SW_TAB);
     let n = entries
         .iter()
         .position(|e| *e == hud::Entry::Superweapon(0))
@@ -1137,7 +1147,7 @@ const FOUR_MORE: [(&str, &str); 4] = [
 #[test]
 fn s0513_claim_33_source_pick_arms_position_4() {
     let mut p = sw_start("Chronosphere", &FOUR_MORE, true);
-    let local = p.local;
+    let local = p.me();
     source_pick(&mut p, local);
     assert_eq!(p.source_aim(), Some(4));
     source_pick(&mut p, HouseId(1 - local.0));
@@ -1148,7 +1158,7 @@ fn s0513_claim_33_source_pick_arms_position_4() {
 #[test]
 fn s0513_claim_33_source_pick_switch_off() {
     let mut p = sw_start("Chronosphere", &FOUR_MORE, false);
-    let local = p.local;
+    let local = p.me();
     source_pick(&mut p, local);
     assert_eq!(p.source_aim(), Some(1));
 }
@@ -1168,12 +1178,12 @@ fn a_gained_construction_yard_cancels_the_placement_in_progress() {
     p.key(KeyCommand::Deploy);
     step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
     step_until(&mut p, 50, |p| {
-        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+        !p.world().houses[usize::from(p.me().0)].econ.tech.icons[0].is_empty()
     });
     p.tab_click(0);
-    let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
+    let t = p.world().houses[usize::from(p.me().0)].econ.tech.icons[0][0].t;
     p.cameo_click(0, Button::Left, false);
-    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.local, t));
+    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.me(), t));
     p.cameo_click(0, Button::Left, false);
     assert_eq!(p.tool, Tool::Place(t));
     // The fixture's yard carries no construction-yard flag: set it (S-0214 Terms).
@@ -1194,14 +1204,14 @@ fn a_gained_construction_yard_cancels_the_placement_in_progress() {
         after_slots: true,
     };
     // A construction yard gained by another house, or another building gained by the local one: nothing.
-    p.effects = vec![captured(&p, "YARD", 1 - p.local.0)];
+    p.effects = vec![captured(&p, "YARD", 1 - p.me().0)];
     p.captured_yard_cancels_placement();
     assert_eq!(p.tool, Tool::Place(t));
-    p.effects = vec![captured(&p, "POWR", p.local.0)];
+    p.effects = vec![captured(&p, "POWR", p.me().0)];
     p.captured_yard_cancels_placement();
     assert_eq!(p.tool, Tool::Place(t));
     // A construction yard gained by the local house cancels it.
-    p.effects = vec![captured(&p, "YARD", p.local.0)];
+    p.effects = vec![captured(&p, "YARD", p.me().0)];
     p.captured_yard_cancels_placement();
     assert_eq!(p.tool, Tool::Select);
 }
@@ -1229,9 +1239,9 @@ fn a_click_finds_an_enemy_disguised_as_scenery_but_not_a_cloaked_one() {
     assert!(glasnost_sim::cloak::appears_disguised(
         p.world(),
         e,
-        Some(p.local)
+        Some(p.me())
     ));
-    assert!(!targeting::selectable_by(p.world(), e, Some(p.local)));
+    assert!(!targeting::selectable_by(p.world(), e, Some(p.me())));
     assert_eq!(p.target(Some(e), cell), ClickOn::Object(e), "still clicked");
     p.game.world.obj_mut(e).unwrap().cloak.disguise = None;
     p.game.world.obj_mut(e).unwrap().cloak.state = CloakState::Cloaked;
@@ -1425,7 +1435,7 @@ fn claim_33_group_kept_on_owner_change_both_ways() {
         let m = mixed_mobiles(&mut p);
         let theirs = their_gunr(&mut p);
         let other = p.world().obj(theirs).unwrap().owner;
-        let local = Some(p.local);
+        let local = Some(p.me());
         p.selection = vec![m[1], m[2]];
         p.make_group(1);
         p.game.world.obj_mut(m[1]).unwrap().owner = other;
@@ -1456,7 +1466,7 @@ fn said(p: &Play) -> String {
 /// [`mixed_mobiles`].
 fn own_gunr(p: &mut Play, dx: i32) -> ObjectId {
     let base = own(p, Kind::Vehicle)[0];
-    let local = p.local;
+    let local = p.me();
     let w = &mut p.game.world;
     let at = w.obj(base).unwrap().pos.cell();
     let t = w.rules().index_of(Kind::Vehicle, "GUNR").unwrap();
@@ -1527,7 +1537,7 @@ fn claim_32_a_held_drag_seeds_every_candidate_in_the_box() {
     let far = own_gunr(&mut p, 9);
     let theirs = their_gunr(&mut p);
     let at = p.world().obj(mcv).unwrap().pos.cell();
-    let local = p.local.0;
+    let local = p.me().0;
     let w = &mut p.game.world;
     let pw1 = testkit::spawn(
         w,
@@ -1574,7 +1584,7 @@ fn claim_32_a_held_drag_seeds_every_candidate_in_the_box() {
         .econ
         .building
         .unit_disabled = true;
-    assert!(!targeting::box_eligible(p.world(), p.local, &[], g2));
+    assert!(!targeting::box_eligible(p.world(), p.me(), &[], g2));
     p.type_drag(&[g2], &map, false);
     assert_eq!(p.selection, added_in_order(&p, &[], &[g1, g2, far]));
     // A building that is not vehicle-like seeds its type: both plants.
@@ -1646,7 +1656,7 @@ fn a_pack_up_hands_the_control_group_and_the_selection_to_the_vehicle() {
     p.make_group(0);
     // spec: S-0111 claim 17 (the tenth group, key 0, shows 0)
     assert_eq!(p.group_digits().get(&yard), Some(&0));
-    let local = p.local;
+    let local = p.me();
     let cell = p.world().obj(yard).unwrap().pos.cell();
     let vehicle = {
         let w = &mut p.game.world;
@@ -1703,7 +1713,7 @@ fn an_accepted_route_mode_cell_click_shows_the_move_marker() {
     let to = CellXY::new(cell.x, cell.y + 2);
     let on = ClickOn::Cell(to);
     let glasnost_sim::routes::RouteClick::Orders(o) =
-        glasnost_sim::routes::click(p.world(), p.local, &p.selection, on, Modifiers::default())
+        glasnost_sim::routes::click(p.world(), p.me(), &p.selection, on, Modifiers::default())
     else {
         panic!("a point add");
     };

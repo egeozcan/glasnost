@@ -195,7 +195,7 @@ fn client_screens_from_menu_to_end() {
     ticks(&mut c, &mut clock, 5);
     {
         let s = c.session.as_mut().unwrap();
-        let local = s.play.local;
+        let local = s.play.me();
         let mcv = s
             .play
             .world()
@@ -222,7 +222,7 @@ fn client_screens_from_menu_to_end() {
 
     // Build the first building icon and enter placement mode.
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let first = s.play.world().houses[usize::from(local.0)].econ.tech.icons[0]
         .first()
         .map(|i| i.t);

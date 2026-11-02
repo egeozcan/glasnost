@@ -167,13 +167,13 @@ impl Shots {
 fn icons(c: &Client) -> usize {
     let s = c.session.as_ref().unwrap();
     let p = &s.play;
-    glasnost_ui::hud::entries(p.world(), p.local, p.shown_tab()).len()
+    glasnost_ui::hud::entries(p.world(), p.me(), p.shown_tab()).len()
 }
 
 /// The local house's side index (S-0004 claim 9).
 fn local_side(c: &Client) -> Option<usize> {
     let s = c.session.as_ref()?;
-    glasnost_audio::events::local_side(s.play.world(), Some(s.play.local))
+    glasnost_audio::events::local_side(s.play.world(), Some(s.play.me()))
 }
 
 /// Starts a skirmish on map 0 with slot 0's country stepped `steps` times,
@@ -210,7 +210,7 @@ fn start(size: (i32, i32), steps: usize) -> Option<Client> {
 fn deploy(c: &mut Client, clock: &mut i64) -> Option<CellXY> {
     ticks(c, clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let mcv = s
         .play
         .world()
@@ -230,7 +230,7 @@ fn deploy(c: &mut Client, clock: &mut i64) -> Option<CellXY> {
 /// fields.
 fn spawn_base(c: &mut Client, clock: &mut i64, home: CellXY) {
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = &mut s.play.game.world;
     let r = w.rules_arc();
     let mut cells =
@@ -368,7 +368,7 @@ fn s15_b_the_sidebar_buttons_in_play() {
                 ticks(&mut c, &mut clock, 1);
                 let s = c.session.as_ref().unwrap();
                 let w = s.play.world();
-                let local = s.play.local;
+                let local = s.play.me();
                 ready = glasnost_ui::hud::entries(w, local, 0).iter().any(|e| {
                     matches!(e, glasnost_ui::hud::Entry::Type(t)
                         if glasnost_sim::econ::sidebar::icon_state(w, local, *t).is_some_and(|s| s.ready))

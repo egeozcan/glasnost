@@ -288,7 +288,7 @@ fn vehicles_drive_and_the_chrono_miner_jumps_only_to_dock() {
     let mut clock = 0i64;
     ticks(&mut c, &mut clock, 5);
     let s = c.session.as_mut().unwrap();
-    let local = s.play.local;
+    let local = s.play.me();
     let w = s.play.world();
     let mcv = w
         .objects
