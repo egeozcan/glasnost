@@ -335,37 +335,61 @@ pub fn check(
     slot: usize,
     with_range: bool,
 ) -> Answer {
-    answer(w, firer, target, slot, with_range, true)
+    answer(w, firer, target, slot, with_range, Ask::Every)
 }
 
-/// The firing check without the range test and without the reasons of the
-/// moment that rank ahead of the target tests: the rearm countdown and the
-/// other rearming gates of rank 5, ammunition 0 (rank 7) and the cloak
-/// (rank 8). It answers whether the firing rules rule the target illegal,
-/// or the shot impossible, for the weapon in `slot`, as the attack rule of
-/// S-0214 claim 6 (e) asks: "other reasons for not firing at this moment
-/// (facing, reloading, rotating, range and so on) do not count". The
-/// ordinary check answers *rearming*, *out of ammunition* or *cloaked*
-/// ahead of the target tests of rank 9 (S-0301 claim 9; S-0304 claim 2),
-/// so it cannot answer that; without force-fire the attack cursor does not
-/// appear on an object those tests make illegal (S-0304 claim 2). It also
-/// passes over the materialising firer's *rearming* of rank 4 (S-0301 r69
-/// claim 9), a reason of the moment too (interim under Q-2356).
+/// The own AI's lasting test (our design, PLAN §4.7): the firing check
+/// without the range test and without the reasons of the moment that rank
+/// ahead of the target tests, the materialising firer's *rearming* of rank
+/// 4 and ranks 5 to 8 (the rearm countdown and the other rearming gates,
+/// ammunition 0, the cloak; S-0301 claim 9). It answers whether the target
+/// is worth an attack past this moment, so that a unit whose countdown
+/// runs or that phases in does not take a target its weapon can never
+/// hurt. The attack rule of S-0214 claim 6 (e) does not use it: since r78
+/// it takes the ordinary check's answer ([`check`]), or with
+/// `quirks.moment_reason_attack_cursor` off asks [`illegal_at_any_rank`].
 pub fn check_lasting(w: &World, firer: ObjectId, target: Option<Target>, slot: usize) -> Answer {
-    answer(w, firer, target, slot, false, false)
+    answer(w, firer, target, slot, false, Ask::Lasting)
 }
 
-/// The firing check, with the reasons of ranks 5 to 8 and the materialising
-/// *rearming* asked (`moment`) or passed over (S-0214 claim 6 (e); the
-/// materialising answer under Q-2356).
+/// Whether a reason that gives *illegal* holds for the weapon in `slot`
+/// against `target`, at any rank, every other answer passed over: S-0214
+/// claim 6 (e) with `quirks.moment_reason_attack_cursor` off. No range
+/// test is asked (part (d) is the range part), and with no weapon in the
+/// slot nothing is (part (e) holds for an actor with no weapon). Which
+/// answers the switch passes over is under Q-2426 (interim: every answer
+/// that is not *illegal*).
+pub fn illegal_at_any_rank(w: &World, firer: ObjectId, target: Option<Target>, slot: usize) -> bool {
+    answer(w, firer, target, slot, false, Ask::IllegalOnly) == Answer::Illegal
+}
+
+/// What a firing check asks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Ask {
+    /// Every reason, by S-0301 claim 9's ranks.
+    Every,
+    /// The own AI's lasting test: the materialising *rearming* and ranks 5
+    /// to 8 passed over.
+    Lasting,
+    /// Only the reasons that give *illegal*, at any rank (S-0214 claim 6
+    /// (e) with `quirks.moment_reason_attack_cursor` off; Q-2426 interim).
+    IllegalOnly,
+}
+
+/// The firing check, with the reasons of the moment asked or passed over
+/// as `ask` says.
 fn answer(
     w: &World,
     firer: ObjectId,
     target: Option<Target>,
     slot: usize,
     with_range: bool,
-    moment: bool,
+    ask: Ask,
 ) -> Answer {
+    // The reasons of ranks 5 to 8 and the materialising rearming are asked.
+    let moment = ask == Ask::Every;
+    // An answer other than illegal is passed over, so that an illegal reason ranked below it still answers.
+    let pass = ask == Ask::IllegalOnly;
     let Some(o) = w.obj(firer) else {
         return Answer::Impossible;
     };
@@ -374,12 +398,13 @@ fn answer(
     let weapon = slot_weapon(w, firer, slot);
     let target = target.filter(|t| target_exists(w, firer, *t));
     // spec: S-0301 claims 9 and 14 (a building's pending delayed shot: rearming at rank 4, yielding only to the building's own answers of S-0405 table T1 and ahead of every other reason, the absent-weapon and hidden-target impossible, the drain refusals, every row of S-0306 claim 23 and the later ranks; Q-1770 answered)
-    if kind == Kind::Building && o.combat.delayed_shot.is_some() {
+    // Passed over for illegal only: the building's own answers are asked again below.
+    if !pass && kind == Kind::Building && o.combat.delayed_shot.is_some() {
         return crate::econ::power::firing_answer(w, firer).unwrap_or(Answer::Rearming);
     }
     // Ranks 1 and 3 (a vehicle playing death frames, melee-linked) need states that no topic of our engine sets yet.
     // spec: S-0301 claim 9 rank 2 and S-0506 claim 10 (a vehicle whose launching count is above 0: busy)
-    if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
+    if !pass && kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
         return Answer::Busy;
     }
     // spec: S-0310 claim 11 and S-0301 r69 claim 9 (A materialising firer within rank 4: an infantry healer gets illegal when its target is absent, not infantry or at full health; the answer outranks every answer of the general part, the materialising and own-gripped-unit rearming among them, as one of the answers an infantry firer is asked first)
@@ -398,15 +423,15 @@ fn answer(
     // to another object) is asked here, before the materialising rearming;
     // it needs S-0214's melee link, which no topic of our engine sets yet.
     // spec: S-0301 r69 claim 9 (A materialising firer within rank 4: rearming for every target and weapon; it yields only to the slave-bound firer's illegal, not in our engine, for vehicles to ranks 1 to 3 and the tube transit, and for infantry to the answers an infantry firer is asked first, above; it outranks every other rank-4 answer, among them the projectile refusals of S-0306 claim 23, the hidden-target impossible, the parasite warhead's illegal against a protected object, the empty slot's impossible and the own-gripped-unit rearming) and S-0207 claim 20 (f) (phasing in)
-    // The attack rule's check (`moment` off) passes over it as a reason of
-    // the moment, as it passes over ranks 5 to 8, so the target tests decide
-    // there: interim under Q-2356 (S-0214 claim 6 (e), "other reasons for not
-    // firing at this moment ... do not count").
+    // The own AI's lasting test passes over it as a reason of the moment
+    // (our design). The attack rule asks it (S-0214 r78 claim 6 (e), Q-2356
+    // answered), unless quirks.moment_reason_attack_cursor is off.
     if moment && crate::teleport::phasing_in(w, firer) {
         return Answer::Rearming;
     }
     // spec: S-0301 r69 claim 9 (Grip refusals within rank 4) and S-0607 r38 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, the refusal of a firer bound to a slave master, which our engine does not have, and for an infantry lifter the answers an infantry firer is asked first precede it, all asked above)
-    if weapon.is_some()
+    if !pass
+        && weapon.is_some()
         && let Some(Target::Object(x)) = target
         && crate::lift::grips(w, firer, x)
     {
@@ -429,6 +454,7 @@ fn answer(
     // spec: S-0405 claim 9 and T1 (a building's own answers, at rank 4)
     if kind == Kind::Building
         && let Some(a) = crate::econ::power::firing_answer(w, firer)
+        && (!pass || a == Answer::Illegal)
     {
         return a;
     }
@@ -465,7 +491,8 @@ fn answer(
         }
     }
     // spec: S-0301 claim 9 rank 4 and S-0516 claim 24 (a target hidden from the firer's house: impossible when the mean weapon damage is above 0 or the target is not allied with the firer)
-    if let Some(Target::Object(x)) = target
+    if !pass
+        && let Some(Target::Object(x)) = target
         && crate::cloak::hidden_from(w, x, o.owner)
         && (crate::combat::weapon::mean_damage(w, firer) > 0
             || !w.allied(o.owner, w.obj(x).and_then(|t| t.owner)))
@@ -473,7 +500,8 @@ fn answer(
         return Answer::Impossible;
     }
     // spec: S-0301 claim 9 rank 4 and S-0514 claim 19 (a firer that already holds this very target with a temporal weapon: rearming)
-    if let Some(Target::Object(x)) = target
+    if !pass
+        && let Some(Target::Object(x)) = target
         && r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
         && crate::temporal::holds(w, firer, x)
     {
@@ -495,11 +523,11 @@ fn answer(
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)
-    if crate::parasite::held_spawner(w, firer, weapon) {
+    if !pass && crate::parasite::held_spawner(w, firer, weapon) {
         return Answer::Impossible;
     }
     // spec: S-0301 claim 9 rank 4 and S-0506 claim 10 (a spawner weapon none of whose slot objects is alive: rearming)
-    if wr.spawner && !crate::spawn::any_alive(w, firer) {
+    if !pass && wr.spawner && !crate::spawn::any_alive(w, firer) {
         return Answer::Rearming;
     }
     // spec: S-0301 claim 9 rank 4 and S-0504 claim 5 (a sinking firer: illegal; earlier reasons keep their precedence)
@@ -527,22 +555,24 @@ fn answer(
         && targeting_mode_illegal(w, firer, t)
     {
         // spec: S-0306 claim 23 and S-0301 claim 5 (the other weapon's live effect: impossible, ahead of the two rows)
-        if crate::emitters::other_effect_alive(w, firer, slot) {
+        if !pass && crate::emitters::other_effect_alive(w, firer, slot) {
             return Answer::Impossible;
         }
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0607 claims 10 and 11 (a seized firer: illegal; a magnetic-beam firer gripping a unit with a live wave against a target that is neither that unit nor a building: rearming, after the target's layer and projectile tests, so against an airborne target the beam cannot hit that refusal wins; placed last among the rank-4 answers)
-    if let Some(a) = crate::lift::firing_answer(w, firer, wr.mag_beam, target) {
+    if let Some(a) = crate::lift::firing_answer(w, firer, wr.mag_beam, target)
+        && (!pass || a == Answer::Illegal)
+    {
         return a;
     }
     // spec: S-0301 claim 5 (a live effect of the kind of the asked weapon's other weapon: impossible, rank 4) and S-0616 claim 1 (the gate applies while the emitter is held)
-    if crate::emitters::other_effect_alive(w, firer, slot) {
+    if !pass && crate::emitters::other_effect_alive(w, firer, slot) {
         return Answer::Impossible;
     }
     let t = w.tick;
     let c = &o.combat;
-    // spec: S-0214 claim 6 (e) and S-0304 claim 2 (reloading and the other reasons of the moment do not count against the attack rule, and without force-fire the cursor does not appear on an illegal object: ranks 5 to 8, the rearming, out-of-ammunition and cloaked answers that come before illegal, are passed over when it asks, so the target tests of rank 9 answer)
+    // Ranks 5 to 8, the rearming, out-of-ammunition and cloaked answers that come before illegal, are passed over by the own AI's lasting test (our design) and, with quirks.moment_reason_attack_cursor off, by S-0214 claim 6 (e), so the target tests of rank 9 answer there; the attack rule asks them otherwise (S-0214 r78 claim 6 (e))
     if moment {
         // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
         let sync = sync_tick(w, firer, slot, weapon);
@@ -573,7 +603,8 @@ fn answer(
     }
     if let Some(tg) = target {
         // spec: S-0301 claim 9 rank 9 (a seeker type answers out of range, whatever the distance)
-        if kind == Kind::Vehicle
+        if !pass
+            && kind == Kind::Vehicle
             && r.unit(kind, o.type_index)
                 .is_some_and(|u| u.vehicle.hunter_seeker)
         {
@@ -620,7 +651,7 @@ fn answer(
     if kind == Kind::Vehicle {
         let u = r.unit(kind, o.type_index).expect("vehicle type");
         // spec: S-0301 claim 9 rank 11 and S-0310 claim 9 (must deploy: a deploy-to-fire vehicle whose own cell fails S-0517 claim 14's cell test, when no reason of ranks 1 to 10 holds; it outranks moving, still turning and not facing)
-        if u.vehicle.deploy_to_fire && !crate::econ::inplace::deploy_test(w, firer) {
+        if !pass && u.vehicle.deploy_to_fire && !crate::econ::inplace::deploy_test(w, firer) {
             return Answer::MustDeploy;
         }
         // spec: S-0310 claim 11 and S-0301 claim 9 rank 12 (a vehicle healer: illegal when the target is absent, does not count as a vehicle, or is at full health)

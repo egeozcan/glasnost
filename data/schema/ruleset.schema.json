@@ -9885,6 +9885,11 @@
           "type": "boolean",
           "default": true
         },
+        "moment_reason_attack_cursor": {
+          "description": "The attack rule's part (e) takes the firing check's answer, so a reason of the moment that ranks above a target test hides it: while the rearm countdown runs, out of ammunition, cloaked, or with an early rearming of rank 4 (phasing in among them) the attack is offered over a target only those tests refuse; off: part (e) asks only whether a reason that gives illegal holds, at any rank, passing over every reason of the moment.",
+          "type": "boolean",
+          "default": true
+        },
         "multiple_factory_counts_all": {
           "description": "Every factory building of the kind counts for the several-factories factor, also those that cannot make the item.",
           "type": "boolean",

@@ -411,11 +411,13 @@ fn row_b7_pulse_cannon_and_building_being_sold() {
     assert_eq!(act(&w, tower, ClickOn::Object(cart)), Action::Nothing);
 }
 
-// spec: S-0214 claim 6 (e) (the firing rules must not rule the target illegal for the weapon the actor would use; other reasons for not firing at this moment, reloading among them, do not count), S-0304 claim 1 (a versus value of exactly zero: illegal at S-0301 claim 9 rank 9) and S-0304 claim 2 (rearming and out of ammunition come before illegal in the check; without force-fire the attack cursor does not appear on such an object)
+// spec: S-0214 Edge cases (Attack offered over a reason of the moment: with quirks.moment_reason_attack_cursor off, part (e) asks only whether a reason that gives illegal holds, at any rank, passing over every reason of the moment, reloading and out of ammunition among them), S-0304 claim 1 (a versus value of exactly zero: illegal at S-0301 claim 9 rank 9) and S-0301 claim 9 (the own AI's lasting test passes over ranks 5 to 8 in both positions)
+// The on position (the default) is tested in claims_s0214_r78.rs.
 #[test]
-fn claim_6e_reloading_neither_gives_nor_takes_the_attack() {
+fn claim_6e_switch_off_reloading_neither_gives_nor_takes_the_attack() {
     use glasnost_sim::combat::check::{self, Answer};
     let mut r = testkit::combat_ruleset();
+    r.globals.quirks.moment_reason_attack_cursor = false;
     // The gun's warhead does nothing to class light (index 3, the cart's).
     r.sim
         .warheads

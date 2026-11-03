@@ -440,7 +440,7 @@ fn stale_guard_target(w: &World, o: &Object) -> bool {
     }
     let t = Some(t);
     let (slot, wp) = weapon::would_use(w, o.id, t);
-    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the firing check without the range test and without the reasons of the moment of ranks 5 to 8, so that rank 5's rearming hides neither rank 9's target tests, a seeker's out-of-range answer among them, nor the range answer, which is tested on its own below)
+    // spec: S-0301 claim 9 (the own AI's lasting test, our design, PLAN §4.7: the firing check without the range test and without the reasons of the moment of ranks 5 to 8, so that rank 5's rearming hides neither rank 9's target tests, a seeker's out-of-range answer among them, nor the range answer, which is tested on its own below)
     wp.is_none()
         || matches!(
             check::check_lasting(w, o.id, t, slot),
@@ -450,17 +450,19 @@ fn stale_guard_target(w: &World, o: &Object) -> bool {
         || !range::in_range(w, o.id, wp, t, None)
 }
 
-/// Whether unit `id` can attack enemy `e` at all, as its cursor shows: the
-/// weapon it would use against it (S-0308 claim 3) passes the firing check
-/// without the range test, short of an illegal target or an impossible
-/// shot (S-0301 claim 9). An aircraft out of a ground weapon's reach is
-/// not worth a unit's attention. Reloading does not count (S-0214 claim 6
-/// (e)): a unit whose countdown runs is asked as if it had none, so that
-/// the rearming answer does not hide an illegal target.
+/// Whether unit `id` can attack enemy `e` at all: the weapon it would use
+/// against it (S-0308 claim 3) passes the firing check without the range
+/// test, short of an illegal target or an impossible shot (S-0301 claim
+/// 9). An aircraft out of a ground weapon's reach is not worth a unit's
+/// attention. Reloading does not count: a unit whose countdown runs is
+/// asked as if it had none, so that the rearming answer does not hide an
+/// illegal target. This lasting test is the own AI's (our design, PLAN
+/// §4.7); the attack cursor of S-0214 claim 6 (e) (r78) counts the reasons
+/// of the moment ranked above the target tests instead.
 pub(crate) fn can_attack(w: &World, id: ObjectId, e: ObjectId) -> bool {
     let t = Some(Target::Object(e));
     let (slot, weapon) = weapon::would_use(w, id, t);
-    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the check without the reasons of the moment of ranks 5 to 8)
+    // spec: S-0301 claim 9 (the check without the reasons of the moment of ranks 5 to 8: the own AI's lasting test, our design, PLAN §4.7)
     weapon.is_some()
         && !matches!(
             check::check_lasting(w, id, t, slot),
@@ -2712,7 +2714,7 @@ mod can_attack_tests {
 
     const SIZE: i32 = 32;
 
-    // spec: S-0214 claim 6 (e) (the attack a person could order: the firing rules must not rule the target illegal; reasons of the moment, reloading among them, do not count), S-0304 claim 1 (a versus value of exactly zero: illegal, S-0301 claim 9 rank 9) and S-0304 claim 2 (rearming comes before illegal; without force-fire the attack cursor does not appear on such an object)
+    // spec: S-0301 claim 9 (the own AI's lasting test, our design, PLAN §4.7: the firing rules must not rule the target illegal; reasons of the moment, reloading among them, do not count), S-0304 claim 1 (a versus value of exactly zero: illegal, S-0301 claim 9 rank 9) and S-0304 claim 2 (rearming comes before illegal; without force-fire the attack cursor does not appear on such an object)
     #[test]
     fn a_reloading_unit_cannot_attack_a_target_its_weapon_may_not_hurt() {
         let mut r = testkit::combat_ruleset();
