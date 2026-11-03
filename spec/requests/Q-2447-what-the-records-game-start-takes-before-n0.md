@@ -35,7 +35,12 @@ gives, by seed (raw values, counted from place 0 as M-0019 counts them):
 Notes on the numbers:
 
 - Every start is fixed, so our early phase takes no draw, and the two rounds are adjacent from
-  place 0. The synthetic R17 test `claims_s0202_houses::claim_14_two_house_rounds_then_the_final_draw`
+  place 0. On the records' map this was checked as follows:
+  - the map defines start waypoints 0 to 3, so the three players need no random start cell;
+  - the houses get starts 3, 0 and 1, so no random-position draw is taken (asserted in
+    `arena::pt6_the_records_game_start_in_our_setup`);
+  - the other steps between the rounds (the shroud start, the trigger set-up and the radar flags)
+    take no draw (read in the code). The synthetic R17 test `claims_s0202_houses::claim_14_two_house_rounds_then_the_final_draw`
   checks that order exactly (2 to 4 players, seeds 1 to 5).
 - Each R(450, 1800) draw has d = 1350, so it keeps the lowest 11 bits of a raw value and rejects
   values above 1350 (S-0202 claim 4). `quirks.ranged_draw_half_span` is on, but it changes only
