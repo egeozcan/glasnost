@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 44
+revision: 45
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
@@ -1322,7 +1322,12 @@ rank* and *elite weapon*), *n*
     rocket-flight movement is instead absent from both cell-layer lists in every phase,
     including pause, tilt and raise at its launch point; crossing cells never adds it to
     those lists (S-0506 claim 23). This exception has high confidence and `measurable`
-    backing (S-0506 scenario R17). A render layer is not a cell layer.
+    backing (S-0506 scenario R17). Units with drop-pod movement and tunnelling units while
+    digging are likewise listed in no cell layer (S-0102 claim 3). So a superweapon warp, which
+    takes only objects listed in a cell and not in the air (S-0513 claims 4 and 34), never takes
+    either kind, as it never takes a rocket missile. This exception has medium confidence and
+    `unmeasured` backing: no reproducible skirmish setup puts either kind in a warp's source
+    block at its launch. A render layer is not a cell layer.
     Consequently an aircraft passing over an otherwise empty foundation cell does not block
     building placement through S-0406 claim 3 (b)'s aircraft-list test; a landed aircraft does.
 
@@ -1371,10 +1376,13 @@ rank* and *elite weapon*), *n*
       listing, with S-0501 scenario AC27 for deck-marked listing; S-0513 scenario SW7(f) for per-foundation-cell building listing and its strike-witness
       consequence). `unmeasured` for order among multiple buildings in one cell layer: no valid setup
       establishing overlapping buildings and distinguishing their order is known here.
+      `unmeasured` for drop-pod and digging tunnelling units listed in no cell layer, for the
+      reason given above.
     - Confidence: high for the front and end rule and for the moment a walking unit counts as
       entering, for the nearest-object tie and for per-foundation-cell building listing.
       Medium for the order among objects placed by the
-      map and for aircraft listing.
+      map, for aircraft listing and for drop-pod and digging tunnelling units listed in no cell
+      layer.
 
 ### Entry outcomes for an aircraft
 
