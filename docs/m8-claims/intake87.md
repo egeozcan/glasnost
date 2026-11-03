@@ -108,7 +108,11 @@ place no longer depends on the pairing, but it misses M-0019 in every seed (raw 
 | After − *N*₀ | +5 | −11 | −9 | −9 | +5 | +7 |
 | Round 1, round 2 (raw values) | 6, 6 | 6, 5 | 6, 8 | 9, 5 | 10, 7 | 8, 8 |
 
-The test now prints the rounds' places by seed. Filed as **Q-2447** (what else the records'
+The test now prints the rounds' places by seed. The rounds are adjacent on the records' map:
+- it has start waypoints 0 to 3;
+- the houses get starts 3, 0 and 1, so there is no random-start or position draw
+  (`pt6_the_records_game_start_in_our_setup` asserts the human's start);
+- the shroud start, the trigger set-up and the radar flags between the rounds take no draw. Filed as **Q-2447** (what else the records'
 game start takes before *N*₀). We changed nothing to fit the numbers. The other local-lane
 checks pass: `pt6_the_records_game_start_in_our_setup` (five houses, one human object on
 waypoint 3, 19 vehicles taken off, which are the two computer base units and the 17 the map
