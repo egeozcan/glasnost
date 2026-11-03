@@ -216,10 +216,18 @@ fn infantry_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     w.rules().combat.weapon(weapon).fire_particles && dest
 }
 
-/// Whether a target is gone or out of play (no object).
-fn target_exists(w: &World, t: Target) -> bool {
+/// Whether a target is gone or out of play (no object). A departed warp
+/// member that the firer's temporal beam holds is still a target, off the
+/// map.
+fn target_exists(w: &World, firer: ObjectId, t: Target) -> bool {
     match t {
-        Target::Object(x) => w.obj(x).is_some_and(|o| o.on_map && o.health > 0),
+        Target::Object(x) => w.obj(x).is_some_and(|o| {
+            o.health > 0
+                // spec: S-0513 claim 39a (The firer, Q-2317: the firing check answers S-0514 claim 19's rearming for a firer whose beam is attached to the member, before and after its departure, unless a reason that outranks it holds) and S-0514 claim 19
+                && (o.on_map
+                    || (crate::superweapons::warp::departed(w, x)
+                        && crate::temporal::holds(w, firer, x)))
+        }),
         Target::Cell(_) => true,
     }
 }
@@ -364,7 +372,7 @@ fn answer(
     let r = w.rules();
     let kind = o.kind;
     let weapon = slot_weapon(w, firer, slot);
-    let target = target.filter(|t| target_exists(w, *t));
+    let target = target.filter(|t| target_exists(w, firer, *t));
     // spec: S-0301 claims 9 and 14 (a building's pending delayed shot: rearming at rank 4, yielding only to the building's own answers of S-0405 table T1 and ahead of every other reason, the absent-weapon and hidden-target impossible, the drain refusals, every row of S-0306 claim 23 and the later ranks; Q-1770 answered)
     if kind == Kind::Building && o.combat.delayed_shot.is_some() {
         return crate::econ::power::firing_answer(w, firer).unwrap_or(Answer::Rearming);

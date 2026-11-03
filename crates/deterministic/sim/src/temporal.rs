@@ -360,26 +360,63 @@ pub fn turn(w: &mut World, id: ObjectId, update: bool) -> bool {
     if !attached(w, id) {
         return false;
     }
-    let kind = w.obj(id).map_or(Kind::Terrain, |o| o.kind);
-    if erased(w, id) {
-        // spec: S-0513 claim 39a (from its departure a member no longer being erased has no being-erased sparkles, only those of phasing in) and S-0514 claim 18
-        sparkle(w, id);
+    // The sparkle of this turn is made by [`turn_sparkle`], before this.
+    let short = cut_short(w, id) && kind_of(w, id) != Kind::Building;
+    if short {
+        // spec: S-0514 claim 17 and S-0215 claim 2 (a mobile object being erased drops its target and destination on each such tick) and S-0513 claim 39a (so does a vehicle or aircraft phasing in with a beam attached)
+        inactivity_clear(w, id);
     }
-    let short = cut_short(w, id) && kind != Kind::Building;
+    if update {
+        erasure_update(w, id);
+    }
+    short
+}
+
+fn kind_of(w: &World, id: ObjectId) -> Kind {
+    w.obj(id).map_or(Kind::Terrain, |o| o.kind)
+}
+
+/// S-0514 claim 17's clearing of an infantry unit, vehicle or aircraft
+/// whose turn is cut short: its target and destination, the destination
+/// kept under a pending point suppression. A building clears nothing.
+fn inactivity_clear(w: &mut World, id: ObjectId) {
+    if kind_of(w, id) == Kind::Building {
+        return;
+    }
     // spec: S-0215 claim 2 and S-0514 claim 17 (a vehicle under a pending point suppression, S-0207 claim 27, keeps its destination; the target is dropped in every case)
     let keeps = crate::refresh::suppression_pending(w, id);
-    if short && let Some(ob) = w.obj_mut(id) {
-        // spec: S-0514 claim 17 and S-0215 claim 2 (a mobile object being erased drops its target and destination on each such tick) and S-0513 claim 39a (so does a vehicle or aircraft phasing in with a beam attached)
+    if let Some(ob) = w.obj_mut(id) {
         crate::spawn::clear_own_target(ob);
         if !keeps {
             ob.dest = None;
             ob.path.steps.clear();
         }
     }
-    if update {
-        erasure_update(w, id);
+}
+
+/// The drop of a warp member after its turn's warp step (S-0513 claim 39a,
+/// *Sparkles and drops in the warp's turns*): when the member is still
+/// being erased after the warp step, or its turns are cut short by a beam,
+/// it clears its target and destination as S-0514 claim 17 gives. The
+/// arrival hold, whose ordinary turn follows the warp step, makes this
+/// drop through [`turn`].
+pub fn member_drop(w: &mut World, id: ObjectId) {
+    // spec: S-0513 claim 39a (Q-2316: in each turn in which the member is still being erased after the turn's warp step, or whose turns are cut short by a beam, it clears its target and destination as S-0514 claim 17 gives: its leaving updates from t_L + 1 to the expiry update, the expiry's target search included, with or without a beam; the departure update of a vehicle or aircraft with a beam attached; every turn after a later lock) and claims 48 and 51; S-0514 claim 17
+    if crate::superweapons::being_erased(w, id) || cut_short(w, id) {
+        inactivity_clear(w, id);
     }
-    short
+}
+
+/// The sparkle of an object's turn (S-0514 claim 18): one in each turn of
+/// an object being erased, phasing in, or both. A warp member's comes
+/// before its turn's warp step (S-0513 claims 39a and 51); another
+/// object's at its place in the ordinary turn. Both come before the turn's
+/// erasure update (interim Q-2377).
+pub fn turn_sparkle(w: &mut World, id: ObjectId) {
+    // spec: S-0513 claim 39a (Q-2316: each turn of a warp member at every stage is one of its turns for S-0514 claim 18, with or without a beam; in its leaving stage it counts as being erased, from its departure it phases in; its state before the turn's warp step decides; one sparkle per turn whether it is being erased, phasing in or both) and S-0514 claim 18
+    if crate::superweapons::being_erased(w, id) || crate::teleport::phasing_in(w, id) {
+        sparkle(w, id);
+    }
 }
 
 /// The erasure update of a warp member with a beam attached, made before
@@ -462,14 +499,8 @@ pub fn sparkle(w: &mut World, id: ObjectId) {
         // spec: S-0514 claim 18 (aircraft and buildings without damage-fire positions: their own position; the damage-fire positions are not imported)
         _ => o.pos,
     };
+    // spec: S-0514 r14 claim 18 (the sparkle is an ordinary animation with S-0109's simulation effects: its playback draws, claims 3, 11 and 28, its damage, claim 17, its start and middle effects, claim 28; a creation draw comes in the turn's place, before a warp member's warp step, S-0513 claim 39a) and S-0109 claim 29
     effects::anim(w, &name, at);
-}
-
-/// The sparkle of a phasing-in unit (claim 18).
-pub fn phasing_sparkle(w: &mut World, id: ObjectId) {
-    if crate::teleport::phasing_in(w, id) {
-        sparkle(w, id);
-    }
 }
 
 /// Completion (claims 12 and 13): the target is removed without death.

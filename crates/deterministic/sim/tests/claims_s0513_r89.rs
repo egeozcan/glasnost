@@ -1,0 +1,709 @@
+//! Claim tests of S-0513 revision 89, claim 39a (Q-2316 and Q-2317
+//! answered), with the matching clauses of claim 51, S-0514 claims 17 and
+//! 18, S-0309 claim 27 and S-0203 claim 4 (M8 step A3 intake 81): a warp
+//! member's sparkles and drops in its warp turns, with a beam and without
+//! one, and the firer whose temporal beam holds a member while it waits to
+//! land. Synthetic rules (`tests/sw_common`): every name and number is
+//! invented. The ledger is `docs/m8-claims/intake81.md`.
+//!
+//! Tick reading: after `tick::step` has run tick *k*, the tick number reads
+//! *k* + 1. The warp order is applied after the turn pass of tick *t*_L
+//! (S-0203 claim 7). With a clean landing the member enters its leaving
+//! stage in *t*_L + 1, departs in *t*_L + 62, appears in *t*_L + 63, has
+//! its arrival effects in *t*_L + 64 and ends phasing in in *t*_L + 65
+//! (S-0513 claims 39 and 40, SW12 part d).
+
+mod sw_common;
+
+use glasnost_rules::schema::Ruleset;
+use glasnost_sim::combat::check::{Answer, check};
+use glasnost_sim::combat::effects::Effect;
+use glasnost_sim::orders;
+use glasnost_sim::rules::Behaviour;
+use glasnost_sim::superweapons;
+use glasnost_sim::superweapons::warp::Stage;
+use glasnost_sim::temporal;
+use glasnost_sim::world::{ObjectId, Pos, Target, World};
+use sw_common::*;
+
+/// S-0514 Constants: the sparkle period, on the global tick number.
+const SPARKLE: i32 = 24;
+/// S-0309 claim 29's check period, written out for the chosen ticks.
+const PERIOD: i32 = 16;
+
+fn rules() -> Ruleset {
+    let mut r = ruleset();
+    {
+        let g = &mut r.sim.general.superweapons;
+        g.chrono_placement = Some("MARK".into());
+        g.chrono_blast = Some("BLASTS".into());
+        g.chrono_blast_dest = Some("BLASTD".into());
+        g.chrono_delay = Some(7);
+    }
+    r.sim.general.warp_out = Some("WARPA".into());
+    // The imported sparkle animation exists (S-0514 claim 18).
+    r.sim.general.chrono_sparkle = Some("SPARK".into());
+    for n in ["MARK", "BLASTS", "BLASTD", "WARPA", "SPARK"] {
+        r.sim
+            .animations
+            .insert(n.into(), glasnost_rules::sim::AnimationType::default());
+        r.registries
+            .entry("animations".into())
+            .or_default()
+            .push(n.into());
+    }
+    // Every weapon of warhead HE is a temporal weapon (S-0301 Terms): the
+    // CART's Gun and the TOWER's Cannon. Every type of the members is given
+    // strength 10 000, so no erasure here completes.
+    r.sim.warheads.get_mut("HE").unwrap().temporal = Some(true);
+    for t in [
+        r.sim.vehicles.get_mut("BUGGY"),
+        r.sim.infantry.get_mut("JUMPER"),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        t.strength = Some(10_000);
+    }
+    r
+}
+
+fn keeps_beam(on: bool) -> Ruleset {
+    let mut r = rules();
+    r.globals.quirks.warp_departure_keeps_beam = on;
+    r
+}
+
+fn stage(w: &World, id: ObjectId) -> Option<Stage> {
+    w.obj(id).and_then(|o| o.sw.warp.as_ref()).map(|m| m.stage)
+}
+
+/// A game with ALPHA's teleport source ready.
+fn ready(r: &Ruleset) -> World {
+    let mut w = game(r);
+    spawn(&mut w, "CHRONOB", ALPHA, -9, -9);
+    ready_tick(&mut w, ALPHA, SOURCE, 300);
+    w
+}
+
+/// Launches ALPHA's warp of the block at `at(0, 0)` to `at(5, 5)` in the
+/// first tick from now whose number leaves `rem` when divided by
+/// `modulus` and in which orders are taken; returns t_L, the tick that
+/// applied the warp order, which has run.
+fn launch(w: &mut World, modulus: i32, rem: i32) -> i32 {
+    fire_now(w, ALPHA, SOURCE, at(0, 0));
+    while orders::blocked(w) || w.tick.rem_euclid(modulus) != rem {
+        step(w);
+    }
+    fire(w, ALPHA, WARP, at(5, 5));
+    let tl = w.tick;
+    step(w);
+    tl
+}
+
+/// Runs until tick `t` has run (the next tick to run is `t + 1`).
+fn run_through(w: &mut World, t: i32) {
+    while w.tick <= t {
+        step(w);
+    }
+}
+
+/// S-0514 claim 18's placement for an infantry unit or vehicle: 120
+/// leptons farther along each horizontal axis, same height.
+fn placed(p: Pos) -> Pos {
+    Pos::new(p.x + 120, p.y + 120, p.z) // spec: S-0514 Constants (mobile sparkle displacement 120 leptons)
+}
+
+/// One run of the sparkle record: each tick's sparkles and the member's
+/// stage after it.
+struct Record {
+    sparkles: Vec<(i32, Pos)>,
+    stages: Vec<(i32, Option<Stage>)>,
+}
+
+/// Runs through tick `last`, recording the sparkle animations created in
+/// each tick, with their positions, and `m`'s stage after each tick.
+fn record(w: &mut World, m: ObjectId, last: i32) -> Record {
+    let mut rec = Record {
+        sparkles: Vec::new(),
+        stages: Vec::new(),
+    };
+    while w.tick <= last {
+        w.effects.clear();
+        let t = w.tick;
+        step(w);
+        for e in &w.effects {
+            if let Effect::Anim { name, pos, .. } = e
+                && name == "SPARK"
+            {
+                rec.sparkles.push((t, *pos));
+            }
+        }
+        rec.stages.push((t, stage(w, m)));
+    }
+    rec
+}
+
+fn stage_after(rec: &Record, t: i32) -> Option<Stage> {
+    rec.stages
+        .iter()
+        .find(|(k, _)| *k == t)
+        .and_then(|(_, s)| *s)
+}
+
+/// The clean timeline of claim 39 (SW12 part d), read from the record.
+fn assert_clean_timeline(rec: &Record, tl: i32) {
+    assert_eq!(stage_after(rec, tl + 61), Some(Stage::Expired));
+    assert_eq!(
+        stage_after(rec, tl + 62),
+        Some(Stage::Away),
+        "departs in t_L + 62"
+    );
+    assert_eq!(
+        stage_after(rec, tl + 63),
+        Some(Stage::Placed),
+        "appears in t_L + 63"
+    );
+    assert!(
+        matches!(stage_after(rec, tl + 64), Some(Stage::Hold(_))),
+        "arrival effects in t_L + 64"
+    );
+    assert_eq!(
+        stage_after(rec, tl + 65),
+        None,
+        "phasing in ends in t_L + 65"
+    );
+}
+
+/// The expected sparkles from `from` to `to`, both included: one in each
+/// tick divisible by 24, from the old position up to the appearance tick
+/// t_L + 63 and from the landing point from the arrival-effects tick on.
+fn expected(tl: i32, from: i32, to: i32, old: Pos, landing: Pos) -> Vec<(i32, Pos)> {
+    (from..=to)
+        .filter(|t| t.rem_euclid(SPARKLE) == 0)
+        .map(|t| {
+            let p = if t <= tl + 63 { old } else { landing };
+            (t, placed(p))
+        })
+        .collect()
+}
+
+/// The launch residues modulo 24 that put t_L + 1, the departure, the
+/// appearance, the arrival effects and the phasing end on a sparkle tick
+/// (SW12 part l6c).
+const RESIDUES: [(i32, i32); 5] = [(23, 1), (10, 62), (9, 63), (8, 64), (7, 65)];
+
+// --- Sparkles in the warp's turns (SW12 parts l6 and l6c) -------------------------------
+
+#[test]
+fn claim39a_l6c_a_member_with_no_beam_sparkles_in_its_warp_turns_from_tl_plus_2_to_its_phasing_end()
+{
+    // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns, Q-2316: each turn of a member at every stage is one of its turns for S-0514 claim 18, with or without a beam; in its leaving stage it counts as being erased and from its departure it phases in; a sparkle in each turn whose tick is divisible by 24 from its update of t_L + 2 to the update that ends its phasing in, both included; its state before the turn's warp step decides, so t_L + 1 makes none; placed from its position before the warp step: the old position up to its appearance update, the landing point from its arrival-effects update; none after its phasing in ends) and claim 51 (the sparkle is an intrinsic exception, made before the warp work); S-0514 claim 18; S-0203 claim 4
+    for name in ["BUGGY", "JUMPER"] {
+        for (rem, off) in RESIDUES {
+            let mut w = ready(&rules());
+            let m = spawn(&mut w, name, BETA, 0, 0);
+            let old = w.obj(m).unwrap().pos;
+            let tl = launch(&mut w, SPARKLE, rem);
+            assert_eq!(stage(&w, m), Some(Stage::Pending));
+            assert_eq!((tl + off).rem_euclid(SPARKLE), 0, "set-up");
+            let rec = record(&mut w, m, tl + 90);
+            assert_clean_timeline(&rec, tl);
+            let landing = w.obj(m).unwrap().pos;
+            assert_ne!(landing.cell(), old.cell());
+            assert_eq!(
+                rec.sparkles,
+                expected(tl, tl + 2, tl + 65, old, landing),
+                "{name}, launch residue {rem}"
+            );
+            if off != 1 {
+                assert!(
+                    rec.sparkles.iter().any(|(t, _)| *t == tl + off),
+                    "{name}: a sparkle in t_L + {off}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn claim39a_l6_a_member_with_a_beam_sparkles_once_per_turn_and_not_after_its_phasing_end() {
+    // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns: the same sparkles with a beam attached, one per turn; after its phasing in has ended a member whose beam was locked before its departure sparkles only while it is being erased, so none while that beam stays attached; Switch: these rules hold in both settings of quirks.warp_departure_keeps_beam, for the states that arise in each: off, the lock is refused and the sparkles are those of a member with no beam) and S-0514 claims 3 and 18
+    for on in [true, false] {
+        for (rem, off) in RESIDUES {
+            let mut w = ready(&keeps_beam(on));
+            let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+            let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+            let old = w.obj(m).unwrap().pos;
+            let tl = launch(&mut w, SPARKLE, rem);
+            step(&mut w);
+            assert!(matches!(stage(&w, m), Some(Stage::Leaving(_))));
+            // The detonation of f's temporal projectile at the member, in flight at the launch,
+            // after the member's turn of t_L + 1 (claim 39a, The lock routes and The lock).
+            temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+            assert_eq!(temporal::holds(&w, f, m), on, "switch {on}");
+            let rec = record(&mut w, m, tl + 100);
+            assert_clean_timeline(&rec, tl);
+            assert_eq!(temporal::attached(&w, m), on, "the beam stays attached");
+            assert!(!temporal::erased(&w, m));
+            let landing = w.obj(m).unwrap().pos;
+            assert_eq!(
+                rec.sparkles,
+                expected(tl, tl + 2, tl + 65, old, landing),
+                "switch {on}, launch residue {rem}"
+            );
+            if off != 1 {
+                assert!(rec.sparkles.iter().any(|(t, _)| *t == tl + off));
+            }
+        }
+    }
+}
+
+#[test]
+fn claim39a_a_lock_before_the_members_turn_of_tl_plus_1_makes_that_turn_sparkle() {
+    // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns: its update of t_L + 1, in which it enters the leaving stage, makes none unless a beam was locked on it before that turn; its state before the turn's warp step decides) and S-0514 claim 18
+    let mut w = ready(&rules());
+    let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let old = w.obj(m).unwrap().pos;
+    let tl = launch(&mut w, SPARKLE, 23);
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::erased(&w, m));
+    let rec = record(&mut w, m, tl + 30);
+    assert_eq!(
+        rec.sparkles,
+        vec![(tl + 1, placed(old)), (tl + 25, placed(old))],
+        "a sparkle in t_L + 1, being erased before the warp step"
+    );
+}
+
+#[test]
+fn claim39a_a_later_lock_after_the_phasing_end_sparkles_again_once_per_turn() {
+    // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns: after its phasing in has ended the member sparkles only while it is being erased, that is from a later lock on; A lock after the departure) and S-0514 claim 18 (one sparkle per turn of an object being erased)
+    let mut w = ready(&rules());
+    let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+    let g = spawn(&mut w, "CART", ALPHA, -8, 6);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let tl = launch(&mut w, SPARKLE, 0);
+    step(&mut w);
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    run_through(&mut w, tl + 66);
+    assert_eq!(stage(&w, m), None);
+    let rec = record(&mut w, m, tl + 71);
+    assert!(rec.sparkles.is_empty(), "attached, not being erased");
+    temporal::deliver(&mut w, Some(g), Some(Target::Object(m)));
+    assert!(temporal::erased(&w, m), "being erased again");
+    let p = w.obj(m).unwrap().pos;
+    let from = w.tick;
+    let rec = record(&mut w, m, from + 50);
+    let want: Vec<(i32, Pos)> = (from..=from + 50)
+        .filter(|t| t.rem_euclid(SPARKLE) == 0)
+        .map(|t| (t, placed(p)))
+        .collect();
+    assert_eq!(rec.sparkles, want);
+}
+
+#[test]
+fn claim39a_a_member_phasing_in_and_being_erased_in_its_hold_sparkles_once() {
+    // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns: a member makes S-0514 claim 18's sparkle in each of its turns, one per turn, whether it is being erased, phasing in or both) and S-0514 claim 18
+    // A redirected landing gives a hold of the teleport delay, 7 (claims 37 and 40); the lock
+    // comes in the hold, after the departure, and the hold covers a sparkle tick.
+    let set_up = |rem: i32| {
+        let mut w = ready(&rules());
+        let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+        let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+        spawn(&mut w, "TOWER", BETA, 5, 5);
+        let tl = launch(&mut w, SPARKLE, rem);
+        until(&mut w, 120, |w| matches!(stage(w, m), Some(Stage::Hold(_))));
+        let Some(Stage::Hold(ta)) = stage(&w, m) else {
+            unreachable!()
+        };
+        (w, f, m, tl, ta)
+    };
+    // A probe run gives the hold's start after the launch; the run proper
+    // puts a sparkle tick three ticks into the hold.
+    let (_, _, _, tl0, ta0) = set_up(0);
+    let s = ta0 - tl0 + 3;
+    let (mut w, f, m, tl, ta) = set_up((-s).rem_euclid(SPARKLE));
+    assert_eq!(ta - tl, s - 3, "set-up");
+    assert!(
+        w.tick < ta + 3,
+        "set-up: the lock comes before the sparkle tick"
+    );
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::erased(&w, m));
+    let rec = record(&mut w, m, ta + 5);
+    assert!(
+        matches!(stage_after(&rec, ta + 3), Some(Stage::Hold(_))),
+        "set-up: still in the hold"
+    );
+    let at: Vec<i32> = rec.sparkles.iter().map(|(t, _)| *t).collect();
+    assert_eq!(at, vec![ta + 3], "one sparkle, not one per cause");
+}
+
+#[test]
+fn s0514_r14_claim18_the_sparkle_is_an_ordinary_animation_whose_creation_draw_precedes_the_warp_step()
+ {
+    // spec: S-0514 r14 claim 18 (the sparkle is an ordinary animation with the simulation effects S-0109 gives one, its playback draws included; a type whose creation takes a draw puts it in the scenario random stream's order before the warp step of a warp member's turn) and S-0513 claim 39a (the sparkle's draws come before the departure's warp-out animation); S-0109 claims 3 and 29
+    let mut r = rules();
+    // A random rate pair whose range holds more than one delay: one ranged
+    // creation draw each (S-0109 claim 3).
+    for n in ["SPARK", "WARPA"] {
+        r.sim.animations.get_mut(n).unwrap().random_rate = Some([450, 225]);
+    }
+    let mut w = ready(&r);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let tl = launch(&mut w, SPARKLE, 10);
+    run_through(&mut w, tl + 61);
+    assert_eq!(
+        (tl + 62).rem_euclid(SPARKLE),
+        0,
+        "set-up: the departure on a sparkle tick"
+    );
+    w.effects.clear();
+    step(&mut w);
+    assert!(superweapons::warp::departed(&w, m));
+    let made: Vec<(&str, bool, bool)> = w
+        .effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Anim {
+                name, delay, id, ..
+            } if name == "SPARK" || name == "WARPA" => {
+                Some((name.as_str(), delay.is_some(), id.is_some()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        made,
+        vec![("SPARK", true, true), ("WARPA", true, true)],
+        "the sparkle, an animation in play with its creation draw, before the warp-out animation"
+    );
+}
+
+// --- Drops in the warp's turns -----------------------------------------------------------
+
+/// Gives `m` a target and a destination directly, as an order would.
+fn give(w: &mut World, m: ObjectId, x: ObjectId) {
+    let o = w.obj_mut(m).unwrap();
+    o.target = Some(Target::Object(x));
+    o.dest = Some(Target::Cell(at(3, 9)));
+}
+
+fn target(w: &World, id: ObjectId) -> Option<Target> {
+    w.obj(id).unwrap().target
+}
+
+fn dest(w: &World, id: ObjectId) -> Option<Target> {
+    w.obj(id).unwrap().dest
+}
+
+#[test]
+fn claim39a_a_member_with_no_beam_drops_a_given_target_in_each_leaving_turn_the_expiry_included() {
+    // spec: S-0513 claim 39a (Drops: in each turn in which the member is still being erased after the turn's warp step, it clears its target and destination as S-0514 claim 17 gives: its updates from t_L + 1 to its expiry update in t_L + 61, with or without a beam) and claim 48 (a turn still in the leaving stage after its warp update, the wait expiry included, drops target and destination); claim 51
+    let mut w = ready(&rules());
+    let x = spawn(&mut w, "WALKER", ALPHA, -8, -8);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let tl = launch(&mut w, 1, 0);
+    for t in [tl + 10, tl + 40, tl + 60] {
+        run_through(&mut w, t);
+        give(&mut w, m, x);
+        step(&mut w);
+        assert!(superweapons::being_erased(&w, m));
+        assert_eq!(
+            (target(&w, m), dest(&w, m)),
+            (None, None),
+            "dropped in t_L + {}",
+            t + 1 - tl
+        );
+    }
+    assert_eq!(stage(&w, m), Some(Stage::Expired), "the expiry update");
+}
+
+#[test]
+fn claim39a_a_member_with_no_beam_keeps_a_given_target_from_its_departure_update() {
+    // spec: S-0513 claim 39a (Drops: only a turn in which the member is still being erased after the warp step, or whose turns are cut short by a beam, drops; the departure update ends its being erased) and claim 51 (the warp work is the whole turn: no other clearing)
+    let mut w = ready(&rules());
+    let x = spawn(&mut w, "WALKER", ALPHA, -8, -8);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let tl = launch(&mut w, 1, 0);
+    for t in [tl + 61, tl + 62, tl + 63] {
+        run_through(&mut w, t);
+        give(&mut w, m, x);
+        step(&mut w);
+        assert_eq!(
+            target(&w, m),
+            Some(Target::Object(x)),
+            "kept in t_L + {}",
+            t + 1 - tl
+        );
+    }
+}
+
+/// A member being erased in its leaving stage by `f`'s beam, locked after
+/// its turn of t_L + 1; returns the world after tick `upto`.
+fn locked(r: &Ruleset, name: &str, upto: i32) -> (World, ObjectId, ObjectId, ObjectId, i32) {
+    let mut w = ready(r);
+    let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+    let x = spawn(&mut w, "WALKER", ALPHA, -8, -8);
+    let m = spawn(&mut w, name, BETA, 0, 0);
+    let tl = launch(&mut w, 1, 0);
+    step(&mut w);
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::erased(&w, m));
+    run_through(&mut w, tl + upto);
+    (w, f, x, m, tl)
+}
+
+#[test]
+fn claim39a_a_vehicle_member_with_a_beam_drops_in_its_departure_and_off_map_turns() {
+    // spec: S-0513 claim 39a (Drops: the departure update ends its being erased, so it makes this drop there as a vehicle or aircraft with a beam attached, which Departure gives; Departure: while it phases in, a vehicle with a beam attached has its turns cut short) and claim 51 (S-0514 claim 17's clearing after the warp work in each turn in which the member is a vehicle or aircraft phasing in with a beam attached); S-0514 claim 17
+    let (mut w, _, x, m, tl) = locked(&rules(), "BUGGY", 61);
+    for t in [tl + 61, tl + 62, tl + 63] {
+        run_through(&mut w, t);
+        give(&mut w, m, x);
+        step(&mut w);
+        assert!(!temporal::erased(&w, m));
+        assert_eq!(
+            (target(&w, m), dest(&w, m)),
+            (None, None),
+            "dropped in t_L + {}",
+            t + 1 - tl
+        );
+    }
+}
+
+#[test]
+fn claim39a_an_infantry_member_with_a_beam_drops_off_the_map_only_with_the_switch_off() {
+    // spec: S-0513 claim 39a and Edge cases (quirks.phase_in_beam_spares_infantry: on, an infantry member phasing in with a beam attached and not being erased is not cut short and makes no drop; off, it is cut short and drops) and claim 51 (the clearing after the warp work for an infantry member in that state with the switch off); S-0514 claim 17
+    for spares in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.phase_in_beam_spares_infantry = spares;
+        let (mut w, _, x, m, tl) = locked(&r, "JUMPER", 62);
+        assert!(superweapons::warp::departed(&w, m));
+        give(&mut w, m, x);
+        step(&mut w);
+        assert_eq!(stage(&w, m), Some(Stage::Placed));
+        assert_eq!(
+            target(&w, m).is_some(),
+            spares,
+            "switch {spares}: kept only when not cut short (t_L + 63 = {})",
+            tl + 63
+        );
+    }
+}
+
+#[test]
+fn claim39a_a_lock_while_the_member_waits_to_land_makes_it_drop_whatever_its_kind() {
+    // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns: a lock while it waits to land, or in its placement or arrival-effects update, makes it being erased again, with the drop in each turn from then on, for every kind of member) and S-0514 r13 claim 1 (a departed member off the map is an ordinary object target for the lock)
+    for name in ["JUMPER", "BUGGY"] {
+        let mut w = ready(&rules());
+        let f = spawn(&mut w, "CART", ALPHA, -8, 8);
+        let x = spawn(&mut w, "WALKER", ALPHA, -8, -8);
+        let m = spawn(&mut w, name, BETA, 0, 0);
+        let tl = launch(&mut w, 1, 0);
+        run_through(&mut w, tl + 62);
+        assert!(superweapons::warp::departed(&w, m));
+        assert!(!temporal::attached(&w, m), "no beam before");
+        temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+        assert!(temporal::erased(&w, m), "{name}: being erased");
+        for k in [63, 64] {
+            give(&mut w, m, x);
+            step(&mut w);
+            assert_eq!(
+                (target(&w, m), dest(&w, m)),
+                (None, None),
+                "{name}: dropped in t_L + {k}"
+            );
+        }
+        assert!(matches!(stage(&w, m), Some(Stage::Hold(_))));
+        assert_eq!(w.tick, tl + 65);
+    }
+}
+
+// --- The firer while the member waits to land (SW12 part l3, Q-2317) --------------------
+
+/// SW12 part l3's set-up on our engine: a firer `f` of type `name`, placed
+/// after the launch within its weapon's range of the member's old position,
+/// whose beam is locked on the member after the member's turn of t_L + 1
+/// and which is then given *attack* on it. An unprotected TOWER of the
+/// member's owner on the landing cell redirects the landing (claim 37), so
+/// the member waits to land for more than one tick.
+struct Waiting {
+    w: World,
+    f: ObjectId,
+    m: ObjectId,
+    /// t_L.
+    tl: i32,
+    /// The departure tick.
+    dep: i32,
+    /// The appearance tick.
+    app: i32,
+}
+
+fn waiting_at(r: &Ruleset, name: &str, fx: i32, fy: i32, rem: i32) -> Waiting {
+    let mut w = ready(r);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    spawn(&mut w, "TOWER", BETA, 5, 5);
+    let tl = launch(&mut w, PERIOD, rem);
+    let f = spawn(&mut w, name, ALPHA, fx, fy);
+    step(&mut w);
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::holds(&w, f, m));
+    let t = w.tick;
+    let o = w.obj_mut(f).unwrap();
+    o.beh.force(Behaviour::Attack, t, false);
+    o.target = Some(Target::Object(m));
+    o.combat.opportunity = false;
+    o.targeting_timer = t + 400;
+    run_through(&mut w, tl + 61);
+    assert_eq!(stage(&w, m), Some(Stage::Expired));
+    // The departure and appearance ticks, read from a copy.
+    let mut p = w.clone();
+    let dep = until(&mut p, 5, |p| superweapons::warp::departed(p, m)) - 1;
+    let app = until(&mut p, 30, |p| stage(p, m) == Some(Stage::Placed)) - 1;
+    assert_eq!(dep, tl + 62, "departs in t_L + 62");
+    assert!(
+        app > dep + 1,
+        "set-up: it waits to land for more than one tick"
+    );
+    Waiting {
+        w,
+        f,
+        m,
+        tl,
+        dep,
+        app,
+    }
+}
+
+/// As [`waiting_at`], with the launch chosen so that the tick after the
+/// departure, in which the member is off the map at the start of its
+/// firer's turn, is a check tick of S-0309 claim 29.
+fn waiting(r: &Ruleset, name: &str, fx: i32, fy: i32) -> Waiting {
+    let probe = waiting_at(r, name, fx, fy, 0);
+    let rem = (probe.tl - probe.dep - 1).rem_euclid(PERIOD);
+    let run = waiting_at(r, name, fx, fy, rem);
+    assert!(held_check(run.dep + 1), "set-up: a check tick off the map");
+    run
+}
+
+fn shots_by(w: &World, id: ObjectId) -> usize {
+    w.effects
+        .iter()
+        .filter(|e| matches!(e, Effect::Shot { firer, .. } if *firer == id))
+        .count()
+}
+
+/// The firer's record of SW12 part l3 for Q-2317: target, behaviour, cell
+/// and body and turret facing.
+fn firer_state(
+    w: &World,
+    f: ObjectId,
+) -> (
+    Option<Target>,
+    Option<Behaviour>,
+    glasnost_map::CellXY,
+    impl PartialEq + std::fmt::Debug + use<>,
+) {
+    let o = w.obj(f).unwrap();
+    (
+        o.target,
+        o.beh.current,
+        o.pos.cell(),
+        (o.body.target, o.turret.target),
+    )
+}
+
+/// The record from the departure update to the appearance update, both
+/// included: in each tick the firer keeps the member, stays in *attack*,
+/// makes no shot and keeps its cell and facing; its firing check about the
+/// member answers *rearming*; the beam is attached after the appearance.
+fn assert_kept_while_waiting(s: Waiting) {
+    let Waiting {
+        mut w,
+        f,
+        m,
+        tl,
+        dep,
+        app,
+    } = s;
+    let before = firer_state(&w, f);
+    assert_eq!(before.0, Some(Target::Object(m)));
+    assert_eq!(before.1, Some(Behaviour::Attack));
+    for t in dep..=app {
+        assert_eq!(w.tick, t);
+        w.effects.clear();
+        step(&mut w);
+        assert_eq!(shots_by(&w, f), 0, "no shot in t_L + {}", t - tl);
+        let now = firer_state(&w, f);
+        if t < app {
+            assert_eq!(now, before, "unchanged in t_L + {}", t - tl);
+        } else {
+            // The appearance tick: the record is taken just after the
+            // member's update, and the firer's own turn later in the tick
+            // may already aim at the landing point (claim 39a: the first
+            // change comes at the appearance). Target, behaviour and cell
+            // are unchanged.
+            assert_eq!(
+                (now.0, now.1, now.2),
+                (before.0, before.1, before.2),
+                "unchanged in the appearance tick t_L + {}",
+                t - tl
+            );
+        }
+        if superweapons::warp::departed(&w, m) {
+            assert_eq!(
+                check(&w, f, Some(Target::Object(m)), 0, true),
+                Answer::Rearming,
+                "S-0514 claim 19's rearming while off the map"
+            );
+        }
+    }
+    assert_eq!(stage(&w, m), Some(Stage::Placed), "appeared");
+    assert!(
+        temporal::holds(&w, f, m),
+        "the beam is attached after the appearance"
+    );
+}
+
+fn held_check(t: i32) -> bool {
+    glasnost_sim::combat::held::check_tick(t)
+}
+
+#[test]
+fn claim39a_l3_an_infantry_firer_keeps_a_member_that_waits_to_land_with_its_turns_unchanged() {
+    // spec: S-0513 claim 39a (The firer, Q-2317: while the member waits to land, from its departure update to its appearance, an infantry or vehicle firer whose beam is attached to it, within its weapon's range of its old position, whose firing check answers rearming, keeps it as its target and its turns go on as before: no shot, S-0309 claim 29's check keeps it, its range and aim read the old position, so it neither moves nor turns, its behaviour stays) and Changes for S-0309 claim 27 (the departure is not claim 27's drop); S-0514 claim 19
+    let mut r = rules();
+    // The WALKER's Rifle (warhead SA) is a temporal weapon here.
+    r.sim.warheads.get_mut("SA").unwrap().temporal = Some(true);
+    assert_kept_while_waiting(waiting(&r, "WALKER", -2, -2));
+}
+
+#[test]
+fn claim39a_a_vehicle_firer_keeps_a_member_that_waits_to_land_with_its_turns_unchanged() {
+    // spec: S-0513 claim 39a (The firer, Q-2317: the same for a vehicle firer, unmeasured) and S-0514 claim 19
+    assert_kept_while_waiting(waiting(&rules(), "CART", -3, -2));
+}
+
+#[test]
+fn claim39a_a_deactivated_vehicle_firer_drops_a_member_that_waits_to_land_at_the_check() {
+    // spec: S-0513 claim 39a (The firer: with an outranking illegal, such as a deactivated firer's, S-0309 claim 29's check drops the member as its target, as before the departure; dropping the target does not itself release the beam) and S-0301 claim 9 (deactivated firers within rank 4); S-0514 claim 14
+    let Waiting {
+        mut w, f, m, dep, ..
+    } = waiting(&rules(), "CART", -3, -2);
+    run_through(&mut w, dep);
+    assert!(superweapons::warp::departed(&w, m));
+    assert_eq!(target(&w, f), Some(Target::Object(m)));
+    w.obj_mut(f).unwrap().econ.building.unit_disabled = true;
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, false),
+        Answer::Illegal,
+        "the deactivated firer's illegal outranks rearming"
+    );
+    run_through(&mut w, dep + 1);
+    assert!(superweapons::warp::departed(&w, m));
+    assert_eq!(target(&w, f), None, "dropped at the check tick");
+    assert!(temporal::holds(&w, f, m), "the drop releases no beam");
+}
