@@ -602,6 +602,8 @@ pub fn layer_refile(w: &mut crate::world::World, object: ObjectId) {
     // spec: S-0501 claim 48 (a) and (c) (an aircraft that a factory release left above its pad stays filed in the ground render layer until a re-file: a landing or a crash, S-0102 claim 4)
     if let Some(a) = w.obj_mut(object).and_then(|o| o.air.as_mut()) {
         a.ground_filed = false;
+        // spec: S-0306 r65 claim 17 (an aircraft member whose type cannot land keeps the ground render layer while it flies, until a crash: its next re-file)
+        a.warp_filed = false;
     }
     w.effects.push(Effect::LayerMoment {
         object,

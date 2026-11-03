@@ -133,11 +133,12 @@ fn left(w: &World, x: ObjectId) -> bool {
 /// as no target, so no firing check is asked about it and no shot is fired
 /// at it or at its place.
 pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
-    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 r89 claim 39a (The firer, Q-2317 answered: an infantry or vehicle firer whose beam is attached to a departed member keeps it as its target, its firing check answering rearming, its range and aim reading the old position) and S-0309 r95 claim 27 (while the member waits to land such a firer within range keeps it, makes no shot at it and neither moves nor turns for it); a building firer: interim Q-2376 question 1, no target as our own rule; an aircraft firer: the aircraft specs', the same handling meanwhile
+    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 r89 claim 39a (The firer, Q-2317 answered: an infantry or vehicle firer whose beam is attached to a departed member keeps it as its target, its firing check answering rearming, its range and aim reading the old position) and S-0309 r95 claim 27 (while the member waits to land such a firer within range keeps it, makes no shot at it and neither moves nor turns for it); S-0513 r91 claim 39a (Q-2376 answered: a building firer without the SAM flag keeps it too, and its attack processing treats it as a target, not as none, so it takes S-0215 claim 32's rearming row and not the no-target row; an infantry or vehicle firer beyond range of the old position keeps it as for a target on the map there) and r91's Changes for S-0309 claim 27; a SAM-flag building reads its target in its own rows (`behave::sam_attack`); an aircraft firer: the aircraft specs' (S-0513 claim 39a), no target here meanwhile as our own rule
     o.target.filter(|t| match *t {
         Target::Object(x) => {
             !left(w, x)
-                || (matches!(o.kind, Kind::Infantry | Kind::Vehicle) && beam_held(w, o.id, x))
+                || (matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Building)
+                    && beam_held(w, o.id, x))
         }
         Target::Cell(_) => true,
     })
@@ -318,7 +319,7 @@ pub(crate) fn turn_start_drop(w: &mut World, id: ObjectId) {
     let Some(Target::Object(x)) = w.obj(id).and_then(|o| o.target) else {
         return;
     };
-    // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered, no longer an interim: an infantry or vehicle firer whose beam is attached to the member, within range of its old position, keeps it as its target from the departure to the appearance; Release: the warp is no release cause) and S-0514 claim 14; S-0309 r95 claim 27 (the departure is not this drop for a firer whose temporal beam is attached); a building firer and a firer beyond range: interim Q-2376, kept as well; an aircraft firer: the aircraft specs', the same meanwhile
+    // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered, no longer an interim: an infantry or vehicle firer whose beam is attached to the member, within range of its old position, keeps it as its target from the departure to the appearance; Release: the warp is no release cause) and S-0514 claim 14; S-0309 r95 claim 27 (the departure is not this drop for a firer whose temporal beam is attached); S-0513 r91 claim 39a (Q-2376 answered: a building firer, with or without the SAM flag, keeps it while it waits to land, and so does an infantry or vehicle firer beyond its weapon's range of the old position) and r91's Changes for S-0309 claim 27; an aircraft firer: the aircraft specs' (S-0513 claim 39a), kept here meanwhile as our own rule
     if !left(w, x) || beam_held(w, id, x) {
         return;
     }

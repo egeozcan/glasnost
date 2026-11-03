@@ -350,7 +350,7 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         if b.building.sam {
             return sam_attack(w, id);
         }
-        // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
+        // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step); S-0513 r91 claim 39a (Q-2376 answered: a departed warp member that the building's temporal beam holds is a target here, so the building takes the rearming row, no shot, the 2-tick delay and a rotation towards the old position, and no guard is queued for the departure)
         let Some(t) = crate::combat::held::firing_target(w, &o) else {
             // spec: S-0518 claim 10 (a prism master's attack processed with no target resets its support count)
             crate::linked::reset_count(w, id);
@@ -544,6 +544,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
         return 1;
     };
     let tick = w.tick;
+    // spec: S-0513 r91 claim 39a (Q-2376 answered: a SAM-flag building whose beam holds a warp member that waits to land takes these rows as for a target on the map at the member's old position, at the world height it had there, which the departure keeps; so it keeps an aircraft member above height 0, its rearming one of the aimed stage's other answers, keeps any member while the power row applies, and otherwise drops the member and starts guard)
     let suitable = matches!(o.target, Some(Target::Object(x))
         if w.obj(x).is_some_and(|t| t.kind == Kind::Aircraft && t.pos.z != 0));
     let stage = o.beh.progress;

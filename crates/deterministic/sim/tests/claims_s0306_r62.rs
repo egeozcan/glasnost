@@ -3,6 +3,8 @@
 //! member that has departed or is phasing in, the deck count after a
 //! refused placement, and the ground render layer of a warp member, on
 //! synthetic rules (`tests/sw_common`). Every name and number is invented.
+//! Revision 65's ground render layer after the arrival hold (M8 step A3
+//! intake 84) is the last section.
 //!
 //! As in `claims_s0306_r57`, the member's update (`superweapons::warp::turn`)
 //! is set apart from the projectile's (`combat::projectile::turn`), as
@@ -873,4 +875,129 @@ fn quirk_warp_deck_departure_airborne_off_stands_on_its_departure_deck_through_a
         "after a failed check and its redirect"
     );
     assert!(!aa_finds(&w, v));
+}
+
+// --- Revision 65: the ground render layer after the arrival hold -------------------
+
+/// The ruleset with LANDER, a twin of the strike aircraft JET whose type can
+/// land (JET's cannot).
+fn rules_r65() -> Ruleset {
+    let mut r = rules();
+    let mut t = r.sim.aircraft["JET"].clone();
+    t.econ.landable = Some(true);
+    r.sim.aircraft.insert("LANDER".into(), t);
+    register(&mut r, "aircraft", "LANDER");
+    r
+}
+
+/// An aircraft of type `name` of BETA standing at (2, 2), a warp member in
+/// its arrival hold, whose update then ends the hold (S-0513 claim 40,
+/// with no held delay: the tick after the arrival effects).
+fn after_hold(name: &str) -> (World, ObjectId) {
+    let mut w = ready(&rules_r65());
+    let a = testkit::spawn(&mut w, Kind::Aircraft, name, BETA.0, at(2, 2), 0);
+    assert_eq!(w.height_above_surface(a), 0, "{name}: on the ground");
+    expire(&mut w, a, at(2, 2));
+    let t = w.tick;
+    w.obj_mut(a).unwrap().sw.warp.as_mut().unwrap().stage = Stage::Hold(t - 1);
+    assert!(warp::in_ground_layer(&w, a), "{name}: in the hold");
+    assert!(!warp::turn(&mut w, a));
+    assert!(!warp::is_member(&w, a), "{name}: the hold has ended");
+    (w, a)
+}
+
+/// Raises the aircraft 600 leptons, as its own movement would in flight.
+fn up(w: &mut World, a: ObjectId) {
+    let p = pos(w, a);
+    w.obj_mut(a).unwrap().pos = Pos::new(p.x, p.y, p.z + 600);
+}
+
+/// Whether a straight ranged shot passing by the airborne target, last 70
+/// short of its reference point and then 80 past it, detonates at its own
+/// position (claim 20 (c)'s threshold 42) rather than being moved onto the
+/// target point (threshold 128), as in the revision 62 test above.
+fn threshold_42(w: &World, a: ObjectId) -> bool {
+    let mut w = w.clone();
+    assert!(projectile::target_airborne(&w, a), "airborne");
+    let f = spawn(&mut w, "BUGGY", ALPHA, -6, 2);
+    let rp = w.reference_point(a);
+    w.cells.leave_both(rp.cell(), a);
+    let id = shoot(
+        &mut w,
+        f,
+        "Passer",
+        Target::Object(a),
+        Pos::new(rp.x - 370, rp.y, rp.z),
+        [150, 0, 0],
+    );
+    w.projectiles.get_mut(&id).unwrap().stored = rp;
+    let Out::Detonated(p) = fly(&mut w, id) else {
+        panic!("no detonation")
+    };
+    p != rp
+}
+
+/// Whether a temporal detonation from TIMER on the target locks it
+/// (S-0514 claim 1: only an object of the ground render layer).
+fn erasable(w: &World, a: ObjectId) -> bool {
+    let mut w = w.clone();
+    let f = spawn(&mut w, "TIMER", ALPHA, -2, 2);
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(a)));
+    temporal::erased(&w, a)
+}
+
+#[test]
+fn r65_claim17_an_aircraft_member_whose_type_cannot_land_keeps_the_ground_layer_in_flight() {
+    // spec: S-0306 r65 claim 17 (after its arrival hold a member leaves the ground render layer only when its own movement raises it, except an aircraft whose type cannot land, which keeps the ground layer while it flies, until a crash), claim 20 (c) (threshold 42 for a target airborne in the ground render layer) and S-0514 claim 1 (an object target of the ground render layer)
+    let (mut w, a) = after_hold("JET");
+    up(&mut w, a);
+    assert!(!temporal::ground_layer(&w, a), "its own rows: in the air");
+    assert!(warp::in_ground_layer(&w, a), "kept in the ground layer");
+    assert!(threshold_42(&w, a), "claim 20 (c): threshold 42");
+    assert!(erasable(&w, a), "S-0514 claim 1: erasable");
+}
+
+#[test]
+fn r65_claim17_an_aircraft_member_whose_type_can_land_leaves_the_ground_layer_when_raised() {
+    // spec: S-0306 r65 claim 17 (after its hold the member stands at no height above its surface, so its own rows give the ground layer; it leaves that layer when its own movement raises it) and claim 20 (c) (threshold 128 for a target airborne in another render layer)
+    let (mut w, a) = after_hold("LANDER");
+    assert!(temporal::ground_layer(&w, a), "at no height: ground layer");
+    assert!(
+        !warp::in_ground_layer(&w, a),
+        "no warp layer after the hold"
+    );
+    up(&mut w, a);
+    assert!(!warp::in_ground_layer(&w, a));
+    assert!(!temporal::ground_layer(&w, a), "raised: another layer");
+    assert!(!threshold_42(&w, a), "claim 20 (c): threshold 128");
+    assert!(!erasable(&w, a), "S-0514 claim 1: not erasable in the air");
+}
+
+#[test]
+fn r65_claim17_a_crash_ends_the_kept_ground_layer() {
+    // spec: S-0306 r65 claim 17 (an aircraft member whose type cannot land keeps the ground layer while it flies, until a crash) and S-0102 claim 4 (every tick of an aircraft's crash fall re-files)
+    let (mut w, a) = after_hold("JET");
+    up(&mut w, a);
+    assert!(warp::in_ground_layer(&w, a));
+    assert!(glasnost_sim::air::start_crash(&mut w, a, true));
+    step(&mut w);
+    assert!(w.obj(a).is_some(), "still falling");
+    assert!(!warp::in_ground_layer(&w, a), "re-filed by its crash fall");
+}
+
+#[test]
+fn r65_claim17_a_ground_member_is_in_the_ground_layer_by_its_own_rows_after_the_hold() {
+    // spec: S-0306 r65 claim 17 (from the launch until its own movement applies again after its hold a member is in the ground render layer; a member that does not move between bridge decks then stands at no height above its surface, so its own rows give it)
+    let mut w = ready(&rules_r65());
+    let v = spawn(&mut w, "BUGGY", BETA, 2, 2);
+    expire(&mut w, v, at(2, 2));
+    let t = w.tick;
+    w.obj_mut(v).unwrap().sw.warp.as_mut().unwrap().stage = Stage::Hold(t - 1);
+    assert!(!warp::turn(&mut w, v));
+    assert!(
+        !warp::in_ground_layer(&w, v),
+        "no warp layer after the hold"
+    );
+    assert!(temporal::ground_layer(&w, v), "its own rows");
+    assert!(erasable(&w, v));
 }

@@ -257,6 +257,13 @@ pub struct AirState {
     /// cleared at its next re-file moment. S-0309 claim 7's ground-layer
     /// pass and the drawing read it.
     pub ground_filed: bool,
+    /// Kept in the ground render layer after a superweapon warp (S-0306
+    /// claim 17, revision 65): set when the arrival hold of a member whose
+    /// type cannot land ends, so that it keeps that layer while it flies;
+    /// cleared at its next re-file moment, which for such a type is only a
+    /// crash (`effects::layer_refile`). Read through
+    /// `superweapons::warp::in_ground_layer`.
+    pub warp_filed: bool,
     /// The start tick of the *move* whose first processing gave the
     /// aircraft its destination, until that move's next processing gives
     /// its flight point once more (claim 40).
