@@ -1185,7 +1185,7 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
     }
     // spec: S-0518 claim 15 (an infantry unit whose charging mark is set first runs an automatic range search, without the timer gate)
     crate::linked::break_off(w, id);
-    // spec: S-0309 r94's Changes for S-0304 claim 2 (Q-2263 answered: claim 29 covers every holder of every owner, so a unit drops an illegal target at that claim's periodic check, a healer also at its firing step's reply; the attack processing's drop is a building's only, S-0215 claim 32, for every owner)
+    // spec: S-0304 r6 claim 2 (This holds for every actor, whatever its owner) and S-0309 r94's Changes for S-0304 claim 2 (Q-2263 answered: claim 29 covers every holder of every owner, so a unit drops an illegal target at that claim's periodic check, a healer also at its firing step's reply; the attack processing's drop is a building's only, S-0215 claim 32, for every owner)
     if w.obj(id).is_some_and(|o| o.target.is_none()) {
         // spec: S-0215 claim 23 (fall-back: no target)
         fall_back(w, id, false);

@@ -240,7 +240,7 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
         // spec: S-0516 claim 11 (a) (cloaked: the infantry unit starts uncloaking)
         crate::cloak::machine::firing_answer(w, id, slot, t, answer);
         if answer == Answer::Illegal {
-            // spec: S-0309 r70's Changes for S-0310 claim 11 (an infantry unit whose default weapon heals replies to illegal in its own firing step, in each of its turns: it drops a target that is not infantry or is at full health, and keeps an infantry target below full health and does nothing in that step)
+            // spec: S-0310 r8 claim 11, from S-0309 r70's Changes for S-0310 claim 11 (an infantry unit whose default weapon heals replies to illegal in its own firing step, in each of its turns: it drops a target that is not infantry or is at full health, and keeps an infantry target below full health and does nothing in that step)
             let default_heals = slot_weapon(w, id, choose_slot(w, id, None))
                 .is_some_and(|x| rules.combat.weapon(x).damage < 0);
             if default_heals {

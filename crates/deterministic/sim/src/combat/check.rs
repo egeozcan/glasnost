@@ -340,13 +340,16 @@ pub fn check(
 /// ordinary check answers *rearming*, *out of ammunition* or *cloaked*
 /// ahead of the target tests of rank 9 (S-0301 claim 9; S-0304 claim 2),
 /// so it cannot answer that; without force-fire the attack cursor does not
-/// appear on an object those tests make illegal (S-0304 claim 2).
+/// appear on an object those tests make illegal (S-0304 claim 2). It also
+/// passes over the materialising firer's *rearming* of rank 4 (S-0301 r69
+/// claim 9), a reason of the moment too (interim under Q-2356).
 pub fn check_lasting(w: &World, firer: ObjectId, target: Option<Target>, slot: usize) -> Answer {
     answer(w, firer, target, slot, false, false)
 }
 
-/// The firing check, with the reasons of ranks 5 to 8 asked (`moment`) or
-/// passed over (S-0214 claim 6 (e)).
+/// The firing check, with the reasons of ranks 5 to 8 and the materialising
+/// *rearming* asked (`moment`) or passed over (S-0214 claim 6 (e); the
+/// materialising answer under Q-2356).
 fn answer(
     w: &World,
     firer: ObjectId,
@@ -371,32 +374,7 @@ fn answer(
     if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
         return Answer::Busy;
     }
-    // spec: S-0301 claim 9 (grip refusals within rank 4) and S-0607 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, which gives the same answer, and the refusal of a firer bound to a slave master, which our engine does not have, precede it)
-    if weapon.is_some()
-        && let Some(Target::Object(x)) = target
-        && crate::lift::grips(w, firer, x)
-    {
-        return Answer::Rearming;
-    }
-    // spec: S-0301 claim 9 (Deactivated firers within rank 4) and S-0405 claim 20: a deactivated vehicle gets illegal for every target and weapon, a force-fire target included; the refusal yields to the slave-bound firer's illegal (not in our engine), the own-gripped-target rearming (above) and the materialising firer's rearming, and outranks every other rank-4 answer
-    if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
-        if crate::teleport::phasing_in(w, firer) {
-            // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
-            return Answer::Rearming;
-        }
-        return Answer::Illegal;
-    }
-    // spec: S-0608 claim 3 (Precedence relevant to drain: the own-current-building refusal follows the own-gripped-unit and materialisation rearming answers and precedes the held-temporal-target rearming, hidden-target impossible, absence-of-weapon and power-sensitive-weapon impossible, the other weapon's live-effect impossible and the conditional magnetic-wave rearming)
-    if let Some(Target::Object(x)) = target
-        && own_drained_building(w, firer, x)
-    {
-        if crate::teleport::phasing_in(w, firer) {
-            // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0608 claim 3 (materialisation precedes the own-current-building refusal)
-            return Answer::Rearming;
-        }
-        return Answer::Illegal;
-    }
-    // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
+    // spec: S-0310 claim 11 and S-0301 r69 claim 9 (A materialising firer within rank 4: an infantry healer gets illegal when its target is absent, not infantry or at full health; the answer outranks every answer of the general part, the materialising and own-gripped-unit rearming among them, as one of the answers an infantry firer is asked first)
     if kind == Kind::Infantry
         && let Some(wp) = weapon
         && healing(w, wp)
@@ -406,6 +384,35 @@ fn answer(
         if !ok {
             return Answer::Illegal;
         }
+    }
+    // The keep-acting illegal (S-0301 r69 claim 9: an infantry firer whose
+    // type has the keep-acting flag, against a vehicle target melee-linked
+    // to another object) is asked here, before the materialising rearming;
+    // it needs S-0214's melee link, which no topic of our engine sets yet.
+    // spec: S-0301 r69 claim 9 (A materialising firer within rank 4: rearming for every target and weapon; it yields only to the slave-bound firer's illegal, not in our engine, for vehicles to ranks 1 to 3 and the tube transit, and for infantry to the answers an infantry firer is asked first, above; it outranks every other rank-4 answer, among them the projectile refusals of S-0306 claim 23, the hidden-target impossible, the parasite warhead's illegal against a protected object, the empty slot's impossible and the own-gripped-unit rearming) and S-0207 claim 20 (f) (phasing in)
+    // The attack rule's check (`moment` off) passes over it as a reason of
+    // the moment, as it passes over ranks 5 to 8, so the target tests decide
+    // there: interim under Q-2356 (S-0214 claim 6 (e), "other reasons for not
+    // firing at this moment ... do not count").
+    if moment && crate::teleport::phasing_in(w, firer) {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 r69 claim 9 (Grip refusals within rank 4) and S-0607 r38 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, the refusal of a firer bound to a slave master, which our engine does not have, and for an infantry lifter the answers an infantry firer is asked first precede it, all asked above)
+    if weapon.is_some()
+        && let Some(Target::Object(x)) = target
+        && crate::lift::grips(w, firer, x)
+    {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 claim 9 (Deactivated firers within rank 4) and S-0405 claim 20: a deactivated vehicle gets illegal for every target and weapon, a force-fire target included; the refusal yields to the slave-bound firer's illegal (not in our engine), the materialising firer's rearming and the own-gripped-target rearming (both above), and outranks every other rank-4 answer
+    if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
+        return Answer::Illegal;
+    }
+    // spec: S-0608 claim 3 (Precedence relevant to drain: the own-current-building refusal follows the own-gripped-unit and materialisation rearming answers, both above, and precedes the held-temporal-target rearming, hidden-target impossible, absence-of-weapon and power-sensitive-weapon impossible, the other weapon's live-effect impossible and the conditional magnetic-wave rearming)
+    if let Some(Target::Object(x)) = target
+        && own_drained_building(w, firer, x)
+    {
+        return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 (no weapon in the slot: impossible)
     let Some(weapon) = weapon else {
@@ -457,10 +464,6 @@ fn answer(
     {
         return Answer::Impossible;
     }
-    // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
-    if crate::teleport::phasing_in(w, firer) {
-        return Answer::Rearming;
-    }
     // spec: S-0301 claim 9 rank 4 and S-0514 claim 19 (a firer that already holds this very target with a temporal weapon: rearming)
     if let Some(Target::Object(x)) = target
         && r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
@@ -474,7 +477,7 @@ fn answer(
         // spec: S-0608 claim 3 (Precedence relevant to drain: the draining-weapon refusals (b) and (c) follow the held-temporal-target, hidden-target, absence-of-weapon and power-sensitive-weapon answers and precede the berserk-warhead target refusals, projectile eligibility, the conditional magnetic-wave refusal, the other weapon's live-effect refusal and the empty-spawner rearming; their order among reasons that all answer illegal is not observable)
         return Answer::Illegal;
     }
-    // spec: S-0513 r62 claim 39 and its Changes for S-0301 (Q-2213 answered: a target that has a superweapon warp pending, from the launch until its departure, answers illegal for every weapon, a temporal weapon included; the test is on the pending warp itself, apart from being erased, so another firer's beam on the member does not change it; rank 4, after every other rank-4 reason, the held-temporal-target rearming of S-0514 claim 19 above included, except the spawner-weapon answers, the other weapon's live-effect impossible, every row of S-0306 claim 23 and the magnetic-beam rearming against another target, which it outranks, and ahead of ranks 5 and 7 to 16; the earlier projectile and berserk rows also answer illegal, so their order before it is not observable)
+    // spec: S-0301 r69 claim 9 (Targets with a superweapon warp pending within rank 4) and S-0513 r62 claim 39 (Q-2213 answered: a target that has a superweapon warp pending, from the launch until its departure, answers illegal for every weapon, a temporal weapon included; the test is on the pending warp itself, apart from being erased, so another firer's beam on the member does not change it; rank 4, after every other rank-4 reason, the held-temporal-target rearming of S-0514 claim 19 above included, except the spawner-weapon answers, the other weapon's live-effect impossible, every row of S-0306 claim 23 and the magnetic-beam rearming against another target, which it outranks, and ahead of ranks 5 and 7 to 16; the earlier projectile and berserk rows also answer illegal, so their order before it is not observable)
     // The sinking, falling, deploy-transition, seized-firer and S-0517
     // magnetic-beam refusals below also answer illegal, so their place after
     // this reason is not observable.

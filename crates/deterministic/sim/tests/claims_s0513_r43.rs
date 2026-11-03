@@ -505,7 +505,7 @@ fn claim39_holders_of_a_member_killed_by_its_landing_check_draw_after_the_warp_o
 
 #[test]
 fn claim39_the_own_jump_drops_with_no_timer_draw() {
-    // spec: S-0513 claim 39 and its Changes for S-0207 claim 20 (e) (the teleporting locomotor's own jump never gives a holder the ranged draw over 4 to 8 ticks: a holder that drops the jumper keeps its timer, whatever it shows)
+    // spec: S-0207 r83 claim 20 (e) (these drops are not S-0309 claim 27's or claim 28's, so they take no targeting-timer draw, whatever a holder's timer shows) and S-0513 claim 39 and its Changes for S-0207 claim 20 (e) (the teleporting locomotor's own jump never gives a holder the ranged draw over 4 to 8 ticks: a holder that drops the jumper keeps its timer, whatever it shows)
     let mut r = rules();
     let mut tele = r.sim.vehicles["CART"].clone();
     tele.locomotor = Some(glasnost_rules::sim::Locomotor::Teleport);

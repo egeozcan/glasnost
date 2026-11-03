@@ -1537,7 +1537,7 @@ fn explode(
     // spec: S-0516 claim 31 (a disguise-flag warhead's projectile does no damage to the target)
     let area = special.is_none();
     if special == Some(Special::Disguise) {
-        // spec: S-0516 claim 31 (detonating on its target, it disguises its firer) and S-0306 claim 17 (a departed warp member, off the map or phasing in, is copied as that claim gives)
+        // spec: S-0516 r13 claim 31 (detonating on its target, it disguises its firer; a departed warp member, off the map or phasing in, is an ordinary target and is copied as above) and S-0306 claim 17 (a departed warp member, off the map or phasing in, is copied as that claim gives)
         crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
     }
     if p.airburst {
@@ -2103,14 +2103,15 @@ pub(crate) fn target_leaves(w: &mut World, id: ObjectId) {
 /// that passed for a landing cell on a deck awaits its placement (S-0306
 /// claim 17). After a refused placement it counts by its height again until
 /// a later check passes for a deck cell (claim 17's design rule, Q-2232).
-/// Every other object is S-0307's airborne.
+/// Every other object is S-0307's airborne. S-0307 r21 Terms states the
+/// same exception for a member between its departure and its appearance.
 pub fn target_airborne(w: &World, id: ObjectId) -> bool {
     use crate::superweapons::warp;
     let Some(o) = w.obj(id) else { return false };
     if !warp::departed(w, id) {
         return airborne_by_height(w, id);
     }
-    // spec: S-0306 claim 17 (a departed member counts as standing on a deck only while a landing check that passed for a landing cell on a deck awaits its placement; each passed check sets the count from its own landing cell; after a refused placement, engine design with no switch, it counts by its height again, Q-2232)
+    // spec: S-0307 r21 Terms (a warp member between its departure and its appearance is counted by its height above the surface beneath its kept position, except while a passed landing check for a deck cell awaits its placement) and S-0306 claim 17 (a departed member counts as standing on a deck only while a landing check that passed for a landing cell on a deck awaits its placement; each passed check sets the count from its own landing cell; after a refused placement, engine design with no switch, it counts by its height again, Q-2232)
     if warp::passed_for_deck(w, id) {
         return false;
     }

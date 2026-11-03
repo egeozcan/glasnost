@@ -390,7 +390,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         || (building && o.health <= 0)
         // spec: S-0302 claim 8 (stage 1: the target is temporarily invulnerable, + hits; S-0513 claim 26)
         || (crate::superweapons::protected(w, target) && plus)
-        // spec: S-0302 claim 8 (stage 1: the target is being erased, + and − hits; the leaving stage of S-0513 claim 39, the temporal beam is S-0514's seam)
+        // spec: S-0302 claim 8 (stage 1: the target is being erased, + and − hits; the leaving stage of S-0513 claim 39, the temporal beam is S-0514's seam) and S-0302 r40 claim 8 (a superweapon warp member whose beam was locked before the departure is not being erased from its departure update and takes ordinary hits, up to a later lock, from which this protection applies again: S-0513 claim 39a, in `being_erased`)
         || (crate::econ::power::being_erased(w, target) && !ign);
     if stage1 {
         return HitResult::Unaffected;

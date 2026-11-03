@@ -172,7 +172,7 @@ fn fragment(
         return;
     };
     let fp = rules.combat.projectiles[pid as usize].clone();
-    // spec: S-0318 claim 6 (towards the aim point's reference point) and S-0306 claims 3 and 5 (revision 38: a fragment is excepted from the shot's aim point, lead and launch direction)
+    // spec: S-0318 r27 claim 6 (towards the aim point's reference point; the direction is taken from the burst point as it is, not from the raised starting position) and S-0306 claims 3 and 5 (revision 38: a fragment is excepted from the shot's aim point, lead and launch direction)
     let tp = target_point(w, target);
     let yaw = i32::from(direction(
         i64::from(tp.x - burst.x),
@@ -194,7 +194,7 @@ fn fragment(
     } else {
         fp.arm
     };
-    // spec: S-0318 claim 5 (placed at the burst point) and S-0306 claims 5 and 8 (revision 38: a fragment starts at the burst point, not the fire point; revision 45: raised to 1 lepton above the terrain when the burst point is not above it, S-0306 Changes for other specs)
+    // spec: S-0318 r27 claims 1 and 5 (placed at the burst point, raised in height only, as S-0306 claim 8 gives, when it is not above the terrain) and S-0306 claims 5 and 8 (revision 38: a fragment starts at the burst point, not the fire point; revision 45: raised to 1 lepton above the terrain when the burst point is not above it, S-0306 Changes for other specs)
     let mut pos = crate::combat::projectile::start_point(w, burst);
     if fp.inviso {
         // spec: S-0318 claims 5 and 6 and S-0306 claim 9 (an invisible fragment is moved at once to K, or the first blocking cell's centre; no launch scatter draw, S-0318 Open questions)
