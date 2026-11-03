@@ -23,14 +23,24 @@
 //!   (`GLASNOST_GAME_DIR`) and checked against the record's sha256; never
 //!   committed. Its rules layer applies (the inputs of a skirmish on that
 //!   map), and its own objects are loaded as in any game on it, the
-//!   neutral house's buildings in play from tick 0. Which of them are the
+//!   neutral house's buildings and infantry in play from tick 0, its
+//!   vehicles taken off the map before the groups (below). Which of them are the
 //!   records' "four bunkers, owned by a neutral house" is Q-2098: none has
 //!   the tank-bunker flag of S-0606 (`--groups` lists them). W is the cell
 //!   of start waypoint [`W_WAYPOINT`].
-//! - **Houses**: side A plays country [`COUNTRIES`]`[0]` at start 0, side B
-//!   [`COUNTRIES`]`[1]` at start 1; skirmish setup with 0 credits, no
-//!   starting units, no bases, short game, superweapons and crates off,
-//!   game speed fastest (index 0, glossary claim G2). The record's houses
+//! - **Houses** (S-0216 r67 claim 8, *Game start*): in S-0009 claim 19's
+//!   order, a human player house at start [`HUMAN_START`] (M-0001's idle
+//!   house, a player, not an observer), side A playing country
+//!   [`COUNTRIES`]`[0]` at start 0, side B [`COUNTRIES`]`[1]` at start 1,
+//!   then the neutral and special houses, each with S-0202 claim 14's two
+//!   house-creation draws. Skirmish setup with 0 credits, the bases setting
+//!   on and the unit-count setting 0 (each player house gets its base unit
+//!   and no budget unit), short game, superweapons and crates off, game
+//!   speed fastest (index 0, glossary claim G2). After the game start every
+//!   vehicle the human player house does not own is taken off the map with
+//!   no draw ([`take_off_before_the_groups`]); the human player house's
+//!   base unit stays on its base cell, and no house treats that house as an
+//!   enemy (`House::idle_test_house`). The record's houses
 //!   are hard computer players: per S-0412 claim 4 a hard computer gets
 //!   difficulty index 0 and the easy row, which our engine applies through
 //!   the handicap (S-0412 claim 5). With `computer` set (the default)
@@ -130,6 +140,24 @@ pub const COUNTRIES: [&str; 2] = ["Americans", "Russians"];
 /// The start positions of side A and side B (measure: M-0001, Setup,
 /// Players).
 pub const STARTS: [u32; 2] = [0, 1];
+
+/// The start position of the human player house (S-0216 claim 8, *Game
+/// start*: M-0001's idle house at start 3; measure: M-0001, Setup, Players).
+pub const HUMAN_START: u32 = 3;
+
+/// The side whose country the human player house takes. No record gives
+/// that house's country: Q-2446, interim of our own (design).
+pub const HUMAN_COUNTRY_SIDE: Side = Side::A;
+
+/// The human player house's house number: first in S-0009 claim 19's house
+/// order (human players before computer players; S-0216 claim 8, *Game
+/// start*).
+pub const HUMAN: HouseId = HouseId(0);
+
+/// The house numbers of side A and side B: the two computer players, after
+/// the human player house in S-0009 claim 19's order (S-0216 claim 8,
+/// *Game start*).
+pub const SIDE_HOUSES: [HouseId; 2] = [HouseId(1), HouseId(2)];
 
 /// The facing values *v* of side A and side B for a play-time placement
 /// (S-0216 claim 1: body and turret facings 256 × *v*): 256 × 64 = 16384
@@ -984,11 +1012,59 @@ pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, 
     })
 }
 
-/// A synthetic ground for tests and CI: the synthetic combat ruleset on our
-/// own flat map of `size` cells, with start waypoints 0 and 1 and W in the
-/// middle, the countries the synthetic rules' first two.
+/// The synthetic base-unit type of [`synthetic_ruleset`], an unarmed
+/// vehicle of our own.
+pub const SYNTHETIC_BASE_UNIT: &str = "BASE";
+
+/// The synthetic combat ruleset with what our arena's game start reads
+/// (S-0216 claim 8, *Game start*), all invented: the neutral and special
+/// houses' countries, passive (so they take no start position and no
+/// starting units, S-0009 claims 19 and 45), and an unarmed vehicle type
+/// [`SYNTHETIC_BASE_UNIT`] of both player countries as the only base-unit
+/// type (S-0009 claim 45).
+pub fn synthetic_ruleset() -> glasnost_rules::schema::Ruleset {
+    let mut r = glasnost_sim::testkit::combat_ruleset();
+    let players: Vec<String> = r.registries["countries"].clone();
+    for name in [glasnost_sim::load::NEUTRAL, glasnost_sim::load::SPECIAL] {
+        r.registries
+            .entry("countries".into())
+            .or_default()
+            .push(name.into());
+        r.sim.countries.insert(
+            name.into(),
+            glasnost_rules::sim::Country {
+                multiplay_passive: Some(true),
+                multiplay_passive_base: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push(SYNTHETIC_BASE_UNIT.into());
+    r.sim.vehicles.insert(
+        SYNTHETIC_BASE_UNIT.into(),
+        glasnost_rules::sim::UnitType {
+            strength: Some(1000),
+            speed: Some(4),
+            rot: Some(4),
+            locomotion_class: Some(glasnost_rules::sim::LocomotionClass::Track),
+            locomotor: Some(glasnost_rules::sim::Locomotor::Drive),
+            owner: Some(players),
+            ..Default::default()
+        },
+    );
+    r.sim.general.base_unit = Some(vec![SYNTHETIC_BASE_UNIT.into()]);
+    r
+}
+
+/// A synthetic ground for tests and CI: [`synthetic_ruleset`] on our own
+/// flat map of `size` cells, with start waypoints 0 and 1, W in the middle
+/// and start waypoint [`HUMAN_START`] off to one side, the countries the
+/// synthetic rules' first two.
 pub fn synthetic_ground(size: i32) -> Ground {
-    let rules = glasnost_sim::testkit::combat_rules();
+    let rules = Arc::new(SimRules::new(&synthetic_ruleset(), "synthetic-arena"));
     let mut map = glasnost_sim::testkit::empty_map(size);
     let w = glasnost_sim::testkit::mid(size, 0, 0);
     let wp = |c: CellXY| (c.x as i16, c.y as i16);
@@ -997,6 +1073,8 @@ pub fn synthetic_ground(size: i32) -> Ground {
     map.waypoints
         .insert(1, wp(CellXY::new(w.x + size / 2, w.y)));
     map.waypoints.insert(W_WAYPOINT, wp(w));
+    map.waypoints
+        .insert(HUMAN_START as u16, wp(CellXY::new(w.x, w.y - size / 2)));
     let countries = [0, 1].map(|i| rules.country_names[i].clone());
     Ground {
         rules,
@@ -1087,6 +1165,10 @@ pub struct Arena {
     /// the set-up's first object was created: the place of the first
     /// creation draw (S-0216 claim 8, *Acceptance*: M-0019's *N*₀).
     pub first_raw: u64,
+    /// The vehicles taken off the map before the groups (S-0216 claim 8,
+    /// *Removal before the groups*), in creation order. None of them is
+    /// in `world`.
+    pub removed: Vec<ObjectId>,
 }
 
 /// The units off their stated cells, one line each (shown by `--watch` and
@@ -1285,10 +1367,35 @@ fn cost_of(w: &World, id: ObjectId) -> i64 {
     })
 }
 
+/// Takes off the map every vehicle that `human` does not own (S-0216 r67
+/// claim 8, *Removal before the groups*, design): the two computer houses'
+/// base units and every vehicle the map gave the neutral house. Each is
+/// taken out of the game with no draw, no animation and no recalculation
+/// of its cell, which it frees ([`glasnost_sim::objects::take_out_quietly`]);
+/// none of them exists at the next tick, and the creation numbers they took
+/// stay taken. Returns the vehicles taken, in creation order.
+pub fn take_off_before_the_groups(w: &mut World, human: HouseId) -> Vec<ObjectId> {
+    // spec: S-0216 claim 8 (Removal before the groups: every vehicle that the human player house does not own)
+    let gone: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Vehicle && o.owner != Some(human))
+        .map(|o| o.id)
+        .collect();
+    for &id in &gone {
+        // spec: S-0216 claim 8 (Removal before the groups: no random draw, no animation, the cells freed; the creation numbers stay taken)
+        glasnost_sim::objects::take_out_quietly(w, id);
+    }
+    gone
+}
+
 /// Sets up the game of `types` (side A's and side B's type) with `seed`,
 /// the group of `row_side` (the side the pairing's row type plays) created
 /// and placed first (S-0216 claim 8, *Order*). A game of a type against
-/// itself has no row side of its own: its callers pass [`Side::A`].
+/// itself has no row side of its own: its callers pass [`Side::A`]. The
+/// game start before the groups is claim 8's *Game start* and *Removal
+/// before the groups* (r67): the houses [`HUMAN`], then side A and side B
+/// ([`SIDE_HOUSES`]), then the neutral and special houses.
 pub fn setup(
     ground: &Ground,
     types: [&str; 2],
@@ -1296,45 +1403,59 @@ pub fn setup(
     seed: u32,
 ) -> Result<Arena, String> {
     let rules = &ground.rules;
-    let players: Vec<Player> = [0, 1]
-        .map(|i| Player {
-            name: format!("Side {}", ["A", "B"][i]),
-            country: ground.countries[i].clone(),
-            start: Some(STARTS[i]),
-            // An AI house with no brain: the record's houses are computer
-            // players (measure: M-0001, Setup, Players), which stop the
-            // unused-house cleanup (S-0009 claim 28); our own AI takes no part.
-            ai: true,
-            values: HouseValues {
-                // spec: S-0412 claim 4 (a hard computer: index 0, the easy row), applied through claim 5's handicap
-                handicap: Some(Row::Easy),
-                ..Default::default()
-            },
-        })
-        .into();
+    // spec: S-0216 claim 8 (Game start, r67: a human player house at start 3, M-0001's idle house; it holds a start position, so it is a player, not an observer; its country is Q-2446's interim)
+    let human = Player {
+        name: "Human".into(),
+        country: ground.countries[HUMAN_COUNTRY_SIDE.index()].clone(),
+        start: Some(HUMAN_START),
+        ai: false,
+        values: HouseValues::default(),
+    };
+    let sides: [Player; 2] = [0, 1].map(|i| Player {
+        name: format!("Side {}", ["A", "B"][i]),
+        country: ground.countries[i].clone(),
+        start: Some(STARTS[i]),
+        // An AI house with no brain: the record's houses are computer
+        // players (measure: M-0001, Setup, Players), which stop the
+        // unused-house cleanup (S-0009 claim 28); our own AI takes no part.
+        ai: true,
+        values: HouseValues {
+            // spec: S-0412 claim 4 (a hard computer: index 0, the easy row), applied through claim 5's handicap
+            handicap: Some(Row::Easy),
+            ..Default::default()
+        },
+    });
+    // spec: S-0216 claim 8 (Game start: the houses in S-0009 claim 19's order, the human player house, then the two computer houses; setup::skirmish adds the neutral and special houses after them)
+    let players: Vec<Player> = std::iter::once(human).chain(sides).collect();
     let settings = Settings {
         // measure: M-0001 (0 credits, short game off, superweapons off, crates off)
         credits: Some(0),
         short_game: Some(false),
         superweapons: Some(false),
+        // spec: S-0216 claim 8 (Game start: crates off, M-0001's setting)
         crates: Some(false),
         ..Default::default()
     };
-    // measure: M-0001 (no starting units, no buildings)
+    // spec: S-0216 claim 8 (Game start, r67: the unit-count setting 0, so no house buys a budget unit)
     let mut gs = setup::skirmish(rules, &players, settings, 0, seed);
-    gs.bases = false;
+    // spec: S-0216 claim 8 (Game start, r67: the bases setting on, so each player house gets its base unit, S-0009 claims 45 and 46)
+    gs.bases = true;
     gs.game_speed = FASTEST;
+    let houses = SIDE_HOUSES;
     if ground.computer {
         // measure: M-0001 (Setup, Players: two computer houses). Both
         // houses are test-only computer-controlled player houses (glossary;
         // S-0215 Terms): they follow the original's computer-owner rules.
-        for h in gs.houses.iter_mut().take(2) {
-            h.human = false;
+        for h in houses {
+            gs.houses[usize::from(h.0)].human = false;
         }
     }
     let mut w = glasnost_sim::load::new_game(rules.clone(), &ground.map, ground.tiles.clone(), &gs)
         .map_err(|e| format!("{e:?}"))?;
-    let houses = [HouseId(0), HouseId(1)];
+    // spec: S-0216 claim 8 (Game start, r67: no house treats the human player house as an enemy; no object targets or damages its objects; design, copied from M-0001's Setup)
+    w.houses[usize::from(HUMAN.0)].idle_test_house = true;
+    // spec: S-0216 claim 8 (Removal before the groups, r67: after resource-glint setup, the last of new_game's draws, and before the first group's first creation)
+    let removed = take_off_before_the_groups(&mut w, HUMAN);
     if ground.computer {
         // spec: S-0215 Terms and S-0309 Terms (Test-only exception: a marked test house takes its oracle house's skill level and difficulty index, and has no teams)
         // spec: S-0412 claim 3 (a computer player house: the rules' maximum house skill level)
@@ -1395,6 +1516,7 @@ pub fn setup(
         units,
         moved,
         first_raw,
+        removed,
     })
 }
 
