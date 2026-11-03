@@ -3,7 +3,7 @@ id: Q-2336
 title: Which draws make up the records' game start before the arena set-up, given that ours takes 12 to 26 fewer raw values?
 status: answered
 related: [S-0216, S-0202, S-0009, S-0412, M-0019, M-0001, M-0002]
-answered-by: [S-0202]
+answered-by: [S-0202, S-0216]
 ---
 
 ## Need
