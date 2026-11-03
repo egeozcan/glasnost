@@ -1579,7 +1579,7 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
 
 /// A contact place index outside every pad's displacement count: the
 /// docking position of an aircraft without a contact (S-0404 claim 15).
-const NO_PLACE: u32 = u32::MAX;
+const NO_PLACE: u32 = u32::MAX; // spec: S-0501 claim 24 (r99: the docking position without a contact) and S-0404 claim 15 (a contact index outside the displacement count gives c; a count of 1 gives the sole displacement whatever the index)
 
 /// One step of *enter*'s docking approach while the aircraft lands (claim
 /// 24): toward its contact place's docking position at pad `k`, along each
