@@ -342,6 +342,48 @@ fn claim_24_a_sale_during_the_approach_falls_back_with_a_behaviour_queued() {
 }
 
 // ---------------------------------------------------------------------------
+// S-0404 r23 claim 15: the released position follows the contact place
+
+// spec: S-0404 claim 15 (r23: an aircraft not in contact takes the first empty place, which is the place a new contact takes, so the released position follows the contact place; an aircraft already in contact keeps its place) and S-0501 claim 23 (a granted contact holds the pad's place)
+#[test]
+fn s0404_claim_15_the_release_place_is_the_place_a_new_contact_takes() {
+    let r = rules_with(3, Some(vec![[10, 0, 0], [20, 0, 0], [30, 0, 0]]));
+    let mut w = game(&r);
+    let k = building(&mut w, "APAD", 0, 0, 0);
+    ready(&mut w);
+    let a = put(&mut w, 8, 0);
+    let b = put(&mut w, -8, 0);
+    let c = put(&mut w, 0, 8);
+    let d = put(&mut w, 0, -8);
+    // b holds place 1, so place 0 is the first empty place and 2 the next.
+    {
+        let o = w.obj_mut(b).unwrap();
+        o.contact = Some(k);
+        o.econ.exit = Some(Exit {
+            factory: k,
+            tethered: false,
+            place: 1,
+        });
+    }
+    let place_of = |w: &World, id: ObjectId| w.obj(id).unwrap().econ.exit.unwrap().place;
+    for (u, want) in [(a, 0), (c, 2)] {
+        let (pos, release) = glasnost_sim::econ::release::pad_position(&w, k, u);
+        assert_eq!(release, want, "the release's place");
+        assert!(air::request_contact(&mut w, u, k), "contact granted");
+        assert_eq!(place_of(&w, u), release, "the contact's place");
+        // The aircraft now in contact keeps that place and that position.
+        assert_eq!(
+            glasnost_sim::econ::release::pad_position(&w, k, u),
+            (pos, release)
+        );
+    }
+    // Every place held: the release has none below the count, and no contact
+    // is granted.
+    assert_eq!(glasnost_sim::econ::release::pad_position(&w, k, d).1, 3);
+    assert!(!air::request_contact(&mut w, d, k));
+}
+
+// ---------------------------------------------------------------------------
 // A waiting aircraft landing over its pad
 
 // spec: S-0501 claim 24 (r99: a waiting aircraft that lands over its destination pad is moved while landing as the docking stage moves one in contact, toward a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: the same docking position for an aircraft that lands over the pad without a contact); S-0501 claim 24 (each axis by the difference limited to −5 … +5 leptons, the height unchanged; so does an aircraft whose contact ends during the docking stage)
