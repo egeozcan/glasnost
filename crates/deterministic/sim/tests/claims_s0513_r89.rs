@@ -834,4 +834,27 @@ fn claim39a_a_deactivated_vehicle_firer_drops_a_member_that_waits_to_land_at_the
         Some(Behaviour::Attack),
         "S-0309 claim 29: the drop changes no behaviour"
     );
+    // spec: S-0514 claim 14 (in the ordinary stationary attack case, the attack processing with no target falls back to rest and then releases) and S-0513 claim 39a (Release: the beam lets go only at S-0514's causes)
+    // The attack processing is made when it is due, so the fall-back can
+    // come some turns later; until then the beam stays attached.
+    let mut fell_back = false;
+    for _ in 0..200 {
+        step(&mut w);
+        if w.obj(f).unwrap().beh.current != Some(Behaviour::Attack) {
+            fell_back = true;
+            break;
+        }
+        assert!(
+            temporal::holds(&w, f, m),
+            "still attached before the fall-back"
+        );
+    }
+    assert!(
+        fell_back,
+        "a later attack processing with no target falls back to rest"
+    );
+    assert!(
+        !temporal::holds(&w, f, m),
+        "the fall-back to rest, not the drop, lets the beam go"
+    );
 }
