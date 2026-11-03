@@ -198,6 +198,7 @@ const RESIDUES: [(i32, i32); 5] = [(23, 1), (10, 62), (9, 63), (8, 64), (7, 65)]
 #[test]
 fn claim39a_l6c_a_member_with_no_beam_sparkles_in_its_warp_turns_from_tl_plus_2_to_its_phasing_end()
 {
+    // spec: S-0203 r43 claim 4 (S-0514 claim 18's sparkle is no suppressed ordinary work: made before the warp work in each warp turn in which the member is being erased or phasing in)
     // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns, Q-2316: each turn of a member at every stage is one of its turns for S-0514 claim 18, with or without a beam; in its leaving stage it counts as being erased and from its departure it phases in; a sparkle in each turn whose tick is divisible by 24 from its update of t_L + 2 to the update that ends its phasing in, both included; its state before the turn's warp step decides, so t_L + 1 makes none; placed from its position before the warp step: the old position up to its appearance update, the landing point from its arrival-effects update; none after its phasing in ends) and claim 51 (the sparkle is an intrinsic exception, made before the warp work); S-0514 claim 18; S-0203 claim 4
     for name in ["BUGGY", "JUMPER"] {
         for (rem, off) in RESIDUES {
@@ -228,6 +229,7 @@ fn claim39a_l6c_a_member_with_no_beam_sparkles_in_its_warp_turns_from_tl_plus_2_
 
 #[test]
 fn claim39a_l6_a_member_with_a_beam_sparkles_once_per_turn_and_not_after_its_phasing_end() {
+    // spec: S-0203 r43 claim 4 (the sparkle before the warp work in the member's warp turns)
     // spec: S-0513 claim 39a (Sparkles and drops in the warp's turns: the same sparkles with a beam attached, one per turn; after its phasing in has ended a member whose beam was locked before its departure sparkles only while it is being erased, so none while that beam stays attached; Switch: these rules hold in both settings of quirks.warp_departure_keeps_beam, for the states that arise in each: off, the lock is refused and the sparkles are those of a member with no beam) and S-0514 claims 3 and 18
     for on in [true, false] {
         for (rem, off) in RESIDUES {
@@ -382,6 +384,50 @@ fn s0514_r14_claim18_the_sparkle_is_an_ordinary_animation_whose_creation_draw_pr
     );
 }
 
+/// The member's targeting timer after its expiry update in t_L + 61, a
+/// sparkle tick, with the sparkle animation taking a creation draw or not.
+fn expiry_timer(drawing_sparkle: bool) -> i32 {
+    let mut r = rules();
+    if drawing_sparkle {
+        r.sim.animations.get_mut("SPARK").unwrap().random_rate = Some([450, 225]);
+    }
+    let mut w = ready(&r);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let tl = launch(&mut w, SPARKLE, 11);
+    assert_eq!(
+        (tl + 61).rem_euclid(SPARKLE),
+        0,
+        "set-up: the expiry on a sparkle tick"
+    );
+    run_through(&mut w, tl + 60);
+    // No target and more than 10 ticks left: the expiry search draws.
+    let t = w.tick;
+    w.obj_mut(m).unwrap().targeting_timer = t + 400;
+    w.effects.clear();
+    step(&mut w);
+    assert_eq!(stage(&w, m), Some(Stage::Expired));
+    let sparkled = w
+        .effects
+        .iter()
+        .any(|e| matches!(e, Effect::Anim { name, delay, .. } if name == "SPARK" && delay.is_some() == drawing_sparkle));
+    assert!(sparkled, "the sparkle of the expiry update");
+    w.obj(m).unwrap().targeting_timer
+}
+
+#[test]
+fn s0203_r43_the_sparkles_creation_draw_comes_before_the_expiry_updates_target_search() {
+    // spec: S-0203 r43 claim 4 (the sparkle is made before the turn's warp work) and S-0513 claim 39a (Sparkles: any draw that creating it takes comes before the draws of the turn's warp step, the expiry update's target search among them); S-0207 claim 20 (f) (the search's one draw over 4 to 8 ticks); S-0109 claim 3
+    // The sparkle's draw moves the search's draw one place on in the
+    // stream, so the search's result differs from the run whose sparkle
+    // takes no draw. Were the search first, it would take the same value in
+    // both runs.
+    assert_ne!(
+        expiry_timer(true),
+        expiry_timer(false),
+        "the search's draw follows the sparkle's"
+    );
+}
+
 // --- Drops in the warp's turns -----------------------------------------------------------
 
 /// Gives `m` a target and a destination directly, as an order would.
@@ -401,6 +447,7 @@ fn dest(w: &World, id: ObjectId) -> Option<Target> {
 
 #[test]
 fn claim39a_a_member_with_no_beam_drops_a_given_target_in_each_leaving_turn_the_expiry_included() {
+    // spec: S-0203 r43 claim 4 (S-0514 claim 17's clearing is no suppressed ordinary work: made after the warp work in each turn in which the member is being erased)
     // spec: S-0513 claim 39a (Drops: in each turn in which the member is still being erased after the turn's warp step, it clears its target and destination as S-0514 claim 17 gives: its updates from t_L + 1 to its expiry update in t_L + 61, with or without a beam) and claim 48 (a turn still in the leaving stage after its warp update, the wait expiry included, drops target and destination); claim 51
     let mut w = ready(&rules());
     let x = spawn(&mut w, "WALKER", ALPHA, -8, -8);
@@ -458,6 +505,7 @@ fn locked(r: &Ruleset, name: &str, upto: i32) -> (World, ObjectId, ObjectId, Obj
 
 #[test]
 fn claim39a_a_vehicle_member_with_a_beam_drops_in_its_departure_and_off_map_turns() {
+    // spec: S-0203 r43 claim 4 (the clearing after the warp work for a vehicle phasing in with a beam attached)
     // spec: S-0513 claim 39a (Drops: the departure update ends its being erased, so it makes this drop there as a vehicle or aircraft with a beam attached, which Departure gives; Departure: while it phases in, a vehicle with a beam attached has its turns cut short) and claim 51 (S-0514 claim 17's clearing after the warp work in each turn in which the member is a vehicle or aircraft phasing in with a beam attached); S-0514 claim 17
     let (mut w, _, x, m, tl) = locked(&rules(), "BUGGY", 61);
     for t in [tl + 61, tl + 62, tl + 63] {
@@ -476,6 +524,7 @@ fn claim39a_a_vehicle_member_with_a_beam_drops_in_its_departure_and_off_map_turn
 
 #[test]
 fn claim39a_an_infantry_member_with_a_beam_drops_off_the_map_only_with_the_switch_off() {
+    // spec: S-0203 r43 claim 4 (the clearing after the warp work for an infantry member phasing in with a beam attached, with quirks.phase_in_beam_spares_infantry off)
     // spec: S-0513 claim 39a and Edge cases (quirks.phase_in_beam_spares_infantry: on, an infantry member phasing in with a beam attached and not being erased is not cut short and makes no drop; off, it is cut short and drops) and claim 51 (the clearing after the warp work for an infantry member in that state with the switch off); S-0514 claim 17
     for spares in [true, false] {
         let mut r = rules();
@@ -597,7 +646,8 @@ fn shots_by(w: &World, id: ObjectId) -> usize {
 }
 
 /// The firer's record of SW12 part l3 for Q-2317: target, behaviour, cell
-/// and body and turret facing.
+/// and body and turret facing, and an infantry firer's attack state and
+/// sequence (S-0107 claim 11).
 fn firer_state(
     w: &World,
     f: ObjectId,
@@ -612,8 +662,34 @@ fn firer_state(
         o.target,
         o.beh.current,
         o.pos.cell(),
-        (o.body.target, o.turret.target),
+        (
+            o.body.target,
+            o.turret.target,
+            o.infantry.as_ref().map(|s| (s.attack, s.seq)),
+        ),
     )
+}
+
+/// The rank-4 answers that S-0301 claim 9 ranks above S-0514 claim 19's
+/// *rearming* and that read the target, asked about the departed member:
+/// none holds for it off the map (claim 39a, *The firer*: rearming unless
+/// an outranking answer holds; the member is not airborne, not protected and
+/// not hidden, so its being off the map makes none of them answer).
+fn assert_no_outranking_answer(w: &World, f: ObjectId, m: ObjectId) {
+    assert!(!w.obj(m).unwrap().on_map, "off the map");
+    assert!(
+        !glasnost_sim::combat::weapon::airborne_by_height(w, m),
+        "S-0306 claim 23: not airborne off the map"
+    );
+    assert!(
+        !superweapons::protected(w, m),
+        "S-0513 claim 27: not protected"
+    );
+    let owner = w.obj(f).unwrap().owner;
+    assert!(
+        !glasnost_sim::cloak::hidden_from(w, m, owner),
+        "S-0516 claim 24: not hidden from the firer's house"
+    );
 }
 
 /// The record from the departure update to the appearance update, both
@@ -654,10 +730,18 @@ fn assert_kept_while_waiting(s: Waiting) {
             );
         }
         if superweapons::warp::departed(&w, m) {
+            assert_no_outranking_answer(&w, f, m);
             assert_eq!(
                 check(&w, f, Some(Target::Object(m)), 0, true),
                 Answer::Rearming,
                 "S-0514 claim 19's rearming while off the map"
+            );
+            // The firing step's target is the member, so an infantry
+            // firer's no-target row (S-0107 claim 11) is not reached.
+            assert_eq!(
+                glasnost_sim::combat::held::firing_target(&w, w.obj(f).unwrap()),
+                Some(Target::Object(m)),
+                "the firing step's target while off the map"
             );
         }
     }
@@ -675,6 +759,7 @@ fn held_check(t: i32) -> bool {
 #[test]
 fn claim39a_l3_an_infantry_firer_keeps_a_member_that_waits_to_land_with_its_turns_unchanged() {
     // spec: S-0513 claim 39a (The firer, Q-2317: while the member waits to land, from its departure update to its appearance, an infantry or vehicle firer whose beam is attached to it, within its weapon's range of its old position, whose firing check answers rearming, keeps it as its target and its turns go on as before: no shot, S-0309 claim 29's check keeps it, its range and aim read the old position, so it neither moves nor turns, its behaviour stays) and Changes for S-0309 claim 27 (the departure is not claim 27's drop); S-0514 claim 19
+    // spec: S-0309 r95 claim 27 (a firer whose temporal beam is attached is the exception: rearming; while the member waits to land, an infantry firer within range keeps it, makes no shot and neither moves nor turns; measurable, SW12 part l3)
     let mut r = rules();
     // The WALKER's Rifle (warhead SA) is a temporal weapon here.
     r.sim.warheads.get_mut("SA").unwrap().temporal = Some(true);
@@ -682,14 +767,52 @@ fn claim39a_l3_an_infantry_firer_keeps_a_member_that_waits_to_land_with_its_turn
 }
 
 #[test]
+fn claim39a_l3_an_infantry_firer_in_its_attack_state_stays_in_it_while_the_member_waits_to_land() {
+    // spec: S-0513 claim 39a (The firer, Q-2317: while the member waits to land the infantry firer keeps it as its target and its turns go on as before the departure) and S-0309 r95 claim 27 (the departure is not claim 27's drop for a firer whose temporal beam is attached); S-0107 claim 11 (the attack state ends when the unit has no target, when its target changes, at a frozen stage and when it is not ready at the fire frame; none of these comes here)
+    let mut r = rules();
+    r.sim.warheads.get_mut("SA").unwrap().temporal = Some(true);
+    let Waiting {
+        mut w,
+        f,
+        m,
+        tl,
+        dep,
+        app,
+    } = waiting(&r, "WALKER", -2, -2);
+    assert_eq!(w.tick, dep);
+    // The firer in its attack state at the member, at a stage that is not
+    // its fire frame and is not frozen, as after a shot.
+    let t = w.tick;
+    let o = w.obj_mut(f).unwrap();
+    o.combat.last_shot_target = Some(Target::Object(m));
+    let s = o.infantry.as_mut().unwrap();
+    s.attack = true;
+    s.seq_delay = 10_000;
+    s.seq_t0 = t - 10_000;
+    for t in dep..=app {
+        step(&mut w);
+        let o = w.obj(f).unwrap();
+        assert_eq!(o.target, Some(Target::Object(m)), "t_L + {}", t - tl);
+        assert!(
+            o.infantry.as_ref().unwrap().attack,
+            "still in the attack state after t_L + {}",
+            t - tl
+        );
+    }
+    assert!(temporal::holds(&w, f, m));
+}
+
+#[test]
 fn claim39a_a_vehicle_firer_keeps_a_member_that_waits_to_land_with_its_turns_unchanged() {
     // spec: S-0513 claim 39a (The firer, Q-2317: the same for a vehicle firer, unmeasured) and S-0514 claim 19
+    // spec: S-0309 r95 claim 27 (the same for a vehicle firer, unmeasured)
     assert_kept_while_waiting(waiting(&rules(), "CART", -3, -2));
 }
 
 #[test]
 fn claim39a_a_deactivated_vehicle_firer_drops_a_member_that_waits_to_land_at_the_check() {
     // spec: S-0513 claim 39a (The firer: with an outranking illegal, such as a deactivated firer's, S-0309 claim 29's check drops the member as its target, as before the departure; dropping the target does not itself release the beam) and S-0301 claim 9 (deactivated firers within rank 4); S-0514 claim 14
+    // spec: S-0309 r95 claim 27 (a deactivated firer's illegal ranks above the rearming, and with it claim 29's check drops the member)
     let Waiting {
         mut w, f, m, dep, ..
     } = waiting(&rules(), "CART", -3, -2);
@@ -706,4 +829,9 @@ fn claim39a_a_deactivated_vehicle_firer_drops_a_member_that_waits_to_land_at_the
     assert!(superweapons::warp::departed(&w, m));
     assert_eq!(target(&w, f), None, "dropped at the check tick");
     assert!(temporal::holds(&w, f, m), "the drop releases no beam");
+    assert_eq!(
+        w.obj(f).unwrap().beh.current,
+        Some(Behaviour::Attack),
+        "S-0309 claim 29: the drop changes no behaviour"
+    );
 }

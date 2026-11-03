@@ -401,7 +401,7 @@ fn inactivity_clear(w: &mut World, id: ObjectId) {
 /// arrival hold, whose ordinary turn follows the warp step, makes this
 /// drop through [`turn`].
 pub fn member_drop(w: &mut World, id: ObjectId) {
-    // spec: S-0513 claim 39a (Q-2316: in each turn in which the member is still being erased after the turn's warp step, or whose turns are cut short by a beam, it clears its target and destination as S-0514 claim 17 gives: its leaving updates from t_L + 1 to the expiry update, the expiry's target search included, with or without a beam; the departure update of a vehicle or aircraft with a beam attached; every turn after a later lock) and claims 48 and 51; S-0514 claim 17
+    // spec: S-0513 claim 39a (Q-2316: in each turn in which the member is still being erased after the turn's warp step, or whose turns are cut short by a beam, it clears its target and destination as S-0514 claim 17 gives: its leaving updates from t_L + 1 to the expiry update, the expiry's target search included, with or without a beam; the departure update of a vehicle or aircraft with a beam attached; every turn after a later lock) and claims 48 and 51; S-0514 claim 17; S-0203 r43 claim 4 (the clearing after the warp work: being erased, a vehicle or aircraft phasing in with a beam attached, or an infantry member in that state with quirks.phase_in_beam_spares_infantry off)
     if crate::superweapons::being_erased(w, id) || cut_short(w, id) {
         inactivity_clear(w, id);
     }

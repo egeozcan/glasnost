@@ -237,7 +237,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     crate::combat::held::turn_start_drop(w, id);
     let member = crate::superweapons::warp::is_member(w, id);
     if member {
-        // spec: S-0513 claim 39a (Q-2316: a member's sparkle, with or without a beam, decided by its state before the turn's warp step) and claim 51 (an intrinsic exception made before the warp work, its draws before the warp step's); its order against the erasure update is open (S-0513 Open questions, S-0514's): interim Q-2377, before it, as in an ordinary turn
+        // spec: S-0513 claim 39a (Q-2316: a member's sparkle, with or without a beam, decided by its state before the turn's warp step) and claim 51 (an intrinsic exception made before the warp work, its draws before the warp step's) and S-0203 r43 claim 4 (S-0514 claim 18's sparkle is not suppressed ordinary work, made before the warp work in each turn in which the member is being erased or phasing in); its order against the erasure update is open (S-0513 Open questions, S-0514's): interim Q-2377, before it, as in an ordinary turn
         crate::temporal::turn_sparkle(w, id);
     }
     // spec: S-0513 claim 39a and S-0203 claim 4 (a warp member's erasure update comes before its warp step in each of its turns; a member that update removes takes no warp step, the no-step rule)
@@ -247,7 +247,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and S-0203 claim 4 revision 32: the warp update is the whole member turn, with the intrinsic exceptions)
     if crate::superweapons::warp::turn(w, id) {
-        // spec: S-0513 claim 39a (Q-2316: the drop after the warp step of a member still being erased or cut short) and claim 51
+        // spec: S-0513 claim 39a (Q-2316: the drop after the warp step of a member still being erased or cut short) and claim 51; S-0203 r43 claim 4 (S-0514 claim 17's clearing is not suppressed ordinary work, made after the warp work)
         crate::temporal::member_drop(w, id);
         // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)
         crate::combat::fire::reload_elapsed(w, id);
