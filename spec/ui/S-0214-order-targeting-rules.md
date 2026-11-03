@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 68
+revision: 78
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356]
 supersedes: []
 ---
 
@@ -423,8 +423,38 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    - (e) unless force-fire is held, or the actor is an infiltrating infantry type facing a building
      it can enter (a spy and a spyable building, another infiltrator and a capturable building, or
      an infiltrator with the charge flag and a building that accepts charges), the firing rules of
-     the combat specs do not rule the target illegal for the weapon it would use. Other reasons for
-     not firing at this moment (facing, reloading, rotating, range and so on) do not count.
+     the combat specs do not rule the target illegal for the weapon it would use. Part (e) takes
+     the answer the firing check gives for that target and weapon, the answer of the highest rank
+     that holds (S-0301 claim 9), and fails only when that answer is *illegal*. A reason of the
+     moment that ranks below every target test (not facing, still turning, moving, out of range)
+     therefore does not count. One that ranks above some of the target tests hides them: while
+     the actor's rearm countdown runs (rank 5, the firing-frame gate and the weapon's own live
+     effect with it), while it is out of ammunition (rank 7) and while its answer is *cloaked* (rank
+     8), the late target tests of rank 9 (the zero-versus test of S-0304 claim 1 and the takeover,
+     bomb, parasite and sinking tests among them) and the vehicle tests of rank 12 are not
+     asked. Over a target that only those tests rule illegal, such an actor is offered the
+     attack without force-fire, and a click gives an attack order. The target tests of rank 4,
+     S-0306 claim 23's water and land rows among them, rank above the countdown and still
+     refuse. A unit actor drops the target, without firing at it, at its first checking turn in
+     a check tick at which no reason ranked above the refusal applies (S-0309 claim 29). The end
+     of one such reason need not be that turn: when the countdown ends while the actor is out of
+     ammunition, its answer is *out of ammunition*, which still hides rank 9, so it keeps the
+     target. A holder that takes a checking turn in every tick drops it within 16 ticks of the
+     last such reason ending. One that misses its turn in a check tick, or whose turn there is
+     cut short or in a behaviour that makes no check, drops it at its next checking turn in a
+     later check tick (S-0309 claim 29). Its firing step makes no drop on *illegal*, except that
+     of a healer, which can drop the target earlier where its own reply to *illegal* drops it
+     (S-0310 claim 11). A building actor drops it at its attack processing, as S-0215 claim 32's
+     table gives for an *illegal* answer, which it normally reaches first. Where S-0309 claim 29's
+     periodic check covers the building, that check can drop it earlier (S-0215 claim 32, S-0304
+     claim 2). A building without the
+     SAM flag that is out of ammunition drops it sooner, at its first attack processing while it
+     is still out of ammunition, since that table's drop row takes *out of ammunition* as well.
+     So over an enemy that its weapon cannot affect,
+     the actor's action changes with its countdown: the attack while the countdown runs, the
+     action without the attack once it has ended.
+     `quirks.moment_reason_attack_cursor` (Edge cases and quirks) can make part (e) ask every
+     reason that gives *illegal*, whatever the reasons of the moment.
      The combat specs rule every target illegal for a falling firer (S-0301 claim 9, rank 4). That
      is a firing rule, not one of those other reasons, so a falling actor, for example under a
      parachute, fails part (e) for every target unless force-fire is held or the infiltrator
@@ -434,6 +464,56 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      move order of table M toward the target (claim 11), not an attack order. With force-fire held
      the click gives an attack order at once, which the actor carries out after landing (Terms,
      *able to fire*).
+     A falling actor that is also phasing in (Terms) is the exception. A falling vehicle that is
+     phasing in gets the materialising *rearming*, which outranks its falling *illegal* (S-0301
+     claim 9, *A materialising firer within rank 4*), so part (e) holds for it as for any
+     phasing-in actor below. For a falling infantry unit that is phasing in, which answer it gets
+     rests on S-0310's open question on dying and falling sequences (S-0301 claim 9).
+     An actor that is phasing in (Terms), after its own jump or as a superweapon warp member
+     (S-0513 claim 39), gets *rearming* for every target and weapon, ahead of the target tests
+     (S-0301 claim 9, *A materialising firer within rank 4*). Among those tests are the ones for
+     a target in the air that the weapon cannot hit, a protected object for a parasite warhead
+     and a warhead that cannot affect the target's armour, and S-0306 claim 23's water and land
+     rows, which come after this *rearming* within rank 4 (low: that place within rank 4 is
+     S-0306 claim 23's, rated low there). *Rearming* is a reason of the moment,
+     so part (e) holds unless an answer that claim ranks above it is *illegal*. A target hidden
+     from the actor's house that the pointer is over gives the same result as for an actor that
+     is not phasing in, since its hidden-target answer is *impossible*, not *illegal* (S-0516
+     claim 24). A phasing-in actor is not movable (Terms), so part (d) still asks that the target be
+     in range of the weapon it would use. Over an enemy in that range, row G8 gives *attack* without
+     force-fire, whether or not the weapon can hit the target, and the kind tables and the click
+     follow from that *attack* as for any other actor. Over an enemy out of that range the actor
+     gets *nothing* from row G9. A vehicle or aircraft phasing in with a temporal beam attached
+     and not being erased (an infantry unit too, with S-0513
+     `quirks.phase_in_beam_spares_infantry` off) is offered the attack and given the order like
+     any other, since row G2 refuses only an actor being erased,
+     but its turns are cut short: it drops the target in each of its turns while phasing in
+     (S-0309 claim 29, *Turns cut short*, S-0513 claim 39a), at the level S-0513 claim 39a gives.
+     An aircraft actor, materialising or not, also makes S-0309 claim 29's two aircraft drops at
+     the start of each of its turns (S-0501 claim 32), so an aircraft member of a superweapon warp
+     given an order on a target that one of those drops takes loses it at the start of its next
+     turn, while still phasing in. Any other phasing-in actor keeps a target so ordered while
+     phasing in, unless a drop that does not depend on the actor's own turns takes it, as other
+     specs give: for example S-0516 claim 14's drop of a target that starts or completes cloaking
+     in a cell the actor's house does not sense, when the two are not of the same owner, at that
+     claim's level. Once phasing in ends, an actor drops a target that the
+     firing check then answers *illegal* for, without firing at it, at its first checking turn in
+     a check tick at which no reason ranked above the refusal applies (S-0309 claim 29), or
+     earlier at a healer's firing step, as for the countdown above. With
+     `quirks.moment_reason_attack_cursor` off, part (e) passes over this *rearming* too.
+     The same reading holds for the other *rearming* answers that S-0306 claim 23 puts before its
+     water and land rows within rank 4: a spawner weapon none of whose spawned aircraft is alive,
+     a target that the firer's temporal beam holds, and an own building's pending delayed shot
+     (S-0301 claim 14). Over a target that one of those two rows refuses, in range of the weapon,
+     such an actor is offered the attack without force-fire and a click gives an attack order
+     (low: the place of those rows within rank 4 is S-0306 claim 23's, rated low there). What
+     happens to that target afterwards follows the held-target rules (S-0309 claim 29, S-0215
+     claim 32 for a building). Those answers rank above the tests of ranks 9 and 12 too (S-0301
+     claim 9), so a target that only those tests refuse gets the same, as for the countdown
+     above. The firer's own gripped unit is refused by neither row (S-0306 claim 23). The rearm
+     countdown (S-0301 claim 9, rank 5) comes after both rows, so a firer that is only waiting out
+     its countdown is not offered the attack over a target that one of them refuses.
+     `quirks.moment_reason_attack_cursor` reaches these answers too.
 
    *May attack as a friend:* the actor's type carries the attack-friendlies flag; or it carries the
    attack-cursor-on-friendlies flag, unless the warhead of the weapon it would use plants bombs and
@@ -455,18 +535,50 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    target whose type is immune to damage most kinds show *no-move* instead.
    - Backing: `measurable` (Scenario T4, including a unit travelling underground for part (b),
      the permanently disguised target, T4 part C for parts (d) and (e) and T4 part D for a falling
-     infantry unit; Scenario T10 for the
-     attack-friendlies flag, the attack-cursor-on-friendlies flag and its bomb-planting
-     exception). Four parts are `unmeasured`: a falling vehicle, because no scenario here drops
-     one; the sonic-warhead exception of *May attack as a
-     friend* and the case of a disguise that is currently disrupted (blinking), because the setup
+     infantry unit, T4 part E for a phasing-in actor, which runs a target in the air, a target in
+     range and one out of range; the protected-object and zero-versus cases follow from the ranks
+     of S-0301 claim 9, at T4 part E's backing; T4 part F for the rearm countdown hiding the
+     zero-versus test; the cloak drop of a phasing-in actor's target at S-0516 claim 14's
+     backing; Scenario T10
+     for the attack-friendlies flag, the attack-cursor-on-friendlies flag and its bomb-planting
+     exception). Eleven parts are `unmeasured`: a falling vehicle, because no scenario here drops
+     one; a falling actor that is also phasing in, because no scenario here drops a phasing-in
+     unit; an infantry or building actor kept over such a target through its countdown and its
+     drop afterwards, because T4 part F's actor is a tank; an actor out of ammunition or one
+     whose answer is
+     *cloaked* over a target that only the
+     tests of ranks 9 and 12 refuse, because T4 part F runs the countdown only; the other early
+     *rearming* answers of rank 4 against the tests of ranks 9 and 12, because no part here puts
+     a firer with such an answer over such a target (both follow from the ranks of S-0301 claim
+     9); the water and land cases, of a phasing-in actor and of the other *rearming* answers
+     before those rows, because no part here puts a firer with such an answer over a target that
+     those rows refuse (S-0306 claim 23 leaves the rows' place within rank 4 `unmeasured`); a
+     phasing-in aircraft actor's aircraft drops, because part E's actor is a tank and no part here
+     gives a phasing-in aircraft an attack order; a phasing-in actor with a temporal beam attached
+     and not being erased dropping the target in each turn, because no part here gives such an
+     actor an attack order (S-0513 claim 39a's backing covers the drop itself); the sonic-warhead
+     exception of *May attack as a friend* and the case of a disguise that is currently disrupted
+     (blinking), because the setup
      has no known way to put a parasite on a mobile unit or to disrupt a disguise at a chosen
      tick; and the case of a unit or building disguised as scenery over a terrain-fire weapon (low),
      because no disguise that belongs to no house is known in the setup (Open questions).
      The exact limit of −20 leptons in part (b) is `measurable` by Scenario T4 part B: scripted
      clicks on every tick of a unit's descent, with the recorder reading its height. The limit is
      fixed only as finely as the height changes between two ticks of the descent (Open questions).
-   - Confidence: medium (low where marked)
+   - Confidence: medium (low where marked: the water and land cases, of a phasing-in actor and
+     of the other *rearming* answers before those rows, and the disguise as scenery). Medium for
+     the reasons of the moment that hide the tests of ranks 9 and 12 (the countdown, out of
+     ammunition, *cloaked* and the early *rearming* answers of rank 4), as S-0301 claim 9
+     rates those ranks, for a vehicle or building actor. Low for the keep of such a target until
+     that reason ends, and the drop after it, for an infantry actor, as S-0309 claim 29 rates the
+     rank-5 keep for an infantry holder (T4 part F runs a tank only).
+     For a phasing-in actor with a temporal beam attached and not being erased,
+     its drop of the target in each turn is at S-0513 claim 39a's level. Medium for a falling
+     vehicle that is phasing in holding part (e), as S-0301 claim 9 rates the materialising
+     firer within rank 4, and low for a falling infantry unit that is phasing in (an open
+     question there). Medium for the keep of a target past the end of one reason while another
+     reason ranked above the refusal still applies, and for a holder that misses its checking
+     turn dropping it at its next one, as S-0309 claim 29 gives them.
 
 7. **Infantry on an object.** The final action of an own infantry actor on a target object is
    given by table I, a precedence list over the generic result and the actor's and target's
@@ -2043,6 +2155,34 @@ Ordering consequences:
   original). Hovering an engineer over a building above its capture threshold retains the
   preceding cursor rather than choosing a new image; the action and capture order do not
   change. Off: it uses the capture cursor of table C. Backing: `measurable` (T16), confidence high.
+- **Attack offered over a reason of the moment.** `quirks.moment_reason_attack_cursor` (default:
+  original). Part (e) of claim 6 takes the firing check's answer, so a reason of the moment that
+  ranks above a target test hides that test. While an actor's rearm countdown runs, while it is
+  out of ammunition and while its answer is *cloaked*, it is offered the attack over an enemy that
+  only the tests of ranks 9 and 12 refuse, for example one its warhead's versus value of zero cannot
+  affect, and a click gives an attack order. A phasing-in actor gets *rearming* for every target
+  ahead of the target tests, so over an enemy in range of its weapon it is offered the attack
+  even when the weapon cannot hit that enemy, for example a unit in the air for a weapon that
+  cannot hit one. The other early *rearming* answers of rank 4 hide the tests ranked below them
+  in the same way (claim 6). None fires at such a target. An actor whose reason of the moment
+  has ended drops it as claim 6 gives. While phasing in, a vehicle or aircraft with a temporal
+  beam attached and not being erased (an infantry unit too, with S-0513
+  `quirks.phase_in_beam_spares_infantry` off) drops it in each of its turns, and an aircraft
+  actor drops a target that one of S-0309 claim 29's two aircraft drops takes at the start of
+  its next turn, phasing in or not. Any other phasing-in actor keeps it while phasing in, unless
+  a drop that does not depend on its own turns takes it, such as S-0516 claim 14's cloak drop,
+  and drops it after phasing in ends (claim 6). Off: part (e) asks only whether a reason that
+  gives *illegal* holds, at any rank, passing over every reason of the moment (the *rearming*
+  answers of ranks 4 and 5, out of ammunition, *cloaked* and the lower ranks). Over an enemy that
+  the weapon cannot hit or affect, the actor then gets *nothing* from row G9 and the click gives
+  no attack order, whatever its countdown, ammunition or phasing in, so the action over a target
+  no longer changes with the actor's countdown. Part (d) and every other part of the attack rule
+  are the same in both states. Backing: `measurable` (T4 part E for phasing in, T4 part F for the
+  countdown), confidence medium, except: out of ammunition, *cloaked* and the other early
+  *rearming* answers against the tests of ranks 9 and 12, `unmeasured`, medium (claim 6); the
+  aircraft actor's drops and the drop by an actor with a temporal beam attached and not being
+  erased, `unmeasured`, as claim 6 gives, confidence medium for the aircraft drops and S-0513
+  claim 39a's level for the beam case; and the water and land cases, `unmeasured`, low (claim 6).
 
 ## Import mapping
 
@@ -2361,6 +2501,47 @@ cell, by table GC). Falsified if any of these differs.
   attack and give an attack order. Falsified by an attack action or attack order from the
   ordinary click during the fall, or by no attack order from the force-fire click. A run in which
   a click falls after landing, or the building leaves play before the units land, is void.
+- *Part E, a phasing-in actor (claim 6 (e) and `quirks.moment_reason_attack_cursor`).* Use the
+  setup of Scenario T9 part B: a flat, revealed test map whose named test map override gives an
+  own armed tank the teleporting locomotor without the harvester flag, game speed 2. The tank's
+  only weapon is a named test weapon that cannot hit a target in the air.
+  Near the landing cell stand three enemies: a unit of a hovering jump-jet type held in the air
+  within the weapon's range, a ground tank within range and a ground tank out of range. Order an
+  own jump far enough that S-0207 F9 gives *D* ≥ 4 ticks. In separate runs, scripted input moves
+  the cursor over one of the enemies on the first tick after the jump, logs the action shown and
+  clicks once without force-fire. Record on every tick, through phasing in and 40 ticks after
+  it, the phasing-in state, the tank's target, its orders and its shots. Repeat each case three
+  times. Control: the same three cases after phasing in ends. Variant: a superweapon warp member
+  of the same type, over the same three enemies, with the hover and click between its appearance
+  at the landing point and the end of its arrival hold (S-0513 claims 39 and 40), with a hold
+  long enough for the script. A variant run with no click in that window is inconclusive.
+  *Expected:* during phasing in, the attack action and an attack order over the unit in the air
+  and over the tank in range, and *nothing* over the tank out of range, without an attack order.
+  The target in the air is kept while phasing in, dropped at the first check tick of S-0309
+  claim 29 after phasing in ends (the tank takes a checking turn in every tick and no other
+  reason ranked above the refusal holds then), and is never fired at. In the control, no attack
+  action over the unit in the air and the attack action over both tanks. *Falsified by:* no attack
+  action or no attack order over the unit in the air during phasing in, an attack action over the
+  tank out of range during phasing in, the target in the air dropped before that check tick or
+  kept past it, or a shot at it. A run whose recorder shows phasing in already ended
+  at the click is inconclusive and is repeated with a longer jump.
+- *Part F, the rearm countdown (claim 6 (e) and `quirks.moment_reason_attack_cursor`).* A flat,
+  revealed test map, game speed 2. A named test rules file gives an own tank a named test weapon
+  with a rate of fire of 300 ticks, whose named test warhead has a versus value of zero against
+  the armour class of a named enemy test tank type *Z* and a nonzero one against the armour of an
+  ordinary enemy tank *A*. *A* and *Z* stand within the weapon's range of the own tank, which
+  does not move. Order the own tank to attack *A*. On the tenth tick after its first shot, while
+  its countdown runs, scripted input moves the cursor over *Z*, logs the action shown and clicks
+  once without force-fire. Record on every tick, until 100 ticks after the countdown ends, the
+  tank's target, its orders and its shots. Repeat three times. Control: the same hover and click
+  over *Z* before the tank's first shot, with no countdown running, and again 100 ticks after a
+  shot's countdown has ended. *Expected:* during the countdown, the attack action over *Z* and an
+  attack order on it; *Z* is kept until the countdown ends, dropped at the first check tick of
+  S-0309 claim 29 at whose turn the countdown has run out (the tank takes a checking turn in
+  every tick, and a run in which it is out of ammunition then is void), and never fired at. In the
+  control, no attack action over *Z* and no attack order. *Falsified by:* no attack action or no
+  attack order over *Z* during the countdown, an attack action over *Z* in the control, *Z* dropped
+  before that check tick or kept past it, or a shot at *Z*.
 
 **Scenario T5: infantry rows (claim 7, table I).**
 - Setup: own infantry, each tried alone: an engineer, a spy, a vehicle thief, a charge planter, a
@@ -3506,6 +3687,49 @@ readiness*, and Edge cases).**
   S-0408 claim 12a keeps claim 13's cursor-cell and object-versus-wall-sale distinction.
 
 ## Changes for other specs
+
+- **S-0304, claim 2 and its State table, attack cursor at a versus value of zero.** The row for
+  an actor given an attack order on an object without force-fire at a versus value of zero says
+  no attack cursor and no order, and claim 2 ends "Without force-fire the attack cursor does not
+  appear on such an object (S-0214)". Both should add the exception for an actor whose firing
+  check gives an answer other than *illegal* that ranks above the zero-versus test (S-0301 claim
+  9): its rearm countdown runs, it is out of ammunition, its answer is *cloaked*, or it has one of
+  the early *rearming* answers of rank 4 (it is phasing in, its spawner weapon has none of its
+  spawned aircraft alive, its temporal beam holds that target, or it is a building whose delayed
+  shot is pending). S-0214 claim 6 (e) then offers the attack over such a target (in range of the
+  weapon for an actor that is not movable, a phasing-in one among them) and a click gives an
+  attack order. The actor makes no shot at it and drops it (S-0214 claim
+  6), or, for a building without the SAM flag that is out of ammunition, at its first attack
+  processing (S-0215 claim 32), unless `quirks.moment_reason_attack_cursor` is off, which keeps
+  the row as it stands. The
+  term *Illegal target* should say that S-0214 claim 6 (e) asks the firing check's answer, so a
+  reason of the moment that ranks above the test hides it. Level: medium for a vehicle or
+  building actor, low for the keep and the drop for an infantry actor, as S-0214 claim 6 rates
+  them. Backing: `measurable` for the countdown (S-0214 T4 part F) and a phasing-in actor
+  (T4 part E), `unmeasured` for the other answers, as S-0214 claim 6 gives.
+
+- **S-0306, claim 23, the attack offered against a target that the water or land row refuses.**
+  The sentence "Separately from the rank, an ordinary click offers no attack on such a target
+  even while the firer is rearming, since S-0214 claim 6(e)'s cursor query does not count
+  rearming at all." becomes: "Separately from the rank, an ordinary click offers no attack on
+  such a target while the firer's rearm countdown runs, since the row's *illegal* outranks that
+  *rearming* and S-0214 claim 6(e) withholds the attack from a target the firing rules rule
+  illegal. The *rearming* answers that come before the two rows within rank 4 are the exception:
+  a materialising firer, a firer whose spawner weapon has none of its spawned aircraft alive, a
+  firer whose temporal beam holds that target, and a building whose delayed shot is pending.
+  Over such a target in range of its weapon an ordinary click offers each of them the attack and
+  gives an attack order (S-0214 claim 6 (e)), unless `quirks.moment_reason_attack_cursor` is
+  off. The firer's own gripped unit is not such a target, since
+  neither row refuses it." Level: low, as this claim rates the two rows' place within rank 4.
+  Backing: `unmeasured`, as this claim's backing gives for that place (S-0214 T4 part E's target
+  is one in the air, not one these rows refuse).
+  In the claim's Backing, the reason given for the rank of the two rows against a rearm
+  countdown's *rearming*, "S-0214 claim 6(e)'s cursor query does not count rearming, so no
+  cursor probe tells the ranks apart, and no scenario here reads the firing answer during a
+  countdown", becomes: "S-0214 claim 6 (e)'s cursor query takes the firing check's answer, so
+  a cursor probe over such a target during a countdown would tell the ranks apart, but no
+  scenario here makes that probe or reads the firing answer during a countdown (S-0214 T4 part
+  F's target is one the zero-versus test refuses)". The backing stays `unmeasured`.
 
 - **S-0204, claim 5, uses of the table square root.** The claim lists the uses that
   `quirks.table_root_distance` covers. S-0214's representative distance (F1) and group centre
