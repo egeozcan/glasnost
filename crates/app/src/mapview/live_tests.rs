@@ -453,6 +453,135 @@ fn mobiles_are_drawn_layer_by_layer() {
     assert_eq!(order[order.len() - 2..], [a, b]);
 }
 
+/// spec: S-0102 claims 3, 4 and 6 and scenario D49 (c), our engine's test
+/// of claim 6's order, not a measurement of the original (Q-2346 answered):
+/// no step of a superweapon warp re-files its member, so J1, created before
+/// G4 and G5 and with one sort key with both, keeps its place before both
+/// at every step of the warp, its time off the map included, through its
+/// arrival hold and 300 ticks on; both positions of
+/// quirks.layer_change_on_events_only. The warp is the simulation's own
+/// (S-0513 claims 34, 36 and 39: a vehicle lands at its landing cell's
+/// centre).
+#[test]
+fn d49c_a_warp_member_keeps_its_place_before_equal_key_objects() {
+    use std::collections::BTreeSet;
+
+    use glasnost_map::CellXY;
+    use glasnost_sim::rules::Kind as SimKind;
+    use glasnost_sim::superweapons::{self, warp, warp::Stage};
+    use glasnost_sim::world::Layer as CellLayer;
+
+    use super::live::mobile_key;
+
+    for events_only in [true, false] {
+        let (mut live, _) = synthetic_live();
+        live.set_view_quirks(super::quirks::ViewQuirks {
+            layer_change_on_events_only: events_only,
+            ..Default::default()
+        });
+        // The source block's centre and the destination block's centre on
+        // one screen row (equal x + y), 6 cells apart along it, away from the
+        // scenario's units.
+        let (source, dest) = (CellXY::new(46, 54), CellXY::new(52, 48));
+        let along = |c: CellXY, k: i32| CellXY::new(c.x + k, c.y - k);
+        let mut cells: Vec<CellXY> = [source, dest]
+            .into_iter()
+            .flat_map(|c| {
+                superweapons::block(&live.world, c)
+                    .into_iter()
+                    .map(|(_, b)| b)
+            })
+            .collect();
+        cells.extend([along(source, 2), along(dest, 2)]);
+        assert_eq!(cells.len(), 20, "every cell is on the map");
+        for &c in &cells {
+            assert!(
+                live.world.cells.list(c, CellLayer::Ground).is_empty(),
+                "{c:?} is clear"
+            );
+        }
+        // J1 on an edge cell of the source block, G4 the next cell outside
+        // it along the row, G5 the next cell outside the destination block
+        // along the row from J1's landing cell. J1 is created first.
+        let j1 = testkit::spawn(
+            &mut live.world,
+            SimKind::Vehicle,
+            "CART",
+            1,
+            along(source, 1),
+            0,
+        );
+        let g4 = testkit::spawn(
+            &mut live.world,
+            SimKind::Vehicle,
+            "CART",
+            1,
+            along(source, 2),
+            0,
+        );
+        let g5 = testkit::spawn(
+            &mut live.world,
+            SimKind::Vehicle,
+            "CART",
+            1,
+            along(dest, 2),
+            0,
+        );
+        live.after_tick();
+        let key = |live: &Live, id: ObjectId| mobile_key(live.world.obj(id).unwrap());
+        assert_eq!(key(&live, j1), key(&live, g4));
+        assert_eq!(key(&live, j1), key(&live, g5));
+        let place = |live: &Live, id: ObjectId| live.ground().objects().position(|x| x == id);
+        let check = |live: &Live, what: &str| {
+            let (j, a, b) = (place(live, j1), place(live, g4), place(live, g5));
+            assert!(j.is_some(), "J1 stays in the ground list ({what})");
+            assert!(
+                j < a && j < b,
+                "J1 before G4 and G5 ({what}, events only {events_only})"
+            );
+        };
+        check(&live, "before the launch");
+        warp::launch(&mut live.world, HouseId(1), source, dest);
+        let mut seen = BTreeSet::new();
+        let mut away_listed = false;
+        let mut over = None;
+        for t in 0..3000 {
+            live.step();
+            let o = live.world.obj(j1).expect("J1 lives");
+            let stage = o.sw.warp.as_ref().map(|m| m.stage);
+            seen.insert(match stage {
+                Some(Stage::Pending) => "pending",
+                Some(Stage::Leaving(_) | Stage::Expired) => "leaving",
+                Some(Stage::Blocked) => "blocked",
+                Some(Stage::Away) => "away",
+                Some(Stage::Placed) => "placed",
+                Some(Stage::Hold(_)) => "hold",
+                None => "over",
+            });
+            away_listed |= !o.on_map && place(&live, j1).is_some();
+            check(&live, &format!("tick {t}, {stage:?}"));
+            if stage.is_none() {
+                let end = *over.get_or_insert(t);
+                if t >= end + 300 {
+                    break;
+                }
+            }
+        }
+        assert!(over.is_some(), "the hold ended");
+        for s in ["leaving", "away", "placed", "hold", "over"] {
+            assert!(seen.contains(s), "the warp reached {s}: {seen:?}");
+        }
+        assert!(away_listed, "kept in the ground list while off the map");
+        assert_eq!(live.world.obj(j1).unwrap().pos.cell(), along(dest, 1));
+        assert_eq!(
+            key(&live, j1),
+            key(&live, g5),
+            "one key at the landing point"
+        );
+        assert_eq!(live.layer_of(j1), Some(super::slots::Layer::Ground));
+    }
+}
+
 /// spec: S-0102 claim 4 (the simulation's moments reach the drawing: a
 /// re-file reported in the tick's effects moves the object into its
 /// evaluated layer under the default switch)

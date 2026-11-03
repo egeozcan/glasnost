@@ -40,7 +40,7 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
     if !o.kind.is_mobile() || !o.on_map {
         return None;
     }
-    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, is in the ground layer from its warp's launch until at least the end of its arrival hold, whatever its height; this row comes before every other row, S-0306 claim 17)
+    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_ground_layer`), where the member stands at no height above its surface and its own rows give ground too
     if glasnost_sim::superweapons::warp::in_ground_layer(w, id) {
         return Some(Layer::Ground);
     }
@@ -59,6 +59,20 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
     }
     // spec: S-0102 State and ordering (walking, driving, hovering, ship, mech and teleport movement: always ground; tunnel and drop-pod movement are not modelled)
     Some(Layer::Ground)
+}
+
+/// Whether the drawing keeps mobile object `id` in its layer: an object on
+/// the map, or a superweapon warp member off it, between its departure and
+/// its appearance at its landing point. A member is in the ground list from
+/// its warp's launch and stays in it through its warp; its departure and
+/// its placement at the landing point re-file nothing (S-0102 claims 3 and
+/// 4). While it is away it keeps the position it had at departure (S-0513
+/// claim 39), which gives its sort key, and it is not drawn.
+pub fn listed(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        // spec: S-0102 claims 3 and 4 (a warp member stays in the ground list through its warp; no step of a superweapon warp is a moment)
+        o.kind.is_mobile() && (o.on_map || glasnost_sim::superweapons::warp::in_ground_layer(w, id))
+    })
 }
 
 /// The two-height rule of a unit with jumpjet movement (S-0102 *State and
@@ -204,14 +218,20 @@ impl Layers {
     /// - **Set-C rocket missiles:** re-filed at their first pause update
     ///   and at their first ascent update, seen from their phase after each
     ///   tick (a missile takes one update per tick).
-    /// - **Superweapon warp members** (S-0102 claim 3): one that is in a
-    ///   list other than ground once its warp has launched is put into the
-    ///   ground layer (interim, Q-2346). After its arrival hold, it stays
-    ///   there until one of claim 4's moments re-files it (Q-2346).
+    /// - **Superweapon warp members** (S-0102 claims 3 and 4, Q-2346): no
+    ///   step of a warp is a moment. A member is already in the ground list
+    ///   at the launch (the warp takes only objects listed in a cell and not
+    ///   in the air), and its launch, departure, placement at the landing
+    ///   point, the end of its hold and the return of its own movement
+    ///   re-file nothing: it keeps its track and its place while it is off
+    ///   the map ([`listed`]), and no moment, rocket re-file or sweep moves
+    ///   it while the warp row applies, in either position of the switch.
+    ///   After the hold it is an ordinary object again: it leaves the ground
+    ///   list at one of claim 4's moments, once its own movement raises it.
     /// - With `events_only` off (`quirks.layer_change_on_events_only`):
     ///   the checks give way to a sweep after the re-files: every object
     ///   whose evaluated layer differs from the list it is in moves to that
-    ///   layer's list.
+    ///   layer's list (a warp member only once the warp row has ended).
     ///
     /// Returns the objects that were put into a layer, in that order, with
     /// the layer.
@@ -222,30 +242,33 @@ impl Layers {
         events_only: bool,
         moments: &[Moment],
     ) -> Vec<(ObjectId, Layer)> {
-        let on_map = |id: ObjectId| w.obj(id).is_some_and(|o| o.kind.is_mobile() && o.on_map);
+        // spec: S-0102 claims 3, 4 and 7 (objects that leave the map leave their layer, except a warp member while it is away)
+        let kept = |id: ObjectId| listed(w, id);
+        // spec: S-0102 claims 3 and 4 (while the warp row applies, neither position of quirks.layer_change_on_events_only moves a warp member between lists, Edge cases)
+        let warping = |id: ObjectId| glasnost_sim::superweapons::warp::in_ground_layer(w, id);
         let gone: Vec<ObjectId> = self
             .tracks
             .keys()
             .copied()
-            .filter(|&id| !on_map(id))
+            .filter(|&id| !kept(id))
             .collect();
         for id in gone {
             self.tracks.remove(&id);
             self.remove(super::live::Entrant::Object(id));
         }
-        // Objects in their turn order; objects on the map that are not in
-        // play (none in practice) after them, by ID.
+        // Objects in their turn order; objects kept that are not in play
+        // (none in practice) after them, by ID.
         let mut ids: Vec<ObjectId> = w
             .update
             .order
             .iter()
             .copied()
-            .filter(|&id| on_map(id))
+            .filter(|&id| kept(id))
             .collect();
         let mut rest: Vec<ObjectId> = w
             .objects
             .values()
-            .filter(|o| o.kind.is_mobile() && o.on_map && !ids.contains(&o.id))
+            .filter(|o| kept(o.id) && !ids.contains(&o.id))
             .map(|o| o.id)
             .collect();
         ids.append(&mut rest);
@@ -254,7 +277,13 @@ impl Layers {
             if self.tracks.contains_key(&id) {
                 continue;
             }
-            let Some(mut layer) = evaluate(w, id) else {
+            let away = w.obj(id).is_some_and(|o| !o.on_map);
+            // spec: S-0102 claim 3 (a warp member is in the ground list through its warp: one the drawing first sees while it is away, as after a load, is filed there)
+            let Some(mut layer) = (if away {
+                Some(Layer::Ground)
+            } else {
+                evaluate(w, id)
+            }) else {
                 continue;
             };
             if glasnost_sim::air::ground_filed(w, id) {
@@ -276,7 +305,8 @@ impl Layers {
             return placed;
         }
         for &(id, check) in moments {
-            if !self.tracks.contains_key(&id) {
+            // spec: S-0102 claim 4 (no step of a superweapon warp is a moment: while the warp moves the member its own movement takes no step)
+            if !self.tracks.contains_key(&id) || warping(id) {
                 continue;
             }
             match check {
@@ -314,23 +344,18 @@ impl Layers {
                 tr.ascended |= first_ascent;
             }
             if (first_pause || first_ascent)
+                && !warping(id)
                 && let Some(layer) = evaluate(w, id)
             {
                 self.refile(id, layer, &mut placed);
             }
         }
-        for &id in &ids {
-            let Some(t) = self.tracks.get(&id).copied() else {
-                continue;
-            };
-            // spec: S-0102 claim 3 (a superweapon warp member is in the ground layer from its warp's launch, whatever its height); claim 4 names no moment at the launch, so a member still in an upper list is put into the ground layer after the launch's tick (interim, Q-2346)
-            if t.layer != Layer::Ground && glasnost_sim::superweapons::warp::in_ground_layer(w, id)
-            {
-                self.refile(id, Layer::Ground, &mut placed);
-            }
-        }
         if !events_only {
             for &id in &ids {
+                if warping(id) {
+                    // spec: S-0102 Edge cases (quirks.layer_change_on_events_only off: the sweep does not move a warp member while the warp row applies)
+                    continue;
+                }
                 let (Some(t), Some(layer)) = (self.tracks.get(&id), evaluate(w, id)) else {
                     continue;
                 };
@@ -669,9 +694,13 @@ mod tests {
     }
 
     /// spec: S-0102 claim 3 and State and ordering (a superweapon warp
-    /// member, any kind, is in the ground layer from its warp's launch until
-    /// at least the end of its arrival hold, whatever its height; the row
-    /// comes before every other, the rocket and jumpjet rows included)
+    /// member, any kind, evaluates to the ground layer from its warp's
+    /// launch, whatever its height, until its own movement applies again
+    /// after its arrival hold; the row comes before every other, the rocket
+    /// and jumpjet rows included). The warp never takes a hovering jumpjet,
+    /// an aircraft in the air or a rocket-moved unit (claim 3, S-0513 claims
+    /// 4 and 34), so these heights test the row's precedence as an
+    /// evaluation only.
     #[test]
     fn claim3_a_warp_member_is_in_the_ground_layer_whatever_its_height() {
         use glasnost_sim::superweapons::warp::Stage;
@@ -706,15 +735,107 @@ mod tests {
         assert_eq!(evaluate(&w, cart), Some(Layer::Air));
     }
 
-    /// spec: S-0102 claim 3 (a warp member is in the ground layer from its
-    /// warp's launch) and claim 4 (placement re-files; between moments an
-    /// object stays in its list), both positions of
-    /// quirks.layer_change_on_events_only; interim Q-2346 (launch and the
-    /// hold's end name no moment: an upper-list member is put into the
-    /// ground layer after the launch's tick, and after the hold it stays
-    /// there until a moment re-files it)
+    /// spec: S-0102 claims 3 and 4 and Edge cases, Q-2346 answered (no step
+    /// of a superweapon warp is a moment: the launch, the departure, the
+    /// placement at the landing point, the end of the arrival hold and the
+    /// return of the member's own movement re-file nothing; the member is in
+    /// the ground list throughout, off the map included; while the warp
+    /// moves it its own movement takes no step, so no check or re-file of
+    /// claim 4 applies; after the hold it stands at no height above its
+    /// surface, where its own rows give ground, so neither position of
+    /// quirks.layer_change_on_events_only moves it then; it leaves the
+    /// ground list in the movement step in which its height first reaches
+    /// 208 leptons on its climb)
     #[test]
-    fn claim4_a_warp_member_leaves_its_upper_list_at_the_launch() {
+    fn claim4_no_step_of_a_warp_is_a_moment() {
+        use glasnost_sim::superweapons::warp::Stage;
+        for events_only in [true, false] {
+            let mut w = world();
+            let jj = spawn(&mut w, Kind::Infantry, "JJ", 0);
+            let mut l = Layers::default();
+            l.evaluate_mobiles(&w, false, events_only, &[]);
+            assert_eq!(l.of(jj), Some(Layer::Ground));
+            let nothing = |l: &mut Layers, w: &World, moments: &[super::Moment], what: &str| {
+                let placed = l.evaluate_mobiles(w, true, events_only, moments);
+                assert!(placed.is_empty(), "{what}, events only {events_only}");
+                assert_eq!(l.of(jj), Some(Layer::Ground), "{what}");
+            };
+            // The launch: the member joins its group, already in the ground
+            // list.
+            warp(&mut w, jj, Some(Stage::Pending));
+            nothing(&mut l, &w, &[], "launch");
+            // Moments reported during the warp are not the member's own
+            // movement's: no re-file, no check.
+            warp(&mut w, jj, Some(Stage::Leaving(0)));
+            nothing(
+                &mut l,
+                &w,
+                &[(jj, None), (jj, Some((h(0), h(300))))],
+                "leaving",
+            );
+            // The departure takes it off the map; it keeps its track.
+            w.obj_mut(jj).unwrap().on_map = false;
+            warp(&mut w, jj, Some(Stage::Away));
+            nothing(&mut l, &w, &[], "departed");
+            // Its placement at the landing point is no placement re-file.
+            w.obj_mut(jj).unwrap().on_map = true;
+            w.obj_mut(jj).unwrap().pos.x += 4 * 256;
+            warp(&mut w, jj, Some(Stage::Placed));
+            nothing(&mut l, &w, &[], "placed");
+            warp(&mut w, jj, Some(Stage::Hold(3)));
+            nothing(&mut l, &w, &[], "hold");
+            // The hold over, at no height above its surface: its own rows
+            // give ground, so the sweep does not move it either.
+            warp(&mut w, jj, None);
+            nothing(&mut l, &w, &[], "hold over");
+            // Its own climb: below 208 leptons still ground, then the step
+            // that first reaches 208 moves it.
+            lift(&mut w, jj, 207);
+            nothing(&mut l, &w, &[(jj, Some((h(150), h(207))))], "climb to 207");
+            lift(&mut w, jj, 208);
+            let placed = l.evaluate_mobiles(&w, true, events_only, &[(jj, Some((h(207), h(208))))]);
+            assert_eq!(placed, [(jj, Layer::Air)], "events only {events_only}");
+        }
+    }
+
+    /// spec: S-0102 claim 4 and Edge cases (quirks.layer_change_on_events_only:
+    /// once the warp row has ended a member is treated as any object; an
+    /// aircraft whose type cannot land is never re-filed by a take-off, so a
+    /// member of that type keeps the ground list while it flies with the
+    /// switch on, and the sweep moves it with the switch off)
+    #[test]
+    fn claim4_a_non_landable_aircraft_member_keeps_the_ground_list_while_it_flies() {
+        use glasnost_sim::superweapons::warp::Stage;
+        for events_only in [true, false] {
+            let mut w = world();
+            let jet = spawn(&mut w, Kind::Aircraft, "JET", 0);
+            let mut l = Layers::default();
+            l.evaluate_mobiles(&w, false, events_only, &[]);
+            for stage in [Stage::Pending, Stage::Placed, Stage::Hold(0)] {
+                warp(&mut w, jet, Some(stage));
+                assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
+            }
+            warp(&mut w, jet, None);
+            assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
+            lift(&mut w, jet, 600);
+            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
+            if events_only {
+                assert!(placed.is_empty(), "no take-off re-file for its type");
+                assert_eq!(l.of(jet), Some(Layer::Ground));
+            } else {
+                assert_eq!(placed, [(jet, Layer::Top)], "the sweep moves it");
+            }
+        }
+    }
+
+    /// spec: S-0102 claim 4 and Edge cases (neither position of
+    /// quirks.layer_change_on_events_only moves a superweapon warp member
+    /// between lists while the warp row applies; the launch re-files
+    /// nothing). Claim 3 says the warp never takes an object outside the
+    /// ground list; this state, a member in the top list, is made by hand to
+    /// show that no rule of the drawing moves it there either.
+    #[test]
+    fn claim4_no_rule_moves_a_member_between_lists_while_the_warp_row_applies() {
         use glasnost_sim::superweapons::warp::Stage;
         for events_only in [true, false] {
             let mut w = world();
@@ -722,40 +843,11 @@ mod tests {
             lift(&mut w, jj, 600);
             let mut l = Layers::default();
             l.evaluate_mobiles(&w, false, events_only, &[]);
-            assert_eq!(l.list(Layer::Top), [Entrant::Object(jj)]);
-            // The launch: the member joins its group.
+            assert_eq!(l.of(jj), Some(Layer::Top));
             warp(&mut w, jj, Some(Stage::Pending));
-            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
-            assert_eq!(placed, [(jj, Layer::Ground)], "events only {events_only}");
-            assert!(l.list(Layer::Top).is_empty());
-            // A jumpjet check during the warp: both sides ground, no re-file.
-            assert!(
-                l.evaluate_mobiles(&w, true, events_only, &[(jj, Some((h(600), h(600))))])
-                    .is_empty()
-            );
-            // Departure takes it off the map; it leaves every list.
-            w.obj_mut(jj).unwrap().on_map = false;
-            warp(&mut w, jj, Some(Stage::Away));
-            l.evaluate_mobiles(&w, true, events_only, &[]);
-            assert_eq!(l.of(jj), None);
-            // Its placement at the landing point re-files it, into ground.
-            w.obj_mut(jj).unwrap().on_map = true;
-            warp(&mut w, jj, Some(Stage::Placed));
-            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
-            assert_eq!(placed, [(jj, Layer::Ground)]);
-            warp(&mut w, jj, Some(Stage::Hold(3)));
-            assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
-            // The hold over.
-            warp(&mut w, jj, None);
-            let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
-            if events_only {
-                assert!(placed.is_empty(), "no moment: it stays in ground");
-                assert_eq!(l.of(jj), Some(Layer::Ground));
-                l.evaluate_mobiles(&w, true, events_only, &[(jj, None)]);
-                assert_eq!(l.of(jj), Some(Layer::Top), "a re-file moment moves it");
-            } else {
-                assert_eq!(placed, [(jj, Layer::Top)], "the sweep of the same tick");
-            }
+            let placed = l.evaluate_mobiles(&w, true, events_only, &[(jj, None)]);
+            assert!(placed.is_empty(), "events only {events_only}");
+            assert_eq!(l.list(Layer::Top), [Entrant::Object(jj)]);
         }
     }
 
