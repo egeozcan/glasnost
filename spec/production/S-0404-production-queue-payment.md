@@ -2,11 +2,11 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226]
 supersedes: []
@@ -583,7 +583,8 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
     With either flag, the released aircraft's position is *c* + *d*ᵢ, component by component
     in the map x, y and world-height axes, where *d*ᵢ is the docking displacement of its
     contact place. The places are numbered from 0 in their imported order. An aircraft already
-    in contact keeps that place; otherwise it takes the first empty place. If the imported
+    in contact keeps that place; otherwise it takes the first empty place, which is the place a
+    new contact takes, so the position follows the contact place. If the imported
     docking-place count is 1, the sole displacement is used regardless of contact index.
     With a count of 0, or a contact index outside the imported displacement count, use *c*
     without a displacement. A new release with several places uses its newly established
@@ -598,7 +599,10 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
     timing. This claim governs the release only: the height component is applied only at a factory
     release, which puts the aircraft at this position, height included, and S-0501 claim 48 governs
     what follows. An aircraft that docks by landing is moved toward the docking position
-    horizontally and rests at the landing height (S-0501 claim 24).
+    horizontally and rests at the landing height (S-0501 claim 24). An aircraft that lands over the
+    pad without a contact (S-0501 claim 24) is moved toward a docking position that does not depend
+    on whether the pad has a free contact place: with one docking place, that place's docking
+    position, and otherwise the pad's foundation centre with no displacement.
     - Backing: `measurable` (scenario P13) for ordinary release positions and tested import
       branches. The zero-count and out-of-count contact-index fallbacks are `unmeasured`:
       no P13 release establishes an aircraft contact in either state, so a failed release
@@ -607,11 +611,13 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
       distinguish such a draw from unresolved initial-placement draws during the same release.
       That docking by landing moves the aircraft horizontally and leaves the height component
       unapplied has S-0501 claim 24's backing: `measurable` (S-0501 scenarios AC30 part k (1) and
-      AC14).
+      AC14). The docking position of an aircraft that lands without a contact has S-0501 claim 24's
+      backing: `unmeasured` (no set-up there lands a waiting aircraft over its pad).
     - Confidence: high (position formula, flags, count branches and no position-selection draw),
       medium (contact-place selection and final position within the release tick); medium, until
       S-0501 scenarios AC30 part k (1) and AC14 run, for docking by landing's horizontal move and
-      unapplied height, as S-0501 claim 24 rates them
+      unapplied height, as S-0501 claim 24 rates them; medium for the docking position of an
+      aircraft that lands without a contact, as S-0501 claim 24 rates it
 
 ## Formulas
 
