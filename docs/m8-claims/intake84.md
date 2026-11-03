@@ -102,7 +102,8 @@ changes no sparkle (it is about cut-short turns). Their C7 verdicts stand
 
 ## Lanes
 
-Main e2239c1 (binaries and tests built from a worktree at the base) against the branch. All
+Main against the branch. The base binaries and tests were built from a worktree at 0ff0bea,
+whose code is the same as e2239c1's: the commits between them change only docs and spec files. All
 lane outputs are under `local-lane/m8/i84/` (git-ignored).
 
 | Lane | Before | After |
