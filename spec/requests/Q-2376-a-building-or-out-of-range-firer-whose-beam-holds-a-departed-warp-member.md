@@ -1,9 +1,9 @@
 ---
 id: Q-2376
 title: A building firer, or a firer beyond range, whose temporal beam holds a departed warp member
-status: open
+status: answered
 related: [S-0513, S-0514, S-0309, S-0215]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
