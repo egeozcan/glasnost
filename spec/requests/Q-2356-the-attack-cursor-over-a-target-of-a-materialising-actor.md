@@ -1,9 +1,9 @@
 ---
 id: Q-2356
 title: The attack cursor and order acceptance for an actor that is materialising
-status: open
+status: answered
 related: [S-0214, S-0301, S-0304, S-0207, S-0513]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
