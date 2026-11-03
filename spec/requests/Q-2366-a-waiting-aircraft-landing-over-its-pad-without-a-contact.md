@@ -1,9 +1,9 @@
 ---
 id: Q-2366
 title: A waiting aircraft that lands over its destination pad without a contact
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
