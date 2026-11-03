@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 64
+revision: 65
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232]
 supersedes: []
@@ -822,9 +822,17 @@ S-0501 claim 20.
     the direct-rocking and nuke-making rows of S-0514 claim 20 do to a departed member is not
     established (Open questions).
 
-    *Render layer of a warp member.* From its warp's launch until at least the end of its arrival
-    hold, a warp member is in the ground render layer, whatever its height. When it leaves that
-    layer after the hold is not established here. So claim 20 (c) uses the threshold 42 for a warp
+    *Render layer of a warp member.* From its warp's launch until its own movement applies again
+    after its arrival hold, a warp member is in the ground render layer, whatever its height
+    (S-0102 claims 3 and 4). Unless it moves from one bridge deck to another, it then stands at
+    no height above its surface (on the deck when it lands on a high-bridge cell from the
+    ground), so its own rows of S-0102's layer table give the ground layer as well. It leaves
+    that layer only when its own movement raises it, at that movement's moment of S-0102 claim
+    4, except an aircraft whose type cannot land, which keeps the ground layer while it flies,
+    until a crash. For a member moving from one bridge deck to another, its height at the
+    landing point is not established (S-0513 claim 36), and so, for a unit with jumpjet movement
+    or an aircraft whose type can land, neither is when it leaves the ground layer (S-0102 claim
+    3 and Open questions). So claim 20 (c) uses the threshold 42 for a warp
     member, also for one that departed from a high-bridge deck and counts as airborne by the
     paragraph above. No member uses 128 there:
     an aircraft is never warped while in the air (S-0513 claim 34).
@@ -848,8 +856,11 @@ S-0501 claim 20.
       `measurable` in our engine by run i; the original has no refused placement to compare. The
       rule of no seizing is `measurable` in our engine by run h part h run there; run in the
       original, that part only records the original's outcome. The threshold 42 for a member
-      that counts as airborne is `measurable` by run j. That the ground layer lasts at least
-      until the arrival hold ends is `unmeasured`: no rule here reads the layer after appearance
+      that counts as airborne is `measurable` by run j. The ground render layer until the
+      member's own movement applies again after its hold, and its leaving that layer at that
+      movement's moment, are `measurable` (S-0102 D49 (b)). They are `unmeasured` for a landing
+      on a high-bridge deck, from the ground or from another deck, since D49 runs on a flat map,
+      and for an aircraft member, since no scenario there warps one.
     - Confidence: high; medium for the target point at the world origin; medium for the warp
       member kept as target, the turn towards its landing point and the hit there (run f), and
       medium, unmeasured, for the position read while the member is off the map, for the lack of
@@ -857,7 +868,9 @@ S-0501 claim 20.
       kills it, for the deck rule and for the airborne count of a departed member. Medium for each
       special-hit row on a departed member (runs g and h), medium for an erasure lock's effects
       while the member phases in or after (S-0513 claim 39a), medium for the threshold 42 (run j),
-      medium, unmeasured, for the ground render layer lasting until the arrival hold ends, and high
+      medium for the ground render layer until the member's own movement applies again after its
+      hold and its leaving that layer then (S-0102 claims 3 and 4), low for a member that moves
+      from one bridge deck to another, and high
       for the two engine-design rules (the deck count after a refused placement, and no seizing
       of a member from its departure until its arrival hold ends) as design contracts
 
@@ -3757,7 +3770,8 @@ b and 6 a, T1's first row).**
   that is off the map holds back its warp is not established either (run g part d records V's
   appearance and arrival-effect ticks). Nor is what the direct-rocking and nuke-making rows of
   S-0514 claim 20 do to a departed member, which claim 17 does not list. Nor is the moment at which
-  a warp member leaves the ground render layer after its arrival hold, which no rule here needs.
+  a warp member that moves from one bridge deck to another leaves the ground render layer, for a
+  unit with jumpjet movement or an aircraft whose type can land (S-0102 claim 3).
 
 ## Changes for other specs
 
@@ -3785,16 +3799,13 @@ b and 6 a, T1's first row).**
   designation, disguise-making and the erasure lock act on it, charging does nothing, and in our
   engine a locomotor-seizing
   hit does nothing until its arrival hold ends (design). The selected row replaces ordinary
-  damage in every case. A warp member is in the ground render layer from the launch until at least the end
-  of its arrival hold. With `quirks.warp_deck_departure_airborne` on, its deck count after a
+  damage in every case. A warp member is in the ground render layer from the launch until its
+  own movement applies again after its arrival hold (S-0102 claims 3 and 4). With
+  `quirks.warp_deck_departure_airborne` on, its deck count after a
   refused placement follows the latest passed check (design, with claim 50). S-0513 claim 39 can
   point here for these: medium, `measurable` by P11 runs g, h and j, except how long the layer
-  lasts, medium, `unmeasured`, and the two design rules, high as design contracts.
-
-- S-0102 claim 3 and its layer table: a superweapon warp member is in the ground layer from its
-  warp's launch until at least the end of its arrival hold, whatever its height (claim 17 here).
-  S-0102 can say so, pointing here. When it leaves that layer after the hold is not established.
-  Medium, `unmeasured`, as claim 17 rates it.
+  lasts, which S-0102 claims 3 and 4 give and rate, and the two design rules, high as design
+  contracts.
 
 - S-0601 claim 5, S-0519 claims 2, 7 and 16, S-0516 claim 31 and S-0514 claims 1 to 4: a
   departed warp member is an ordinary target object for these hits, off the map or phasing in
