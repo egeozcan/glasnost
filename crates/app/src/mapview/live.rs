@@ -1287,8 +1287,7 @@ impl Live {
             entrants.push((rank, Entrant::Static(i), g.key));
         }
         for o in live.world.objects.values() {
-            if o.kind.is_mobile()
-                && o.on_map
+            if super::layers::listed(&live.world, o.id)
                 && live.layers.of(o.id) == Some(super::slots::Layer::Ground)
             {
                 entrants.push((o.id.0, Entrant::Object(o.id), mobile_key(o)));
@@ -2625,8 +2624,8 @@ impl Live {
                 .objects
                 .values()
                 .filter(|o| {
-                    o.kind.is_mobile()
-                        && o.on_map
+                    // spec: S-0102 claims 3, 4 and 6 (a warp member keeps its place in the ground list while it is away, with the key of its position at departure, S-0513 claim 39; it is not drawn then)
+                    super::layers::listed(&self.world, o.id)
                         && self.layers.of(o.id) == Some(super::slots::Layer::Ground)
                 })
                 .map(|o| (Entrant::Object(o.id), mobile_key(o))),

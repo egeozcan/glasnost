@@ -374,3 +374,15 @@ Ledger: [intake81.md](intake81.md). S-0513 r89 claim 39a adds the sparkles and d
 | `phase_in_beam_spares_infantry` | S-0513 claim 39a (Drops: an infantry member with a beam drops while it phases in only with the switch off) | rejected (not in the layer), unchanged | The new difference is whether an infantry member with a beam keeps a given target and destination in its turns while it phases in. That is still a rule change over a few ticks with no glitch named. Both positions are tested: `claims_s0513_r89::claim39a_an_infantry_member_with_a_beam_drops_off_the_map_only_with_the_switch_off`. |
 
 Intake 81 leaves the layer file unchanged.
+
+## Intake 83 (S-0102 r41): the layer-change switch judged
+
+Ledger: [intake83.md](intake83.md). S-0102 r41 adds no switch. Its Edge cases give the existing
+`layer_change_on_events_only` a warp-member part. No earlier C7 entry judged this switch, which
+is read only by the client (`mapview::quirks::ViewQuirks`).
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `layer_change_on_events_only` | S-0102 claim 4, Edge cases (r41: neither position moves a warp member between lists while the warp row applies; afterwards a member is treated as any object) | rejected (not in the layer) | Condition 1 is met: the Edge case states the off position (a sweep every tick moves an object whose evaluated layer differs from its list), and it is built in `Layers::evaluate_mobiles`. Condition 2 fails. The quirk text gives the difference as which list an object is in between claim 4's moments, and so its draw order against overlapping images of other layers. It names no stuck unit, no give-up and no glitch, and no play note or request names it. For a warp member the two positions agree until its own movement raises it after the hold. Condition 3 is met: only drawing order changes, and no simulation state. Both positions are tested: `layers::tests::claim4_switch_off_sweeps_every_tick`, `claim4_no_step_of_a_warp_is_a_moment`, `claim4_a_non_landable_aircraft_member_keeps_the_ground_list_while_it_flies`, `claim4_no_rule_moves_a_member_between_lists_while_the_warp_row_applies` and `live_tests::d49c_a_warp_member_keeps_its_place_before_equal_key_objects`. |
+
+Intake 83 leaves the layer file unchanged.
