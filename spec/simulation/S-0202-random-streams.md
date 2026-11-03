@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 54
+revision: 62
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-03
 measurements: [M-0008]
-requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711, Q-1562]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711, Q-1562, Q-2336]
 supersedes: []
 ---
 
@@ -818,6 +818,33 @@ original's recording modes are retained as deferred context, not implementation 
 14. **Loading-order refinements (Q-0101).** In a new skirmish, the following relations
     fix observable animation and resource outcomes and the stream state available to later
     choices. They describe draw allocation, not a required internal loading schedule:
+    - **House creation (Q-2336).** Each house that the game start creates takes one ranged
+      draw R(450, 1800) when it is created. The bounds are a constant of the executable, the same
+      for every house, with no source in the rules data, and the draw takes raw values as claim
+      4's ranged-draw rule gives for that range. No rule of this
+      project uses the draw's result. A skirmish game's start
+      creates S-0009 claim 19's house list twice, both times in that claim's order, so these
+      draws come in two rounds, one draw per house in each. The first round comes before S-0009
+      claim 20's early phase, whose position
+      draws are taken for the first round's houses. Those houses are then discarded and take
+      no further observable part in the game: each player keeps the position the early phase
+      gave it (S-0009 claim 20). The second round comes after the early phase and before the
+      initial fill, so before every later group of the map-loading table, the fill's draws of a
+      water-filled map included. A network game's
+      start is the same. A campaign mission creates each house its map lists once, in the
+      map's order, each with one such draw.
+      - Backing: `measurable` (R17) for the draw, its bounds for every house, the two rounds
+        and their places on either side of the early phase and before the fill's draws (variant D)
+        in a skirmish game. M-0019's counts of raw values before
+        tick 0 include both rounds (S-0216 claim 8), which a reading of those records' draws
+        shows, not an observation. `unmeasured` for the first round's houses taking no further
+        part, since no scenario part here observes houses in play, and R17 records the stream
+        only. `unmeasured` for the network game and the campaign mission, which no record or
+        scenario part reaches.
+        Confidence: medium for the draw, its bounds, the two rounds and their places on either
+        side of the early phase and before the fill; medium for the first round's houses taking no
+        further part
+        (unmeasured); low for the network game and the campaign mission.
     - The unused-house cleanup of S-0009 claim 28 follows the second whole-map
       recalculation of S-0010 claim 12 and precedes the late start-position phase. Taking a
       removed house's grounded pre-placed objects out of their occupied cells recalculates
@@ -1306,7 +1333,9 @@ with claim 10's draws. Rows marked "pointer" belong to a spec that does not yet 
 
 | Group | Effects and draw allocation within the group | Owner |
 |---|---|---|
+| House creation, first round | one house-creation draw R(450, 1800) (claim 14) per house created, over S-0009 claim 19's house list in its order (skirmish and network games) | claim 14 |
 | S-0009 early phase | list 1, list 2, random positions | S-0009, claim 20 |
+| House creation, second round | the same list created again, one house-creation draw R(450, 1800) per house, in the same order (skirmish and network games; a campaign mission creates its houses once, here, with one draw each) | claim 14 |
 | Initial fill | one per visited cell, water fill only | S-0009, claim 6 |
 | Tags of cell tags | the draws of each tag created by a cell tag | S-0011, claim 34 |
 | Overlay type stream | in the stream's order: the bridge pieces of each bridge completed by an end marker (3 per cell step) and the creation draws of cell animations (claim 10, *Animation creation draws*). Tile animations started by placement recalculations take their draws in this group too; the placement's cell-animation creation and immediate start-event draws precede that recalculation's tile-animation draws | claim 10 |
@@ -1333,7 +1362,8 @@ overlay and vein-candidate groups, claim 14's conditional cleanup tile-animation
 and the secret-lab group before remaining tags. Creating terrain objects, smudges and tunnels
 from the map was not found to take draws (medium confidence, `unmeasured`: no scenario
 isolates these creations between known stream checkpoints). Neither S-0009
-nor S-0011 lists the *Fence lines* row; it matters only for data with fence posts. Where each group
+nor S-0011 lists the two *House creation* rows, which claim 14 states (R17). Neither lists the
+*Fence lines* row either; it matters only for data with fence posts. Where each group
 sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws,
 that each bridge or vein site follows the one before it in the stream, that the overlays of R8 C
 take no draw and, through R8 G, the total of the pre-placed objects' draws before the starting
@@ -1494,9 +1524,10 @@ The recorder is part of the measurement setup (the project lead has approved it)
   recorder and scripted input; repeat any run voided by the bystander.
   *Procedure:* after tick 300, open the options menu to stop simulation, read the recorder,
   save the game without resuming play, and read the recorder again. Let that
-  run continue without loading for 1800 ticks (2 game minutes), video-recorded (run 0). Then load
+  run continue without loading for two game minutes, video-recorded (run 0). Then load
   the save twice (runs 1 and 2), read the recorder at load completion before any resumed tick,
-  give no orders and video-record 1800 ticks. Use scripted input to resume each run identically.
+  give no orders and video-record two game minutes. Use scripted input to resume each run
+  identically.
   If the recorder cannot isolate the pre-tick load checkpoint, the state comparison is
   inconclusive, not evidence of failed restoration.
   *Expected (required):* the stream state and position read just before the save, just after the
@@ -2109,7 +2140,65 @@ The recorder is part of the measurement setup (the project lead has approved it)
     must be repeated another way. The smoke update draws of S-0616 claim 6 come later and are not
     part of the compared group.
 
+- **R17, house-creation draws (claim 14; Q-2336).** A small purpose-made skirmish map with
+  stock data, speed 4, no engine add-on and no mods (the named test files of a scenario
+  excepted): no water, no resource, no overlay, no trigger, no tag and no pre-placed object,
+  and four start waypoint markers, so no start list has a random entry. The skirmish runs under
+  the oracle harness, whose settings file gives the skirmish setup (as for M-0001's games: no
+  menus), with the harness's arena set-up and its gameplay changes off. The bases setting has no
+  lobby control and no settings-file route: it is the base rules' bases default, copied when the
+  program starts (S-0412 claim 1). So a loose test copy of the base rules, placed before the
+  program starts as in S-0412 scenarios K1 run 2 and K3, sets the bases default off and the
+  minimum unit count 0. The settings file sets the lobby's values: the unit-count setting 0,
+  crates off, and fixed colours and fixed start positions for every player. Runs with two, three
+  and four players (one human, the rest computer), five naturally recorded seeds each, with a
+  read-only random-state recorder that logs every scenario-stream request, its bounds and its
+  result, from the seeding to tick 0. Variant B adds one pre-placed vehicle of the neutral house,
+  of a type with neither visceroid flag (Import mapping), no initial slot objects (S-0506
+  claim 1) and no initial slave group (S-0402 claim 19), so that its creation makes no other
+  object (S-0216 claim 3). Variant C leaves every player's start
+  position on random, so the human player, first in S-0009 claim
+  19's house order with no position yet taken, takes that claim's one ranged draw over
+  0 … 3, and every later player gets the farthest-sum position with no draw. Variant D sets the
+  map's fill setting to water (S-0009 claim 6), so the initial fill takes one draw over 0 … 3
+  per visited cell.
+  - *Expected:* with *p* players, 2 × (*p* + 2) ranged draws R(450, 1800) first (the *p*
+    players and the neutral and special houses, twice, each round in S-0009 claim 19's order),
+    then the starting-unit step's final R(0, 65535) and no other draw before tick 0.
+    In variant B the vehicle's creation draw comes after all the house draws, followed by any
+    placement draws that the placement specs give the vehicle (map-loading table, *Pre-placed
+    objects*), and those are the only other draws. In variant C the one draw over 0 … 3 comes
+    after the first *p* + 2 house draws and before the other *p* + 2,
+    and it is the only other draw. In variant D the fill's draws over 0 … 3 come directly after
+    the second round's last house draw (the later draws of a water map are not compared).
+  - *Falsified if:* another count, house draws with other bounds, house draws after the
+    vehicle's creation draw, in variant C the draw over 0 … 3 in another place, in variant D a
+    fill draw before a second-round house draw, or, in the runs without water, any other draw
+    before tick 0 (variant B's placement draws for its vehicle excepted).
+
 ## Changes for other specs
+
+- S-0009 claims 19 and 20 (Q-2336): each house created takes claim 14's house-creation draw,
+  and a skirmish game creates claim 19's house list twice. So claim 20's draw order starts with
+  the first round of these draws, before list 1's random entries, and has the second round
+  after the random-position draws and before the initial fill's draws. Claim 20's *Draw order*
+  list can name both rounds and point here.
+- S-0009 scenario M9c (Q-2336): with *h* houses created per round (the *p* players and the
+  neutral and special houses, *h* = *p* + 2; *h* = 4 in M9c's two-player game), the raw values
+  before the fill's include both rounds' 2 × *h* house-creation draws (claim 14), whose raw
+  values follow from the recorded seed by this spec's range rule (claim 4). Variant A's *Expected*
+  becomes: *k* is
+  1 plus the raw values that the 2 × *h* house draws take, all computed from the recorded seed,
+  and the human starts at waypoint 0 exactly when the raw value directly after the first round's
+  raw values gives 0 by the range rule. Its parenthesis on a *k* larger than 1 becomes: a *k* that
+  exceeds this value by the same amount in every run falsifies only the absence of other draws,
+  and variant B then adds that amount. Variant B's *Expected* becomes: *k* is the raw values of
+  the first round, plus those of the 4 random entries, plus 1, plus those of the second round,
+  all computed from the recorded seed, and the human starts at the position that the raw value
+  directly before the second round's raw values gives. "S-0202's table "Draws during map loading"
+  lists nothing before the early phase" becomes: that table lists only the first house-creation
+  round before the early phase. The rest of M9c, list 3 and the fill's draws included, is
+  unchanged.
 
 - S-0215 F6 (targeting timer): in M-0008 one infantry unit of one type, placed during play at tick
   300, and one armed tank type created before tick 0, both left in *guard*, show a second periodic
