@@ -386,3 +386,15 @@ is read only by the client (`mapview::quirks::ViewQuirks`).
 | `layer_change_on_events_only` | S-0102 claim 4, Edge cases (r41: neither position moves a warp member between lists while the warp row applies; afterwards a member is treated as any object) | rejected (not in the layer) | Condition 1 is met: the Edge case states the off position (a sweep every tick moves an object whose evaluated layer differs from its list), and it is built in `Layers::evaluate_mobiles`. Condition 2 fails. The quirk text gives the difference as which list an object is in between claim 4's moments, and so its draw order against overlapping images of other layers. It names no stuck unit, no give-up and no glitch, and no play note or request names it. For a warp member the two positions agree until its own movement raises it after the hold. Condition 3 is met: only drawing order changes, and no simulation state. Both positions are tested: `layers::tests::claim4_switch_off_sweeps_every_tick`, `claim4_no_step_of_a_warp_is_a_moment`, `claim4_a_non_landable_aircraft_member_keeps_the_ground_list_while_it_flies`, `claim4_no_rule_moves_a_member_between_lists_while_the_warp_row_applies` and `live_tests::d49c_a_warp_member_keeps_its_place_before_equal_key_objects`. |
 
 Intake 83 leaves the layer file unchanged.
+
+## Intake 84 (S-0513 r91, S-0514 r16, S-0306 r65): the warp switches judged again
+
+Ledger: [intake84.md](intake84.md). S-0513 r91 adds a building firer and a firer beyond range to claim 39a's *The firer*. S-0514 r16 orders the sparkle against the erasure update with no switch. S-0306 r65 extends the ground render layer of a warp member past its hold. None of them adds a switch or changes a switch's text.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `warp_departure_keeps_beam` | S-0513 claim 39a (*The firer*: a building firer and a firer beyond range, Q-2376) | rejected (not in the layer), unchanged | The off position refuses the lock at the launch, so no firer holds a departed member and the new firer rows do not arise. That follows from the refusal judged in intake 75. It names no stuck unit or glitch, and both positions are built and tested |
+| `phase_in_beam_spares_infantry` | S-0513 claim 39a; S-0514 claim 18 | rejected (not in the layer), unchanged | It decides only which turns an infantry member with a beam has cut short while it phases in. The sparkle's new order against the erasure update is the same in both positions |
+| `warp_deck_departure_airborne` | S-0306 claim 17 | rejected, unchanged | r65 restates the paragraph that cites it without changing it. The deck count and its effects on projectiles are as judged before |
+
+Intake 84 leaves the layer file unchanged.
