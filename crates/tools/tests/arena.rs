@@ -349,6 +349,18 @@ fn pt6_the_records_game_start_in_our_setup() {
             HouseRole::Special
         ]
     );
+    println!(
+        "start waypoints 0 to 7 on the map: {:?}; the houses' starts: {:?}",
+        (0..8u16)
+            .filter(|k| g.map.waypoints.contains_key(k))
+            .collect::<Vec<_>>(),
+        w.houses.iter().map(|h| h.start).collect::<Vec<_>>()
+    );
+    // spec: S-0216 claim 8 (Game start: the human player house at start 3, so no random-position draw)
+    assert_eq!(
+        w.houses[usize::from(oracle::HUMAN.0)].start,
+        Some(oracle::HUMAN_START)
+    );
     // Everything created before the groups' first unit is the game start's.
     let first_group_unit = a.units.iter().flatten().min().copied().unwrap();
     let human: Vec<_> = w
