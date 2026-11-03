@@ -2,14 +2,14 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 34
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490,
-Q-0520, Q-0580, Q-0742, Q-1560, Q-2176]
+Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346]
 supersedes: []
 ---
 
@@ -78,7 +78,7 @@ screen rows.
 | *L(z)* | Height lift of S-0101 claim 3 and F2, in pixels: ⌊15·*z*/104 + ½⌋, exact rational arithmetic for signed integer *z* in leptons, with ties towards positive infinity. For example *L*(400) = 58, and *L*(104·ℓ) = 15·ℓ for every integer level ℓ. |
 | depth reference *C* | The view-independent integer 32768 depth units that ties depth values to world pixel rows throughout a game (F1). |
 | view jump | A change of the battlefield view's position between two drawn frames by more than the view's width across or more than its height up or down, for example after a click on a distant point of the radar map. Smaller changes are *scrolls*. Both sizes are in screen pixels. |
-| global cruise height | A game-wide height above the terrain, in leptons, that separates the air layer from the top layer for objects whose layer is not decided by their own movement type (Import mapping). |
+| global cruise height | A game-wide height above the surface (*State and ordering*), in leptons, that separates the air layer from the top layer for objects whose layer is not decided by their own movement type (Import mapping). |
 | jumpjet cruise height | A per-type height above the terrain, in leptons, that separates the air layer from the top layer for units with jumpjet movement (Import mapping, *State and ordering*). |
 | terrain fudge | A per-type depth value, in depth units, that pushes a vehicle, infantry or aircraft farther from the viewer near cliffs, bridge columns, tunnel entrances or high bridges (claim 14). |
 | unit depth adjustment *U* | The depth bias of a vehicle, infantry or aircraft before the constants of claim 13 (claim 14). |
@@ -145,9 +145,37 @@ screen rows.
    (S-0301 claim 22). Other animations use their type's layer (default air); particles, voxel animations,
    wave effects and building light effects are in the air layer; particle systems in the ground
    layer; units digging through a tunnel evaluate to the underground layer; the veinhole monster is
-   in no layer. A superweapon warp member is in the ground layer from its warp's launch until at
-   least the end of its arrival hold, whatever its height (S-0306 claim 17); when it leaves that
-   layer after the hold is not established.
+   in no layer. A superweapon warp member evaluates to the ground layer from its warp's launch,
+   whatever its height (S-0306 claim 17), until its own movement applies again some time after
+   its arrival hold; that exact tick is not claimed, because it changes no layer. A member is
+   already in the ground list at the launch and stays in it through its warp. The warp takes only
+   objects that are listed in a cell and are not in the air (S-0513 claims 4 and 34). An aircraft
+   is listed only at no height above its surface or deck, and a unit with jumpjet movement only
+   where its own rows give the ground layer (S-0209 claim 13). There the moments of claim 4 have
+   filed it in the ground list, and a unit with jumpjet movement at its cruise height is never a
+   member. Units with rocket movement are listed in no cell (S-0209 claim 13), nor are units with
+   drop-pod movement and tunnelling units while digging, so none of them is ever a member. A
+   member that does not move from one bridge deck to another is put down at its landing point at
+   no height above its surface there (S-0513 claim 36). On a high-bridge cell that surface is the
+   deck: a member landing there from the ground stands on the deck, its on-deck state set, at no
+   height above it. Its own rows then give the ground layer as well, whatever its kind: a vehicle
+   or infantry unit whose movement type alone gives that layer, a unit with jumpjet movement, whose
+   height *r* is 0, and an aircraft or a unit with flying movement, whose height above its surface
+   is 0 (the table's heights are above the surface, not above the terrain under the deck). So
+   neither the end of its hold nor the return of its own movement moves it out of the ground layer.
+   It leaves only when its own movement raises it, at that movement's moment
+   of claim 4, except an aircraft whose type cannot land, which claim 4 never re-files by a
+   take-off, so it keeps the ground list while it flies, until a crash. For a member moving from
+   one bridge deck to another, its height at the landing point is not established (S-0513 claim 36
+   rates that case low). A vehicle or infantry unit whose movement type alone gives the ground
+   layer stays in it whatever that height, and an aircraft whose type cannot land keeps the ground
+   list for the reason above. For the other kinds, when it leaves the ground list is open (Open
+   questions). A unit with jumpjet movement: claim 4's check of its first movement step re-files it
+   only when its two evaluations differ, and whether the warp row still gives the first of them is
+   not settled. An aircraft whose type can land: claim 4 re-files it only at its first movement
+   update after a take-off starts and at the updates of a landing, and with its height not
+   established, whether its own movement starts a take-off or a landing from that height, or
+   neither, is not established either.
    - Backing: `measurable`. Coverage by row of the table:
      - walking, driving, hovering, ship and teleport movement: D2, D3, D14, D19 (d).
      - flying movement, in the air and on the ground: D2, D5, D12, D14.
@@ -180,16 +208,42 @@ screen rows.
      - the veinhole monster: no reproducible setup distinguishes this object from an ordinary
        terrain object or identifies its own visible drawing (Open questions), so no expected
        picture can be stated.
-     - a superweapon warp member's ground layer from its warp's launch until at least the end of
-       its arrival hold: as S-0306 claim 17 rates it, no rule there reads the layer after the
-       member appears. When the member leaves the layer after the hold is not claimed here.
+     - a superweapon warp member's ground evaluation from its warp's launch until at least the
+       end of its arrival hold: as S-0306 claim 17 rates it, no rule there reads the layer after
+       the member appears.
+     - that units with drop-pod movement and tunnelling units while digging are listed in no
+       cell: no reproducible skirmish setup puts either in a warp's source block at its launch.
+
+     - a warp member moving from one bridge deck to another: its height after the hold, and, for
+       a unit with jumpjet movement or an aircraft whose type can land, its list then: D49 runs on
+       a flat map, and S-0513 claim 36 rates that landing point low.
+     - a warp member that is an aircraft whose type cannot land keeping the ground list after the
+       hold: claim 4's exception for such a type is `unmeasured`, and no scenario here warps one.
+     - a warp member landing on a high-bridge deck from the ground: its on-deck state, its height
+       above the deck and its ground layer there, for every kind: D49 runs on a flat map, and no
+       scenario here warps a member onto a high bridge.
+
+     `measurable` for the rest of the warp member's part: its ground list from the launch until
+     its own climb after the hold, the hovering jumpjet left out of the warp, and its height and
+     ground layer at a landing point off a high bridge (D49).
+     Rocket movement's absence from the cell lists is
+     S-0209 claim 13's, `measurable` there (S-0506 scenario R17).
    - Confidence: high for the table, except: the tunnel rows (low: tunnelling units may in practice
      stay in the ground list, see Open questions); the jumpjet cruise
      height minimum and the cruise height being also the hover height (medium). The exact
      jumpjet two-height predicate and the distinction between falling and crashing are high
      confidence; the veinhole monster (medium: it is in no layer, and no drawing of it in
      a drawn frame was found); building light effects (medium); a superweapon warp member's
-     ground layer from launch through arrival hold (medium, as S-0306 claim 17 rates it)
+     ground evaluation from launch through arrival hold (medium, as S-0306 claim 17 rates it),
+     the member in the ground list at the launch and through its warp, and the kinds that are
+     never members (medium; high for rocket movement, as S-0209 claim 13 rates it); its height and
+     ground layer at the landing point after the hold (medium, except for a member moving from
+     one bridge deck to another: its height after the hold, and its list then for a unit with
+     jumpjet movement or an aircraft whose type can land, are open, low, as S-0513 claim 36 rates
+     its landing point); a member landing on a high-bridge deck from the ground standing on the
+     deck at no height above it, its own rows giving the ground layer, whatever its kind
+     (medium); an aircraft member whose type cannot land keeping the
+     ground list after the hold, whatever its landing point (medium)
 4. **When an object changes layer.** An object's layer is evaluated from the table under *State
    and ordering*, for its state and height at that moment, only at the moments below. Between them
    the object stays in the list it was last put into, even if its height has crossed a threshold
@@ -244,6 +298,21 @@ screen rows.
      movement is always air, so these re-files only make the missile the last object of the air
      layer.
    No other step of flying, jumpjet or rocket movement evaluates the layer.
+   No step of a superweapon warp is a moment either. Its launch, the member's departure and its
+   placement at the landing point, the end of the arrival hold and the return of the member's own
+   movement re-file nothing, and while the warp moves the member its own movement takes no step,
+   so the checks of jumpjet movement do not run. The member is in the ground list throughout
+   (claim 3), so whenever it is drawn it is ordered as claim 6 orders any ground object; S-0513
+   claim 39 gives when it is drawn during its warp. After the hold, a member that does not move
+   from one bridge deck to another, one standing on a high-bridge deck after a landing from the
+   ground included (claim 3), leaves the ground list only at one of the moments above, once
+   its own movement raises it: a unit with jumpjet movement in the movement step in which its
+   height above the surface first reaches 208 leptons on its climb, and an aircraft or a unit with
+   flying movement at its first movement update after a take-off starts. An aircraft whose type
+   cannot land is never re-filed by a take-off, so any member of that type keeps the ground list
+   while it flies, as after any placement on the ground, until a crash. For a unit with jumpjet
+   movement or an aircraft whose type can land that moves from one bridge deck to another, when it
+   leaves the ground list is open (claim 3).
    - Backing: `measurable` (scenarios D5, D12, D14 and D47) for placement, attachment, the jumpjet
      climb, hover and descent changes and the ordinary landable-aircraft take-off and landing
      re-files. The non-landable exception is `unmeasured`: none of these scenarios places a
@@ -254,10 +323,27 @@ screen rows.
      setup changes a jumpjet's evaluated layer between movement steps at a known tick) and for
      the crash, dropped-explosive and rocket re-files (a crash fall, a dropped explosive or a
      rocket ascent overlapping a second object of the same layer at a known tick has no
-     reproducible setup)
-   - Confidence: high for the list of moments and which of them re-file or check; medium for the
-     falling rule and for the hover flips, which depend on S-0502's wobble keeping the height
-     within one tick of its target
+     reproducible setup). `unmeasured` for no step of a superweapon warp being a moment, the
+     return of the member's own movement included: the member is in the ground list throughout,
+     so a re-file could show only in its order against ground objects of equal sort key, and the
+     original's order of equal-key objects is not established (claim 6), so a re-file leaves no
+     observable the original is known to show. D49 parts (a) and (b) cannot tell a member that
+     keeps its place from one re-filed into the ground layer, and no scenario here shows when its
+     own movement applies again after the hold (claim 3, S-0513 claim 48). D49 (c) checks it in
+     our engine only, an engine test of claim 6's order, not a measurement of the original.
+     `measurable` (D49 (a)
+     and (b)) for the superweapon warp: no change of layer from the launch until the member's
+     own climb, and the climb's change at the same height as a
+     unit that was not warped; for an aircraft member's take-off after the hold, `unmeasured`:
+     no scenario here follows a warped aircraft into a take-off over a second top-layer object.
+     `unmeasured` for when a member moving from one bridge deck to another leaves the ground list
+     (claim 3).
+   - Confidence: high for the list of moments and which of them re-file or check; medium that no
+     step of a superweapon warp is one (the return of the member's own movement included); medium
+     for the falling rule and for the hover flips, which depend on S-0502's wobble keeping the
+     height within one tick of its target; medium for a warp member's first change of layer after
+     the hold; low for when a member moving from one bridge deck to another leaves the ground list,
+     if it has jumpjet movement or is an aircraft whose type can land (claim 3)
 
 ### Order inside a layer
 
@@ -1584,8 +1670,8 @@ single-layout correction, not the original's stray bits from combining layouts.
 | Object kind | Condition | Layer |
 |---|---|---|
 | vehicle or infantry, walking / driving / hovering / ship / mech / teleport movement | always | ground |
-| aircraft or unit with flying movement | height above the terrain > 0 | top |
-| aircraft or unit with flying movement | on the ground | ground |
+| aircraft or unit with flying movement | height above its surface > 0 | top |
+| aircraft or unit with flying movement | height above its surface ≤ 0 (on the ground or on a deck) | ground |
 | unit with jumpjet movement | *r* < 208 leptons or *r*′ = 0 leptons (defined below) | ground |
 | unit with jumpjet movement | *r* ≥ 208 leptons, *r*′ ≠ 0 and *r*′ ≥ its jumpjet cruise height | top |
 | unit with jumpjet movement | *r* ≥ 208 leptons, *r*′ ≠ 0 and *r*′ below its jumpjet cruise height | air |
@@ -1602,10 +1688,11 @@ single-layout correction, not the original's stray bits from combining layouts.
 | particle, voxel animation, wave effect, building light effect | always | air |
 | particle system | always | ground |
 | veinhole monster | never in any layer; no step of a drawn frame was found to paint it | — |
-| superweapon warp member, any kind | from its warp's launch until at least the end of its arrival hold, whatever its height; this row comes before every row above (S-0306 claim 17) | ground |
+| superweapon warp member, any kind | from its warp's launch until its own movement applies again after its arrival hold, whatever its height; this row comes before every row above (S-0306 claim 17). A member is in the ground list at the launch and, unless it moves from one bridge deck to another (then claim 3), stands at no height above its surface after the hold (on the deck if it lands on a high-bridge cell from the ground), where its own rows give ground too (claims 3 and 4) | ground |
 
-Heights in this table are heights above the terrain (glossary), in leptons, except for the two
-jumpjet heights defined below. A unit's jumpjet cruise height is its type's configured value,
+Heights in this table are heights above the surface, in leptons: above the deck when the object's
+on-deck state is set, otherwise above the terrain (glossary), except for the two jumpjet heights
+defined below. A unit's jumpjet cruise height is its type's configured value,
 raised to 208 leptons if smaller (absent-key default 500); it is also the height at which a unit
 with jumpjet movement hovers.
 
@@ -1677,7 +1764,18 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
   evaluates to when that differs from the list it is in; an object whose layer is unchanged is
   not moved by this check. The re-files of claim 4 that keep the layer (placement, attachment,
   crash ticks, the start of a dropped explosive's fall, aircraft take-off and landing, set C
-  rocket pause and ascent) happen in both states.
+  rocket pause and ascent) happen in both states. Neither state moves a superweapon warp member
+  between lists while the warp row applies: it is in the ground list and evaluates to the ground
+  layer from its warp's launch until its own movement applies again after the hold. Once the warp
+  row has ended, a member is treated as any object: with the switch on it leaves the ground list
+  only at a moment of claim 4 (claims 3 and 4), and an aircraft member whose type cannot land
+  keeps it while it flies, until a crash; with the switch off, the sweep also moves a member in
+  any tick in which its own rows give another layer, a flying aircraft member whose type cannot
+  land included. A member that does not move from one bridge deck to another stands at no height
+  above its surface at the end of the warp row (on the deck when it lands on a high-bridge cell
+  from the ground), where its own rows give the ground layer, so the sweep does not move it then.
+  For a unit with jumpjet movement or an aircraft whose type can land that moves from one bridge
+  deck to another, with the switch on, when a moment of claim 4 moves it is open (claim 3).
 - **`quirks.cliff_fudge_far_cliff_weaker`** (default: on). A high cell two steps in front gives the
   cliff fudge factor 1 and overrides a high cell one step in front, which alone gives factor 2.
   Alternative: factor 2 whenever either cell qualifies.
@@ -2915,6 +3013,69 @@ walking frame). Compare successive frames, not an assumed start value.
     the ground at another tick. The air part needs no landing: a run whose deploy order does not
     make it land is inconclusive for the ground part only.
 
+**D49 — A warp member's layer at the launch and after the hold (claims 3 and 4; Q-2346).** A flat
+open map at level 0, the common measurement setup, with the test house given a ready teleport
+warp: its source pick and its second stage (S-0513 claims 33 and 34). Test type J: a vehicle
+type with jumpjet movement, without the organic flag (so the warp does not kill it, S-0513 claim
+35), its wobble switched off and its cruise height at least 416 leptons (twice 208), through the
+test map's override section. With that height a J unit given an order away from its cell keeps
+its place until its height above the ground reference reaches half its cruise height (truncated
+toward zero), which is then at least 208 leptons (S-0502 claim 8), so it moves sideways only
+once its layer is no longer ground. Keep every destination block cell clear, so that each
+landing is clean (S-0513 claim 37). Record per tick the tick number, each J unit's height above
+the surface in leptons, matched to the tick-labelled drawn frame without changing the running
+game's state, and, where two images named below overlap, which one is on top.
+  - (a) In the source block: J1 of type J standing on the ground, and J3 of type J hovering at
+    its cruise height over another cell of the block, placed so that its image overlaps J1's.
+    Outside the block: a standing vehicle G1 whose sort key is greater than J1's and whose image
+    overlaps J1's (choose the positions by observing the overlaps; a run without both overlaps is
+    inconclusive). Launch the warp on the block. Expected, on every tick from the launch until
+    J1 departs: G1 covers J1 and J3 covers J1 where they overlap, and J3 is not warped: it still
+    hovers over the source block after J1 has gone. Falsified if J1 covers G1 or J3 at any overlap
+    in that window, or if J3 joins the warp.
+  - (b) Outside the destination block, next to J1's landing point: a standing vehicle G2 whose
+    sort key is greater than J1's at that point and whose image overlaps J1's there; and a
+    control C of type J standing on the ground with a standing vehicle G3 placed to C as G2 is to
+    J1. Place G2 and G3 so that each has both coordinates no less than its J unit's own, and
+    keep the cells between each J unit and its order's target clear. Wait until J1's phasing in
+    has ended (its translucency ends, S-0513 claim 40), then in one tick order J1 and C each to
+    a cell whose two coordinates are each at least 6 less than those of its own cell. That
+    direction lowers the unit's sort key with every sideways step, away from G2 and G3, so even a
+    sideways step taken in the ground layer could not carry it past them.
+    Expected: J1 appears at height 0 and stays there until its order; G2 covers J1 from its
+    appearance until the tick J1's recorded height first reaches 208 leptons; from that tick J1
+    covers G2; C changes against G3 at its own 208-lepton tick in the same way. Falsified if J1
+    has a height above 0 before its order, covers G2 before its height reaches 208 leptons, or is
+    still covered by G2 on or after that tick. A run in which J1 does not lift off in response to
+    the order is inconclusive for this part; record what it did instead. Repeat with the order
+    given at least 300 ticks after J1's phasing in ends.
+  - (c) Engine test of claim 6's order, not a measurement of the original: no re-file at any
+    step of the warp (claim 4). Run it in our engine only: it relies on the order of equal-key
+    objects, which is claim 6's departure; the original's order of equal-key objects is not
+    established. A separate run with equal sort keys, so that a
+    re-file would change the order (claim 6: equal-key objects keep their previous relative order,
+    and a newcomer follows existing equal-key objects). Place the destination block on the same
+    screen row as the source block, at least 4 cells from it along that row, so that the two
+    coordinates of its centre cell have the same sum as those of the source block's centre cell.
+    Each cell of the destination block then has the same coordinate sum as the cell in the same
+    position of the source block (S-0513 claim 36). J1 stands on the ground at the centre of an edge
+    cell of the source block. G4, a standing vehicle, stands at the centre of the next cell outside
+    the source block along the screen row, and G5, a standing vehicle, at the centre of the next
+    cell outside the destination block along the screen row from J1's landing cell, so that J1, G4
+    and G5 have one sort key at the source and the landing point alike (J1 is a vehicle and lands at
+    its landing cell's centre). J1 is created before G4 and G5 (first among the map's unit entries),
+    so both follow it in the ground list. A J1 that is not re-filed keeps its place before both at
+    every step of the warp. A re-file at the launch puts J1 after G4 and G5; one at the departure,
+    the placement or the end of the hold puts it after G5. The return of J1's own movement is not
+    reached: J1 has no order, and nothing here shows when its own movement applies again (claim 3,
+    S-0513 claim 48). Choose the types and cells by observing that the images overlap; a run without
+    both overlaps is inconclusive. Record, on every tick from the map start, which of J1 and G4, or
+    J1 and G5, is on top where they overlap. Give J1 no order. Expected: G4 covers J1 from the start
+    until J1 departs, and G5 covers J1 from its appearance until at least 300 ticks after its
+    phasing in ends (S-0513 claim 40), through the end of its hold. A run in which G4 does not cover
+    J1 before the launch is inconclusive. Falsified if J1 covers G4 after the launch, or covers G5
+    at any recorded tick: a re-file puts J1 after the equal-key G4 or G5.
+
 ## Open questions
 
 Q-1560 is fully answered by claim 4 and scenarios D5, D12 and D47. Before this revision
@@ -2987,6 +3148,17 @@ the current owning specs; no requested part owned here remains open.
     cell and of its neighbours, which has not been tied to the map's terrain and overlays.
   - the order among terrain tiles, which also decides which of two overlapping smudge paintings, or
     a smudge and a neighbouring tile, shows (claims 16, 25).
+- **Warp member landing from one bridge deck on another:** its height at the landing point is
+  not established (S-0513 claim 36 rates it low: the bridge lift may be added twice), so its list
+  after its arrival hold is open (claim 3). For a unit with jumpjet movement, it depends on
+  whether the warp row still gives the first evaluation of claim 4's check at its first movement
+  step after the hold, and on whether its own rows give another layer there. For an aircraft
+  whose type can land, it depends on whether its own movement starts a take-off or a landing from
+  that height, the only moments that re-file it. Settle with a warp from one bridge deck to
+  another of a unit with jumpjet movement and of an aircraft of a type that can land, each
+  standing on the source deck, recording each member's height, whether the aircraft takes off or
+  lands, and its order against unwarped objects of the air and top layers over the following
+  ticks.
 - **Tunnel layer:** tunnelling units have not been seen to be moved into the underground layer; they
   may stay in the ground layer while underground. Settle with the tunnel movement spec.
 - **Effect groups** in claim 2: the three kinds of beam, light flashes and map beacons are
@@ -3014,3 +3186,27 @@ the current owning specs; no requested part owned here remains open.
 - **Cell pass:** the cell pass has two further parts that have not been identified, one ranked
   before the terrain tiles and one between the terrain objects and the building bodies (claim 16). The order among terrain tiles
   themselves (which matters only where two tile pixels tie) is not known.
+
+## Changes for other specs
+
+- **For S-0306 claim 17 (*Render layer of a warp member*).** Its sentence "When it leaves that
+  layer after the hold is not established here" can point to S-0102 claims 3 and 4: the member
+  evaluates to the ground layer until its own movement applies again after the hold, and,
+  unless it moves from one bridge deck to another, it stands at no height above its surface
+  then (on the deck when it lands on a high-bridge cell from the ground), so its own rows give
+  the ground layer as well. It leaves only when its own movement
+  raises it, at that movement's moment of S-0102 claim 4, except an aircraft whose type cannot
+  land, which keeps the ground list while it flies, until a crash. For a member moving from one
+  bridge deck to another, its height at the landing point is not established (S-0513 claim 36,
+  low), and so, for a unit with jumpjet movement or an aircraft whose type can land, neither is
+  when it leaves the ground list (S-0102 claim 3 and Open questions). Claim 17's threshold rule
+  is unchanged. Confidence: medium; low for that deck-to-deck case. Backing: `measurable` (S-0102
+  D49 (b)); `unmeasured` for a landing on a high-bridge deck, from the ground or from another
+  deck, since D49 runs on a flat map, and for an
+  aircraft member whose type cannot land, since no scenario there warps one.
+- **For S-0209 claim 13 (cell listing).** S-0102 claim 3 states that units with drop-pod movement
+  and tunnelling units while digging are listed in no cell, so a superweapon warp, which takes
+  only objects listed in a cell and not in the air (S-0513 claims 4 and 34), never takes them.
+  Claim 13's listing rules can state the same for those two kinds, beside its rule for units
+  with rocket movement. Confidence: medium. Backing: `unmeasured`, since no reproducible
+  skirmish setup puts either kind in a warp's source block at its launch.
