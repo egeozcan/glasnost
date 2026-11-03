@@ -2592,7 +2592,7 @@ S-0214 r78 claim 6 (e): the attack rule's part (e) takes the firing check's answ
 - the rearm countdown (rank 5), out of ammunition (rank 7) and *cloaked* (rank 8) hide the zero-versus and other rank-9 tests and rank 12;
 - the early *rearming* answers of rank 4 (a materialising firer, an empty spawner, a temporal hold, a building's pending delayed shot) also hide S-0306 claim 23's water and land rows.
 
-Over such a target the actor is offered the attack and a click gives an attack order. The held-target check of S-0309 claim 29 then drops the target unfired once the reason ends. A phasing-in actor is not movable any more (`targeting::movable`), so part (d) asks that the target be in range: *attack* in range, *nothing* out of range.
+Over such a target the actor is offered the attack and a click gives an attack order. The held-target check of S-0309 claim 29 then drops the target unfired once the reason ends. A phasing-in actor is not movable any more (`targeting::movable`), so part (d) asks that the target be in range: *attack* in range, *nothing* out of range. That Terms part is r68 text that no intake had built. It reaches every rule that asks *movable*: table G's object rows, table M's orders and S-0213 table T2's scatter, guard and deploy rule. Cell clicks were already refused by row GC1.
 
 Intake 79's interim for Q-2356, which passed over the materialising *rearming*, is retired. `check::check_lasting` stays as the own AI's lasting test (our design, PLAN §4.7), and the AI modules that used it are re-cited to S-0301 claim 9. The AI still gives its orders through `targeting::click`, so the attack orders it has accepted follow the new rule.
 
@@ -2600,13 +2600,14 @@ New switch `quirks.moment_reason_attack_cursor` (default on, the original). Off,
 
 Formats: no hashed state, so the save format, AI game format and wire are unchanged. The schema gains the switch. No golden moved.
 
-Tests: `claims_s0214_r78.rs` (8, both positions); `claims_s0214_combat::claim_6e_switch_off_reloading_neither_gives_nor_takes_the_attack`; `claims_s0301_r69::the_ai_lasting_check_passes_over_the_materialising_rearming`.
+Tests: `claims_s0214_r78.rs` (9; both positions for the switch); `claims_s0214_combat::claim_6e_switch_off_reloading_neither_gives_nor_takes_the_attack`; `claims_s0301_r69::the_ai_lasting_check_passes_over_the_materialising_rearming`.
 
 Lanes (main c68e76a against the branch):
 - The M6c, M7a and M7b sweeps (seeds 1 to 16) are identical.
 - The arena (`arena --record all`) is byte-identical, with main's 11 failing pairings.
 - `glasnost-ai --include-ignored`: 246 passed before and after.
-- The AI quick lane (seeds 7 to 10, maps 0, 2 and 8, sides 0,1, 0,2 and 1,2: 36 games): every game is over with a winner. 34 are identical. Two are longer: seed 7, sides 0,2, map 2 (71 855 to 86 252 ticks, same winner) and seed 9, sides 1,2, map 0 (81 935 to 107 935 ticks, the winner changes from house 0 to house 1). The median, 42 718 ticks, is unchanged.
+- The AI quick lane (seeds 7 to 10, maps 0, 2 and 8, sides 0,1, 0,2 and 1,2: 36 games): every game is over with a winner. 34 are identical. Two are longer: seed 7, sides 0,2, map 2 (71 855 to 86 252 ticks, same winner) and seed 9, sides 1,2, map 0 (81 935 to 107 935 ticks, the winner changes from house 0 to house 1). The median, 42 718 ticks, is unchanged. Both changed games have teleporting units (the lane's counters show 9 teleporters in the second). So the cause may be the wider attack acceptance or the *movable* change, reaching an AI order given through the cursor rules. It has not been traced.
+- The lanes were measured on c68e76a. After the rebase only the checks were run again.
 
 Ledger: [m8-claims/intake85.md](m8-claims/intake85.md).
 
