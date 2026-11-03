@@ -2,11 +2,11 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0984, Q-1522]
 supersedes: []
@@ -292,12 +292,21 @@ before joint hand-off.
     their position, with unchanged height; aircraft use their own position. Skipped turns
     create nothing. Buildings use their damage-fire positions: position *i*, counted from
     0, sparkles when (*tick* + *i*) is divisible by 24. With none, they use their own position
-    and tick residue 0. This is presentation only.
+    and tick residue 0. The sparkle is an ordinary animation, with the simulation effects S-0109
+    gives one: its playback draws (claims 3, 11 and 28), its damage (claim 17) and its start and
+    middle effects (claim 28). A type whose creation takes a draw puts it in the scenario random
+    stream's order before the warp step of a warp member's turn (S-0513 claim 39a).
     - Backing: `measurable` (E11 part b) for cadence and mobile placement. Exact conversion
       of building drawing positions to world positions is `unmeasured`: no scenario here
       predicts that transformation independently. Absence of sparkles on skipped turns is
       `unmeasured`: E11 does not establish a setup that isolates a skipped turn on a sparkle tick.
-    - Confidence: high (cadence, mobile placement); medium (building placement).
+      The sparkle as an ordinary animation: S-0109's for those rules, as its claims 3, 11, 17 and
+      28 rate them (`measurable`, scenarios AN3 and AN25 for the draws, claim 17's for damage).
+      That the sparkle follows them, and its draw's place before a warp member's warp step, are
+      `unmeasured`, since no part of S-0513 or S-0514 gives the sparkle animation a type that
+      takes a draw or has damage or such effects.
+    - Confidence: high (cadence, mobile placement); medium (building placement); medium (the
+      sparkle as an ordinary animation with S-0109's effects, and its draw's place).
 
 19. **Attacker firing.** Holding the same target makes the firing check answer rearming
     (S-0301 claim 9), so a stationary attacker does not fire repeated erasing shots at it.
