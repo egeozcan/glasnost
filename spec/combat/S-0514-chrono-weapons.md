@@ -2,13 +2,13 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 14
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-03
 measurements: []
-requests: [Q-0984, Q-1522]
+requests: [Q-0984, Q-1522, Q-2377]
 supersedes: []
 ---
 
@@ -296,17 +296,41 @@ before joint hand-off.
     gives one: its playback draws (claims 3, 11 and 28), its damage (claim 17) and its start and
     middle effects (claim 28). A type whose creation takes a draw puts it in the scenario random
     stream's order before the warp step of a warp member's turn (S-0513 claim 39a).
+
+    *Order against the erasure update.* Within one turn of an object being erased, an infantry
+    unit makes its sparkle before that turn's erasure update (claim 7). A vehicle, aircraft or
+    building makes it after the update. The object's state at that point decides whether it
+    sparkles: being erased or phasing in. A completion in the update (claim 12) does not end that
+    state for this purpose. So a turn whose erasure update removes the object still makes the
+    sparkle in a sparkle tick, in every kind, placed by the rule above for its kind from the
+    object's last position. For a
+    vehicle, aircraft or building it comes after the removal and the warp-away animation. Any
+    draw the sparkle's creation takes therefore comes before every draw of the update (such as
+    the creation of claim 12's warp-away animation) for infantry, and after them for the other
+    kinds. A release in the update that ends the erasure (claim 11, the last attacker letting go)
+    leaves a vehicle, aircraft or building that is not phasing in with no sparkle in that turn,
+    while an infantry unit makes it. A warp member keeps its kind's order, with both before the
+    turn's warp step (S-0513 claim 39a), so its removing turn sparkles in a sparkle tick when it
+    is being erased or phasing in at the turn's start.
     - Backing: `measurable` (E11 part b) for cadence and mobile placement. Exact conversion
       of building drawing positions to world positions is `unmeasured`: no scenario here
       predicts that transformation independently. Absence of sparkles on skipped turns is
       `unmeasured`: E11 does not establish a setup that isolates a skipped turn on a sparkle tick.
       The sparkle as an ordinary animation: S-0109's for those rules, as its claims 3, 11, 17 and
       28 rate them (`measurable`, scenarios AN3 and AN25 for the draws, claim 17's for damage).
-      That the sparkle follows them, and its draw's place before a warp member's warp step, are
-      `unmeasured`, since no part of S-0513 or S-0514 gives the sparkle animation a type that
-      takes a draw or has damage or such effects.
+      That the sparkle follows them is `measurable` for its creation draw (E11 part e2) and
+      `unmeasured` for its damage and its start and middle effects, since no part gives the
+      sparkle animation a type that has damage or such effects. Its draw's place before a warp
+      member's warp step is `unmeasured`, since no part of S-0513 gives a warp member's sparkle
+      animation a type whose creation takes a draw. The order against the erasure update:
+      `measurable` (E11 part e) for the removing turn's sparkle, the draw order and the release
+      turn, for an infantry unit, a vehicle, a landed aircraft and a building. For a warp member
+      it is `unmeasured`, since no scenario removes a member in a sparkle tick (S-0513 scenario
+      SW12 avoids a removal during the warp).
     - Confidence: high (cadence, mobile placement); medium (building placement); medium (the
-      sparkle as an ordinary animation with S-0109's effects, and its draw's place).
+      sparkle as an ordinary animation with S-0109's effects, and its draw's place); medium (the
+      order against the erasure update per kind, the removing turn's sparkle, the draw order,
+      the release turn, and a warp member's removing turn).
 
 19. **Attacker firing.** Holding the same target makes the firing check answer rearming
     (S-0301 claim 9), so a stationary attacker does not fire repeated erasing shots at it.
@@ -599,6 +623,11 @@ leader receiving both gains has the final experience defined by F5's composition
 the intermediate cap and narrowing rather than a single combined gain. Both recipients'
 gains are present by target removal.
 
+Within one turn of an object being erased, an infantry unit's sparkle comes before the erasure
+update and the sparkle of every other kind after it (claim 18). A removing turn's sparkle is
+made in a sparkle tick by every kind, so a vehicle, aircraft or building makes it after its own
+removal and warp-away animation.
+
 ## Edge cases and quirks
 
 - `quirks.erasure_refused_hit_side_effects`, default original: claim 2's target side effects
@@ -611,6 +640,10 @@ gains are present by target removal.
 - `quirks.erasure_double_experience`, default original: F5 supplements ordinary credit.
   Off: only ordinary S-0311 credit remains.
 - Type strength rather than health is intentional. Zero-step indefinite attachment is retained.
+- The sparkle's order against the erasure update differs by kind (claim 18) and is copied, with
+  no switch. With stock data its only visible effect is the sparkle a vehicle, aircraft or
+  building makes in its removing turn and its absence after a releasing update. With other data
+  the order keeps the scenario random stream's draws in step with the original.
 - Beam flash display bugs, fixed without a switch, per the lead decision of 2026-10-14: the
   zero-step division of a very short flash in F6, the light-alpha channel spill (claim 25) and the zeroed
   depth term at equal world y in F8.
@@ -774,7 +807,29 @@ is falsified by the opposite result under the same conditions.
   units across three global tick residues: expect the same phase and mobile placement.
   Phase relative to arrival rather than global tick falsifies that part.
   Building coordinate conversion is recorded
-  without a predicted result. (c) Select an own target before lock: expect
+  without a predicted result. (e) Order against the erasure update (Q-2377). (e1) One erasing
+  infantry attacker locks, in separate runs, an enemy infantry unit, an enemy vehicle, an enemy
+  aircraft landed on flat ground and an enemy test building with no damage-fire positions,
+  started so that the erasure completes in a tick divisible by 24, with no skipped turn: expect
+  a sparkle created in the removal tick for every kind, placed by claim 18's rule for its kind
+  from the target's last position (120 leptons farther along each horizontal map axis for the
+  infantry unit and the vehicle, the target's own position for the aircraft and the building).
+  No sparkle in that tick for any kind, or one at another position for a mobile kind,
+  falsifies it. A further run uses part (b)'s building art with two fire positions and a
+  completion in a tick one less than a multiple of 24: expect one sparkle in the removal tick,
+  from the second position. No sparkle, or one from the first position, falsifies it. Its
+  position is recorded without a predicted result, as in part (b). (e2) As (e1), the building
+  without damage-fire positions, with named test art giving the sparkle animation a ranged rate
+  pair and the warp-away animation another ranged rate pair with a different range, so that
+  each creation takes a draw, and the random-state recorder logging each request with its
+  range: expect the sparkle's draw before the warp-away animation's for the infantry target and
+  after it for the vehicle, aircraft and building targets. The opposite order for any falsifies
+  it. (e3) A leading erasing attacker alone inside an open-topped transport, moved beyond the
+  release distance (claim 11) in runs whose release update falls in a tick divisible by 24,
+  against each of (e1)'s targets but the second building: expect no sparkle in that tick at
+  the vehicle, aircraft and building targets and one at the infantry target. A sparkle at a
+  vehicle, aircraft or building target, or none at the infantry target, falsifies it. (c)
+  Select an own target before lock: expect
   deselection, no lock/release-induced flash. (d) Named gattling spin-down tests start well
   above a threshold and just above it. Expect spin reduction in both, a stage reduction only
   across the threshold. A zero decrement resets spin to 0. Record immediately, before
@@ -911,3 +966,14 @@ is falsified by the opposite result under the same conditions.
 - S-0109 claim 21 and Terms: the building body's own erasure translucency (code 2, or 3 when
   double-thick) is claim 27; claim 21 stays limited to slot animations.
 - S-0513 claim 40: a phasing-in object's body is drawn with claim 27's translucency.
+- S-0513 claim 39a, *Sparkles and drops in the warp's turns*: "A turn whose erasure update
+  removes the member is left out: whether it sparkles there is open (Open questions)." becomes:
+  "A turn whose erasure update removes the member sparkles too, in a sparkle tick, when the
+  member is being erased or phasing in at the turn's start, as S-0514 claim 18 gives: an
+  infantry member makes the sparkle before the turn's erasure update, a vehicle or aircraft
+  member after it, both before the warp step." The same claim's Backing and Confidence take
+  S-0514 claim 18's (`unmeasured`, medium for a warp member). The Open question on the order of
+  the sparkle against the erasure update, and the sentence of claim 51's intrinsic exceptions
+  that points to it ("The sparkle's order against the turn's erasure update is S-0514's (Open
+  questions).") are answered by S-0514 claim 18: the sentence becomes "The sparkle's order
+  against the turn's erasure update is S-0514 claim 18's." and the Open question is removed.
