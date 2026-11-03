@@ -2,13 +2,13 @@
 id: S-0216
 title: Units placed after the game has started
 topic: simulation
-revision: 59
+revision: 67
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: [M-0001, M-0002, M-0003, M-0006, M-0017, M-0019]
-requests: [Q-1711, Q-1713, Q-2096, Q-2098, Q-2099, Q-2277]
+requests: [Q-1711, Q-1713, Q-2096, Q-2098, Q-2099, Q-2277, Q-2336]
 supersedes: []
 ---
 
@@ -451,14 +451,48 @@ S-0208 claim 3 reads it. In addition:
    committed outcomes are their acceptance check.
    - **Map objects (Q-2098, in part).** The arena loads the records' map as any game on that map
      is loaded (S-0009): every map entry that S-0009's loading creates is in play from tick 0 as
-     the map gives it, the neutral house's buildings and vehicles and the terrain objects
-     included, and the arena adds or changes none of them and removes none beyond what S-0009
-     removes. What stands on the bunker cells M-0006 lists (*Map content*) is
-     whatever the map gives there, with the kind and behaviour its type's imported data give. The
-     arena has no rule of its own for these objects and does not pick them by type. Acceptance:
-     in the arena's tick-0 state a building of the neutral house covers each of those four cells,
-     whether one building or several. What the records' games had there, and what a stock game
-     on the map does with them, stay open (Open questions).
+     the map gives it, the neutral house's buildings and infantry and the terrain objects
+     included, except the neutral house's vehicles, which *Removal before the groups* takes off
+     the map. The arena adds or changes none of these objects and removes none beyond that
+     removal and what S-0009 removes. What stands on the bunker cells M-0006 lists
+     (*Map content*) is whatever the map gives there, with the kind and behaviour its type's
+     imported data give. The arena has no rule of its own for these objects and does not pick
+     them by type. Acceptance: in the arena's tick-0 state a building of the neutral house
+     covers each of those four cells, whether one building or several. What the records' games
+     had there, and what a stock game on the map does with them, stay open (Open questions).
+   - **Game start (Q-2336).** The arena's game is a standard skirmish game with the houses of the
+     records' games: the two players' computer houses, a human player house at start 3 (M-0001's
+     idle house; it holds a start position, so S-0009 claims 19 and 45 treat it as a player, not
+     as an observer), then the neutral and the special house. They are created in S-0009 claim
+     19's order and take S-0202 claim 14's house-creation draws, in two rounds. Our arena's setup
+     supplies the game's settings (S-0412 claim 1): the bases setting on, the unit-count setting 0
+     and crates off. In the original the bases setting is the base rules' bases default, copied
+     when the program starts, and the unit-count and crate settings are lobby values (S-0412
+     claim 1), which the records' settings file gives (M-0019, Setup: no menus). Crates off is
+     M-0001's setting (Setup, *Players*), which M-0019 says the records' games use. The bases
+     setting and the unit count are a reading of the records, which give neither. The records'
+     houses had starting construction vehicles for the harness to remove (M-0001 and
+     M-0019, Setup), and S-0009 claim 45 gives a base unit only with the bases setting on. Each
+     records' house owns only its placed group (M-0001, *Players*), and its starting objects are
+     vehicles of no set-up type, gone at the next tick (M-0019). So no house bought a budget unit,
+     as the unit-count setting 0 gives (S-0009 claim 45's budget is then 0). The records do not
+     show that their setting was 0 rather than another value whose budget bought nothing. So S-0009
+     claims 45 and 46 give each of the three player houses its base unit, house by house in claim
+     19's order: each with its creation draw and one creation number, put directly on its base
+     cell with no draw. No house buys a budget unit (its budget is 0), and after the last house
+     comes the final R(0, 65535). Every other group before the set-up is as S-0202's map-loading
+     table gives it. So the base units' creation numbers come before every set-up object's.
+   - **Removal before the groups (Q-2336).** After resource-glint setup and before the first
+     group's first creation, the arena takes off the map every vehicle that the human player
+     house does not own: the two computer houses' base units and every vehicle the map gave the
+     neutral house. The removal takes no random draw, starts no animation and frees the cells the
+     vehicles stood on, so the take test below does not see them. None of them exists at the next
+     tick. The creation numbers they took stay taken. The human player house's base unit stays on
+     its base cell for the whole game, with no order from the arena, and takes whatever draws a
+     unit of its type and behaviour takes in play. No house treats the human player house as an
+     enemy: no object targets or damages its objects, and the computer houses ignore it, as
+     M-0001's Setup lists for the records' games (design). The neutral house's buildings,
+     infantry and terrain objects stay.
    - **Order.** The arena creates and places the units one at a time: the group of the row type of
      the game's pairing first (the type that heads the pairing's row in M-0001 to M-0003, and
      in M-0017), on whichever side it plays, in increasing unit index *i* (the index of
@@ -545,13 +579,35 @@ S-0208 claim 3 reads it. In addition:
      refused try as above. In the games
      with vehicles it measures the count of raw values only, and the per-object order there rests
      on claim 3's medium order. Draws taken
-     before the set-up are those of our engine's map loading and game start, as S-0202 claim 10
-     (its map-loading table) and claim 14 order them, which this claim does not restate. M-0019
-     counts their raw values only: which draws take them is not identified.
+     before the set-up are those of *Game start* above and of S-0202's map-loading table (its
+     claims 10 and 14), which this claim does not restate. M-0019 counts their raw values only.
+     For each of the six seeds, the draws those rules give for the records' map and settings,
+     taken in that order, take exactly M-0019's *N*₀ raw values: both house-creation rounds, the
+     map objects' creation draws, the three base units' creation draws and the final
+     R(0, 65535), the end-of-loading tags' draws and the resource-glint choices. That this is how
+     the records' raw values divide among the groups is a reading of the records' draws, not an
+     observation (medium).
    - **Group counts (Q-2099, in part).** A group's count is its budget divided by its type's
      cost, rounded to the nearest integer, then held to the records' minimum and infantry cap
      (M-0001 Setup). An exact half goes to the even one of the two counts (Formulas). The rule is
      the same for infantry and vehicle groups.
+   - Backing for *Game start* and *Removal before the groups*: `measurable`. PT6 tests them in
+     our engine. Crates off in the records' games rests on M-0001's Setup, which states it
+     (high). The bases setting on and the unit-count setting 0 in the records' games are a reading
+     of M-0001's and M-0019's Setup and of M-0019's starting objects, not a recorded setting
+     (medium for the bases setting, low for the unit count's value). PT8 runs with a test copy of
+     the base rules that only lowers the minimum unit count to 0 (S-0412 K3), the bases default
+     as installed, as in the records' games, and the unit-count setting 0 in its settings file,
+     and fails if the tick-0 state, the house rounds or the starting-unit step differ from these
+     rules and S-0202 claim 14 (PT8, *Falsified if*), not by a comparison with the records,
+     which hold no group checkpoints. PT8 tests, in the original under the records' harness, the
+     tick-0 state (which vehicles are off the map at tick 0 and gone at the next
+     tick, and the human player house's base unit on its base
+     cell all game) and, group by group at each group's own
+     checkpoint, the draws the house rounds and the base units take. Medium for both rules, as
+     the original's tick-0 state is not yet in a record. M-0019 measures only the total, *N*₀,
+     at the first creation: that the two rules' draws are part of it, and how many of its raw
+     values each group takes, is the reading above (medium, `measurable` through PT8).
    - Backing: `measurable`. Scenario PT6, a run of our engine's arena on the records' map, tests
      the order, with each unit's creation and placement draws interleaved, the take test, the
      neighbour order, first come first served and the placement draws, and checks the acceptance
@@ -609,7 +665,15 @@ S-0208 claim 3 reads it. In addition:
      (claim 3).
      High for the values of the M-0019 acceptance item, counts of raw values that M-0019
      measures. Whether our arena
-     reaches them rests on our engine's game-start draws (S-0202), at their levels. The draws
+     reaches them rests on our engine's game-start draws (S-0202), at their levels. Medium for
+     *Game start* and *Removal before the groups*, as design rules that copy the records' game
+     start: the house list, the base units and the vehicles taken off the map rest on a reading
+     of the records' draws and tick-0 state that no record yet states (PT8). Of the settings,
+     high for crates off (M-0001's Setup), medium for the bases setting on and low for the
+     records' unit-count value being 0 (readings, above). Medium, design, for
+     the human player house's objects being neither targeted nor damaged, copied from M-0001's
+     Setup. Medium for the
+     division of *N*₀ among the groups before the set-up (a reading). The draws
      that this order interleaves are at claim 3's levels. Medium for the take test,
      first come first served and the error stop, since they act on the take test's result on a
      given cell, which rests on claim 5's entry outcome and on claim 2's first-row
@@ -831,7 +895,10 @@ placement, and whether each unit is on the map in its cell right after its place
 original. Set up, on the records' map, every side-A group of M-0001 and of M-0002 against
 its side-B group, each pairing as its own run at seed 0. Record at tick 0 every unit's stated
 and placed cell, every scenario-stream draw from the first creation to the first update, and every
-building of the neutral house with the cells it covers.
+building of the neutral house with the cells it covers. Record also the stream's count of raw
+values since the seeding at the end of each group of S-0202's map-loading table and of each
+house-creation round, every object of every house at tick 0 with whether it is on the map, and
+every object at tick 1.
 - *Expected (rules):* units placed in the order of claim 8; every moved unit on the first cell
   of claim 8's neighbour order that takes it; the draws in claim 8's interleaved order, each
   unit's creation draws (its own, then those of the objects its creation makes, claim 8's
@@ -841,7 +908,11 @@ building of the neutral house with the cells it covers.
   before the next try; the first object's creation draw (the first try's when the first unit
   has refused tries) at claim 8's M-0019 raw-value place for the seed, and every
   infantry unit's standing position the one claim 2 gives for its draw, as in M-0019; and group
-  counts as claim 8's rounding gives them.
+  counts as claim 8's rounding gives them. Five houses created in each of the two rounds,
+  three base units created, the final R(0, 65535) taken; at tick 0 the two computer houses'
+  base units and every vehicle of the neutral house off the map, none of them at tick 1, and the
+  human player house's base unit on its base cell (claim 8's *Game start* and *Removal before
+  the groups*).
 - *Expected (acceptance):* every unit placed; no side-B unit moved; every move to a neighbouring
   cell; a neutral building covering each of M-0006's four bunker cells (each medium); and,
   wherever a run's group states a unit on a cell of M-0006's cliff-cell table, that unit on the
@@ -888,6 +959,56 @@ stated and placed cell.
   on any cell or set-up completes; or in part d the top-edge vehicle stands on its stated cell or
   the bottom-edge vehicle is moved (the plain test's result).
 
+**PT8: the records' game start (claim 8, Q-2336).** This part runs the original, stock data
+(the test rules copy below excepted), under the records' harness, whose settings file gives
+the skirmish setup (M-0019, Setup: no menus), with M-0019's settings, on the records' map, one
+all-infantry pairing of M-0019 at its six seeds. Every variant places a loose test copy of the
+base rules before the program starts, as S-0412 scenarios K1 run 2 and K3 place one. The copy
+is the installed base rules with the minimum unit count set to 0, since the slider's lower end
+for the unit-count setting is read from the base rules only (S-0412 K3). The settings file then
+sets the unit-count setting 0, as S-0412 K1 part b does, the value claim 8's *Game start* reads
+from the records. The bases setting has no lobby control and no settings-file route: it is the
+base rules' bases default, copied when the program starts (S-0412 claim 1), which the copy
+leaves as installed, as in the records' games. Variant a is as above. In variant b the copy
+also sets the bases default off, everything else as in variant a. Variant c adds
+to the settings file one computer player at an unused start, with no group, so the game has
+three computer players (the two recorded and the added one) and the human player: four player
+houses and, with the neutral and special houses, six houses in each house-creation round. A
+recorder keeps every house's objects at every tick of the first ten, and a read-only random-state
+recorder logs every scenario-stream request, its bounds and its result, and the count of raw values
+since the seeding after it, from the seeding to the first set-up
+object's creation draw.
+Record: at ticks 0 and 1 every object's house, kind, type and whether it is on the map; the human
+player house's base unit's cell and health at every tick; and, at each group's own checkpoint (the
+first and last request of the group, as S-0202's map-loading table orders the groups), the
+requests and raw values of each house-creation round and of the starting-unit step, and the count
+at the first set-up object's creation draw (*N*₀, read as M-0019 reads it).
+- *Expected:* in variant a, at tick 0 the two computer houses' base units and every vehicle of the
+  neutral house off the map, none of them at tick 1; the neutral house's buildings and infantry on
+  the map at both ticks; the human player house's base unit on its base cell with its health
+  unchanged at every tick. Each house-creation round is five house-creation draws (S-0202 claim
+  14), one per house in S-0009 claim 19's order (the human player house, the two computer houses,
+  the neutral house, the special house), each R(450, 1800) and taking the raw values that
+  S-0202 claim 4's ranged-draw rule gives for that range from the stream's state at its place.
+  The starting-unit step is three creation draws,
+  one per base unit in that order, then the final R(0, 65535). *N*₀ is as M-0019 gives it. In
+  variant b, the house rounds as in variant a, and the starting-unit step only the final
+  R(0, 65535). In variant c, each round six draws, the added computer house's after the second
+  recorded computer house's and before the neutral house's, and four creation draws in the
+  starting-unit step. As a whole-load check, *N*₀ in variant b is M-0019's *N*₀ less the three
+  base units' creation draws, with every later ranged draw retaken from the stream so shifted
+  by S-0202 claim 4 (a draw over a range that is not a power of two can then take another number
+  of raw values). In variant c it is M-0019's *N*₀ plus the raw values of the added computer
+  house's two house-creation draws and its base unit's creation draw, with every draw after the
+  first added one retaken in the same way.
+- *Falsified if:* a neutral-house vehicle is on the map at tick 0; a removed vehicle exists at
+  tick 1; the human player house's base unit moves or loses health; a house-creation round has
+  another number of draws, draws with other bounds or another house order, or lies elsewhere in
+  the stream than S-0202 claim 14 places it; or the starting-unit step takes another number of
+  creation draws than there are player houses with a base unit. A difference in *N*₀ alone, with
+  every group of these as expected, falsifies none of these rules: it lies in another group, which
+  its own checkpoints locate.
+
 ## Changes for other specs
 
 - S-0206 claim 5 and Terms: the conversion of a facing value *v* to 256 × *v* facing units, given
@@ -919,15 +1040,22 @@ stated and placed cell.
   fit claim 3's draws (claim 7). The rest needs a run that
   observes the placement itself (backlog). Our arena's own placement is claim 8's (design).
 - **The records' harness (Q-2096, Q-2098, Q-2099).** Whether the records' harness refused cells
-  by claim 8's take test, its rounding, and whether it removed or changed any map entry (the
-  neutral house's other map objects, the bunkers' "in play from tick 0" among its listed
-  changes), are not established (low). Its count of off-map objects per unit (equal to the
+  by claim 8's take test, its rounding, and whether it removed or changed any map entry beyond
+  the vehicles that claim 8's *Removal before the groups* takes off the map (the neutral house's
+  other map objects, the bunkers' "in play from tick 0" among its listed changes), are not
+  established (low). Which vehicles were off the map at tick 0 is PT8's to record. Its count
+  of off-map objects per unit (equal to the
   place of the unit's cell in claim 8's neighbour order) and the totals of raw values of placed
   units and those objects are measured (M-0019, claim 8), and so is its order in the all-infantry
   games. In the games with vehicles its order is a reading, `unmeasured` (claim 8). That each
   object is one refused cell's try is inferred (medium), and which cells it tried is not
   observed. Claim 8's rules are
   our own, and a difference shows as a failed acceptance check.
+- **Our arena's count before the set-up (Q-2336).** Whether our engine's groups before the
+  set-up take, for the records' map and settings, the same raw values as the records' groups,
+  group by group, is open. A first creation at another
+  place than M-0019's *N*₀, with *Game start* and the removal in place, is a difference in one
+  of S-0202's map-loading groups.
 - **Q-2277 question 1, several infantry units on one cell.** Which position an infantry unit
   placed on a cell already holding infantry took in the records, where any was, is not
   established: M-0019 gives no finding of its own for that case. Claim 2 gives our arena's rule
