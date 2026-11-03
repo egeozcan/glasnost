@@ -399,3 +399,15 @@ Ledger: [intake84.md](intake84.md). S-0513 r91 adds a building firer and a firer
 | `layer_change_on_events_only` | S-0102 claim 4, Edge cases; S-0306 r65 claim 17 | rejected (not in the layer), unchanged | Intake 83's verdict stands. The kept ground layer of a non-landable aircraft member after its hold is the switch-on position's own claim 4 rule. The drawing reads `warp::in_warp_row`, so with the switch off the sweep still moves such a member once the warp row has ended. Both positions are tested with the kept layer set: `layers::tests::claim4_a_non_landable_aircraft_member_keeps_the_ground_list_while_it_flies` |
 
 Intake 84 leaves the layer file unchanged.
+
+## Intake 85 (S-0214 r78): the reason-of-the-moment cursor switch judged
+
+Ledger: [intake85.md](intake85.md). S-0214 r78 adds one switch, read by the attack rule's part
+(e) (`targeting::attack_rule`). `phase_in_beam_spares_infantry`, which the Edge case names, is
+S-0513's and is judged with intake 84.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `moment_reason_attack_cursor` | S-0214 claim 6 (e), Edge cases (*Attack offered over a reason of the moment*) | rejected (not in the layer) | Condition 1 is met: the Edge case states the off position (part (e) asks only whether a reason that gives *illegal* holds, at any rank), and it is built in `check::illegal_at_any_rank`. Which answers it passes over beyond those the text names is under Q-2426, with an interim. Condition 2 fails. The quirk text gives the on position's effect as an attack offered, and an order accepted, over a target the actor will never fire at and drops once its reason of the moment ends. It names no stuck unit, no give-up and no glitch, and no play note or request names it. The off position takes away an attack order the original accepts. Condition 3 is doubtful as well: it changes which orders a person's click gives, and the own AI's, since the AI clicks through the same rule. Both positions are tested: `claims_s0214_r78::t4f_the_countdown_offers_the_attack_over_a_target_its_warhead_cannot_affect`, `out_of_ammunition_and_cloaked_hide_the_zero_versus_test`, `t4e_a_phasing_in_actor_is_offered_the_attack_over_a_target_in_the_air_in_range`, `a_falling_vehicle_that_is_phasing_in_holds_part_e`, `the_land_row_outranks_the_countdown_but_not_the_early_rearming_answers`, `a_pending_delayed_shot_hides_the_zero_versus_test`, and `claims_s0214_combat::claim_6e_switch_off_reloading_neither_gives_nor_takes_the_attack`. |
+
+Intake 85 leaves the layer file unchanged.

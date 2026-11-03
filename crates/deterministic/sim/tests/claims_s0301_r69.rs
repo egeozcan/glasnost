@@ -296,9 +296,9 @@ fn a_materialising_firer_gets_rearming_ahead_of_the_rank_4_refusals() {
     }
 }
 
-// spec: S-0214 claim 6 (e) and S-0301 claim 9, interim under Q-2356: the attack rule's check (S-0214 claim 6 (e), "other reasons for not firing at this moment ... do not count") passes over the materialising rearming of S-0301 claim 9, as it passes over ranks 5 to 8, so the target tests decide there.
+// spec: S-0301 claim 9 (the own AI's lasting test, our design, PLAN §4.7: it passes over the materialising rearming of rank 4, as it passes over ranks 5 to 8, so the target tests decide there). Q-2356 is answered by S-0214 r78: the attack rule's part (e) takes the ordinary check's answer instead, so the materialising rearming hides the target tests there (claims_s0214_r78.rs).
 #[test]
-fn q2356_the_attack_rules_check_passes_over_the_materialising_rearming() {
+fn the_ai_lasting_check_passes_over_the_materialising_rearming() {
     let mut w = game();
     let gun = put(&mut w, Kind::Vehicle, "GUN", ALPHA, -2, 0);
     let sky = put(&mut w, Kind::Vehicle, "SKY", ALPHA, -2, 2);

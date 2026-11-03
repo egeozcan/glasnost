@@ -548,6 +548,10 @@ pub struct Quirks {
     // spec: S-0214 claim 21 and Edge cases
     #[serde(default = "on")]
     pub damaging_entry_cursor_retained: bool,
+    /// The attack rule's part (e) takes the firing check's answer, so a reason of the moment that ranks above a target test hides it: while the rearm countdown runs, out of ammunition, cloaked, or with an early rearming of rank 4 (phasing in among them) the attack is offered over a target only those tests refuse; off: part (e) asks only whether a reason that gives illegal holds, at any rank, passing over every reason of the moment.
+    // spec: S-0214 claim 6 (e) and Edge cases (Attack offered over a reason of the moment)
+    #[serde(default = "on")]
+    pub moment_reason_attack_cursor: bool,
     /// View-arrow presses and releases made during an order block are discarded; off: they are accepted (unit orders stay blocked).
     // spec: S-0213 claim 23 and Edge cases; S-0201 claim 14
     #[serde(default = "on")]
@@ -2344,6 +2348,8 @@ impl Default for Quirks {
             group_center_keeps_extra_selection: true,
             group_kept_on_owner_change: true,
             damaging_entry_cursor_retained: true,
+            // spec: S-0214 claim 6 (e) and Edge cases (default on = original)
+            moment_reason_attack_cursor: true,
             blocked_arrow_events: true,
             queued_move_sleeps: true,
             override_suspends_queued: true,
@@ -3053,6 +3059,10 @@ impl Quirks {
             (
                 "damaging_entry_cursor_retained",
                 self.damaging_entry_cursor_retained,
+            ),
+            (
+                "moment_reason_attack_cursor",
+                self.moment_reason_attack_cursor,
             ),
             ("blocked_arrow_events", self.blocked_arrow_events),
             ("queued_move_sleeps", self.queued_move_sleeps),

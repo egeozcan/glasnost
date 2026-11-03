@@ -133,7 +133,7 @@ pub fn drain_target(w: &World, d: ObjectId, b: ObjectId) -> bool {
         return false;
     };
     let draining = t.combat.slots[slot].is_some_and(|wp| w.rules().combat.weapon(wp).drain);
-    // spec: S-0214 claim 6 (e) and S-0301 claim 9 (the check without the reasons of the moment of ranks 5 to 8, so that reloading does not hide an illegal target)
+    // spec: S-0301 claim 9 (the own AI's lasting test, our design, PLAN §4.7: the check without the reasons of the moment of ranks 5 to 8, so that reloading does not hide an illegal target)
     draining && check::check_lasting(w, d, target, slot) != Answer::Illegal
 }
 

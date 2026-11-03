@@ -511,13 +511,17 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
         // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
+        // spec: S-0214 Terms (movable: not phasing in) and claim 6 (d) (r78: a phasing-in actor is not movable, so part (d) asks that the target be in range of the weapon it would use)
+        // The Terms' "not being erased" and "not a slave unit" are not asked here (seams: rows G2 and GC1 refuse a click of an actor being erased; our engine has no slave units).
         Some(Kind::Infantry | Kind::Vehicle) => {
             !disabled(w, id)
+                && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
                 && !crate::structures::bunker::bunkered(w, id)
         }
         Some(Kind::Aircraft) => {
             !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
+                && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
         }
         // spec: S-0214 Terms (a building: rally-capable or undeploys into a vehicle; a construction yard also needs the lobby option, which our setup lacks)
@@ -1128,11 +1132,17 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
     // spec: S-0214 claim 6 (e) (unless force-fire or an infiltrator's entry, the firing rules do not rule the target illegal)
     let e = mods.force_fire || infiltrator_entry(w, actor, t) || {
         let (slot, x) = weapon::would_use(w, actor, Some(Target::Object(t)));
+        let tg = Some(Target::Object(t));
+        // spec: S-0214 r78 claim 6 (e) (Q-2356 answered: part (e) takes the firing check's answer for that target and weapon, the answer of the highest rank that holds, S-0301 claim 9, and fails only when it is illegal; a reason of the moment ranked above a target test hides it: the rearm countdown, out of ammunition, cloaked and the early rearming answers of rank 4, phasing in among them; one ranked below every target test, not facing, still turning, moving, out of range, does not count, and the range test is part (d)'s, so it is not asked here)
+        // spec: S-0214 claim 6 (e) (the falling firer's refusal of S-0301 claim 9 rank 4 is a firing rule, so a falling actor fails (e) unless force-fire or the infiltrator exception, or unless it is also phasing in: the materialising rearming outranks it) and S-0522 claim 17 (an ordinary click over an enemy during the fall gives the move of table M, a force-fire click an attack order)
+        // spec: S-0214 Edge cases (quirks.moment_reason_attack_cursor off: part (e) asks only whether a reason that gives illegal holds, at any rank, passing over every reason of the moment; Q-2426 interim: every answer that is not illegal)
         // Without a weapon there is no firing rule to rule the target illegal.
-        // spec: S-0214 claim 6 (e) (other reasons for not firing at this moment do not count; the falling firer's refusal of S-0301 claim 9 rank 4 is a firing rule, so a falling actor fails (e) unless force-fire or the infiltrator exception) and S-0522 claim 17 (an ordinary click over an enemy during the fall gives the move of table M, a force-fire click an attack order)
-        // spec: S-0214 claim 6 (e) (reloading does not count: the check without the reasons of ranks 5 to 8, which would answer ahead of the target tests of rank 9)
         x.is_none()
-            || check::check_lasting(w, actor, Some(Target::Object(t)), slot) != Answer::Illegal
+            || if w.rules().quirks.moment_reason_attack_cursor {
+                check::check(w, actor, tg, slot, false) != Answer::Illegal
+            } else {
+                !check::illegal_at_any_rank(w, actor, tg, slot)
+            }
     };
     a && b && c && d && e
 }
