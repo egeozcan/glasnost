@@ -88,4 +88,8 @@ Baseline built at main c782577; the intake on top of it. Nothing moved.
   run again at c782577; the duel-m6c, m7a and m7b goldens are unchanged).
 - AI: `glasnost-ai --include-ignored` 246 passed, as at 66b2770; the quick lane (seeds 7 to 10,
   36 games) identical to the baseline apart from timings, every game over.
-- `glasnost-sim --include-ignored`: only `pathing_c7p4::diag` fails, as on main. Tested: `claims_s0501_r99::s0404_claim_15_the_release_place_is_the_place_a_new_contact_takes` (three places, place 1 held: the release's place and `air::request_contact`'s grant are both 0, then both 2; an aircraft in contact keeps its place and position; with every place held the release has none and no contact is granted). No code change: `econ::release::pad_position` and `air::request_contact` both take `first_free_place` over the same count (NumberOfDocks, absent 1, at least 1) |
+- `glasnost-sim --include-ignored`: only `pathing_c7p4::diag` fails, as on main.
+- Rebased onto main da3ef7e (intakes 79 and 81) without conflicts and with this intake's code
+  unchanged: the workspace tests (7388 passed, 0 failed), `glasnost-ai --include-ignored` (246
+  passed) and `cargo xtask gate` (every golden unchanged) were run again there; the arena,
+  sweeps and quick lane were not. Tested: `claims_s0501_r99::s0404_claim_15_the_release_place_is_the_place_a_new_contact_takes` (three places, place 1 held: the release's place and `air::request_contact`'s grant are both 0, then both 2; an aircraft in contact keeps its place and position; with every place held the release has none and no contact is granted). No code change: `econ::release::pad_position` and `air::request_contact` both take `first_free_place` over the same count (NumberOfDocks, absent 1, at least 1) |
