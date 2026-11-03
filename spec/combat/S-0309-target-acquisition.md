@@ -2,11 +2,11 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 94
+revision: 95
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
 Q-2262, Q-2263, Q-2264]
@@ -1383,7 +1383,13 @@ index 1. This is a design rule, not an additional claim about the original.
     for it, is not established (Open questions). A superweapon warp member that a holder holds
     through its departure is not such a target, since the departure makes no revert. What the
     firing check answers for it while it waits to land and while it is phasing in is open (S-0513
-    claim 39). A member that a revert gives back to a holder while it is off the map is such a
+    claim 39). A firer whose temporal beam is attached to the member is the exception: its firing
+    check answers *rearming*, unless an answer that S-0301 claim 9 ranks above that *rearming*
+    holds (a deactivated firer's *illegal* is one, and with it claim 29's check drops the member).
+    While the member waits to land, an infantry or vehicle firer of that kind within its weapon's
+    range of the member's old position whose check answers *rearming* keeps it, makes no shot at
+    it and neither moves nor turns for it (S-0513 claim 39a, *The firer*). A member that a revert
+    gives back to a holder while it is off the map is such a
     target. A crush gives both drops within the crush, and
     together they take at most one timer draw: after a first draw at most 8 ticks are left. For an
     aircraft holder, the adjustment of its behaviour that follows belongs to the aircraft specs.
@@ -1422,12 +1428,15 @@ index 1. This is a design rule, not an additional claim about the original.
       staying in play awaiting its removal, S-0312 claim 21) and for a sinking or crashing object
       at its killing hit: parts a and b crush their objects, and the only object killed by a hit,
       in part c, is an infantry unit in its death sequence.
-      `unmeasured`: the two passages on a superweapon warp member, since no part of S-0513 judges
+      `unmeasured`: the two passages on a superweapon warp member, since, apart from the firer whose temporal beam is attached to the member (below), no part of S-0513 judges
       a holder that holds the member at departure (its holders among those to which claim 29's
       rules apply drop it at that claim's check before then, S-0513 claim 39, and a later
       re-taking is recorded but not judged), fires at a member as it departs, records the holders
       of a member destroyed by its landing check, or puts an override in effect for a holder of
       the member.
+      The firer whose temporal beam is attached to the member: `measurable` (S-0513 scenario SW12
+      part l3) for an infantry firer, `unmeasured` for a vehicle firer, since part l3's firer is
+      an infantry unit.
     - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
       infantry and vehicle holders of an object that is crushed, as in A18 parts a and b, or of an
       infantry unit killed in its death sequence, as in part c); medium (the drop's moment inside
@@ -1444,7 +1453,8 @@ index 1. This is a design rule, not an additional claim about the original.
       c), medium for one whose object is crushed or goes off the map; the handling of a
       restored object that stays off
       the map or in play after its killing hit is a design rule; medium for the two passages on a
-      superweapon warp member; medium for the absence of the timer draw during game set-up
+      superweapon warp member; medium for the firer whose temporal beam is attached to the member,
+      infantry and vehicle firers alike; medium for the absence of the timer draw during game set-up
 
 28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
     are S-0516 claim 14's: at the start of cloaking and again when the object becomes fully cloaked
