@@ -223,7 +223,7 @@ fn target_exists(w: &World, firer: ObjectId, t: Target) -> bool {
     match t {
         Target::Object(x) => w.obj(x).is_some_and(|o| {
             o.health > 0
-                // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered: the firing check answers S-0514 claim 19's rearming for a firer whose beam is attached to the member, before and after its departure, unless a reason that outranks it holds) and S-0514 claim 19; S-0309 r95 claim 27 (the exception for a firer whose temporal beam is attached: rearming, unless an answer ranked above it holds, a deactivated firer's illegal among them)
+                // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered: the firing check answers S-0514 claim 19's rearming for a firer whose beam is attached to the member, before and after its departure, unless a reason that outranks it holds) and S-0514 claim 19; S-0309 r95 claim 27 (the exception for a firer whose temporal beam is attached: rearming, unless an answer ranked above it holds, a deactivated firer's illegal among them); S-0513 r91 claim 39a (Q-2376 answered: the same for a building firer, unless one of the building's own answers ranked above it holds, and for a firer beyond its weapon's range of the old position, whatever the range)
                 && (o.on_map
                     || (crate::superweapons::warp::departed(w, x)
                         && crate::temporal::holds(w, firer, x)))

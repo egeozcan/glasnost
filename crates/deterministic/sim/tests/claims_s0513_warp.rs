@@ -609,6 +609,94 @@ fn claim48_a_member_still_leaving_takes_no_other_part_of_its_turn() {
     assert!(w.obj(a).unwrap().drive.as_ref().unwrap().track.is_none());
 }
 
+// --- Jumpjet members (M8 step A3 intake 84, intake 83's seams) -----------------------
+
+/// The rules with JJ, a vehicle type with jumpjet movement (otherwise a
+/// CART).
+fn rules_jj() -> Ruleset {
+    let mut r = rules();
+    let mut t = r.sim.vehicles["CART"].clone();
+    t.locomotor = Some(glasnost_rules::sim::Locomotor::Jumpjet);
+    r.sim.vehicles.insert("JJ".into(), t);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("JJ".into());
+    r
+}
+
+/// A JJ of BETA at (0, 0), placed (grounded, listed in the ground layer),
+/// then raised `h` leptons above its surface in the ascending state with
+/// its ground listing kept, as S-0209 claim 13's jumpjet rule lists it
+/// below 208 leptons.
+fn jumpjet_at(h: i32) -> (World, ObjectId) {
+    let mut w = game(&rules_jj());
+    chrono(&mut w);
+    let j = spawn(&mut w, "JJ", BETA, 0, 0);
+    let c = w.obj(j).unwrap().pos.cell();
+    assert!(
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .contains(&j),
+        "listed on the ground"
+    );
+    if h > 0 {
+        let surface = w.surface_for(j);
+        let o = w.obj_mut(j).unwrap();
+        o.pos.z = surface + h;
+        o.jump.as_mut().unwrap().phase = glasnost_sim::jump::Phase::Ascending;
+    }
+    (w, j)
+}
+
+#[test]
+fn intake84_claim34_a_grounded_jumpjet_listed_in_the_block_joins_the_warp() {
+    // spec: S-0513 claim 34 (every remaining examined object joins the warp group) and S-0209 claim 13 (a grounded jumpjet is listed in its cell)
+    let (mut w, j) = jumpjet_at(0);
+    warp(&mut w, at(0, 0), at(5, 5));
+    assert_eq!(stage(&w, j), Some(Stage::Pending));
+}
+
+#[test]
+fn intake84_claim34_a_listed_jumpjet_above_its_surface_is_left_alone_q2419_interim() {
+    // spec: S-0513 claim 34 (an object in the air, an aircraft or jumpjet in flight, is left alone); S-0209 claim 13 and S-0102 claim 3 (r41) list a jumpjet below 208 leptons, so it is examined. Whether that listed jumpjet is "in flight" is Q-2419; interim: any height above its surface is in the air
+    let (mut w, j) = jumpjet_at(100);
+    let c = w.obj(j).unwrap().pos.cell();
+    assert!(
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .contains(&j),
+        "still listed at 100 leptons"
+    );
+    warp(&mut w, at(0, 0), at(5, 5));
+    assert_eq!(stage(&w, j), None, "left alone (interim)");
+}
+
+#[test]
+fn intake84_claim36_a_jumpjet_member_landing_on_a_deck_from_the_ground_stands_on_it_on_deck() {
+    // spec: S-0513 claim 36 (on a high-bridge cell the bridge lift is added) and S-0102 claim 3 (r41: a member landing on the deck from the ground stands on it, its on-deck state set, at no height above it); S-0502 claim 4 (the on-deck state chooses deck listing)
+    let (mut w, j) = jumpjet_at(0);
+    let c = at(5, 5);
+    let i = w.cells.idx(c).unwrap();
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+    assert!(!w.obj(j).unwrap().jump.as_ref().unwrap().on_deck);
+    let tl = warp(&mut w, at(0, 0), c);
+    run_through(&mut w, tl + 63);
+    assert_eq!(stage(&w, j), Some(Stage::Placed));
+    let o = w.obj(j).unwrap();
+    assert_eq!(o.layer, glasnost_sim::world::Layer::Deck);
+    assert!(o.jump.as_ref().unwrap().on_deck, "its on-deck state is set");
+    assert_eq!(w.height_above_surface(j), 0, "no height above the deck");
+    assert!(
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Deck)
+            .contains(&j),
+        "listed on the deck"
+    );
+}
+
 // --- Determinism ---------------------------------------------------------------------
 
 #[test]

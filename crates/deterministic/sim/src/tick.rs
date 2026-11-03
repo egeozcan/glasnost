@@ -233,15 +233,21 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0616 claim 1 (a deactivated vehicle's spark step comes first in its turn, before every other draw of that turn, also in turns that end early for another reason)
     crate::emitters::deactivated_sparks(w, id);
-    // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r89 claim 39a (The firer: an infantry or vehicle firer whose beam is attached to a departed member keeps it; a building firer and a firer beyond range: interim Q-2376, kept too; an aircraft firer: the aircraft specs')
+    // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r89 claim 39a (The firer: an infantry or vehicle firer whose beam is attached to a departed member keeps it) and r91 claim 39a (Q-2376 answered: so do a building firer and an infantry or vehicle firer beyond range of the old position); an aircraft firer: the aircraft specs', kept meanwhile as our own rule
     crate::combat::held::turn_start_drop(w, id);
     let member = crate::superweapons::warp::is_member(w, id);
-    if member {
-        // spec: S-0513 claim 39a (Q-2316: a member's sparkle, with or without a beam, decided by its state before the turn's warp step) and claim 51 (an intrinsic exception made before the warp work, its draws before the warp step's) and S-0203 r43 claim 4 (S-0514 claim 18's sparkle is not suppressed ordinary work, made before the warp work in each turn in which the member is being erased or phasing in); its order against the erasure update is open (S-0513 Open questions, S-0514's): interim Q-2377, before it, as in an ordinary turn
-        crate::temporal::turn_sparkle(w, id);
-    }
+    // spec: S-0513 claim 39a (Q-2316: a member's sparkle, with or without a beam, decided by its state before the turn's warp step) and claim 51 (an intrinsic exception made before the warp work, its draws before the warp step's) and S-0203 r43 claim 4 (S-0514 claim 18's sparkle is not suppressed ordinary work, made before the warp work in each turn in which the member is being erased or phasing in); S-0514 r16 claim 18 and S-0513 r91 claims 39a and 51 (Q-2377: its order against the erasure update is S-0514 claim 18's, an infantry member's before the update and a vehicle or aircraft member's after it, both before the warp step)
+    let sparkle = if member {
+        crate::temporal::sparkle_before_update(w, id)
+    } else {
+        None
+    };
     // spec: S-0513 claim 39a and S-0203 claim 4 (a warp member's erasure update comes before its warp step in each of its turns; a member that update removes takes no warp step, the no-step rule)
     let erasure_made = crate::temporal::member_update(w, id);
+    if member {
+        // spec: S-0514 r16 claim 18 and S-0513 r91 claim 39a (Q-2377: a vehicle or aircraft member's sparkle after the turn's erasure update, by its state then; a member that update removes sparkles from its state at the turn's start and its last position, before the no-step rule ends its turn)
+        crate::temporal::sparkle_after_update(w, id, sparkle);
+    }
     if erasure_made && w.obj(id).is_none() {
         return;
     }
@@ -293,11 +299,15 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0514 claims 14, 17 and 18 (an attached attacker lets go on arriving in a new cell; a target being erased takes its erasure update and sparkle in its own turn and skips ordinary movement, turning, firing and behaviour; a building skips behaviour processing and firing; a phasing-in unit sparkles)
     crate::temporal::holder_turn(w, id);
-    if !member {
-        // spec: S-0514 claim 18 (one sparkle per turn of an object being erased, phasing in or both); a warp member's came before its warp step (S-0513 claim 39a)
-        crate::temporal::turn_sparkle(w, id);
-    }
-    if crate::temporal::turn(w, id, !erasure_made) {
+    // spec: S-0514 claim 18 (one sparkle per turn of an object being erased, phasing in or both) and r16 claim 18 (Order against the erasure update, Q-2377: an infantry unit's before the turn's erasure update, a vehicle's, aircraft's or building's after it, by its state then, a removing turn's from its state before the update); a warp member's came before its warp step (S-0513 claim 39a)
+    let sparkle = if member {
+        None
+    } else {
+        crate::temporal::sparkle_before_update(w, id)
+    };
+    let short = crate::temporal::turn(w, id, !erasure_made);
+    crate::temporal::sparkle_after_update(w, id, sparkle);
+    if short {
         // spec: S-0525 claims 9 and 11 (the radiation hit in the object's own turn, after its self-healing; S-0514 claim 17's erasure skips behaviour, movement, turning and firing, not the hit)
         crate::radiation::hit_turn(w, id);
         return;

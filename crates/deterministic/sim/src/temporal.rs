@@ -173,7 +173,7 @@ pub fn deliver(w: &mut World, firer: Option<ObjectId>, target: Option<Target>) {
         let_go(w, f);
         return;
     }
-    // spec: S-0514 claim 1 (an object target must be in the ground render layer, otherwise this effect does nothing) and S-0306 claim 17 (a warp member is in the ground render layer from its warp's launch until at least the end of its arrival hold, so the test passes for it, off the map or phasing in); S-0514 r13 claim 1 (a departed warp member target, off the map or phasing in, is an ordinary object target for claims 1 to 4)
+    // spec: S-0514 claim 1 (an object target must be in the ground render layer, otherwise this effect does nothing) and S-0306 r65 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, an aircraft whose type cannot land until a crash, so the test passes for it, off the map or phasing in); S-0514 r13 claim 1 (a departed warp member target, off the map or phasing in, is an ordinary object target for claims 1 to 4)
     if !ground_layer(w, x) && !crate::superweapons::warp::in_ground_layer(w, x) {
         return;
     }
@@ -360,7 +360,7 @@ pub fn turn(w: &mut World, id: ObjectId, update: bool) -> bool {
     if !attached(w, id) {
         return false;
     }
-    // The sparkle of this turn is made by [`turn_sparkle`], before this.
+    // The sparkle of this turn is made around the update by the caller ([`sparkle_before_update`], [`sparkle_after_update`]).
     let short = cut_short(w, id) && kind_of(w, id) != Kind::Building;
     if short {
         // spec: S-0514 claim 17 and S-0215 claim 2 (a mobile object being erased drops its target and destination on each such tick) and S-0513 claim 39a (so does a vehicle or aircraft phasing in with a beam attached)
@@ -407,15 +407,69 @@ pub fn member_drop(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The sparkle of an object's turn (S-0514 claim 18): one in each turn of
-/// an object being erased, phasing in, or both. A warp member's comes
-/// before its turn's warp step (S-0513 claims 39a and 51); another
-/// object's at its place in the ordinary turn. Both come before the turn's
-/// erasure update (interim Q-2377).
-pub fn turn_sparkle(w: &mut World, id: ObjectId) {
-    // spec: S-0513 claim 39a (Q-2316: each turn of a warp member at every stage is one of its turns for S-0514 claim 18, with or without a beam; in its leaving stage it counts as being erased, from its departure it phases in; its state before the turn's warp step decides; one sparkle per turn whether it is being erased, phasing in or both) and S-0514 claim 18
-    if crate::superweapons::being_erased(w, id) || crate::teleport::phasing_in(w, id) {
-        sparkle(w, id);
+/// The state that decides a turn's sparkle, read just before the turn's
+/// erasure update (S-0514 claim 18, *Order against the erasure update*):
+/// whether the object was being erased or phasing in, its kind and its
+/// last position. A vehicle, aircraft or building whose update removes it
+/// sparkles from this.
+#[derive(Clone, Copy, Debug)]
+pub struct SparkleState {
+    due: bool,
+    kind: Kind,
+    pos: Pos,
+}
+
+/// Whether object `id` sparkles in its turn by its state now: being
+/// erased, phasing in, or both (S-0514 claim 18; S-0513 claim 39a).
+fn sparkle_due(w: &World, id: ObjectId) -> bool {
+    // spec: S-0513 claim 39a (Q-2316: each turn of a warp member at every stage is one of its turns for S-0514 claim 18, with or without a beam; in its leaving stage it counts as being erased, from its departure it phases in; one sparkle per turn whether it is being erased, phasing in or both) and S-0514 claim 18
+    crate::superweapons::being_erased(w, id) || crate::teleport::phasing_in(w, id)
+}
+
+/// The first half of a turn's sparkle (S-0514 r16 claim 18, *Order against
+/// the erasure update*), called just before the turn's erasure update, or
+/// where it would come: an infantry unit makes its sparkle here, by its
+/// state now; any other kind makes it in [`sparkle_after_update`], from
+/// the state this returns. A warp member's two halves both come before
+/// its turn's warp step (S-0513 claims 39a and 51).
+pub fn sparkle_before_update(w: &mut World, id: ObjectId) -> Option<SparkleState> {
+    let o = w.obj(id)?;
+    let state = SparkleState {
+        due: sparkle_due(w, id),
+        kind: o.kind,
+        pos: o.pos,
+    };
+    if state.kind == Kind::Infantry {
+        // spec: S-0514 r16 claim 18 (Order against the erasure update, Q-2377: an infantry unit makes its sparkle before that turn's erasure update, so any draw its creation takes comes before every draw of the update; a release in the update still leaves it its sparkle) and S-0513 r91 claim 39a (an infantry member makes it before the turn's erasure update, both before the warp step)
+        if state.due {
+            sparkle_at(w, state.kind, state.pos);
+        }
+        return None;
+    }
+    Some(state)
+}
+
+/// The second half of a turn's sparkle (S-0514 r16 claim 18): a vehicle,
+/// aircraft or building makes it after the turn's erasure update, by its
+/// state at that point. One that the update removed sparkles from
+/// `before`, its state and last position before the update, since a
+/// completion does not end its being erased for this purpose.
+pub fn sparkle_after_update(w: &mut World, id: ObjectId, before: Option<SparkleState>) {
+    let Some(before) = before else { return };
+    match w.obj(id) {
+        Some(o) => {
+            let (kind, pos) = (o.kind, o.pos);
+            // spec: S-0514 r16 claim 18 (Order against the erasure update, Q-2377: a vehicle, aircraft or building makes its sparkle after the update; its state at that point decides, so a release in the update that ends the erasure, the last attacker letting go, leaves one that is not phasing in with no sparkle in that turn) and S-0513 r91 claim 39a (a vehicle or aircraft member makes it after the turn's erasure update, before the warp step; otherwise its state before the warp step decides)
+            if sparkle_due(w, id) {
+                sparkle_at(w, kind, pos);
+            }
+        }
+        None => {
+            // spec: S-0514 r16 claim 18 (Order against the erasure update, Q-2377: a completion in the update does not end the state for this purpose, so a turn whose erasure update removes the object still sparkles in a sparkle tick, placed by its kind's rule from its last position, after the removal and the warp-away animation, its creation draw after every draw of the update) and S-0513 r91 claim 39a (a turn whose erasure update removes the member sparkles when it was being erased or phasing in at the turn's start)
+            if before.due {
+                sparkle_at(w, before.kind, before.pos);
+            }
+        }
     }
 }
 
@@ -482,9 +536,10 @@ pub fn building_erased(w: &World, id: ObjectId) -> bool {
     erased(w, id) && w.obj(id).is_some_and(|o| o.kind == Kind::Building)
 }
 
-/// A sparkle for an erased or phasing-in object (claim 18): every global
-/// tick divisible by 24, at the object's turn.
-pub fn sparkle(w: &mut World, id: ObjectId) {
+/// A sparkle for an erased or phasing-in object of kind `kind` whose
+/// position is `pos` (claim 18): every global tick divisible by 24, at the
+/// object's turn.
+fn sparkle_at(w: &mut World, kind: Kind, pos: Pos) {
     // spec: S-0514 Constants (sparkle period 24 ticks, on the global tick number)
     if w.tick % 24 != 0 {
         return;
@@ -492,12 +547,11 @@ pub fn sparkle(w: &mut World, id: ObjectId) {
     let Some(name) = w.rules().combat.general.chrono_sparkle.clone() else {
         return;
     };
-    let Some(o) = w.obj(id) else { return };
-    let at = match o.kind {
+    let at = match kind {
         // spec: S-0514 claim 18 (infantry and vehicles: 120 leptons farther along each horizontal axis, same height)
-        Kind::Infantry | Kind::Vehicle => Pos::new(o.pos.x + 120, o.pos.y + 120, o.pos.z), // spec: S-0514 Constants (mobile sparkle displacement 120 leptons)
+        Kind::Infantry | Kind::Vehicle => Pos::new(pos.x + 120, pos.y + 120, pos.z), // spec: S-0514 Constants (mobile sparkle displacement 120 leptons)
         // spec: S-0514 claim 18 (aircraft and buildings without damage-fire positions: their own position; the damage-fire positions are not imported)
-        _ => o.pos,
+        _ => pos,
     };
     // spec: S-0514 r14 claim 18 (the sparkle is an ordinary animation with S-0109's simulation effects: its playback draws, claims 3, 11 and 28, its damage, claim 17, its start and middle effects, claim 28; a creation draw comes in the turn's place, before a warp member's warp step, S-0513 claim 39a) and S-0109 claim 29
     effects::anim(w, &name, at);

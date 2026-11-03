@@ -131,13 +131,50 @@ pub fn departed(w: &World, id: ObjectId) -> bool {
     member(w, id).is_some_and(|m| m.departed())
 }
 
-/// Whether an object is a warp member whose warp has been launched and whose
-/// arrival hold has not ended: S-0306 claim 17 puts it in the ground render
-/// layer then, whatever its height. The member state exists from joining
-/// the group at launch until the hold ends (`turn`).
+/// Whether a superweapon warp keeps an object in the ground render layer
+/// whatever its height (S-0306 claim 17, revision 65): a member whose warp
+/// has been launched and whose arrival hold has not ended (the member
+/// state exists from joining the group at launch until the hold ends,
+/// `turn`), and after the hold an aircraft whose type cannot land, while it
+/// flies, until a crash (`air::AirState::warp_filed`). Any other former
+/// member that did not move from one bridge deck to another stands at no
+/// height above its surface after the hold until its own movement raises
+/// it, so its own rows (`temporal::ground_layer`) give the ground layer
+/// until then and another layer from that movement's moment. For a deck to
+/// deck member the height test is kept: when it leaves the layer is not
+/// established (S-0306 Open questions).
 pub fn in_ground_layer(w: &World, id: ObjectId) -> bool {
-    // spec: S-0306 claim 17 (a warp member is in the ground render layer from its warp's launch until at least the end of its arrival hold, whatever its height)
+    // spec: S-0306 r65 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, whatever its height; it leaves that layer only when its own movement raises it, except an aircraft whose type cannot land, which keeps the ground layer while it flies, until a crash)
     member(w, id).is_some()
+        || w.obj(id)
+            .and_then(|o| o.air.as_ref())
+            .is_some_and(|a| a.warp_filed)
+}
+
+/// Whether the warp row of S-0102's layer table applies: from the warp's
+/// launch until the member's own movement applies again after its arrival
+/// hold. Unlike [`in_ground_layer`] it leaves out the ground layer that an
+/// aircraft whose type cannot land keeps afterwards: that part is no warp
+/// row but the claim 4 rule that no take-off re-files such a type, which
+/// the drawing applies itself, and with `quirks.layer_change_on_events_only`
+/// off its sweep moves such a member once the warp row has ended.
+pub fn in_warp_row(w: &World, id: ObjectId) -> bool {
+    // spec: S-0102 claim 3, claim 4 and Edge cases (the warp row applies from the warp's launch until the member's own movement applies again after its arrival hold; once it has ended a member is treated as any object)
+    member(w, id).is_some()
+}
+
+/// At the end of a member's arrival hold: an aircraft whose type cannot
+/// land keeps the ground render layer (S-0306 claim 17, revision 65); no
+/// landing or take-off of such a type re-files it (S-0102 claim 4), so
+/// only a crash ends it (`combat::effects::layer_refile`).
+fn keep_ground_filing(w: &mut World, id: ObjectId) {
+    if !w.obj(id).is_some_and(|o| o.kind == Kind::Aircraft) || crate::air::landable(w, id) {
+        return;
+    }
+    if let Some(a) = w.obj_mut(id).and_then(|o| o.air.as_mut()) {
+        // spec: S-0306 r65 claim 17 (an aircraft member whose type cannot land keeps the ground layer while it flies, until a crash)
+        a.warp_filed = true;
+    }
 }
 
 /// Whether a departed member's landing check has passed for a landing cell
@@ -276,6 +313,7 @@ pub fn launch(w: &mut World, h: HouseId, source: CellXY, dest: CellXY) {
 
 /// One examined object of the source block (claims 34 and 35).
 fn examine(w: &mut World, h: HouseId, id: ObjectId, to: Option<CellXY>) {
+    // spec: S-0209 r45 claim 13 and S-0513 claims 4 and 34 (only objects listed in a cell are examined: units with drop-pod movement and tunnelling units while digging are in no cell layer and never taken; our engine builds neither movement, `rules::Locomotor::None`, and the drop-pod stand-in ends at once, S-0607 claims 23 and 24, so every such unit stands listed in its cell)
     let Some(o) = w.obj(id) else { return };
     if !o.kind.is_mobile() {
         // spec: S-0513 claim 34 (buildings and other objects are never moved)
@@ -469,6 +507,7 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0513 claim 40 (phasing in ends in tick t_A + max(1, H))
             if t.wrapping_sub(ta) >= hold.max(1) {
                 set_member(w, id, None);
+                keep_ground_filing(w, id);
                 // spec: S-0513 claim 39 and T2 (when the hold ends, a member with no target tries a target search)
                 crate::teleport::phasing_search(w, id);
             }
