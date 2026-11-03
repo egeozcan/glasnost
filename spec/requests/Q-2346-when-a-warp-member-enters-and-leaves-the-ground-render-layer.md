@@ -1,9 +1,9 @@
 ---
 id: Q-2346
 title: When a superweapon warp member enters the ground render layer at the launch, and when it leaves it after the arrival hold
-status: open
+status: answered
 related: [S-0102, S-0306, S-0513]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
