@@ -1,9 +1,9 @@
 ---
 id: Q-2396
 title: An armed walker blocked by an enemy building that its weapon cannot fire at
-status: open
+status: answered
 related: [S-0209, S-0212, S-0309, S-0301]
-answered-by: []
+answered-by: [S-0209]
 ---
 
 ## Need
