@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 42
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-03
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -422,8 +422,14 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
    target searches, sensor updates, elapsed protection duration, placement and arrival-fate tests
    are not suppressed ordinary work, and neither is the erasure update of a temporal beam attached
    to the member (S-0514 claim 7), which comes before the warp work in each of the member's turns
-   (S-0513 claim 39a). So in our engine the erasure update of a member being erased runs in every
-   warp turn, and S-0513 claim 39a's removal tick holds. Elapsed-tick clocks keep running:
+   (S-0513 claim 39a), nor S-0514 claim 18's sparkle, made before the warp work in each of the
+   member's turns in which it is then being erased or phasing in, nor S-0514 claim 17's clearing of
+   target and destination, made after the warp work in each turn in which the member is then being
+   erased, or is a vehicle or aircraft phasing in with a beam attached, or an infantry member in
+   that state with S-0513 `quirks.phase_in_beam_spares_infantry` off (S-0513 claim 39a, *Sparkles
+   and drops in the warp's turns*). So in our engine the erasure update of a member being erased
+   runs in every warp turn, and S-0513 claim 39a's removal tick holds, and a member sparkles in its
+   warp turns and clears its target there as S-0514 gives. Elapsed-tick clocks keep running:
    suppressed reload work grants no ammunition and restarts no countdown, but its elapsed time still
    passes. Skipping firing-frame advancement likewise does not freeze a shot cooldown. Independent
    house updates, other objects' updates, immediate damage and explicit event-driven effects remain
@@ -448,13 +454,19 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
      infantry or aircraft member, as S-0513 claim 39a gives. Its order within the turn, before the
      warp work, is design, tested in our engine by S-0513 SW12 part l4; that the original keeps
      that order is `unmeasured`, as S-0513 claim 39a gives. The original-side gaps retain claim
-     48's `unmeasured` backing. The original's behaviour in the warp updates other than the leaving
+     48's `unmeasured` backing. The sparkles and the clearing in warp turns: `measurable` in our
+     engine (S-0513 SW12 part l6) for the sparkles. That the original
+     makes them likewise is
+     `measurable` (S-0513 SW12 part l6) for the sparkles of a tank member, and `unmeasured` for the
+     clearing beyond claim 48's leaving rule and for an infantry or aircraft member, as S-0513
+     claim 39a gives. The original's behaviour in the warp updates other than the leaving
      stage is an open question of S-0610
    - Confidence for this contract: high as design; low for matching the original's
      unresolved rows, as in S-0513 claim 51. The suppression of the held-target check and drop:
      high as design. The erasure update in warp turns: high as design for our engine; for the
      original, medium in every stage that it makes the update, and low for its order before the
-     warp work (S-0513 claim 39a)
+     warp work (S-0513 claim 39a). The sparkles and the clearing in warp turns: high as design for
+     our engine; for the original, medium, as S-0513 claim 39a rates it
 
    - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
      after its own turn: claim 11's backing (`unmeasured`).
