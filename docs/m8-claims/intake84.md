@@ -11,7 +11,8 @@ warp member. Both replace intake 81's interim rules. S-0306 r64 to r65 (commit 7
 says how long a warp member stays in the ground render layer after its arrival hold, and S-0209
 r44 to r45 (commit e7f04c9, claim 13) that units with drop-pod movement and
 tunnelling units while digging are in no cell layer, so a warp never takes them. Two seams that [intake 83](intake83.md) (S-0102 r41) left in S-0513
-claims 34 and 36 for a jumpjet member are checked here too. Requests filed: **Q-2416**,
+claims 34 and 36 for a jumpjet member are checked here too, and the drawing's warp row is kept
+apart from the sim's new kept ground layer. Requests filed: **Q-2416**,
 **Q-2417**, **Q-2418** and **Q-2419**.
 
 ## Built
@@ -83,7 +84,7 @@ claims 34 and 36 for a jumpjet member are checked here too. Requests filed: **Q-
 | 17: until a crash | tested | `r65_claim17_a_crash_ends_the_kept_ground_layer` |
 | 17: the other readers of the ground render layer (S-0309 claims 7 and 9, S-0607 claim 3) for such an aircraft | request | **Q-2417**; interim: they read its height as before |
 | 17: a member moving from one bridge deck to another: when it leaves the layer | seam | not established (S-0306 Open questions); the height test after the hold, as before |
-| 17: the render-list filing itself and S-0102 claim 4's re-file moment | client | S-0102 r41, intake 83; `app::mapview::layers` reads `warp::in_ground_layer`, so the client follows the new rule |
+| 17: the render-list filing itself and S-0102 claim 4's re-file moment | client, built | S-0102 r41, intake 83. After the rebase onto intake 83, the drawing's warp row (`layers::evaluate_at`, `listed` and the sweep's skip) reads the new `warp::in_warp_row` (the member state alone) instead of `warp::in_ground_layer`. With the new kept layer, `in_ground_layer` would have stopped the sweep of `quirks.layer_change_on_events_only` off from moving a flying non-landable aircraft member after its hold, which S-0102 Edge cases say it does once the warp row has ended. With the switch on, the drawing keeps such a member in the ground list by claim 4's own rule (no take-off re-file for its type), as S-0306 r65 says. Test: `layers::tests::claim4_a_non_landable_aircraft_member_keeps_the_ground_list_while_it_flies` now sets the kept layer as a real warp's hold end does (both switch positions) |
 | 17 and `quirks.warp_deck_departure_airborne` | unchanged | r65 changes none of its text; its tests (r62 run j, run i) pass |
 | S-0513 claim 34 against S-0102 r41 (intake 83's seam): a unit with jumpjet movement listed in a source cell while above its surface (*r* < 208, S-0209 claim 13) | request | **Q-2419**: r41 names it a possible member, but claim 34 leaves "a jumpjet in flight" alone without saying when a jumpjet is in flight. Interim: `warp::in_air` unchanged, any height above the surface or deck is in the air (`claims_s0513_warp::intake84_claim34_a_listed_jumpjet_above_its_surface_is_left_alone_q2419_interim`); a grounded jumpjet joins (`intake84_claim34_a_grounded_jumpjet_listed_in_the_block_joins_the_warp`) |
 | S-0513 claim 36 with S-0102 r41 (intake 83's seam): a jumpjet member landing on a high-bridge deck from the ground has its own on-deck state set | tested | `warp::place` sets the deck layer and `objects::place` calls `jump::placed`, which sets `on_deck` from the layer: `claims_s0513_warp::intake84_claim36_a_jumpjet_member_landing_on_a_deck_from_the_ground_stands_on_it_on_deck` (deck layer, on-deck state, height 0 above the deck, listed on the deck) |
