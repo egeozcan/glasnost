@@ -73,4 +73,19 @@ leaves it alone. Main carries r23 (commit 23a1e47).
 | claim | status |
 |---|---|
 | 15, an aircraft that lands over the pad without a contact (S-0501 claim 24) is moved toward a docking position that does not depend on a free contact place: with one docking place that place's docking position, otherwise the foundation centre with no displacement | Tested: `claims_s0501_r99::claim_24_a_waiting_aircraft_is_moved_toward_its_docking_position_without_a_contact` (one and two places). Built: `air::docking_step` aims at `econ::release::pad_position_at(w, k, NO_PLACE)`, whose rules for a count of 1 and for an index outside the count give these positions; `econ::release` is unchanged. Backing `unmeasured` and confidence medium, as S-0501 claim 24 rates them |
-| 15, the position of an aircraft without a contact otherwise follows the first empty place, the place a new contact takes (r23's wording) | Tested: `claims_s0501_r99::s0404_claim_15_the_release_place_is_the_place_a_new_contact_takes` (three places, place 1 held: the release's place and `air::request_contact`'s grant are both 0, then both 2; an aircraft in contact keeps its place and position; with every place held the release has none and no contact is granted). No code change: `econ::release::pad_position` and `air::request_contact` both take `first_free_place` over the same count (NumberOfDocks, absent 1, at least 1) |
+| 15, the position of an aircraft without a contact otherwise follows the first empty place, the place a new contact takes (r23's wording) |
+
+## Lanes
+
+Baseline built at main c782577; the intake on top of it. Nothing moved.
+
+- Goldens: `cargo xtask gate` passes with every golden unchanged (native and wasm32).
+- Arena: all 155 pairing rows identical to the baseline; the same 11 fail (LTNK–E1,
+  TELE–APOC, TELE–V3, CAOS–APOC, CAOS–TTNK, CAOS–E1, CAOS–E2, DISK–FV, INIT–E2, ROBO–HTK,
+  MIND–E1), none changed.
+- Sweeps over seeds 1 to 16: m6c smallest minimum 0 (air-strike orders), m7a 0, m7b smallest
+  drain minimum 3, every statistic as on the earlier baseline at 66b2770 (the sweeps were not
+  run again at c782577; the duel-m6c, m7a and m7b goldens are unchanged).
+- AI: `glasnost-ai --include-ignored` 246 passed, as at 66b2770; the quick lane (seeds 7 to 10,
+  36 games) identical to the baseline apart from timings, every game over.
+- `glasnost-sim --include-ignored`: only `pathing_c7p4::diag` fails, as on main. Tested: `claims_s0501_r99::s0404_claim_15_the_release_place_is_the_place_a_new_contact_takes` (three places, place 1 held: the release's place and `air::request_contact`'s grant are both 0, then both 2; an aircraft in contact keeps its place and position; with every place held the release has none and no contact is granted). No code change: `econ::release::pad_position` and `air::request_contact` both take `first_free_place` over the same count (NumberOfDocks, absent 1, at least 1) |
