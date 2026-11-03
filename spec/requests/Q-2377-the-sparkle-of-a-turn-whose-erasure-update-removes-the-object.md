@@ -1,9 +1,9 @@
 ---
 id: Q-2377
 title: The sparkle of a turn whose erasure update removes the object being erased
-status: open
+status: answered
 related: [S-0514, S-0513, S-0109]
-answered-by: []
+answered-by: [S-0514]
 ---
 
 ## Need
