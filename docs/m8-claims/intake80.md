@@ -7,6 +7,10 @@
   S-0404 claim 15. No quirk is added or changed: `quirks.aircraft_edge_hold` and
   `quirks.unarmed_pad_bound_hover` read as at r93, so `c7-play-fixes.md` gets no new entry.
 
+- **S-0404** r23 claim 15 (commit 23a1e47 on main): the docking position of an aircraft that
+  lands without a contact, which this intake's change builds; owned here at the coordinator's
+  request.
+
 Requests filed: Q-2366 (a waiting aircraft that lands over its destination pad without a
 contact: F7 refuses the pad's cell, and the pad-bound rule that "comes first"). Q-2367 to
 Q-2375 unused.
@@ -60,3 +64,13 @@ No state is added, so the save format (93) and the AI game format (56) are uncha
 | Open question 19, what *enter* does after a refusal with a behaviour queued | Tested with claim 24's refusal above |
 | AC31 part f | Tested: `claim_24_ac31f_…` |
 | Changes for other specs, S-0404 claim 15 (the docking position without a contact) | Built through `pad_position_at`'s rule for an index outside the count |
+
+### S-0404 r23
+
+Owned here at the coordinator's request, because this intake's change builds it; intake 82
+leaves it alone. Main carries r23 (commit 23a1e47).
+
+| claim | status |
+|---|---|
+| 15, an aircraft that lands over the pad without a contact (S-0501 claim 24) is moved toward a docking position that does not depend on a free contact place: with one docking place that place's docking position, otherwise the foundation centre with no displacement | Tested: `claims_s0501_r99::claim_24_a_waiting_aircraft_is_moved_toward_its_docking_position_without_a_contact` (one and two places). Built: `air::docking_step` aims at `econ::release::pad_position_at(w, k, NO_PLACE)`, whose rules for a count of 1 and for an index outside the count give these positions; `econ::release` is unchanged. Backing `unmeasured` and confidence medium, as S-0501 claim 24 rates them |
+| 15, the position of an aircraft without a contact otherwise follows the first empty place, the place a new contact takes (r23's wording) | No change: `pad_position` already takes the first empty place for an aircraft not in contact |
