@@ -431,7 +431,10 @@ fn claim51_sw23_f_the_members_own_periodic_check_is_suppressed_through_arrival_e
         let (_, control) = run(k, false);
         if k < 65 {
             assert_eq!(checked, control, "{row} (tick t_L + {k}): no check");
-            if k != 63 {
+            if k <= 61 {
+                // spec: S-0513 r89 claim 39a (Sparkles and drops in the warp's turns: a member still being erased after its warp step, its leaving updates to the expiry included, clears its target in both runs, so these rows show only that the check adds nothing)
+                assert_eq!(checked, None, "{row}: claim 39a's drop");
+            } else if k != 63 {
                 assert!(checked.is_some(), "{row}: the target is kept");
             }
         } else {
@@ -460,15 +463,14 @@ fn claim51_sw23_f_the_members_allied_drop_is_suppressed_through_arrival_effects(
         step(&mut w);
         (stage(&w, m), target(&w, m))
     };
-    for (k, row) in [
-        (2_i32, "leaving"),
-        (40, "leaving"),
-        (61, "wait expiry"),
-        (62, "departure"),
-        (64, "arrival effects"),
-    ] {
+    for (k, row) in [(62_i32, "departure"), (64, "arrival effects")] {
         let (_, kept) = run(k);
         assert!(kept.is_some(), "{row} (tick t_L + {k}): no allied drop");
+    }
+    // spec: S-0513 r89 claim 39a (Sparkles and drops in the warp's turns: in its leaving updates, the expiry included, the member clears its target after the warp step whatever the target, so those rows no longer tell an allied drop from none)
+    for (k, row) in [(2_i32, "leaving"), (40, "leaving"), (61, "wait expiry")] {
+        let (_, dropped) = run(k);
+        assert_eq!(dropped, None, "{row} (tick t_L + {k}): claim 39a's drop");
     }
     let (stage_e, dropped) = run(65);
     assert_eq!(stage_e, None, "the hold has ended");

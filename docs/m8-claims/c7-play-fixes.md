@@ -363,3 +363,14 @@ Ledger: [intake75.md](intake75.md). S-0513 r86 claim 39a adds two switches.
 | `phase_in_beam_spares_infantry` | S-0513 claim 39a, Edge cases; S-0514 claim 17; S-0610 claim 5 | rejected (not in the layer) | Condition 1 is met: the off position (an infantry unit with an attached beam has its turns cut short while it phases in) is stated and built. Condition 2 fails: the spec gives the difference as which turns an infantry warp member takes during its arrival hold, a few ticks long; it names no stuck unit or glitch, and no play note or request names it. Condition 3: the off position changes a unit's turns, a rule change rather than a fix. Both positions are tested: `claims_s0513_r86::claim39a_an_infantry_member_with_a_beam_phases_in_as_one_with_no_beam_in_both_positions` and `claim39a_the_berserk_countdown_skips_the_cut_short_phasing_in_updates`. |
 
 Intake 75 leaves the layer file unchanged, so it does not move the layered rules hash again.
+
+## Intake 81 (S-0513 r89, S-0514 r14): the two chrono switches judged again
+
+Ledger: [intake81.md](intake81.md). S-0513 r89 claim 39a adds the sparkles and drops in a warp member's turns and the firer's keeping a departed member. It adds no switch. Both of intake 75's switches now also cover the new rules.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `warp_departure_keeps_beam` | S-0513 claim 39a, Edge cases (*Sparkles and drops in the warp's turns* hold in both settings) | rejected (not in the layer), unchanged | The off position refuses the lock, so its member sparkles and drops as one with no beam. That is a presentation and target-clearing difference that follows from the refusal judged in intake 75. It names no stuck unit or glitch, and condition 3 still fails for the same reason. Both positions are tested: `claims_s0513_r89::claim39a_l6_a_member_with_a_beam_sparkles_once_per_turn_and_not_after_its_phasing_end`. |
+| `phase_in_beam_spares_infantry` | S-0513 claim 39a (Drops: an infantry member with a beam drops while it phases in only with the switch off) | rejected (not in the layer), unchanged | The new difference is whether an infantry member with a beam keeps a given target and destination in its turns while it phases in. That is still a rule change over a few ticks with no glitch named. Both positions are tested: `claims_s0513_r89::claim39a_an_infantry_member_with_a_beam_drops_off_the_map_only_with_the_switch_off`. |
+
+Intake 81 leaves the layer file unchanged.

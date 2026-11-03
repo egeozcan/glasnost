@@ -233,8 +233,13 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0616 claim 1 (a deactivated vehicle's spark step comes first in its turn, before every other draw of that turn, also in turns that end early for another reason)
     crate::emitters::deactivated_sparks(w, id);
-    // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r62 claim 39 (a departed warp member held through its departure is not that case: interim Q-2211 question 3, the same drop as our own rule)
+    // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r89 claim 39a (The firer: an infantry or vehicle firer whose beam is attached to a departed member keeps it; a building firer and a firer beyond range: interim Q-2376, kept too; an aircraft firer: the aircraft specs')
     crate::combat::held::turn_start_drop(w, id);
+    let member = crate::superweapons::warp::is_member(w, id);
+    if member {
+        // spec: S-0513 claim 39a (Q-2316: a member's sparkle, with or without a beam, decided by its state before the turn's warp step) and claim 51 (an intrinsic exception made before the warp work, its draws before the warp step's) and S-0203 r43 claim 4 (S-0514 claim 18's sparkle is not suppressed ordinary work, made before the warp work in each turn in which the member is being erased or phasing in); its order against the erasure update is open (S-0513 Open questions, S-0514's): interim Q-2377, before it, as in an ordinary turn
+        crate::temporal::turn_sparkle(w, id);
+    }
     // spec: S-0513 claim 39a and S-0203 claim 4 (a warp member's erasure update comes before its warp step in each of its turns; a member that update removes takes no warp step, the no-step rule)
     let erasure_made = crate::temporal::member_update(w, id);
     if erasure_made && w.obj(id).is_none() {
@@ -242,6 +247,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and S-0203 claim 4 revision 32: the warp update is the whole member turn, with the intrinsic exceptions)
     if crate::superweapons::warp::turn(w, id) {
+        // spec: S-0513 claim 39a (Q-2316: the drop after the warp step of a member still being erased or cut short) and claim 51; S-0203 r43 claim 4 (S-0514 claim 17's clearing is not suppressed ordinary work, made after the warp work)
+        crate::temporal::member_drop(w, id);
         // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)
         crate::combat::fire::reload_elapsed(w, id);
         return;
@@ -286,7 +293,10 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0514 claims 14, 17 and 18 (an attached attacker lets go on arriving in a new cell; a target being erased takes its erasure update and sparkle in its own turn and skips ordinary movement, turning, firing and behaviour; a building skips behaviour processing and firing; a phasing-in unit sparkles)
     crate::temporal::holder_turn(w, id);
-    crate::temporal::phasing_sparkle(w, id);
+    if !member {
+        // spec: S-0514 claim 18 (one sparkle per turn of an object being erased, phasing in or both); a warp member's came before its warp step (S-0513 claim 39a)
+        crate::temporal::turn_sparkle(w, id);
+    }
     if crate::temporal::turn(w, id, !erasure_made) {
         // spec: S-0525 claims 9 and 11 (the radiation hit in the object's own turn, after its self-healing; S-0514 claim 17's erasure skips behaviour, movement, turning and firing, not the hit)
         crate::radiation::hit_turn(w, id);

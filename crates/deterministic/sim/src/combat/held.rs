@@ -118,8 +118,11 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
 /// holds it through the departure; what the firing check answers for the
 /// departed member, and so what that holder's own processing does with it,
 /// is open there (Q-2211 question 3). Our interim gives it the same
-/// handling, as our own rule rather than claim 27's. A member that a revert
-/// gives back while it is off the map is claim 27's case.
+/// handling, as our own rule rather than claim 27's. An infantry or vehicle
+/// holder whose temporal beam is attached to the departed member is not
+/// that open case: S-0513 r89 claim 39a (Q-2317 answered) keeps the member
+/// as its target ([`beam_held`]). A member that a revert gives back while
+/// it is off the map is claim 27's case.
 fn left(w: &World, x: ObjectId) -> bool {
     w.obj(x)
         .is_some_and(|o| !o.on_map || crate::combat::damage::dead(o))
@@ -130,9 +133,20 @@ fn left(w: &World, x: ObjectId) -> bool {
 /// as no target, so no firing check is asked about it and no shot is fired
 /// at it or at its place.
 pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
-    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 r62 claim 39 (claim 27's rule does not apply to a holder of a departed warp member that no revert gave back; what the firing check answers for that member is open: interim Q-2211 question 3, the same handling as our own rule)
-    o.target
-        .filter(|t| !matches!(*t, Target::Object(x) if left(w, x)))
+    // spec: S-0309 claim 27 (DECIDED, Q-2006 question 3: a restored object off the map or destroyed in play is no target in the firing step); S-0513 r89 claim 39a (The firer, Q-2317 answered: an infantry or vehicle firer whose beam is attached to a departed member keeps it as its target, its firing check answering rearming, its range and aim reading the old position) and S-0309 r95 claim 27 (while the member waits to land such a firer within range keeps it, makes no shot at it and neither moves nor turns for it); a building firer: interim Q-2376 question 1, no target as our own rule; an aircraft firer: the aircraft specs', the same handling meanwhile
+    o.target.filter(|t| match *t {
+        Target::Object(x) => {
+            !left(w, x)
+                || (matches!(o.kind, Kind::Infantry | Kind::Vehicle) && beam_held(w, o.id, x))
+        }
+        Target::Cell(_) => true,
+    })
+}
+
+/// Whether `holder`'s temporal beam is attached to `x`, a departed warp
+/// member (S-0513 claim 39a, *The firer*).
+fn beam_held(w: &World, holder: ObjectId, x: ObjectId) -> bool {
+    crate::superweapons::warp::departed(w, x) && crate::temporal::holds(w, holder, x)
 }
 
 /// Whether tick number `t` is a check tick of claim 29: a multiple of the
@@ -304,10 +318,8 @@ pub(crate) fn turn_start_drop(w: &mut World, id: ObjectId) {
     let Some(Target::Object(x)) = w.obj(id).and_then(|o| o.target) else {
         return;
     };
-    // spec: S-0513 claim 39a (The firer: while its beam is attached, a firer keeps the member at the checks and makes no further shot at it; Release: the warp is no release cause, and a firer in attack approaches a member that lands beyond range) and S-0514 claim 14; interim Q-2317: a holder whose beam is attached to the departed member keeps it
-    if !left(w, x)
-        || (crate::temporal::holds(w, id, x) && crate::superweapons::warp::departed(w, x))
-    {
+    // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered, no longer an interim: an infantry or vehicle firer whose beam is attached to the member, within range of its old position, keeps it as its target from the departure to the appearance; Release: the warp is no release cause) and S-0514 claim 14; S-0309 r95 claim 27 (the departure is not this drop for a firer whose temporal beam is attached); a building firer and a firer beyond range: interim Q-2376, kept as well; an aircraft firer: the aircraft specs', the same meanwhile
+    if !left(w, x) || beam_held(w, id, x) {
         return;
     }
     if let Some(ob) = w.obj_mut(id) {
