@@ -378,8 +378,19 @@ pub fn resource_glints(w: &mut World, order: &[CellXY]) {
     }
 }
 
-/// Sets up a new game on `map` (S-0009, S-0202 claim 8): the early phase
-/// of start positions, the initial fill, the overlay type stream and its
+/// One round of house creation (S-0202 claim 14): one ranged draw
+/// R(450, 1800) per house of the game, in house order, its result unused.
+fn house_creation_round(w: &mut World, half_span: bool) {
+    for _ in 0..w.houses.len() {
+        // spec: S-0202 claim 14 (the bounds 450 and 1800, the same for every house, raw values by claim 4's ranged-draw rule; no rule uses the result)
+        let _ = w.rng.ranged(450, 1800, half_span);
+    }
+}
+
+/// Sets up a new game on `map` (S-0009, S-0202 claim 8): the first round of
+/// house-creation draws (S-0202 claim 14), the early phase of start
+/// positions, the second round of house-creation draws, the initial fill,
+/// the overlay type stream and its
 /// placement effects, the overlay data stream, the first terrain
 /// recalculation pass, the vein rebuild, the map's objects, the second
 /// pass, the unused-house cleanup, the late phase, the owners of the map's
@@ -434,6 +445,7 @@ pub fn new_game(
             lost_to_capture: false, // spec: S-0509 claim 11 (the mark is clear at the start of a game)
             infiltrated_vehicle_factory: false, // spec: S-0510 Terms (both flags are clear at the start of a game)
             infiltrated_infantry_factory: false, // spec: S-0510 Terms (both flags are clear at the start of a game)
+            idle_test_house: false, // spec: S-0216 claim 8 (Removal before the groups: only the arena's human player house is idle)
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {
@@ -533,6 +545,11 @@ pub fn new_game(
         trace: Default::default(),
         pathfinder: Default::default(),
     };
+    let q = rules.quirks;
+    if !setup.sandbox {
+        // spec: S-0202 claim 14 (house creation, first round: one ranged draw R(450, 1800) per house of S-0009 claim 19's list, in its order, before the early phase; the result unused)
+        house_creation_round(&mut w, q.ranged_draw_half_span);
+    }
     // spec: S-0409 claim 3 (the states at game start, before any object is placed)
     crate::econ::shroud::start(&mut w);
     // spec: S-0011 claim 4 and S-0009 claim 32 (the trigger definitions, the difficulty position and the variables)
@@ -543,7 +560,6 @@ pub fn new_game(
         // The first house update works claim 1 out for every house (S-0410 claim 1 holds from the start).
         h.econ.radar.due = true;
     }
-    let q = rules.quirks;
     let order = map.cells.visiting_order(q.narrow_map_partial_pass);
     let players = starts::player_count(&w);
     let late_passive = |w: &World, h: usize| {
@@ -592,6 +608,11 @@ pub fn new_game(
         }
         // spec: S-0009 claim 19 (the others in house order, against list 2)
         starts::assign(&mut w, &order, &list2);
+    }
+
+    if !setup.sandbox {
+        // spec: S-0202 claim 14 (house creation, second round: the same list created again, one draw R(450, 1800) per house in the same order, after the early phase and before the initial fill)
+        house_creation_round(&mut w, q.ranged_draw_half_span);
     }
 
     // Initial fill (S-0009 claim 6): one draw per visited cell for a water fill.
