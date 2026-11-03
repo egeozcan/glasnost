@@ -83,21 +83,24 @@ and **Q-2377**.
 | S-0309 claim 27 (r89 Changes): a firer whose beam is attached answers *rearming*, a deactivated firer's *illegal* drops at the check | tested | as *The firer* |
 | S-0514 r14 claim 18: the sparkle is an ordinary animation, its creation draw before a warp member's warp step | tested | as the r14 test above |
 | 39a Sparkles: the sparkle's draw before the expiry update's target search | tested | `s0203_r43_the_sparkles_creation_draw_comes_before_the_expiry_updates_target_search` (an expiry on a sparkle tick: the sparkle's creation draw moves the search's 4-to-8 draw, which a search made first would not feel). The landing check is in the same warp step, after the warp-out animation |
-| 39a The firer: off the map, none of the rank-4 answers above *rearming* that read the target answers for the member | tested | the l3 and vehicle firer tests assert in each off-map tick that the member is not airborne (`airborne_by_height` reads an off-map object as not airborne, so `projectile_illegal`'s air row stays out), not protected and not hidden from the firer's house. These read the member's own state, not `on_map`, so a member protected or cloaked at its departure still gets that answer, which the claim allows as an outranking one |
+| 39a The firer: off the map, none of the rank-4 answers above *rearming* that read the target answers for the member | tested | the l3 and vehicle firer tests assert in each off-map tick that the member is not airborne (`airborne_by_height` reads an off-map object as not airborne, so `projectile_illegal`'s air row stays out), not protected and not hidden from the firer's house. These read the member's own state, not `on_map` |
+| 39a The firer: a member protected or cloaked at its departure | seam | it keeps that state off the map (the cloak machine skips off-map objects, our engine's choice, not stated by claim 39a), so its firer gets *illegal* or *impossible*, ranked above *rearming*, and claim 29's check drops it. Consistent with "unless an outranking answer holds"; no spec says whether the cloak state may change off the map |
 | 39a The firer: an infantry firer's attack state; the firing step's no-target row not reached | tested | `claim39a_l3_an_infantry_firer_in_its_attack_state_stays_in_it_while_the_member_waits_to_land` (attack state set at a non-fire, non-frozen stage before the departure: it holds to the appearance); the l3 test asserts `held::firing_target` is the member in each off-map tick and records the attack state and sequence as unchanged |
-| 39a The firer: after a deactivated firer's drop the beam stays attached and the behaviour stays *attack* | tested | the deactivated test. A later fall-back to rest from the attack processing with no target would release by S-0514 claim 14 (*Release*), outside this drop |
+| 39a The firer: after a deactivated firer's drop the beam stays attached and the behaviour stays *attack* | tested | the deactivated test: the beam stays attached until the firer's next due attack processing with no target falls back to rest, and lets go there (S-0514 claim 14, *Release*), not at the drop |
 | **S-0309 r95** claim 27: a firer whose temporal beam is attached to the departed member is the exception: *rearming* unless an answer ranked above it holds; a deactivated firer's *illegal* lets claim 29's check drop it; within range while the member waits to land it keeps it, makes no shot and neither moves nor turns | tested | `combat::check`'s `target_exists`, `held::firing_target`, `held::turn_start_drop` cite it; tests: the l3 infantry firer test (`measurable`, SW12 part l3), the vehicle firer test, the infantry attack-state test and the deactivated firer test |
 | **S-0203 r43** claim 4: a warp member's sparkle before its warp work and S-0514 claim 17's clearing after it are not suppressed ordinary work | tested | `tick.rs` (the sparkle and `member_drop` calls) and `temporal::member_drop` cite it; tests: l6c, l6, the leaving-turns drop, the vehicle and infantry drop tests and the expiry draw-order test |
 
 ## Lanes
 
-All before and after runs used one release build each, the before build from origin/main at
-the rebase point.
+All before and after runs used one release build each: before is main at 4c57780, after is
+this intake's code on that base. The branch was then rebased onto c782577 (intake 77, which
+changes the arena set-up and parts of the sim); on that base the workspace tests, clippy, the
+AI tests and `xtask gate` were run again.
 
 | Lane | Before | After |
 |---|---|---|
 | AI tests (`glasnost-ai --include-ignored`) | 246 passed | 246 passed |
 | M6c, M7a, M7b sweeps 1 to 16 | ok | identical (no diff line) |
 | Arena (`glasnost-headless`) | 10 failing pairings | the same 10; all six output files byte-identical |
-| AI quick lane, seeds 7 to 10 | recorded | identical apart from timings (`out.txt` and `ai-sides.txt`): seeds 7 and 8; seeds 9 and 10 still running |
+| AI quick lane, seeds 7 to 10 | recorded | identical apart from timings (`out.txt` and `ai-sides.txt`), all four seeds |
 | Goldens (`xtask gate`, wasm32 duel goldens) | | unchanged; no golden moved |
