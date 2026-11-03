@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 89
+revision: 91
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-03
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316, Q-2317]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316, Q-2317, Q-2376]
 supersedes: []
 ---
 
@@ -1377,8 +1377,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
       - *Sparkles.* If the imported sparkle animation exists, a member makes S-0514 claim 18's
         sparkle in each of its turns whose global tick number is divisible by 24, from its update of
         tick *t*_L + 2 to the update in which its phasing in ends, both included, with or without a
-        beam. A turn whose erasure update removes the member is left out: whether it sparkles there
-        is open (Open questions). Its state before the turn's warp step decides. So its update of tick *t*_L + 1, in
+        beam. A turn whose erasure update removes the member sparkles too, in a sparkle tick, when
+        the member is being erased or phasing in at the turn's start, as S-0514 claim 18 gives: an
+        infantry member makes the sparkle before the turn's erasure update, a vehicle or aircraft
+        member after it, both before the warp step. Otherwise its state before the turn's warp step
+        decides. So its update of tick *t*_L + 1, in
         which it enters the leaving stage, makes none unless a beam was locked on it before that
         turn (*The lock*), while its departure update and the update that ends its phasing in are
         among those turns. After its phasing in has ended it sparkles only while it is being erased,
@@ -1424,8 +1427,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
       While the member waits to land, from its departure update to its appearance (Q-2317), an
       infantry or vehicle firer whose beam is attached to it, that is within its weapon's range of
       the member's old position and whose firing check about it answers *rearming* keeps it as its
-      target, and its turns go on as before the departure. An aircraft firer is the aircraft specs',
-      and a building firer is not covered here. The departure is neither S-0309 claim 27's drop nor
+      target, and its turns go on as before the departure. An aircraft firer is the aircraft
+      specs'. A building firer and a firer beyond range follow below. The departure is neither
+      S-0309 claim 27's drop nor
       a revert (claim 39), so that claim's rule for a held object that a revert gave back while it
       is off the map does not apply. The firing check still answers *rearming*, unless an answer
       that S-0301 claim 9 ranks above that *rearming* holds, as above. With *rearming* the firer
@@ -1439,6 +1443,40 @@ presentation and swept-layer rules below also apply where those specs cite them.
       turn. The first change comes at the member's appearance, when its position becomes the landing
       point: a firer in *attack* that takes the approach step then moves towards it if it is beyond
       range (*Release*).
+
+      A building firer without the SAM flag whose beam is attached to the member keeps it as its
+      target while it waits to land (Q-2376). Its *attack* processing treats the member as a target,
+      not as none: its firing check answers *rearming*, unless one of the building's own answers
+      that S-0301 claim 9 ranks above it holds, so it takes S-0215 claim 32's *rearming* row. It
+      makes no shot, chooses that row's delay and rotates towards the member's position, which is
+      the old one until placement. That is the direction it fired in, so its facing does not change
+      for the departure. It does not take that claim's no-target row, so it queues no *guard* for
+      the departure. S-0309 claim 29's check keeps the member, and no approach step or per-tick drop
+      applies to a building (S-0215 claim 37 g). With an outranking *illegal* or *impossible*, the
+      row for those answers drops the member and starts *guard*, as before the departure. A building
+      whose type has the SAM flag takes S-0215 claim 32's SAM rows instead, as for a target on the
+      map at the member's old position, at the world height it had there. So it keeps an aircraft
+      member whose world height there is not 0, and its *rearming* is one of the *aimed* stage's
+      other answers. While that claim's power row applies it keeps any member. Otherwise those rows
+      drop the member and then start *guard*.
+
+      An infantry or vehicle firer whose beam is attached to the member and that is beyond its
+      weapon's range of the old position at the departure keeps it as its target too (Q-2376). Its
+      firing check answers *rearming* as above, whatever the range, so it makes no shot. Every
+      rule that decides whether it keeps or approaches the member reads the member's position, the
+      old one, and its cell. So the departure changes nothing for it: it does what a firer
+      holding a target on the map at that position does, by S-0215 claim 37's approach step with
+      its table and per-tick rule. A firer in *attack* that takes the approach step keeps the
+      member and, with no destination, searches for an approach position (S-0215 claim 37 parts
+      d and f). It takes that claim's approach step as for a target on the map at the old
+      position, with that claim's exceptions, so a firer that moves goes towards the old
+      position. It lets the beam go at its first arrival in a new cell (S-0514 claim 14), and
+      from then on it holds a member with no beam of its
+      attached, whose firing check is claim 39's open question. A deployed infantry unit of a
+      human-controlled owner takes no approach step (S-0215 claim 37 g): it keeps the member and
+      its beam and neither moves nor turns for the departure. A firer whose type speed is 0
+      takes the step, but the step alone supplies no movement (S-0215 claim 37 g), so it keeps
+      the member and its beam while it does not move.
     - **Switch.** `quirks.warp_departure_keeps_beam`, default on (the original), covers the lock
       on a member (*The lock*), the erasure updates and removal that follow it (*The erasure goes
       on*, its no-step rule aside), the departure's keeping of the beam (*Departure*), the
@@ -1526,7 +1564,10 @@ presentation and swept-layer rules below also apply where those specs cite them.
       that has damage or such effects. The drop in the leaving stage with a beam attached is
       `unmeasured`: it follows from claim 48's rule, measured with no beam (SW23 part b), and the
       member's being erased there either way, but no part here gives a member on which a beam is
-      locked a target or destination then. A lock while the member waits to land or in its placement
+      locked a target or destination then. The sparkle of a turn whose erasure update removes the
+      member, and its order against that update, are `unmeasured` for a warp member (S-0514 claim
+      18 measures them for objects outside a warp). A lock while the member waits to land or in its
+      placement
       or arrival-effects update, the drop that follows it and its sparkles while it phases in are
       `unmeasured`: no part here times a lock there, a drop needs a target or destination to be
       seen, and the sparkles there do not tell such a lock from none. What such a lock does to the
@@ -1536,7 +1577,17 @@ presentation and swept-layer rules below also apply where those specs cite them.
       firer (SW12 part l3, its record from the departure to the appearance) and `unmeasured` for a
       vehicle firer, since part l3's firer is an infantry unit. Its rearm countdown's running then
       is `unmeasured`: no part here reads it, and the firer makes no shot while its beam is
-      attached.
+      attached. A building firer's keeping the member while it waits to land, in *attack*, with
+      no shot, its facing unchanged and its beam still attached at the appearance, is
+      `measurable` (SW12 part l7). The outranking answers of a building and their drop, and the
+      SAM-flag building, follow from S-0215 claim 32 and S-0301 claim 9 and take their backing: no
+      part here has an unpowered, deactivated or SAM-flag building firer. A firer beyond its
+      weapon's range of the old position at the departure, its keeping the member, its approach
+      and its release are `unmeasured`: no practical set-up puts a firer that holds its beam
+      there, since a firer that moves to a new cell lets the beam go (S-0514 claim 14) and the
+      routes that lock from beyond range cannot be timed by the harness. The rules it follows are
+      S-0215 claim 37's and S-0514 claim 14's, `measurable` for targets on the map (S-0215
+      scenario B32, S-0514 scenario E10).
     - Confidence: high for a lock after the member's turn of tick *d*. Medium, unmeasured, for the
       fragment route of *The lock routes*, a fragment's lock in any tick from *t*_L + 1 to the
       departure update included. Medium, unmeasured, for a lock before that turn, while its warp
@@ -1568,14 +1619,23 @@ presentation and swept-layer rules below also apply where those specs cite them.
       their ticks and their positions, for a tank member with or without a beam. Medium, unmeasured,
       for the same for an infantry or aircraft member, after a lock before the member's turn of tick
       *t*_L + 1 and in a longer wait off the map, for the place of the sparkle's creation draw, for
-      the sparkle's damage and start and middle effects for a type that has them, for the drop in
-      the leaving stage with a beam attached, and for a lock while the member waits to land or in
+      the sparkle's damage and start and middle effects for a type that has them, for the sparkle
+      of a turn whose erasure update removes the member and its order against that update, for
+      the drop in the leaving stage with a beam attached, and for a lock while the member waits
+      to land or in
       its placement or arrival-effects update, the drop after it and its sparkles while it phases
       in. Medium for the firer's keeping the member while it waits to land, with no shot and its
       behaviour, cell and facing unchanged, for an infantry firer within its weapon's range of the
       member's old position whose check answers *rearming*, and medium, unmeasured, for a vehicle
       firer there. The outranking answers and their drop are rated with the firer's answers above
-      (medium). Medium, unmeasured, for its rearm countdown's running then.
+      (medium). Medium, unmeasured, for its rearm countdown's running then. Medium for a
+      building firer's keeping the member while it waits to land, with S-0215 claim 32's
+      *rearming* row. Medium, unmeasured, for a building with the SAM flag, which takes S-0215
+      claim 32's SAM rows; low, unmeasured, for its keeping any member while that claim's power
+      row applies, as that claim rates the power condition. Medium, unmeasured, for a firer beyond range of the old position: its
+      keeping the member, its approach step towards the old position and the release at its
+      first new cell, a deployed infantry firer's staying put and a zero-speed firer's keeping
+      its beam while it does not move.
 
 40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
     *held delay*, in ticks. With one update per tick, phasing in ends in tick
@@ -1904,8 +1964,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     of target and destination, made after the warp work in each turn in which the member is then
     being erased, or is a vehicle or aircraft phasing in with a beam attached, or an infantry
     member in that state with `quirks.phase_in_beam_spares_infantry` off (claim 39a, *Sparkles and
-    drops in the warp's turns*). The sparkle's order against the turn's erasure update is S-0514's
-    (Open questions). While it phases in, a vehicle or aircraft member
+    drops in the warp's turns*). The sparkle's order against the turn's erasure update is S-0514
+    claim 18's. While it phases in, a vehicle or aircraft member
     with an attached beam, being erased
     or not, gets none of the hold row's behaviour processing, movement, turning or firing (claim
     39a). Nor does an infantry member while it is being erased, or, with
@@ -2969,13 +3029,29 @@ is not under test.
     to the phasing-end tick, and a run of (l6c) whose tank does not keep part (d)'s timeline is
     recorded and judges only the expectations whose ticks it records. The sparkles do not tell the
     tank being erased from phasing in, and none of this reads a target drop.
+  - (l7) A building firer (Q-2376). As (l3), with *T* a building in place of the infantry unit:
+    a test building type of the test data, armed with part l's test temporal weapon as its only
+    weapon, with no turret-snap, SAM, animation-delay or power need, placed so that the tank's old
+    position is within its weapon's range. The human orders it to attack the tank without
+    force-fire. (l3)'s release and approach records do not apply, since a building never moves.
+    Part l's counting condition holds with "*T* stays in play" read for the building. Record, in
+    each tick from the tank's departure update to its appearance update, both included, *T*'s
+    target, behaviour, facing and shots just after the tank's update, and *T*'s *attack*
+    processing ticks, and whether *T*'s beam is attached just after the appearance update. At
+    least five runs must count. Expected (claim 39a, *The firer*): in each of those ticks *T*
+    holds the tank as its target, stays in *attack*, makes no shot and keeps the facing it had
+    just before the departure update. Its *attack* processings fall every other tick (S-0215
+    claim 32's *rearming* row), and its beam is still attached after the appearance. Falsified by
+    a tick in that span in which *T* holds no target or another one, is in *guard* or makes a
+    shot, by a changed facing, by processings one tick apart, or by a beam let go by the
+    appearance.
   Our engine runs the same input with `quirks.warp_departure_keeps_beam` off. Expected there:
   *T*'s first shot locks no beam, the tank is not removed in tick *r* in (l1) to (l4), and in
   (l1), (l2), (l4) and (l5) it warps as in part (d). In (l5) *V*'s lock is a leader's lock: the
   tank is being erased from it on, as S-0514 gives, and is removed at the tick *V*'s own erasure
   gives, with *V* credited. No removal in (l5) is tied to tick *r*. In (l6) the sparkles are as
-  in (l6c), and in (l3) *T* holds no beam, so its record from the departure to the appearance
-  judges nothing there.
+  in (l6c), and in (l3) and (l7) *T* holds no beam, so its record from the departure to the
+  appearance judges nothing there.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -3233,11 +3309,6 @@ for these two kinds.
   attached is not part of this question: claim 39a (*The firer* and *Release*) gives what it does.
 - What else the original does for a member that the erasure removes in its expiry, departure
   or a placement update, beyond the observables in claim 39a's *Departure from the original*.
-- The order, within one turn of an object being erased, of S-0514 claim 18's sparkle against
-  that turn's erasure update, and so whether an object that the update removes makes the turn's
-  sparkle and whose draws come first. It is S-0514's for every object being erased, a warp member
-  included (claim 39a, *Sparkles and drops in the warp's turns*, gives only the sparkle's place
-  before the warp step).
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
 - Q-0738 is accounted for question by question in claim 48: leaving exclusions, stopped
@@ -3319,6 +3390,17 @@ for these two kinds.
   moves nor turns for it (S-0513 claim 39a, *The firer*)." Level: medium. Backing:
   `measurable` (S-0513 SW12 part l3) for an infantry firer, `unmeasured` for a vehicle firer,
   since part l3's firer is an infantry unit.
+- **S-0309 claim 27, a building firer and a firer beyond range (Q-2376).** After "neither moves nor
+  turns for it (S-0513 claim 39a, *The firer*)." the claim gains: "A building firer of that kind
+  without the SAM flag keeps the member too: its *attack* processing takes S-0215 claim 32's
+  *rearming* row, so it makes no shot and rotates towards the old position. A building with the SAM
+  flag takes that claim's SAM rows for the member at the old position. An infantry or vehicle firer
+  of that kind beyond its weapon's range of the old position keeps the member and takes S-0215 claim
+  37's approach step as for a target on the map at the old position, with that claim's exceptions
+  (claim 37 g), so in *attack* a firer that moves goes towards it and lets the beam go at its first
+  arrival in a new cell (S-0514 claim 14, S-0513 claim 39a, *The firer*)." Level: medium. Backing:
+  `measurable` (S-0513 SW12 part l7) for a building firer without the SAM flag, `unmeasured` for one
+  with it and for a firer beyond range, as S-0513 claim 39a gives.
 - **S-0309 claim 29.** The periodic held-target check
   that claim 39 relies on: at its checking turns in every tick whose tick number is a multiple of
   16, a holder, whatever its owner, in every current behaviour but *capture* and *sabotage*, and
