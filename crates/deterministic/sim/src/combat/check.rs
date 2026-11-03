@@ -359,7 +359,12 @@ pub fn check_lasting(w: &World, firer: ObjectId, target: Option<Target>, slot: u
 /// slot nothing is (part (e) holds for an actor with no weapon). Which
 /// answers the switch passes over is under Q-2426 (interim: every answer
 /// that is not *illegal*).
-pub fn illegal_at_any_rank(w: &World, firer: ObjectId, target: Option<Target>, slot: usize) -> bool {
+pub fn illegal_at_any_rank(
+    w: &World,
+    firer: ObjectId,
+    target: Option<Target>,
+    slot: usize,
+) -> bool {
     answer(w, firer, target, slot, false, Ask::IllegalOnly) == Answer::Illegal
 }
 

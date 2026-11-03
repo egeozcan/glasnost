@@ -360,7 +360,11 @@ fn t4e_the_target_in_the_air_is_kept_through_the_phase_in_and_dropped_unfired() 
     w.effects.clear();
     issue_until_held(&mut w, orders, j, Target::Object(up));
     let dropped = drop_tick(&mut w, j, Target::Object(up), 80);
-    assert_eq!(dropped, Some(n + 42), "the first check tick after the phase-in");
+    assert_eq!(
+        dropped,
+        Some(n + 42),
+        "the first check tick after the phase-in"
+    );
     assert!(!glasnost_sim::teleport::phasing_in(&w, j));
     assert_eq!(shots_by(&w, j), 0, "never fired at");
 }
