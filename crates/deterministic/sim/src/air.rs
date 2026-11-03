@@ -1593,7 +1593,7 @@ fn docking_step(w: &mut World, id: ObjectId, k: ObjectId) {
         if contact {
             crate::econ::release::pad_position(w, k, id).0
         } else {
-            // spec: S-0501 claim 24 (r99: an aircraft without a contact aims at a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (a count of 1 gives the sole displacement whatever the index; a contact index outside the count gives c)
+            // spec: S-0501 claim 24 (r99: an aircraft without a contact aims at a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: an aircraft that lands over the pad without a contact is moved toward that same docking position; a count of 1 gives the sole displacement whatever the index, a contact index outside the count gives c)
             crate::econ::release::pad_position_at(w, k, NO_PLACE)
         }
     } else {

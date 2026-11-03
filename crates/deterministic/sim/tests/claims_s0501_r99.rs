@@ -344,7 +344,7 @@ fn claim_24_a_sale_during_the_approach_falls_back_with_a_behaviour_queued() {
 // ---------------------------------------------------------------------------
 // A waiting aircraft landing over its pad
 
-// spec: S-0501 claim 24 (r99: a waiting aircraft that lands over its destination pad is moved while landing as the docking stage moves one in contact, toward a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement, S-0404 claim 15; each axis by the difference limited to −5 … +5 leptons, the height unchanged; so does an aircraft whose contact ends during the docking stage)
+// spec: S-0501 claim 24 (r99: a waiting aircraft that lands over its destination pad is moved while landing as the docking stage moves one in contact, toward a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: the same docking position for an aircraft that lands over the pad without a contact); S-0501 claim 24 (each axis by the difference limited to −5 … +5 leptons, the height unchanged; so does an aircraft whose contact ends during the docking stage)
 #[test]
 fn claim_24_a_waiting_aircraft_is_moved_toward_its_docking_position_without_a_contact() {
     let offsets = Some(vec![[0, -30, 0], [30, 0, 0]]);
