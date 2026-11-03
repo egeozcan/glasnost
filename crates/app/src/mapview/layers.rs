@@ -40,8 +40,8 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
     if !o.kind.is_mobile() || !o.on_map {
         return None;
     }
-    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_ground_layer`), where the member stands at no height above its surface and its own rows give ground too
-    if glasnost_sim::superweapons::warp::in_ground_layer(w, id) {
+    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_warp_row`), where the member stands at no height above its surface and its own rows give ground too. The ground layer that an aircraft whose type cannot land keeps after the hold (S-0306 r65 claim 17, `warp::in_ground_layer`) is no warp row here: it is claim 4's rule that no take-off re-files such a type, and with the switch off the sweep moves it (Edge cases)
+    if glasnost_sim::superweapons::warp::in_warp_row(w, id) {
         return Some(Layer::Ground);
     }
     let loco = w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor);
@@ -71,7 +71,7 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
 pub fn listed(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         // spec: S-0102 claims 3 and 4 (a warp member stays in the ground list through its warp; no step of a superweapon warp is a moment)
-        o.kind.is_mobile() && (o.on_map || glasnost_sim::superweapons::warp::in_ground_layer(w, id))
+        o.kind.is_mobile() && (o.on_map || glasnost_sim::superweapons::warp::in_warp_row(w, id))
     })
 }
 
@@ -245,7 +245,7 @@ impl Layers {
         // spec: S-0102 claims 3, 4 and 7 (objects that leave the map leave their layer, except a warp member while it is away)
         let kept = |id: ObjectId| listed(w, id);
         // spec: S-0102 claims 3 and 4 (while the warp row applies, neither position of quirks.layer_change_on_events_only moves a warp member between lists, Edge cases)
-        let warping = |id: ObjectId| glasnost_sim::superweapons::warp::in_ground_layer(w, id);
+        let warping = |id: ObjectId| glasnost_sim::superweapons::warp::in_warp_row(w, id);
         let gone: Vec<ObjectId> = self
             .tracks
             .keys()
@@ -816,6 +816,14 @@ mod tests {
                 assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
             }
             warp(&mut w, jet, None);
+            // spec: S-0306 r65 claim 17 (a real warp's hold end leaves such an aircraft its kept ground layer; the drawing still treats it as any object, S-0102 Edge cases)
+            w.obj_mut(jet)
+                .unwrap()
+                .air
+                .as_mut()
+                .expect("an aircraft")
+                .warp_filed = true;
+            assert!(glasnost_sim::superweapons::warp::in_ground_layer(&w, jet));
             assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
             lift(&mut w, jet, 600);
             let placed = l.evaluate_mobiles(&w, true, events_only, &[]);

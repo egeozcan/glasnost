@@ -151,6 +151,18 @@ pub fn in_ground_layer(w: &World, id: ObjectId) -> bool {
             .is_some_and(|a| a.warp_filed)
 }
 
+/// Whether the warp row of S-0102's layer table applies: from the warp's
+/// launch until the member's own movement applies again after its arrival
+/// hold. Unlike [`in_ground_layer`] it leaves out the ground layer that an
+/// aircraft whose type cannot land keeps afterwards: that part is no warp
+/// row but the claim 4 rule that no take-off re-files such a type, which
+/// the drawing applies itself, and with `quirks.layer_change_on_events_only`
+/// off its sweep moves such a member once the warp row has ended.
+pub fn in_warp_row(w: &World, id: ObjectId) -> bool {
+    // spec: S-0102 claim 3, claim 4 and Edge cases (the warp row applies from the warp's launch until the member's own movement applies again after its arrival hold; once it has ended a member is treated as any object)
+    member(w, id).is_some()
+}
+
 /// At the end of a member's arrival hold: an aircraft whose type cannot
 /// land keeps the ground render layer (S-0306 claim 17, revision 65); no
 /// landing or take-off of such a type re-files it (S-0102 claim 4), so
