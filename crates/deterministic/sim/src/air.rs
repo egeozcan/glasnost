@@ -1577,6 +1577,10 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
     report_entered(w, id, k);
 }
 
+/// A contact place index outside every pad's displacement count: the
+/// docking position of an aircraft without a contact (S-0404 claim 15).
+const NO_PLACE: u32 = u32::MAX;
+
 /// One step of *enter*'s docking approach while the aircraft lands (claim
 /// 24): toward its contact place's docking position at pad `k`, along each
 /// map axis by the difference limited to −5 … +5 leptons, its world height
@@ -1584,8 +1588,14 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
 fn docking_step(w: &mut World, id: ObjectId, k: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let here = o.pos;
+    let contact = o.contact == Some(k);
     let to = if w.obj(k).is_some_and(|b| b.kind == Kind::Building) {
-        crate::econ::release::pad_position(w, k, id).0
+        if contact {
+            crate::econ::release::pad_position(w, k, id).0
+        } else {
+            // spec: S-0501 claim 24 (r99: an aircraft without a contact aims at a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (a count of 1 gives the sole displacement whatever the index; a contact index outside the count gives c)
+            crate::econ::release::pad_position_at(w, k, NO_PLACE)
+        }
     } else {
         // spec: S-0501 claim 24 (a contact that is not a building gives its centre instead of a docking position)
         w.reference_point(k)
@@ -3422,24 +3432,23 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building));
     let Some(k) = pad else {
-        // spec: S-0501 T3 and claim 46 (the pad is gone: the destination is cleared before the fall-back)
-        set_dest(w, id, None);
-        // spec: S-0501 claim 24 (a lost reservation: falls back to rest; the unlinked and fallback paths return 1 tick)
-        fall_back(w, id);
-        return 1; // spec: S-0501 claim 24 (the unlinked retry and fallback paths return 1 tick)
+        return without_contact(w, id);
     };
-    // spec: S-0501 claim 24 (each processing it asks to be loaded: the pad confirms the contact and the approach, or refuses)
+    // spec: S-0501 claim 24 (each processing asks the pad it is in contact with to be loaded: the pad confirms the contact and the approach)
     if !request_contact(w, id, k) {
+        // spec: S-0501 claim 24 (r99: a refusal by which the pad ends the contact during the approach) and Open question 19 (the refusal itself stays open: our engine meets it at this request)
         if let Some(ob) = w.obj_mut(id) {
             ob.contact = None;
             ob.econ.exit = None;
         }
-        if o.beh.queued.is_none() {
-            // spec: S-0501 T3 and claim 46 (a refusal clears the destination when no behaviour is queued; Open question 19 otherwise, where it is kept)
+        if being_sold(w, k) {
+            // spec: S-0501 claim 24 (r99: the pad stops being its destination while it approaches, a sale, claim 32: it falls back to rest) and claim 46 (a sale removes the pad as the aircraft's destination before it falls back, whether or not a behaviour is queued)
             set_dest(w, id, None);
+            fall_back(w, id);
+            return 1; // spec: S-0501 claim 24 (r99: a processing that finds no contact returns 1 tick, whether it waits or falls back)
         }
-        fall_back(w, id);
-        return 1; // spec: S-0501 claim 24 (the fallback path returns 1 tick)
+        // spec: S-0501 claim 24 (r99: a refusal that ends the contact while the pad stays its destination leaves it to the processing without a contact; our engine meets the refusal in this processing, so that processing follows at once) and claim 46 (the destination cleared when no behaviour is queued)
+        return without_contact(w, id);
     }
     let landing = st(w, id).landing;
     // spec: S-0501 claim 24 (the processing of enter that finds it landing while in contact advances to the docking stage; one already down on its pad does too, and is not moved)
@@ -3470,6 +3479,50 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
     }
     // spec: S-0501 claim 24 (in contact during the approaching stage it returns 3 ticks, with no standard-delay draw)
     3
+}
+
+/// Whether pad `k` is being sold (S-0501 claim 22's "being sold").
+fn being_sold(w: &World, k: ObjectId) -> bool {
+    w.obj(k).is_some_and(|b| {
+        b.econ.sale.is_some() || matches!(b.beh.current.or(b.beh.queued), Some(Behaviour::Selling))
+    })
+}
+
+/// The pad that is aircraft `id`'s destination, if its destination is
+/// still one: a living building of its dock types, on the map and not being
+/// sold (claim 24 r99: "if the pad stops being its destination").
+fn destination_pad(w: &World, id: ObjectId) -> Option<ObjectId> {
+    let Some(Target::Object(k)) = w.obj(id)?.dest else {
+        return None;
+    };
+    let t = ty(w, id)?;
+    // spec: S-0501 Terms (a pad: a building whose type is one of the aircraft type's dock types)
+    let pad = w.obj(k).is_some_and(|b| {
+        b.kind == Kind::Building && b.health > 0 && b.on_map && t.docks.contains(&b.type_index)
+    });
+    (pad && !being_sold(w, k)).then_some(k)
+}
+
+/// A processing of *enter* after its first that finds the aircraft without
+/// a contact (claim 24, r99, Q-2326), in flight and on the ground alike,
+/// whether or not the pad has a free contact place.
+fn without_contact(w: &mut World, id: ObjectId) -> i32 {
+    let queued = w.obj(id).is_some_and(|o| o.beh.queued.is_some());
+    match destination_pad(w, id) {
+        Some(k) if queued => {
+            // spec: S-0501 claim 24 (r99: with a behaviour queued it keeps the destination and enter, asks no pad and waits until the queued behaviour becomes current, whether or not the aircraft is ready to change)
+            if st(w, id).landing && pad_cell(w, k, id) {
+                // spec: S-0501 claim 24 (r99: a waiting aircraft that lands over its destination pad is moved while landing as the docking stage moves one in contact; Q-2366 for its first processing found landing, interim: at every processing that finds it landing over a cell of the pad)
+                docking_step(w, id, k);
+            }
+        }
+        _ => {
+            // spec: S-0501 claim 24 (r99: with no behaviour queued it forgets the destination and falls back to rest, claim 18; so does an aircraft whose destination is no longer a pad, gone or sold, claims 32 and 46, or was cleared at a touchdown without a contact, claim 40, which ends the wait even with a behaviour queued; Q-2366 for the moment of that fall-back, interim: this processing) and T3 (the pad is gone: the destination is cleared before the fall-back)
+            set_dest(w, id, None);
+            fall_back(w, id);
+        }
+    }
+    1 // spec: S-0501 claim 24 (r99: a processing that finds no contact returns 1 tick, whether it waits or falls back; no standard-delay draw)
 }
 
 /// *Retreat* (claim 34).
