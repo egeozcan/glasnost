@@ -343,6 +343,19 @@ fn t4e_a_phasing_in_actor_is_offered_the_attack_over_a_target_in_the_air_in_rang
     }
 }
 
+// spec: S-0214 Terms (movable: a mobile object that is phasing in is not movable) and S-0213 table T2 (scatter: movable; stop: movable or able to fire)
+#[test]
+fn a_phasing_in_unit_is_not_movable_for_the_key_commands() {
+    let mut w = game(true);
+    let j = put(&mut w, Kind::Vehicle, "JUMPER", ALPHA, -2, 0);
+    let scatter = |w: &World| targeting::key_command(w, A, &[j], targeting::KeyCommand::Scatter);
+    let stop = |w: &World| targeting::key_command(w, A, &[j], targeting::KeyCommand::Stop);
+    assert_eq!(scatter(&w).len(), 1, "control");
+    materialise(&mut w, j, 100);
+    assert!(scatter(&w).is_empty());
+    assert_eq!(stop(&w).len(), 1, "able to fire");
+}
+
 // spec: S-0214 claim 6 (e) (r78: a phasing-in actor that is not an aircraft and has no temporal beam attached keeps a target so ordered while phasing in; once phasing in ends it drops a target that the firing check then answers illegal for, without firing at it, at its first checking turn in a check tick, S-0309 claim 29) and Edge cases (quirks.moment_reason_attack_cursor on); scenario T4 part E's expected keep, drop and no shot
 #[test]
 fn t4e_the_target_in_the_air_is_kept_through_the_phase_in_and_dropped_unfired() {
