@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 45
+revision: 55
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
-requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560, Q-2396]
 supersedes: []
 ---
 
@@ -784,6 +784,21 @@ rank* and *elite weapon*), *n*
    scenario applies if that state becomes available. Confidence: high for the no-house
    predicate, medium for the entry outcome as in row WP25.
 
+   *Armed walkers and the firing check (Q-2396).* Rows WP13, WP24 and WP28 test only the walker's
+   weapons as the rows state (a primary weapon for WP13, *armed* in Terms for WP24 and WP28). None
+   of them asks the firing check (S-0301 claim 9) about the occupant. So, where one of these rows
+   applies, an armed walker gets
+   *enemy obstacle* from an enemy building, a closed enemy gate or another enemy object even when
+   the firing check of the weapon it would use against that occupant (S-0308) answers *illegal*,
+   for example through a versus value of 0 against every building armour (S-0304 claim 6). The
+   path search reads the same entry outcome, so it gives such a step the *enemy obstacle* cost of
+   S-0212 claim 8, and a path can run through that cell when every detour costs more. Claim 9 says
+   what the walker then does (`quirks.walker_attacks_unhittable_obstacle`, Edge cases).
+   - Backing: `measurable` (scenario C15: parts e1 to e3 for row WP24, part e6 for row WP13 with
+     a closed enemy gate, part e7 for row WP28 with an enemy vehicle).
+   - Confidence: high that rows WP13, WP24 and WP28 ask no firing check. Medium for the entry
+     outcome and the path cost of each of the three rows, as for those rows in the table.
+
    A terrain object has no owner, so it is never allied (Terms *allied*) and always falls under the
    enemy rows. It gives no value of its own (row WP27), but it can still decide the outcome through
    the side positions it marks (claim 1) and through the terrain checks of S-0211.
@@ -1183,6 +1198,105 @@ rank* and *elite weapon*), *n*
        target. That includes an allied wall: no alliance test applies to the wall. Whether it then
        fires on an allied wall belongs to the combat specs (Open questions; a possible switch is among the Questions for the project lead).
      - In every case the walker also stops and discards its path.
+     - *The take is an override.* Taking the object, or the wall's cell, as its target is an
+       override (S-0215 claim 10) to *attack* with that target and no destination. The walker's
+       current behaviour, or its queued one when one is queued, is suspended, and its earlier
+       target and destination are put aside.
+     - *After the take (Q-2396).* In *attack* the walker approaches and engages its target as
+       S-0215 claims 23 and 37 and the combat specs give. When the firing check answers *illegal*
+       for that target, the walker does not fire, and S-0309 claim 29 drops the target at a check
+       tick, except in the charges case below. That drop does not revert the override (S-0215
+       claim 10). When neither a search (S-0309 claim 23 (a), as below) nor a retaliation (S-0215
+       claim 18) gives the walker a target before its next *attack* processing, that processing
+       finds no target, and the walker falls back to rest (S-0215 claims 13 and 14) with its
+       destination still put aside:
+       - The common effects of that fall-back come first (S-0215 claim 13), with or without
+         attack-move memory. When a row of the tables of S-0215 claims 13 and 14 gives the walker
+         a destination or an order at that fall-back, those claims and the order specs give what
+         follows, and this claim adds nothing. The cases below are for a walker to which no such
+         row applies, such as the walker of scenario C15. The refresh of attack-move memory that
+         comes before those tables (S-0215 claim 13) is not such a row: S-0309 claim 23 (b)
+         decides it, as below.
+       - Without attack-move memory, such a walker rests in front of the obstacle and does not
+         move on by itself. Its suspended behaviour stays suspended until a revert cause of
+         S-0215 claim 10 meets a target that it holds later. A search does not take the same
+         occupant again while the firing check answers *illegal* (S-0309, table C).
+       - With attack-move memory, S-0309 claim 23 (b) decides at that fall-back. The take neither
+         sets nor ends the *engaged* mark (S-0309 Terms, claim 23 (c)). So the walker is engaged at
+         the fall-back in two cases. It was engaged already when it took the occupant, for example
+         in *attack* towards an earlier target that a targeting-timer search of its attack move
+         found. Or one of its targeting-timer expiries came while it held the occupant, and S-0309
+         claim 23 (a) then kept that target and queued *attack*. When it is engaged, the attack
+         move resumes, which ends the mark: the walker searches a path to the remembered
+         destination again, meets the same cell when that path leads through it, and takes the
+         occupant again by this claim. From then on each targeting-timer expiry acts by S-0309
+         claim 23 (a), by its rows for a memory that holds a destination:
+         - Not engaged: a range search runs, and it keeps the target the walker has. The occupant
+           is never an opportunity target, since the take is a setting of a target and not a
+           search (S-0309 claim 24). So an expiry while the walker holds the occupant makes it
+           engaged. An expiry while it holds no target, as on the walk between a resumption and
+           the next take, makes it engaged when the search finds another target, such as an
+           enemy within its search range. It then queues *attack* on that target, and its path
+           towards it can lead through the same cell.
+         - Engaged, with its target within reach (S-0309 claim 23): nothing happens. No search
+           runs, the timer is not restarted, and the walker stays engaged and keeps its target.
+         - Engaged, with no target within reach: a range search runs that does not keep the
+           present target. A walker that holds the occupant out of reach loses it there, at a
+           tick that need not be a check tick, and takes another target when the search finds
+           one. It stays engaged either way, so the fall-back that follows a loss without another
+           target resumes the attack move again.
+
+         At the first fall-back that finds it not engaged, its memory is removed and it rests as
+         above.
+       - The walker has no give-up count and no timer of its own for this. The cycle also ends
+         when the occupant leaves the cell or is destroyed, or at a new order.
+       - *Charges case.* A walker with explosive charges (by type or veterancy ability) that takes
+         a building that accepts charges and is not invisible meets the first infantry row of
+         S-0215 claim 23 at its first *attack* processing after the take, if it still holds the
+         building then. That row makes the building its destination and queues *sabotage*. The
+         take does not touch the processing timer (S-0215 claims 3 and 10). What follows is
+         stated for a walker with no queued behaviour at the take: a queued behaviour stays
+         queued at the override (S-0215 claim 10), and its start is S-0215's (claims 3, 8 and 11),
+         not claimed here. The queued *sabotage* becomes current at the first per-tick start, the
+         late start included, at which the walker is ready to change (S-0215 claim 11). S-0309
+         claim 29 decides in the walker's turn of the first check tick after the take, after that
+         turn's first per-tick start (*Place in the turn*). When *sabotage* is current there, no
+         check is made, nor in any later turn while *sabotage* stays current, so the walker keeps
+         the building as its target and does not rest as above. S-0215 claim 28 and S-0519 claim 13
+         own what follows. Otherwise *attack* is current there, and the check drops the building
+         as for any other walker. That happens when the check tick comes no later than that first
+         processing, or when the walker is not ready at any per-tick start from that processing to
+         the check. What the walker does after such a drop, with *sabotage* queued, is S-0215's
+         (claims 11, 13 and 28) and is not claimed here. An enemy object that is not a building
+         (row WP28) never meets that row.
+
+       With `quirks.walker_attacks_unhittable_obstacle` off, rows WP13, WP24 and WP28 give
+       *blocked* instead of *enemy obstacle* where the Edge cases entry says, for a walker with
+       charges too, so the walker never takes the occupant this way.
+       - Backing: `measurable` (scenario C15). Part e1 backs the rest without attack-move memory.
+         Part e2 backs the attack-move cycle and its end: after each loss the walker either takes
+         the occupant again or rests and stays at rest. Which of the two follows a given loss
+         (whether a targeting-timer expiry came while the walker held the occupant) is
+         `unmeasured`: a request's bounds and result do not tell the targeting timer's restarts
+         from other draws with the same bounds (S-0215 claims 6 and 33). A walker engaged before
+         the take, and the re-engagement by a search that finds another target, are `unmeasured`:
+         no set-up is proposed, since they need a walker whose search range exceeds its weapon's
+         range (S-0309 claim 8), which C15's test file does not give. C15 puts the occupant
+         within reach, so its parts back the engaged row with the target within reach. The
+         engaged row with the occupant out of reach is `unmeasured` here: no set-up is proposed
+         for it, since an occupant out of reach also brings in the approach of S-0215 claim 37,
+         which this spec does not give. The rows of S-0215 claims 13 and 14 that give a
+         destination or an order keep those claims' backing: C15 excludes them. Part e5 backs
+         the override, which its revert at the target's destruction tells apart from a plain change
+         of behaviour. Parts e6 and e7 back the same rest for a closed enemy gate and an enemy
+         vehicle. The charges case is `unmeasured`: no set-up is proposed that keeps a planted
+         charge, the walker's readiness and a queued behaviour out of the comparison.
+       - Confidence: medium for the override, the rest without attack-move memory, the
+         attack-move cycle and its end, the resumption of a walker engaged before the take, and
+         the re-engagement by a search. Medium for the loss of an occupant out of reach, as for
+         S-0309 claim 23's searches. Medium for the common effects coming first, as S-0215 claim
+         13 rates them. Medium for the charges case, as for the conditions of S-0215 claim 23's
+         infantry rows and for S-0215 claim 11's readiness, which decides when *sabotage* starts.
    - *Cloaked blocker.* Every cloaked object in the blocking cell's ground layer, of any house,
      starts uncloaking on the asking tick (S-0516 claim 11(e)). This changes the object's cloak
      state for every house, rather than granting sight only to the walker's house. Bridge-deck
@@ -1508,7 +1622,7 @@ delay is an imported integer in ticks, used as read.
 | walking, or waiting after a repeated ask on an earlier tick | first ask: stationary friendly, friendly obstacle, enemy obstacle, blocked | stops, discards the path, searches a new one on the asking tick whatever the retry timer shows, and makes the repeated ask on that tick too |
 | holding a path searched on this asking tick | repeated ask: clear, position free | walking target chosen in the first cell of the new path on the same asking tick (claim 7), so it stands still exactly as long as at a free cell boundary |
 | holding a path searched on this asking tick | repeated ask: stationary friendly | gives up within the close-enough distance (claim 8), otherwise sends a cell-wide request and waits for the rest of the tick; on the next tick it asks again as a first reaction |
-| holding a path searched on this asking tick | repeated ask: friendly obstacle, enemy obstacle | stops and discards the path. On the same tick it attacks the first listed object when the walker's house is not allied with that object (a terrain object included), takes the wall as its target when no object is listed, and attacks nothing when the walker's house is allied with the first listed object (claim 9) |
+| holding a path searched on this asking tick | repeated ask: friendly obstacle, enemy obstacle | stops and discards the path. On the same tick it attacks the first listed object when the walker's house is not allied with that object (a terrain object included), takes the wall as its target when no object is listed, and attacks nothing when the walker's house is allied with the first listed object. Each take is an override to *attack* with no destination (claim 9) |
 | holding a path searched on this asking tick | repeated ask: blocked | keeps the path and waits for the rest of the tick; on the next tick it asks again as a first reaction |
 | walking | closed friendly gate | opens the gate, waits |
 | walking, or waiting after a repeated ask on an earlier tick | cloaked blocker (first or repeated ask) | every cloaked ground-layer occupant of the blocking cell, of any house, starts uncloaking for every house; deck occupants are unaffected (S-0516 claim 11(e)). On the first ask: it searches a new path on the asking tick with those ground-layer occupants already uncloaking (claim 7). On the repeated ask: it waits for the rest of the tick; on the next tick it asks again as a first reaction |
@@ -1635,6 +1749,25 @@ Ordering stated as consequences:
   The default removal behaviour is `measurable` through S-0207 scenario D22 runs 14 and 15,
   with medium confidence. S-0207 owns this lifecycle and alternative.
   Claims 1, 3, 5 and 6 here own occupancy, entry and standing-position consequences.
+- **An armed walker takes an occupant it cannot fire at (Q-2396).** Rows WP13, WP24 and WP28 of
+  claim 4 ask no firing check, so, where one of these rows applies, an armed walker meets an
+  enemy building, a closed enemy gate or
+  another enemy object that its weapon cannot fire at as *enemy obstacle*: its path may lead
+  through that cell, and it takes the occupant as its target (claim 9). The drop of S-0309 claim
+  29 then leaves a walker under a plain move, to which no row of S-0215 claims 13 and 14 gives a
+  destination or an order at its fall-back, resting in front of the occupant without its move,
+  and keeps a walker under an attack move in the take-and-drop cycle of claim 9 for as long as it
+  is engaged at each fall-back. A walker with explosive charges that takes a building accepting
+  charges goes to *sabotage* instead when that behaviour is current in its turn of the next check
+  tick, and otherwise the check drops the building as for any other walker (claim 9, charges
+  case). The
+  switch `quirks.walker_attacks_unhittable_obstacle` (default: the original) selects this. With
+  it off, each of these three rows gives *blocked* instead of *enemy obstacle* when the firing
+  check without the range test, for the weapon the walker would use against the occupant
+  (S-0308), answers *illegal*, as for an unarmed walker (row WP22). That holds for a walker with
+  charges too, which then never reaches *sabotage* this way. The path search then does not
+  consider that step (S-0212 claim 8), and the walker routes round the occupant or reacts to
+  *blocked* as claim 7 gives. Scenario C15, parts e1 to e3, e6 and e7, distinguishes the two.
 - **Rounding.** The rounding mode is S-0205's (claim 5, switch `quirks.chop_rounding`), and this
   spec defines no switch of its own for it. The conversions to integers in F1 and F2 truncate toward
   zero in either setting (S-0205 claim 7). The switch reaches F1 only through √̃, for sums of
@@ -2253,9 +2386,10 @@ whatever house the human player plays.
   erasure ends first, the run cannot decide and is repeated with the eraser's order given earlier.
 
 **Scenario C15: buildings and aircraft that block (claim 4, rows WP19, WP23 and
-WP24).** Each part uses a one-cell-wide
-corridor that the blocker closes, with no other route. The walker's destination is a cell beyond
-the blocker, farther than the close-enough distance from the cell in front of it.
+WP24, and rows WP13 and WP28 for parts e6 and e7; claim 9 for parts e1 to e3 and e5 to e7).**
+Parts a to d use a one-cell-wide corridor that the blocker closes, with no other route. The walker's
+destination is a cell beyond the blocker, farther than the close-enough distance from the cell in
+front of it.
 - *Setup:*
   - (a) A building of the human player, of a stock type that is neither a gate nor invisible in
     play, and an infantry of the human player.
@@ -2282,6 +2416,119 @@ the blocker, farther than the close-enough distance from the cell in front of it
     target.
 
   If no stock aircraft type rests on open ground long enough, part (b) cannot decide.
+
+- *Parts e1 to e3 and e5 to e7 (Q-2396): an occupant the walker cannot fire at.*
+  - *Setup:* a purpose-made flat map, every cell at one height level, with a wall of impassable
+    cells and a one-cell gap in it, closed
+    by one foundation cell *X* of a stock building *B* of the computer player of the type of part
+    (d). The rest of *B*'s foundation lies among the wall's impassable cells, and *X* is not in the
+    last column along x of a building whose type has the bib flag (a test file removes the flag
+    otherwise). The walker *W* is an infantry of the human player whose only weapon is a test
+    weapon (a named test rules file) in its primary slot, with no secondary weapon and no elite
+    weapon: positive damage, and a warhead whose versus value is 0 against every building armour,
+    so the firing check answers *illegal* against *B*, and *W* is armed (Terms) and has a primary
+    weapon (row WP13). The test weapon's range puts the occupant within reach of *W* (S-0307) from
+    every cell next to *X* on *W*'s side: it is at least one cell more than the distance from such
+    a cell's centre to the occupant's reference point (for a building, the centre of its
+    foundation, S-0204 claim 4). The test file also clears the explosive-charges flag of *W*'s
+    type and any explosive-charges veterancy ability of it. *W* is given its one order of the
+    part and no other, and no route-mode order, so it follows no route (S-0213 claim 16). That
+    order leaves it with no queued destinations (S-0213 claim 5, table T3 part g), and only orders
+    fill that list (S-0215 Terms). A run counts only if *W*'s guard spot is never on a cell other
+    than its own. At each fall-back after a drop *W* holds no target, and no destination, since
+    the take is an override with no destination (claim 9). So no row of S-0215 claims 13 and 14
+    gives it a destination or an order at its fall-backs. No other object is near, except in
+    (e5) below, and no object attacks *W* in any part, so no retaliation (S-0215 claim 18) gives
+    it a target.
+    - *Map of parts e1, e2 and e5 to e7.* The wall runs across the whole usable area, from one edge
+      of it to the opposite edge, so that inside the usable area the gap is the only way from *W*'s
+      side to the other. The usable area leaves a strip of legal cells outside it along one edge
+      only: the edge on *W*'s side that runs parallel to the wall, at least 6 cells from the wall's
+      face. *W* is placed by the map in that strip, as the movers of scenario C20 are. Its order's
+      destination is a cell inside the usable area beyond the gap, farther than the close-enough
+      distance from the cell in front of *X*.
+      - *The search at the order.* *W*'s cell is a legal cell outside the usable area, so the
+        search skips the reach-region comparison (S-0212 claim 6, second exception) and runs
+        without a corridor (S-0212 claim 14). Every legal cell outside the usable area lies on
+        *W*'s side, so the path it finds enters the usable area on that side and leads through
+        *X*, the only way across the wall there. A search that runs while *W* is still outside
+        the usable area runs in the same way.
+      - *Entering the usable area.* *W* enters the usable area before it reaches the cell in front
+        of *X* (the recorder checks it, see the Procedure). From then on it has the
+        in-the-playfield mark (S-0215 Terms: the mark is set once the object has entered the
+        usable area), so S-0215 claim 37 (f) leaves its destination unchanged while its target
+        is in range.
+      - *Searches after entering.* Every search after *W* has entered runs from a cell inside the
+        usable area. A building
+        leaves its cells *open* and a unit never changes a category (S-0212 claim 1), so *W*'s
+        cell and the destination lie in one reach region, and the search passes the reach-region
+        comparison (S-0212 claim 6). Cells outside the usable area give *blocked* to a walker
+        inside it (claim 4a), so every path such a search finds leads through *X*, with or
+        without the corridor (S-0212 claims 13 and 14).
+    - *Map of part e3.* The usable area's edge runs along the wall's face on *W*'s side: every cell
+      on that side, the cell in front of *X* among them, is a legal cell outside the usable area,
+      and *X*, the wall and every cell beyond it lie inside it. *W* is placed on that side as the
+      movers of scenario C20 are. The
+      way round the wall is 3 cells longer than the way through the gap, counting straight steps
+      only, and the destination is a cell inside the usable area beyond the gap. *W* starts
+      outside the usable area, so its search at the order skips the reach-region comparison
+      (S-0212 claim 6, second exception) and runs without a corridor (S-0212 claim 14), and the
+      route depends on the cell costs alone (S-0212 claim 8). The route through *X* costs 19 more
+      than an open gap would (one *enemy obstacle* step instead of a *clear* one), so the margin
+      of 16 exceeds the 3 cost units that S-0212 scenario P13 allows for the direction terms and
+      the estimate.
+    - (e5) an attacker *K* of the human player stands beyond the wall, at least 3 cells from *X*
+      and from every cell of the straight line from *X* to the destination, with a test weapon
+      whose range reaches *B* from there and that destroys *B* with one shot.
+
+    The last two parts change the occupant:
+    - (e6) As (e1), with *B* replaced by a closed gate *G* of the computer player, of a stock gate
+      type, placed as *B* is, with one foundation cell *X* in the gap. No unit of the computer
+      player comes near, so *G* stays closed (row WP13). The warhead's versus value of 0 against
+      every building armour makes the firing check answer *illegal* against *G* too.
+    - (e7) As (e1), with no building in the gap: the map places in *X* an idle unarmed vehicle *V*
+      of the computer player, of an ordinary stock type (row WP28). The test weapon's warhead has
+      a versus value of 0 against every armour, so the firing check answers *illegal* against *V*
+      too. *W* stays armed, since Terms *armed* reads only the damage fields.
+  - *Procedure:* (e1), (e3) and (e5) to (e7) a move order to the destination, (e2) an attack-move
+    order to it. In (e5) the harness selects *K* by scripted normal input in the run's first input
+    cycle. Let *t* be the tick at whose end the recorder first shows *B* as *W*'s target. In the
+    cycle of tick *t* + 1, whose input comes after tick *t*, the harness gives *K* a force-fire
+    order on *B* by scripted normal input, so the order takes effect at the end of tick *t* + 1
+    (S-0213 claim 1, S-0203 claim 7). Record every tick for 600 ticks *W*'s cell, whether that cell
+    is inside the usable area, its target, its current behaviour, its destination, its guard spot,
+    whether it holds a path, the shots it fires and the tick number. In (e5) record *B*'s health and
+    the tick of the hit that destroys it. A run of (e5) counts only if *W*'s target is still *B* at
+    the end of tick *t* + 1 and the hit that destroys *B* comes in a tick before the first multiple
+    of 16 after *t*. A run of (e1), (e2) or (e5) to (e7) counts only if *W*'s cell is inside the
+    usable area from a tick before the one at whose end it first holds a target (the occupant), and
+    stays inside it. A run of (e7) counts only if *V* stays in *X* until *W*'s first loss of *V*. Up
+    to 5 runs of each, and up to 8 of (e5), moving *W*'s start by one cell each time, until 2 count.
+  - *Expected:*
+    - (e1) *W*'s path leads to the gap. It stops in front of *B*, takes *B* as its target in
+      *attack* and fires no shot. It loses the target at the first tick that is a multiple of 16
+      after the take's tick, then falls back to rest (S-0215 claims 13 and 14). It never enters
+      *B*'s cell and takes no target again in the 600 ticks.
+    - (e2) As (e1) up to the first loss of the target. After each loss, *W* either searches a path
+      again and takes *B* again without moving on past *X*, or falls back to rest as in (e1). Once
+      it rests it stays at rest and takes no target again in the 600 ticks. Each loss of *B* comes
+      at a multiple of 16.
+    - (e3) *W*'s path goes round the wall. It never stops in front of *B* or takes it as target.
+    - (e5) At the end of the tick of the hit that destroys *B*, *W*'s current behaviour is *move*
+      with its order's destination again (the override's revert, S-0215 claim 10), and *W* leaves
+      the cell in front of *B* within 300 ticks of that hit.
+    - (e6) As (e1), with *G* in place of *B*.
+    - (e7) As (e1), with *V* in place of *B*.
+  - *Falsified if:*
+    - in (e1) *W* does not reach the cell in front of *X*, or in (e3) its path leads through *X*,
+    - in (e1) it moves on after the loss or takes *B* again,
+    - in (e2) after a loss it moves on past *X* without taking *B* again, or takes a target after
+      it has fallen back to rest,
+    - in (e2) *W* loses *B* at a tick that is not a multiple of 16,
+    - in (e5) it is not in *move* with that destination at the end of that tick, or it stays in
+      front of *B*,
+    - in (e6) or (e7) as in (e1), with *G* or *V* in place of *B*,
+    - or *W* enters *B*'s cell before *B* is destroyed.
 
 **Scenario C16: terrain objects (claims 1, 2, 4 rows WP27 and WR6, claim 9, Terms *allied*,
 Edge cases).** For parts (a) to (c), except (a′), the map's theater and a
@@ -3333,6 +3580,12 @@ approved text at paired hand-off, rather than treating the earlier approved summ
 - Retain S-0207 claim 15 and S-0212 claim 22's immediate fresh search and same-tick
   repeated check. Jump-time target loss and reversion stay owned by S-0207 claim 20 e
   and S-0215 claim 10; reservation layers do not change that contract.
+- S-0215 claim 10 (Q-2396): its list of other users of override and revert can name claim 9
+  here next to S-0207 claim 15. A walker's repeated ask that gives *friendly obstacle* or *enemy
+  obstacle* overrides to *attack*, with no destination, against the first object listed in the
+  cell when its house is not allied with that object, or against the wall when no object is
+  listed and the cell holds a wall. S-0309 needs no change: its claims 23 and 29 already give the
+  drop and the attack-move resumption that claim 9 relies on.
 
 The S-0102 alignment item is satisfied: its claim 3 and layer table agree with
 S-0502 claim 4's two-height predicate and distinguish on-deck surface height
