@@ -833,6 +833,7 @@ pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
             }
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
             crate::emitters::retarget_let_go(w, x);
+            crate::combat::held::note_revert(w, x);
         }
         let Some(ob) = w.obj_mut(x) else { continue };
         if ob.target == Some(Target::Object(id)) {

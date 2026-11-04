@@ -922,10 +922,25 @@ fn given_at_departure(
     fy: i32,
     prep: impl Fn(&mut World, ObjectId),
 ) -> Waiting {
+    given_at_departure_rem(r, name, fx, fy, 0, prep)
+}
+
+/// As [`given_at_departure`] with the launch in a tick whose number leaves
+/// `rem` when divided by 16. With `rem` 1 the tick after the departure is
+/// a check tick of S-0309 claim 29, in which the member is still off the
+/// map (as [`waiting`] gives).
+fn given_at_departure_rem(
+    r: &Ruleset,
+    name: &str,
+    fx: i32,
+    fy: i32,
+    rem: i32,
+    prep: impl Fn(&mut World, ObjectId),
+) -> Waiting {
     let mut w = ready(r);
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
     spawn(&mut w, "TOWER", BETA, 5, 5);
-    let tl = launch(&mut w, PERIOD, 0);
+    let tl = launch(&mut w, PERIOD, rem);
     let f = spawn(&mut w, name, ALPHA, fx, fy);
     prep(&mut w, f);
     step(&mut w);
@@ -987,23 +1002,40 @@ fn r91_claim39a_a_sam_building_firer_drops_a_ground_member_and_starts_guard() {
     assert_eq!(o.beh.current, Some(Behaviour::Guard), "guard starts");
 }
 
-#[test]
-fn r91_claim39a_a_sam_building_firer_short_of_power_keeps_the_member_in_its_own_rows() {
-    // spec: S-0513 r91 claim 39a (The firer, Q-2376: while S-0215 claim 32's power row applies the SAM building keeps any member) and S-0215 claim 32 (aiming: a type that needs and drains power with its owner short of power does nothing for 1 tick)
-    // Q-2418 question 2 (interim: as for a target on the map, S-0309 claim 29's check then drops the member, the building's own impossible of S-0405 T1 outranking rearming; S-0301 claim 9)
+/// The ruleset of revision 91 with SAMT a type that needs and drains power
+/// (S-0405 Terms), so that its owner, with no power plant, is short of
+/// power from the start.
+fn rules_sam_drain() -> Ruleset {
     let mut r = rules_r91();
-    {
-        let t = r.sim.buildings.get_mut("SAMT").unwrap();
-        t.econ.power = Some(-10);
-        t.powered = Some(true);
-    }
-    let mut s = given_at_departure(&r, "SAMT", -3, -3, |_, _| {});
+    let t = r.sim.buildings.get_mut("SAMT").unwrap();
+    t.econ.power = Some(-10);
+    t.powered = Some(true);
+    r
+}
+
+#[test]
+fn r108_claim39a_a_sam_building_firer_short_of_power_and_not_charged_drops_the_member_at_the_check()
+{
+    // spec: S-0513 r108 claim 39a (The firer, Q-2418: while S-0215 claim 32's power row applies, the aiming stage's rows keep any member; a building that is not charged, S-0405 claim 8, is then not in operation, so its check answers S-0405 table T1's impossible, and it drops the member, as a target on the map, at the first of an attack processing in the aimed stage and its checking turn in the first check tick of S-0309 claim 29 in that state) and S-0309 r113 claim 27 (the same for a SAM-flag building)
+    // The launch leaves 1 so that the first check tick falls while the
+    // member is off the map, after a processing in the aimed stage.
+    let mut s = given_at_departure_rem(&rules_sam_drain(), "SAMT", -3, -3, 1, |_, _| {});
     assert!(
         glasnost_sim::seams::sam_held_by_low_power(&s.w, s.f),
         "set-up: the power row applies"
     );
+    assert_eq!(
+        glasnost_sim::econ::power::chargers(&s.w, s.f),
+        0,
+        "set-up: not charged"
+    );
     let first_check = (s.dep..).find(|&t| held_check(t)).unwrap();
-    assert!(first_check > s.dep, "set-up: a processing before the check");
+    assert_eq!(
+        first_check,
+        s.dep + 1,
+        "set-up: a processing before the check"
+    );
+    assert!(first_check < s.app, "set-up: the check while off the map");
     let dropped = sam_drop_tick(&mut s);
     assert_eq!(
         dropped,
@@ -1020,6 +1052,45 @@ fn r91_claim39a_a_sam_building_firer_short_of_power_keeps_the_member_in_its_own_
         o.beh.current,
         Some(Behaviour::Attack),
         "the check starts no guard"
+    );
+    assert!(
+        temporal::holds(&s.w, s.f, s.m),
+        "S-0514 claim 14: the drop releases no beam"
+    );
+}
+
+#[test]
+fn r108_claim39a_a_charged_sam_building_firer_short_of_power_keeps_the_member() {
+    // spec: S-0513 r108 claim 39a (The firer, Q-2418: a charged building's check answers rearming, for which the aimed row for any other answer does nothing, so it keeps the member) and S-0405 claim 8 and Constants (2 chargers keep a building in operation)
+    let mut s = given_at_departure_rem(&rules_sam_drain(), "SAMT", -3, -3, 1, |w, f| {
+        let a = spawn(w, "CART", ALPHA, -7, 7);
+        let b = spawn(w, "CART", ALPHA, -7, 8);
+        w.obj_mut(f).unwrap().combat.chargers = vec![a, b];
+    });
+    assert!(
+        glasnost_sim::seams::sam_held_by_low_power(&s.w, s.f),
+        "set-up: the power row applies"
+    );
+    assert_eq!(
+        glasnost_sim::econ::power::chargers(&s.w, s.f),
+        2,
+        "set-up: charged"
+    );
+    assert!(glasnost_sim::econ::power::in_operation(&s.w, s.f));
+    // The first check tick falls while the member is off the map, as in the
+    // uncharged run, whose drop comes at it.
+    let first_check = (s.dep..).find(|&t| held_check(t)).unwrap();
+    assert_eq!(
+        first_check,
+        s.dep + 1,
+        "set-up: a check after the departure"
+    );
+    assert!(first_check < s.app, "set-up: the check while off the map");
+    assert_eq!(sam_drop_tick(&mut s), None, "kept through the check");
+    assert_eq!(
+        s.w.obj(s.f).unwrap().target,
+        Some(Target::Object(s.m)),
+        "still held at the appearance"
     );
 }
 
@@ -1089,55 +1160,91 @@ fn r91_claim39a_a_vehicle_firer_beyond_range_keeps_the_member_approaches_its_old
 }
 
 #[test]
-fn r91_claim39a_a_deployed_infantry_firer_beyond_range_takes_no_approach_step_and_stays_put() {
-    // spec: S-0513 r91 claim 39a (The firer, Q-2376: a deployed infantry unit of a human-controlled owner takes no approach step, S-0215 claim 37 g, and neither moves nor turns for the departure)
-    // Q-2418 question 1 (interim: as for a target on the map at the old position, S-0215 claim 23's deployed-firing rule, S-0517 claim 16, drops the out-of-range member in the first attack processing, so r91's keeping of the member and its beam is not built)
+fn r108_claim39a_a_deployed_infantry_firer_beyond_range_drops_the_member_and_stays_put() {
+    // spec: S-0513 r108 claim 39a (The firer, Q-2418: a deployed infantry unit of a human-controlled owner takes no approach step, S-0215 claim 37 g, and neither moves nor turns; at each processing at which S-0215 claim 23 or 31 runs S-0517 claim 16's deployed-firing rule, that rule applies to the member at its old position, as to a target on the map there: beyond the range of the weapon that rule selects it drops the member, or takes the target that rule's search finds instead; its beam stays attached)
+    // spec: S-0309 r113 claim 27 (a deployed infantry firer of a human-controlled owner neither moves nor turns, and S-0517 claim 16's deployed-firing rule applies to the member at the old position, while its beam stays attached)
     let mut r = rules_r91();
-    // The WALKER's Rifle (warhead SA) is a temporal weapon here.
+    // The WALKER's Rifle (warhead SA) is a temporal weapon here, and the
+    // WALKER a deploy-to-fire type (SW12 part l9) whose deploy weapon is the
+    // Rifle too (S-0308 claim 8: no deploy weapon index given, slot 0).
     r.sim.warheads.get_mut("SA").unwrap().temporal = Some(true);
+    r.sim.infantry.get_mut("WALKER").unwrap().deploy_fire = Some(true);
     assert!(
         r.globals.quirks.warp_departure_keeps_beam,
         "the default switch"
     );
-    let s = given_at_departure(&r, "WALKER", -6, -6, |w, f| {
-        w.obj_mut(f).unwrap().infantry.as_mut().unwrap().seq =
-            Some(glasnost_sim::infantry::Seq::Deployed);
-    });
-    let Waiting {
-        mut w,
-        f,
-        m,
-        tl,
-        dep,
-        app,
-    } = s;
-    assert!(
-        w.houses[usize::from(ALPHA.0)].human,
-        "set-up: a human owner"
-    );
-    assert!(
-        !glasnost_sim::approach::in_range(&w, f, Target::Object(m)),
-        "set-up: beyond range"
-    );
-    let before = firer_state(&w, f);
-    let mut dropped = None;
-    for t in dep..=app {
-        step(&mut w);
-        let o = w.obj(f).unwrap();
-        assert_eq!(o.dest, None, "no approach in t_L + {}", t - tl);
-        let now = firer_state(&w, f);
-        assert_eq!(
-            (&now.2, &now.3),
-            (&before.2, &before.3),
-            "neither moves nor turns in t_L + {}",
-            t - tl
+    // In guard (S-0215 claim 31 runs the rule) and in attack (claim 23).
+    for beh in [Behaviour::Guard, Behaviour::Attack] {
+        let s = given_at_departure(&r, "WALKER", -6, -6, |w, f| {
+            w.obj_mut(f).unwrap().infantry.as_mut().unwrap().seq =
+                Some(glasnost_sim::infantry::Seq::Deployed);
+        });
+        let Waiting {
+            mut w,
+            f,
+            m,
+            tl,
+            dep,
+            app,
+        } = s;
+        let t = w.tick;
+        let o = w.obj_mut(f).unwrap();
+        o.beh.force(beh, t, false);
+        o.target = Some(Target::Object(m));
+        assert!(
+            w.houses[usize::from(ALPHA.0)].human,
+            "set-up: a human owner"
         );
-        if dropped.is_none() && o.target.is_none() {
-            dropped = Some(t);
+        assert!(
+            !glasnost_sim::approach::in_range(&w, f, Target::Object(m)),
+            "set-up: beyond range"
+        );
+        let before = firer_state(&w, f);
+        let mut dropped = None;
+        for t in dep..=app {
+            step(&mut w);
+            let o = w.obj(f).unwrap();
+            assert_eq!(o.dest, None, "{beh:?}: no approach in t_L + {}", t - tl);
+            let now = firer_state(&w, f);
+            assert_eq!(
+                (&now.2, &now.3),
+                (&before.2, &before.3),
+                "{beh:?}: neither moves nor turns in t_L + {}",
+                t - tl
+            );
+            if dropped.is_none() && o.target.is_none() {
+                dropped = Some(t);
+            }
+        }
+        // spec: S-0517 claim 16 (beyond the selected weapon's range, with no other target found, the target is dropped)
+        if beh == Behaviour::Attack {
+            assert_eq!(
+                dropped,
+                Some(dep),
+                "attack: dropped in the first processing"
+            );
+        } else {
+            // The forced guard's first processing comes later.
+            assert!(dropped.is_some(), "guard: dropped while it waits to land");
+        }
+        if beh == Behaviour::Guard {
+            assert!(
+                temporal::holds(&w, f, m),
+                "guard: its beam stays attached (no fall-back, S-0517 claim 16)"
+            );
+        } else {
+            // Seam (Q-2468): in attack S-0517 claim 16 falls the unit back to
+            // rest, and S-0514 claim 14 lets the beam go with the fall-back's
+            // common effects, while S-0513 r108 says the beam stays attached.
+            // Our engine follows S-0517 and S-0514 until the request is
+            // answered.
+            assert!(
+                !temporal::holds(&w, f, m),
+                "attack: the fall-back lets the beam go (interim, Q-2468)"
+            );
+            assert_eq!(w.obj(f).unwrap().beh.current, Some(Behaviour::Guard));
         }
     }
-    // The interim of Q-2418 question 1: S-0517 claim 16's drop.
-    assert_eq!(dropped, Some(dep), "dropped in the first processing");
 }
 
 #[test]
@@ -1232,5 +1339,571 @@ fn r91_claim39a_a_member_removed_by_its_erasure_update_in_a_sparkle_tick_sparkle
             ("SPARK".to_string(), placed(last))
         ],
         "vehicle: the sparkle after the update"
+    );
+}
+
+// --- Revision 108: a held temporal target within rank 4 (Q-2416) -------------------------
+
+/// A CART of ALPHA whose temporal beam is locked on a BUGGY of BETA on the
+/// map, holding it as its target, with no warp.
+fn beamed_on_the_map() -> (World, ObjectId, ObjectId) {
+    let mut w = ready(&rules());
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let f = spawn(&mut w, "CART", ALPHA, -3, -2);
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::holds(&w, f, m), "set-up: locked");
+    w.obj_mut(f).unwrap().target = Some(Target::Object(m));
+    (w, f, m)
+}
+
+/// Makes `m` protected (S-0513 claim 27) from now on.
+fn protect_now(w: &mut World, m: ObjectId) {
+    let t = w.tick;
+    w.obj_mut(m).unwrap().sw.protection = Some(superweapons::Protection {
+        start: t,
+        duration: 10_000,
+        kind: superweapons::ProtectKind::Curtain,
+        tint: Default::default(),
+    });
+}
+
+/// Makes `m` fully cloaked, with no sensor of the firer's house, so that
+/// it is hidden from that house (S-0516 claim 24).
+fn hide(w: &mut World, m: ObjectId) {
+    w.obj_mut(m).unwrap().cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+}
+
+/// Makes ALPHA a computer-controlled house, whose firing check reads
+/// protection (S-0513 claim 28).
+fn computer_alpha(w: &mut World) {
+    w.houses[usize::from(ALPHA.0)].human = false;
+}
+
+#[test]
+fn r108_claim39a_the_held_temporal_rearming_outranks_a_protected_targets_illegal_on_the_map() {
+    // spec: S-0513 r108 claim 39a and its Changes for S-0301 claim 9 (A held temporal target within rank 4, Q-2416: the held-temporal-target rearming outranks the illegal for a protected target, S-0513 claim 28, so a firer whose temporal beam is attached to a protected target keeps it at S-0309 claim 29's check, on the map); S-0513 claim 28 (a firer that is not a player-human gets illegal against a protected object)
+    let (mut w, f, m) = beamed_on_the_map();
+    computer_alpha(&mut w);
+    protect_now(&mut w, m);
+    assert!(superweapons::protected(&w, m));
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, false),
+        Answer::Rearming,
+        "the beam's rearming"
+    );
+    // The control: another firer of the same house with no beam attached.
+    let g = spawn(&mut w, "CART", ALPHA, -3, 2);
+    assert_eq!(
+        check(&w, g, Some(Target::Object(m)), 0, false),
+        Answer::Illegal,
+        "with no beam: the protected target's illegal"
+    );
+    // S-0309 claim 29's check keeps it.
+    let next = (w.tick..).find(|&t| held_check(t)).unwrap();
+    run_through(&mut w, next);
+    assert_eq!(target(&w, f), Some(Target::Object(m)), "kept at the check");
+}
+
+#[test]
+fn r108_claim39a_the_held_temporal_rearming_outranks_a_hidden_targets_impossible_on_the_map() {
+    // spec: S-0513 r108 claim 39a and its Changes for S-0301 claim 9 (A held temporal target within rank 4, Q-2416: the held-temporal-target rearming outranks the hidden-target impossible, S-0516 claim 24, so a firer whose temporal beam is attached to a hidden target keeps it at S-0309 claim 29's check, on the map)
+    let (mut w, f, m) = beamed_on_the_map();
+    hide(&mut w, m);
+    let owner = w.obj(f).unwrap().owner;
+    assert!(glasnost_sim::cloak::hidden_from(&w, m, owner));
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, false),
+        Answer::Rearming,
+        "the beam's rearming"
+    );
+    let g = spawn(&mut w, "CART", ALPHA, -3, 2);
+    assert_eq!(
+        check(&w, g, Some(Target::Object(m)), 0, false),
+        Answer::Impossible,
+        "with no beam: the hidden target's impossible"
+    );
+}
+
+#[test]
+fn r108_claim39a_a_firer_keeps_a_protected_or_hidden_member_off_the_map() {
+    // spec: S-0513 r108 claim 39a (The firer, Q-2416: neither the member's protection, claims 26 and 28, nor its being hidden from the firer's house, S-0516 claim 24, gives such an answer: rearming outranks both, S-0301 claim 9 as amended, on the map or off it, so the firer keeps a protected or hidden member at S-0309 claim 29's checks)
+    for hidden in [false, true] {
+        let Waiting {
+            mut w, f, m, dep, ..
+        } = waiting(&rules(), "CART", -3, -2);
+        run_through(&mut w, dep);
+        assert!(superweapons::warp::departed(&w, m));
+        if hidden {
+            hide(&mut w, m);
+            let owner = w.obj(f).unwrap().owner;
+            assert!(glasnost_sim::cloak::hidden_from(&w, m, owner));
+        } else {
+            computer_alpha(&mut w);
+            protect_now(&mut w, m);
+        }
+        assert_eq!(
+            check(&w, f, Some(Target::Object(m)), 0, false),
+            Answer::Rearming,
+            "hidden {hidden}: rearming off the map"
+        );
+        // The tick after the departure is a check tick (`waiting`).
+        run_through(&mut w, dep + 1);
+        assert!(superweapons::warp::departed(&w, m));
+        assert_eq!(
+            target(&w, f),
+            Some(Target::Object(m)),
+            "hidden {hidden}: kept at the check off the map"
+        );
+    }
+}
+
+// --- Revision 108: a building firer before the lock (SW12 parts l7a and l7b) -------------
+
+/// The rules of part l7: the TOWER's weapon a temporal weapon (warhead HE)
+/// with a rearm delay of 20 ticks and a straight projectile (no steering,
+/// not arcing), whose shot speed is the arc speed for the distance under
+/// the test data's gravity `g` (S-0306 claim 1, F2), capped at half the
+/// distance to the impact point (claim 2), so that the harness can place
+/// the TOWER for a detonation in the second tick after the shot.
+fn rules_l7(g: i32, keeps: bool) -> Ruleset {
+    let mut r = keeps_beam(keeps);
+    r.sim.general.gravity = Some(g);
+    r.sim.projectiles.insert(
+        "Straight".into(),
+        glasnost_rules::sim::ProjectileType::default(),
+    );
+    r.sim.weapons.insert(
+        "Timer".into(),
+        glasnost_rules::sim::WeaponType {
+            damage: Some(1),
+            // spec: S-0513 SW12 (l7) (the test data give the weapon a rearm delay of 20 ticks)
+            rof: Some(20),
+            range: Some(glasnost_rules::sim::Decimal("7.25".into())),
+            projectile: Some("Straight".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
+    r.sim.buildings.get_mut("TOWER").unwrap().primary = Some("Timer".into());
+    r
+}
+
+/// Part l7's set-up: the tank (a BUGGY of BETA) in the block at (0, 0) and
+/// a TOWER *T* of ALPHA ordered by the human to attack it without
+/// force-fire, with ALPHA's teleport source picked on the block. Gives the
+/// world before the tick of *T*'s first shot, *T*, the tank and that tick
+/// *s*, found by a rehearsal on a copy; `None` when the detonation is not
+/// in *s* + 2 or a check tick of S-0309 claim 29 falls from *s* to *s* + 3
+/// (such a run decides nothing).
+fn l7_setup(r: &Ruleset, fx: i32, fy: i32, wait: i32) -> Option<(World, ObjectId, ObjectId, i32)> {
+    let mut w = ready(r);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    // As in `waiting_at`: the landing is redirected, so the tank waits to
+    // land for more than one tick.
+    spawn(&mut w, "TOWER", BETA, 5, 5);
+    let f = spawn(&mut w, "TOWER", ALPHA, fx, fy);
+    fire_now(&mut w, ALPHA, SOURCE, at(0, 0));
+    while orders::blocked(&w) {
+        step(&mut w);
+    }
+    for _ in 0..wait {
+        step(&mut w);
+    }
+    let ok = orders::issue(
+        &mut w,
+        ALPHA,
+        orders::Order::Behaviour {
+            actor: f,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(m)),
+            dest: None,
+        },
+    );
+    assert!(ok, "the attack order is taken");
+    let mut p = w.clone();
+    let mut s = None;
+    for _ in 0..200 {
+        let t = p.tick;
+        p.effects.clear();
+        step(&mut p);
+        if shots_by(&p, f) > 0 {
+            s = Some(t);
+            break;
+        }
+    }
+    let s = s?;
+    let mut d = None;
+    for _ in 0..20 {
+        let t = p.tick;
+        step(&mut p);
+        if temporal::holds(&p, f, m) {
+            d = Some(t);
+            break;
+        }
+    }
+    if d != Some(s + 2) || (s..=s + 3).any(held_check) {
+        return None;
+    }
+    // Back to the world before tick s.
+    while w.tick < s {
+        step(&mut w);
+    }
+    Some((w, f, m, s))
+}
+
+/// Finds a placement, projectile speed and start for part l7.
+fn l7(keeps: bool) -> (World, ObjectId, ObjectId, i32) {
+    for g in [120, 200, 400, 800] {
+        let r = rules_l7(g, keeps);
+        for (fx, fy) in [(-2, 0), (-3, 0), (-2, -2), (-3, -3), (-4, 0), (-4, -4)] {
+            for wait in 0..16 {
+                if let Some(found) = l7_setup(&r, fx, fy, wait) {
+                    return found;
+                }
+            }
+        }
+    }
+    panic!("no l7 placement detonates in the second tick after the shot");
+}
+
+/// Runs tick `s` with the warp order applied after its turns (part l's
+/// launch), returning t_L.
+fn launch_in(w: &mut World, s: i32) -> i32 {
+    while w.tick < s {
+        step(w);
+    }
+    fire(w, ALPHA, WARP, at(5, 5));
+    let tl = w.tick;
+    step(w);
+    tl
+}
+
+#[test]
+fn r108_claim39a_sw12_l7a_a_building_drops_the_member_at_its_processing_before_the_lock() {
+    // spec: S-0513 r108 claim 39a (The firer: until the lock a building's firing check answers claim 39's illegal, unless an answer that S-0301 claim 9 ranks above it holds; so it drops the member, after the launch and before the lock, at the first of an attack processing at which its check answers that illegal, where S-0215 claim 32's row drops it and starts guard, and its checking turn in a check tick of S-0309 claim 29; a building whose shot is made at an attack processing sets its timer to 1 tick there, so its next processing is in the next tick) and SW12 part (l7a) (the launch after the turns of tick s; no beam attached just before T's processing in s + 1, and just after it T holds no target and is in guard); S-0309 r113 claim 27 (one drops the member, after the launch and before the lock, at the first of two places)
+    // spec: S-0513 SW12 (l7a is as in the original with quirks.warp_departure_keeps_beam off)
+    for keeps in [true, false] {
+        let (mut w, f, m, s) = l7(keeps);
+        let tl = launch_in(&mut w, s);
+        assert_eq!(tl, s, "the launch after the turns of tick s");
+        assert!(
+            superweapons::warp_pending_or_leaving(&w, m),
+            "set-up: the warp is launched"
+        );
+        assert_eq!(w.tick, s + 1);
+        assert!(!temporal::holds(&w, f, m), "no beam just before s + 1");
+        assert_eq!(target(&w, f), Some(Target::Object(m)));
+        step(&mut w);
+        let o = w.obj(f).unwrap();
+        assert_eq!(
+            o.beh.last.map(|(k, _)| k),
+            Some(s + 1),
+            "keeps {keeps}: T processes in s + 1"
+        );
+        assert_eq!(o.target, None, "keeps {keeps}: no target after s + 1");
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::Guard),
+            "keeps {keeps}: in guard"
+        );
+    }
+}
+
+#[test]
+fn r108_claim39a_a_building_that_dropped_the_member_holds_it_again_after_the_lock_as_at_the_lock() {
+    // spec: S-0513 r108 claim 39a (The firer: after the drop the building takes targets as any building does, the member among them; its beam stays attached either way; its firing check about the member answers claim 39's illegal before the lock and S-0514 claim 19's rearming from the lock on; a building that holds the member again after the lock holds it as one that held it at the lock does, unless a revert gave it back while the member is off the map); S-0309 r113 claim 27 (one that holds the member again after the lock keeps it as one that held it at the lock does)
+    let (mut w, f, m, s) = l7(true);
+    launch_in(&mut w, s);
+    step(&mut w);
+    assert_eq!(target(&w, f), None, "set-up: dropped in s + 1");
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, true),
+        Answer::Illegal,
+        "before the lock: claim 39's illegal"
+    );
+    step(&mut w);
+    assert!(temporal::holds(&w, f, m), "the lock in s + 2");
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, true),
+        Answer::Rearming,
+        "from the lock on: S-0514 claim 19's rearming"
+    );
+    // It takes the member again, as an order or a search gives it.
+    let t = w.tick;
+    let o = w.obj_mut(f).unwrap();
+    o.beh.force(Behaviour::Attack, t, false);
+    o.target = Some(Target::Object(m));
+    let mut p = w.clone();
+    let app = until(&mut p, 120, |p| stage(p, m) == Some(Stage::Placed)) - 1;
+    while w.tick <= app {
+        let t = w.tick;
+        w.effects.clear();
+        step(&mut w);
+        assert_eq!(shots_by(&w, f), 0, "no shot in {t}");
+        assert_eq!(target(&w, f), Some(Target::Object(m)), "kept in {t}");
+        assert_eq!(w.obj(f).unwrap().beh.current, Some(Behaviour::Attack));
+    }
+    assert!(temporal::holds(&w, f, m), "attached after the appearance");
+}
+
+#[test]
+fn r108_claim39a_sw12_l7b_a_building_that_holds_the_member_at_the_lock_keeps_it() {
+    // spec: S-0513 r108 claim 39a (The firer: a building firer without the SAM flag whose beam is attached to the member keeps it as its target while it waits to land if it still holds it at the lock; its attack processing takes S-0215 claim 32's rearming row: no shot, that row's delay, no guard for the departure) and SW12 part (l7b) (the launch one tick later, after the turns of s + 1; T's processing in s + 1 answers rearming, so it makes no second shot and processes next in s + 3; the lock in s + 2 comes before it; at each of T's processings from s + 3 to the departure update T holds the tank and stays in attack; from the departure update to the appearance T holds it, stays in attack, makes no shot, keeps its facing, processes every other tick, and its beam is attached after the appearance); S-0309 r113 claim 27 (a building firer without the SAM flag that holds the member at the lock keeps it too)
+    let (mut w, f, m, s) = l7(true);
+    let tl = launch_in(&mut w, s + 1);
+    assert_eq!(tl, s + 1);
+    let last = w.obj(f).unwrap().beh.last;
+    assert_eq!(last.map(|(k, _)| k), Some(s + 1), "T processed in s + 1");
+    assert_eq!(target(&w, f), Some(Target::Object(m)), "kept in s + 1");
+    step(&mut w);
+    assert!(temporal::holds(&w, f, m), "the lock in s + 2");
+    let mut p = w.clone();
+    let dep = until(&mut p, 80, |p| superweapons::warp::departed(p, m)) - 1;
+    let app = until(&mut p, 30, |p| stage(p, m) == Some(Stage::Placed)) - 1;
+    let mut processings = Vec::new();
+    while w.tick < dep {
+        let t = w.tick;
+        w.effects.clear();
+        step(&mut w);
+        assert_eq!(shots_by(&w, f), 0, "no shot in {t}");
+        let o = w.obj(f).unwrap();
+        if o.beh.last.is_some_and(|(k, _)| k == t) {
+            processings.push(t);
+            assert_eq!(o.target, Some(Target::Object(m)), "held after {t}");
+            assert_eq!(o.beh.current, Some(Behaviour::Attack), "attack after {t}");
+        }
+    }
+    assert_eq!(processings.first(), Some(&(s + 3)), "next processing s + 3");
+    let s = Waiting {
+        w,
+        f,
+        m,
+        tl,
+        dep,
+        app,
+    };
+    let during = assert_kept_while_waiting(s);
+    for p in during.windows(2) {
+        assert_eq!(p[1].0 - p[0].0, 2, "processings every other tick");
+    }
+}
+
+#[test]
+fn r108_claim39a_a_building_with_a_delayed_shot_pending_answers_its_rearming_for_the_member() {
+    // spec: S-0513 r108 claim 39a (The firer: while a delayed shot of the building is pending, its firing check about the member answers as S-0301 claims 9 and 14 give: the pending shot's rearming, whose S-0215 claim 32 row keeps the member, unless one of the building's own answers of S-0405 table T1 holds) and S-0301 claims 9 and 14 (a building's pending delayed shot: rearming at rank 4, yielding only to the building's own answers)
+    let mut w = ready(&rules());
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let f = spawn(&mut w, "TOWER", ALPHA, -3, -3);
+    let tl = launch(&mut w, PERIOD, 1);
+    assert!(superweapons::warp_pending_or_leaving(&w, m));
+    assert!(!temporal::holds(&w, f, m));
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, true),
+        Answer::Illegal,
+        "no shot pending: claim 39's illegal"
+    );
+    w.obj_mut(f).unwrap().combat.delayed_shot = Some(tl + 30);
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, true),
+        Answer::Rearming,
+        "the pending shot's rearming"
+    );
+    // One of the building's own answers of S-0405 table T1 outranks it.
+    w.obj_mut(f).unwrap().econ.building.switched_off = true;
+    assert_eq!(
+        check(&w, f, Some(Target::Object(m)), 0, true),
+        Answer::Impossible,
+        "not in operation: the building's own impossible"
+    );
+}
+
+// --- Revision 108: a revert that gives back a member off the map (S-0309 claim 27) -------
+
+#[test]
+fn r108_claim39a_a_member_a_revert_gives_back_off_the_map_is_dropped_whatever_the_beam() {
+    // spec: S-0513 r108 claim 39a (The firer: a holder that holds the member again after the lock holds it as one that held it at the lock does, unless a revert gave it back while the member is off the map, which is the case of S-0309 claim 27's rule) and S-0309 r113 claim 27 (a member that a revert gives back to a holder while it is off the map is such a target: no target in the firing step, dropped at the start of the holder's next turn, no draw, no revert) and S-0215 claim 10 (a revert brings back the target put aside)
+    let Waiting {
+        mut w, f, m, dep, ..
+    } = waiting(&rules(), "CART", -3, -2);
+    run_through(&mut w, dep);
+    assert!(superweapons::warp::departed(&w, m));
+    assert!(temporal::holds(&w, f, m), "set-up: the beam is attached");
+    // An override put the member aside: the firer's target is another
+    // object X, its attack on the member suspended.
+    let x = spawn(&mut w, "BUGGY", BETA, -6, 6);
+    {
+        let o = w.obj_mut(f).unwrap();
+        o.beh.suspended = Some(Behaviour::Attack);
+        o.beh.aside = Some((Some(Target::Object(m)), None));
+        o.target = Some(Target::Object(x));
+    }
+    // X leaves the game: the drop ends the override, and the revert gives
+    // the member back while it is off the map.
+    glasnost_sim::objects::remove(&mut w, x);
+    assert_eq!(target(&w, f), Some(Target::Object(m)), "given back");
+    assert!(temporal::holds(&w, f, m), "its beam is still attached");
+    assert_eq!(
+        glasnost_sim::combat::held::firing_target(&w, w.obj(f).unwrap()),
+        None,
+        "no target in the firing step"
+    );
+    step(&mut w);
+    assert!(superweapons::warp::departed(&w, m), "still off the map");
+    assert_eq!(target(&w, f), None, "dropped at its next turn's start");
+    assert_eq!(
+        w.obj(f).unwrap().combat.revert_gave_departed,
+        None,
+        "the mark ends there"
+    );
+}
+
+// --- Revision 108: a SAM building short of power on the map (SW12 part l10) --------------
+
+/// Part l10's set-up, after S-0215 scenario B16 part (j): SAMT of ALPHA, a
+/// type with the SAM flag that needs and drains power, with no charger, and
+/// GEN, a test power plant whose output covers the drain, so that ALPHA has
+/// full power; a JET of BETA in flight within SAMT's range, which SAMT
+/// attacks. Gives the world, SAMT, GEN and the JET.
+fn l10() -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut r = rules_sam_drain();
+    let mut plant = r.sim.buildings["TOWER"].clone();
+    plant.primary = None;
+    // spec: S-0513 SW12 (l10) and S-0215 B16 (j) (the test power-plant type's output covers the whole drain)
+    plant.econ.power = Some(100);
+    r.sim.buildings.insert("GEN".into(), plant);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("GEN".into());
+    // The SAM's weapon can fire at aircraft in flight.
+    r.sim.projectiles.get_mut("Rocket").unwrap().aa = Some(true);
+    // An unarmed test aircraft type that can land (B16 part (j)), strong
+    // enough to survive the run.
+    r.sim.aircraft.insert(
+        "JET".into(),
+        glasnost_rules::sim::UnitType {
+            strength: Some(10_000),
+            speed: Some(30),
+            rot: Some(12),
+            locomotor: Some(glasnost_rules::sim::Locomotor::Fly),
+            ..Default::default()
+        },
+    );
+    r.sim.aircraft.get_mut("JET").unwrap().econ.landable = Some(true);
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("JET".into());
+    let mut w = game(&r);
+    let g = spawn(&mut w, "GEN", ALPHA, -8, 8);
+    let f = spawn(&mut w, "SAMT", ALPHA, 0, 0);
+    let a = glasnost_sim::testkit::spawn(
+        &mut w,
+        glasnost_sim::rules::Kind::Aircraft,
+        "JET",
+        BETA.0,
+        at(3, 3),
+        0,
+    );
+    // In flight at its cruise height, held there by a move order far away.
+    let ok = orders::issue(
+        &mut w,
+        BETA,
+        orders::Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(3, -12))),
+        },
+    );
+    assert!(ok);
+    until(&mut w, 60, |w| w.height_above_surface(a) > 0);
+    let t = w.tick;
+    let o = w.obj_mut(f).unwrap();
+    o.beh.force(Behaviour::Attack, t, false);
+    o.target = Some(Target::Object(a));
+    step(&mut w);
+    (w, f, g, a)
+}
+
+#[test]
+fn r108_claim39a_sw12_l10_a_sam_building_short_of_power_drops_its_target_by_the_first_check_tick() {
+    // spec: S-0513 r108 claim 39a (The firer, Q-2418: a building that is not charged, S-0405 claim 8, is not in operation while S-0215 claim 32's power row applies, so its check answers S-0405 table T1's impossible, and it drops the target, as a target on the map, no later than its checking turn in the first check tick of S-0309 claim 29 in that state) and SW12 part (l10) (the building holds its target while its house has power and drops it after the power loss, no later than its checking turn in the first tick after the loss whose number is a multiple of 16; a drop before that turn is the aimed stage's and is not judged; a loss in a tick whose number is a multiple of 16 decides nothing)
+    let (mut w, f, g, a) = l10();
+    assert_eq!(
+        glasnost_sim::econ::power::chargers(&w, f),
+        0,
+        "set-up: no charger"
+    );
+    // While the house has power the building holds its target.
+    for _ in 0..20 {
+        step(&mut w);
+        assert!(!glasnost_sim::econ::power::low_power(&w, ALPHA));
+        assert_eq!(target(&w, f), Some(Target::Object(a)), "held with power");
+    }
+    // The power loss, in a tick whose number is not a multiple of 16.
+    while held_check(w.tick) || held_check(w.tick + 1) {
+        step(&mut w);
+    }
+    // The control: the same ticks with the plant kept.
+    let mut control = w.clone();
+    glasnost_sim::objects::remove(&mut w, g);
+    until(&mut w, 40, |w| {
+        glasnost_sim::econ::power::low_power(w, ALPHA)
+    });
+    let loss = w.tick - 1;
+    assert!(!held_check(loss), "set-up: the loss is no check tick");
+    let first = (loss + 1..).find(|&t| held_check(t)).unwrap();
+    run_through(&mut control, first);
+    assert!(!glasnost_sim::econ::power::low_power(&control, ALPHA));
+    assert_eq!(
+        target(&control, f),
+        Some(Target::Object(a)),
+        "control: held through tick {first} with power"
+    );
+    run_through(&mut w, first);
+    assert!(glasnost_sim::econ::power::low_power(&w, ALPHA));
+    assert!(w.height_above_surface(a) > 0, "set-up: still in flight");
+    assert_eq!(
+        target(&w, f),
+        None,
+        "dropped no later than the check turn in tick {first}"
+    );
+}
+
+// --- Revision 108: a firer in sticky beyond range ----------------------------------------
+
+#[test]
+fn r108_claim39a_a_sticky_firer_beyond_range_drops_the_member_with_its_destination_and_keeps_its_beam()
+ {
+    // spec: S-0513 r108 claim 39a (The firer: an infantry or vehicle firer beyond its weapon's range of the old position takes S-0215 claim 37's approach step as for a target on the map there; in sticky, and in that table's other rows that drop an out-of-range target, it drops the member with the destination; dropping it does not release the beam) and S-0309 r113 claim 27 (it keeps the member, approaches it, or drops it with the destination as claim 37's parts (a), (d) and (g) give); S-0215 claim 37 (d) (sticky drops an out-of-range target and the destination at once)
+    let Waiting {
+        mut w, f, m, dep, ..
+    } = given_at_departure(&rules_r91(), "CART", -8, -8, |_, _| {});
+    assert!(
+        !glasnost_sim::approach::in_range(&w, f, Target::Object(m)),
+        "set-up: beyond range"
+    );
+    // The departure update runs; then the firer is in sticky with a
+    // destination, and the harness runs S-0215 claim 37's approach step for
+    // it (sticky is processed as guard, S-0215 claim 5, which takes no
+    // approach step of its own, so no processing of ours reaches the row).
+    step(&mut w);
+    assert_eq!(w.tick - 1, dep);
+    assert!(superweapons::warp::departed(&w, m), "set-up: off the map");
+    let t = w.tick;
+    let o = w.obj_mut(f).unwrap();
+    o.beh.force(Behaviour::Sticky, t, false);
+    o.target = Some(Target::Object(m));
+    o.dest = Some(Target::Cell(at(-7, -7)));
+    glasnost_sim::approach::step(&mut w, f);
+    let o = w.obj(f).unwrap();
+    assert_eq!(o.target, None, "sticky drops the member beyond range");
+    assert_eq!(o.dest, None, "the destination goes with it");
+    assert!(
+        temporal::holds(&w, f, m),
+        "dropping it does not release the beam"
     );
 }

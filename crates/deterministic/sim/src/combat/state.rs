@@ -43,6 +43,14 @@ pub struct CombatState {
     /// A building's pending delayed shot: the tick of its turn (S-0301
     /// claim 14).
     pub delayed_shot: Option<i32>,
+    /// The superweapon warp member that a revert last gave back as this
+    /// holder's target while the member was off the map (S-0309 claim 27,
+    /// S-0513 r108 claim 39a): claim 27's case, so that member is no target
+    /// in the firing step and is dropped at the start of the holder's next
+    /// turn, whatever temporal beam the holder has attached to it
+    /// (`combat::held`). Cleared at that turn's start.
+    #[serde(default)]
+    pub revert_gave_departed: Option<ObjectId>,
     /// The weapon slot a building's delayed shot was started with: the
     /// check and the shot at the end of the delay use it, not a fresh
     /// choice (S-0301 claim 14, S-0308 claim 14).
@@ -186,6 +194,7 @@ impl CombatState {
             anim_frame: 0,
             firing_frame: None,
             delayed_shot: None,
+            revert_gave_departed: None,
             delayed_slot: 0,
             bomb: None,
             charge_planter: None,

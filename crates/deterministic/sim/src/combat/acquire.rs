@@ -1166,9 +1166,11 @@ pub fn search(
                     continue;
                 }
                 // spec: S-0501 claim 48 (a) and its Changes for S-0309 claim 7 (the ground-layer pass takes the objects filed in the ground render layer's list, whatever their height: an aircraft that a factory release left above its pad, not re-filed since, is among them)
+                // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: it stays in the ground list, S-0102 claim 4, and S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight as a landed aircraft there, in both passes of a search that looks for aircraft and in the second pass alone otherwise; the connected-region test and table C apply as to any candidate)
                 if pass == 1
                     && !crate::temporal::ground_layer(w, x)
                     && !crate::air::ground_filed(w, x)
+                    && !crate::air::kept_filed(w, x)
                 {
                     continue;
                 }

@@ -356,6 +356,7 @@ fn drop_cell_targets(w: &mut World, c: CellXY) {
             ob.dest = d;
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
             crate::emitters::retarget_let_go(w, id);
+            crate::combat::held::note_revert(w, id);
         }
         let Some(ob) = w.obj_mut(id) else { continue };
         let lost = ob.target == cell;

@@ -1495,9 +1495,9 @@ fn detonation_point(
             crate::combat::weapon::in_air(w, x)
         }
     };
-    // spec: S-0306 r65 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, whatever its height, and an aircraft member whose type cannot land while it flies, until a crash; so claim 20 (c) uses 42 for it, also when it departed from a deck and counts as airborne)
+    // spec: S-0306 r72 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, whatever its height, so until then claim 20 (c) uses 42 for it, also when it departed from a deck and counts as airborne; An aircraft that cannot land, in flight: claim 20 (c) reads the layer from state and height, not the ground list it stays in, so it gives such an aircraft 128 while it is airborne)
     let ground =
-        |x| crate::temporal::ground_layer(w, x) || crate::superweapons::warp::in_ground_layer(w, x);
+        |x| crate::temporal::ground_layer(w, x) || crate::superweapons::warp::in_warp_row(w, x);
     // spec: S-0306 claim 20 (c) (threshold 42 for a target that is not airborne or is airborne in the ground render layer; 128 for a target airborne in another render layer)
     let threshold = match t {
         Target::Object(x) if airborne(x) && !ground(x) => 128,

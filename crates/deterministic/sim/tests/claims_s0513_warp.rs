@@ -63,6 +63,22 @@ fn warp(w: &mut World, src: CellXY, dst: CellXY) -> i32 {
     tl
 }
 
+/// As [`warp`], with `prep` run on the world after the source pick has
+/// been applied and just before t_L, so that what it sets is what the
+/// launch in t_L finds (the warp order is applied before any object's own
+/// movement of that tick).
+fn warp_with(w: &mut World, src: CellXY, dst: CellXY, prep: impl FnOnce(&mut World)) -> i32 {
+    if !rec(w, ALPHA, SOURCE).ready {
+        ready_tick(w, ALPHA, SOURCE, 300);
+    }
+    fire_now(w, ALPHA, SOURCE, src);
+    prep(w);
+    fire(w, ALPHA, WARP, dst);
+    let tl = w.tick;
+    step(w);
+    tl
+}
+
 /// Runs until tick `t` has run (the next tick to run is `t + 1`).
 fn run_through(w: &mut World, t: i32) {
     while w.tick <= t {
@@ -625,11 +641,9 @@ fn rules_jj() -> Ruleset {
     r
 }
 
-/// A JJ of BETA at (0, 0), placed (grounded, listed in the ground layer),
-/// then raised `h` leptons above its surface in the ascending state with
-/// its ground listing kept, as S-0209 claim 13's jumpjet rule lists it
-/// below 208 leptons.
+/// A JJ of BETA at (0, 0), placed (grounded, listed in the ground layer).
 fn jumpjet_at(h: i32) -> (World, ObjectId) {
+    assert_eq!(h, 0, "raise it with `warp_raised`");
     let mut w = game(&rules_jj());
     chrono(&mut w);
     let j = spawn(&mut w, "JJ", BETA, 0, 0);
@@ -640,13 +654,40 @@ fn jumpjet_at(h: i32) -> (World, ObjectId) {
             .contains(&j),
         "listed on the ground"
     );
-    if h > 0 {
-        let surface = w.surface_for(j);
-        let o = w.obj_mut(j).unwrap();
-        o.pos.z = surface + h;
-        o.jump.as_mut().unwrap().phase = glasnost_sim::jump::Phase::Ascending;
-    }
     (w, j)
+}
+
+/// Raises the jumpjet `h` leptons above its surface in `phase`, its target
+/// height `h`, with its listing kept, as S-0209 claim 13's jumpjet rule
+/// lists it below 208 leptons.
+fn raise(w: &mut World, j: ObjectId, h: i32, phase: glasnost_sim::jump::Phase) {
+    let surface = w.surface_for(j);
+    let o = w.obj_mut(j).unwrap();
+    o.pos.z = surface + h;
+    let jj = o.jump.as_mut().unwrap();
+    jj.phase = phase;
+    jj.ht = h;
+}
+
+/// Warps the block at (0, 0) to (5, 5), with `prep` run just before t_L.
+/// The objects' turns of t_L come before its orders (S-0203 claim 7), so a
+/// rehearsal of t_L without the warp order gives the jumpjet's height above
+/// its surface and its listing as the launch reads them: returned, with
+/// the tick t_L.
+fn warp_raised(w: &mut World, j: ObjectId, prep: impl FnOnce(&mut World)) -> (i32, i32, bool) {
+    let mut seen = (0, false);
+    let tl = warp_with(w, at(0, 0), at(5, 5), |w| {
+        prep(w);
+        let mut p = w.clone();
+        step(&mut p);
+        let o = p.obj(j).unwrap();
+        let c = o.pos.cell();
+        seen = (
+            p.height_above_surface(j),
+            p.cells.list(c, o.layer).contains(&j),
+        );
+    });
+    (tl, seen.0, seen.1)
 }
 
 #[test]
@@ -658,18 +699,162 @@ fn intake84_claim34_a_grounded_jumpjet_listed_in_the_block_joins_the_warp() {
 }
 
 #[test]
-fn intake84_claim34_a_listed_jumpjet_above_its_surface_is_left_alone_q2419_interim() {
-    // spec: S-0513 claim 34 (an object in the air, an aircraft or jumpjet in flight, is left alone); S-0209 claim 13 and S-0102 claim 3 (r41) list a jumpjet below 208 leptons, so it is examined. Whether that listed jumpjet is "in flight" is Q-2419; interim: any height above its surface is in the air
-    let (mut w, j) = jumpjet_at(100);
+fn r108_claim34_a_listed_jumpjet_ascending_below_the_airborne_height_joins_the_warp() {
+    // spec: S-0513 r108 claim 34 (a listed object in the air is not examined: any object other than an aircraft when it is airborne, S-0307; neither a jumpjet state nor a layer is read, Q-2419; so a unit with jumpjet movement listed in a source cell and not airborne is examined like any listed object, whether it is ascending, descending or hovering on a listing it kept, and joins the group)
+    for h in [100, 207] {
+        let (mut w, j) = jumpjet_at(0);
+        let (_, seen, listed) = warp_raised(&mut w, j, |w| {
+            raise(w, j, h, glasnost_sim::jump::Phase::Ascending);
+        });
+        assert_eq!(seen, h, "set-up: {h} leptons at the launch");
+        assert!(listed, "set-up: still listed at {h} leptons");
+        assert_eq!(stage(&w, j), Some(Stage::Pending), "joins at {h}");
+    }
+}
+
+#[test]
+fn r108_claim34_a_listed_jumpjet_in_any_state_below_the_airborne_height_joins_the_warp() {
+    // spec: S-0513 r108 claim 34 (neither a jumpjet state nor a layer is read: descending or hovering on a listing it kept, a listed unit that is not airborne is examined and joins)
+    for phase in [
+        glasnost_sim::jump::Phase::Descending,
+        glasnost_sim::jump::Phase::Hovering,
+    ] {
+        let (mut w, j) = jumpjet_at(0);
+        let (_, seen, listed) = warp_raised(&mut w, j, |w| raise(w, j, 150, phase));
+        assert!(
+            seen > 0 && seen < 208,
+            "set-up: in the air below the airborne height at the launch, {phase:?} ({seen})"
+        );
+        assert!(listed, "set-up: still listed, {phase:?}");
+        assert_eq!(stage(&w, j), Some(Stage::Pending), "{phase:?}");
+    }
+}
+
+#[test]
+fn r108_claim34_a_listed_jumpjet_at_the_airborne_height_is_not_examined() {
+    // spec: S-0513 r108 claim 34 (one that is airborne, S-0307: at least 208 leptons above its surface, is not examined even while listed, so nothing applies to it); S-0307 Terms (airborne at 208)
+    // A jumpjet's own turn lists it out of the ground layer at 208 leptons
+    // (S-0502 claim 4), so the launch does not find it in the block's lists.
+    let (mut w, j) = jumpjet_at(0);
+    let (_, seen, _) = warp_raised(&mut w, j, |w| {
+        raise(w, j, 208, glasnost_sim::jump::Phase::Ascending);
+    });
+    assert_eq!(seen, 208, "set-up: airborne at the launch");
+    assert_eq!(stage(&w, j), None, "left alone");
+    assert!(w.obj(j).is_some_and(|o| o.on_map));
+    // A vehicle without jumpjet movement keeps its listing: listed and
+    // airborne, it is not examined.
+    let (mut w, _) = jumpjet_at(0);
+    let v = spawn(&mut w, "CART", BETA, 1, 0);
+    let (_, seen, listed) = warp_raised(&mut w, v, |w| {
+        let surface = w.surface_for(v);
+        w.obj_mut(v).unwrap().pos.z = surface + 208;
+    });
+    assert_eq!(seen, 208, "set-up: airborne at the launch");
+    assert!(listed, "set-up: listed");
+    assert_eq!(stage(&w, v), None, "left alone");
+    assert!(w.obj(v).is_some_and(|o| o.on_map));
+}
+
+#[test]
+fn r108_claim34_the_height_of_a_jumpjet_on_a_deck_is_taken_above_the_deck() {
+    // spec: S-0513 r108 claim 34 (any other object is in the air when it is airborne, S-0307, its height taken above the deck while its on-deck state is set)
+    let (mut w, j) = jumpjet_at(0);
     let c = w.obj(j).unwrap().pos.cell();
-    assert!(
-        w.cells
-            .list(c, glasnost_sim::world::Layer::Ground)
-            .contains(&j),
-        "still listed at 100 leptons"
+    let i = w.cells.idx(c).unwrap();
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+    let mut terrain = 0;
+    let (_, seen, listed) = warp_raised(&mut w, j, |w| {
+        terrain = w.surface_for(j);
+        if w.obj(j).unwrap().layer != glasnost_sim::world::Layer::Deck {
+            w.cells.leave(c, glasnost_sim::world::Layer::Ground, j);
+            w.cells.enter(c, glasnost_sim::world::Layer::Deck, j, false);
+        }
+        let o = w.obj_mut(j).unwrap();
+        o.layer = glasnost_sim::world::Layer::Deck;
+        // The deck is 416 above the terrain (S-0307 Constants): standing on
+        // it, the jumpjet is at least 208 above the terrain, but at no
+        // height above the deck. (Its take-off unsets the on-deck state,
+        // S-0502 claim 4, so in flight its height is the terrain's.)
+        o.pos.z = terrain + 416; // spec: S-0307 Constants (bridge deck height 416)
+        let jj = o.jump.as_mut().unwrap();
+        jj.on_deck = true;
+        assert_eq!(jj.phase, glasnost_sim::jump::Phase::Grounded);
+        assert_eq!(w.height_above_surface(j), 0, "set-up: on the deck");
+    });
+    assert_eq!(seen, 0, "set-up: on the deck at the launch");
+    assert!(listed, "set-up: listed on the deck");
+    assert_eq!(
+        w.obj(j).unwrap().pos.z - terrain,
+        416,
+        "set-up: at least 208 above the terrain"
     );
-    warp(&mut w, at(0, 0), at(5, 5));
-    assert_eq!(stage(&w, j), None, "left alone (interim)");
+    assert_eq!(
+        stage(&w, j),
+        Some(Stage::Pending),
+        "not airborne above the deck: examined, it joins"
+    );
+}
+
+#[test]
+fn r108_claim34_sw12_b8_an_ordered_jumpjet_ascending_at_the_launch_joins_and_lands() {
+    // spec: S-0513 r108 claim 34 (a listed jumpjet ascending below the airborne height is examined and joins) and SW12 part (b8) (ordered to a cell outside the block before the launch; at the launch its height is above 0 and below the airborne height, rising, over a block cell; it joins the group, departing with the members and appearing in the destination block)
+    let mut r = rules_jj();
+    // spec: S-0513 SW12 (b8) (its cruise height set by the test data well above the airborne height)
+    r.sim.vehicles.get_mut("JJ").unwrap().jumpjet_height = Some(1000);
+    let mut w = game(&r);
+    chrono(&mut w);
+    let j = spawn(&mut w, "JJ", BETA, 0, 0);
+    let ok = glasnost_sim::orders::issue(
+        &mut w,
+        BETA,
+        glasnost_sim::orders::Order::Behaviour {
+            actor: j,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(-4, 0))),
+        },
+    );
+    assert!(ok, "the move order is taken");
+    // The launch comes in the first tick whose turn leaves it above 0 and
+    // higher than before.
+    let (o0, d0) = (at(0, 0), at(5, 5));
+    let mut before = 0;
+    let (tl, h, c) = {
+        let mut seen = (0, o0);
+        let tl = warp_with(&mut w, o0, d0, |w| {
+            until(w, 200, |w| {
+                let mut p = w.clone();
+                step(&mut p);
+                let h = p.height_above_surface(j);
+                seen = (h, p.obj(j).unwrap().pos.cell());
+                let rising = h > w.height_above_surface(j);
+                before = w.height_above_surface(j);
+                h > 0 && rising
+            });
+        });
+        (tl, seen.0, seen.1)
+    };
+    assert!(
+        h > before && h < 208,
+        "set-up: rising below the airborne height at the launch ({before} to {h})"
+    );
+    assert!(
+        (c.x - o0.x).abs() <= 1 && (c.y - o0.y).abs() <= 1,
+        "set-up: over a block cell ({c:?})"
+    );
+    assert_eq!(stage(&w, j), Some(Stage::Pending), "it joins");
+    run_through(&mut w, tl + 70);
+    let o = w.obj(j).unwrap();
+    assert!(o.on_map, "it appeared");
+    let c = o.pos.cell();
+    assert!(
+        (c.x - d0.x).abs() <= 1 && (c.y - d0.y).abs() <= 1,
+        "in the destination block: {c:?}"
+    );
 }
 
 #[test]

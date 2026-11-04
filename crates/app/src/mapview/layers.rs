@@ -40,7 +40,7 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
     if !o.kind.is_mobile() || !o.on_map {
         return None;
     }
-    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_warp_row`), where the member stands at no height above its surface and its own rows give ground too. The ground layer that an aircraft whose type cannot land keeps after the hold (S-0306 r65 claim 17, `warp::in_ground_layer`) is no warp row here: it is claim 4's rule that no take-off re-files such a type, and with the switch off the sweep moves it (Edge cases)
+    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_warp_row`), where the member stands at no height above its surface and its own rows give ground too. The ground list that an aircraft whose type cannot land stays in after the hold (S-0306 r72 claim 17, `air::kept_filed`) is no warp row here: it is claim 4's rule that no take-off re-files such a type, and with the switch off the sweep moves it (Edge cases)
     if glasnost_sim::superweapons::warp::in_warp_row(w, id) {
         return Some(Layer::Ground);
     }
@@ -290,6 +290,10 @@ impl Layers {
                 // spec: S-0501 claim 48 (a) and S-0102 claim 4 (an aircraft that a factory release raised above its pad in the tick of its ground placement was filed in the ground render layer by that placement, and the release does not re-file it)
                 layer = Layer::Ground;
             }
+            if glasnost_sim::air::kept_filed(w, id) {
+                // spec: S-0306 r72 claim 17 and S-0102 claim 4 (an aircraft whose type cannot land, placed on the ground or at the end of a warp's hold, stays in the ground list while it flies: one the drawing first sees in flight, as after a load, is filed there)
+                layer = Layer::Ground;
+            }
             self.tracks.insert(
                 id,
                 Track {
@@ -427,6 +431,20 @@ mod tests {
         w.obj_mut(id).unwrap().pos.z = z;
     }
 
+    /// Makes `id` an aircraft placed in flight, not on the ground: no
+    /// ground placement keeps it in the ground list (S-0306 r72 claim 17,
+    /// `air::kept_filed`), so the drawing's first evaluation files it by
+    /// its height.
+    fn placed_in_flight(w: &mut World, id: ObjectId, z: i32) {
+        lift(w, id, z);
+        w.obj_mut(id)
+            .unwrap()
+            .air
+            .as_mut()
+            .expect("an aircraft")
+            .kept_filed = false;
+    }
+
     /// spec: S-0102 claim 3 and State and ordering (driving movement:
     /// ground at any height; flying movement: top above 0, ground at 0,
     /// S-0501 claim 7; rocket movement: air)
@@ -500,7 +518,7 @@ mod tests {
         let mut w = world();
         let a = spawn(&mut w, Kind::Aircraft, "JET", 0);
         let b = spawn(&mut w, Kind::Aircraft, "JET", 2);
-        lift(&mut w, a, 100);
+        placed_in_flight(&mut w, a, 100);
         let mut l = Layers::default();
         let placed = l.evaluate_mobiles(&w, false, true, &[]);
         assert_eq!(placed, [(a, Layer::Top), (b, Layer::Ground)]);
@@ -516,6 +534,24 @@ mod tests {
         assert_eq!(l.of(a), None);
     }
 
+    /// spec: S-0306 r72 claim 17 and S-0102 claim 4 (an aircraft whose
+    /// type cannot land, placed on the ground, stays in the ground list
+    /// while it flies: a drawing that first sees it in flight, as after a
+    /// load, files it there)
+    #[test]
+    fn r72_claim17_a_kept_filed_aircraft_first_seen_in_flight_is_filed_on_the_ground() {
+        let mut w = world();
+        let a = spawn(&mut w, Kind::Aircraft, "JET", 0);
+        assert!(
+            glasnost_sim::air::kept_filed(&w, a),
+            "set-up: placed on the ground"
+        );
+        lift(&mut w, a, 100);
+        let mut l = Layers::default();
+        let placed = l.evaluate_mobiles(&w, false, true, &[]);
+        assert_eq!(placed, [(a, Layer::Ground)]);
+    }
+
     /// spec: S-0102 claims 4 and 7 (a re-file moment, here a landable
     /// aircraft's take-off and landing updates or a crash tick, takes the
     /// object out of its list and puts it at the end of its evaluated
@@ -526,8 +562,8 @@ mod tests {
         let mut w = world();
         let a = spawn(&mut w, Kind::Aircraft, "JET", 0);
         let b = spawn(&mut w, Kind::Aircraft, "JET", 2);
-        lift(&mut w, a, 100);
-        lift(&mut w, b, 100);
+        placed_in_flight(&mut w, a, 100);
+        placed_in_flight(&mut w, b, 100);
         let mut l = Layers::default();
         l.evaluate_mobiles(&w, false, true, &[]);
         assert_eq!(l.list(Layer::Top), [Entrant::Object(a), Entrant::Object(b)]);
@@ -816,14 +852,15 @@ mod tests {
                 assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
             }
             warp(&mut w, jet, None);
-            // spec: S-0306 r65 claim 17 (a real warp's hold end leaves such an aircraft its kept ground layer; the drawing still treats it as any object, S-0102 Edge cases)
+            // spec: S-0306 r72 claim 17 (a real warp's hold end leaves such an aircraft in the ground list, S-0102 claim 4; the drawing still treats it as any object, S-0102 Edge cases)
             w.obj_mut(jet)
                 .unwrap()
                 .air
                 .as_mut()
                 .expect("an aircraft")
-                .warp_filed = true;
-            assert!(glasnost_sim::superweapons::warp::in_ground_layer(&w, jet));
+                .kept_filed = true;
+            assert!(glasnost_sim::air::kept_filed(&w, jet));
+            assert!(!glasnost_sim::superweapons::warp::in_warp_row(&w, jet));
             assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
             lift(&mut w, jet, 600);
             let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
