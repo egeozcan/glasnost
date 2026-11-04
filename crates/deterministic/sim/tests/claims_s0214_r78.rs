@@ -119,6 +119,12 @@ fn rules() -> Ruleset {
         t.harvester = Some(false);
         t.combat.land_targeting = Some(1);
     });
+    vehicle(&mut r, "NAVALER", |t| {
+        t.primary = Some("Plain".into());
+        t.locomotor = Some(Locomotor::Teleport);
+        t.harvester = Some(false);
+        t.combat.naval_targeting = Some(6);
+    });
     let mut b = r.sim.buildings["TOWER"].clone();
     b.combat.land_targeting = Some(1);
     register(&mut r, "buildings", "LTOWER");
@@ -432,6 +438,34 @@ fn the_land_row_outranks_the_countdown_but_not_the_early_rearming_answers() {
         assert_eq!(is_attack_on(&click(&w, tower, near), tower, near), on);
         assert_eq!(act(&w, lander, close) == Action::Attack, on, "on {on}");
         assert_eq!(is_attack_on(&click(&w, lander, close), lander, close), on);
+    }
+}
+
+// spec: S-0214 claim 6 (e) (r78: S-0306 claim 23's water and land rows come after the materialising rearming within rank 4 and the rearm countdown, rank 5, comes after both, so a firer only waiting out its countdown is not offered the attack over a target the water row refuses, while a phasing-in one is) and Edge cases (quirks.moment_reason_attack_cursor: off, no attack); S-0306 claim 23 and S-0308 table N (the water row: a target not on a bridge, on a water or beach cell, with naval mode 6 giving "none" for every target)
+#[test]
+fn the_water_row_outranks_the_countdown_but_not_the_materialising_rearming() {
+    use glasnost_map::terrain::land;
+    for on in [true, false] {
+        let mut w = game(on);
+        let n = put(&mut w, Kind::Vehicle, "NAVALER", ALPHA, -2, 4);
+        let wet = put(&mut w, Kind::Vehicle, "PLAINV", BETA, 0, 4);
+        let dry = put(&mut w, Kind::Vehicle, "PLAINV", BETA, 0, 6);
+        let c = w.obj(wet).unwrap().pos.cell();
+        w.cells.grid.get_mut(c).unwrap().land = land::WATER;
+        // Control: the water row refuses the target on water only.
+        assert_eq!(ask(&w, n, obj(wet)), Answer::Illegal);
+        assert_ne!(act(&w, n, wet), Action::Attack, "control, on {on}");
+        assert_ne!(ask(&w, n, obj(dry)), Answer::Illegal, "dry land");
+        // Only the countdown: the row outranks it.
+        let t = w.tick;
+        w.obj_mut(n).unwrap().combat.rearm_until = t + 50;
+        assert_eq!(ask(&w, n, obj(wet)), Answer::Illegal, "countdown");
+        assert_ne!(act(&w, n, wet), Action::Attack, "countdown, on {on}");
+        // The materialising rearming comes before the row.
+        materialise(&mut w, n, 100);
+        assert_eq!(ask(&w, n, obj(wet)), Answer::Rearming);
+        assert_eq!(act(&w, n, wet) == Action::Attack, on, "on {on}");
+        assert_eq!(is_attack_on(&click(&w, n, wet), n, wet), on);
     }
 }
 

@@ -4,7 +4,8 @@
 //! intake 90. Synthetic data only: every type, weapon, warhead and number
 //! is invented. The ledger is `docs/m8-claims/intake90.md`.
 //!
-//! Each test sets up one of the four cases the Edge case names. With the
+//! Each test sets up one of the cases the Edge case names (a switched-off
+//! defence's own *impossible* added by M8 seam sweep 5b). With the
 //! switch on (the original), an answer that is not *illegal* is the
 //! highest rank that holds, so part (e) holds and the click gives the
 //! attack order. With the switch off, part (e) passes over that answer and
@@ -218,6 +219,28 @@ fn off_a_hidden_target_that_a_later_test_rules_illegal_fails_part_e() {
         w.obj_mut(z).unwrap().cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
         assert!(glasnost_sim::cloak::hidden_from(&w, z, Some(A)));
         assert_part_e(&w, on, d, z, Answer::Impossible);
+    }
+}
+
+// spec: S-0214 r80 Edge cases (Q-2426 answered, question 2: with quirks.moment_reason_attack_cursor off, part (e) passes over every impossible, a building's own of S-0405 claim 9 and table T1 among them, so it fails for a switched-off defence over a target that a later test rules illegal, here the zero-versus test of S-0304 claim 1; on, the building's impossible is the answer and part (e) holds) and S-0405 claim 8 (a building switched off and not charged is not in operation)
+#[test]
+fn off_a_switched_off_defence_over_an_illegal_target_fails_part_e() {
+    for on in [true, false] {
+        let mut r = rules(on);
+        let mut d = r.sim.buildings["TOWER"].clone();
+        d.primary = Some("W".into());
+        register(&mut r, "buildings", "DEFT");
+        r.sim.buildings.insert("DEFT".into(), d);
+        let mut w = testkit::game_with(&r, SIZE, 1);
+        let b = put(&mut w, Kind::Building, "DEFT", ALPHA, -1, 0);
+        let z = put(&mut w, Kind::Vehicle, "TARGET", BETA, 2, 0);
+        // Control: in operation, the zero-versus test answers illegal.
+        assert!(glasnost_sim::econ::power::in_operation(&w, b));
+        assert_eq!(ask(&w, b, obj(z)), Answer::Illegal, "control");
+        assert_ne!(act(&w, b, z), Action::Attack, "control, on {on}");
+        w.obj_mut(b).unwrap().econ.building.switched_off = true;
+        assert!(!glasnost_sim::econ::power::in_operation(&w, b));
+        assert_part_e(&w, on, b, z, Answer::Impossible);
     }
 }
 
