@@ -1,9 +1,9 @@
 ---
 id: Q-2506
 title: What a processing of enter's docking stage does for an aircraft in contact that is in flight and not landing
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
