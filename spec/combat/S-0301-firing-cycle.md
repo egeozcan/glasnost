@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 70
+revision: 71
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-04
-measurements: [M-0004]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416]
+measurements: [M-0004, M-0021]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714]
 supersedes: []
 ---
 
@@ -201,7 +201,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    different whole number of ticks. Formula F1 gives the number domain of each result.
    - Backing: `measured` (M-0004: the full delay as a base plus its one R(0, 2) draw, the in-burst
      delay, the 1-tick delay of a building with spare rounds before both, and a fire-particle
-     weapon's bare rate, each as a countdown); `measurable` (scenario F2 for the factors, F4 for the
+     weapon's bare rate, each as a countdown); `measured` (M-0021, for the full delay's base with
+     a computer house's factor: for each of its three test weapons, in every run, the shortest gap
+     between one vehicle's shots is *R* × *h* with the draw at 0, converted to whole ticks as above,
+     the factor's value kept local); `measurable` (scenario F2 for the factors, F4 for the
      other effect weapons and its building part for the 1-tick delay before the bare rate, F14's
      no-draw part for the absence of a delay draw with a burst-delay field, the bare rate and the
      1-tick delay, which M-0004 does not separate from the background draws)
@@ -232,7 +235,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      human player in a skirmish the normal row. The house of each computer player gets the row that
      its lobby entry selects (S-0412 claim 4 owns the pairing): the easy computer the difficult row,
      the normal computer the normal row and the hard computer the easy row. The computer-easy-bonus shift is conditional on more than one human participant and the rules' computer-easy-bonus flag being on. A skirmish has at most one human participant, including observers (S-0302, claim 3), so this shift does not occur in a skirmish. Its effect outside this spec's skirmish scope is not specified here. In a campaign mission the original takes the row of the player's chosen difficulty for the player's house and the row of the scenario's computer difficulty for the others. Our engine does not reproduce these assignments; the handicap setting can.
-   - Backing: `measurable` (scenario F2); `unmeasured` for the one-step move of the
+   - Backing: `measured` (M-0021, for the product: the gaps of its three test weapons match *h* as
+     the row's factor times the country's for a hard computer house of each of its two countries,
+     with the factors kept local, so the record does not show which row a lobby entry selects),
+     `measurable` (scenario F2); `unmeasured` for the one-step move of the
      computer-easy-bonus flag (it needs a game with more than one human player: a skirmish does not
      have one in our engine, and network games are out of scope). The historical campaign
      rules in this claim are `unmeasured` here: campaigns are outside this spec's
