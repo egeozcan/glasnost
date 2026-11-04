@@ -10,7 +10,7 @@ measured-on: 2026-10-18
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-29
+approved-on: 2026-11-04
 ---
 
 # M-0003: Unit arena: Allied against Soviet vehicles at equal cost
@@ -20,7 +20,7 @@ approved-on: 2026-10-29
 - Game build: stock Yuri's Revenge 1.001, executable hash verified; run under the oracle harness (PROVENANCE §7).
 - Data: stock, no mods, no loose rules or art files.
 - Map: the stock multiplayer map `Arena.mmx` (sha256 `ed5fa0d7ec4b5e2d8a7110a0fff6cad413ae0437c62521c3c75fd9bc7422c874`), on the open ground around its start waypoint 2 (call its cell W).
-- Players: two computer houses, side A = Americans (start 0) and side B = Russians (start 1), difficulty hard, each with no starting MCV, no buildings and 0 credits, so each owns only its placed group; an observer human at start 3 that the computer houses ignore and that owns nothing that fights. Game speed fastest, tech level 10, superweapons off, crates off, short game off.
+- Players: two computer houses, side A = Americans (start 0) and side B = Russians (start 1), difficulty hard, each with no starting MCV, no buildings and 0 credits, so each owns only its placed group; an observer human of the British country at start 3 that the computer houses ignore and that owns nothing that fights. Game speed fastest, tech level 10, superweapons off, crates off, short game off.
 - Harness: the oracle's unit arena. Its house director is off for every house. Five other gameplay
   changes of the harness were on in these games: a siege rule for long-range artillery, a change to
   Magnetron carrying, changes to the computer houses' production, extra defences, and an expansion
@@ -43,7 +43,7 @@ approved-on: 2026-10-29
   enemy. Infantry also take one cell each. A unit that its stated cell does not take is placed on a
   free neighbouring cell (M-0017 Setup). Every unit starts in the *hunt* mission. The group counts
   are not stated here (they follow from stock costs); compute them from the imported rules.
-- Each pairing (row type against column type) is played with the row type on side A (6 games, seeds 0 to 5) and on side B (6 games, seeds 0 to 5). The seed is the game's random seed for the match (the same seed list on both sides).
+- Each pairing (row type against column type) is played with the row type on side A (6 games, seeds 0 to 5) and on side B (6 games, seeds 0 to 5). The game for seed *s* is played with the random seed 1000 + *s*, as its settings file gives it (the same seed list on both sides).
 
 ## Procedure
 
@@ -108,6 +108,8 @@ gives no per-game army shares, so no share test runs against it.
 ## Evidence
 
 Raw per-game harness output stays with the oracle operator (outside this repository), 420 game directories; no game failed or was dropped.
+- Each game's settings file gives the seed and every house's country and start. In every game of
+  this record the seed is 1000 + the game's seed number and the observer house is British.
 
 ## Notes
 
