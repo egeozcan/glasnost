@@ -1,9 +1,9 @@
 ---
 id: Q-2508
 title: In which order the aircraft in contact with a pad receive its run-away notice
-status: open
+status: answered
 related: [S-0501, S-0314]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
