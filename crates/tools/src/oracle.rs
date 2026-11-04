@@ -19,6 +19,10 @@
 //!
 //! # The protocol (measure: M-0001, M-0002, M-0003, Setup and Procedure)
 //!
+//! - **Seeds** (S-0216 r69 claim 8, *Seeds and the human player house's
+//!   country*): the game with the records' seed number *s* seeds the
+//!   scenario stream with 1000 + *s* ([`game_seed`]); every output and
+//!   argument keeps the seed number.
 //! - **Map**: the record's stock map, read from the install
 //!   (`GLASNOST_GAME_DIR`) and checked against the record's sha256; never
 //!   committed. Its rules layer applies (the inputs of a skirmish on that
@@ -30,7 +34,8 @@
 //!   of start waypoint [`W_WAYPOINT`].
 //! - **Houses** (S-0216 r67 claim 8, *Game start*): in S-0009 claim 19's
 //!   order, a human player house at start [`HUMAN_START`] (M-0001's idle
-//!   house, a player, not an observer), side A playing country
+//!   house, a player, not an observer, of side A's country, r69), side A
+//!   playing country
 //!   [`COUNTRIES`]`[0]` at start 0, side B [`COUNTRIES`]`[1]` at start 1,
 //!   then the neutral and special houses, each with S-0202 claim 14's two
 //!   house-creation draws. Skirmish setup with 0 credits, the bases setting
@@ -145,9 +150,26 @@ pub const STARTS: [u32; 2] = [0, 1];
 /// start*: M-0001's idle house at start 3; measure: M-0001, Setup, Players).
 pub const HUMAN_START: u32 = 3;
 
-/// The side whose country the human player house takes. No record gives
-/// that house's country: Q-2446, interim of our own (design).
+/// The side whose country the human player house takes: side A's (S-0216
+/// claim 8, *Seeds and the human player house's country*, r69, a design
+/// rule of our arena; Q-2446 answered). The country picks the house's base
+/// unit (S-0009 claim 45); the house-creation draws do not depend on it
+/// (S-0202 claim 14).
+// spec: S-0216 claim 8 (Seeds and the human player house's country: the human player house takes side A's country, design)
 pub const HUMAN_COUNTRY_SIDE: Side = Side::A;
+
+/// What the arena adds to a seed number to seed the scenario stream.
+// spec: S-0216 claim 8 (Seeds and the human player house's country, r69, Q-2447 answered: the arena's game for seed number s seeds S-0202's generator with 1000 + s)
+pub const GAME_SEED_OFFSET: u32 = 1000;
+
+/// The seed of the scenario stream for the arena's game with seed number
+/// `seed` (S-0216 claim 8, *Seeds and the human player house's country*):
+/// 1000 + `seed`. Seed numbers are the records' naming (M-0001: seeds 0
+/// to 5) and stay so everywhere else: the CSV's `seed` column, [`SEEDS`]
+/// and the command line's seed arguments. `None` when the sum does not fit.
+pub fn game_seed(seed: u32) -> Option<u32> {
+    seed.checked_add(GAME_SEED_OFFSET)
+}
 
 /// The human player house's house number: first in S-0009 claim 19's house
 /// order (human players before computer players; S-0216 claim 8, *Game
@@ -1389,8 +1411,9 @@ pub fn take_off_before_the_groups(w: &mut World, human: HouseId) -> Vec<ObjectId
     gone
 }
 
-/// Sets up the game of `types` (side A's and side B's type) with `seed`,
-/// the group of `row_side` (the side the pairing's row type plays) created
+/// Sets up the game of `types` (side A's and side B's type) with seed
+/// number `seed`, whose scenario stream is seeded with [`game_seed`], the
+/// group of `row_side` (the side the pairing's row type plays) created
 /// and placed first (S-0216 claim 8, *Order*). A game of a type against
 /// itself has no row side of its own: its callers pass [`Side::A`]. The
 /// game start before the groups is claim 8's *Game start* and *Removal
@@ -1403,7 +1426,9 @@ pub fn setup(
     seed: u32,
 ) -> Result<Arena, String> {
     let rules = &ground.rules;
-    // spec: S-0216 claim 8 (Game start, r67: a human player house at start 3, M-0001's idle house; it holds a start position, so it is a player, not an observer; its country is Q-2446's interim)
+    // spec: S-0216 claim 8 (Seeds and the human player house's country, r69: the game for seed number s seeds the generator with 1000 + s)
+    let stream_seed = game_seed(seed).ok_or_else(|| format!("seed number {seed} is too large"))?;
+    // spec: S-0216 claim 8 (Game start, r67: a human player house at start 3, M-0001's idle house; it holds a start position, so it is a player, not an observer; r69: it takes side A's country, design)
     let human = Player {
         name: "Human".into(),
         country: ground.countries[HUMAN_COUNTRY_SIDE.index()].clone(),
@@ -1437,7 +1462,7 @@ pub fn setup(
         ..Default::default()
     };
     // spec: S-0216 claim 8 (Game start, r67: the unit-count setting 0, so no house buys a budget unit)
-    let mut gs = setup::skirmish(rules, &players, settings, 0, seed);
+    let mut gs = setup::skirmish(rules, &players, settings, 0, stream_seed);
     // spec: S-0216 claim 8 (Game start, r67: the bases setting on, so each player house gets its base unit, S-0009 claims 45 and 46)
     gs.bases = true;
     gs.game_speed = FASTEST;
