@@ -1,9 +1,9 @@
 ---
 id: Q-2507
 title: Which position is the landing point of an aircraft that lands where it is, for claim 8's exception
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
