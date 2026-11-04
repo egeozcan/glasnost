@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 78
+revision: 80
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426]
 supersedes: []
 ---
 
@@ -454,7 +454,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      the actor's action changes with its countdown: the attack while the countdown runs, the
      action without the attack once it has ended.
      `quirks.moment_reason_attack_cursor` (Edge cases and quirks) can make part (e) ask every
-     reason that gives *illegal*, whatever the reasons of the moment.
+     reason that gives *illegal*, whatever the other answers ahead of it.
      The combat specs rule every target illegal for a falling firer (S-0301 claim 9, rank 4). That
      is a firing rule, not one of those other reasons, so a falling actor, for example under a
      parachute, fails part (e) for every target unless force-fire is held or the infiltrator
@@ -2172,8 +2172,20 @@ Ordering consequences:
   its next turn, phasing in or not. Any other phasing-in actor keeps it while phasing in, unless
   a drop that does not depend on its own turns takes it, such as S-0516 claim 14's cloak drop,
   and drops it after phasing in ends (claim 6). Off: part (e) asks only whether a reason that
-  gives *illegal* holds, at any rank, passing over every reason of the moment (the *rearming*
-  answers of ranks 4 and 5, out of ammunition, *cloaked* and the lower ranks). Over an enemy that
+  gives *illegal* holds, at any rank of S-0301 claim 9, and passes over every answer that is not
+  *illegal*, so an *illegal* reason ranked below such an answer still fails part (e). Passed over
+  are *busy* (rank 2), every *rearming* of ranks 4 and 5, the own-gripped-unit and magnetic-beam
+  *rearming* answers (S-0607 claim 11) among them, every *impossible*, among them the hidden
+  target's (S-0516 claim 24), the held spawner's (S-0506 claim 10), the other weapon's live
+  effect (S-0301 claim 5) and a building's own (S-0405 claim 9, table T1), out of ammunition,
+  *cloaked*, *must deploy* (rank 11) and the other lower ranks. Two stops remain: with no weapon
+  in the slot nothing further is asked and part (e) holds, and the range test is not asked,
+  since part (d) is the range part. So with the switch off, part (e) fails for a lifter over its
+  own gripped unit in the air whose weapon cannot hit a unit in the air, over a hidden target
+  that a later test rules illegal, and for a vehicle launching spawned aircraft or a
+  deploy-to-fire healer vehicle whose cell fails the deploy test, over a target that a later
+  reason rules illegal (rank 12's healer *illegal* for the latter). The off position is a design
+  choice, not the original's behaviour. Over an enemy that
   the weapon cannot hit or affect, the actor then gets *nothing* from row G9 and the click gives
   no attack order, whatever its countdown, ammunition or phasing in, so the action over a target
   no longer changes with the actor's countdown. Part (d) and every other part of the attack rule
@@ -2183,6 +2195,9 @@ Ordering consequences:
   aircraft actor's drops and the drop by an actor with a temporal beam attached and not being
   erased, `unmeasured`, as claim 6 gives, confidence medium for the aircraft drops and S-0513
   claim 39a's level for the beam case; and the water and land cases, `unmeasured`, low (claim 6).
+  The off position (from "Off:" to the end of the sentence on the countdown) is a departure by
+  decision, which no scenario here runs: `unmeasured` (a design decision; the original never
+  takes it, so no measurement of the original decides it), confidence high (fixed by this entry).
 
 ## Import mapping
 
