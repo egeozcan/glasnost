@@ -1,9 +1,9 @@
 ---
 id: Q-2467
 title: Who owns quirks.layer_change_on_events_only now that its off position changes a target search
-status: open
+status: answered
 related: [S-0102, S-0306, S-0309]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
