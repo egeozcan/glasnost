@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 108
+revision: 113
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -10,7 +10,7 @@ approved-on: 2026-11-04
 measurements: []
 requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850,
 Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316,
-Q-2317, Q-2376, Q-2416, Q-2418, Q-2419]
+Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468]
 supersedes: []
 ---
 
@@ -1441,7 +1441,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
       claim 10). Some firers take no approach step (S-0215 claim 37 g): a building never does,
       and a deployed infantry unit of a human-controlled owner takes none while deployed. An
       aircraft firer's approach is the aircraft specs'. A firer that does not move, those
-      included, keeps its beam on the member until one of those causes or the member's removal.
+      included, keeps its beam on the member until one of those causes or the member's removal (a
+      deployed infantry unit's fall-back to rest in *attack*, unless its type is a jumpjet type, is
+      one, and so is a fall-back to rest before a deploy order's *unload* starts, *The firer*).
     - **The firer.** While its beam is attached, a firer's firing check about the member answers
       S-0514 claim 19's *rearming*, both before the departure, where it ranks above claim 39's
       *illegal*, and after it, unless an answer that S-0301 claim 9 ranks above that *rearming*
@@ -1582,7 +1584,39 @@ presentation and swept-layer rules below also apply where those specs cite them.
       deployed-firing rule, that rule applies to the member at its old position, as to a target
       on the map there: beyond the range of the
       weapon that rule selects, it drops the member, or takes the target that rule's search finds
-      instead. Its beam stays attached (*Release*, Q-2418). A firer whose type speed is 0
+      instead. In *guard* (S-0215 claim 31) its beam stays attached (*Release*, Q-2418). In *attack*
+      (S-0215 claim 23) a drop with no target found makes a unit whose type is not a jumpjet type
+      fall back to rest (S-0517 claim 16), and that fall-back lets the beam go as one of its common
+      effects (S-0215 claim 13, S-0514 claim 14), unless a fall-back to rest has already taken
+      those effects in that tick. A unit of a jumpjet type does not fall back there: it stays in
+      *attack* with no target, its beam still attached. These hold for a target on the map as well
+      (Q-2468). A deploy order clears the unit's target and queues *unload* (S-0213 claim 10),
+      which becomes current at the first update of the unit after the order at which it is ready
+      to change (S-0215 claim 11). Until then the unit stays in *attack* with no target, and an
+      *attack* processing in that span finds no target and falls back to rest by S-0215 claim 23's
+      general row. That fall-back lets the beam go as one of its common effects (S-0215 claim 13),
+      whichever row of S-0215 claim 14 then applies. Where that row queues a behaviour, it takes
+      the place of *unload* (S-0215 claim 7), so that deploy never starts. A unit with
+      attack-move memory never keeps *unload* through row 1 in a first fall-back of the tick: the
+      refresh before the table's effects (S-0215 claim 13, S-0309 claim 23 b) queues *move* or
+      *attack* in place of *unload*, or removes the memory and a later row applies, so that
+      deploy never starts either, except where that later row changes nothing as below. Where the
+      row changes nothing (row 6, a zombie or paralysed property of *attack*), *unload* stays
+      queued and the deploy goes on, with the beam let go. The release and the refresh share
+      S-0215 claim 13's limit of once per actor per tick: when a fall-back to rest has already
+      taken the common effects in that tick, this one neither lets the beam go nor refreshes the
+      memory, and only S-0215 claim 14's rows apply. A unit with attack-move memory then meets
+      row 1, so *unload* stays queued and the deploy goes on, its beam still attached. A unit
+      with no target is
+      no longer in the middle of firing from its first update after the order on: the firing state
+      that a shot left ends at that update, after both of its per-tick starts. So unless another
+      readiness condition of S-0215 claim 11 holds, *unload* becomes current no later than the
+      unit's second update after the order, and only an *attack* processing at its first update,
+      when its previous update left it in the middle of firing, comes before it. Otherwise the
+      deploy goes on, and *unload* forces *guard* (S-0215 claim 30), so a unit whose deploy
+      completes holds no target in *guard*, its beam still attached, until an order, a target that
+      S-0517 claim 16's search finds or a retaliation (S-0215 claim 10) gives it one. A firer whose
+      type speed is 0
       takes the step, but the step alone supplies no movement (S-0215 claim 37 g), so it keeps
       the member and its beam while it does not move.
     - **Switch.** `quirks.warp_departure_keeps_beam`, default on (the original), covers the lock
@@ -1745,8 +1779,25 @@ presentation and swept-layer rules below also apply where those specs cite them.
       S-0215 claim 37's and S-0514 claim 14's, with their backing: `measurable` for targets on the
       map (S-0215 scenario B32, S-0514 scenario E10), except the *sticky* and *any other* rows of
       S-0215 claim 37 part d, which that claim rates `unmeasured`. A deployed infantry firer's drop
-      of the member beyond range by S-0517 claim 16, with its beam still attached, is `measurable`
-      before the departure (SW12 part l9), and `unmeasured` while the member waits to land: that
+      of the member beyond range by S-0517 claim 16 in *attack*, with its fall-back to rest and the
+      beam's release then, and its holding no target in *guard* after its deploy completes with
+      its beam still attached, are `measurable` before the departure (SW12 part l9). Its
+      *unload*'s becoming current no later than its second update after a deploy order, with no
+      *attack* processing before it, its holding no target with its beam attached in that span and
+      its deploy's going on once *unload* is current are `measurable` by part l9a. The release at
+      an *attack* processing before *unload* starts is `measurable` by part l9b. That the deploy
+      goes on, with the beam let go, where S-0215 claim 14 changes nothing (row 6) is
+      `unmeasured`, and so is the deploy's loss to an attack-move refresh: no part here gives the
+      firer attack-move memory or *attack* such a property. Both follow from S-0215 claims 13 and
+      14 and S-0309 claim 23 (b) and take their backing. A jumpjet-type
+      firer's keeping its beam in *attack* follows from S-0517 claim 16 and takes its backing.
+      The once-per-tick
+      exception, in the drop and in the deploy-order span, follows from S-0215 claim 13 and takes
+      its backing. That the firing state ends after both of the first update's per-tick starts is
+      `unmeasured`: no part here tells the late start of that update from the next one's, since
+      SW12 parts l9a and l9b judge only whether *unload* is current by the second update and what
+      the first update's processing does. The drop and release are
+      `unmeasured` while the member waits to land: that
       rule reads only the member's position, which stays the old one (S-0306 claim 17), and no
       part here deploys a firer then.
     - Confidence: high for a lock after the member's turn of tick *d*. Medium, unmeasured, for the
@@ -1818,10 +1869,18 @@ presentation and swept-layer rules below also apply where those specs cite them.
       its approach step towards the old position and the release at its first new cell, a
       deployed infantry firer's staying put and a zero-speed firer's keeping its beam while it
       does not move. Medium for a deployed infantry firer's drop of the member beyond range by
-      S-0517 claim 16 when that rule's search finds no other target, and for its beam staying
-      attached. Low for its taking a target that search finds while its beam is attached, as
-      S-0517 claim 16 rates whether S-0309 claims 2 and 3 limit that search. Medium, unmeasured,
-      for a firer's keeping a member hidden from its house or a protected member.
+      S-0517 claim 16 when that rule's search finds no other target, for its fall-back to rest in
+      *attack* and the beam's release then (for a type that is not a jumpjet type), for the release
+      at an *attack* processing before a deploy order's *unload* starts and that start's coming no
+      later than its second update after the order, and for its beam's staying attached in
+      *guard*, after a completed deploy and, for a jumpjet type, in *attack*. Medium, unmeasured,
+      for the deploy's going on with the beam let go when S-0215 claim 14 changes nothing (row 6),
+      for its loss to an attack-move refresh, for the deploy's going on with the beam attached in
+      a second fall-back of the tick, and for the firing state's ending after both of the first
+      update's per-tick starts. Low for its taking a
+      target that search finds while its beam is
+      attached, as S-0517 claim 16 rates whether S-0309 claims 2 and 3 limit that search. Medium,
+      unmeasured, for a firer's keeping a member hidden from its house or a protected member.
 
 40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
     *held delay*, in ticks. With one update per tick, phasing in ends in tick
@@ -3270,20 +3329,57 @@ is not under test.
     a processing or a tick in those spans in which *T* holds no target or another one, is in
     *guard* or makes a shot, by a changed facing, by processings one tick apart, or by a beam let
     go by the appearance.
-  - (l9) A deployed infantry firer (Q-2418). As (l1) without *U*, its order or the tank's move
-    order, with *T* a deploy-to-fire infantry test type of the human's house whose undeployed
-    weapon is part l's temporal weapon and whose deploy weapon (S-0308 claim 8) has a range
-    shorter than *T*'s distance to the tank. No object of another house is within that range.
-    In tick *d* + 1 the human orders *T* to deploy. Record, in each tick from then to the
-    departure update, *T*'s target, behaviour, cell, facing and processing ticks, whether its
-    deploy is complete, and whether its beam is attached, read-only. A run counts only if the
-    deploy completes with the beam still attached and a processing of *T* at which S-0215 claim
-    23 or 31 runs S-0517 claim 16's rule falls after the completion and before the departure
-    update, and *T* holds the tank at the completion and just before the first such processing.
-    At least five runs must count. Expected (claim 39a, *The firer*): just after the
-    first such processing *T* holds no target, its beam is still attached, and its cell and
-    facing are those it had at the completion. Falsified by *T* still holding the tank just
-    after it, by a beam let go there, or by a move or a turn.
+  - (l9) A deployed infantry firer (Q-2418, Q-2468). As (l1) without *U*, its order or the tank's
+    move order, with *T* a deploy-to-fire infantry test type of the human's house, not of a jumpjet
+    type, not immune to radiation and with a negative undeploy delay, with no guard-area veterancy
+    ability, of a type that does not default to area guard and with no attack-move memory, and
+    with neither the zombie nor the paralysed property on *attack* in the test data, whose
+    undeployed weapon is
+    part l's temporal weapon and whose deploy weapon (S-0308 claim 8), without the area-fire flag,
+    has a range shorter than *T*'s distance to the tank. No object of another house is within that
+    range. In tick *d* + 1 the human orders *T* to deploy. Once the deploy is complete, and before
+    the departure update, the human orders *T* to attack the tank, with force-fire held as in (l1).
+    Part l's condition of no other cause of S-0514 claim 14 holds here up to that attack order,
+    and (l9) judges no removal tick.
+    Record, in each tick from the deploy order to the departure update, *T*'s target, current and
+    queued behaviour, firing state, cell, facing and processing ticks, whether its deploy has
+    started and is complete, and whether its beam is attached, read-only. Two judgements read
+    these runs, (l9a) for the span from the deploy order and (l9) after the completed deploy.
+    (l9a) The deploy-order span. Every run counts in which *T* is in *attack* with its beam
+    attached just before the deploy order, except a run in which *T* is in the middle of firing
+    just before its first update after the deploy order and makes an *attack* processing in that
+    update, which (l9b)'s Expected judges. At least five runs must count. Expected (claim 39a,
+    *The firer*): *unload* is current no later than *T*'s second update after the deploy order,
+    and *T* makes no *attack* processing before it. From the deploy order until *unload* is
+    current *T* holds no target and its beam stays attached. Once *unload* is current, *T*'s
+    deploy starts and does not stop before it completes or the departure update comes.
+    Falsified by *unload* not current by *T*'s second update after the order, by an *attack*
+    processing before it, by a target held or a beam let go before it, by *unload* replaced in
+    the queue before it is current, or by no deploy started, or a deploy stopped short of its
+    completion, from then to the departure update.
+    (l9) After the completed deploy. A run counts if it counts in (l9a), its deploy completes
+    before the departure update, and a processing of *T* in *attack* at which S-0215 claim 23
+    runs S-0517 claim 16's rule falls after the attack order and before the departure update. At
+    least five runs must count. Expected (claim 39a, *The firer*): from its *unload* processing
+    on *T* is in *guard*, and from the completion to the attack order it holds no target and its
+    beam stays attached. Just after the update of the first such *attack* processing *T* holds
+    no target, its beam is no longer attached, and *guard* is its current or queued behaviour
+    (S-0215 claims 11 and 14), current from its next update on. Its cell and facing are those it
+    had at the completion. Falsified by *T* not in *guard* from its *unload* processing to the
+    attack order, by a target held or a beam let go between the completion and the attack order,
+    by *T* still holding the tank, its beam still attached or *guard* neither current nor queued
+    just after that update, or by a move or a turn.
+  - (l9b) The release before *unload* starts (Q-2468). As (l9), with test art giving *T* a long
+    *fire-standing* sequence (S-0107), as in S-0215 scenario B45 part (c), so that *T* is still in
+    the middle of firing in tick *d* + 1, and with no attack order. Part l's condition of no other
+    cause of S-0514 claim 14 does not cover the fall-back judged here, and (l9b) judges no removal
+    tick. Repeat the run with other seeds. A run counts only if *T* is in the middle of firing just
+    before its first update after the deploy order and makes an *attack* processing in that update.
+    At least three runs must count. Expected (claim 39a, *The firer*): just after that update *T*
+    holds no target, its beam is no longer attached, its deploy has not started and *guard* is its
+    queued or current behaviour, not *unload*. *T* does not deploy before the departure update.
+    Falsified by a beam still attached just after that update, by *unload* current or queued then,
+    or by a deploy that starts.
   - (l10) A SAM-flag building short of power (Q-2418), on the map with no warp: S-0215 scenario
     B16 part (j)'s set-up and timed power loss, recording also the building's target and the
     tick number in each tick from the power loss to the end of the run. The set-up gives the
@@ -3302,8 +3398,9 @@ is not under test.
   gives, with *V* credited. No removal in (l5) is tied to tick *r*. In (l6) the sparkles are as
   in (l6c), and in (l3) *T* holds no beam, so its record from the departure to the appearance
   judges nothing there. (l7a) is as in the original. In (l7b) no beam is attached before *T*'s
-  processing in *s* + 3, so no run counts and (l7b) judges nothing in this setting. In (l9) no
-  beam is attached, so no run counts. (l10) has no warp and is as in the original.
+  processing in *s* + 3, so no run counts and (l7b) judges nothing in this setting. In (l9a),
+  (l9) and (l9b) no beam is attached, so none of them judges anything in this setting.
+  (l10) has no warp and is as in the original.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -3670,7 +3767,10 @@ for these two kinds.
   drops it with the destination as that claim's parts (a), (d) and (g) give. A deployed infantry
   firer of a human-controlled owner instead neither moves nor turns, and S-0517 claim 16's
   deployed-firing rule applies to the member at the old position as to a target on the map
-  there, while its beam stays attached (S-0513 claim 39a). A firer that moves goes
+  there. Its beam stays attached in *guard*, and in *attack* the fall-back to rest that follows a
+  drop with no target found lets it go, unless its type is a jumpjet type, which does not fall
+  back there, or a fall-back to rest has already taken its common effects in that tick (S-0513
+  claim 39a). A firer that moves goes
   towards the old position and lets the beam go at its first arrival in a new cell (S-0514 claim 14,
   S-0513 claim 39a, *The firer*)." Level: medium. Low for the SAM-flag building's drop or keep
   while the power row applies, and for the deployed infantry firer's taking a target that rule's
@@ -3686,7 +3786,8 @@ for these two kinds.
   flag and for a firer beyond range, as S-0513 claim 39a gives. `measurable` for targets on the
   map for the drop of a SAM-flag building that is not charged while the power row applies, no
   later than that check tick (S-0513 SW12 part l10), and before the departure for the deployed
-  infantry firer's drop (part l9), and `unmeasured` for both with a member waiting to land and
+  infantry firer's drop, its release in *attack* and its keeping the beam in *guard* (part l9),
+  and `unmeasured` for both with a member waiting to land and
   for a charged one's keep. How it takes a target
   after the
   drop is claims 1, 2 and 18 and table C's, with their backing.
