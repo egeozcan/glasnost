@@ -1,9 +1,9 @@
 ---
 id: Q-2466
 title: The height at which a warped aircraft that cannot land appears at its landing point
-status: open
+status: answered
 related: [S-0306, S-0513, S-0501, S-0102]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
