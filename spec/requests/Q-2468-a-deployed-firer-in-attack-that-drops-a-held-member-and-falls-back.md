@@ -1,9 +1,9 @@
 ---
 id: Q-2468
 title: Does a deployed infantry firer in attack keep its beam when its deployed-firing rule drops a held member and it falls back to rest
-status: open
+status: answered
 related: [S-0513, S-0517, S-0514, S-0215, S-0309]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
