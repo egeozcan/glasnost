@@ -2,13 +2,15 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 91
+revision: 108
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316, Q-2317, Q-2376]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850,
+Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316,
+Q-2317, Q-2376, Q-2416, Q-2418, Q-2419]
 supersedes: []
 ---
 
@@ -900,8 +902,18 @@ presentation and swept-layer rules below also apply where those specs cite them.
     animations (one at the source centre, one at the destination centre), ends the source marker,
     and affects the listed objects of the source cell's effect block (claim 4), of any house.
     The observable recipient sequence for infantry, vehicles and aircraft follows claim 4,
-    not a grouping by kind; buildings and other objects are never moved. An object in the air (an aircraft or
-    jumpjet in flight) is left alone. A naval parasite inside an examined object is released
+    not a grouping by kind; buildings and other objects are never moved. A listed object in the
+    air is not examined, so nothing below applies to it, a parasite's release included: an
+    aircraft by S-0501 claim 18's in-the-air answer, any other object when it is airborne
+    (S-0307), its height taken above the deck while its on-deck state is set.
+    Neither a jumpjet state nor a layer is read (Q-2419). So a unit with jumpjet movement that is
+    listed in a source cell (claim 4) and is not airborne is examined like any listed object,
+    whether it is ascending, descending or hovering on a listing it kept (S-0502 claim 4): unless
+    one of this claim's exclusions below leaves it in place, it joins the group or dies by claim
+    35. One that is airborne is not examined even while listed,
+    and one not listed
+    there, such as one cruising below the airborne height, is not examined. A naval parasite inside
+    an examined object is released
     with 500 ticks of suppression before any other effect of the warp on that object
     (S-0614 claim 12). This release occurs whether the object is killed, left in place or joins
     the warp group. An examined object with the organic flag and without the teleporter flag
@@ -920,8 +932,23 @@ presentation and swept-layer rules below also apply where those specs cite them.
       `unmeasured`: these parts establish a pending or leaving warp, not a separately
       observable recipient held in either of those other states. Parasite release from an
       already protected host is also `unmeasured`: protection prevents infection and starting
-      curtain protection already releases the parasite, so these tests cannot isolate it
-    - Confidence: high
+      curtain protection already releases the parasite, so these tests cannot isolate it. That
+      a listed jumpjet ascending below the airborne height is examined and joins is `measurable`
+      (SW12 part b8): a reading that refuses an ascending unit would refuse that part's unit.
+      That the in-air test reads no jumpjet state in its other states (descending, hovering,
+      cruising) is `unmeasured`: no part here lists such a unit below the airborne height. That
+      one airborne is left alone even while listed is `unmeasured`: on part (b)'s block a unit
+      in those states is never listed and airborne at once. That it reads no layer is `unmeasured`:
+      on flat terrain without a bridge the layer change comes at the airborne height (S-0102
+      claim 4), so no part here tells the two apart. One hovering on a kept
+      listing and one cruising unlisted below that height are `unmeasured`: whether and how long
+      a type keeps such a listing depends on its cruise height and on S-0502 claim 4's kept
+      listing, which no part here isolates. That a parasite inside a listed object in the air is
+      not released is `unmeasured`: no part here infects a host in the air over a block
+    - Confidence: high. Medium for the in-air test's reading no jumpjet state other than
+      ascending and reading no layer, for an airborne unit left alone while listed, for no
+      release from a host in the air, and for the jumpjet hovering on a kept listing and the one
+      cruising unlisted below the airborne height
 
 35. **Organic objects die.** An examined object with the organic flag and without the teleporter flag
     receives a hit of its type's whole strength, distance 0, with the demolition warhead, ignoring
@@ -1422,7 +1449,12 @@ presentation and swept-layer rules below also apply where those specs cite them.
       rank 4). With *rearming*, the firer makes no further shot at the member and keeps it at
       S-0309 claim 29's checks. With an outranking *illegal*, that check drops the member as its
       target (S-0309 claim 29). Dropping the target does not itself release the beam: it lets
-      go only at the causes of the Release item above (S-0514 claim 14).
+      go only at the causes of the Release item above (S-0514 claim 14). Neither the member's
+      protection (claims 26 and 28) nor its being hidden from the firer's house (S-0516 claim 24)
+      gives such an answer: *rearming* outranks both (S-0301 claim 9, as amended below), on the
+      map or off it, so the firer keeps a protected or hidden member at those checks (Q-2416).
+      While the member waits to land, its protection runs on by its tick window (claim 26), and our
+      engine keeps its cloak state as it was at the departure (claim 51, S-0516 claim 42).
 
       While the member waits to land, from its departure update to its appearance (Q-2317), an
       infantry or vehicle firer whose beam is attached to it, that is within its weapon's range of
@@ -1444,37 +1476,113 @@ presentation and swept-layer rules below also apply where those specs cite them.
       point: a firer in *attack* that takes the approach step then moves towards it if it is beyond
       range (*Release*).
 
-      A building firer without the SAM flag whose beam is attached to the member keeps it as its
-      target while it waits to land (Q-2376). Its *attack* processing treats the member as a target,
-      not as none: its firing check answers *rearming*, unless one of the building's own answers
+      A building firer without the SAM flag whose beam is attached to the member keeps the member
+      as its target while it waits to land if it still holds the member as its target at the lock
+      (Q-2376). Until the lock its firing check answers claim 39's *illegal*, unless an answer
+      that S-0301 claim 9 ranks above it holds. The building's own answers of S-0405 table T1 are
+      *illegal* or *impossible*. A delayed shot of the building, later than the shot whose
+      projectile locks the beam, can be pending at the launch. While it is pending, the
+      building's firing check about the member answers as S-0301 claims 9 and 14 give: the
+      pending shot's *rearming*, whose S-0215 claim 32 row keeps the member, unless one of the
+      building's own answers of S-0405 table T1 holds, whose row of that claim drops it. The
+      check at the end of its delay drops that shot: it answers claim 39's *illegal* before the
+      lock and S-0514 claim 19's *rearming* from the lock on, unless one of those own answers
+      holds, and never *can fire* (*The lock routes*, S-0301 claim 14). From the launch to the
+      lock no delay at the member starts, since no check about it answers *can fire* then: it
+      answers claim 39's *illegal* or an answer that S-0301 claim 9 ranks above it. So the building
+      drops the member, after the launch and before the lock, at the first of two places: an
+      *attack* processing at which its check answers claim 39's *illegal*, or an answer that
+      S-0301 claim 9 ranks above it whose row of S-0215 claim 32 drops the target, where that row
+      drops it and starts *guard*, and its checking turn in a check tick of S-0309 claim 29 at
+      which that check answers *illegal* or *impossible*, where that claim drops it. It still holds
+      the
+      member at the lock only if neither came before the lock. When such a processing comes
+      depends on how the building fires:
+      - A building whose shot is made at an *attack* processing sets its processing timer to 1
+        tick there (that claim's *can fire* row). So its next processing is at its first turn
+        after the shot's tick (S-0215 claim 2): in the next tick, unless it misses its turn there
+        (S-0203 claim 10). After a shot in the tick of the launch it still holds the member at the
+        lock only if its projectile detonates before that next processing and before any check
+        tick of S-0309 claim 29 that drops it.
+      - A building whose shot S-0301 claim 14 delays makes it at the end of the delay, in its
+        turn, not at a processing. Its processings while the shot is pending take that claim's
+        *rearming* row (S-0301 claim 14), since one of its own answers of S-0405 table T1 at any
+        of them would drop the target before the shot. A processing in the turn that ends the
+        delay comes before the shot. With *K* the delay's length in ticks (S-0301 claim 14's
+        max(*d* − 1, 0)), and while the building takes its turn in every tick from the start of
+        the delay and has no behaviour start in that time (S-0215 claim 3), those processings
+        come every other tick and its first processing after the shot comes 1 tick after it when
+        *K* is even and 2 ticks after it when *K* is odd. After a missed turn (S-0203 claim 10)
+        or such a behaviour start (an order taken while the shot is pending, S-0301 claim 14)
+        that parity rule does not apply: each processing is at the building's first turn at
+        which its processing timer, as S-0215 claims 2 and 3 set it, has run out. After a shot in
+        the tick of the launch it still holds the member at the lock only if its projectile
+        detonates before that processing and before any check tick of S-0309 claim 29 that
+        drops it.
+      - A building with a delayed shot pending at the launch keeps the member while that shot is
+        pending, except where one of its own answers of S-0405 table T1 holds at a processing or
+        at a check tick of S-0309 claim 29, which drops it there (S-0301 claim 14). With no such
+        answer, the drop comes at the first of its first processing after the end-of-delay
+        check, since a processing in the turn of that check comes before it and still takes the
+        *rearming* row (S-0301 claim 14), and its first check tick of S-0309 claim 29 after that
+        check. It still holds the member at the lock only if the lock comes before both.
+
+      After the drop the building takes targets as any building does: by an order, by S-0309
+      claim 1's search (with that spec's claim 2 and table C), and by retaliation (S-0309
+      claim 18, S-0215 claim 18). Such a target may be the member or another object. Its beam
+      stays attached either way: neither dropping the target nor taking another one releases it
+      (*Release*, S-0514 claim 14). This claim adds only what the building's firing check about
+      the member answers in those rules: before the lock, claim 39's *illegal* unless an answer
+      that S-0301 claim 9 ranks above it holds, and from the lock on S-0514 claim 19's
+      *rearming* unless an answer that S-0301 claim 9 ranks above that *rearming* holds (*The
+      firer* above). A building that holds the member again after the lock holds it as one that
+      held it at the lock does, unless a revert gave it back while the member is off the map,
+      which is the case of S-0309 claim 27's rule (claim 39).
+      For a building that holds the member after the lock, other than by such a revert, its
+      *attack* processing treats the member as a target, not as none: its firing check answers
+      *rearming*, unless one of the building's own answers
       that S-0301 claim 9 ranks above it holds, so it takes S-0215 claim 32's *rearming* row. It
       makes no shot, chooses that row's delay and rotates towards the member's position, which is
       the old one until placement. That is the direction it fired in, so its facing does not change
       for the departure. It does not take that claim's no-target row, so it queues no *guard* for
       the departure. S-0309 claim 29's check keeps the member, and no approach step or per-tick drop
       applies to a building (S-0215 claim 37 g). With an outranking *illegal* or *impossible*, the
-      row for those answers drops the member and starts *guard*, as before the departure. A building
+      building drops the member, as before the departure, at the first of an *attack* processing,
+      where the row for those answers drops it and starts *guard*, and its checking turn in a
+      check tick of S-0309 claim 29, where that claim drops it. A building
       whose type has the SAM flag takes S-0215 claim 32's SAM rows instead, as for a target on the
       map at the member's old position, at the world height it had there. So it keeps an aircraft
       member whose world height there is not 0, and its *rearming* is one of the *aimed* stage's
-      other answers. While that claim's power row applies it keeps any member. Otherwise those rows
-      drop the member and then start *guard*.
+      other answers. While that claim's power row applies, the *aiming* stage's rows keep any
+      member. A building that is not charged (S-0405 claim 8) is then not in operation, so its
+      check answers S-0405 table T1's *impossible*, and it drops the member, as a target on the
+      map, at the first of an *attack* processing in the *aimed* stage, where that claim's *aimed*
+      row for *impossible* drops it, and its checking turn in the first check tick of S-0309
+      claim 29 in that state (Q-2418). A charged building's check answers *rearming*, for which
+      the *aimed* row for any other answer does nothing, so it keeps the member. Otherwise those
+      rows drop the member and then start *guard*.
 
       An infantry or vehicle firer whose beam is attached to the member and that is beyond its
-      weapon's range of the old position at the departure keeps it as its target too (Q-2376). Its
-      firing check answers *rearming* as above, whatever the range, so it makes no shot. Every
-      rule that decides whether it keeps or approaches the member reads the member's position, the
-      old one, and its cell. So the departure changes nothing for it: it does what a firer
-      holding a target on the map at that position does, by S-0215 claim 37's approach step with
-      its table and per-tick rule. A firer in *attack* that takes the approach step keeps the
-      member and, with no destination, searches for an approach position (S-0215 claim 37 parts
-      d and f). It takes that claim's approach step as for a target on the map at the old
-      position, with that claim's exceptions, so a firer that moves goes towards the old
-      position. It lets the beam go at its first arrival in a new cell (S-0514 claim 14), and
+      weapon's range of the old position at the departure is treated as one holding a target on
+      the map there (Q-2376). Its firing check answers *rearming* as above, whatever the range,
+      so it makes no shot. Every rule that decides whether it keeps, approaches or drops the
+      member reads the member's position, the old one, and its cell. So the departure changes
+      nothing for it: it takes S-0215 claim 37's approach step and per-tick rule as for a target
+      on the map at the old position, so it keeps the member, approaches it, or drops it with
+      the destination as that claim's parts (a), (d) and (g) give. In *attack* that claim's table
+      keeps the member, and a firer that takes the approach step with no destination searches for
+      an approach position (S-0215 claim 37 parts d and f). In *sticky*, and in that table's other
+      rows that drop an out-of-range target, it drops the member with the destination. Dropping it
+      does not release the beam (above). A firer that moves goes towards the old position. It
+      lets the beam go at its first arrival in a new cell (S-0514 claim 14), and
       from then on it holds a member with no beam of its
       attached, whose firing check is claim 39's open question. A deployed infantry unit of a
-      human-controlled owner takes no approach step (S-0215 claim 37 g): it keeps the member and
-      its beam and neither moves nor turns for the departure. A firer whose type speed is 0
+      human-controlled owner takes no approach step (S-0215 claim 37 g) and neither moves nor
+      turns. At each processing at which S-0215 claim 23 or 31 runs S-0517 claim 16's
+      deployed-firing rule, that rule applies to the member at its old position, as to a target
+      on the map there: beyond the range of the
+      weapon that rule selects, it drops the member, or takes the target that rule's search finds
+      instead. Its beam stays attached (*Release*, Q-2418). A firer whose type speed is 0
       takes the step, but the step alone supplies no movement (S-0215 claim 37 g), so it keeps
       the member and its beam while it does not move.
     - **Switch.** `quirks.warp_departure_keeps_beam`, default on (the original), covers the lock
@@ -1516,11 +1624,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
       no part here removes a member in such a turn, since that run might not be safe. In our engine
       the order and the no-step rule are design, tested by variant l4. The approach exceptions
       follow from S-0215 claim 37 g, and the answers that outrank the firer's *rearming* from S-0301
-      claim 9, and take their backing: no part here has a building, deployed infantry or deactivated
-      firer. The routes follow from S-0215 claim 32, S-0501 claim 12 and S-0301 claim 14 and take
-      their backing: no part here sets up a building or aircraft firer. The fragment route of *The
-      lock routes* follows from S-0318 claims 1, 3, 5 and 7 and S-0514 claims 1, 20 and 21, and is
-      `unmeasured`: no part here gives a firer that holds a temporal beam a fragment weapon. The
+      claim 9, and take their backing: no part here judges a building's or a deployed infantry
+      firer's approach, or has a deactivated firer. The routes follow from S-0215 claim 32, S-0501
+      claim 12 and S-0301 claim 14 and take
+      their backing: no part here sets up an aircraft firer, and the only building firers are part
+      l7's, with no delayed shot, and part l10's, on the map with no warp. The fragment route of
+      *The lock routes* follows from S-0318 claims 1, 3, 5 and 7 and S-0514 claims 1, 20 and 21, and
+      is `unmeasured`: no part here gives a firer that holds a temporal beam a fragment weapon. The
       invisible route follows from S-0306's *Ordering* and is `unmeasured`: no part here removes an
       object to delay a projectile's first turn. A lock before the member's turn of tick *d*, while
       that turn's warp update is still to come, and the removal tick of such a lock are
@@ -1575,19 +1685,70 @@ presentation and swept-layer rules below also apply where those specs cite them.
       while it waits to land, with no shot and with its behaviour, cell and facing unchanged, for a
       firer whose check answers *rearming* (no outranking answer), is `measurable` for an infantry
       firer (SW12 part l3, its record from the departure to the appearance) and `unmeasured` for a
-      vehicle firer, since part l3's firer is an infantry unit. Its rearm countdown's running then
-      is `unmeasured`: no part here reads it, and the firer makes no shot while its beam is
-      attached. A building firer's keeping the member while it waits to land, in *attack*, with
-      no shot, its facing unchanged and its beam still attached at the appearance, is
-      `measurable` (SW12 part l7). The outranking answers of a building and their drop, and the
-      SAM-flag building, follow from S-0215 claim 32 and S-0301 claim 9 and take their backing: no
-      part here has an unpowered, deactivated or SAM-flag building firer. A firer beyond its
-      weapon's range of the old position at the departure, its keeping the member, its approach
-      and its release are `unmeasured`: no practical set-up puts a firer that holds its beam
+      vehicle firer, since part l3's firer is an infantry unit. Its keeping a member hidden from its
+      house is `unmeasured`: S-0516 claim 9 starts uncloaking a fully cloaked object that is
+      warping, which includes being erased (S-0516 Terms), so no part here keeps a beamed member
+      hidden in the original. Its keeping a protected member is `unmeasured`: only a
+      computer-controlled firer's check reads protection (claim 28), no part here times such a
+      firer's lock, and whether a protection launch reaches a
+      member being erased is not established. Both follow from S-0301 claim 9 as amended below.
+      The member's protection while it waits to land takes claim 26's backing, and its cloak state
+      then is our engine's rule (claim 51, S-0516 claim 42), not a finding about the original.
+      Its rearm countdown's running then is `unmeasured`: no part here reads it, and the firer makes
+      no shot while its beam is
+      attached. A building firer's keeping the member at its *attack* processings from the lock
+      to the departure and while it waits to land, in *attack*, with no shot, its facing
+      unchanged and its beam still attached at the appearance, is `measurable` (SW12 part l7b).
+      Its drop of the member at its first *attack* processing after the launch when the lock
+      comes after that processing, and no check tick of S-0309 claim 29 that drops it comes
+      before it, is `measurable` (SW12 part l7a) for a building whose shot is
+      made at a processing, part l7's building having no delayed shot and part l counting only
+      runs whose detonation comes before the first check tick. The drop at a check tick of
+      S-0309 claim 29 that comes before that processing is `unmeasured` here, for that reason: it
+      follows from that claim's check and this claim's answers. The drop at such a processing on
+      an answer that S-0301 claim 9 ranks above claim 39's *illegal* follows from S-0301 claim 9
+      and S-0215 claim 32 and takes their backing: part l7's building meets none of them. For a
+      building whose shot
+      S-0301 claim 14 delays, the place of that processing after a shot in the tick of the launch
+      (1 or 2 ticks after the shot, by the parity of *K*, while the building takes its turn in
+      every tick from the start of the delay and has no behaviour start in that time, and by
+      S-0215 claims 2 and 3's timer after a missed turn or such a start), and for a building
+      with a delayed shot pending at the launch, its keeping the member while that shot is
+      pending, its drop at a processing or check tick where one of its own answers of S-0405
+      table T1 holds, and otherwise its drop at the first of its first processing and its first
+      check tick after the end-of-delay check, are `unmeasured`: no part here has such a
+      building firer. They follow from S-0301 claims 9 and 14's pending *rearming* with its
+      exception for the building's own answers, S-0215 claims 2 and 3's timer and S-0215
+      claim 32's rows and delays. After the drop, the
+      building's firing check about the member (claim 39's *illegal* before the lock, S-0514
+      claim 19's *rearming* from it on, each unless an outranking answer holds), its beam staying
+      attached when it takes another target, and its holding the member as at the lock when it
+      holds it again after the lock, other than by a revert while the member is off the map, are
+      `unmeasured`: l7a judges nothing after the drop, and no
+      part here gives a building that dropped the member a new target. They follow from S-0301
+      claim 9, S-0514 claims 14 and 19 and S-0215 claim 32. How it takes a target then is S-0309
+      claims 1, 2 and 18 and table C's and S-0215 claim 18's, with their backing. The
+      outranking answers of a building and their drop, and the SAM-flag building, follow from
+      S-0215 claim 32 and S-0301 claim 9 and take their backing: no part here has a deactivated
+      or SAM-flag building firer of a member. A SAM-flag building's drop while that claim's power
+      row applies, no later than its checking turn in the first check tick of S-0309 claim 29
+      after the power loss, is `measurable` for a target on the map (SW12 part l10). Which of the
+      *aimed*-stage processing and that check tick drops it is `unmeasured`, since part l10 does
+      not observe the stage, and so is the drop for a member, which follows from that check,
+      S-0215 claim 32's *aimed* row, S-0405 claim 8 and table T1 and S-0301 claim 9: no practical
+      set-up gives such a building a member it still holds when its owner becomes short of power. A
+      firer beyond its weapon's range of the old position at the departure, its keeping,
+      approaching or dropping the member, its approach and its release are `unmeasured`: no
+      practical set-up puts a firer that holds its beam
       there, since a firer that moves to a new cell lets the beam go (S-0514 claim 14) and the
       routes that lock from beyond range cannot be timed by the harness. The rules it follows are
-      S-0215 claim 37's and S-0514 claim 14's, `measurable` for targets on the map (S-0215
-      scenario B32, S-0514 scenario E10).
+      S-0215 claim 37's and S-0514 claim 14's, with their backing: `measurable` for targets on the
+      map (S-0215 scenario B32, S-0514 scenario E10), except the *sticky* and *any other* rows of
+      S-0215 claim 37 part d, which that claim rates `unmeasured`. A deployed infantry firer's drop
+      of the member beyond range by S-0517 claim 16, with its beam still attached, is `measurable`
+      before the departure (SW12 part l9), and `unmeasured` while the member waits to land: that
+      rule reads only the member's position, which stays the old one (S-0306 claim 17), and no
+      part here deploys a firer then.
     - Confidence: high for a lock after the member's turn of tick *d*. Medium, unmeasured, for the
       fragment route of *The lock routes*, a fragment's lock in any tick from *t*_L + 1 to the
       departure update included. Medium, unmeasured, for a lock before that turn, while its warp
@@ -1629,13 +1790,38 @@ presentation and swept-layer rules below also apply where those specs cite them.
       member's old position whose check answers *rearming*, and medium, unmeasured, for a vehicle
       firer there. The outranking answers and their drop are rated with the firer's answers above
       (medium). Medium, unmeasured, for its rearm countdown's running then. Medium for a
-      building firer's keeping the member while it waits to land, with S-0215 claim 32's
-      *rearming* row. Medium, unmeasured, for a building with the SAM flag, which takes S-0215
-      claim 32's SAM rows; low, unmeasured, for its keeping any member while that claim's power
-      row applies, as that claim rates the power condition. Medium, unmeasured, for a firer beyond range of the old position: its
-      keeping the member, its approach step towards the old position and the release at its
-      first new cell, a deployed infantry firer's staying put and a zero-speed firer's keeping
-      its beam while it does not move.
+      building firer's keeping the member from the lock to the departure and while it waits to
+      land, with S-0215 claim 32's *rearming* row, and for its drop of the member at its first
+      *attack* processing after the launch when that comes before the lock and before any check
+      tick of S-0309 claim 29 that drops it, for a building whose shot is made at a processing.
+      Medium, unmeasured, for the drop at such a check tick. Medium, unmeasured, for that
+      processing's place after a shot in the tick of the launch, 1 or 2 ticks after the shot by
+      the parity of *K* while the building takes its turn in every tick from the start of the
+      delay and has no behaviour start in that time (S-0215 claim 3), and by S-0215 claims 2
+      and 3's timer after a missed turn or such a start, for a building whose shot S-0301
+      claim 14 delays.
+      Medium, unmeasured, for a building with a delayed shot pending at the launch: its keeping
+      the member while that shot is pending, its drop at a processing or check tick where one of
+      its own answers of S-0405 table T1 holds, and otherwise its drop at the first of its first
+      processing and its first check tick after the end-of-delay check.
+      Medium, unmeasured, for the building's firing check about the member after the drop, for
+      its beam staying attached when it takes another target, and for its holding the member as
+      at the lock when it holds it again after the lock, other than by a revert while the member
+      is off the map. Medium, unmeasured, for a building
+      with the SAM flag, which takes S-0215 claim 32's SAM rows; low for its own rows' keeping any
+      member while that claim's power row applies, as that claim rates the power condition, low
+      for the drop then of a building that is not charged, at the first of an *aimed*-stage
+      processing and S-0309 claim 29's check, and low for a charged building's keeping the member
+      then, both of which rest on that condition.
+      Medium, unmeasured, for a firer beyond range of the old position: its keeping,
+      approaching or dropping the member as S-0215 claim 37 gives for a target on the map there,
+      its approach step towards the old position and the release at its first new cell, a
+      deployed infantry firer's staying put and a zero-speed firer's keeping its beam while it
+      does not move. Medium for a deployed infantry firer's drop of the member beyond range by
+      S-0517 claim 16 when that rule's search finds no other target, and for its beam staying
+      attached. Low for its taking a target that search finds while its beam is attached, as
+      S-0517 claim 16 rates whether S-0309 claims 2 and 3 limit that search. Medium, unmeasured,
+      for a firer's keeping a member hidden from its house or a protected member.
 
 40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
     *held delay*, in ticks. With one update per tick, phasing in ends in tick
@@ -2732,7 +2918,18 @@ is not under test.
   first stage is ungranted. A substituted building/source or no restart of the granted
   record falsifies the contract. (b) A 3 × 3 block with own tanks, an enemy tank, own
   infantry and a teleporter-flag infantry; expected: tanks move (the enemy too), ordinary infantry
-  die credited to the launcher, the teleporter infantry moves. (c) Expected: the block's shape is
+  die credited to the launcher, the teleporter infantry moves. (b8) Listed jumpjets (claim 34,
+  Q-2419), on part (b)'s block and launch. A jumpjet vehicle test type without the organic flag,
+  its cruise height set by the test data well above the airborne height (S-0307), stands in a
+  block cell, owned by the human's house, which launches the warp as in part (b). The human
+  orders it, by scripted input, to a cell three cells outside the block a number of ticks before
+  the launch taken from a rehearsal's height record. Record its
+  height above its surface and its cell in each tick, and from the launch to *t*_L + 70 its warp
+  state and position. A run counts only if its height at the launch is above 0 and below the
+  airborne height, rising, and its unit is over a block cell then. At least three runs must
+  count. Expected: it joins the group, departing with the members and appearing in the
+  destination block. Falsified by a unit that stays and flies on. (c) Expected:
+  the block's shape is
   kept; infantry keep their position within the cell; vehicles end at cell centres. Repeat
   with an aircraft landed on open ground, recording its within-cell position before and after:
   expected unchanged position within the corresponding destination cell. A changed relative
@@ -2892,7 +3089,8 @@ is not under test.
   is the tank type's strength field. *T* stands still within its weapon's range of the tank's old
   position and is ordered to attack the tank by the human of part (k), in (l1) with force-fire
   held, as given there. The harness applies the launch in the
-  tick of *T*'s first shot, after that tick's turns, so the shot is made before the launch. A run
+  tick of *T*'s first shot (in (l7b) in the next tick, as given there), after that tick's turns, so
+  the shot is made before the launch. A run
   counts only if that shot's projectile detonates at the tank in a tick *d* from *t*_L + 1 to
   the tick before part (i)'s first check tick *c*, nothing but *U* in (l1) hits the tank before its
   removal or the end of the run, and *T* stays in play, with no other cause of S-0514 claim 14
@@ -2900,8 +3098,9 @@ is not under test.
   variant needs at least five runs that count. Record the tick of each shot of *T* and of each
   detonation, the tank's departure, appearance, arrival-effects and phasing-end ticks, its
   health, cell and drawing in each tick, the tick of its removal, its warp-away animation, and
-  who is credited. The launch comes in the tick of *T*'s first shot and no shot is made at the
-  tank from then until its departure update (claim 39a, *The lock routes*), so that shot's
+  who is credited. The launch comes in the tick of *T*'s first shot, or in (l7b) the next tick, and
+  no shot is made at the tank from then until its departure update (claim 39a, *The lock routes*),
+  so that shot's
   projectile is the only lock before the departure. No fragment locks one: *T* is the only firer
   here that holds a temporal beam before the departure, and the detonation of its temporal
   projectile launches no fragments (S-0318 claim 1 (a)). A run in which *T* makes a shot with
@@ -3034,24 +3233,77 @@ is not under test.
     weapon, with no turret-snap, SAM, animation-delay or power need, placed so that the tank's old
     position is within its weapon's range. The human orders it to attack the tank without
     force-fire. (l3)'s release and approach records do not apply, since a building never moves.
-    Part l's counting condition holds with "*T* stays in play" read for the building. Record, in
-    each tick from the tank's departure update to its appearance update, both included, *T*'s
-    target, behaviour, facing and shots just after the tank's update, and *T*'s *attack*
-    processing ticks, and whether *T*'s beam is attached just after the appearance update. At
-    least five runs must count. Expected (claim 39a, *The firer*): in each of those ticks *T*
+    From the launch until the lock, *T*'s firing check answers *illegal* for the tank (claim 39),
+    and S-0215 claim 32's row for that answer drops it at *T*'s next *attack* processing. No check
+    tick of S-0309 claim 29 drops it first in a run that counts, since part l counts a run only if
+    *d* comes before part (i)'s first check tick *c*. *T*
+    processes again one tick after its shot when it takes its turn in that tick (that claim's
+    *can fire* row, S-0215 claim 2), so with part l's launch in the tick of the shot a lock comes
+    before that processing only if the projectile detonates in the next tick, before *T*'s update
+    there. So (l7) has two arms. In both the test data give
+    the weapon a rearm delay of 20 ticks, over well before the departure, and *T* is placed so that
+    its projectile detonates at the tank in the second tick after the shot: with the shot in tick
+    *s*, *d* = *s* + 2. A run with another detonation tick decides nothing. Record *T*'s *attack*
+    processing ticks from its shot, with whether *T*'s beam is attached to the tank just before
+    each, read-only, as part (i)'s recorder allows, and *T*'s target and behaviour just after
+    each, and whether *T* took its turn in each tick from *s* on (S-0203 claim 10). Part l's
+    counting condition holds with "*T* stays in play" read for the building, and a run counts only
+    if *T* takes its turn in every tick from *s* to the last tick its arm judges.
+    (l7a) The drop. The launch is part l's, after the turns of tick *s*, so *T*'s processing in
+    *s* + 1 comes before the lock. Expected (claim 39a, *The firer*): no beam is attached just
+    before that processing, and just after it *T* holds no target and is in *guard*. Falsified by
+    a beam attached then, or by *T* still holding the tank or in *attack* just after it. The rest
+    of the run judges nothing.
+    (l7b) The keep. The harness applies the launch one tick later than part l does, after the
+    turns of tick *s* + 1. With the rearm delay, *T*'s processing in *s* + 1 answers *rearming*, so
+    it makes no second shot and processes next in *s* + 3. The lock in *s* + 2 = *t*_L + 1 comes
+    before that processing whatever the order of the updates within a tick. A run counts only if,
+    besides, *T*'s beam is attached just before its processing in *s* + 3. Record, in each tick
+    from the tank's departure update to its appearance update, both included, *T*'s target,
+    behaviour, facing and shots just after the tank's update, and whether *T*'s beam is attached
+    just after the appearance update. At least five runs must count. Expected (claim 39a, *The
+    firer*): at each of *T*'s processings from *s* + 3 to the departure update, *T* holds the tank
+    and stays in *attack*. In each tick from the departure update to the appearance update *T*
     holds the tank as its target, stays in *attack*, makes no shot and keeps the facing it had
     just before the departure update. Its *attack* processings fall every other tick (S-0215
     claim 32's *rearming* row), and its beam is still attached after the appearance. Falsified by
-    a tick in that span in which *T* holds no target or another one, is in *guard* or makes a
-    shot, by a changed facing, by processings one tick apart, or by a beam let go by the
-    appearance.
+    a processing or a tick in those spans in which *T* holds no target or another one, is in
+    *guard* or makes a shot, by a changed facing, by processings one tick apart, or by a beam let
+    go by the appearance.
+  - (l9) A deployed infantry firer (Q-2418). As (l1) without *U*, its order or the tank's move
+    order, with *T* a deploy-to-fire infantry test type of the human's house whose undeployed
+    weapon is part l's temporal weapon and whose deploy weapon (S-0308 claim 8) has a range
+    shorter than *T*'s distance to the tank. No object of another house is within that range.
+    In tick *d* + 1 the human orders *T* to deploy. Record, in each tick from then to the
+    departure update, *T*'s target, behaviour, cell, facing and processing ticks, whether its
+    deploy is complete, and whether its beam is attached, read-only. A run counts only if the
+    deploy completes with the beam still attached and a processing of *T* at which S-0215 claim
+    23 or 31 runs S-0517 claim 16's rule falls after the completion and before the departure
+    update, and *T* holds the tank at the completion and just before the first such processing.
+    At least five runs must count. Expected (claim 39a, *The firer*): just after the
+    first such processing *T* holds no target, its beam is still attached, and its cell and
+    facing are those it had at the completion. Falsified by *T* still holding the tank just
+    after it, by a beam let go there, or by a move or a turn.
+  - (l10) A SAM-flag building short of power (Q-2418), on the map with no warp: S-0215 scenario
+    B16 part (j)'s set-up and timed power loss, recording also the building's target and the
+    tick number in each tick from the power loss to the end of the run. The set-up gives the
+    building no charger (S-0405 claim 8). A run in which the power loss comes in a tick whose
+    number is a multiple of 16, or the building holds no target just before it, decides nothing.
+    At least three runs must count. Expected (claim 39a, *The firer*): the building holds its
+    target while its house has power, and drops it after the power loss, no later than its
+    checking turn in the first tick after the power loss whose number is a multiple of 16
+    (S-0309 claim 29). A drop before that turn is the *aimed* stage's (S-0215 claim 32) and is
+    not judged. Falsified by the target still held just after that turn while the house is short
+    of power, or dropped while the house has power.
   Our engine runs the same input with `quirks.warp_departure_keeps_beam` off. Expected there:
   *T*'s first shot locks no beam, the tank is not removed in tick *r* in (l1) to (l4), and in
   (l1), (l2), (l4) and (l5) it warps as in part (d). In (l5) *V*'s lock is a leader's lock: the
   tank is being erased from it on, as S-0514 gives, and is removed at the tick *V*'s own erasure
   gives, with *V* credited. No removal in (l5) is tied to tick *r*. In (l6) the sparkles are as
-  in (l6c), and in (l3) and (l7) *T* holds no beam, so its record from the departure to the
-  appearance judges nothing there.
+  in (l6c), and in (l3) *T* holds no beam, so its record from the departure to the appearance
+  judges nothing there. (l7a) is as in the original. In (l7b) no beam is attached before *T*'s
+  processing in *s* + 3, so no run counts and (l7b) judges nothing in this setting. In (l9) no
+  beam is attached, so no run counts. (l10) has no warp and is as in the original.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -3392,15 +3644,52 @@ for these two kinds.
   since part l3's firer is an infantry unit.
 - **S-0309 claim 27, a building firer and a firer beyond range (Q-2376).** After "neither moves nor
   turns for it (S-0513 claim 39a, *The firer*)." the claim gains: "A building firer of that kind
-  without the SAM flag keeps the member too: its *attack* processing takes S-0215 claim 32's
-  *rearming* row, so it makes no shot and rotates towards the old position. A building with the SAM
-  flag takes that claim's SAM rows for the member at the old position. An infantry or vehicle firer
-  of that kind beyond its weapon's range of the old position keeps the member and takes S-0215 claim
-  37's approach step as for a target on the map at the old position, with that claim's exceptions
-  (claim 37 g), so in *attack* a firer that moves goes towards it and lets the beam go at its first
-  arrival in a new cell (S-0514 claim 14, S-0513 claim 39a, *The firer*)." Level: medium. Backing:
-  `measurable` (S-0513 SW12 part l7) for a building firer without the SAM flag, `unmeasured` for one
-  with it and for a firer beyond range, as S-0513 claim 39a gives.
+  without the SAM flag that holds the member at the lock keeps it too: its *attack* processing takes
+  S-0215 claim 32's *rearming* row, so it makes no shot and rotates towards the old position. One
+  drops the member, after the launch and before the lock, at the first of two places: an *attack*
+  processing at which its check answers S-0513 claim 39's *illegal*, or an answer that S-0301
+  claim 9 ranks above it whose row of S-0215 claim 32 drops the target, and its checking turn in a
+  check tick of claim 29 at which that check answers *illegal* or *impossible*. While a delayed shot
+  of it is pending, its check answers as S-0301
+  claims 9 and 14 give: that shot's *rearming*, which keeps the member, unless one of the
+  building's own answers of S-0405 table T1 holds, which drops it. After the drop it takes
+  targets as any building does, by an order, by
+  claim 1's search (with claim 2 and table C), and by claim 18's retaliation, while its beam stays
+  attached. Its firing check about the member then answers S-0513 claim 39's *illegal* before the
+  lock and S-0514 claim 19's *rearming* from the lock on, each unless an answer that S-0301 claim 9
+  ranks above it holds. One that holds the member again after the lock keeps it as one that held it
+  at the lock does (S-0513 claim 39a, *The firer*), unless a revert gave it back while the member
+  is off the map. A building with the SAM flag takes that
+  claim's SAM rows for the member at the old position. While that claim's power row applies, one
+  that is not charged (S-0405 claim 8) drops the member as a target on the map, at the first of an
+  *attack* processing in the *aimed* stage and its checking turn in the first check tick of claim
+  29 in that state, and a charged one keeps it (S-0513 claim 39a).
+  An infantry or vehicle firer of that kind
+  beyond its weapon's range of the old position takes S-0215 claim 37's approach step and per-tick
+  rule as for a target on the map at the old position, so it keeps the member, approaches it, or
+  drops it with the destination as that claim's parts (a), (d) and (g) give. A deployed infantry
+  firer of a human-controlled owner instead neither moves nor turns, and S-0517 claim 16's
+  deployed-firing rule applies to the member at the old position as to a target on the map
+  there, while its beam stays attached (S-0513 claim 39a). A firer that moves goes
+  towards the old position and lets the beam go at its first arrival in a new cell (S-0514 claim 14,
+  S-0513 claim 39a, *The firer*)." Level: medium. Low for the SAM-flag building's drop or keep
+  while the power row applies, and for the deployed infantry firer's taking a target that rule's
+  search finds, as S-0513 claim 39a rates them. Backing: `measurable` (S-0513 SW12 part l7b for
+  the keep, part l7a for the drop at a processing) for a building firer without the SAM flag whose
+  shot is made at a processing, `unmeasured` for its drop at a check tick of claim 29 that comes
+  before such a processing, for its drop on an answer that S-0301 claim 9 ranks above S-0513
+  claim 39's *illegal*, for the drop's place for one whose shot S-0301 claim 14 delays, for a
+  building with a delayed shot pending at the launch (its keep while that shot is pending and its
+  drop), for its firing check about the member after
+  the drop and its keeping the member when it holds it again after the lock other than by such a
+  revert, for one with the SAM
+  flag and for a firer beyond range, as S-0513 claim 39a gives. `measurable` for targets on the
+  map for the drop of a SAM-flag building that is not charged while the power row applies, no
+  later than that check tick (S-0513 SW12 part l10), and before the departure for the deployed
+  infantry firer's drop (part l9), and `unmeasured` for both with a member waiting to land and
+  for a charged one's keep. How it takes a target
+  after the
+  drop is claims 1, 2 and 18 and table C's, with their backing.
 - **S-0309 claim 29.** The periodic held-target check
   that claim 39 relies on: at its checking turns in every tick whose tick number is a multiple of
   16, a holder, whatever its owner, in every current behaviour but *capture* and *sabotage*, and
@@ -3428,6 +3717,20 @@ for these two kinds.
   39); backing `measurable` (SW12 parts i and j). For a member's own check in the original:
   unsettled, low, `unmeasured` (claims 48 and 52 list no row for it); high as design for our
   engine's suppression, `measurable` in our engine (SW23 part f).
+- **S-0301 claim 9, a held temporal target (Q-2416).** Before "**Drain refusals within rank 4**"
+  the claim gains: "**A held temporal target within rank 4 (S-0514 claim 19).** The
+  held-temporal-target *rearming* outranks the hidden-target *impossible* (S-0516 claim 24) and
+  the *illegal* for a protected target (S-0513 claim 28). So a firer whose temporal beam is
+  attached to a target that is hidden from its house or protected keeps that target at S-0309
+  claim 29's check, on the map or, for a superweapon warp member, off it (S-0513 claim 39a)."
+  Level: medium, as S-0513 claim 39a rates the keep. Backing: `unmeasured` for both, as S-0513
+  claim 39a gives.
+- **S-0102 claim 3 (Q-2419).** "and a unit with jumpjet movement at its cruise height is never a
+  member" becomes "and a unit with jumpjet movement that is airborne (S-0307) is never a member,
+  whether or not it is listed, while one listed there and not airborne is examined (S-0513 claim
+  34)". Level and backing: S-0513 claim 34's. High and `measurable` (S-0513 SW12 part b8) for a
+  listed unit ascending below the airborne height. Medium and `unmeasured` for an airborne unit,
+  listed or not, and for one hovering on a kept listing.
 - **S-0203 claim 4.** Its engine contract's list of suppressed ordinary work gains "the periodic
   held-target check (S-0309 claim 29) and the drop of an allied held target at its place (S-0309
   claim 25 part k)", after the overload update of an unlimited mind controller, as claim 51 here
