@@ -3,7 +3,7 @@ id: M-0021
 title: Unit arena, a test pairing after Q-1714's (fragments per shot, first shots, gaps, stages)
 topic: combat
 specs: [S-0318, S-0609, S-0301, S-0307]
-requests: [Q-1714]
+requests: [Q-1714, Q-2516]
 verdict: confirms
 value-visibility: local
 measured-on: 2026-11-04
@@ -44,11 +44,19 @@ S-0301 claim 2 for the firing house's rate-of-fire factor, whose value is kept l
   10, with superweapons, crates and the short game off, bases on and the map revealed. Bases on
   is the stock rules data's bases setting (S-0412 claim 1), which these runs keep, so it is no
   change from a stock skirmish.
-- Houses: as M-0001's *Players* line, with the same start positions. In every run F is the
+- Houses: as M-0001's *Players* line, with the same start positions, except for the starting
+  construction vehicles, whose handling here is given below. In every run F is the
   computer house of the Americans and G that of the Russians, both at the hard computer level.
-  The human player is British: an observer whose objects cannot be targeted or damaged, and who
-  owns one building far from the fight, only so that it is not defeated. That building's type,
-  cell, facing and mission are kept `local`. It takes no part in the fight.
+  The human player is British, at start position 3 as in M-0001: an observer whose objects
+  cannot be targeted or damaged, and who owns one building far from the fight, only so that it
+  is not defeated. That building's type, cell, facing and mission are kept `local`. It takes no
+  part in the fight. At tick 0 the observer owns that building and nothing else on the map: its
+  starting construction vehicle, like each computer house's, is off the map at tick 0 and gone
+  from tick 1 on (*What is not stock*).
+- Creation order, the same in every run: each house's starting construction vehicle (removed as
+  above), then F's 16 vehicles, then G's 16, whichever side F stands on, then the observer's
+  building. Within a group the vehicles are created in increasing unit index *i* of M-0001's
+  *Groups* line, so unit 0, on the front column's first cell, comes first.
 - Groups: 16 vehicles a side, F's type on one side and G's on the other, on the cells and facings
   of M-0001's *Groups* line for 16 units (two columns of 8, the front columns 12 cells apart).
   A unit that its stated cell does not take is placed on a neighbouring cell (M-0006, M-0016).
@@ -78,7 +86,12 @@ S-0301 claim 2 for the firing house's rate-of-fire factor, whose value is kept l
   - G: two firing stages with thresholds 30 and 60 (normal and elite alike), a spin-up rate *u*
     of 1 and a spin-down rate of 1 (S-0609), and a turret count of 1. Stage 0 fires a weapon of
     damage 5, rate of fire 20 ticks, range 5 cells. Stage 1 fires a weapon of damage 10, rate of
-    fire 10 ticks, range 5 cells. Normal and elite alike.
+    fire 10 ticks, range 5 cells. Normal and elite alike. G's weapon count is 4: its numbered
+    weapon slots 0 and 1 hold stage 0's weapon and slots 2 and 3 stage 1's, normal and elite
+    alike. Its file names stage 0's weapon as its standard primary and elite primary reference
+    and gives no standard secondary or elite secondary reference. With a turret count of 1 the
+    standard references do not take effect (S-0004 claim 13), so G's primary and secondary
+    weapons, the weapons in its slots 0 and 1 (S-0308 Terms), are both stage 0's weapon.
 - Parts and seeds. The game seeds are 1000, 1001 and 1002.
   - part A (fragment count 3, nothing dies): seeds 1000 to 1002, F on side A and on side B, 6
     runs, each to a tick limit of 600.
@@ -89,6 +102,12 @@ S-0301 claim 2 for the firing house's rate-of-fire factor, whose value is kept l
   - the control set: part A's files with one more change, the easy difficulty row's rate-of-fire
     factor set to 1 (a test value), seed 1000, F on side A and on side B, 2 runs to the same
     limit as part A.
+  - in parts A and A0 and the control, every run's recording ends at tick 608: the game plays on
+    for 8 ticks after the tick limit of 600, and the recording covers those ticks. The per-tick
+    rows (positions, cells, spin values) end at tick 607, and shots and hits are recorded up to
+    tick 608. In part B a run's recording ends after one side has no vehicle left, and its last
+    tick is kept `local`. In part B as well the per-tick rows end one tick before the
+    recording's last tick.
 - What is not stock:
   - no menus: the skirmish setup comes from a settings file
   - every starting vehicle and every object of the map's neutral house are removed, and the
@@ -109,11 +128,14 @@ vehicle's spin value and stage each tick. F's two warheads tell a shot's hit fro
 
 1. Void check: a run in which F fires any weapon other than its primary is void.
 2. For each F shot at tick *t* on target *X*, the shot's *window* runs from *t* up to, but not
-   including, the tick of that firer's next shot (to the run's end for its last shot). The shot
+   including, the tick of that firer's next shot (to the run's end for its last shot: tick 608
+   in parts A and A0 and the control). The shot
    owns *X*'s hit by F's shot warhead, and every fragment-warhead hit in its window whose attacker
    is that firer. The windows of one firer do not overlap.
 3. A shot is judged unless its target is not a G vehicle among the recorded objects at its tick,
-   or (in part B) its window holds the death of any vehicle of either side.
+   or (in part B) its window holds the death of any vehicle of either side. A shot fired at a
+   run's last tick (tick 608 in parts A and A0 and the control) is not judged, since that tick
+   has no per-tick rows.
 4. For each judged shot, record the hits it owns: on which objects, how many, and how much health
    each took. From the cells read at *t*, let *c* be the number of cells of rings 1 to 3 around
    *X*'s cell (S-0303's ring metric, as S-0318 claim 3 visits them) that hold a G vehicle other
@@ -225,7 +247,10 @@ side, by 54 to 182 ticks over all 96 G vehicles.
 - No run is void: F fired only its primary weapon in every run. No run crashed or stopped before
   its end.
 - In each part A run at most 2 F shots are not judged, their target not being among the recorded
-  objects at the shot's tick. Parts A0 and the control have none. In part B, shots whose window
+  objects at the shot's tick: these are the shots fired at tick 608. Parts A0 and the control
+  have none. Every judged shot of parts A and A0 and of the control, each firer's last one
+  included, has all its hits by tick 607, some of them after tick 600, so the run's end cut no
+  judged window short. In part B, shots whose window
   holds a death are not judged, and about half of each run's F shots are judged.
 - The hits a judged shot owns were found as step 2 gives. In part A every fragment-warhead hit
   names an F vehicle as its attacker, and each judged window holds exactly 3 that name its firer,
