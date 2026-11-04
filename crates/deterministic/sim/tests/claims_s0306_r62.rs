@@ -1028,26 +1028,51 @@ fn p46(r: &Ruleset, run: u8) -> (World, ObjectId) {
         fire(&mut w, ALPHA, WARP, at(6, 2));
         step(&mut w);
         assert!(warp::is_member(&w, a), "set-up: its only member");
-        until(&mut w, 200, |w| !warp::is_member(w, a));
-        let o = w.obj(a).unwrap();
-        assert!(o.on_map, "set-up: landed at its first try");
-        assert_eq!(o.pos.cell(), at(6, 2), "set-up: at its landing cell");
-        // Seam (Q-2466): S-0306 claim 17 has a former member stand at no
-        // height above its surface after its hold, but the placement at
-        // the landing point (S-0513 claim 39) runs S-0501 claim 1, whose
-        // visiting mark, set by the type test of A's first placement,
-        // places A at its cruise height. Our engine does the latter until
-        // the request is answered, so run 2 begins with A in flight.
+        assert!(
+            w.obj(a).unwrap().air.as_ref().unwrap().visiting,
+            "set-up: marked visiting by the type test of its first placement (S-0501 Terms)"
+        );
+        // spec: S-0306 r75 claim 17 and scenario P46 run 2 (Observable: A's height above its surface in each tick from its appearance at its landing point on; Expected: it appears at height 0, not at its cruise height)
+        let mut appeared = false;
+        for _ in 0..200 {
+            step(&mut w);
+            if !warp::is_member(&w, a) {
+                break;
+            }
+            let o = w.obj(a).unwrap();
+            if o.on_map && o.pos.cell() == at(6, 2) {
+                appeared = true;
+            }
+            if appeared {
+                assert_eq!(
+                    w.height_above_surface(a),
+                    0,
+                    "run 2: at height 0 from its appearance through its hold (tick {})",
+                    w.tick
+                );
+            }
+        }
+        assert!(
+            appeared,
+            "set-up: it appeared at its landing cell at its first try"
+        );
+        assert!(!warp::is_member(&w, a), "set-up: its hold has ended");
+        assert!(w.obj(a).unwrap().on_map, "set-up: on the map");
         assert!(
             glasnost_sim::air::kept_filed(&w, a),
             "set-up: in the ground list after its hold"
         );
+        // Q-2526 seam: at its wait's expiry (S-0513 claim 39) the search's
+        // fall-back of S-0207 claim 20 (f) gave this visiting aircraft
+        // S-0501 table T2's on-ground *retreat*, so from the hold's end it
+        // flies, not at rest until the trigger's move order as P46 run 2
+        // expects. Parts a, c and d judge it in flight, which holds either
+        // way; the controls c2 and d2 run in run 1 only.
     }
     (w, a)
 }
 
 /// Whether *A* stands at rest at height 0, as parts c2 and d2 have it.
-/// Run 2 does not until Q-2466 is answered (see `p46`).
 fn at_rest(w: &World, a: ObjectId) -> bool {
     w.height_above_surface(a) == 0
 }
@@ -1125,10 +1150,10 @@ fn r72_claim17_p46_parts_c_and_d_no_seizing_and_no_erasure_above_height_0() {
     // spec: S-0607 r39 claim 3 and S-0514 r17 claim 1 (the layer is the one the target's state and height give it, not the list it is filed in: such an aircraft is not seized or erased by a hit while it is above height 0)
     for run in [1, 2] {
         let (w, a) = p46(&rules_p46(), run);
-        // Parts c2 and d2, the controls: A at rest at height 0. Run 2's
-        // controls wait on Q-2466 (see `p46`).
+        // Parts c2 and d2, the controls: A at rest at height 0. Run 2's rest
+        // after the hold waits on Q-2526 (see `p46`), so they run in run 1.
         if run == 1 {
-            assert!(at_rest(&w, a));
+            assert!(at_rest(&w, a), "run {run}: at rest at height 0");
             assert!(
                 lift::eligible(&w, a, 20),
                 "run {run}, c2: a seizing hit at rest seizes"
@@ -1170,5 +1195,140 @@ fn r72_claim17_the_airborne_scan_and_claim_20c_read_the_layer_from_state_and_hei
         );
         up(&mut w, a);
         assert!(!threshold_42(&w, a), "run {run}: 128 while airborne");
+    }
+}
+
+// --- Revision 75: the appearance of an aircraft member (Q-2466) ----------------------
+
+#[test]
+fn r75_claim17_p46_run_2_an_aircraft_member_that_cannot_land_rests_on_the_ground_through_its_hold()
+{
+    // spec: S-0306 r75 claim 17 (an aircraft member then stays at rest at that height after its hold until an order, its own behaviour or a seize gives it a destination, as an aircraft that the map places on the ground does: its height changes only in a tick in which its own movement moves it) and scenario P46 run 2 (Expected: A appears at its landing point at height 0, not at its cruise height)
+    // spec: S-0501 r111 claim 1 (a warp member's appearance does not follow the placement rule: an aircraft whose type cannot land does not appear at its cruise height)
+    let (w, a, seen) = warp_aircraft("JET", true, false);
+    for s in &seen {
+        assert_eq!(s.h, 0, "at height 0: {s:?}");
+        assert!(s.on_ground && s.rest, "on the ground at rest: {s:?}");
+        assert!(s.kept_filed, "in the ground list: {s:?}");
+    }
+    // Q-2526 seam: what the cited rules give after the hold, not what P46
+    // run 2 expects. Its wait's expiry search found no target and fell back
+    // to rest while it stood on the ground at its old cell; as a visiting
+    // aircraft it took *retreat* there, and that *retreat*, its own
+    // behaviour, gives it a destination when the hold ends.
+    // spec: S-0513 claim 39 (when the 60-tick wait expires, a member with no target tries a target search with the conditional draw of S-0207 claim 20 f) and S-0207 claim 20 (f) (when the attempt sets no target the object falls back to its idle behaviour) and S-0501 table T2 (on the ground, visiting, no passengers, not in a team: retreat; current retreat: unchanged)
+    assert_eq!(
+        w.obj(a).unwrap().beh.current,
+        Some(glasnost_sim::rules::Behaviour::Retreat),
+        "retreat from its wait's expiry"
+    );
+    assert!(
+        w.height_above_surface(a) > 0,
+        "it takes off when the hold ends"
+    );
+    // spec: S-0306 r75 claim 17 (an aircraft whose type cannot land keeps the ground list while it flies, until a crash)
+    assert!(glasnost_sim::air::kept_filed(&w, a));
+}
+
+/// Warps an aircraft of type `name` of BETA standing at (2, 2), with its
+/// visiting mark set to `visiting` before the launch, through ALPHA's real
+/// launch to (6, 2), which is a high-bridge cell when `deck` is set. Runs
+/// until the hold has ended and returns the world, the aircraft and what it
+/// read in each tick from its appearance through the last tick of its hold.
+fn warp_aircraft(name: &str, visiting: bool, deck: bool) -> (World, ObjectId, Vec<Seen>) {
+    let mut w = ready(&rules_p46());
+    let a = testkit::spawn(&mut w, Kind::Aircraft, name, BETA.0, at(2, 2), 0);
+    w.obj_mut(a).unwrap().air.as_mut().unwrap().visiting = visiting;
+    if deck {
+        set_deck(&mut w, at(6, 2));
+    }
+    fire_now(&mut w, ALPHA, SOURCE, at(2, 2));
+    while glasnost_sim::orders::blocked(&w) {
+        step(&mut w);
+    }
+    fire(&mut w, ALPHA, WARP, at(6, 2));
+    step(&mut w);
+    assert!(warp::is_member(&w, a), "set-up: its only member");
+    let mut seen = Vec::new();
+    for _ in 0..200 {
+        step(&mut w);
+        if !warp::is_member(&w, a) {
+            break;
+        }
+        let o = w.obj(a).unwrap();
+        if o.on_map && o.pos.cell() == at(6, 2) {
+            let s = o.air.as_ref().unwrap();
+            seen.push(Seen {
+                h: o.pos.z - w.surface_at(o.pos.x, o.pos.y),
+                // spec: S-0501 claim 1 (on the ground: held height 0, speed fraction 0, the object-present mark) and claim 47 (a) (not tracked on the ground)
+                rest: s.ground
+                    && s.held == 0
+                    && s.cur == F64::ZERO
+                    && s.mark == Some(o.pos.cell())
+                    && !glasnost_sim::combat::flying::tracked(&w, a),
+                on_ground: glasnost_sim::air::on_ground(&w, a),
+                deck_marked: glasnost_sim::air::deck_marked(&w, a),
+                air_height: glasnost_sim::air::height(&w, a),
+                deck_listed: w.cells.list(at(6, 2), Layer::Deck).contains(&a),
+                kept_filed: glasnost_sim::air::kept_filed(&w, a),
+            });
+        }
+    }
+    assert!(!warp::is_member(&w, a), "set-up: its hold has ended");
+    assert!(!seen.is_empty(), "set-up: it appeared at (6, 2)");
+    (w, a, seen)
+}
+
+/// What [`warp_aircraft`] reads in each tick in which the aircraft is a
+/// member standing at its landing cell, from its appearance through the last
+/// tick of its arrival hold.
+#[derive(Clone, Copy, Debug)]
+struct Seen {
+    h: i32,
+    rest: bool,
+    on_ground: bool,
+    deck_marked: bool,
+    air_height: i32,
+    deck_listed: bool,
+    kept_filed: bool,
+}
+
+#[test]
+fn r75_claim17_an_aircraft_member_appears_at_no_height_whatever_its_landing_flag_and_visiting_mark()
+{
+    // spec: S-0306 r75 claim 17 (it then stands at no height above its surface; this holds whatever its kind and, for an aircraft, whatever its type's landing flag, its visiting mark and whether it stood as the map placed it or had landed: its appearance sets that height and does not follow S-0501 claim 1's placement rule) and S-0513 r115 claim 36 (a member that does not move from one bridge deck to another appears at its landing point at no height above its surface, whatever its kind and, for an aircraft, whatever its visiting mark)
+    for (name, visiting) in [
+        ("JET", true),
+        ("JET", false),
+        ("LANDER", true),
+        ("LANDER", false),
+    ] {
+        let (w, a, seen) = warp_aircraft(name, visiting, false);
+        for s in &seen {
+            assert_eq!(s.h, 0, "{name}, visiting {visiting}: {seen:?}");
+            assert!(s.on_ground && s.rest, "{name}, visiting {visiting}: {s:?}");
+            // spec: S-0306 r72 claim 17 (only an aircraft whose type cannot land keeps the ground list in flight)
+            assert_eq!(
+                s.kept_filed,
+                name == "JET",
+                "{name}: the kept ground list follows the landing flag"
+            );
+        }
+        // spec: S-0306 r75 claim 17 (a member leaves the ground layer only when its own movement raises it, except an aircraft whose type cannot land, which keeps the ground list while it flies, until a crash)
+        assert_eq!(glasnost_sim::air::kept_filed(&w, a), name == "JET");
+    }
+}
+
+#[test]
+fn r115_claim36_an_aircraft_member_landing_on_a_high_bridge_cell_from_the_ground_appears_on_the_deck()
+ {
+    // spec: S-0513 r115 claim 36 (on a high-bridge cell the bridge lift is added; a member that does not move from one bridge deck to another appears at no height above its surface, on the deck when it lands on a high-bridge cell from the ground) and S-0306 r75 claim 17 (the same) and S-0501 claim 43 (the deck mark: its own standing-on-deck state)
+    let (_, _, seen) = warp_aircraft("JET", true, true);
+    for s in &seen {
+        assert_eq!(s.h, DECK, "on the deck: {seen:?}");
+        assert!(s.deck_marked, "deck-marked: {s:?}");
+        assert_eq!(s.air_height, 0, "height 0 above the deck: {s:?}");
+        assert!(s.on_ground && s.rest, "{s:?}");
+        assert!(s.deck_listed, "listed on the deck (S-0209 claim 13): {s:?}");
     }
 }

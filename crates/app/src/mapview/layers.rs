@@ -40,7 +40,7 @@ pub fn evaluate_at(w: &World, id: ObjectId, h: LayerHeights) -> Option<Layer> {
     if !o.kind.is_mobile() || !o.on_map {
         return None;
     }
-    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_warp_row`), where the member stands at no height above its surface and its own rows give ground too. The ground list that an aircraft whose type cannot land stays in after the hold (S-0306 r72 claim 17, `air::kept_filed`) is no warp row here: it is claim 4's rule that no take-off re-files such a type, and with the switch off the sweep moves it (Edge cases)
+    // spec: S-0102 claim 3 and State and ordering (a superweapon warp member, any kind, evaluates to the ground layer from its warp's launch, whatever its height, until its own movement applies again after its arrival hold; this row comes before every other row, S-0306 claim 17). The exact end is not claimed, because it changes no layer: our member state ends with the hold (`warp::in_warp_row`), where the member stands at no height above its surface and its own rows give ground too. The ground list that an aircraft whose type cannot land stays in after the hold (S-0306 r72 claim 17, `air::kept_filed`) is no warp row here: it is claim 4's rule that no take-off re-files such a type, and with the switch off the sweep moves it (Edge cases). The switch is a drawing setting (S-0102 r43, Q-2467): that sweep moves it only in the lists the drawing reads, and the simulation's ground-layer pass reads `air::kept_filed` in both positions (S-0306 r75 claim 17)
     if glasnost_sim::superweapons::warp::in_warp_row(w, id) {
         return Some(Layer::Ground);
     }
@@ -291,7 +291,7 @@ impl Layers {
                 layer = Layer::Ground;
             }
             if glasnost_sim::air::kept_filed(w, id) {
-                // spec: S-0306 r72 claim 17 and S-0102 claim 4 (an aircraft whose type cannot land, placed on the ground or at the end of a warp's hold, stays in the ground list while it flies: one the drawing first sees in flight, as after a load, is filed there)
+                // spec: S-0306 r75 claim 17 and S-0102 claim 4 (an aircraft whose type cannot land, placed on the ground or appearing as a warp member, which puts it on the ground whatever its visiting mark, stays in the ground list while it flies: one the drawing first sees in flight, as after a load, is filed there)
                 layer = Layer::Ground;
             }
             self.tracks.insert(
@@ -852,7 +852,7 @@ mod tests {
                 assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
             }
             warp(&mut w, jet, None);
-            // spec: S-0306 r72 claim 17 (a real warp's hold end leaves such an aircraft in the ground list, S-0102 claim 4; the drawing still treats it as any object, S-0102 Edge cases)
+            // spec: S-0306 r75 claim 17 (a real warp's appearance puts such an aircraft on the ground, whatever its visiting mark, and it keeps the ground list from there, S-0102 claim 4; the drawing still treats it as any object, S-0102 Edge cases)
             w.obj_mut(jet)
                 .unwrap()
                 .air
@@ -863,6 +863,7 @@ mod tests {
             assert!(!glasnost_sim::superweapons::warp::in_warp_row(&w, jet));
             assert!(l.evaluate_mobiles(&w, true, events_only, &[]).is_empty());
             lift(&mut w, jet, 600);
+            let before = glasnost_sim::save::state_hash(&w);
             let placed = l.evaluate_mobiles(&w, true, events_only, &[]);
             if events_only {
                 assert!(placed.is_empty(), "no take-off re-file for its type");
@@ -870,6 +871,16 @@ mod tests {
             } else {
                 assert_eq!(placed, [(jet, Layer::Top)], "the sweep moves it");
             }
+            // spec: S-0102 r43 and S-0306 r75 claim 17 (Q-2467: the switch is a drawing setting; its off position moves objects only between the lists the drawing reads, and the simulation's list readers, S-0309 claim 7's ground-layer pass, read the on position's membership in both positions)
+            assert_eq!(
+                glasnost_sim::save::state_hash(&w),
+                before,
+                "events only {events_only}: the drawing's lists leave the simulation state alone"
+            );
+            assert!(
+                glasnost_sim::air::kept_filed(&w, jet),
+                "events only {events_only}: the ground-layer pass still reads it as filed there"
+            );
         }
     }
 

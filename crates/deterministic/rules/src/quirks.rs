@@ -4274,7 +4274,7 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     ),
     (
         "layer_change_on_events_only",
-        "renderer (mapview::quirks), S-0102 claim 4; S-0501 claim 48 (a) names it for an aircraft released above its pad (S-0501 r52); S-0306 claim 17 names it for S-0309 claim 7's ground-layer pass over an aircraft that cannot land, in flight (S-0306 r72), which the simulation cannot read: it takes the on position until Q-2467 is answered",
+        "renderer (mapview::quirks), S-0102 claim 4; a drawing setting that each client may set for itself (S-0102 r43, Q-2467): simulation rules that read an object's list, S-0309 claim 7's ground-layer pass also in S-0501 claim 48 (a), read the membership the on position gives, in both positions (S-0306 r75 claim 17, S-0501 r111 claim 48 a)",
     ),
     (
         "enable_unfreezes_unpowered",

@@ -1161,6 +1161,7 @@ fn r91_claim39a_a_vehicle_firer_beyond_range_keeps_the_member_approaches_its_old
 
 #[test]
 fn r108_claim39a_a_deployed_infantry_firer_beyond_range_drops_the_member_and_stays_put() {
+    // spec: S-0513 r115 claim 39a (The firer: in guard, S-0215 claim 31, its beam stays attached; in attack the fall-back to rest after a drop with no target found lets it go, Q-2468)
     // spec: S-0513 r108 claim 39a (The firer, Q-2418: a deployed infantry unit of a human-controlled owner takes no approach step, S-0215 claim 37 g, and neither moves nor turns; at each processing at which S-0215 claim 23 or 31 runs S-0517 claim 16's deployed-firing rule, that rule applies to the member at its old position, as to a target on the map there: beyond the range of the weapon that rule selects it drops the member, or takes the target that rule's search finds instead; its beam stays attached)
     // spec: S-0309 r113 claim 27 (a deployed infantry firer of a human-controlled owner neither moves nor turns, and S-0517 claim 16's deployed-firing rule applies to the member at the old position, while its beam stays attached)
     let mut r = rules_r91();
@@ -1233,18 +1234,265 @@ fn r108_claim39a_a_deployed_infantry_firer_beyond_range_drops_the_member_and_sta
                 "guard: its beam stays attached (no fall-back, S-0517 claim 16)"
             );
         } else {
-            // Seam (Q-2468): in attack S-0517 claim 16 falls the unit back to
-            // rest, and S-0514 claim 14 lets the beam go with the fall-back's
-            // common effects, while S-0513 r108 says the beam stays attached.
-            // Our engine follows S-0517 and S-0514 until the request is
-            // answered.
+            // spec: S-0513 r115 claim 39a (The firer, Q-2468: in attack, S-0215 claim 23, a drop with no target found makes a unit whose type is not a jumpjet type fall back to rest, S-0517 claim 16, and that fall-back lets the beam go as one of its common effects, S-0215 claim 13, S-0514 claim 14)
+            // spec: S-0309 r116 claim 27 (in attack the fall-back to rest that follows a drop with no target found lets the beam go)
             assert!(
                 !temporal::holds(&w, f, m),
-                "attack: the fall-back lets the beam go (interim, Q-2468)"
+                "attack: the fall-back lets the beam go"
             );
             assert_eq!(w.obj(f).unwrap().beh.current, Some(Behaviour::Guard));
         }
     }
+}
+
+#[test]
+fn r115_claim39a_a_deployed_jumpjet_firer_and_a_second_fall_back_of_the_tick_keep_the_beam_in_attack()
+ {
+    // spec: S-0513 r115 claim 39a (The firer, Q-2468: a unit of a jumpjet type does not fall back there: it stays in attack with no target, its beam still attached; the fall-back lets the beam go unless a fall-back to rest has already taken those effects in that tick)
+    // spec: S-0309 r116 claim 27 (in attack the fall-back lets the beam go, unless its type is a jumpjet type, which does not fall back there, or a fall-back to rest has already taken its common effects in that tick)
+    // spec: S-0517 claim 16 (a unit left targetless falls back to rest unless its current behaviour is guard or its type is a jumpjet type) and S-0215 claim 13 (the common effects at most once per actor per tick)
+    for (jumpjet, earlier) in [(true, false), (false, true), (false, false)] {
+        let mut r = rules_r91();
+        r.sim.warheads.get_mut("SA").unwrap().temporal = Some(true);
+        let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+        walker.deploy_fire = Some(true);
+        walker.jumpjet = Some(jumpjet);
+        let s = given_at_departure(&r, "WALKER", -6, -6, |w, f| {
+            w.obj_mut(f).unwrap().infantry.as_mut().unwrap().seq =
+                Some(glasnost_sim::infantry::Seq::Deployed);
+        });
+        let Waiting { mut w, f, m, .. } = s;
+        let t = w.tick;
+        let o = w.obj_mut(f).unwrap();
+        o.beh.force(Behaviour::Attack, t, false);
+        o.target = Some(Target::Object(m));
+        if earlier {
+            // A fall-back to rest has already taken the common effects in
+            // this tick.
+            o.beh.last_common_effects = Some(t);
+        }
+        step(&mut w);
+        let o = w.obj(f).unwrap();
+        let case = format!("jumpjet {jumpjet}, earlier fall-back {earlier}");
+        assert_eq!(o.target, None, "{case}: the member dropped");
+        assert_eq!(
+            temporal::holds(&w, f, m),
+            jumpjet || earlier,
+            "{case}: the beam"
+        );
+        if jumpjet {
+            assert_eq!(
+                o.beh.current,
+                Some(Behaviour::Attack),
+                "{case}: stays in attack with no target"
+            );
+        }
+    }
+}
+
+/// One tick of SW12 part l9's record of *T*: target, current and queued
+/// behaviour, sequence, cell, body facing and whether its beam is attached.
+#[derive(Clone, Debug)]
+struct L9 {
+    tick: i32,
+    target: Option<Target>,
+    current: Option<Behaviour>,
+    queued: Option<Behaviour>,
+    seq: Option<glasnost_sim::infantry::Seq>,
+    cell: glasnost_map::CellXY,
+    facing: glasnost_num::geom::Facing,
+    beam: bool,
+}
+
+fn l9_row(w: &World, f: ObjectId, m: ObjectId) -> L9 {
+    let o = w.obj(f).unwrap();
+    L9 {
+        tick: w.tick,
+        target: o.target,
+        current: o.beh.current,
+        queued: o.beh.queued,
+        seq: o.infantry.as_ref().and_then(|s| s.seq),
+        cell: o.pos.cell(),
+        facing: o.body.value(w.tick),
+        beam: temporal::holds(w, f, m),
+    }
+}
+
+fn deploy_complete(seq: Option<glasnost_sim::infantry::Seq>) -> bool {
+    use glasnost_sim::infantry::Seq;
+    matches!(
+        seq,
+        Some(Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)
+    )
+}
+
+#[test]
+fn r115_claim39a_sw12_l9a_and_l9_a_deploy_order_then_an_attack_order_on_the_member_beyond_the_deploy_weapons_range()
+ {
+    // spec: S-0513 r115 claim 39a (The firer, Q-2468: a deploy order clears the unit's target and queues unload, S-0213 claim 10, which becomes current at the first update of the unit after the order at which it is ready to change, S-0215 claim 11; until then it stays in attack with no target; otherwise the deploy goes on, and unload forces guard, S-0215 claim 30, so a unit whose deploy completes holds no target in guard, its beam still attached; in attack, S-0215 claim 23, a drop with no target found makes a unit whose type is not a jumpjet type fall back to rest, S-0517 claim 16, and that fall-back lets the beam go as one of its common effects, S-0215 claim 13, S-0514 claim 14) and SW12 parts l9a and l9
+    // spec: S-0309 r116 claim 27 (a deployed infantry firer of a human-controlled owner neither moves nor turns; its beam stays attached in guard, and in attack the fall-back to rest that follows a drop with no target found lets it go)
+    let mut r = rules();
+    r.sim.warheads.get_mut("SA").unwrap().temporal = Some(true);
+    // SW12 l9's deploy weapon (S-0308 claim 8, the secondary slot by the
+    // import default), without the area-fire flag, with a range shorter
+    // than T's distance to the tank; the undeployed weapon is the Rifle,
+    // whose warhead SA is temporal here (part l's temporal weapon).
+    r.sim.weapons.insert(
+        "Stub".into(),
+        glasnost_rules::sim::WeaponType {
+            damage: Some(1),
+            rof: Some(25),
+            range: Some(glasnost_rules::sim::Decimal("1".into())),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("SA".into()),
+            ..Default::default()
+        },
+    );
+    let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+    walker.deployer = Some(true);
+    walker.deploy_fire = Some(true);
+    walker.secondary = Some("Stub".into());
+    // spec: S-0513 r115 SW12 part l9 (Setup: T's type has a negative undeploy delay)
+    walker.undeploy_delay = Some(-1);
+    // Invented deploy sequences (as the S-0517 claim tests' deployed
+    // infantry type has them), so its deploy can start and complete.
+    for (k, n) in [
+        ("deploy", 4),
+        ("deployed", 1),
+        ("undeploy", 6),
+        ("ready", 1),
+        ("stand", 1),
+        ("deployed_fire", 2),
+    ] {
+        walker.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: n,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    let mut w = ready(&r);
+    let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+    let tl = launch(&mut w, PERIOD, 0);
+    let f = spawn(&mut w, "WALKER", ALPHA, -3, 0);
+    step(&mut w);
+    // The lock in tick d (claim 39a, part l): T's beam attached, T in
+    // attack on the tank.
+    temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
+    assert!(temporal::holds(&w, f, m), "set-up: locked");
+    let t = w.tick;
+    let o = w.obj_mut(f).unwrap();
+    o.beh.force(Behaviour::Attack, t, false);
+    o.target = Some(Target::Object(m));
+    o.combat.opportunity = false;
+    o.targeting_timer = t + 400;
+    step(&mut w);
+    assert!(
+        w.houses[usize::from(ALPHA.0)].human,
+        "set-up: a human owner"
+    );
+    let before = l9_row(&w, f, m);
+    assert_eq!(before.current, Some(Behaviour::Attack), "set-up: in attack");
+    assert!(before.beam, "set-up: its beam attached before the order");
+    let dep = tl + 62;
+    // The deploy order (tick d + 1).
+    assert!(
+        orders::issue(&mut w, ALPHA, orders::Order::Deploy { actor: f }),
+        "the deploy order is taken"
+    );
+    let mut rec = Vec::new();
+    while w.tick < dep && !deploy_complete(rec.last().and_then(|x: &L9| x.seq)) {
+        step(&mut w);
+        rec.push(l9_row(&w, f, m));
+    }
+    // (l9a) unload current no later than T's second update after the order
+    // (S-0215 claim 30: its processing forces guard at once), and no
+    // attack processing before it: no target held and no beam let go.
+    let unload_at = rec
+        .iter()
+        .position(|x| x.current == Some(Behaviour::Guard) && x.seq.is_some_and(|q| q.is_deploy()))
+        .unwrap_or_else(|| panic!("l9a: unload made current and processed: {rec:#?}"));
+    assert!(unload_at <= 1, "l9a: unload by the second update: {rec:#?}");
+    for x in &rec[..=unload_at] {
+        assert_eq!(x.target, None, "l9a: no target from the order on: {x:?}");
+        assert!(x.beam, "l9a: the beam stays attached: {x:?}");
+    }
+    // Once unload is current the deploy starts and completes before the
+    // departure update.
+    let last = rec.last().unwrap();
+    assert!(
+        deploy_complete(last.seq),
+        "l9a: the deploy completes by tick {}: {rec:#?}",
+        last.tick
+    );
+    assert!(
+        last.tick < dep,
+        "set-up: the completion comes before the departure"
+    );
+    // (l9) From its unload processing on T is in guard; from the completion
+    // to the attack order it holds no target, its beam attached.
+    for x in &rec[unload_at..] {
+        assert_eq!(x.current, Some(Behaviour::Guard), "l9: guard: {x:?}");
+        assert_eq!(x.target, None, "l9: no target: {x:?}");
+        assert!(x.beam, "l9: the beam stays attached: {x:?}");
+        assert_eq!(
+            (x.cell, x.facing),
+            (before.cell, before.facing),
+            "no move or turn"
+        );
+    }
+    let done = last.clone();
+    for _ in 0..3 {
+        step(&mut w);
+        let x = l9_row(&w, f, m);
+        assert_eq!(x.current, Some(Behaviour::Guard), "l9: guard: {x:?}");
+        assert!(x.beam && x.target.is_none(), "l9: {x:?}");
+    }
+    // The attack order, with force-fire held as in (l1).
+    assert!(
+        orders::issue(
+            &mut w,
+            ALPHA,
+            orders::Order::Behaviour {
+                actor: f,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(m)),
+                dest: None,
+            },
+        ),
+        "the attack order is taken"
+    );
+    let mut held = false;
+    let mut after = None;
+    while w.tick < dep {
+        step(&mut w);
+        let x = l9_row(&w, f, m);
+        assert_eq!(
+            (x.cell, x.facing),
+            (done.cell, done.facing),
+            "l9: no move or turn: {x:?}"
+        );
+        if x.target == Some(Target::Object(m)) {
+            held = true;
+        } else if held {
+            after = Some(x);
+            break;
+        }
+    }
+    assert!(held, "set-up: the attack order gave T the tank");
+    let x =
+        after.expect("l9: an attack processing ran S-0517 claim 16's rule before the departure");
+    assert_eq!(x.target, None, "l9: no target just after it");
+    assert!(!x.beam, "l9: the fall-back to rest let the beam go");
+    assert!(
+        x.current == Some(Behaviour::Guard) || x.queued == Some(Behaviour::Guard),
+        "l9: guard current or queued: {x:?}"
+    );
 }
 
 #[test]

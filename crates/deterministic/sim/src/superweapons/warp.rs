@@ -141,31 +141,19 @@ pub fn departed(w: &World, id: ObjectId) -> bool {
 /// its own rows (`temporal::ground_layer`) give the ground layer until then
 /// and another layer from that movement's moment. For a deck to deck
 /// member the height test is kept: when it leaves the layer is not
-/// established (S-0306 Open questions). The ground list that an aircraft
-/// whose type cannot land stays in afterwards is no warp row but S-0102
-/// claim 4's rule that no take-off re-files such a type
-/// (`air::kept_filed`), which only S-0309 claim 7's ground-layer pass and
-/// the drawing read; with `quirks.layer_change_on_events_only` off the
-/// drawing's sweep moves such a member once the warp row has ended.
+/// established (S-0306 Open questions). An aircraft member appears on the
+/// ground at its landing point whatever its visiting mark (`air::placed`,
+/// S-0306 r75 claim 17), so the ground list that an aircraft whose type
+/// cannot land stays in afterwards is no warp row but that ground
+/// placement's, kept by S-0102 claim 4's rule that no take-off re-files
+/// such a type (`air::kept_filed`). Only S-0309 claim 7's ground-layer pass
+/// and the drawing read it. `quirks.layer_change_on_events_only` is a
+/// drawing setting (S-0102 r43): with it off the drawing's sweep moves such
+/// a member once the warp row has ended, and the simulation's ground-layer
+/// pass reads the on position's list in both positions.
 pub fn in_warp_row(w: &World, id: ObjectId) -> bool {
     // spec: S-0306 r72 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, whatever its height; once it flies after its hold, an aircraft whose type cannot land stays in the ground list, S-0102 claim 4, while the erasure test, the seizing test, the airborne scan and claim 20 (c) read the layer from state and height) and S-0102 claim 3, claim 4 and Edge cases (the warp row applies from the warp's launch until the member's own movement applies again after its arrival hold; once it has ended a member is treated as any object)
     member(w, id).is_some()
-}
-
-/// At the end of a member's arrival hold: an aircraft whose type cannot
-/// land stays in the ground list (S-0306 r72 claim 17); no landing or
-/// take-off of such a type re-files it (S-0102 claim 4), so only a crash
-/// ends it (`combat::effects::layer_refile`). Its placement at the landing
-/// point may have put it in flight (`air::placed`), so the hold's end sets
-/// the mark whatever that placement gave.
-fn keep_ground_filing(w: &mut World, id: ObjectId) {
-    if !w.obj(id).is_some_and(|o| o.kind == Kind::Aircraft) || crate::air::landable(w, id) {
-        return;
-    }
-    if let Some(a) = w.obj_mut(id).and_then(|o| o.air.as_mut()) {
-        // spec: S-0306 r72 claim 17 (an aircraft member whose type cannot land keeps the ground list while it flies, until a crash, S-0102 claim 4)
-        a.kept_filed = true;
-    }
 }
 
 /// Whether a departed member's landing check has passed for a landing cell
@@ -503,7 +491,6 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0513 claim 40 (phasing in ends in tick t_A + max(1, H))
             if t.wrapping_sub(ta) >= hold.max(1) {
                 set_member(w, id, None);
-                keep_ground_filing(w, id);
                 // spec: S-0513 claim 39 and T2 (when the hold ends, a member with no target tries a target search)
                 crate::teleport::phasing_search(w, id);
             }
@@ -877,6 +864,7 @@ fn place(w: &mut World, id: ObjectId, m: Member) {
     }
     let facing = o.body.value(w.tick);
     // spec: S-0513 claim 39 (appears at its landing point in its next update)
+    // spec: S-0513 r115 claim 38 (the placement at its landing point is an appearance at the height of claim 36, not S-0501 claim 1's rule: `air::placed` reads the member state, which still holds here)
     crate::objects::place(w, id, m.landing, facing);
     // spec: S-0507 claim 15 (its passengers' positions become its position at once)
     crate::transport::sync(w, id);
@@ -929,9 +917,10 @@ fn arrive(w: &mut World, id: ObjectId, m: Member) {
     let r = w.rules_arc();
     let tc = crate::combat::veterancy::type_combat(w, id);
     let naval = tc.as_ref().is_some_and(|t| t.naval);
+    // spec: S-0513 r115 claim 36 (an aircraft member that lands on a high-bridge cell from the ground appears on the deck; its own deck mark is its standing-on-deck state, S-0501 claim 43, `air::placed`)
     let (land_type, deck) = (
         w.cells.cell(c).map_or(land::CLEAR, |x| x.land),
-        o.layer == Layer::Deck,
+        o.layer == Layer::Deck || crate::air::deck_marked(w, id),
     );
     let water = land_type == land::WATER;
     let infantry = o.kind == Kind::Infantry;
