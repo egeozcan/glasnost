@@ -157,6 +157,39 @@ fn claim_27_every_holder_drops_with_the_timer_reset() {
     }
 }
 
+// spec: S-0309 claim 27 (Consequences: a holder whose turn comes after the drop has no target in that turn and fires nothing; its rearm countdown runs on unchanged) (M8 seam sweep 5a)
+#[test]
+fn claim_27_the_holders_rearm_countdown_runs_on() {
+    for how in [Leave::Kill, Leave::Inside, Leave::Remove] {
+        let mut w = game();
+        let v = put(&mut w, Kind::Vehicle, "BUGGY", 1, 0, 0);
+        let a = put(&mut w, Kind::Vehicle, "CART", 0, -4, 0);
+        let t = put(&mut w, Kind::Building, "TOWER", 0, 4, 0);
+        let tick = w.tick;
+        for (x, left) in [(a, 25), (t, 7)] {
+            let o = w.obj_mut(x).unwrap();
+            o.target = Some(Target::Object(v));
+            o.combat.rearm_until = tick + left;
+        }
+        leave(&mut w, v, how);
+        for (x, left) in [(a, 25), (t, 7)] {
+            let o = w.obj(x).unwrap();
+            assert_eq!(o.target, None, "{how:?}: dropped");
+            assert_eq!(o.combat.rearm_until, tick + left, "{how:?}: unchanged");
+        }
+        // Its next turns: no target, no shot, and the countdown is not restarted.
+        for _ in 0..5 {
+            glasnost_sim::tick::step(&mut w);
+        }
+        for (x, left) in [(a, 25), (t, 7)] {
+            let o = w.obj(x).unwrap();
+            assert_eq!(o.target, None, "{how:?}: no target in its turns");
+            assert_eq!(o.combat.rearm_until, tick + left, "{how:?}: runs on");
+            assert_eq!(shots_by(&w, x), 0, "{how:?}: no shot");
+        }
+    }
+}
+
 // spec: S-0309 claim 27 (the drop ends an override, S-0215 claim 10: the revert can give the object off the map back; DECIDED: no target in the firing step, dropped at the start of the holder's next turn with no draw and no revert; the removal drops it again, the drops taking at most one draw)
 #[test]
 fn claim_27_a_revert_gives_back_an_object_off_the_map() {

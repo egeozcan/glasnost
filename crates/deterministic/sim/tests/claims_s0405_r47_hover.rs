@@ -140,6 +140,56 @@ fn claim_13_a_placed_hover_is_disabled_on_its_placement_cell() {
     assert_eq!(cell_of(&w, bot), home, "never left its placement cell");
 }
 
+// spec: S-0405 claim 13 (Hovering vehicles, Q-1710: the arrival updates are made at the vehicle's actual position before it travels, so the test, the building exception included, reads the cell it stands in, not the cell it is heading for; a vehicle on a cell holding a building is not disabled there) (M8 seam sweep 5a)
+#[test]
+fn claim_13_the_hovers_building_exception_reads_the_cell_it_stands_in() {
+    let mut w = game();
+    // A building of its own house in the placement cell.
+    let tower = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "TOWER",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    let bot = put(&mut w, "HOVERBOT", 0, 0, 0);
+    let home = cell_of(&w, bot);
+    assert!(
+        w.cells
+            .list(home, glasnost_sim::world::Layer::Ground)
+            .contains(&tower)
+    );
+    move_to(&mut w, bot, testkit::mid(SIZE, 6, 0));
+    // Its choices in the building's cell do not disable it, though they head
+    // for a cell without a building.
+    let mut left = None;
+    for t in 0..400 {
+        glasnost_sim::tick::step(&mut w);
+        if cell_of(&w, bot) != home {
+            left = Some(t);
+            break;
+        }
+        assert!(
+            !power::unit_disabled(&w, bot),
+            "enabled while it stands in the building's cell"
+        );
+    }
+    assert!(left.is_some(), "it left the building's cell enabled");
+    // Its first choice made in a cell without a building disables it.
+    let mut ticks = 0;
+    while !power::unit_disabled(&w, bot) {
+        assert!(ticks < 100, "disabled once it stands outside");
+        glasnost_sim::tick::step(&mut w);
+        ticks += 1;
+    }
+    assert_ne!(
+        cell_of(&w, bot),
+        home,
+        "disabled outside the building's cell"
+    );
+}
+
 /// A disabled HOVERBOT and a CART hunter of house 1 run for up to 2000
 /// ticks: whether the hunter took it as its target, damaged it and
 /// destroyed it.

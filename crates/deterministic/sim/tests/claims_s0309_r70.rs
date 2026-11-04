@@ -342,6 +342,66 @@ fn p2_a_running_countdown_keeps_an_illegal_target_to_the_first_check_tick_after_
     assert_eq!(dropped, Some(next_check(n + 39)));
 }
 
+// spec: S-0309 claim 29 (Answers: while the holder's rearm countdown runs, rank 5, a target for which only a rank-9 reason holds is kept, and it is dropped at the first check tick after the countdown has run out; the rank-5 keep for an infantry holder, rated low, run p2's holder being a vehicle) (M8 seam sweep 5a)
+#[test]
+fn p2_the_rank_5_keep_for_an_infantry_holder() {
+    let (mut w, d, x) = duel(Kind::Infantry, "GI");
+    let n = order_at(&mut w, 1, &[(d, x)]);
+    w.obj_mut(d).unwrap().targeting_timer = n + 200;
+    // The countdown runs while the tick number is below n + 40: check ticks n + 15 and n + 31 fall in it.
+    w.obj_mut(d).unwrap().combat.rearm_until = n + 40;
+    let dropped = drop_tick(&mut w, d, x, 80);
+    assert_eq!(
+        dropped,
+        Some(next_check(n + 39)),
+        "kept past n + 15 and n + 31"
+    );
+    assert_eq!(dropped, Some(n + 47));
+    // Control: with no countdown the same holder drops at the first check tick.
+    let (mut c, d2, x2) = duel(Kind::Infantry, "GI");
+    let n2 = order_at(&mut c, 1, &[(d2, x2)]);
+    c.obj_mut(d2).unwrap().targeting_timer = n2 + 200;
+    assert_eq!(drop_tick(&mut c, d2, x2, 80), Some(next_check(n2)));
+}
+
+// spec: S-0309 claim 29 (Answers: a vehicle launching spawned aircraft, rank 2 busy, keeps its target, a rank-9 refusal included; S-0301 claim 9 rank 2 and S-0506 claim 10, a launching count above 0) (M8 seam sweep 5a)
+#[test]
+fn a_launching_vehicle_keeps_an_illegal_target_through_check_ticks() {
+    use glasnost_sim::spawn::{Slot, SlotState, SpawnController};
+    let (mut w, d, x) = duel(Kind::Vehicle, "DEF");
+    let n = order_at(&mut w, 1, &[(d, x)]);
+    w.obj_mut(d).unwrap().targeting_timer = n + 200;
+    let rail = SpawnController {
+        slots: vec![Slot {
+            state: SlotState::OnRail,
+            object: None,
+            until: 0,
+        }],
+        ..Default::default()
+    };
+    // Three check ticks: n + 15, n + 31 and n + 47.
+    while w.tick <= next_check(n) + 2 * PERIOD {
+        // One slot on its launch rail before each tick: the launching count is 1.
+        w.obj_mut(d).unwrap().spawn = Some(rail.clone());
+        assert_eq!(glasnost_sim::spawn::launching_count(&w, d), 1);
+        assert_eq!(
+            check::check(&w, d, Some(Target::Object(x)), 0, false),
+            Answer::Busy
+        );
+        step(&mut w);
+        assert_eq!(
+            target(&w, d),
+            Some(Target::Object(x)),
+            "kept at tick {}",
+            w.tick - 1
+        );
+    }
+    // Control: with the rail empty the next check tick drops it.
+    w.obj_mut(d).unwrap().spawn = None;
+    let at = w.tick;
+    assert_eq!(drop_tick(&mut w, d, x, 40), Some(next_check(at - 1)));
+}
+
 // spec: S-0309 claim 29 (Answers: a holder whose chosen weapon is not refused keeps the target, even if its other weapon would be; the weapon it would use, S-0308) and A6 part p run p3
 #[test]
 fn p3_the_weapon_it_would_use_decides() {
