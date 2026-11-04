@@ -36,7 +36,9 @@ differ), and record whether it takes off.
 
 ## Current workaround
 
-`air::ignores` takes the aircraft's position at the tick the destination is given (read in the
-flight's movement update and when the destination is given), so a destination in the cell it now
-stands over is ignored and one in the cell where the landing started, if that differs, makes it
-take off. Cited `S-0501 claim 8 … read as its position now, Q-2507`.
+`air::ignores` takes the aircraft's position now, and the check is made again at every movement
+update while the destination stands (and when the destination is given). A destination in the
+cell it stands over is ignored for as long as it stays over that cell; if the landing aircraft
+still drifts into another cell, the next movement update no longer ignores it and it takes off
+for that destination. A destination in the cell where the landing started, if that differs,
+makes it take off at once. Cited `S-0501 claim 8 … read as its position now, Q-2507`.
