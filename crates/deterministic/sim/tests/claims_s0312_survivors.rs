@@ -590,6 +590,53 @@ fn claim_18_full_cell_and_unclear_cell() {
     }
 }
 
+// spec: S-0312 claim 18 (a survivor is put at the position the table chose with no entry test, so no occupant or cell outcome refuses it there; the absence of an entry test when the survivor's cell holds another house's infantry) with S-0209 claim 4 (rows WR2 and WR3: another house's infantry in the record refuses an infantry mover's entry) (M8 seam sweep 5a)
+#[test]
+fn claim_18_no_entry_test_against_another_houses_infantry() {
+    use glasnost_sim::cells::position;
+    use glasnost_sim::occupancy::{self, Outcome};
+    let ground = glasnost_sim::world::Layer::Ground;
+    let mut placed = 0;
+    for seed in 1..=16 {
+        let r = rules();
+        let mut w = game(&r, seed);
+        let id = spawn(&mut w, Kind::Building, "BOX", 0, 0, 0);
+        let tl = w.obj(id).unwrap().pos.cell();
+        let cells = damage::foundation_order(tl, (3, 3));
+        // The right position of every foundation cell, and of a cell outside
+        // it, taken by Beta's infantry, so that every row of S-0208's table O
+        // for the centre class still has a free side position.
+        let outside = testkit::mid(SIZE, 6, 6);
+        let soldier = w.rules().index_of(Kind::Infantry, "SOLDIER").unwrap();
+        let filler =
+            glasnost_sim::objects::create(&mut w, Kind::Infantry, soldier, Some(HouseId(1)));
+        for &c in cells.iter().chain([&outside]) {
+            w.cells
+                .mark_infantry(c, ground, position::RIGHT, filler, HouseId(1));
+        }
+        // The entry test an Alpha infantry unit meets there: not clear.
+        let probe = spawn(&mut w, Kind::Infantry, "SOLDIER", 0, -6, -6);
+        let level = w.cells.cell(outside).map_or(0, |x| i32::from(x.level));
+        assert_ne!(
+            occupancy::infantry_outcome(&w, probe, outside, level),
+            Outcome::Clear
+        );
+        glasnost_sim::objects::remove(&mut w, probe);
+        let mut ty = |rr: &mut Rng| {
+            rr.percent();
+            Some("ACREW")
+        };
+        let got = kill_and_check(&mut w, id, &mut no_skip, 0, 2, 2, &mut ty, &[], &[]);
+        for &s in &got {
+            let o = w.obj(s).unwrap();
+            assert!(cells.contains(&o.pos.cell()), "in a foundation cell");
+            assert_eq!(o.owner, Some(HouseId(0)));
+            placed += 1;
+        }
+    }
+    assert!(placed > 0, "some runs put a survivor down");
+}
+
 // spec: S-0312 Edge cases (Departure: missing survivor type: no survivor in that cell, no creation or health draw)
 #[test]
 fn departure_missing_survivor_type() {
@@ -1097,6 +1144,53 @@ fn claim_19g_clear_for_movement() {
         assert_eq!(damage::apply(&mut w, id, killing()), HitResult::NowDead);
         assert_eq!(w.rng, rr, "seed {seed}");
         assert!(new_infantry(&w, after).is_empty());
+    }
+}
+
+// spec: S-0312 claim 19 (g) (for a high-bridge cell, S-0211 claim 15, the record read is the bridge-deck record and test 3 is not made; for every other cell it is the ground record; the high-bridge case is rated unmeasured) (M8 seam sweep 5a). The deck is set on the cells directly, as intake 64's deck tests do.
+#[test]
+fn claim_19g_a_high_bridge_cell_reads_the_deck_record() {
+    use glasnost_rules::sim::{Decimal, LandRow, LandType};
+    let mut r = rules();
+    r.sim.land_types.insert(
+        LandType::Water,
+        LandRow {
+            track: Some(Decimal("0".into())),
+            ..Default::default()
+        },
+    );
+    for seed in 1..=8 {
+        let mut w = game(&r, seed);
+        let id = spawn(&mut w, Kind::Building, "BOX", 0, 0, 0);
+        // No survivor chance is drawn: only the smudge steps remain.
+        w.houses[0].econ.result.defeated = true;
+        let tl = w.obj(id).unwrap().pos.cell();
+        let cells = damage::foundation_order(tl, (3, 3));
+        let (ground, deck) = (
+            glasnost_sim::world::Layer::Ground,
+            glasnost_sim::world::Layer::Deck,
+        );
+        for &c in &cells[1..=4] {
+            let i = w.cells.idx(c).unwrap();
+            w.cells.deck[i] = true;
+        }
+        // Cell 1: the deck record's object-present flag fails it. Cell 2:
+        // the ground record's flag under the deck does not. Cell 3: water
+        // with a track multiplier of exactly 0 under the deck does not (no
+        // test 3). Cell 4: a deck cell with nothing set. Cell 5, no deck:
+        // the ground record's flag fails it (control).
+        w.cells.occ_mut(cells[1], deck).unwrap().others = 1;
+        w.cells.occ_mut(cells[2], ground).unwrap().others = 1;
+        w.cells.grid.get_mut(cells[3]).unwrap().land = land::WATER;
+        w.cells.occ_mut(cells[5], ground).unwrap().others = 1;
+        let mut rr = w.rng.clone();
+        smudge_a(&w, &mut rr);
+        let mut ty = |_: &mut Rng| Some("ACREW");
+        let unclear = [cells[1], cells[5]];
+        let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, &[], &unclear);
+        assert!(want.is_empty());
+        assert_eq!(damage::apply(&mut w, id, killing()), HitResult::NowDead);
+        assert_eq!(w.rng, rr, "seed {seed}");
     }
 }
 

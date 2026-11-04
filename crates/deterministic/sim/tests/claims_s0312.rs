@@ -1097,6 +1097,73 @@ fn claim_13_crew_refused_by_its_entry_test() {
     assert_eq!(after.taken(), rr.taken(), "no health draw");
 }
 
+/// Puts a TECH of `house` on standing position `p` of cell `c` (its mark
+/// set by the placement, S-0209 claim 1); `moving` gives it a walking
+/// target, so that it has movement in progress (S-0209 Terms).
+fn stand(w: &mut World, house: u8, c: glasnost_map::CellXY, p: u8, moving: bool) -> ObjectId {
+    let ti = w.rules().index_of(Kind::Infantry, "TECH").unwrap();
+    let id = glasnost_sim::objects::create(
+        w,
+        Kind::Infantry,
+        ti,
+        Some(glasnost_sim::world::HouseId(house)),
+    );
+    let (u, v) = glasnost_sim::walk::standing_point(p);
+    let (x, y) = (256 * c.x + u, 256 * c.y + v);
+    let z = w.surface_at(x, y);
+    glasnost_sim::objects::place(w, id, Pos::new(x, y, z), 0);
+    if moving {
+        let o = w.obj_mut(id).unwrap();
+        let at = o.pos;
+        o.walk.get_or_insert_with(Default::default).target = Some(at);
+    }
+    id
+}
+
+// spec: S-0312 claim 13 (the crew's one entry test accepts only clear: every other outcome refuses it at once, moving blocker included, with no waiting) and S-0209 claim 4 (rows WR4 and WR5: the three side positions taken by allied infantry, not all three still, gives moving blocker; all three still gives stationary friendly) (M8 seam sweep 5a)
+#[test]
+fn claim_13_crew_refused_by_a_moving_blocker() {
+    use glasnost_sim::cells::position;
+    use glasnost_sim::occupancy::{self, Outcome};
+    let r = crew_rules();
+    // `moving`: whether one of the three allies in the side positions is moving.
+    let run = |moving: Option<bool>| {
+        let mut w = game(&r);
+        let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
+        let c = w.obj(id).unwrap().pos.cell();
+        if let Some(m) = moving {
+            for (i, &p) in position::SIDES.iter().enumerate() {
+                stand(&mut w, 0, c, p, m && i == 0);
+            }
+        }
+        // The entry outcome a TECH of the vehicle's house meets in the cell
+        // with the vehicle's own claims set aside, as the crew does.
+        let probe = spawn(&mut w, Kind::Infantry, "TECH", 0, 5, 5);
+        // The vehicle stands at rest at its cell's centre: its one claim is
+        // its own cell's, and it is set aside with its listing.
+        let ground = glasnost_sim::world::Layer::Ground;
+        let listed = w.cells.list(c, ground).iter().position(|&x| x == id);
+        w.cells.claim_vehicle(c, ground, false);
+        w.cells.leave(c, ground, id);
+        let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+        let out = occupancy::infantry_outcome(&w, probe, c, level);
+        w.cells.restore(c, ground, id, listed.unwrap());
+        w.cells.claim_vehicle(c, ground, true);
+        glasnost_sim::objects::remove(&mut w, probe);
+        let before = crews(&w);
+        let (after, _) = crew_of(&mut w, id);
+        let new: Vec<_> = after.into_iter().filter(|x| !before.contains(x)).collect();
+        (out, new.len())
+    };
+    assert_eq!(run(Some(true)), (Outcome::MovingBlocker, 0), "refused");
+    assert_eq!(
+        run(Some(false)),
+        (Outcome::StationaryFriendly, 0),
+        "control: three still allies refuse too"
+    );
+    assert_eq!(run(None), (Outcome::Clear, 1), "control: an empty cell takes the crew");
+}
+
 /// A game of `r` on the testkit's empty map with its local area cut by 2
 /// cells on each side, so that some legal cells lie outside the usable
 /// area, its stream moved on by `k` raw values.
