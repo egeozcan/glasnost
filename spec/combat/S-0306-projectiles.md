@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 72
+revision: 75
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-04
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467]
 supersedes: []
 ---
 
@@ -826,16 +826,25 @@ S-0501 claim 20.
     after its arrival hold, a warp member is in the ground render layer, whatever its height
     (S-0102 claims 3 and 4). Unless it moves from one bridge deck to another, it then stands at
     no height above its surface (on the deck when it lands on a high-bridge cell from the
-    ground), so its own rows of S-0102's layer table give the ground layer as well. It leaves
-    that layer only when its own movement raises it, at that movement's moment of S-0102 claim
-    4, except an aircraft whose type cannot land, which keeps the ground list while it flies,
-    until a crash (S-0102 claim 4). For a member moving from one bridge deck to another, its
+    ground), so its own rows of S-0102's layer table give the ground layer as well. This holds
+    whatever its kind and, for an aircraft, whatever its type's landing flag, its visiting mark
+    (S-0501 Terms) and whether it stood as the map placed it or had landed: its appearance at
+    the landing point (S-0513 claims 38 and 39) sets that height and does not follow S-0501
+    claim 1's placement rule, so an aircraft whose type cannot land does not appear at its cruise
+    height (Changes for other specs, S-0501 and S-0513). An aircraft member then stays at rest at
+    that height after its hold until an order, its own behaviour or a seize gives it a
+    destination, as an aircraft that the map places on the ground does: its height changes only
+    in a tick in which its own movement moves it (S-0501 claims 2 to 4). What follows a seize is
+    S-0607's (claims 5 and 7). A member
+    leaves the ground layer only when its own movement raises it, at that movement's moment of
+    S-0102 claim 4, except an aircraft whose type cannot land, which keeps the ground list while it
+    flies, until a crash (S-0102 claim 4). For a member moving from one bridge deck to another, its
     height at the landing point is not established (S-0513 claim 36), and so, for a unit with
-    jumpjet movement or an aircraft whose type can land, neither is when it leaves the ground
-    layer (S-0102 claim 3 and Open questions). So, until its own movement applies again, claim
-    20 (c) uses the threshold 42 for a warp member, also for one that departed from a high-bridge
-    deck and counts as airborne by the paragraph above. No member uses 128 then:
-    an aircraft is never warped while in the air (S-0513 claim 34).
+    jumpjet movement or an aircraft whose type can land, neither is when it leaves the ground layer
+    (S-0102 claim 3 and Open questions). So, until its own movement applies again, claim 20 (c) uses
+    the threshold 42 for a warp member, also for one that departed from a high-bridge deck and
+    counts as airborne by the paragraph above. No member uses 128 then: an aircraft is never warped
+    while in the air (S-0513 claim 34).
 
     *An aircraft that cannot land, in flight.* This paragraph is about an aircraft whose type
     cannot land and whose movement is neither rocket nor drop-pod movement. An aircraft with either
@@ -859,9 +868,12 @@ S-0501 claim 20.
       height: above height 0 the aircraft is not erased, and claim 20 (c) gives it 128 while it is
       airborne (S-0307) and 42 otherwise.
 
-    With S-0102's `quirks.layer_change_on_events_only` off, that switch's sweep moves the aircraft
-    out of the ground list in the first tick its state and height give another layer, so S-0309
-    claim 7's ground-layer pass no longer considers it. The other rules above are unchanged.
+    S-0102's `quirks.layer_change_on_events_only` is a drawing setting with no consequence in the
+    simulation (our engine's design, not a reproduction claim). With it off, its sweep moves the
+    aircraft only out of the ground list that the drawing reads. S-0309 claim 7's ground-layer
+    pass, here and in S-0501 claim 48 (a), reads the list as the switch's on position keeps it,
+    in both positions (Changes for other specs, S-0501 and S-0102). The other rules above read
+    the layer from state and height, not a list, so the switch does not reach them either.
     - Backing: `measurable` (scenario P11: run a for the airborne target, run c for the target on
       the ground, run d for a target that teleports, run e for a firer that leaves the game, run f
       for a projectile that keeps a warp member and turns towards its landing point; P38 for a
@@ -894,8 +906,11 @@ S-0501 claim 20.
       range search that looks for aircraft alone can miss a tracked aircraft in another sector
       (S-0309 claim 9), so no part here shows the scan's reading on its own. Claim 20 (c)'s
       reading is `unmeasured`: no part here places a miss at a distance between the two
-      thresholds at will. The rule with the switch off is
-      `unmeasured`: the original has no such state, and it follows from S-0102's alternative.
+      thresholds at will. The switch's scope to the drawing is our engine's design: the original
+      has only the on position. The height 0 at the appearance of an aircraft member whose type
+      cannot land, and its rest there with no order after its hold, are `measurable` by P46 run 2
+      (its height record from the appearance on, parts c2 and d2). For an aircraft member of a
+      landable type they are `unmeasured`: no scenario here warps one.
     - Confidence: high; medium for the target point at the world origin; medium for the warp
       member kept as target, the turn towards its landing point and the hit there (run f), and
       medium, unmeasured, for the position read while the member is off the map, for the lack of
@@ -909,8 +924,11 @@ S-0501 claim 20.
       for the two engine-design rules (the deck count after a refused placement, and no seizing
       of a member from its departure until its arrival hold ends) as design contracts. Medium for
       the ground-layer pass, the seizing test and the erasure test of an aircraft that cannot
-      land, in flight (P46), medium, unmeasured, for its airborne scan reading, for claim 20 (c)'s
-      reading and for the rule with the switch off
+      land, in flight (P46), medium, unmeasured, for its airborne scan reading and for claim 20
+      (c)'s reading, and high for the switch's scope to the drawing as a design contract. High
+      for the height 0 at the appearance of an aircraft member whose type cannot land and medium
+      for its rest there with no order (P46 run 2), medium, unmeasured,
+      for both with an aircraft member of a landable type
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
@@ -3756,7 +3774,7 @@ b and 6 a, T1's first row).**
     fire, and it is not a type that deploys to fire.
   - Part c: a vehicle *L* of H2 with a seizing weapon (S-0607) whose damage the test file sets
     above *A*'s size. Part c2, the control: the same with the map trigger left out, so *A* gets
-    no move order and stays at rest at height 0.
+    no move order and stays at rest at height 0 until it is seized.
   - Part d: a vehicle *E* of H2 with a temporal weapon (S-0514). Part d2, the control: the same
     with the map trigger left out, so *A* gets no move order and stays at rest at height 0.
 - Procedure: in every part but c2 and d2 the trigger gives *A* its move order to a cell far
@@ -3764,17 +3782,23 @@ b and 6 a, T1's first row).**
   order and the launch by normal input: in part a *V*'s *hunt* order once *A* is above height 0,
   in parts c and d *L*'s or *E*'s attack order on *A* once *A* is above height 0, and in c2 and
   d2 that order with *A* at rest.
-- Observable: *A*'s position and height above its surface in each tick. Part a: *V*'s target in
-  each tick. Parts c and d: each shot's detonation tick and point, *A*'s height above its
-  surface at that tick, and whether *A* is seized or is being erased in each tick after it.
+- Observable: *A*'s position and height above its surface in each tick, in run 2 from its
+  appearance at its landing point on. Part a: *V*'s target in each tick. Parts c and d: each
+  shot's detonation tick and point, *A*'s height above its surface at that tick, and whether
+  *A* is seized or is being erased in each tick after it.
 - Runs: 1 per part and run.
-- Expected: (a) *V* takes *A* as its target while *A* flies (the ground-layer pass reads the
-  ground list). (c) after a shot detonates at *A* while *A* is above height 0, *A* is not seized
-  and flies on. (c2) *A* is seized. (d) after such a detonation *A* is not erased. (d2) *A* is
-  being erased from the detonation on.
-- Falsified if: (a) *V*'s target stays empty while *A* flies; (c) *A* is seized; (d) *A* is being
-  erased. Parts c2 and d2 falsify nothing here: when c2 fails in a run, part c of that run is
-  void, and likewise d2 for part d.
+- Expected: (run 2, every part) *A* appears at its landing point at height 0, not at its
+  cruise height, and stays at rest there until the trigger's move order. In part c2 it stays
+  there until it is seized (what follows the seize is not judged here), and in part d2 until
+  the part ends. (a) *V* takes *A* as its target while *A* flies (the ground-layer pass
+  reads the ground list). (c) after a shot detonates at *A* while *A* is above height 0, *A* is
+  not seized and flies on. (c2) *A* is seized. (d) after such a detonation *A* is not erased.
+  (d2) *A* is being erased from the detonation on.
+- Falsified if: (run 2) *A* appears above height 0, or leaves height 0 before the trigger's
+  move order (in part c2 before it is seized, in part d2 before the part ends); (a) *V*'s
+  target stays empty while *A* flies; (c) *A* is seized; (d) *A* is being erased. Apart from
+  run 2's height, parts c2 and d2 falsify nothing here: when c2's seize or d2's erasure fails
+  in a run, part c of that run is void, and likewise d2 for part d.
 - Void if: in run 2 the landing check does not pass at its first try, or the trigger fires
   before *A*'s arrival hold has ended; in a part other than c2 and d2, *A* does not take off on
   its move order; in any part, *A* takes any other order; in part a *V*'s target is not empty
@@ -3919,6 +3943,35 @@ b and 6 a, T1's first row).**
   movement is neither rocket nor drop-pod movement) is not seized or
   erased by a hit while it is above height 0, although it stays in the ground list (claim 17
   here). Each can say so. Medium, `measurable` by scenario P46 parts c and d here.
+
+- S-0501 claim 1: its list "(by production, a map, a carrier launch or a superweapon)" can read
+  "(by production, a map, a carrier launch or a superweapon that creates the aircraft)", and the
+  claim can add that a superweapon warp member's appearance at its landing point does not follow
+  this rule: it appears at no height above its surface whatever its visiting mark, so an aircraft
+  whose type cannot land does not appear at its cruise height (claim 17 here). High for an
+  aircraft whose type cannot land, `measurable` by scenario P46 run 2 here; medium, `unmeasured`,
+  for an aircraft member of a landable type, which no scenario warps.
+
+- S-0501 claim 48 (a): its last sentence, "With S-0102's switch off only the aircraft pass
+  considers it.", can read: "S-0102's `quirks.layer_change_on_events_only` does not change this:
+  the ground-layer pass reads the list as that switch's on position keeps it, in both positions
+  (S-0306 claim 17)." High, as an engine-design contract (the switch is a drawing setting, Q-2467).
+
+- S-0102, `quirks.layer_change_on_events_only`: the entry can end with "The switch is a drawing
+  setting, which each client may set for itself. Its alternative moves objects only between the
+  lists the drawing reads. Simulation rules that read an object's list (S-0309 claim 7's
+  ground-layer pass, also in S-0501 claim 48 (a)) read the membership that the switch's on
+  position gives, in both positions (S-0306 claim 17)." High, as an engine-design contract
+  (Q-2467).
+
+- S-0513 claims 36 and 38: the claims can add that a member that does not move from one bridge
+  deck to another appears at its landing point at no height above its surface (on the deck when
+  it lands on a high-bridge cell from the ground), whatever its kind and, for an aircraft,
+  whatever its visiting mark, and that this appearance does not follow S-0501 claim 1's rule,
+  so an aircraft whose type cannot land does not appear at its cruise height (claim 17 here).
+  A member moving from one bridge deck to another stays as claim 36 has it. A clarification
+  with no behaviour change. High for an aircraft whose type
+  cannot land, `measurable` by scenario P46 run 2 here; medium, `unmeasured`, for other aircraft.
 
 - S-0405 claim 20 (its bullet on a disabled vehicle as a target) and its Open questions on Q-1710
   leave open what sets where M-0005's stall shells land, and why some hunters make a fire attempt
