@@ -2,12 +2,12 @@
 id: S-0318
 title: Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go)
 topic: combat
-revision: 27
-sources-class: [decomp, design]
+revision: 29
+sources-class: [decomp, design, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
-measurements: []
+approved-on: 2026-11-04
+measurements: [M-0021]
 requests: [Q-1714, Q-1825]
 supersedes: []
 ---
@@ -32,8 +32,9 @@ airburst projectile. Here *n* is the fragment count when that is 0 or more; for 
 weapon's damage field unscaled, and the projectile's attacker as its own.
 
 This spec gives the rules that decide how many objects one shot's fragments damage, which bears
-on Q-1714; the count for the pairing that Q-1714 names is open (Open questions). It owns the
-selection of the fragments' targets, their draws and their launch, which S-0306 leaves open
+on Q-1714. M-0021 measures that count on a test pairing built after Q-1714's. For the stock
+pairing that Q-1714 names, the count is our engine's own comparison (Open questions). This spec
+owns the selection of the fragments' targets, their draws and their launch, which S-0306 leaves open
 (Changes for other specs). The look of a fragment's laser beam or electric bolt belongs to S-0518
 and S-0316; this spec says which fragments make one (claim 8).
 
@@ -110,10 +111,14 @@ and S-0316; this spec says which fragments make one (claim 8).
      follow the area damage, and SH1 part p, whose area damage takes a wall-hit draw, for the place
      before the area damage itself; SH1 part n run 3 for the bomb-planting row of (a); SH5 part b
      for clusters and SH5 part c for an airburst; SH1 part r for the burst point against the
-     detonation point; SH1 part s for a damage amount of 0 and for the inert flag). `unmeasured` for the other special-hit rows of
-     (a): each needs the firer and target that its own spec gives it before its row is selected
-     (S-0514), so no part here tests them, and they rest on the same row order of S-0303's table
-     as the bomb-planting row
+     detonation point; SH1 part s for a damage amount of 0 and for the inert flag). `measured`
+     (M-0021) for a burst at a positive count by a shot at a vehicle target, every judged shot of
+     its test pairing bursting, and for no fragments from a projectile that names no fragment
+     weapon (its part A0). M-0021 records no burst cell or burst tick, so a target listed in the
+     burst cell is a case it does not observe: that case is `measurable` (SH1 part a).
+     `unmeasured` for the other special-hit rows of (a): each needs the firer and target that its
+     own spec gives it before its row is selected (S-0514), so no part here tests them, and they
+     rest on the same row order of S-0303's table as the bomb-planting row
    - Confidence: high for conditions b and c, for the place before the area damage and before
      the draws that follow it, and for a burst whose area damage does nothing; medium for the
      burst point against the detonation point, which rests on S-0306 claim 20 (medium), until SH1
@@ -127,10 +132,11 @@ and S-0316; this spec says which fragments make one (claim 8).
      point, taken with S-0204's table square root (F1). A shot fired from further away bursts
      into fewer fragments, and none at |*c*| cells or more.
    - *c* < 0 and the attacker is gone: *n* = 3.
-   - Backing: `measurable` (scenario SH2: parts a to c for the count, part d for the truncation of
-     a distance that is not a whole number of cells; part e, with a one-cell building that house A
-     builds during the run, for the absence of a building adjustment; SH3 part b for the attacker
-     gone). `unmeasured` for the height term of the
+   - Backing: `measured` (M-0021) for *n* = *c* at a count of 3: every judged burst of its test
+     pairing launched 3 fragments. `measurable` (scenario SH2: parts a to c for the count, part d
+     for the truncation of a distance that is not a whole number of cells; part e, with a one-cell
+     building that house A builds during the run, for the absence of a building adjustment; SH3
+     part b for the attacker gone). `unmeasured` for the height term of the
      distance and for the reference point of a vehicle attacker or of a larger building: SH2
      runs on flat ground with a one-cell building, so it cannot tell the spatial distance from
      the planar one, nor a vehicle's reference point from another of its points at ground level,
@@ -176,7 +182,14 @@ and S-0316; this spec says which fragments make one (claim 8).
 
    When the projectile no longer has its attacker, no cell is visited and every fragment goes by
    claim 4.
-   - Backing: `measurable` (scenario SH1 parts a, d, e and f; parts g and h for an alliance in
+   - Backing: `measured` (M-0021) for 3 fragments to 3 distinct enemy vehicles, none to the
+     shot's own target, when 3 or more candidates stand in the rings around the target's cell as
+     read from positions at the shot's tick. M-0021 records no burst cell, so the target's
+     exclusion as an object listed in the burst cell is `measurable` (SH1 part a), not measured
+     there.
+     M-0021 settles neither the visiting order nor the alliance test: in its judged shots no cell
+     holding only the firer's vehicles came before the third candidate.
+     `measurable` (scenario SH1 parts a, d, e and f; parts g and h for an alliance in
      one direction only; part i for a fragment range that is not a whole number of cells; part j
      for ring 11's twice-visited cell; part k for one building receiving several fragments; part
      q for a candidate that the fragment warhead cannot damage; SH3 for the attacker gone; SH2
@@ -253,11 +266,14 @@ and S-0316; this spec says which fragments make one (claim 8).
    decides every case not listed here. With the removal skip off, every such fragment detonates
    in the tick of the burst, in launch order. With a positive arm field, when it detonates
    follows S-0306's arm-time rows, which this spec does not restate.
-   - Backing: `measurable` (scenario SH1 part a, both runs, for the timing; SH4: part a for the
-     damage, part c for the fragment weapon's warhead, part b for the credit to the attacker's
-     house). `unmeasured` for the brightness flag (an invisible fragment draws nothing, and no
-     scenario captures a visible fragment's brightness), for the attacker object as distinct from
-     its house (SH4 part b observes only a house's kill count) and for the speed (an invisible
+   - Backing: `measured` (M-0021) for the fragment weapon's warhead and for the attacker object:
+     in its test pairing's part A, each judged shot's 3 further hits carry the fragment weapon's
+     warhead, which the firer never fires itself, every such hit names an object of the firer's
+     house as its attacker, and each judged shot's 3 name its firer. `measurable`
+     (scenario SH1 part a, both runs, for the timing; SH4: part a for the damage, part c for the
+     fragment weapon's warhead, part b for the credit to the attacker's house). `unmeasured` for
+     the brightness flag (an invisible fragment draws nothing, and no scenario captures a visible
+     fragment's brightness) and for the speed (an invisible
      fragment's speed has no effect, and SH7 judges only the horizontal direction); `measurable` for
      the absence of radiation (scenario SH1 part n, run 4). The raise of a burst point that is not
      above the terrain is `unmeasured`, as S-0306 claim 8 gives: no scenario places a fragment's
@@ -269,10 +285,10 @@ and S-0316; this spec says which fragments make one (claim 8).
      placed before the animation would give run 1's ticks), which follows S-0203 claim 4 as S-0109 claim 29 does for
      an animation that enters play in a projectile's turn; medium for the turn that the bursting
      projectile's removal costs, as S-0203 claim 10 rates its causes; medium for the resulting ticks until SH1 part a runs,
-     since they also rest on the first-turn detonation of S-0306; medium for the brightness flag
-     and the attacker object; high for the absence of radiation; low for the speed, as in claim 6,
-     and medium for the raise of a burst point that is not above the terrain, as S-0306 claim 8
-     rates it
+     since they also rest on the first-turn detonation of S-0306; medium for the brightness
+     flag; high for the attacker object; high for the absence of radiation; low for the speed,
+     as in claim 6, and medium for the raise of a burst point that is not above the terrain, as
+     S-0306 claim 8 rates it
 
 6. **Launch direction.** A fragment starts from its starting position (claim 5) and is launched
    towards its aim point's reference point, climbing at a fixed elevation of about an eighth of a
@@ -969,21 +985,23 @@ with the random-state recorder, except as it says.
   provisional bound is the lead's call (Questions for the project lead).
 - **Random cell outside the map** (claim 4). Where a fragment aimed at a drawn cell beyond the map
   edge goes is not established.
-- **How many objects one shot damages in Q-1714's pairing.** Claims 1 to 5 bound one burst at
-  1 + *n* objects only for a shot that detonates once and is not an airburst projectile, whose
-  warhead and fragment warhead each damage a single object and whose fragments do not burst
-  again, detonate once and are not airburst projectiles. Whether either group's weapons (SH6
-  names a fragment side from the files in use) meet those conditions in each veterancy rank, and
-  so what the count is for that pairing, is not established here: SH6 has not been run, and a
-  weapon whose fragments burst again can damage more.
-- **The rest of Q-1714.** This spec answers no question of Q-1714 for its pairing. Claims 1 to 5
-  give the general rule that decides how many objects one shot can damage; how many objects one
-  shot damages in the pairing (question 2, second half) stays open, as the item above says. Also
-  open are how many shots each vehicle of either group fires (question 2, first half), which
-  group fires first and at what distance (question 1), when a stage-raising group reaches its top
-  stage (question 3), and whether one group spreads its fire (question 4). S-0307, S-0609 and
-  S-0309 own the rules involved, but none of them states the answer for Q-1714's pairing, and SH6
-  has not been run.
+- **How many objects one shot damages in Q-1714's stock pairing.** On M-0021's test pairing,
+  built after Q-1714's with a fragment count of 3, single-object warheads and fragments that do
+  not burst again, every judged shot damaged its target and 3 further enemy vehicles, with 3 or
+  more candidates in the rings each time: 1 + *n* objects, as claims 1 to 5 give. Claims 1 to 5
+  bound one burst at 1 + *n* objects only for a shot that detonates once and is not an airburst
+  projectile, whose warhead and fragment warhead each damage a single object and whose fragments
+  do not burst again, detonate once and are not airburst projectiles. Whether the stock pairing's
+  weapons (SH6 names a fragment side from the files in use) meet those conditions in each
+  veterancy rank, and so what the count is for that pairing, is not established here: it is our
+  engine's own comparison, the same rules applied to the stock data, and SH6 has not been run.
+- **The rest of Q-1714.** For its test pairing, M-0021 also records which group fires first and
+  at what distance (question 1), the shortest gap between one vehicle's shots, as a relation to
+  the weapon's rate of fire and the house's rate-of-fire factor (question 2, first half), and
+  when the stage-raising group reaches its top stage against the first vehicle lost (question
+  3). S-0307, S-0301 and S-0609 own those rules. Whether one group spreads its fire (question 4)
+  is not in M-0021 and stays open; S-0309 owns target choice. For the stock pairing none of these
+  is established here.
 
 ## Questions for the project lead
 
