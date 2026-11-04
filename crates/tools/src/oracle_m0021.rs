@@ -35,14 +35,12 @@
 //!
 //! # What we cannot reproduce (docs/development.md, *Arena mode*)
 //!
-//! The human player is the arena's idle house with its base unit, not
-//! M-0021's British observer with one building; which group is created
-//! first is not in the record ([`F_FIRST`], our choice); the gattling
-//! type's numbered weapons beyond the two stage weapons are not in the
-//! record ([`test_ruleset`]). No row the record marks `exact` for the
-//! per-shot and stage results depends on these, by the record's Notes;
-//! the first-shot distances and part B's outcome may (they follow the
-//! vehicles' movement).
+//! M-0021's British observer owns one building whose type, cell, facing
+//! and mission the record keeps `local`: the type is our choice
+//! ([`observer_building`]), on the observer's start position's cell. The
+//! rest of the setup follows the record's answers to Q-2516: the creation
+//! order ([`F_FIRST`]), the gattling type's numbered weapons
+//! ([`test_ruleset`]) and the run's end ([`END_EXTRA`]).
 //!
 //! # Local values
 //!
@@ -149,10 +147,35 @@ pub const CONTROL_ROF: &str = "1";
 /// Procedure step 4; S-0318 claim 3).
 pub const RINGS: i32 = 3;
 
-/// Whether F's group is created and placed first. The record does not say
-/// (M-0021, Setup, Groups); our choice, as the row type of the oracle
-/// arena goes first (S-0216 claim 8, *Order*).
+/// Whether F's group is created and placed first, on whichever side it
+/// stands (measure: M-0021, Setup, Houses: creation order, F's 16 vehicles,
+/// then G's 16, whichever side F stands on, each in increasing index).
 pub const F_FIRST: bool = true;
+
+/// The ticks the game plays on after the tick limit in parts A and A0 and
+/// the control (measure: M-0021, Parts and seeds: every run's recording
+/// ends at tick 608, the limit being 600).
+pub const END_EXTRA: i32 = 8;
+
+/// The type of the observer's one building: `GLASNOST_M0021_OBSERVER`, else
+/// the first unarmed building type of the rules with a 2 by 2 foundation
+/// that is no factory or gate (a 1 by 1 type may be a wall), else the first
+/// unarmed one. The record keeps the type `local` and the
+/// building takes no part in the fight (measure: M-0021, Setup, Houses).
+pub fn observer_building(r: &glasnost_sim::rules::SimRules) -> Option<String> {
+    if let Ok(n) = std::env::var("GLASNOST_M0021_OBSERVER") {
+        return Some(n);
+    }
+    let unarmed = |b: &&glasnost_sim::rules::BuildingRules| {
+        b.combat.slots.iter().all(Option::is_none) && b.combat.occupy_weapon.is_none()
+    };
+    r.buildings
+        .iter()
+        .filter(unarmed)
+        .find(|b| b.foundation == (2, 2) && b.factory.is_none() && !b.gate)
+        .or_else(|| r.buildings.iter().find(unarmed))
+        .map(|b| b.name.clone())
+}
 
 // The record's values (measure: M-0021, Result).
 
@@ -413,8 +436,9 @@ pub struct Built {
 /// gattling type with two stages, a turret count of 1 and numbered slots
 /// 0 to 3 holding the stage 0, stage 0, stage 1 and stage 1 weapons: stage
 /// *s* fires slot 2*s* (S-0308 claim 7), and S-0308 table P row 3 needs
-/// slot 1 filled; which weapons the record's file put in slots 1 and 3 it
-/// does not say (our choice). The new types go at the end of the vehicle
+/// slot 1 filled; the record's file put the stage 0 weapon in slots 0 and
+/// 1 and the stage 1 weapon in slots 2 and 3, with stage 0's weapon as
+/// primary and secondary (measure: M-0021, Test types). The new types go at the end of the vehicle
 /// registry, so no other type's index moves.
 pub fn test_ruleset(
     base: &Ruleset,
@@ -610,11 +634,13 @@ pub struct Recording {
     pub positions: BTreeMap<i32, BTreeMap<ObjectId, Pos>>,
     /// Each tick's spin value and stage of every G vehicle in play.
     pub spins: BTreeMap<i32, BTreeMap<ObjectId, (i32, i32)>>,
-    /// The last tick played.
+    /// The last tick played. Its per-tick rows are not kept in
+    /// `positions` and `spins` (measure: M-0021, Parts and seeds: the
+    /// per-tick rows end one tick before the recording's last tick).
     pub end: i32,
-    /// The firers whose projectiles (a shot's or a fragment's) are still in
-    /// flight at the run's end.
-    pub in_flight: BTreeSet<ObjectId>,
+    /// The vehicles in play at the last tick, kept only to read deaths at
+    /// that tick.
+    pub last_in_play: Option<BTreeSet<ObjectId>>,
     /// F's shot weapon, the fragment weapon and G's stage weapons.
     pub weapons: [WeaponId; 4],
     /// F's shot warhead and the fragment warhead.
@@ -685,6 +711,8 @@ pub fn play_to(
         count: Some(GROUP),
         houses,
         clear_neutral: true,
+        // measure: M-0021 (Setup, Houses: the British observer owns one building, its type local)
+        observer_building: observer_building(&rules),
     };
     let a = oracle::setup_with(ground, types, first, seed, &opts)?;
     let mut w = a.world;
@@ -731,7 +759,13 @@ pub fn play_to(
     };
     snap(&w, &mut rec);
     let alive = |w: &World, ids: &[ObjectId]| ids.iter().any(|&id| in_play(w, id).is_some());
-    while w.tick < limit {
+    // measure: M-0021 (Parts and seeds: in parts A and A0 and the control the game plays on for 8 ticks after the tick limit; part B ends after one side has no vehicle left)
+    let stop = if part == Part::B {
+        limit
+    } else {
+        limit + END_EXTRA
+    };
+    while w.tick < stop {
         glasnost_sim::tick::step(&mut w);
         let t = w.tick;
         for e in std::mem::take(&mut w.effects) {
@@ -770,11 +804,12 @@ pub fn play_to(
             break;
         }
     }
-    rec.in_flight = w
-        .projectiles
-        .values()
-        .filter_map(|p| p.firer.or(p.attacker))
-        .collect();
+    // measure: M-0021 (Parts and seeds: the per-tick rows end one tick before the recording's last tick)
+    if rec.end > 0 {
+        let last = rec.positions.remove(&rec.end).unwrap_or_default();
+        rec.spins.remove(&rec.end);
+        rec.last_in_play = Some(last.into_keys().collect());
+    }
     Ok(rec)
 }
 
@@ -861,10 +896,6 @@ pub struct Findings {
     pub void: bool,
     /// F's shots not judged (step 3).
     pub not_judged: usize,
-    /// F's last shots whose window the run's end cuts short (a shot in the
-    /// run's last 2 ticks, or with a projectile of its firer still in
-    /// flight at the end), not judged by Q-2516 question 4's interim.
-    pub cut_short: usize,
     /// The judged shots.
     pub judged: Vec<Judged>,
     /// Every fragment-warhead hit in the run, and those whose attacker is
@@ -876,6 +907,10 @@ pub struct Findings {
     /// The shortest gap in ticks 0 to 299 between two shots of one vehicle
     /// with one weapon: F's shot weapon, G's stage 0 and stage 1 weapons.
     pub gaps: [Option<i32>; 3],
+    /// Local report only: (tick, squared centre distance) of F's first shooter to its target over the 4 ticks up to its first shot.
+    pub f_approach: Vec<(i32, i64)>,
+    /// Local report only: F's longest gap between two shots in ticks 0 to 299.
+    pub f_longest_gap: Option<i32>,
     /// The full delay's base of each (S-0301 claim 2, draw at 0).
     pub expected_gap: [i32; 3],
     /// Every stage change of a G vehicle: (from stage, value the tick
@@ -955,11 +990,16 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
         .any(|s| rec.f.contains(&s.firer) && s.weapon != f_shot);
     // Deaths: a vehicle in play at tick t − 1 and not at t died at t.
     let mut died: BTreeMap<ObjectId, i32> = BTreeMap::new();
-    let mut prev: Option<&BTreeMap<ObjectId, Pos>> = None;
-    for (&t, ps) in &rec.positions {
-        if let Some(p) = prev {
-            for id in p.keys() {
-                if !ps.contains_key(id) {
+    let mut prev: Option<BTreeSet<ObjectId>> = None;
+    let rows = rec
+        .positions
+        .iter()
+        .map(|(&t, ps)| (t, ps.keys().copied().collect::<BTreeSet<_>>()))
+        .chain(rec.last_in_play.clone().map(|s| (rec.end, s)));
+    for (t, ps) in rows {
+        if let Some(p) = &prev {
+            for id in p {
+                if !ps.contains(id) {
                     died.entry(*id).or_insert(t);
                 }
             }
@@ -994,14 +1034,6 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
                 out.not_judged += 1;
                 continue;
             };
-            // The firer's last shot, in the run's last 2 ticks or with a
-            // projectile of the firer still in flight at the run's end: the
-            // run's end cuts its window short of the hits that follow the
-            // shot, so it is not judged (Q-2516 question 4's interim).
-            if i + 1 == shots.len() && (rec.end - s.tick < 2 || rec.in_flight.contains(&s.firer)) {
-                out.cut_short += 1;
-                continue;
-            }
             let owned: Vec<&HitRec> = rec
                 .hits
                 .iter()
@@ -1102,6 +1134,36 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
             (t, ds)
         });
     }
+    // Local report only: F's first shooter's centre distance to its target at the 4 ticks up to its first shot, and F's longest gap.
+    if let Some(s) = rec.shots.iter().find(|s| rec.f.contains(&s.firer))
+        && let Target::Object(x) = s.target
+    {
+        out.f_approach = (s.tick - 3..=s.tick)
+            .filter_map(|t| {
+                let ps = rec.positions.get(&t)?;
+                let (a, b) = (ps.get(&s.firer)?, ps.get(&x)?);
+                let (dx, dy, dz) = (
+                    i64::from(a.x - b.x),
+                    i64::from(a.y - b.y),
+                    i64::from(a.z - b.z),
+                );
+                Some((t, dx * dx + dy * dy + dz * dz))
+            })
+            .collect();
+    }
+    out.f_longest_gap = rec
+        .f
+        .iter()
+        .flat_map(|&v| {
+            let t: Vec<i32> = rec
+                .shots
+                .iter()
+                .filter(|s| s.firer == v && s.weapon == f_shot && s.tick < GAP_TICKS)
+                .map(|s| s.tick)
+                .collect();
+            t.windows(2).map(|p| p[1] - p[0]).collect::<Vec<_>>()
+        })
+        .max();
     // Step 7: the shortest gap per vehicle and weapon in ticks 0 to 299.
     for (k, weapon) in [f_shot, g0, g1].into_iter().enumerate() {
         let mut best: Option<i32> = None;
@@ -1561,13 +1623,12 @@ pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Finding
     for ((p, s, seed), f) in runs {
         let _ = writeln!(
             out,
-            "  part {} F on {} seed {seed}: void {}, judged {}, not judged {}, cut short by the end {}, fragment hits {} ({} not by F), first shots {:?}, gaps {:?} expected {:?}, stage changes {}, largest {}, dead F {} G {}, first death {:?}",
+            "  part {} F on {} seed {seed}: void {}, judged {}, not judged {}, fragment hits {} ({} not by F), first shots {:?}, gaps {:?} expected {:?}, stage changes {}, largest {}, dead F {} G {}, first death {:?}, F approach (tick, leptons) {:?}, F longest gap {:?}",
             p.text(),
             s.text(),
             f.void,
             f.judged.len(),
             f.not_judged,
-            f.cut_short,
             f.fragment_hits.0,
             f.fragment_hits.1,
             f.first
@@ -1582,7 +1643,12 @@ pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Finding
             f.largest,
             f.dead.0,
             f.dead.1,
-            f.first_death
+            f.first_death,
+            f.f_approach
+                .iter()
+                .map(|&(t, d)| (t, lepton_text(d)))
+                .collect::<Vec<_>>(),
+            f.f_longest_gap
         );
     }
     out.push_str(&verdicts_text(runs));
@@ -1654,7 +1720,11 @@ pub fn run(
         }
     }
     let summary = format!("{errors}{}", verdicts_text(&judged));
-    let full = format!("{errors}{}", report(&built, &judged));
+    let observer = grounds.values().next().map(|g| observer_building(&g.rules));
+    let full = format!(
+        "{errors}observer's building type (local): {observer:?}\n{}",
+        report(&built, &judged)
+    );
     Ok((summary, full))
 }
 
@@ -1782,6 +1852,7 @@ mod tests {
                 count: Some(GROUP),
                 houses: [SIDE_HOUSES[1], SIDE_HOUSES[0]],
                 clear_neutral: true,
+                observer_building: None,
             },
         )
         .expect("set up");
@@ -1797,6 +1868,44 @@ mod tests {
             })
         });
         assert!(!neutral);
+    }
+
+    // measure: M-0021 (Setup, Houses: the observer's starting construction vehicle is off the map at tick 0 and gone from tick 1 on; creation order, F's group then G's whichever side F stands on)
+    #[test]
+    fn the_observer_keeps_no_vehicle_and_f_is_created_first() {
+        let g = ground(Part::A);
+        let opts = |building: Option<&str>| SetupOptions {
+            count: Some(GROUP),
+            clear_neutral: true,
+            observer_building: building.map(str::to_owned),
+            ..Default::default()
+        };
+        let kept = crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(None))
+            .expect("set up");
+        let human = |a: &crate::oracle::Arena| {
+            a.world
+                .objects
+                .values()
+                .filter(|o| o.owner == Some(crate::oracle::HUMAN))
+                .count()
+        };
+        assert_eq!(human(&kept), 1);
+        // A building type the rules lack is an error, not a silent skip.
+        assert!(
+            crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(Some("X")))
+                .is_err()
+        );
+        // With a building type (the synthetic rules have none), the observer owns that building only.
+        if let Some(b) = observer_building(&g.rules) {
+            let off =
+                crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(Some(&b)))
+                    .expect("set up");
+            assert_eq!(human(&off), 1);
+        }
+        // Side B's group stands first in the numbers when F stands on side B.
+        let fb = crate::oracle::setup_with(&g, [names::G, names::F], Side::B, 0, &opts(None))
+            .expect("set up");
+        assert!(fb.units[1][0] < fb.units[0][0]);
     }
 
     fn at(c: CellXY) -> Pos {
@@ -1820,7 +1929,8 @@ mod tests {
             end: 40,
             ..Default::default()
         };
-        for t in 0..=40 {
+        // measure: M-0021 (Parts and seeds: the per-tick rows end one tick before the recording's last tick)
+        for t in 0..40 {
             let mut ps = BTreeMap::new();
             ps.insert(f, at(CellXY::new(14, 20)));
             ps.insert(x, at(xc));
@@ -1887,7 +1997,7 @@ mod tests {
         ));
         // Part B: a death in the window leaves the shot out.
         let mut b = hand_made();
-        for t in 15..=40 {
+        for t in 15..40 {
             b.positions.get_mut(&t).expect("tick").remove(&ObjectId(5));
         }
         let fb = judge(&b, Part::B);
@@ -1899,23 +2009,27 @@ mod tests {
         assert!(judge(&v1, Part::A).void);
     }
 
-    // measure: M-0021 (Procedure step 2: the last shot's window runs to the run's end); Q-2516 question 4's interim: a last shot whose window the end cuts short is not judged
+    // measure: M-0021 (Procedure step 2: the last shot's window runs to the run's end, and step 3: a shot fired at the run's last tick has no per-tick row and is not judged)
     #[test]
-    fn a_last_shot_cut_short_by_the_end_is_not_judged() {
-        // Its firer still has a projectile in flight at the end.
-        let mut rec = hand_made();
-        rec.in_flight.insert(ObjectId(1));
-        let f = judge(&rec, Part::A);
-        assert_eq!((f.judged.len(), f.not_judged, f.cut_short), (1, 1, 1));
-        assert_eq!(f.judged[0].tick, 10);
-        // A shot in the run's last 2 ticks.
+    fn a_shot_at_the_runs_last_tick_is_not_judged() {
+        // A last shot just before the end is judged with its hits, even late ones.
         let mut late = hand_made();
         late.shots[2].tick = 39;
+        late.hits.retain(|h| h.tick < 30);
+        late.hits.push(HitRec {
+            tick: 40,
+            id: ObjectId(2),
+            warhead: Some(0),
+            attacker: Some(ObjectId(1)),
+            health: (100, 93),
+        });
         let f = judge(&late, Part::A);
-        assert_eq!((f.judged.len(), f.cut_short), (1, 1));
-        // Neither: the last shot is judged with the hits its window holds.
-        let f = judge(&hand_made(), Part::A);
-        assert_eq!((f.judged.len(), f.cut_short), (2, 0));
+        assert_eq!((f.judged.len(), f.not_judged), (2, 1));
+        // A shot at the last tick (40) is not judged.
+        let mut last = hand_made();
+        last.shots[2].tick = 40;
+        let f = judge(&last, Part::A);
+        assert_eq!((f.judged.len(), f.not_judged), (1, 2));
     }
 
     // measure: M-0021 (Procedure step 4: a cell holding an F vehicle is no candidate, and the Chebyshev check sees it)
@@ -1951,8 +2065,13 @@ mod tests {
     fn synthetic_part_a_every_judged_burst_hits_three_candidates() {
         let f = synthetic(Part::A, 300);
         assert!(!f.void);
-        // The shots whose window the run's end cuts own fewer hits.
-        let full: Vec<&Judged> = f.judged.iter().filter(|j| j.c >= 3).collect();
+        // The synthetic run is cut at tick 300 + 8, and a shot in its last
+        // ticks owns fewer hits: only the shots up to the limit are checked.
+        let full: Vec<&Judged> = f
+            .judged
+            .iter()
+            .filter(|j| j.c >= 3 && j.tick <= 300)
+            .collect();
         assert!(!full.is_empty(), "some judged shot with 3 candidates");
         for j in full {
             assert_eq!(j.shot_hits, (1, 0), "tick {}", j.tick);

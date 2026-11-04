@@ -1437,11 +1437,18 @@ fn cost_of(w: &World, id: ObjectId) -> i64 {
 /// none of them exists at the next tick, and the creation numbers they took
 /// stay taken. Returns the vehicles taken, in creation order.
 pub fn take_off_before_the_groups(w: &mut World, human: HouseId) -> Vec<ObjectId> {
+    take_off_vehicles(w, Some(human))
+}
+
+/// [`take_off_before_the_groups`] with no house kept (M-0021, Setup: the
+/// observer's starting construction vehicle is off the map at tick 0 as
+/// each computer house's is).
+fn take_off_vehicles(w: &mut World, keep: Option<HouseId>) -> Vec<ObjectId> {
     // spec: S-0216 claim 8 (Removal before the groups: every vehicle that the human player house does not own)
     let gone: Vec<ObjectId> = w
         .objects
         .values()
-        .filter(|o| o.kind == Kind::Vehicle && o.owner != Some(human))
+        .filter(|o| o.kind == Kind::Vehicle && (keep.is_none() || o.owner != keep))
         .map(|o| o.id)
         .collect();
     for &id in &gone {
@@ -1481,6 +1488,11 @@ pub struct SetupOptions {
     /// Every object of the neutral house is taken off before the groups,
     /// as the vehicles of *Removal before the groups* are.
     pub clear_neutral: bool,
+    /// The human player house is an observer (M-0021, Setup, Houses): its
+    /// starting construction vehicle is taken off with the others, and
+    /// after both groups it owns one building (this type, if the rules
+    /// have it) on its start position's cell, nothing else.
+    pub observer_building: Option<String>,
 }
 
 impl Default for SetupOptions {
@@ -1489,6 +1501,7 @@ impl Default for SetupOptions {
             count: None,
             houses: SIDE_HOUSES,
             clear_neutral: false,
+            observer_building: None,
         }
     }
 }
@@ -1581,7 +1594,12 @@ pub fn setup_with(
     // spec: S-0216 claim 8 (Game start, r67: no house treats the human player house as an enemy; no object targets or damages its objects; design, copied from M-0001's Setup)
     w.houses[usize::from(HUMAN.0)].idle_test_house = true;
     // spec: S-0216 claim 8 (Removal before the groups, r67: after resource-glint setup, the last of new_game's draws, and before the first group's first creation)
-    let mut removed = take_off_before_the_groups(&mut w, HUMAN);
+    let mut removed = if opts.observer_building.is_some() {
+        // measure: M-0021 (Setup, Houses: the observer's starting construction vehicle, like each computer house's, is off the map at tick 0 and gone from tick 1 on)
+        take_off_vehicles(&mut w, None)
+    } else {
+        take_off_before_the_groups(&mut w, HUMAN)
+    };
     if opts.clear_neutral {
         removed.extend(take_off_neutral(&mut w));
     }
@@ -1639,6 +1657,27 @@ pub fn setup_with(
             }
             units[s].push(id);
         }
+    }
+    // measure: M-0021 (Setup, Houses, creation order: the observer's building after both groups; its type, cell, facing and mission are kept local, so the type is the caller's choice, at the human start position's cell, facing 0, guard)
+    if let Some(name) = &opts.observer_building {
+        if rules.index_of(Kind::Building, name).is_none() {
+            return Err(format!(
+                "the observer's building type {name} does not exist"
+            ));
+        }
+        let &(x, y) = ground
+            .map
+            .waypoints
+            .get(&(HUMAN_START as u16))
+            .ok_or("the map has no start position for the observer")?;
+        glasnost_sim::testkit::spawn(
+            &mut w,
+            Kind::Building,
+            name,
+            HUMAN.0,
+            CellXY::new(i32::from(x), i32::from(y)),
+            0,
+        );
     }
     Ok(Arena {
         world: w,
