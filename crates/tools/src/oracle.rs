@@ -150,13 +150,32 @@ pub const STARTS: [u32; 2] = [0, 1];
 /// start*: M-0001's idle house at start 3; measure: M-0001, Setup, Players).
 pub const HUMAN_START: u32 = 3;
 
-/// The side whose country the human player house takes: side A's (S-0216
-/// claim 8, *Seeds and the human player house's country*, r69, a design
-/// rule of our arena; Q-2446 answered). The country picks the house's base
-/// unit (S-0009 claim 45); the house-creation draws do not depend on it
-/// (S-0202 claim 14).
-// spec: S-0216 claim 8 (Seeds and the human player house's country: the human player house takes side A's country, design)
-pub const HUMAN_COUNTRY_SIDE: Side = Side::A;
+/// The country of the human player house: British (S-0216 claim 8, *Seeds
+/// and the human player house's country*, r70; measure: M-0001, M-0002 and
+/// M-0003, Setup, Players). The country picks the house's base unit (S-0009
+/// claim 45); the house-creation draws do not depend on it (S-0202 claim
+/// 14). [`human_country`] looks it up in the loaded rules.
+// spec: S-0216 claim 8 (Seeds and the human player house's country, r70: the human player house is British)
+// measure: M-0001 (Setup, Players: an observer human of the British country)
+pub const HUMAN_COUNTRY: &str = "British";
+
+/// The human player house's country as the loaded rules name it: the
+/// rules' country of the name [`HUMAN_COUNTRY`] (compared without regard to
+/// case). An error, never a fall back to another country, when the rules
+/// have none.
+// spec: S-0216 claim 8 (Seeds and the human player house's country, r70)
+pub fn human_country(rules: &SimRules) -> Result<String, String> {
+    rules
+        .country_names
+        .iter()
+        .find(|n| n.eq_ignore_ascii_case(HUMAN_COUNTRY))
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "the rules have no country {HUMAN_COUNTRY}, the country of the records' human player house (S-0216 claim 8, M-0001 Setup)"
+            )
+        })
+}
 
 /// What the arena adds to a seed number to seed the scenario stream.
 // spec: S-0216 claim 8 (Seeds and the human player house's country, r69, Q-2447 answered: the arena's game for seed number s seeds S-0202's generator with 1000 + s)
@@ -1046,6 +1065,15 @@ pub const SYNTHETIC_BASE_UNIT: &str = "BASE";
 /// type (S-0009 claim 45).
 pub fn synthetic_ruleset() -> glasnost_rules::schema::Ruleset {
     let mut r = glasnost_sim::testkit::combat_ruleset();
+    // The human player house's country, invented, a player country like the first two.
+    r.registries
+        .entry("countries".into())
+        .or_default()
+        .push(HUMAN_COUNTRY.into());
+    r.sim.countries.insert(
+        HUMAN_COUNTRY.into(),
+        glasnost_rules::sim::Country::default(),
+    );
     let players: Vec<String> = r.registries["countries"].clone();
     for name in [glasnost_sim::load::NEUTRAL, glasnost_sim::load::SPECIAL] {
         r.registries
@@ -1428,10 +1456,10 @@ pub fn setup(
     let rules = &ground.rules;
     // spec: S-0216 claim 8 (Seeds and the human player house's country, r69: the game for seed number s seeds the generator with 1000 + s)
     let stream_seed = game_seed(seed).ok_or_else(|| format!("seed number {seed} is too large"))?;
-    // spec: S-0216 claim 8 (Game start, r67: a human player house at start 3, M-0001's idle house; it holds a start position, so it is a player, not an observer; r69: it takes side A's country, design)
+    // spec: S-0216 claim 8 (Game start, r67: a human player house at start 3, M-0001's idle house; it holds a start position, so it is a player, not an observer; r70: it is British, M-0001 to M-0003 Setup)
     let human = Player {
         name: "Human".into(),
-        country: ground.countries[HUMAN_COUNTRY_SIDE.index()].clone(),
+        country: human_country(rules)?,
         start: Some(HUMAN_START),
         ai: false,
         values: HouseValues::default(),

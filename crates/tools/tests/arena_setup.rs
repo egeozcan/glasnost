@@ -471,13 +471,36 @@ fn pt6_game_start_houses_in_claim_19s_order() {
             "{h:?}: a computer house"
         );
     }
-    // spec: S-0216 claim 8 (Seeds and the human player house's country, r69: the human player house takes side A's country, design)
+    // spec: S-0216 claim 8 (Seeds and the human player house's country, r70: the human player house is British) and measure: M-0001 to M-0003 (Setup)
     let country =
         |h: HouseId| w.rules().country_names[w.houses[usize::from(h.0)].country as usize].clone();
-    assert_eq!(country(oracle::HUMAN), g.countries[0]);
+    assert_eq!(country(oracle::HUMAN), "British");
+    assert_ne!(country(oracle::HUMAN), g.countries[0]);
     assert_eq!(country(oracle::SIDE_HOUSES[0]), g.countries[0]);
     // spec: S-0216 claim 8 (Game start: crates off)
     assert_eq!(w.econ.settings.crates, Some(false));
+}
+
+#[test]
+fn pt6_rules_without_the_british_country_fail_with_a_clear_error() {
+    // spec: S-0216 claim 8 (Seeds and the human player house's country, r70: the human player house is British; no silent fall back when the loaded data has no such country)
+    let mut r = oracle::synthetic_ruleset();
+    r.registries
+        .get_mut("countries")
+        .unwrap()
+        .retain(|n| n != oracle::HUMAN_COUNTRY);
+    let mut g = ground(1500, 1500);
+    g.rules = Arc::new(SimRules::new(&r, "intake91-no-british"));
+    let e = oracle::setup(&g, ["CART", "WALKER"], Side::A, 0)
+        .err()
+        .expect("no British country, no game");
+    assert!(e.contains("British"), "{e}");
+    assert!(oracle::human_country(&g.rules).is_err());
+    // With the country present the lookup returns the rules' own spelling.
+    assert_eq!(
+        oracle::human_country(&ground(1500, 1500).rules).as_deref(),
+        Ok("British")
+    );
 }
 
 #[test]
