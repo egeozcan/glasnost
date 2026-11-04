@@ -96,6 +96,7 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
         if reverted {
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
             crate::emitters::retarget_let_go(w, x);
+            note_revert(w, x);
         }
         let Some(ob) = w.obj_mut(x) else { continue };
         if how == Leaving::Removed && ob.target == Some(Target::Object(gone)) {
@@ -138,16 +139,36 @@ pub fn firing_target(w: &World, o: &Object) -> Option<Target> {
         Target::Object(x) => {
             !left(w, x)
                 || (matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Building)
-                    && beam_held(w, o.id, x))
+                    && beam_held(w, o, x))
         }
         Target::Cell(_) => true,
     })
 }
 
 /// Whether `holder`'s temporal beam is attached to `x`, a departed warp
-/// member (S-0513 claim 39a, *The firer*).
-fn beam_held(w: &World, holder: ObjectId, x: ObjectId) -> bool {
-    crate::superweapons::warp::departed(w, x) && crate::temporal::holds(w, holder, x)
+/// member (S-0513 claim 39a, *The firer*), and no revert gave `x` back to
+/// it while `x` was off the map ([`note_revert`]).
+fn beam_held(w: &World, holder: &Object, x: ObjectId) -> bool {
+    // spec: S-0513 r108 claim 39a (The firer: a holder that holds the member again after the lock holds it as one that held it at the lock does, unless a revert gave it back while the member is off the map, which is the case of S-0309 claim 27's rule) and S-0309 r113 claim 27 (a member that a revert gives back to a holder while it is off the map is such a target)
+    crate::superweapons::warp::departed(w, x)
+        && crate::temporal::holds(w, holder.id, x)
+        && holder.combat.revert_gave_departed != Some(x)
+}
+
+/// After a revert (S-0215 claim 10) gave `holder` its target back: marks a
+/// superweapon warp member that is off the map then as S-0309 claim 27's
+/// case, which the beam exception of S-0513 claim 39a does not cover. Every
+/// revert site calls it once the target is restored.
+pub(crate) fn note_revert(w: &mut World, holder: ObjectId) {
+    let Some(o) = w.obj(holder) else { return };
+    // spec: S-0309 r113 claim 27 (a member that a revert gives back to a holder while it is off the map is a target of this claim) and S-0513 r108 claim 39a (unless a revert gave it back while the member is off the map)
+    let gave = match o.target {
+        Some(Target::Object(x)) if crate::superweapons::warp::departed(w, x) => Some(x),
+        _ => None,
+    };
+    if let Some(ob) = w.obj_mut(holder) {
+        ob.combat.revert_gave_departed = gave;
+    }
 }
 
 /// Whether tick number `t` is a check tick of claim 29: a multiple of the
@@ -316,11 +337,18 @@ fn periodic_check(w: &mut World, id: ObjectId) {
 /// timer draw and no revert (S-0215 claim 10: clearing the target by another
 /// rule does not revert).
 pub(crate) fn turn_start_drop(w: &mut World, id: ObjectId) {
-    let Some(Target::Object(x)) = w.obj(id).and_then(|o| o.target) else {
-        return;
+    let Some(o) = w.obj(id) else { return };
+    let target = o.target;
+    let kept = match target {
+        Some(Target::Object(x)) => !left(w, x) || beam_held(w, o, x),
+        _ => true,
     };
-    // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered, no longer an interim: an infantry or vehicle firer whose beam is attached to the member, within range of its old position, keeps it as its target from the departure to the appearance; Release: the warp is no release cause) and S-0514 claim 14; S-0309 r95 claim 27 (the departure is not this drop for a firer whose temporal beam is attached); S-0513 r91 claim 39a (Q-2376 answered: a building firer, with or without the SAM flag, keeps it while it waits to land, and so does an infantry or vehicle firer beyond its weapon's range of the old position) and r91's Changes for S-0309 claim 27; an aircraft firer: the aircraft specs' (S-0513 claim 39a), kept here meanwhile as our own rule
-    if !left(w, x) || beam_held(w, id, x) {
+    // spec: S-0309 claim 27 (the revert's case lasts until the start of the holder's next turn, where the drop is made)
+    if let Some(ob) = w.obj_mut(id) {
+        ob.combat.revert_gave_departed = None;
+    }
+    // spec: S-0513 r89 claim 39a (The firer, Q-2317 answered, no longer an interim: an infantry or vehicle firer whose beam is attached to the member, within range of its old position, keeps it as its target from the departure to the appearance; Release: the warp is no release cause) and S-0514 claim 14; S-0309 r113 claim 27 (the departure is not this drop for a firer whose temporal beam is attached, a building firer that holds the member at the lock or again after it included, unless a revert gave it back while the member is off the map); S-0513 r108 claim 39a (a building firer, with or without the SAM flag, keeps it while it waits to land as its rows give, and an infantry or vehicle firer beyond its weapon's range of the old position is treated as one holding a target on the map there); an aircraft firer: the aircraft specs' (S-0513 claim 39a), kept here meanwhile as our own rule
+    if kept {
         return;
     }
     if let Some(ob) = w.obj_mut(id) {

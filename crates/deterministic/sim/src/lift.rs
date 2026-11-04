@@ -316,6 +316,7 @@ pub fn eligible(w: &World, x: ObjectId, damage: i32) -> bool {
         return false;
     }
     // spec: S-0607 claim 3 (in the ground render layer, S-0102: an aircraft in flight and a jumpjet in the air are immune, a landed aircraft is not)
+    // spec: S-0607 r39 claim 3 (the layer is the one the target's state and height give it, S-0102 claim 3, not the list it is filed in: an aircraft whose type cannot land, neither rocket nor drop-pod movement, is not seized by a hit while it is above height 0, although it stays in the ground list, S-0306 claim 17)
     if !crate::temporal::ground_layer(w, x) {
         return false;
     }

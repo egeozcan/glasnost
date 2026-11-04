@@ -900,7 +900,7 @@ fn after_hold(name: &str) -> (World, ObjectId) {
     expire(&mut w, a, at(2, 2));
     let t = w.tick;
     w.obj_mut(a).unwrap().sw.warp.as_mut().unwrap().stage = Stage::Hold(t - 1);
-    assert!(warp::in_ground_layer(&w, a), "{name}: in the hold");
+    assert!(warp::in_warp_row(&w, a), "{name}: in the hold");
     assert!(!warp::turn(&mut w, a));
     assert!(!warp::is_member(&w, a), "{name}: the hold has ended");
     (w, a)
@@ -947,14 +947,19 @@ fn erasable(w: &World, a: ObjectId) -> bool {
 }
 
 #[test]
-fn r65_claim17_an_aircraft_member_whose_type_cannot_land_keeps_the_ground_layer_in_flight() {
-    // spec: S-0306 r65 claim 17 (after its arrival hold a member leaves the ground render layer only when its own movement raises it, except an aircraft whose type cannot land, which keeps the ground layer while it flies, until a crash), claim 20 (c) (threshold 42 for a target airborne in the ground render layer) and S-0514 claim 1 (an object target of the ground render layer)
+fn r72_claim17_an_aircraft_member_whose_type_cannot_land_stays_in_the_ground_list_but_reads_its_height_layer_in_flight()
+ {
+    // spec: S-0306 r72 claim 17 (after its arrival hold a member leaves the ground render layer only when its own movement raises it, except an aircraft whose type cannot land, which keeps the ground list while it flies, until a crash, S-0102 claim 4; An aircraft that cannot land, in flight: S-0514 claim 1's erasure test and claim 20 (c) read the layer from state and height, so above height 0 it is not erased, and claim 20 (c) gives it 128 while it is airborne)
     let (mut w, a) = after_hold("JET");
     up(&mut w, a);
     assert!(!temporal::ground_layer(&w, a), "its own rows: in the air");
-    assert!(warp::in_ground_layer(&w, a), "kept in the ground layer");
-    assert!(threshold_42(&w, a), "claim 20 (c): threshold 42");
-    assert!(erasable(&w, a), "S-0514 claim 1: erasable");
+    assert!(!warp::in_warp_row(&w, a), "the warp row has ended");
+    assert!(
+        glasnost_sim::air::kept_filed(&w, a),
+        "still in the ground list (S-0102 claim 4: no take-off re-files it)"
+    );
+    assert!(!threshold_42(&w, a), "claim 20 (c): 128 while airborne");
+    assert!(!erasable(&w, a), "S-0514 claim 1: not erasable in the air");
 }
 
 #[test]
@@ -962,12 +967,12 @@ fn r65_claim17_an_aircraft_member_whose_type_can_land_leaves_the_ground_layer_wh
     // spec: S-0306 r65 claim 17 (after its hold the member stands at no height above its surface, so its own rows give the ground layer; it leaves that layer when its own movement raises it) and claim 20 (c) (threshold 128 for a target airborne in another render layer)
     let (mut w, a) = after_hold("LANDER");
     assert!(temporal::ground_layer(&w, a), "at no height: ground layer");
+    assert!(!warp::in_warp_row(&w, a), "no warp layer after the hold");
     assert!(
-        !warp::in_ground_layer(&w, a),
-        "no warp layer after the hold"
+        !glasnost_sim::air::kept_filed(&w, a),
+        "a type that can land is re-filed by its take-off"
     );
     up(&mut w, a);
-    assert!(!warp::in_ground_layer(&w, a));
     assert!(!temporal::ground_layer(&w, a), "raised: another layer");
     assert!(!threshold_42(&w, a), "claim 20 (c): threshold 128");
     assert!(!erasable(&w, a), "S-0514 claim 1: not erasable in the air");
@@ -975,14 +980,17 @@ fn r65_claim17_an_aircraft_member_whose_type_can_land_leaves_the_ground_layer_wh
 
 #[test]
 fn r65_claim17_a_crash_ends_the_kept_ground_layer() {
-    // spec: S-0306 r65 claim 17 (an aircraft member whose type cannot land keeps the ground layer while it flies, until a crash) and S-0102 claim 4 (every tick of an aircraft's crash fall re-files)
+    // spec: S-0306 r72 claim 17 (an aircraft whose type cannot land keeps the ground list while it flies, until a crash, S-0102 claim 4) and S-0102 claim 4 (every tick of an aircraft's crash fall re-files)
     let (mut w, a) = after_hold("JET");
     up(&mut w, a);
-    assert!(warp::in_ground_layer(&w, a));
+    assert!(glasnost_sim::air::kept_filed(&w, a));
     assert!(glasnost_sim::air::start_crash(&mut w, a, true));
     step(&mut w);
     assert!(w.obj(a).is_some(), "still falling");
-    assert!(!warp::in_ground_layer(&w, a), "re-filed by its crash fall");
+    assert!(
+        !glasnost_sim::air::kept_filed(&w, a),
+        "re-filed by its crash fall"
+    );
 }
 
 #[test]
@@ -994,10 +1002,173 @@ fn r65_claim17_a_ground_member_is_in_the_ground_layer_by_its_own_rows_after_the_
     let t = w.tick;
     w.obj_mut(v).unwrap().sw.warp.as_mut().unwrap().stage = Stage::Hold(t - 1);
     assert!(!warp::turn(&mut w, v));
-    assert!(
-        !warp::in_ground_layer(&w, v),
-        "no warp layer after the hold"
-    );
+    assert!(!warp::in_warp_row(&w, v), "no warp layer after the hold");
     assert!(temporal::ground_layer(&w, v), "its own rows");
     assert!(erasable(&w, v));
+}
+
+// --- Revision 72: an aircraft that cannot land, in flight (P46, Q-2417) ------------
+
+/// Scenario P46's aircraft *A*: a JET of BETA, a type that cannot land and
+/// moves with flying movement (neither rocket nor drop-pod movement). Run 1
+/// puts it on the ground at (2, 2) by a placement. Run 2 then warps it
+/// there, through ALPHA's real launch, as the only member of a warp to
+/// (6, 2), a level empty landing cell, and runs on until its arrival hold
+/// has ended.
+fn p46(r: &Ruleset, run: u8) -> (World, ObjectId) {
+    let mut w = ready(r);
+    let a = testkit::spawn(&mut w, Kind::Aircraft, "JET", BETA.0, at(2, 2), 0);
+    assert!(!glasnost_sim::air::landable(&w, a), "set-up: cannot land");
+    assert_eq!(w.height_above_surface(a), 0, "set-up: on the ground");
+    if run == 2 {
+        fire_now(&mut w, ALPHA, SOURCE, at(2, 2));
+        while glasnost_sim::orders::blocked(&w) {
+            step(&mut w);
+        }
+        fire(&mut w, ALPHA, WARP, at(6, 2));
+        step(&mut w);
+        assert!(warp::is_member(&w, a), "set-up: its only member");
+        until(&mut w, 200, |w| !warp::is_member(w, a));
+        let o = w.obj(a).unwrap();
+        assert!(o.on_map, "set-up: landed at its first try");
+        assert_eq!(o.pos.cell(), at(6, 2), "set-up: at its landing cell");
+        // Seam (Q-2466): S-0306 claim 17 has a former member stand at no
+        // height above its surface after its hold, but the placement at
+        // the landing point (S-0513 claim 39) runs S-0501 claim 1, whose
+        // visiting mark, set by the type test of A's first placement,
+        // places A at its cruise height. Our engine does the latter until
+        // the request is answered, so run 2 begins with A in flight.
+        assert!(
+            glasnost_sim::air::kept_filed(&w, a),
+            "set-up: in the ground list after its hold"
+        );
+    }
+    (w, a)
+}
+
+/// Whether *A* stands at rest at height 0, as parts c2 and d2 have it.
+/// Run 2 does not until Q-2466 is answered (see `p46`).
+fn at_rest(w: &World, a: ObjectId) -> bool {
+    w.height_above_surface(a) == 0
+}
+
+/// Gives *A* a move order to a cell far enough away, and runs until it is
+/// above height 0 in flight.
+fn take_off(w: &mut World, a: ObjectId) {
+    let ok = glasnost_sim::orders::issue(
+        w,
+        BETA,
+        glasnost_sim::orders::Order::Behaviour {
+            actor: a,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(-8, 8))),
+        },
+    );
+    assert!(ok, "the move order is taken");
+    until(w, 100, |w| w.height_above_surface(a) > 0);
+    assert!(
+        !temporal::ground_layer(w, a),
+        "its state and height: in the air"
+    );
+}
+
+/// Part a's searcher *V* of ALPHA: a CRUSHER given the anti-ground Gun, so
+/// that its search looks for no aircraft (its first pass does not run).
+fn hunter(w: &mut World) -> ObjectId {
+    testkit::spawn(w, Kind::Vehicle, "CRUSHER", ALPHA.0, at(-6, -6), 0)
+}
+
+fn rules_p46() -> Ruleset {
+    let mut r = rules_r65();
+    r.sim.vehicles.get_mut("CRUSHER").unwrap().primary = Some("Gun".into());
+    // spec: S-0306 scenario P46 (Setup: A's cruise-height field is below 208 leptons, so its in-air answer stays no in flight, S-0501 Terms)
+    r.sim.aircraft.get_mut("JET").unwrap().econ.flight_level = Some(150);
+    r
+}
+
+#[test]
+fn r72_claim17_p46_part_a_the_ground_layer_pass_considers_a_flying_aircraft_that_cannot_land() {
+    // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: once it flies, the ground list it stays in, S-0102 claim 4, and the layer its state and height give differ; the same holds for any such aircraft placed on the ground, warped or not; S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight as it considers a landed aircraft there, in the second pass alone for a search that does not look for aircraft) and scenario P46 part a (runs 1 and 2)
+    // spec: S-0309 r114 claim 7 (such an aircraft stays in the ground list in flight, so the ground-layer pass considers it in flight, as it considers a landed one)
+    use glasnost_sim::combat::acquire::{SearchContext, SearchKind, search};
+    for run in [1, 2] {
+        let (mut w, a) = p46(&rules_p46(), run);
+        take_off(&mut w, a);
+        assert!(
+            glasnost_sim::air::kept_filed(&w, a),
+            "run {run}: in the ground list"
+        );
+        let v = hunter(&mut w);
+        let found = search(&mut w, v, SearchKind::MapWide, SearchContext::Hunt);
+        assert_eq!(found, Some(a), "run {run}: V takes A while it flies");
+    }
+}
+
+#[test]
+fn r72_claim17_p46_part_a_control_a_flying_aircraft_that_can_land_is_not_in_the_ground_list() {
+    // spec: S-0306 r72 claim 17 (only an aircraft whose type cannot land stays in the ground list in flight; one that can land is re-filed by its take-off, S-0102 claim 4) and S-0309 claim 7 (the ground-layer pass reads the list an object was last filed in)
+    use glasnost_sim::combat::acquire::{SearchContext, SearchKind, search};
+    let mut w = ready(&rules_p46());
+    let a = testkit::spawn(&mut w, Kind::Aircraft, "LANDER", BETA.0, at(2, 2), 0);
+    take_off(&mut w, a);
+    assert!(!glasnost_sim::air::kept_filed(&w, a));
+    let v = hunter(&mut w);
+    let found = search(&mut w, v, SearchKind::MapWide, SearchContext::Hunt);
+    assert_eq!(found, None, "not in the ground list once it flies");
+}
+
+#[test]
+fn r72_claim17_p46_parts_c_and_d_no_seizing_and_no_erasure_above_height_0() {
+    // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: S-0607 claim 3's seizing and S-0514 claim 1's erasure test read the layer from state and height, so a seizing shot or an erasure hit that detonates while the aircraft is above height 0 does nothing to it; at rest at height 0 it meets that test, for a warp member after its arrival hold by the design rule above) and scenario P46 parts c, c2, d and d2 (runs 1 and 2)
+    // spec: S-0607 r39 claim 3 and S-0514 r17 claim 1 (the layer is the one the target's state and height give it, not the list it is filed in: such an aircraft is not seized or erased by a hit while it is above height 0)
+    for run in [1, 2] {
+        let (w, a) = p46(&rules_p46(), run);
+        // Parts c2 and d2, the controls: A at rest at height 0. Run 2's
+        // controls wait on Q-2466 (see `p46`).
+        if run == 1 {
+            assert!(at_rest(&w, a));
+            assert!(
+                lift::eligible(&w, a, 20),
+                "run {run}, c2: a seizing hit at rest seizes"
+            );
+            assert!(erasable(&w, a), "run {run}, d2: erased at rest");
+        }
+        let mut w = w;
+        take_off(&mut w, a);
+        assert!(
+            glasnost_sim::air::kept_filed(&w, a),
+            "run {run}: in the ground list"
+        );
+        assert!(
+            !lift::eligible(&w, a, 20),
+            "run {run}, c: not seized in flight"
+        );
+        assert!(!erasable(&w, a), "run {run}, d: not erased in flight");
+    }
+}
+
+#[test]
+fn r72_claim17_the_airborne_scan_and_claim_20c_read_the_layer_from_state_and_height() {
+    // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: S-0309 claim 9's airborne scan reads the layer from state and height, so it does not leave the aircraft out as a ground-layer object once it is tracked, from its take-off, and above height 0; claim 20 (c) gives it 128 while it is airborne, S-0307, and 42 otherwise)
+    // spec: S-0309 r114 claim 9 (such an aircraft is not left out as a ground-layer object once it is tracked and above height 0, although it flies in the ground list)
+    for run in [1, 2] {
+        let (mut w, a) = p46(&rules_p46(), run);
+        assert!(
+            !projectile::target_airborne(&w, a),
+            "run {run}: at rest or at a cruise height below 208 not airborne, so claim 20 (c) gives 42"
+        );
+        take_off(&mut w, a);
+        assert!(
+            glasnost_sim::air::kept_filed(&w, a),
+            "run {run}: in the ground list"
+        );
+        assert!(
+            !temporal::ground_layer(&w, a),
+            "run {run}: the scan's ground-layer test reads its height"
+        );
+        up(&mut w, a);
+        assert!(!threshold_42(&w, a), "run {run}: 128 while airborne");
+    }
 }

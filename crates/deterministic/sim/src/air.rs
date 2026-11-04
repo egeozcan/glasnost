@@ -257,13 +257,15 @@ pub struct AirState {
     /// cleared at its next re-file moment. S-0309 claim 7's ground-layer
     /// pass and the drawing read it.
     pub ground_filed: bool,
-    /// Kept in the ground render layer after a superweapon warp (S-0306
-    /// claim 17, revision 65): set when the arrival hold of a member whose
-    /// type cannot land ends, so that it keeps that layer while it flies;
-    /// cleared at its next re-file moment, which for such a type is only a
-    /// crash (`effects::layer_refile`). Read through
-    /// `superweapons::warp::in_ground_layer`.
-    pub warp_filed: bool,
+    /// An aircraft whose type cannot land, still in the ground render
+    /// layer's list while it flies (S-0306 r72 claim 17, *An aircraft that
+    /// cannot land, in flight*; S-0102 claim 4: no take-off re-files such a
+    /// type): set by a ground placement and at the end of a warp member's
+    /// arrival hold, cleared at its next re-file moment, which for such a
+    /// type is only a crash (`effects::layer_refile`). Only S-0309 claim
+    /// 7's ground-layer pass reads it ([`kept_filed`]); the rules that read
+    /// the layer from state and height do not.
+    pub kept_filed: bool,
     /// The start tick of the *move* whose first processing gave the
     /// aircraft its destination, until that move's next processing gives
     /// its flight point once more (claim 40).
@@ -387,6 +389,15 @@ pub fn ground_filed(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.air.as_ref())
         .is_some_and(|a| a.ground_filed)
+}
+
+/// Whether an aircraft whose type cannot land is still in the ground
+/// render layer's list from a ground placement or a warp's arrival hold,
+/// with no re-file since ([`AirState::kept_filed`]), whatever its height.
+pub fn kept_filed(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| o.air.as_ref())
+        .is_some_and(|a| a.kept_filed)
 }
 
 /// The cell layer the aircraft is listed in (S-0209 claim 13), or none.
@@ -675,6 +686,8 @@ pub fn placed(w: &mut World, id: ObjectId) {
     let surface = w.surface_at(o.pos.x, o.pos.y);
     // spec: S-0501 claim 1 (on the ground when not visiting, by the mark already present, and inside the usable area; else at cruise height)
     let ground = !a.visiting && usable;
+    // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: the same holds for any such aircraft placed on the ground, warped or not; it stays in the ground list, S-0102 claim 4) and S-0102 claim 4 (a placement files it; no take-off of a type that cannot land re-files it)
+    a.kept_filed = ground && !t.landable;
     // spec: S-0501 claim 1 (a type placed carrying passengers is a passenger carrier for life)
     a.passenger_carrier |= passengers(w, id) > 0;
     a.entered = usable;
@@ -2985,6 +2998,7 @@ pub fn fall_back_early(w: &mut World, id: ObjectId) -> bool {
         }
         // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
         crate::emitters::retarget_let_go(w, id);
+        crate::combat::held::note_revert(w, id);
         return true;
     }
     // spec: S-0501 T2 row 2 and S-0519 claim 19 (retreat, the paradrop and spy-plane behaviours, not a strike aircraft: unchanged; a strike aircraft in retreat is not exempt from falling back)

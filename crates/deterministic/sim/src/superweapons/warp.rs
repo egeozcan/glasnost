@@ -131,49 +131,40 @@ pub fn departed(w: &World, id: ObjectId) -> bool {
     member(w, id).is_some_and(|m| m.departed())
 }
 
-/// Whether a superweapon warp keeps an object in the ground render layer
-/// whatever its height (S-0306 claim 17, revision 65): a member whose warp
-/// has been launched and whose arrival hold has not ended (the member
-/// state exists from joining the group at launch until the hold ends,
-/// `turn`), and after the hold an aircraft whose type cannot land, while it
-/// flies, until a crash (`air::AirState::warp_filed`). Any other former
-/// member that did not move from one bridge deck to another stands at no
-/// height above its surface after the hold until its own movement raises
-/// it, so its own rows (`temporal::ground_layer`) give the ground layer
-/// until then and another layer from that movement's moment. For a deck to
-/// deck member the height test is kept: when it leaves the layer is not
-/// established (S-0306 Open questions).
-pub fn in_ground_layer(w: &World, id: ObjectId) -> bool {
-    // spec: S-0306 r65 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, whatever its height; it leaves that layer only when its own movement raises it, except an aircraft whose type cannot land, which keeps the ground layer while it flies, until a crash)
-    member(w, id).is_some()
-        || w.obj(id)
-            .and_then(|o| o.air.as_ref())
-            .is_some_and(|a| a.warp_filed)
-}
-
-/// Whether the warp row of S-0102's layer table applies: from the warp's
-/// launch until the member's own movement applies again after its arrival
-/// hold. Unlike [`in_ground_layer`] it leaves out the ground layer that an
-/// aircraft whose type cannot land keeps afterwards: that part is no warp
-/// row but the claim 4 rule that no take-off re-files such a type, which
-/// the drawing applies itself, and with `quirks.layer_change_on_events_only`
-/// off its sweep moves such a member once the warp row has ended.
+/// Whether the warp row of S-0102's layer table applies, so that a
+/// superweapon warp keeps an object in the ground render layer whatever
+/// its height (S-0306 claim 17): a member whose warp has been launched and
+/// whose arrival hold has not ended (the member state exists from joining
+/// the group at launch until the hold ends, `turn`). Any former member
+/// that did not move from one bridge deck to another stands at no height
+/// above its surface after the hold until its own movement raises it, so
+/// its own rows (`temporal::ground_layer`) give the ground layer until then
+/// and another layer from that movement's moment. For a deck to deck
+/// member the height test is kept: when it leaves the layer is not
+/// established (S-0306 Open questions). The ground list that an aircraft
+/// whose type cannot land stays in afterwards is no warp row but S-0102
+/// claim 4's rule that no take-off re-files such a type
+/// (`air::kept_filed`), which only S-0309 claim 7's ground-layer pass and
+/// the drawing read; with `quirks.layer_change_on_events_only` off the
+/// drawing's sweep moves such a member once the warp row has ended.
 pub fn in_warp_row(w: &World, id: ObjectId) -> bool {
-    // spec: S-0102 claim 3, claim 4 and Edge cases (the warp row applies from the warp's launch until the member's own movement applies again after its arrival hold; once it has ended a member is treated as any object)
+    // spec: S-0306 r72 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, whatever its height; once it flies after its hold, an aircraft whose type cannot land stays in the ground list, S-0102 claim 4, while the erasure test, the seizing test, the airborne scan and claim 20 (c) read the layer from state and height) and S-0102 claim 3, claim 4 and Edge cases (the warp row applies from the warp's launch until the member's own movement applies again after its arrival hold; once it has ended a member is treated as any object)
     member(w, id).is_some()
 }
 
 /// At the end of a member's arrival hold: an aircraft whose type cannot
-/// land keeps the ground render layer (S-0306 claim 17, revision 65); no
-/// landing or take-off of such a type re-files it (S-0102 claim 4), so
-/// only a crash ends it (`combat::effects::layer_refile`).
+/// land stays in the ground list (S-0306 r72 claim 17); no landing or
+/// take-off of such a type re-files it (S-0102 claim 4), so only a crash
+/// ends it (`combat::effects::layer_refile`). Its placement at the landing
+/// point may have put it in flight (`air::placed`), so the hold's end sets
+/// the mark whatever that placement gave.
 fn keep_ground_filing(w: &mut World, id: ObjectId) {
     if !w.obj(id).is_some_and(|o| o.kind == Kind::Aircraft) || crate::air::landable(w, id) {
         return;
     }
     if let Some(a) = w.obj_mut(id).and_then(|o| o.air.as_mut()) {
-        // spec: S-0306 r65 claim 17 (an aircraft member whose type cannot land keeps the ground layer while it flies, until a crash)
-        a.warp_filed = true;
+        // spec: S-0306 r72 claim 17 (an aircraft member whose type cannot land keeps the ground list while it flies, until a crash, S-0102 claim 4)
+        a.kept_filed = true;
     }
 }
 
@@ -245,14 +236,19 @@ fn landing_in(w: &World, kind: Kind, from: Pos, c: CellXY) -> Pos {
     Pos::new(x, y, z)
 }
 
-/// Whether the object is in the air (claim 34: an aircraft or jumpjet in
-/// flight).
+/// Whether a listed object is in the air, so that it is not examined
+/// (claim 34, revision 108): an aircraft by its in-the-air answer, any
+/// other object when it is airborne by height. No jumpjet state and no
+/// layer is read.
 fn in_air(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.kind == Kind::Aircraft {
-        return !crate::air::on_ground(w, id);
+        // spec: S-0513 r108 claim 34 (an aircraft by S-0501 claim 18's in-the-air answer)
+        return crate::combat::weapon::in_air(w, id);
     }
-    o.pos.z > w.surface_for(id)
+    // spec: S-0513 r108 claim 34 (any other object when it is airborne, S-0307, its height taken above the deck while its on-deck state is set; neither a jumpjet state nor a layer is read, Q-2419) and S-0307 Terms (airborne: at least 208 leptons above the surface)
+    // spec: S-0102 r42 claim 3 (a unit with jumpjet movement that is airborne, S-0307, is never a member, whether or not it is listed, while one listed in the block and not airborne is examined, S-0513 claim 34)
+    crate::combat::weapon::airborne_by_height(w, id)
 }
 
 /// The organic flag without the teleporter flag (claim 35).
@@ -320,7 +316,7 @@ fn examine(w: &mut World, h: HouseId, id: ObjectId, to: Option<CellXY>) {
         return;
     }
     if in_air(w, id) {
-        // spec: S-0513 claim 34 (an object in the air, an aircraft or jumpjet in flight, is left alone)
+        // spec: S-0513 r108 claim 34 (a listed object in the air is not examined, so nothing below applies to it, a parasite's release included)
         return;
     }
     // spec: S-0513 claim 34 (a naval parasite inside is released with 500 ticks of suppression before any other effect of the warp on that object; S-0614 claim 12)
