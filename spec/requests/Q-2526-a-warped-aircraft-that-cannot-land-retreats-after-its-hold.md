@@ -1,9 +1,9 @@
 ---
 id: Q-2526
 title: A warped aircraft that cannot land takes retreat at its wait's expiry and flies off after its hold
-status: open
+status: answered
 related: [S-0306, S-0513, S-0207, S-0501, S-0215]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
