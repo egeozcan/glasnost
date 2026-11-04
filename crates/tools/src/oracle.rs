@@ -1659,10 +1659,17 @@ pub fn setup_with(
         }
     }
     // measure: M-0021 (Setup, Houses, creation order: the observer's building after both groups; its type, cell, facing and mission are kept local, so the type is the caller's choice, at the human start position's cell, facing 0, guard)
-    if let Some(name) = &opts.observer_building
-        && rules.index_of(Kind::Building, name).is_some()
-        && let Some(&(x, y)) = ground.map.waypoints.get(&(HUMAN_START as u16))
-    {
+    if let Some(name) = &opts.observer_building {
+        if rules.index_of(Kind::Building, name).is_none() {
+            return Err(format!(
+                "the observer's building type {name} does not exist"
+            ));
+        }
+        let &(x, y) = ground
+            .map
+            .waypoints
+            .get(&(HUMAN_START as u16))
+            .ok_or("the map has no start position for the observer")?;
         glasnost_sim::testkit::spawn(
             &mut w,
             Kind::Building,

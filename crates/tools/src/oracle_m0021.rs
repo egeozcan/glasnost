@@ -158,8 +158,9 @@ pub const F_FIRST: bool = true;
 pub const END_EXTRA: i32 = 8;
 
 /// The type of the observer's one building: `GLASNOST_M0021_OBSERVER`, else
-/// the first unarmed building type of the rules with a 1 by 1 foundation,
-/// else the first unarmed one. The record keeps the type `local` and the
+/// the first unarmed building type of the rules with a 2 by 2 foundation
+/// that is no factory or gate (a 1 by 1 type may be a wall), else the first
+/// unarmed one. The record keeps the type `local` and the
 /// building takes no part in the fight (measure: M-0021, Setup, Houses).
 pub fn observer_building(r: &glasnost_sim::rules::SimRules) -> Option<String> {
     if let Ok(n) = std::env::var("GLASNOST_M0021_OBSERVER") {
@@ -171,7 +172,7 @@ pub fn observer_building(r: &glasnost_sim::rules::SimRules) -> Option<String> {
     r.buildings
         .iter()
         .filter(unarmed)
-        .find(|b| b.foundation == (1, 1))
+        .find(|b| b.foundation == (2, 2) && b.factory.is_none() && !b.gate)
         .or_else(|| r.buildings.iter().find(unarmed))
         .map(|b| b.name.clone())
 }
@@ -906,6 +907,10 @@ pub struct Findings {
     /// The shortest gap in ticks 0 to 299 between two shots of one vehicle
     /// with one weapon: F's shot weapon, G's stage 0 and stage 1 weapons.
     pub gaps: [Option<i32>; 3],
+    /// Local report only: (tick, squared centre distance) of F's first shooter to its target over the 4 ticks up to its first shot.
+    pub f_approach: Vec<(i32, i64)>,
+    /// Local report only: F's longest gap between two shots in ticks 0 to 299.
+    pub f_longest_gap: Option<i32>,
     /// The full delay's base of each (S-0301 claim 2, draw at 0).
     pub expected_gap: [i32; 3],
     /// Every stage change of a G vehicle: (from stage, value the tick
@@ -1129,6 +1134,36 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
             (t, ds)
         });
     }
+    // Local report only: F's first shooter's centre distance to its target at the 4 ticks up to its first shot, and F's longest gap.
+    if let Some(s) = rec.shots.iter().find(|s| rec.f.contains(&s.firer))
+        && let Target::Object(x) = s.target
+    {
+        out.f_approach = (s.tick - 3..=s.tick)
+            .filter_map(|t| {
+                let ps = rec.positions.get(&t)?;
+                let (a, b) = (ps.get(&s.firer)?, ps.get(&x)?);
+                let (dx, dy, dz) = (
+                    i64::from(a.x - b.x),
+                    i64::from(a.y - b.y),
+                    i64::from(a.z - b.z),
+                );
+                Some((t, dx * dx + dy * dy + dz * dz))
+            })
+            .collect();
+    }
+    out.f_longest_gap = rec
+        .f
+        .iter()
+        .flat_map(|&v| {
+            let t: Vec<i32> = rec
+                .shots
+                .iter()
+                .filter(|s| s.firer == v && s.weapon == f_shot && s.tick < GAP_TICKS)
+                .map(|s| s.tick)
+                .collect();
+            t.windows(2).map(|p| p[1] - p[0]).collect::<Vec<_>>()
+        })
+        .max();
     // Step 7: the shortest gap per vehicle and weapon in ticks 0 to 299.
     for (k, weapon) in [f_shot, g0, g1].into_iter().enumerate() {
         let mut best: Option<i32> = None;
@@ -1588,7 +1623,7 @@ pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Finding
     for ((p, s, seed), f) in runs {
         let _ = writeln!(
             out,
-            "  part {} F on {} seed {seed}: void {}, judged {}, not judged {}, fragment hits {} ({} not by F), first shots {:?}, gaps {:?} expected {:?}, stage changes {}, largest {}, dead F {} G {}, first death {:?}",
+            "  part {} F on {} seed {seed}: void {}, judged {}, not judged {}, fragment hits {} ({} not by F), first shots {:?}, gaps {:?} expected {:?}, stage changes {}, largest {}, dead F {} G {}, first death {:?}, F approach (tick, leptons) {:?}, F longest gap {:?}",
             p.text(),
             s.text(),
             f.void,
@@ -1608,7 +1643,12 @@ pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Finding
             f.largest,
             f.dead.0,
             f.dead.1,
-            f.first_death
+            f.first_death,
+            f.f_approach
+                .iter()
+                .map(|&(t, d)| (t, lepton_text(d)))
+                .collect::<Vec<_>>(),
+            f.f_longest_gap
         );
     }
     out.push_str(&verdicts_text(runs));
@@ -1680,7 +1720,11 @@ pub fn run(
         }
     }
     let summary = format!("{errors}{}", verdicts_text(&judged));
-    let full = format!("{errors}{}", report(&built, &judged));
+    let observer = grounds.values().next().map(|g| observer_building(&g.rules));
+    let full = format!(
+        "{errors}observer's building type (local): {observer:?}\n{}",
+        report(&built, &judged)
+    );
     Ok((summary, full))
 }
 
@@ -1838,8 +1882,6 @@ mod tests {
         };
         let kept = crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(None))
             .expect("set up");
-        let off = crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(Some("X")))
-            .expect("set up");
         let human = |a: &crate::oracle::Arena| {
             a.world
                 .objects
@@ -1847,7 +1889,19 @@ mod tests {
                 .filter(|o| o.owner == Some(crate::oracle::HUMAN))
                 .count()
         };
-        assert_eq!((human(&kept), human(&off)), (1, 0));
+        assert_eq!(human(&kept), 1);
+        // A building type the rules lack is an error, not a silent skip.
+        assert!(
+            crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(Some("X")))
+                .is_err()
+        );
+        // With a building type (the synthetic rules have none), the observer owns that building only.
+        if let Some(b) = observer_building(&g.rules) {
+            let off =
+                crate::oracle::setup_with(&g, [names::F, names::G], Side::A, 0, &opts(Some(&b)))
+                    .expect("set up");
+            assert_eq!(human(&off), 1);
+        }
         // Side B's group stands first in the numbers when F stands on side B.
         let fb = crate::oracle::setup_with(&g, [names::G, names::F], Side::B, 0, &opts(None))
             .expect("set up");

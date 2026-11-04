@@ -2714,7 +2714,7 @@ M-0021 is not a pairing table. It plays one test pairing (F: a tank whose invisi
 
 At intake 93, 22 of 24 rows pass, including every per-shot, gap and stage row. Two rows fail. F's centre distance at its first shot is 1504 leptons in our runs against the record's 1527. Part B's G-dead count differs in 2 of 6 runs. The record's Notes say both rows depend on how the vehicles move, and Q-2516 asks about the parts of the setup the record leaves out. [m8-claims/intake93.md](m8-claims/intake93.md) has the ledger and the interim rules.
 
-At intake 95, the record's answers to Q-2516 replaced the interim rules (parts A, A0 and the control play on to tick 608, the observer owns one building and no vehicle, F's group is created first, G's numbered weapons as built). The same 22 rows pass and the same two fail with the same numbers; Q-2536 asks what remains. `GLASNOST_M0021_OBSERVER` names the observer's building type (default: the first unarmed 1 by 1 building). [m8-claims/intake95.md](m8-claims/intake95.md) has the ledger.
+At intake 95, the record's answers to Q-2516 replaced the interim rules (parts A, A0 and the control play on to tick 608, the observer owns one building and no vehicle, F's group is created first, G's numbered weapons as built). The same 22 rows pass and the same two fail with the same numbers; Q-2536 asks what remains. `GLASNOST_M0021_OBSERVER` names the observer's building type (default: the first unarmed 2 by 2 building that is no factory or gate). [m8-claims/intake95.md](m8-claims/intake95.md) has the ledger.
 
 ### The synthetic arena
 
