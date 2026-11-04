@@ -1,9 +1,9 @@
 ---
 id: Q-2438
 title: The aircraft ready mark after the move on to the docking stage, when enter is left by force
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
