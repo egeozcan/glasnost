@@ -1,9 +1,9 @@
 ---
 id: Q-2516
 title: What M-0021's test pairing set up that the record does not state
-status: open
+status: answered
 related: [S-0216, S-0308, S-0318, S-0609]
-answered-by: []
+answered-by: [M-0021]
 ---
 
 ## Need
