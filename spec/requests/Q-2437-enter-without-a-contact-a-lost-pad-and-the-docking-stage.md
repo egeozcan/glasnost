@@ -1,9 +1,9 @@
 ---
 id: Q-2437
 title: Enter without a contact - a lost pad, the move on to the docking stage and its fall-back
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
