@@ -1,9 +1,9 @@
 ---
 id: Q-2447
 title: What else do the records' game starts take from the scenario stream before M-0019's N₀?
-status: open
+status: answered
 related: [S-0202, S-0216, S-0009, M-0019]
-answered-by: []
+answered-by: [S-0216]
 ---
 
 ## Need
