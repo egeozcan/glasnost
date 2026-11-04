@@ -137,6 +137,17 @@
       // (claim 51, Q-2291), with a scenario draw in each tick its step would leave the map.
       // Acts only on aircraft that may leave the map now.
       "aircraft_edge_hold": false,
+      // S-0209 claims 4 and 9 and Edge cases (quirks.walker_attacks_unhittable_obstacle off): rows
+      // WP13, WP24 and WP28 give blocked instead of enemy obstacle when the firing check without
+      // the range test, for the weapon the walker would use against the occupant, answers
+      // illegal, so the path search does not consider that step and the walker routes round the
+      // occupant. On (the original), an armed walker whose path leads through an enemy building,
+      // closed gate or other enemy object that its weapon cannot fire at takes it as its target,
+      // loses it at the next check and rests in front of it without its move, or under an attack
+      // move takes and loses it again for as long as it is engaged (Q-2396, filed from the AI
+      // quick lane: an infantry unit held in front of an enemy building for about 1,260 ticks).
+      // Acts only on occupants the walker's weapon cannot fire at.
+      "walker_attacks_unhittable_obstacle": false,
     },
   },
 }

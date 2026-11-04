@@ -1166,12 +1166,47 @@ fn process_move(w: &mut World, id: ObjectId) -> i32 {
     standard_delay(w, id)
 }
 
+/// The condition of S-0215 claim 23's first infantry row: the infantry
+/// unit `id` has explosive charges (by type or veterancy ability) and `b` is
+/// a building that accepts charges and is not invisible.
+fn charges_building(w: &World, id: ObjectId, b: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0215 claim 23 (explosive charges by type or veterancy ability)
+    let charges = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.raw.c4.unwrap_or(false))
+        || crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::C4);
+    let Some(t) = w
+        .obj(b)
+        .filter(|x| x.kind == Kind::Building)
+        .and_then(|x| w.rules().buildings.get(x.type_index as usize))
+    else {
+        return false;
+    };
+    // spec: S-0215 claim 23 (a building that accepts charges and is not invisible, the two flags as the rules import them)
+    charges && t.building.can_c4 && !t.invisible
+}
+
 /// Attack (S-0215 claim 23).
 fn process_attack(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return NO_RULE_DELAY;
     };
     if o.kind == Kind::Infantry {
+        if let Some(tg @ Target::Object(b)) = o.target
+            && charges_building(w, id, b)
+        {
+            // spec: S-0215 claim 23 (Infantry, first row: explosive charges against a building that accepts charges and is not invisible: the target becomes the destination and sabotage is queued; 1 tick, no draw, none of the general rules)
+            let before = o.dest;
+            if let Some(ob) = w.obj_mut(id) {
+                ob.dest = Some(tg);
+                ob.beh.queue(Some(Behaviour::Sabotage));
+            }
+            // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, id, before);
+            return 1;
+        }
         let deployed = o
             .infantry
             .as_ref()

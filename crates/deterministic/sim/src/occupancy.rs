@@ -370,6 +370,30 @@ pub fn building_gives_none(w: &World, b: ObjectId) -> bool {
         || (!t.gate && t.raw.firestorm_wall.unwrap_or(false))
 }
 
+/// The value of rows WP13, WP24 and WP28 of S-0209 claim 4 for occupant
+/// `oid`: *enemy obstacle*. These rows ask no firing check, so an occupant
+/// the walker cannot fire at gives it too. With
+/// `quirks.walker_attacks_unhittable_obstacle` off they give *blocked* when
+/// the firing check without the range test, for the weapon the walker
+/// would use against that occupant, answers *illegal*.
+fn enemy_obstacle(w: &World, mover: ObjectId, oid: ObjectId) -> Outcome {
+    // spec: S-0209 claim 4 (Armed walkers and the firing check, Q-2396: the rows ask no firing check)
+    if w.rules().quirks.walker_attacks_unhittable_obstacle {
+        return Outcome::EnemyObstacle;
+    }
+    let t = Some(Target::Object(oid));
+    // spec: S-0209 Edge cases (switch off: the weapon it would use against the occupant, S-0308)
+    let (slot, _) = crate::combat::weapon::would_use(w, mover, t);
+    // spec: S-0209 Edge cases (switch off: blocked when the firing check without the range test answers illegal, as for an unarmed walker under row WP22)
+    if crate::combat::check::check(w, mover, t, slot, false)
+        == crate::combat::check::Answer::Illegal
+    {
+        Outcome::Blocked
+    } else {
+        Outcome::EnemyObstacle
+    }
+}
+
 /// The entry outcome of an infantry mover for cell `c` (S-0209 claim 4).
 pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -> Outcome {
     Mover::of(w, mover).map_or(Outcome::Blocked, |m| {
@@ -451,11 +475,11 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
                 // spec: S-0209 claim 4 (row WP12: a closed gate allied with the walker, the gate owner's view)
                 (false, Some(Outcome::ClosedFriendlyGate))
             } else if b.gate {
-                // spec: S-0209 claim 4 (rows WP13 and WP14: any other closed gate: enemy obstacle with a primary weapon, else blocked)
+                // spec: S-0209 claim 4 (rows WP13 and WP14: any other closed gate: enemy obstacle with a primary weapon, else blocked; r55: WP13 tests the primary weapon, not *armed*)
                 (
                     false,
-                    Some(if armed {
-                        Outcome::EnemyObstacle
+                    Some(if mv.primary(w).has {
+                        enemy_obstacle(w, mover, oid)
                     } else {
                         Outcome::Blocked
                     }),
@@ -474,7 +498,7 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
                 (false, Some(Outcome::Blocked))
             } else {
                 // spec: S-0209 claim 4 (row WP24: other enemy building, armed)
-                (false, Some(Outcome::EnemyObstacle))
+                (false, Some(enemy_obstacle(w, mover, oid)))
             }
         } else if o.kind == Kind::Terrain {
             // spec: S-0209 claim 4 (row WP27: a terrain object gives none; row WP22 excludes terrain objects)
@@ -516,7 +540,7 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
             (false, None)
         } else {
             // spec: S-0209 claim 4 (row WP28: other enemy objects, armed)
-            (false, Some(Outcome::EnemyObstacle))
+            (false, Some(enemy_obstacle(w, mover, oid)))
         };
         if v.0 && override_value.is_none() {
             override_value = Some((values.len(), v.1.unwrap_or(Outcome::Clear)));

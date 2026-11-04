@@ -279,6 +279,12 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
 /// An override to *attack* with `target` as target and no destination
 /// (S-0215 claims 10 and 18).
 pub fn override_attack(w: &mut World, actor: ObjectId, target: ObjectId) {
+    override_attack_on(w, actor, Target::Object(target));
+}
+
+/// [`override_attack`] with any target, an object or a cell (S-0215 claim
+/// 10; S-0209 claim 9 takes a wall's cell so).
+pub fn override_attack_on(w: &mut World, actor: ObjectId, target: Target) {
     let q = w.rules().quirks;
     let Some(o) = w.obj_mut(actor) else { return };
     let slots_changed = o.beh.override_with(
@@ -292,7 +298,7 @@ pub fn override_attack(w: &mut World, actor: ObjectId, target: ObjectId) {
     }
     // spec: S-0215 claim 10 (the target and destination are put aside and replaced)
     o.beh.aside = Some((o.target, o.dest));
-    o.target = Some(Target::Object(target));
+    o.target = Some(target);
     let mobile = o.kind.is_mobile();
     // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
     crate::emitters::retarget_let_go(w, actor);

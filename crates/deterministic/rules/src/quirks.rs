@@ -241,6 +241,14 @@ pub struct Quirks {
     // spec: S-0209 claim 4
     #[serde(default = "on")]
     pub occupancy_override_hides_later_blockers: bool,
+    /// Rows WP13, WP24 and WP28 ask no firing check: an armed walker meets an enemy building, a
+    /// closed enemy gate or another enemy object that its weapon cannot fire at as *enemy
+    /// obstacle* and takes it as its target. Off, those rows give *blocked* when the firing
+    /// check without the range test, for the weapon it would use against that occupant,
+    /// answers *illegal*.
+    // spec: S-0209 claims 4 and 9, Edge cases (Q-2396)
+    #[serde(default = "on")]
+    pub walker_attacks_unhittable_obstacle: bool,
     /// A crusher reads obstacle outcomes as clear in cells whose overlay has registration index 0.
     // spec: S-0209 claim 5
     #[serde(default = "on")]
@@ -2285,6 +2293,7 @@ impl Default for Quirks {
             occupancy_house_stale: true,
             stationary_friendly_exactly_three: true,
             occupancy_override_hides_later_blockers: true,
+            walker_attacks_unhittable_obstacle: true,
             crusher_overlay_index0_clear: true,
             crusher_entry_ground_layer: true,
             cell_layer_split_on_uneven_deck: true,
@@ -2900,6 +2909,10 @@ impl Quirks {
             (
                 "occupancy_override_hides_later_blockers",
                 self.occupancy_override_hides_later_blockers,
+            ),
+            (
+                "walker_attacks_unhittable_obstacle",
+                self.walker_attacks_unhittable_obstacle,
             ),
             (
                 "crusher_overlay_index0_clear",
