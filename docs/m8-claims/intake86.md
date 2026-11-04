@@ -89,7 +89,12 @@ golden on their own. The straight duel still exercises everything it must (trans
 
 ## Lanes
 
-Base 538a793 (local main 53e846c plus the requests) against 8f66efa, same machine, release.
+Before: main 53e846c with this intake's requests; after: that base with this intake's code commit
+("sim: aircraft enter without a contact, …"); same machine, release. The lanes ran before the
+rebase onto 7f29fee (intake 85, S-0214, which changes sim and AI code but no golden); on the
+rebased tree the checks and the gate were run again (the goldens hold), the lanes were not.
+Intake 87 moves every golden, the arena and the quick lane, so after this intake is rebased onto
+it the two goldens are regenerated there and the arena and the quick lane are run again.
 
 | lane | before | after |
 |---|---|---|
