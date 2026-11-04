@@ -1,9 +1,9 @@
 ---
 id: Q-2446
 title: Which country does the human player house of the arena's game start have?
-status: open
+status: answered
 related: [S-0216, S-0009, S-0412, M-0001, M-0017, M-0019]
-answered-by: []
+answered-by: [S-0216]
 ---
 
 ## Need
