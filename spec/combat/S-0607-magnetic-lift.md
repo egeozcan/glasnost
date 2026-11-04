@@ -2,11 +2,11 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-04
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
 Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
@@ -143,15 +143,20 @@ New terms:
 3. **Which targets can be seized.** The target is seized only when all of these hold:
    - it is a vehicle or an aircraft. Infantry and buildings are never seized,
    - it is in the ground render layer (S-0102). An aircraft in flight and a jumpjet in the air
-     layer are immune; a landed aircraft is not,
+     layer are immune; a landed aircraft is not. The layer is the one the target's state and
+     height give it (S-0102 claim 3), not the list it is filed in: an aircraft whose type cannot
+     land and whose movement is neither rocket nor drop-pod movement is not seized by a hit while
+     it is above height 0, although it stays in the ground list (S-0306 claim 17),
    - it is not temporarily invulnerable (S-0513 claim 27),
    - it is not already seized,
    - it is not protected by its factory. A vehicle is protected when it is in contact with a
      building of a war-factory type and that building covers the vehicle's cell,
    - its type's size is strictly less than the projectile damage (F1).
-   - Backing: `measurable` (scenario L1)
+   - Backing: `measurable` (scenario L1; scenario P46 part c of S-0306 for an aircraft that
+     cannot land, in flight)
    - Confidence: high (each condition); medium (the factory-contact condition, whose window is
-     short in play)
+     short in play); medium (the layer read from state and height for an aircraft that cannot
+     land, in flight)
    - **A hold starts only with a shot.** The conditions above, and claim 2's, are tested when
      the lifter's seizing projectile detonates, against that projectile's target. No range test
      is made then: neither the weapon's range nor its minimum range is tested at the detonation.
