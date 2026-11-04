@@ -8630,8 +8630,18 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_grounded_enter_stall": {
+          "description": "An aircraft in enter's approaching stage that holds a contact, is on the ground by its height, is not landing and is not pad-bound is never moved on to the docking stage: each processing returns 3 ticks and changes nothing, so it is never serviced; off: every aircraft in contact on the ground and not landing is moved on to the docking stage as a pad-bound one is, so it reports entry at its next processing.",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_half_reload_with_target": {
           "description": "An aircraft on a pad with a target is never reloaded past half its ammunition while it keeps the target; off: reload to full regardless of target.",
+          "type": "boolean",
+          "default": true
+        },
+        "aircraft_ready_mark_outlives_enter": {
+          "description": "An aircraft whose ready mark enter cleared and that is then forced into another behaviour stays not ready in it until a processing sets the mark again, so a queued behaviour or an order waits, under a forced guard below cruise height for as long as it keeps that height; off: the cleared mark holds it not ready only while enter is current.",
           "type": "boolean",
           "default": true
         },

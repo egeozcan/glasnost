@@ -231,6 +231,10 @@ pub struct AirState {
     /// *Enter* has recognised arrival on its pad and docks at its next
     /// processing (claim 24).
     pub enter_docking: bool,
+    /// The ready mark (claim 31, r110, Q-2438) is cleared: state kept from
+    /// one processing to the next, not a reading of the last one. Not
+    /// cleared (the default) means set, as when the aircraft is made.
+    pub mark_cleared: bool,
     /// The tick of the facing requests remembered below (claim 42).
     pub request_tick: i32,
     /// The pass counter (S-0522 Terms): passes it may still start without
@@ -589,20 +593,32 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
     if a.run_lock && cur != Some(Behaviour::SpyPlaneApproach) {
         return false;
     }
-    !ready_mark_cleared(o, &a)
+    // spec: S-0501 claim 31 (r110, Q-2438: not ready when a processing has cleared its ready mark, a kept mark, until a processing sets it again; every change of behaviour, forced or from the queue, leaves it as it is) and Edge cases (quirks.aircraft_ready_mark_outlives_enter off: the cleared mark holds it not ready only while enter is current)
+    !(a.mark_cleared
+        && (w.rules().quirks.aircraft_ready_mark_outlives_enter || cur == Some(Behaviour::Enter)))
 }
 
-/// Whether aircraft `o`'s last processing cleared its ready mark (claim
-/// 31): the processing of *enter* that moved it on to the docking stage,
-/// which alone sets that stage and returns 3 ticks, until its next
-/// processing, which records another delay. Derived from that processing's
-/// record rather than kept as a mark of its own.
-fn ready_mark_cleared(o: &crate::world::Object, a: &AirState) -> bool {
-    // spec: S-0501 claim 24 (r103, Q-2366: the processing that moves an aircraft in contact on to the docking stage leaves it not ready to change until its next processing, 3 ticks later; each processing of the docking stage leaves it ready) and claim 31 (not ready when its processing has cleared its ready mark); Q-2438 for enter left by force within those ticks, interim: the mark is derived from the last processing, so the aircraft is ready again at once
-    o.beh.current == Some(Behaviour::Enter)
-        && a.enter_of == Some(o.beh.start_tick)
-        && a.enter_docking
-        && o.beh.last.is_some_and(|(_, d)| d == APPROACH_DELAY)
+/// Sets the ready mark (claim 31, r110): at the processings of *enter* and
+/// *guard* that claim names.
+fn set_ready_mark(w: &mut World, id: ObjectId) {
+    if let Some(a) = st_mut(w, id) {
+        a.mark_cleared = false;
+    }
+}
+
+/// With `quirks.aircraft_ready_mark_outlives_enter` off, a change out of
+/// *enter* leaves the ready mark set (claim 31, Edge cases): applied at
+/// the start and the end of the aircraft's update, so that it holds once
+/// *enter* is current again. A change out and back within one update is
+/// not seen.
+fn ready_mark_after_enter(w: &mut World, id: ObjectId) {
+    // spec: S-0501 Edge cases (quirks.aircraft_ready_mark_outlives_enter off: any change out of enter, forced or from the queue, leaves its ready mark set)
+    if !w.rules().quirks.aircraft_ready_mark_outlives_enter
+        && w.obj(id)
+            .is_some_and(|o| o.beh.current != Some(Behaviour::Enter))
+    {
+        set_ready_mark(w, id);
+    }
 }
 
 fn stale(w: &World) -> bool {
@@ -1628,23 +1644,25 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
 const NO_PLACE: u32 = u32::MAX; // spec: S-0501 claim 24 (r99: the docking position without a contact; r103: the pad's heading point without a contact) and S-0404 claim 15 (a contact index outside the displacement count gives c; a count of 1 gives the sole displacement whatever the index)
 
 /// One step of *enter*'s docking approach while the aircraft lands (claim
-/// 24): toward its contact place's docking position at pad `k`, along each
+/// 24): toward its contact place's docking position at pad `to`, along each
 /// map axis by the difference limited to −5 … +5 leptons, its world height
 /// unchanged.
-fn docking_step(w: &mut World, id: ObjectId, k: ObjectId) {
+fn docking_step(w: &mut World, id: ObjectId, to: Target) {
     let Some(o) = w.obj(id) else { return };
     let here = o.pos;
-    let contact = o.contact == Some(k);
-    let to = if w.obj(k).is_some_and(|b| b.kind == Kind::Building) {
-        if contact {
-            crate::econ::release::pad_position(w, k, id).0
-        } else {
-            // spec: S-0501 claim 24 (r99 and r103: in the docking stage without a contact, an aircraft aims at a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: an aircraft that lands over the pad without a contact is moved toward that same docking position; a count of 1 gives the sole displacement whatever the index, a contact index outside the count gives c)
-            crate::econ::release::pad_position_at(w, k, NO_PLACE)
+    let to = match to {
+        Target::Object(k) if w.obj(k).is_some_and(|b| b.kind == Kind::Building) => {
+            if o.contact == Some(k) {
+                crate::econ::release::pad_position(w, k, id).0
+            } else {
+                // spec: S-0501 claim 24 (r99 and r103: in the docking stage without a contact, an aircraft aims at a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: an aircraft that lands over the pad without a contact is moved toward that same docking position; a count of 1 gives the sole displacement whatever the index, a contact index outside the count gives c)
+                crate::econ::release::pad_position_at(w, k, NO_PLACE)
+            }
         }
-    } else {
         // spec: S-0501 claim 24 (a contact that is not a building gives its centre instead of a docking position)
-        w.reference_point(k)
+        Target::Object(k) => w.reference_point(k),
+        // spec: S-0501 claim 24 (r110, Q-2437: without a contact, toward a destination that is not a building, such as the landing spot the run-away notice gives, it moves it toward that destination's centre)
+        Target::Cell(c) => Pos::centre(c, here.z),
     };
     // spec: S-0501 claim 24 and Constants (the docking approach step: each map axis by the difference to the docking position limited to −5 … 5 leptons, each axis separately, exact integer arithmetic; the world height unchanged)
     let step = |d: i32| d.clamp(-5, 5);
@@ -1655,15 +1673,14 @@ fn docking_step(w: &mut World, id: ObjectId, k: ObjectId) {
     }
 }
 
-/// The aircraft reports that it has entered pad `k` (claim 24): *sleep*
-/// with *guard* queued, and the pad starts servicing.
+/// The aircraft reports that it has entered pad `k` (claim 24): the pad
+/// starts servicing and has it queue *sleep*, and it then queues *guard*,
+/// which replaces the *sleep*.
 fn report_entered(w: &mut World, id: ObjectId, k: ObjectId) {
-    let (t, s) = (w.tick, stale(w));
-    if let Some(o) = w.obj_mut(id) {
-        // spec: S-0501 claim 24 (its behaviour becomes sleep, with guard queued)
-        o.beh.force(Behaviour::Sleep, t, s);
-        o.beh.queue(Some(Behaviour::Guard));
-    }
+    let t = w.tick;
+    // spec: S-0501 claim 24 (r110, Q-2438: the pad has the aircraft queue sleep, and the aircraft then queues guard, which replaces the sleep, S-0215 claim 7; the processing leaves it ready, so guard becomes current by the end of the tick; neither the report nor the pad tests where it touched down)
+    queue(w, id, Behaviour::Sleep);
+    queue(w, id, Behaviour::Guard);
     if let Some(a) = st_mut(w, k)
         && a.service.is_none()
     {
@@ -1847,6 +1864,10 @@ fn st_opt(w: &World, id: ObjectId) -> Option<&AirState> {
 /// aircraft that is then on the ground by its height, or landing, takes
 /// off.
 fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
+    if dest.is_some_and(|d| ignores(w, id, d)) {
+        // spec: S-0501 claim 8 (r110, Q-2437: a landing aircraft given a destination in the cell of its flight point ignores it: no take-off, the flight point stays as it was and it goes on landing there)
+        return;
+    }
     let raised = raise_now(w, id);
     if let Some(a) = st_mut(w, id) {
         a.flying_to = dest;
@@ -1864,6 +1885,27 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
             crate::combat::effects::layer_refile(w, id);
         }
     }
+}
+
+/// Claim 8's exception: whether landing aircraft `id`'s flight ignores
+/// destination `d`, given in the cell of the point it is landing at (claim
+/// 40's flight point: its docking position when it docks, claim 24; its own
+/// position when it lands where it is, claim 6).
+fn ignores(w: &World, id: ObjectId, d: Target) -> bool {
+    let Some(a) = st_opt(w, id) else { return false };
+    if !a.landing || a.flying_to == Some(d) {
+        return false;
+    }
+    // spec: S-0501 claim 8 (r110: the point it is landing at, its flight point, claim 40; its own position when it lands where it is, claim 6, read as its position now, Q-2507)
+    let at = match a.flying_to {
+        Some(f) => flight_point(w, id, f).cell(),
+        None => match w.obj(id) {
+            Some(o) => o.pos.cell(),
+            None => return false,
+        },
+    };
+    // spec: S-0501 claim 8 (r110: a destination in that cell, the cell of the point the destination gives the flight, claim 40)
+    flight_point(w, id, d).cell() == at
 }
 
 fn tick_flight(w: &mut World, id: ObjectId) -> bool {
@@ -1923,7 +1965,11 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         return false;
     };
     // spec: S-0501 claim 42 (a destination cleared in attack with a target keeps the flight point: guidance and claim 5's slowing go on toward it)
-    let dest = if dead { None } else { flight_target(w, id) };
+    let mut dest = if dead { None } else { flight_target(w, id) };
+    if dest.is_some_and(|d| ignores(w, id, d)) {
+        // spec: S-0501 claim 8 (r110, Q-2437: its flight ignores a destination in the cell of the point it is landing at: the flight point stays as it was and it goes on landing there)
+        dest = a.flying_to;
+    }
     let dp = dest.map(|d| flight_point(w, id, d));
     let here = o.pos;
     let d = dp.map(|p| planar(w, here, p));
@@ -2913,12 +2959,8 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
             continue;
         }
         let Some(o) = w.obj(x).cloned() else { continue };
-        // spec: S-0501 claim 26 (an aircraft still flying in, in enter, or still moving is skipped)
-        if o.beh.current == Some(Behaviour::Enter)
-            || moving(w, x)
-            || !st(w, x).ground
-            || !pad_cell(w, k, x)
-        {
+        // spec: S-0501 claim 26 (an aircraft still flying in, in enter, or still moving is skipped) and claim 24 (r110, Q-2436: neither the report nor the pad tests where it touched down, so one settled off the foundation is serviced there)
+        if o.beh.current == Some(Behaviour::Enter) || moving(w, x) || !st(w, x).ground {
             continue;
         }
         settled = true;
@@ -2964,6 +3006,63 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
     if let Some(a) = st_mut(w, k) {
         // spec: S-0501 claim 26 (with no aircraft settled, servicing ends; otherwise every P ticks)
         a.service = settled.then(|| t.wrapping_add(p.max(1)));
+    }
+}
+
+/// The run-away notice of pad `k` that starts selling (claim 24, r110,
+/// Q-2437; S-0314 claim 22): to every aircraft in contact with it,
+/// approaching, docking or on the pad, in contact-place order.
+pub fn sale_started(w: &mut World, k: ObjectId) {
+    let mut list: Vec<(u32, ObjectId)> = w
+        .objects
+        .values()
+        .filter(|o| o.contact == Some(k) && o.kind == Kind::Aircraft)
+        .map(|o| {
+            (
+                o.econ
+                    .exit
+                    .filter(|e| e.factory == k)
+                    .map_or(u32::MAX, |e| e.place),
+                o.id,
+            )
+        })
+        .collect();
+    // design: S-0501 claim 24 and Q-2508 (r110: the order in which the aircraft in contact receive the notice is not given; interim: contact-place order, as a service step takes them, claim 26, and as depot::sale_started takes vehicles, since each notice can draw for its landing spot, F8)
+    list.sort_unstable();
+    for (_, x) in list {
+        if is_aircraft(w, x) {
+            run_away(w, x);
+        }
+    }
+}
+
+/// The run-away notice to aircraft `x` (claim 24, r110).
+fn run_away(w: &mut World, x: ObjectId) {
+    // spec: S-0501 claim 24 (r110, Q-2437: the notice ends the contact)
+    if let Some(o) = w.obj_mut(x) {
+        o.contact = None;
+        o.econ.exit = None;
+    }
+    // spec: S-0501 claim 24 (r110: it gives the aircraft a landing spot near its house's buildings, Formula F8, as its destination, which makes one that is landing or on the ground take off, claim 8, at its next movement update)
+    let s = landing_spot(w, x);
+    set_dest(w, x, s.map(Target::Cell));
+    // spec: S-0501 claim 24 (r110: it then has the aircraft queue move, S-0215 claim 7 deciding the slot) and claim 34 (a request that claim ignores is ignored entirely)
+    queue(w, x, Behaviour::Move);
+    let cur = w.obj(x).and_then(|o| o.beh.current);
+    match cur {
+        Some(Behaviour::Enter) => {
+            // spec: S-0501 claim 24 (r110: in enter it queues guard after that, which replaces the move)
+            queue(w, x, Behaviour::Guard);
+        }
+        Some(Behaviour::Sleep) if !queue_ignored(w, x, Behaviour::Guard) => {
+            // spec: S-0501 claim 24 (r110: in sleep that guard comes with an immediate start)
+            let (t, s) = (w.tick, stale(w));
+            if let Some(o) = w.obj_mut(x) {
+                o.beh.queue_and_start_at_once(Behaviour::Guard, t, s);
+            }
+        }
+        // spec: S-0501 claim 24 (r110: in any other current behaviour, such as the guard of an aircraft released on its pad, the move stays queued; the notice makes no fall-back itself)
+        _ => {}
     }
 }
 
@@ -3091,12 +3190,10 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
         Some(Behaviour::Attack)
     } else if armed
         && (!in_the_air(w, id)
-            || (o.beh.current == Some(Behaviour::Enter)
-                && o.dest
-                    .is_some_and(|d| Some(d) == o.contact.map(Target::Object)))
+            || (o.beh.current == Some(Behaviour::Enter) && o.dest.is_some())
             || t.docks.is_empty())
     {
-        // spec: S-0501 T2 and claim 45 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: the destination kept; guard, area guard for a computer-controlled house)
+        // spec: S-0501 T2 and claim 45 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: the destination kept; guard, area guard for a computer-controlled house) and claims 24 and 46 (r110, Q-2437: the row of an aircraft already flying to its enter destination needs that destination, not a contact: in enter's docking stage without a contact it keeps the pad, or the landing spot the run-away notice gave, and gives guard)
         Some(resting)
     } else if armed {
         if let Some(k) = seek_pad(w, id) {
@@ -3211,6 +3308,7 @@ pub fn behaviour_turn(w: &mut World, id: ObjectId) {
         return;
     }
     let t = w.tick;
+    ready_mark_after_enter(w, id);
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0501 claim 32 (before processing, a target whose in-the-air answer is yes is cleared; an aircraft in attack whose target is gone, removed and no longer existing (glossary, *removed*), ends its run: the target is cleared here too, for a removal that was not a kill)
     if let Some(Target::Object(x)) = o.target
@@ -3408,23 +3506,20 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
         return standard(w, id);
     }
     // spec: S-0501 claims 29 and 48 (d) (the cruise-height outcomes at exactly the cruise height only)
+    // spec: S-0501 claim 29 (r110, Q-2437: at exactly cruise height the test is team membership, not the destination; our engine has no teams, so every aircraft takes the outcomes outside a team)
     if !ground && h == t.cruise {
-        if o.dest.is_some() {
-            if !t.bound {
-                // spec: S-0501 claim 29 (at cruise height with a destination: move, if it is not pad-bound)
-                queue(w, id, Behaviour::Move);
-            }
-        } else if armed {
-            // spec: S-0501 claim 29 (at cruise height, armed, no destination: falls back to rest)
+        if armed {
+            // spec: S-0501 claim 29 (r110: outside a team, an armed aircraft falls back to rest, claim 18, whatever its destination) and claim 31 (r110, Q-2438: this processing sets the ready mark)
+            set_ready_mark(w, id);
             fall_back(w, id);
         } else {
-            // spec: S-0501 claim 29 (unarmed: its own cell and move, so it lands)
+            // spec: S-0501 claim 29 (unarmed, outside a team: its own cell and move, so it lands, whatever its destination) and claim 31 (r110: this processing leaves the ready mark as it is)
             let c = o.pos.cell();
             set_dest(w, id, Some(Target::Cell(c)));
             queue(w, id, Behaviour::Move);
         }
     } else if !ground && !t.bound && o.dest.is_some() && o.beh.queued.is_none() && o.health > 0 {
-        // spec: S-0501 claim 33 (a living, not pad-bound aircraft in flight in guard with a destination and nothing queued: move)
+        // spec: S-0501 claim 33 (a living, not pad-bound aircraft in flight in guard with a destination and nothing queued: move) and claim 29 (r110: apart from the processings at exactly cruise height)
         queue(w, id, Behaviour::Move);
     }
     // spec: S-0501 claim 29 (45 ticks for an unarmed aircraft and an aircraft on the ground with no contact; otherwise the standard delay)
@@ -3473,74 +3568,132 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
     if bound_away(w, id) {
         return 1; // spec: S-0501 claim 24 (r103: a processing that finds no contact returns 1 tick, and so does the pad-bound rule that queues move)
     }
+    let Some(t) = ty(w, id) else {
+        return NO_RULE_DELAY;
+    };
+    // spec: S-0501 claim 24 (r110, Q-2437: a second rule comes next, at every processing, its first included, and in either stage: an aircraft in flight with no destination asks its contact to be loaded; unless that request is confirmed it falls back to rest at once, claim 18, whatever is queued, and the processing returns 1 tick and does nothing else; an aircraft without a contact has nobody to confirm it, so this is what any aircraft in flight whose destination is gone does) and claim 31 (that fall-back leaves the ready mark as it is)
+    let in_flight = !on_ground(w, id);
+    let asked = in_flight && destination(w, id).is_none();
+    if asked && !load_request(w, id, &t) {
+        fall_back(w, id);
+        return 1; // spec: S-0501 claim 24 (r110: the second rule's fall-back returns 1 tick)
+    }
+    // A confirmed request goes on by the rules below in this processing,
+    // which is still that of the enter it found current: an entry started
+    // again by the pad's answer has its first processing at the next one.
     // spec: S-0501 claim 24 (entry begins with a 1-tick delay)
     if st(w, id).enter_of != Some(o.beh.start_tick) {
         if let Some(a) = st_mut(w, id) {
             a.enter_of = Some(o.beh.start_tick);
             a.enter_docking = false;
         }
+        // spec: S-0501 claim 31 (r110, Q-2438: the processing of enter that starts entry sets the ready mark)
+        set_ready_mark(w, id);
         return 1; // spec: S-0501 claim 24 (entry begins with a 1-tick delay)
     }
     let pad = o
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building));
     let Some(k) = pad else {
+        // spec: S-0501 claim 31 (r110, Q-2438: every processing of enter without a contact that the two rules let through sets the ready mark: the wait, the fall-back, the move on to the docking stage, and every processing of the docking stage)
+        set_ready_mark(w, id);
         if st(w, id).enter_docking {
-            // spec: S-0501 claim 24 (r103: in the docking stage without a contact, its contact having ended after it reached that stage)
-            return docking_without_contact(w, id, None);
+            // spec: S-0501 claim 24 (r103: in the docking stage without a contact, its contact having ended after it reached that stage, or its pad's sale having replaced the destination, r110)
+            return docking_without_contact(w, id);
         }
         return without_contact(w, id);
     };
-    // spec: S-0501 claim 24 (each processing asks the pad it is in contact with to be loaded: the pad confirms the contact and the approach)
-    if !request_contact(w, id, k) {
-        // spec: S-0501 claim 24 (r99: a refusal by which the pad ends the contact during the approach) and Open question 19 (the refusal itself stays open: our engine meets it at this request)
-        if let Some(ob) = w.obj_mut(id) {
-            ob.contact = None;
-            ob.econ.exit = None;
-        }
-        if being_sold(w, k) {
-            // spec: S-0501 claim 24 (r99: the pad stops being its destination while it approaches, a sale, claim 32: it falls back to rest) and claim 46 (a sale removes the pad as the aircraft's destination before it falls back, whether or not a behaviour is queued); Q-2437 for a sale in the docking stage, interim: the same fall-back, before that stage's rules without a contact
-            set_dest(w, id, None);
-            fall_back(w, id);
-            return 1; // spec: S-0501 claim 24 (r99: a processing that finds no contact returns 1 tick, whether it waits or falls back)
-        }
-        if st(w, id).enter_docking {
-            // spec: S-0501 claim 24 (r103: a refusal that ends the contact while the pad stays its destination leaves it, once it is in the docking stage, to that stage's rules without a contact; our engine meets the refusal in this processing, so those rules follow at once)
-            return docking_without_contact(w, id, Some(k));
-        }
-        // spec: S-0501 claim 24 (r99: a refusal that ends the contact while the pad stays its destination leaves it to the processing without a contact; our engine meets the refusal in this processing, so that processing follows at once) and claim 46 (the destination cleared when no behaviour is queued)
+    let docking = st(w, id).enter_docking;
+    // spec: S-0501 claim 24 (r110, Q-2436: a processing asks the pad it is in contact with to be loaded in two cases only: in flight with no destination, the second rule above, and for a pad-bound aircraft in flight in the approaching stage)
+    if !asked && !docking && t.bound && in_flight && !load_request(w, id, &t) {
+        // spec: S-0501 claim 24 (r99: a refusal by which the pad ends the contact during the approach while it stays the aircraft's destination leaves it to the processing without a contact; our engine meets the refusal in this processing, so that processing follows at once) and Open question 19 (the refusal itself stays open: our engine meets it at this request) and claim 31 (r110: that processing sets the ready mark)
+        set_ready_mark(w, id);
         return without_contact(w, id);
     }
     let landing = st(w, id).landing;
-    // spec: S-0501 claim 24 (the processing of enter that finds it landing while in contact advances to the docking stage; one already down on its pad does too, and is not moved)
-    let here = (landing || on_ground(w, id)) && pad_cell(w, k, id);
-    if st(w, id).enter_docking && here {
+    let ground = on_ground(w, id);
+    if docking {
+        // spec: S-0501 claim 31 (r110, Q-2438: every processing of the docking stage that the two rules let through sets the ready mark, the one that reports entry included)
+        set_ready_mark(w, id);
         if landing {
             // spec: S-0501 claim 24 (from the next processing until touchdown, each processing, 1 tick after the one before, moves it horizontally toward its docking position)
-            docking_step(w, id, k);
-        } else {
-            // spec: S-0501 claim 24 (after touchdown it reports that it has entered; an aircraft already on the ground and not landing when it reaches this stage is not moved)
-            dock(w, id, k);
+            docking_step(w, id, Target::Object(k));
+            return 1; // spec: S-0501 claim 24 (the docking and entered-report stage returns 1 tick)
         }
-        return 1; // spec: S-0501 claim 24 (the docking and entered-report stage returns 1 tick)
+        if ground {
+            // spec: S-0501 claim 24 (after touchdown it reports that it has entered; an aircraft already on the ground and not landing when it reaches this stage is not moved; r110, Q-2436: neither the report nor the pad tests where it touched down)
+            dock(w, id, k);
+            return 1; // spec: S-0501 claim 24 (the docking and entered-report stage returns 1 tick)
+        }
+        // design: S-0501 claim 24 and Q-2506 (r110 gives no outcome for a processing of the docking stage in contact that finds the aircraft in flight and not landing, as after a refused touchdown; interim: back to the approaching stage, as before r110, which moves it on again when it next finds it landing)
+        if let Some(a) = st_mut(w, id) {
+            a.enter_docking = false;
+        }
+        return APPROACH_DELAY; // design: S-0501 claim 24 and Q-2506 (interim: the approaching stage's 3 ticks)
     }
-    if here {
-        // spec: S-0501 claim 24 (the processing that finds it landing in contact only advances to the docking stage and returns 3 ticks)
+    // spec: S-0501 claim 24 (r110, Q-2436: in the approaching stage, a processing in contact that finds the aircraft landing moves it on to the docking stage, and so does one that finds a pad-bound aircraft on the ground by its height and not landing; neither tests the position) and Edge cases (quirks.aircraft_grounded_enter_stall on: one that is not pad-bound, on the ground and not landing is never moved on; off: it is moved on as a pad-bound one is)
+    let stall = w.rules().quirks.aircraft_grounded_enter_stall;
+    if landing || (ground && (t.bound || !stall)) {
         if let Some(a) = st_mut(w, id) {
             a.enter_docking = true;
+            // spec: S-0501 claim 31 (r110, Q-2438: the ready mark is cleared only when a processing in contact moves the aircraft on to the docking stage, claim 24, and by move for a type that carries vehicles, a seam: our engine has no such move)
+            a.mark_cleared = true;
         }
-        // spec: S-0501 claim 24 (in contact during the approaching stage: 3 ticks) and claim 31 (r103: this processing leaves it not ready to change until its next processing, ready_mark_cleared)
+        // spec: S-0501 claim 24 (the processing that moves it on to the docking stage returns 3 ticks)
         return APPROACH_DELAY;
     }
-    if let Some(a) = st_mut(w, id) {
-        a.enter_docking = false;
-    }
-    if o.dest != Some(Target::Object(k)) {
-        // design: S-0501 claim 24 and Q-2436 (r103 dropped the take-off of an aircraft on the ground away from its destination pad in favour of the pad-bound rule before every other; whether a processing in contact during the approaching stage gives the pad back as destination when the aircraft's destination is not that pad, such as none after an accepted touchdown outside the foundation, is open; interim: it gives the pad back, as before r103, so that the approach goes on)
-        set_dest(w, id, Some(Target::Object(k)));
-    }
-    // spec: S-0501 claim 24 (in contact during the approaching stage it returns 3 ticks, with no standard-delay draw)
+    // spec: S-0501 claim 24 (r110, Q-2436: a processing in contact that finds neither returns 3 ticks and changes nothing else: it tests neither the destination nor the position, and leaves a cell or no destination as it is, apart from the pad's answer) and claim 31 (it leaves the ready mark as it is)
     APPROACH_DELAY
+}
+
+/// The destination of aircraft `id` as claim 24 reads it (r110, Q-2437): a
+/// destination that is gone, its pad destroyed or removed, leaves none.
+fn destination(w: &World, id: ObjectId) -> Option<Target> {
+    // spec: S-0501 claim 24 (r110, Q-2437: a destination that is gone, its pad destroyed or removed, leaves the aircraft none)
+    w.obj(id)?
+        .dest
+        .filter(|d| !matches!(*d, Target::Object(k) if w.obj(k).is_none()))
+}
+
+/// Claim 24's load request (r110, Q-2436): aircraft `id` asks the pad it is
+/// in contact with to be loaded. Returns whether the pad confirmed it; a
+/// refusal ends the contact. A confirmed request gives a settled aircraft
+/// that the pad accepts the pad as destination, *enter* queued and its
+/// queued behaviour started at once.
+fn load_request(w: &mut World, id: ObjectId, t: &Ty) -> bool {
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let pad = o
+        .contact
+        .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building));
+    // spec: S-0501 claim 24 (r110: a pad that is switched on confirms the request, and a switched-off one refuses it; an aircraft without a contact has nobody to confirm it)
+    let Some(k) = pad.filter(|&k| w.obj(k).is_some_and(|b| !b.econ.building.switched_off)) else {
+        if o.contact.is_some_and(|k| Some(k) == pad)
+            && let Some(ob) = w.obj_mut(id)
+        {
+            // spec: S-0501 claim 24 (a refusal by which the pad ends the contact, claim 32)
+            ob.contact = None;
+            ob.econ.exit = None;
+        }
+        return false;
+    };
+    // spec: S-0501 claim 24 (r110: before it confirms, the pad asks whether the aircraft has settled: its locomotor reports stopped, claim 40, it has no destination, or it is pad-bound and its destination is the cell it stands in)
+    let dest = destination(w, id);
+    let settled =
+        stopped(w, id) || dest.is_none() || (t.bound && dest == Some(Target::Cell(o.pos.cell())));
+    // spec: S-0501 claim 24 (r110: when it has, and the pad accepts it, claim 22, the pad gives itself as destination and has it queue enter and start its queued behaviour at once, whether or not it is ready; with enter current and nothing queued that changes only the destination, S-0215 claim 7; a queued behaviour is replaced and lost, and entry starts again; an aircraft that has not settled keeps its destination: the answer changes nothing for it)
+    if settled && accepts(w, k, id) {
+        set_dest(w, id, Some(Target::Object(k)));
+        // spec: S-0501 claim 34 (a request that claim ignores is ignored entirely)
+        if !queue_ignored(w, id, Behaviour::Enter) {
+            let (tick, s) = (w.tick, stale(w));
+            if let Some(ob) = w.obj_mut(id) {
+                ob.beh.queue_and_start_at_once(Behaviour::Enter, tick, s);
+            }
+        }
+    }
+    true
 }
 
 /// Claim 24's rule before every other (r103, Q-2366): a pad-bound aircraft
@@ -3550,7 +3703,7 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
 /// whether the rule applied.
 fn bound_away(w: &mut World, id: ObjectId) -> bool {
     let Some(t) = ty(w, id) else { return false };
-    let Some(d) = w.obj(id).and_then(|o| o.dest) else {
+    let Some(d) = destination(w, id) else {
         return false;
     };
     let building = |k: ObjectId| w.obj(k).is_some_and(|b| b.kind == Kind::Building);
@@ -3568,11 +3721,9 @@ fn bound_away(w: &mut World, id: ObjectId) -> bool {
         o.contact = None;
         o.econ.exit = None;
     }
-    if let Some(k) = pad
-        && let Some(a) = st_mut(w, id)
-    {
-        // spec: S-0501 claim 24 (r103: it records that destination as the pad it was last heading for, the pad claim 21 asks first); Q-2436 for a destination that is not a building, interim: the record is unchanged
-        a.heading_pad = Some(k);
+    if let Some(a) = st_mut(w, id) {
+        // spec: S-0501 claim 24 (r103: it records that destination as the pad it was last heading for, the pad claim 21 asks first, when it is a building, of its dock types or not; r110, Q-2436: any other destination, such as a cell, is recorded as no pad, and the earlier record is lost)
+        a.heading_pad = pad;
     }
     // spec: S-0501 claim 24 (r103: it queues move with an immediate start, S-0215 claim 7, which replaces any queued behaviour) and claim 34 (a request that claim ignores is ignored entirely)
     if !queue_ignored(w, id, Behaviour::Move) {
@@ -3584,79 +3735,41 @@ fn bound_away(w: &mut World, id: ObjectId) -> bool {
     true
 }
 
-/// The docking stage without a contact (claim 24, r103, Q-2366): the
-/// contact ended after the aircraft reached that stage, with *enter* still
-/// current. `refused` is the pad whose refusal just ended the contact, if
-/// it was in this processing.
-fn docking_without_contact(w: &mut World, id: ObjectId, refused: Option<ObjectId>) -> i32 {
+/// The docking stage without a contact (claim 24, r103 and r110, Q-2366
+/// and Q-2437): the contact ended after the aircraft reached that stage, or
+/// its pad's sale replaced the destination, with *enter* still current.
+fn docking_without_contact(w: &mut World, id: ObjectId) -> i32 {
     // spec: S-0501 claim 24 (r103: each of its processings there, 1 tick apart, makes no test of contact or of a queued behaviour)
     if st(w, id).landing {
-        let pad = refused.or_else(|| match w.obj(id)?.dest {
-            Some(Target::Object(k)) if w.obj(k).is_some_and(|b| b.kind == Kind::Building) => {
-                Some(k)
-            }
-            _ => None,
-        });
-        if let Some(k) = pad {
-            // spec: S-0501 claim 24 (r103: while it is landing, the processing moves it as the docking stage moves one in contact, toward a docking position that does not depend on whether the pad has a free contact place, docking_step without a contact)
-            docking_step(w, id, k);
+        if let Some(d) = destination(w, id) {
+            // spec: S-0501 claim 24 (r103: while it is landing, the processing moves it as the docking stage moves one in contact, toward a docking position that does not depend on whether the pad has a free contact place; r110, Q-2437: toward a destination that is not a building, such as the run-away notice's landing spot, toward that destination's centre)
+            docking_step(w, id, d);
         }
     } else {
-        // spec: S-0501 claim 24 (r103: the first processing that finds it no longer landing makes it fall back to rest, claim 18, whatever is queued: after an accepted touchdown, whose own movement update makes no fall-back, claim 7, or after a refused one); Q-2437 for whether the destination is forgotten first, interim: the fall-back sees the destination as it stands
+        // spec: S-0501 claim 24 (r103: the first processing that finds it no longer landing makes it fall back to rest, claim 18, whatever is queued: after an accepted touchdown, whose own movement update makes no fall-back, claim 7, or after a refused one; r110, Q-2437: it does not forget the destination first, so the fall-back sees the destination as it stands, none after an accepted touchdown, and in flight the destination it still has, for which T2's row of an armed aircraft already flying to its enter destination keeps it and gives guard)
         fall_back(w, id);
     }
     1 // spec: S-0501 claim 24 (r103: the docking stage's processings are 1 tick apart; the docking and entered-report stage returns 1 tick)
 }
 
-/// Whether pad `k` is being sold (S-0501 claim 22's "being sold").
-fn being_sold(w: &World, k: ObjectId) -> bool {
-    w.obj(k).is_some_and(|b| {
-        b.econ.sale.is_some() || matches!(b.beh.current.or(b.beh.queued), Some(Behaviour::Selling))
-    })
-}
-
-/// The pad that is aircraft `id`'s destination, if its destination is
-/// still one: a living building of its dock types, on the map and not being
-/// sold (claim 24 r99: "if the pad stops being its destination").
-fn destination_pad(w: &World, id: ObjectId) -> Option<ObjectId> {
-    let Some(Target::Object(k)) = w.obj(id)?.dest else {
-        return None;
-    };
-    let t = ty(w, id)?;
-    // spec: S-0501 Terms (a pad: a building whose type is one of the aircraft type's dock types)
-    let pad = w.obj(k).is_some_and(|b| {
-        b.kind == Kind::Building && b.health > 0 && b.on_map && t.docks.contains(&b.type_index)
-    });
-    (pad && !being_sold(w, k)).then_some(k)
-}
-
 /// A processing of *enter* after its first that finds the aircraft without
-/// a contact (claim 24, r99 and r103, Q-2326 and Q-2366), in flight and on
-/// the ground alike, whether or not the pad has a free contact place.
+/// a contact (claim 24, r99, r103 and r110, Q-2326, Q-2366 and Q-2437), in
+/// flight and on the ground alike, whether or not the pad has a free contact
+/// place. It makes no test of the destination.
 fn without_contact(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id) else {
         return NO_RULE_DELAY;
     };
-    let (queued, dest) = (o.beh.queued.is_some(), o.dest);
-    let dest_pad = match dest {
-        Some(Target::Object(k)) if w.obj(k).is_some_and(|b| b.kind == Kind::Building) => Some(k),
-        _ => None,
-    };
-    // spec: S-0501 claim 24 (r99: a destination no longer a pad, gone or sold, claims 32 and 46); Q-2437 (r103 makes the queued behaviour the wait's only condition; whether a lost pad still ends the wait is open, interim: it does, as before r103)
-    let gone = matches!(dest, Some(Target::Object(k)) if w.obj(k).is_none());
-    let lost = (gone || dest_pad.is_some()) && destination_pad(w, id).is_none();
+    let queued = o.beh.queued.is_some();
     if st(w, id).landing
-        && let Some(k) = dest_pad
-        && pad_cell(w, k, id)
+        && let Some(a) = st_mut(w, id)
     {
-        // spec: S-0501 claim 24 (r103, Q-2366: a processing without a contact that finds the aircraft landing also moves it on to the docking stage but does not move the aircraft itself; it then waits or falls back as below); Q-2437 for a landing that is not over a cell of its destination pad, interim: the move on needs the pad's cell, as the processing in contact does
-        if let Some(a) = st_mut(w, id) {
-            a.enter_docking = true;
-        }
+        // spec: S-0501 claim 24 (r103, Q-2366: a processing without a contact that finds the aircraft landing also moves it on to the docking stage but does not move the aircraft itself; it then waits or falls back as below; r110, Q-2437: it does so wherever the aircraft lands, with no test of the cell under it or of its destination)
+        a.enter_docking = true;
     }
-    // spec: S-0501 claim 24 (r103, Q-2366: with a behaviour queued it keeps the destination and enter, asks no pad and waits; that processing leaves it ready to change and in enter it carries no run lock, so the queued behaviour becomes current at the end of that tick, claim 31's third point: the wait lasts that one processing; the wait is the same when the order that queued the behaviour also gave a destination other than the pad, such as a cell; a waiting aircraft is never moved toward the pad)
-    if !queued || lost {
-        // spec: S-0501 claim 24 (r99: with no behaviour queued it forgets the destination and falls back to rest, claim 18) and T3 (the pad is gone: the destination is cleared before the fall-back)
+    // spec: S-0501 claim 24 (r103, Q-2366: with a behaviour queued it keeps the destination and enter, asks no pad and waits; that processing leaves it ready to change and in enter it carries no run lock, so the queued behaviour becomes current at the end of that tick, claim 31's third point: the wait lasts that one processing; r110, Q-2437: this processing makes no test of the destination, so a pad being sold, a building not of the dock types or a gone pad is waited with or forgotten as any pad is)
+    if !queued {
+        // spec: S-0501 claim 24 (r99: with no behaviour queued it forgets the destination and falls back to rest, claim 18)
         set_dest(w, id, None);
         fall_back(w, id);
     }
@@ -4197,6 +4310,7 @@ pub fn end_turn(w: &mut World, id: ObjectId) {
         ) {
             set_lock(w, id, false);
         }
+        ready_mark_after_enter(w, id);
         // spec: S-0501 claim 31 (the third start opportunity: once more each update, after its processing and movement)
         start_if_ready(w, id);
         // spec: S-0501 claim 15 (a left run's pending round is spent at the end of that update, a start in this update included)

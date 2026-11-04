@@ -3462,14 +3462,7 @@ fn pad_bound_without_a_pad_crashes_at_the_run_end_both_ways() {
     }
 }
 
-/// Sells building `k` of house 0 and runs until it is gone.
-fn sell(w: &mut World, k: ObjectId) {
-    open(w);
-    assert!(orders::issue(w, ALPHA, Order::Sell { actor: k }));
-    assert!(run_until(w, 600, |w| w.obj(k).is_none()), "sold");
-}
-
-// spec: S-0501 claim 46 and T3 (the pad it flies to is sold during its approach: the destination is cleared before the fall-back, no other pad grants contact, and a pad-bound aircraft in flight crashes then)
+// spec: S-0501 claim 46 (r110: the pad it flies to is sold during its approach: the sale reaches the aircraft in contact through the run-away notice, claim 24, which replaces the pad as destination with a landing spot and gives guard, so the fall-back that decides comes outside enter; no other pad grants contact, and a pad-bound aircraft in flight crashes then)
 #[test]
 fn pad_bound_pad_sold_during_the_approach_crashes() {
     let mut r = pad_bound(Some(vec!["APAD".into()]));
@@ -3485,32 +3478,105 @@ fn pad_bound_pad_sold_during_the_approach_crashes() {
     let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
     open(&mut w);
     assert!(orders::issue(&mut w, ALPHA, Order::Sell { actor: k }));
-    let crash = run_until(&mut w, 50, |w| w.obj(a).unwrap().health == 0);
+    let crash = run_until(&mut w, 200, |w| w.obj(a).unwrap().health == 0);
     assert!(crash, "a crash: {}", describe(&w, a));
-    assert!(w.obj(k).is_some(), "while the pad is being sold");
-    assert_eq!(
+    assert_ne!(
         w.obj(a).unwrap().dest,
-        None,
+        Some(Target::Object(k)),
         "the pad is no longer its destination"
     );
     crashed(&w, a);
     falls_to_impact(&mut w, a, losses);
 }
 
-// spec: S-0501 claim 46 (an aircraft standing on its pad when the pad is sold is on the ground and does not crash; T2's ground row: guard with its ammunition left)
+// spec: S-0501 claim 46 (r110: an aircraft standing on its pad when the pad is sold still holds its contact, so the run-away notice reaches it, claim 24: it holds no contact and has a cell as destination, not the pad, at the end of the sale's first tick; in guard the move the notice queues stays queued, not guard; the landing spot makes it take off, claim 8, and the fall-back that decides comes in flight, at cruise height or over that cell, where a pad-bound aircraft does not land, so with no other pad it crashes in flight with its ammunition full) and claim 26 (guard current once released); AC29 part f (4)
 #[test]
-fn pad_bound_standing_on_its_pad_when_sold_does_not_crash() {
-    let r = pad_bound(Some(vec!["APAD".into()]));
+fn ac29f4_pad_bound_standing_on_its_pad_when_sold_takes_off_and_crashes() {
+    let mut r = pad_bound(Some(vec!["APAD".into()]));
+    r.sim.general.economy.curley_shuffle = Some(true);
     let (mut w, k, a) = built_with(&r, "JET1");
     assert!(air::on_ground(&w, a), "standing on its pad");
-    sell(&mut w, k);
-    for _ in 0..300 {
-        step(&mut w);
-        let o = w.obj(a).expect("not removed");
-        assert!(o.health > 0, "no crash: {}", describe(&w, a));
-        assert!(air::on_ground(&w, a));
-    }
-    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
+    assert!(run_until(&mut w, 200, |w| w.obj(a).unwrap().beh.current
+        == Some(Behaviour::Guard)
+        && w.obj(a).unwrap().beh.queued.is_none()));
+    assert_eq!(w.obj(a).unwrap().combat.ammo, 2, "full ammunition");
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    open(&mut w);
+    assert!(orders::issue(&mut w, ALPHA, Order::Sell { actor: k }));
+    let selling = run_until(&mut w, 20, |w| {
+        w.obj(k).unwrap().beh.current == Some(Behaviour::Selling)
+    });
+    assert!(selling, "the sale");
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.contact, None, "{}", describe(&w, a));
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "a landing spot: {}",
+        describe(&w, a)
+    );
+    assert!(
+        o.beh.current == Some(Behaviour::Move) || o.beh.queued == Some(Behaviour::Move),
+        "move queued or current: {}",
+        describe(&w, a)
+    );
+    assert_ne!(o.beh.queued, Some(Behaviour::Guard), "not guard queued");
+    let h = air::height(&w, a);
+    assert!(run_until(&mut w, 20, |w| air::height(w, a) > h), "it rises");
+    let crash = run_until(&mut w, 3000, |w| w.obj(a).unwrap().health == 0);
+    assert!(crash, "a crash: {}", describe(&w, a));
+    crashed(&w, a);
+    pad_removed_then_falls(&mut w, k, a, losses);
+}
+
+/// Runs until the sold pad `k` leaves play, then runs aircraft `a`'s crash
+/// to impact. The pad comes before the aircraft in the update order, so its
+/// removal in its own turn costs the aircraft that tick's turn (S-0203 claim
+/// 10, `quirks.update_order_removal_skip`), and the fall counter does not
+/// grow in that tick.
+fn pad_removed_then_falls(w: &mut World, k: ObjectId, a: ObjectId, losses: i32) {
+    assert!(run_until(w, 600, |w| w.obj(k).is_none()), "sold");
+    assert!(w.obj(a).is_some(), "still falling when the pad is removed");
+    crashed(w, a);
+    falls_to_impact(w, a, losses);
+}
+
+// spec: S-0501 claim 46 (r110: an aircraft standing on its pad after its run with no ammunition, in sleep when the pad is sold, takes the notice there: guard queued with an immediate start, so guard is queued or current; no contact, a cell as destination; it takes off and crashes in flight) and claim 24; AC29 part f (6)
+#[test]
+fn ac29f6_pad_bound_asleep_on_its_pad_with_no_ammunition_when_sold_crashes() {
+    let mut r = pad_bound(Some(vec!["APAD".into()]));
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let (mut w, k, a) = built_with(&r, "JET1");
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    let asleep = run_until(&mut w, 3000, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Sleep)
+    });
+    assert!(asleep, "sleep on its pad: {}", describe(&w, a));
+    assert_eq!(w.obj(a).unwrap().combat.ammo, 0);
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    open(&mut w);
+    assert!(orders::issue(&mut w, ALPHA, Order::Sell { actor: k }));
+    let selling = run_until(&mut w, 20, |w| {
+        w.obj(k).unwrap().beh.current == Some(Behaviour::Selling)
+    });
+    assert!(selling, "the sale");
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.contact, None, "{}", describe(&w, a));
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "a landing spot: {}",
+        describe(&w, a)
+    );
+    assert!(
+        o.beh.current == Some(Behaviour::Guard) || o.beh.queued == Some(Behaviour::Guard),
+        "guard queued or current: {}",
+        describe(&w, a)
+    );
+    let crash = run_until(&mut w, 3000, |w| w.obj(a).unwrap().health == 0);
+    assert!(crash, "a crash: {}", describe(&w, a));
+    crashed(&w, a);
+    pad_removed_then_falls(&mut w, k, a, losses);
 }
 
 /// The bomb rules of claim 46's planted-bomb case: a bomb warhead whose

@@ -137,6 +137,21 @@
       // (claim 51, Q-2291), with a scenario draw in each tick its step would leave the map.
       // Acts only on aircraft that may leave the map now.
       "aircraft_edge_hold": false,
+      // S-0501 claim 24 and Edge cases (quirks.aircraft_grounded_enter_stall off): every
+      // aircraft in enter's approaching stage that holds a contact and is on the ground and not
+      // landing is moved on to the docking stage as a pad-bound one is, so it reports entry at
+      // its next processing and is serviced. On (the original), one that is not pad-bound
+      // "stays in enter with its contact, returning 3 ticks at each processing, and is never
+      // serviced" until an order, a queued behaviour or the end of its contact (r110, Q-2436).
+      // Acts only on that grounded aircraft in contact.
+      "aircraft_grounded_enter_stall": false,
+      // S-0501 claim 31 and Edge cases (quirks.aircraft_ready_mark_outlives_enter off): the
+      // ready mark that enter's move on to the docking stage clears holds the aircraft not
+      // ready only while enter is current. On (the original), an aircraft forced into another
+      // behaviour before a processing sets the mark again stays not ready in it, so a queued
+      // behaviour or an order waits, and under a forced guard below cruise height for as long as
+      // it keeps that height (r110, Q-2438). Acts only on an aircraft whose mark enter cleared.
+      "aircraft_ready_mark_outlives_enter": false,
       // S-0209 claims 4 and 9 and Edge cases (quirks.walker_attacks_unhittable_obstacle off): rows
       // WP13, WP24 and WP28 give blocked instead of enemy obstacle when the firing check without
       // the range test, for the weapon the walker would use against the occupant, answers
