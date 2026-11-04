@@ -1,9 +1,9 @@
 ---
 id: Q-2426
 title: Which answers part (e) passes over with quirks.moment_reason_attack_cursor off
-status: open
+status: answered
 related: [S-0214, S-0301, S-0607, S-0516, S-0405, S-0506]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
