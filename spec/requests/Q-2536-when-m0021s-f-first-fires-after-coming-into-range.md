@@ -1,9 +1,9 @@
 ---
 id: Q-2536
 title: When M-0021's F vehicle first fires after its target comes into range, and why part B's outcome varies with the seed
-status: open
+status: answered
 related: [S-0307, S-0215, S-0309, S-0413]
-answered-by: []
+answered-by: [M-0021]
 ---
 
 ## Need
