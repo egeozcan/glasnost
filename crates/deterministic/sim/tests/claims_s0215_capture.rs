@@ -184,6 +184,29 @@ fn claim_28_row_2_infantry_with_nothing_falls_back_and_stays() {
     no_unbuilt_note(&w);
 }
 
+// spec: S-0215 claim 2 (an actor processes its behaviour only on a tick on which its own update runs, its turn in S-0203's turn pass) and S-0203 claim 3 (a unit inside a building or a transport that is not open-topped is out of play and takes no turns): a unit in *capture* with no destination and no target is not given claim 28's row 2 while it is inside, and is given it once it is back on the map (M8 seam sweep 5a)
+#[test]
+fn claim_28_a_unit_inside_is_not_processed_until_it_is_back() {
+    let mut w = game();
+    let u = put(&mut w, Kind::Infantry, "WALKER", 0, 0, 0);
+    let pos = w.obj(u).unwrap().pos;
+    set(&mut w, u, Behaviour::Capture, None, None);
+    glasnost_sim::objects::take_inside(&mut w, u);
+    assert!(!w.obj(u).unwrap().on_map);
+    testkit::run(&mut w, 30);
+    let o = w.obj(u).unwrap();
+    assert_eq!(o.beh.last, None, "no processing while inside");
+    assert_eq!(o.beh.current, Some(Behaviour::Capture), "still in capture");
+    assert!(!rested(&w, u, Behaviour::Guard), "no fall-back to rest");
+    // Back on the map: row 2 at its next processing.
+    glasnost_sim::objects::place(&mut w, u, pos, 0);
+    w.obj_mut(u).unwrap().beh.expired = true;
+    processed(&mut w, u);
+    // spec: S-0215 claim 14 row 12 (a player house's infantry without the area-guard ability or default: guard)
+    assert!(rested(&w, u, Behaviour::Guard), "guard once back");
+    no_unbuilt_note(&w);
+}
+
 // spec: S-0215 claim 28 (the scatter off a building: no threat point, forced, not move-anywhere; S-0208 claims 11 and 13 for infantry) and scenario B12 (e), the building's cell (it walks to a neighbouring cell)
 #[test]
 fn claim_28_scatter_off_a_building_infantry() {
