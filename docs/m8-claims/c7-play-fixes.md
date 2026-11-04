@@ -424,3 +424,15 @@ WP13, WP24 and WP28 (`occupancy::enemy_obstacle`), so by the step and the path s
 **Version effects.** The layer file changes, so the layered `sim_rules_hash` moves: a save,
 replay, report or room made with the previous layer is refused on the rules hash. Reference files
 are unaffected.
+
+## Intake 90 (S-0214 r80): the reason-of-the-moment cursor switch judged again
+
+Ledger: [intake90.md](intake90.md). S-0214 r80 answers Q-2426: with the switch off, part (e)
+passes over every answer that is not *illegal* (the interim intake 85 built), and the off position
+is a departure by decision. No switch is added and the switch's default is unchanged.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `moment_reason_attack_cursor` | S-0214 claim 6 (e), Edge cases (r80, Q-2426 answered) | rejected (not in the layer), unchanged | Condition 1 is met in full now: the Edge case names every answer the off position passes over (*busy*, every *rearming* of ranks 4 and 5 with the grip and magnetic-beam answers, every *impossible*, out of ammunition, *cloaked*, *must deploy* and the lower ranks) and the two stops (the empty slot, the range test), and `check::illegal_at_any_rank` builds exactly that. Condition 2 still fails: r80 adds no stuck unit, give-up or glitch to the on position, and no play note or request names one. The four cases it adds (a lifter over its gripped unit in the air, a hidden target a later test rules illegal, a launching vehicle, a deploy-to-fire healer on a failing cell) are, in the on position, further attack orders accepted over a target the actor never fires at. The off position takes those orders away. Condition 3 stays doubtful for the reason intake 85 gives: it changes which orders a click gives, the own AI's included. Both positions of the four new cases: `claims_s0214_r80::off_a_lifter_over_its_gripped_unit_in_the_air_fails_part_e`, `off_a_hidden_target_that_a_later_test_rules_illegal_fails_part_e`, `off_a_launching_vehicle_over_an_illegal_target_fails_part_e`, `off_a_deploy_to_fire_healer_on_a_failing_cell_fails_part_e`; the two stops, off: `off_the_two_stops_remain`. Intake 85's tests stand. |
+
+Intake 90 leaves the layer file unchanged.
