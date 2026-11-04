@@ -140,7 +140,9 @@ The layer file does not change.
 ## Checks
 
 On the tree rebased onto origin/main dad1756 (intake 90, S-0214 r80, S-0216 r69; an earlier
-pass on a097d11, intake 86, gave the same results with 7480 workspace tests):
+pass on a097d11, intake 86, gave the same results with 7480 workspace tests). The branch was
+then rebased onto 21ad0fe, which adds only spec and measurement text over dad1756 (S-0216 r70,
+the M-0001 to M-0003 revisions); `cargo xtask check` was run again there with the same result.
 
 - `cargo test --workspace --no-fail-fast`: 7486 passed, 0 failed, 120 ignored;
   `every_spec_quirk_has_a_switch` passes.
