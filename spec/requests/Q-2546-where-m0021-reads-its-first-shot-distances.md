@@ -1,9 +1,9 @@
 ---
 id: Q-2546
 title: At which point of a tick M-0021 reads its first-shot distances, and whether G's vehicles took their turns before F's
-status: open
+status: answered
 related: [S-0203, S-0310, S-0307, S-0215, S-0207]
-answered-by: []
+answered-by: [M-0021]
 ---
 
 ## Need
