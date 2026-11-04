@@ -1091,6 +1091,7 @@ fn rules_p46() -> Ruleset {
 #[test]
 fn r72_claim17_p46_part_a_the_ground_layer_pass_considers_a_flying_aircraft_that_cannot_land() {
     // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: once it flies, the ground list it stays in, S-0102 claim 4, and the layer its state and height give differ; the same holds for any such aircraft placed on the ground, warped or not; S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight as it considers a landed aircraft there, in the second pass alone for a search that does not look for aircraft) and scenario P46 part a (runs 1 and 2)
+    // spec: S-0309 r114 claim 7 (such an aircraft stays in the ground list in flight, so the ground-layer pass considers it in flight, as it considers a landed one)
     use glasnost_sim::combat::acquire::{SearchContext, SearchKind, search};
     for run in [1, 2] {
         let (mut w, a) = p46(&rules_p46(), run);
@@ -1121,6 +1122,7 @@ fn r72_claim17_p46_part_a_control_a_flying_aircraft_that_can_land_is_not_in_the_
 #[test]
 fn r72_claim17_p46_parts_c_and_d_no_seizing_and_no_erasure_above_height_0() {
     // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: S-0607 claim 3's seizing and S-0514 claim 1's erasure test read the layer from state and height, so a seizing shot or an erasure hit that detonates while the aircraft is above height 0 does nothing to it; at rest at height 0 it meets that test, for a warp member after its arrival hold by the design rule above) and scenario P46 parts c, c2, d and d2 (runs 1 and 2)
+    // spec: S-0607 r39 claim 3 and S-0514 r17 claim 1 (the layer is the one the target's state and height give it, not the list it is filed in: such an aircraft is not seized or erased by a hit while it is above height 0)
     for run in [1, 2] {
         let (w, a) = p46(&rules_p46(), run);
         // Parts c2 and d2, the controls: A at rest at height 0. Run 2's
@@ -1150,6 +1152,7 @@ fn r72_claim17_p46_parts_c_and_d_no_seizing_and_no_erasure_above_height_0() {
 #[test]
 fn r72_claim17_the_airborne_scan_and_claim_20c_read_the_layer_from_state_and_height() {
     // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: S-0309 claim 9's airborne scan reads the layer from state and height, so it does not leave the aircraft out as a ground-layer object once it is tracked, from its take-off, and above height 0; claim 20 (c) gives it 128 while it is airborne, S-0307, and 42 otherwise)
+    // spec: S-0309 r114 claim 9 (such an aircraft is not left out as a ground-layer object once it is tracked and above height 0, although it flies in the ground list)
     for run in [1, 2] {
         let (mut w, a) = p46(&rules_p46(), run);
         assert!(

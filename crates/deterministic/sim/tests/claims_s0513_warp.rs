@@ -701,6 +701,7 @@ fn intake84_claim34_a_grounded_jumpjet_listed_in_the_block_joins_the_warp() {
 #[test]
 fn r108_claim34_a_listed_jumpjet_ascending_below_the_airborne_height_joins_the_warp() {
     // spec: S-0513 r108 claim 34 (a listed object in the air is not examined: any object other than an aircraft when it is airborne, S-0307; neither a jumpjet state nor a layer is read, Q-2419; so a unit with jumpjet movement listed in a source cell and not airborne is examined like any listed object, whether it is ascending, descending or hovering on a listing it kept, and joins the group)
+    // spec: S-0102 r42 claim 3 (a unit with jumpjet movement listed there and not airborne is examined)
     for h in [100, 207] {
         let (mut w, j) = jumpjet_at(0);
         let (_, seen, listed) = warp_raised(&mut w, j, |w| {
@@ -733,6 +734,7 @@ fn r108_claim34_a_listed_jumpjet_in_any_state_below_the_airborne_height_joins_th
 #[test]
 fn r108_claim34_an_airborne_object_is_not_examined_listed_or_not() {
     // spec: S-0513 r108 claim 34 (one that is airborne, S-0307: at least 208 leptons above its surface, is not examined even while listed, so nothing applies to it); S-0307 Terms (airborne at 208)
+    // spec: S-0102 r42 claim 3 (a unit with jumpjet movement that is airborne is never a member, whether or not it is listed; its Backing: no block has such a unit listed and airborne at once)
     // A jumpjet's own turn lists it out of the ground layer at 208 leptons
     // (S-0502 claim 4), so the launch does not find it in the block's lists.
     let (mut w, j) = jumpjet_at(0);
@@ -802,6 +804,7 @@ fn r108_claim34_the_height_of_a_jumpjet_on_a_deck_is_taken_above_the_deck() {
 #[test]
 fn r108_claim34_sw12_b8_an_ordered_jumpjet_ascending_at_the_launch_joins_and_lands() {
     // spec: S-0513 r108 claim 34 (a listed jumpjet ascending below the airborne height is examined and joins) and SW12 part (b8) (ordered to a cell outside the block before the launch; at the launch its height is above 0 and below the airborne height, rising, over a block cell; it joins the group, departing with the members and appearing in the destination block)
+    // spec: S-0102 r42 claim 3 (Backing: a listed unit with jumpjet movement ascending below the airborne height being examined, S-0513 scenario SW12 part b8)
     let mut r = rules_jj();
     // spec: S-0513 SW12 (b8) (its cruise height set by the test data well above the airborne height)
     r.sim.vehicles.get_mut("JJ").unwrap().jumpjet_height = Some(1000);

@@ -1382,6 +1382,7 @@ fn computer_alpha(w: &mut World) {
 #[test]
 fn r108_claim39a_the_held_temporal_rearming_outranks_a_protected_targets_illegal_on_the_map() {
     // spec: S-0513 r108 claim 39a and its Changes for S-0301 claim 9 (A held temporal target within rank 4, Q-2416: the held-temporal-target rearming outranks the illegal for a protected target, S-0513 claim 28, so a firer whose temporal beam is attached to a protected target keeps it at S-0309 claim 29's check, on the map); S-0513 claim 28 (a firer that is not a player-human gets illegal against a protected object)
+    // spec: S-0301 r70 claim 9 (A held temporal target within rank 4: the rearming outranks the illegal for a protected target)
     let (mut w, f, m) = beamed_on_the_map();
     computer_alpha(&mut w);
     protect_now(&mut w, m);
@@ -1407,6 +1408,7 @@ fn r108_claim39a_the_held_temporal_rearming_outranks_a_protected_targets_illegal
 #[test]
 fn r108_claim39a_the_held_temporal_rearming_outranks_a_hidden_targets_impossible_on_the_map() {
     // spec: S-0513 r108 claim 39a and its Changes for S-0301 claim 9 (A held temporal target within rank 4, Q-2416: the held-temporal-target rearming outranks the hidden-target impossible, S-0516 claim 24, so a firer whose temporal beam is attached to a hidden target keeps it at S-0309 claim 29's check, on the map)
+    // spec: S-0301 r70 claim 9 (A held temporal target within rank 4: the rearming outranks the hidden-target impossible)
     let (mut w, f, m) = beamed_on_the_map();
     hide(&mut w, m);
     let owner = w.obj(f).unwrap().owner;
@@ -1427,6 +1429,7 @@ fn r108_claim39a_the_held_temporal_rearming_outranks_a_hidden_targets_impossible
 #[test]
 fn r108_claim39a_a_firer_keeps_a_protected_or_hidden_member_off_the_map() {
     // spec: S-0513 r108 claim 39a (The firer, Q-2416: neither the member's protection, claims 26 and 28, nor its being hidden from the firer's house, S-0516 claim 24, gives such an answer: rearming outranks both, S-0301 claim 9 as amended, on the map or off it, so the firer keeps a protected or hidden member at S-0309 claim 29's checks)
+    // spec: S-0301 r70 claim 9 (A held temporal target within rank 4: the keep holds on the map or, for a superweapon warp member, off it)
     for hidden in [false, true] {
         let Waiting {
             mut w, f, m, dep, ..

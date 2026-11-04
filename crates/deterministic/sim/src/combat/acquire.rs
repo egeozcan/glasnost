@@ -1167,6 +1167,7 @@ pub fn search(
                 }
                 // spec: S-0501 claim 48 (a) and its Changes for S-0309 claim 7 (the ground-layer pass takes the objects filed in the ground render layer's list, whatever their height: an aircraft that a factory release left above its pad, not re-filed since, is among them)
                 // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: it stays in the ground list, S-0102 claim 4, and S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight as a landed aircraft there, in both passes of a search that looks for aircraft and in the second pass alone otherwise; the connected-region test and table C apply as to any candidate)
+                // spec: S-0309 r114 claim 7 (an aircraft whose type cannot land and whose movement is neither rocket nor drop-pod movement stays in the ground list in flight, so the ground-layer pass considers it in flight, as it considers a landed one)
                 if pass == 1
                     && !crate::temporal::ground_layer(w, x)
                     && !crate::air::ground_filed(w, x)
@@ -1211,6 +1212,7 @@ pub fn search(
             for x in crate::combat::flying::candidates(w, centre, nrings) {
                 let Some(o) = w.obj(x) else { continue };
                 // spec: S-0309 claim 9 (only objects on the map and not in the ground render layer, each once; allied ones only with the friendly-row exceptions)
+                // spec: S-0309 r114 claim 9 (the layer read from state and height: an aircraft whose type cannot land and whose movement is neither rocket nor drop-pod movement is not left out as a ground-layer object once it is tracked and above height 0, although it flies in the ground list, S-0306 claim 17)
                 if x == a || !o.on_map || crate::temporal::ground_layer(w, x) {
                     continue;
                 }

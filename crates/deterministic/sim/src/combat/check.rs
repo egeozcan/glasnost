@@ -488,6 +488,7 @@ fn answer(
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0514 claim 19 (a firer that already holds this very target with a temporal weapon: rearming); S-0513 r108 claim 39a and its Changes for S-0301 claim 9 (A held temporal target within rank 4, Q-2416: the held-temporal-target rearming outranks the hidden-target impossible, S-0516 claim 24, and the illegal for a protected target, S-0513 claims 27 and 28, the parasite warhead's included, so a firer whose temporal beam is attached to a hidden or protected target keeps it at S-0309 claim 29's check, on the map or, for a superweapon warp member, off it)
+    // spec: S-0301 r70 claim 9 (A held temporal target within rank 4, Q-2416 answered: the held-temporal-target rearming outranks the hidden-target impossible, S-0516 claim 24, and the illegal for a protected target, S-0513 claim 28, so the firer keeps the target at S-0309 claim 29's check unless an answer this claim ranks above that rearming holds, on the map or, for a warp member, off it)
     if !pass
         && let Some(Target::Object(x)) = target
         && r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)

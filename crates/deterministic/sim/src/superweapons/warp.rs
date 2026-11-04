@@ -247,6 +247,7 @@ fn in_air(w: &World, id: ObjectId) -> bool {
         return crate::combat::weapon::in_air(w, id);
     }
     // spec: S-0513 r108 claim 34 (any other object when it is airborne, S-0307, its height taken above the deck while its on-deck state is set; neither a jumpjet state nor a layer is read, Q-2419) and S-0307 Terms (airborne: at least 208 leptons above the surface)
+    // spec: S-0102 r42 claim 3 (a unit with jumpjet movement that is airborne, S-0307, is never a member, whether or not it is listed, while one listed in the block and not airborne is examined, S-0513 claim 34)
     crate::combat::weapon::airborne_by_height(w, id)
 }
 

@@ -174,6 +174,7 @@ pub fn deliver(w: &mut World, firer: Option<ObjectId>, target: Option<Target>) {
         return;
     }
     // spec: S-0514 claim 1 (an object target must be in the ground render layer, otherwise this effect does nothing) and S-0306 claim 17 (a warp member is in the ground render layer from its warp's launch until its own movement applies again after its arrival hold, so the test passes for it, off the map or phasing in); S-0306 r72 claim 17 (An aircraft that cannot land, in flight: the erasure test reads the layer from state and height, not the ground list it stays in, so above height 0 it is not erased); S-0514 r13 claim 1 (a departed warp member target, off the map or phasing in, is an ordinary object target for claims 1 to 4)
+    // spec: S-0514 r17 claim 1 (for every object target the layer is the one its state and height give it, S-0102 claim 3, not the list it is filed in: an aircraft whose type cannot land, neither rocket nor drop-pod movement, is not erased by a hit while it is above height 0, although it stays in the ground list)
     if !ground_layer(w, x) && !crate::superweapons::warp::in_warp_row(w, x) {
         return;
     }
