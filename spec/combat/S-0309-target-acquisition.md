@@ -2,14 +2,14 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 95
+revision: 113
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
-Q-2262, Q-2263, Q-2264]
+Q-2262, Q-2263, Q-2264, Q-2376, Q-2418]
 supersedes: []
 ---
 
@@ -1388,9 +1388,36 @@ index 1. This is a design rule, not an additional claim about the original.
     holds (a deactivated firer's *illegal* is one, and with it claim 29's check drops the member).
     While the member waits to land, an infantry or vehicle firer of that kind within its weapon's
     range of the member's old position whose check answers *rearming* keeps it, makes no shot at
-    it and neither moves nor turns for it (S-0513 claim 39a, *The firer*). A member that a revert
-    gives back to a holder while it is off the map is such a
-    target. A crush gives both drops within the crush, and
+    it and neither moves nor turns for it (S-0513 claim 39a, *The firer*). A building firer of that
+    kind without the SAM flag that holds the member at the lock keeps it too: its *attack*
+    processing takes S-0215 claim 32's *rearming* row, so it makes no shot and rotates towards the
+    old position. One drops the member, after the launch and before the lock, at the first of two
+    places: an *attack* processing at which its check answers S-0513 claim 39's *illegal*, or an
+    answer that S-0301 claim 9 ranks above it whose row of S-0215 claim 32 drops the target, and its
+    checking turn in a check tick of claim 29 at which that check answers *illegal* or *impossible*.
+    While a delayed shot of it is pending, its check answers as S-0301 claims 9 and 14 give: that
+    shot's *rearming*, which keeps the member, unless one of the building's own answers of S-0405
+    table T1 holds, which drops it. After the drop it takes targets as any building does, by an
+    order, by claim 1's search (with claim 2 and table C), and by claim 18's retaliation, while its
+    beam stays attached. Its firing check about the member then answers S-0513 claim 39's *illegal*
+    before the lock and S-0514 claim 19's *rearming* from the lock on, each unless an answer that
+    S-0301 claim 9 ranks above it holds. One that holds the member again after the lock keeps it as
+    one that held it at the lock does (S-0513 claim 39a, *The firer*), unless a revert gave it back
+    while the member is off the map. A building with the SAM flag takes that claim's SAM rows for
+    the member at the old position. While that claim's power row applies, one that is not charged
+    (S-0405 claim 8) drops the member as a target on the map, at the first of an *attack*
+    processing in the *aimed* stage and its checking turn in the first check tick of claim 29 in
+    that state, and a charged one keeps it (S-0513 claim 39a). An infantry or
+    vehicle firer of that kind beyond its weapon's range of the old position takes S-0215 claim 37's
+    approach step and per-tick rule as for a target on the map at the old position, so it keeps the
+    member, approaches it, or drops it with the destination as that claim's parts (a), (d) and (g)
+    give. A deployed infantry firer of a human-controlled owner instead neither moves nor turns, and
+    S-0517 claim 16's deployed-firing rule applies to the member at the old position as to a target
+    on the map there, while its beam stays attached (S-0513 claim 39a). A firer that moves goes
+    towards the old position and lets the beam go at its first arrival in a new cell (S-0514 claim
+    14, S-0513 claim 39a, *The firer*). A member that a revert gives
+    back to a holder while it is off the map
+    is such a target. A crush gives both drops within the crush, and
     together they take at most one timer draw: after a first draw at most 8 ticks are left. For an
     aircraft holder, the adjustment of its behaviour that follows belongs to the aircraft specs.
     - Backing: `measurable` (scenario A18: part a for the crusher, part b for a removal by another
@@ -1436,7 +1463,27 @@ index 1. This is a design rule, not an additional claim about the original.
       the member.
       The firer whose temporal beam is attached to the member: `measurable` (S-0513 scenario SW12
       part l3) for an infantry firer, `unmeasured` for a vehicle firer, since part l3's firer is
-      an infantry unit.
+      an infantry unit. A building firer without the SAM flag: `measurable` (S-0513 SW12 part
+      l7b for the keep, part l7a for the drop at a processing before the lock) for one whose shot
+      is made at a processing. Its drop at a check tick of claim 29 that comes before such a
+      processing, its drop on an answer that S-0301 claim 9 ranks above S-0513 claim 39's
+      *illegal*, the drop's place
+      for one whose shot S-0301 claim 14 delays, a building with a
+      delayed shot pending at the launch (its keep while that shot is pending and its drop), a
+      building's firing check about the member after the
+      drop and its keeping the member when it holds it again after the lock other than by a
+      revert while the member is off the map, a building firer
+      with the SAM flag and a firer beyond its weapon's range of the old position: `unmeasured`,
+      as S-0513 claim 39a gives (no part there has a building with a delayed shot or a SAM-flag
+      building firer, part l7a judges nothing after the drop, no part gives a building that
+      dropped the member a new target, and no practical set-up puts a firer that holds its beam
+      beyond range at the departure). For targets on the map, the drop of a SAM-flag building that
+      is not charged while S-0215 claim 32's power row applies, no later than its checking turn in
+      the first check tick of claim 29 after the power loss, is `measurable` (S-0513 SW12 part
+      l10), and so is the deployed infantry firer's drop by S-0517 claim 16 before the departure
+      (part l9). Both are `unmeasured` with a member waiting to land, and a charged SAM-flag
+      building's keep is `unmeasured`. How a building takes a target after the drop is
+      claims 1, 2 and 18 and table C's, with their backing.
     - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
       infantry and vehicle holders of an object that is crushed, as in A18 parts a and b, or of an
       infantry unit killed in its death sequence, as in part c); medium (the drop's moment inside
@@ -1454,7 +1501,21 @@ index 1. This is a design rule, not an additional claim about the original.
       restored object that stays off
       the map or in play after its killing hit is a design rule; medium for the two passages on a
       superweapon warp member; medium for the firer whose temporal beam is attached to the member,
-      infantry and vehicle firers alike; medium for the absence of the timer draw during game set-up
+      infantry and vehicle firers alike; medium for a building firer without the SAM flag, its
+      keep, its drop before the lock at a processing or at a check tick of claim 29 with that
+      drop's place for a delayed shot, its keep while a
+      delayed shot pending at the launch is pending and its drop then at one of its own answers
+      of S-0405 table T1, its firing check about the member after the drop
+      and its keep when it holds the member again after the lock other than by such a revert
+      alike, and
+      for one with it, low for that one's rows' keeping any member while S-0215 claim 32's power
+      row applies, for its drop of the member then when it is not charged, at the first of an
+      *aimed*-stage processing and claim 29's check, and for a charged one's keeping it, as S-0513
+      claim 39a rates them; medium for a firer beyond
+      range of the old position; medium for a deployed infantry firer's drop of the member by
+      S-0517 claim 16 with its beam still attached, low for its taking a target that rule's search
+      finds, as S-0513 claim 39a rates them; medium for the absence of the timer draw during game
+      set-up
 
 28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
     are S-0516 claim 14's: at the start of cloaking and again when the object becomes fully cloaked
