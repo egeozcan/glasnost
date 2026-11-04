@@ -102,6 +102,10 @@ rules hash moves. `quirks.chop_rounding` does not change.
 - `cargo xtask gate`: ok (the wasm32 runs match the regenerated goldens).
 - `glasnost-sim --include-ignored` (release): 5228 passed, 1 failed: `pathing_c7p4::diag` only
   (the brief's known failure).
+- After the rebase onto origin/main c4501d0 (spec commits only), these were re-run: workspace
+  tests (7448 passed, 0 failed, 120 ignored), clippy, fmt and `cargo xtask check`, with the same
+  results. The gate, the release sim run and the lanes are from f8553f5 plus the branch. The code
+  is the same.
 - Goldens regenerated (`GLASNOST_UPDATE_GOLDEN=1`): `duel-diagonal`, `duel-m6c`, `duel-m7a`,
   `duel-m7b` and `duel-naval` move; `combat`, `duel`, `scripted` and `skirmish` do not.
 
@@ -116,9 +120,9 @@ under `local-lane/m8/i88/` (git-ignored).
 | M7a sweep, seeds 1 to 16 | smallest minimum 0 | smallest minimum 0; seed 9 now ends early at 7 357 (house 0 wins), so the psychic reveal minimum goes 6 → 2 and slaves at work 7 333 → 2 780 |
 | M7b sweep, seeds 1 to 16 | smallest drain minimum 3 | smallest drain minimum 3 |
 | Arena, `arena --record all --threads 4` | 10 of 155 pairings fail (DISK–FV on the win test; MIND–E1, CAOS–E1, TELE–V3, TELE–BFRT, LTNK–E1, TELE–APOC, TELE–ROBO, INIT–E2, ROBO–HTK on a side outcome) | the same 10 fail; every other row identical. Only MIND–E1 changes: ours 10/1/1 → 11/0/1 (p 0.14 → 0.31), side B now matches |
-| `glasnost-ai --include-ignored` (release) | not rerun (f8553f5's lane) | all pass, 0 failed |
+| `glasnost-ai --include-ignored` (release) | 246 passed, 0 failed (intake 87's after lane; f8553f5 adds only docs to d1e1932) | 246 passed, 0 failed |
 | AI quick lane, seeds 7 to 10, maps 0, 2 and 8, sides 0–1, 0–2, 1–2 (36 games) | every game ends, at 19 974 to 82 013 ticks | every game ends, at 19 974 to 89 077 ticks; most streams change |
-| Seed 10 map 2, dumps every 400 ticks, all three pairs | no walker held in front of an enemy building it cannot hurt (the stuck walker of Q-2396 does not reproduce at f8553f5) | none either: every infantry hold of three or more dumps on an object target hurts it (a brute on a construction yard, conscripts on a power plant, a flak trooper on a captured outpost, GIs on a self-repairing Apocalypse tank) or is a slave miner at work |
+| Seed 10 map 2, dumps every 400 ticks, all three pairs | no walker held in front of an enemy building it cannot hurt (the stuck walker of Q-2396 does not reproduce at f8553f5) | none either. Two scans: infantry holding one cell and one object target for three or more dumps, and infantry resting (*guard*, no destination, no target) within a cell or so of an enemy building's footprint for two or more dumps. The holds hurt their targets (a brute on a construction yard, conscripts on a power plant, GIs on a self-repairing Apocalypse tank) or are slave miners at work. One hold is claim 9's take in play, traced at 16 ticks: sides 0–1, a flak trooper sent to an enemy outpost's own cell takes it at 40 240, turns to *attack*, keeps it through about 67 check ticks (its check does not answer *illegal*) until it dies at 41 328, and the outpost's loss rate rises from about 1.6 to 2.2 per 16 ticks. One rest (sides 0–2, two GIs at (65,41) for 1 550 ticks, 4 cells from an enemy building) is not a take: traced at 16 ticks, the AI orders *attack* on that building with an approach cell, the check drops it at the first check tick after arrival (53 488), and the GIs fall back to *guard* (S-0309 claim 29, S-0215) |
 | Play-fixes layer (`GLASNOST_PLAY_FIXES=1`), seed 10, maps 0, 2 and 8, three pairs | | all 9 games end, at 22 806 to 59 897 ticks, with no slower ticks than the default (686 to 2 190 µs per tick) |
 
 ## Seams
@@ -133,3 +137,12 @@ under `local-lane/m8/i88/` (git-ignored).
   It is not next to the building, so it is not claim 9's case. It may be S-0309 claim 29 not
   answering *illegal* for that weapon. Not traced here. The branch changes that game's stream and
   the hold does not appear in it.
+- **An AI attack on a building the infantry cannot hit** (branch, seed 10, map 2, sides 0 and 2,
+  traced at 16 ticks): the AI orders two GIs to attack an enemy building with an approach cell.
+  The check drops it at the first check tick after arrival, and the GIs rest at the approach
+  cell for about 1 550 ticks. This follows S-0309 claim 29 and S-0215 and is not claim 9 (no
+  entry ask). Whether the AI should choose such a target is an AI-side question, noted for the
+  lead.
+- **S-0309 moved to r113 underneath this intake** (origin/main after f8553f5). This intake's
+  shapes after the take cite S-0309 claims 23 (b) and 29. r113 changes claim 29's text, mostly in
+  the building and warp-member rows. Not built here: it belongs to that revision's own intake.
