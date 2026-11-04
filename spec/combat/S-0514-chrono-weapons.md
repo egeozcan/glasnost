@@ -2,11 +2,11 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
 requests: [Q-0984, Q-1522, Q-2377]
 supersedes: []
@@ -66,7 +66,11 @@ before joint hand-off.
    An object target must be in the ground render layer, otherwise this effect does nothing.
    For a jumpjet this is S-0102 claim 3's render-layer test, not a test of its flight state
    (S-0502 claim 20), combat height or in-the-air state. Being in the ground render layer
-   permits delivery but does not bypass claim 3's lock refusals.
+   permits delivery but does not bypass claim 3's lock refusals. For every object target the
+   layer is the one its state and height give it (S-0102 claim 3), not the list it is filed in:
+   an aircraft whose type cannot land and whose movement is neither rocket nor drop-pod movement
+   is not erased by a hit while it is above height 0, although it stays in the ground list
+   (S-0306 claim 17).
    A bunkered vehicle is redirected to its bunker. A cell or a non-combat object only makes
    the firer's old beam let go. Temporal erasure replaces ordinary direct and area damage,
    but does not suppress the detonation's other presentation effects.
@@ -78,8 +82,10 @@ before joint hand-off.
    - Backing: `measurable` (E1, E4). For a departed warp member target, the lock's attachment is
      `measurable` by S-0306 scenario P11 run g (off the map) and run h (phasing in). That the member
      stays in the ground render layer until at least the end of its arrival hold is `unmeasured`, as
-     S-0306 claim 17 rates it: no rule there reads the layer after appearance.
-   - Confidence: high; medium for a departed warp member target, as S-0306 claim 17 rates it.
+     S-0306 claim 17 rates it: no rule there reads the layer after appearance. For an aircraft
+     that cannot land, in flight: `measurable` by S-0306 scenario P46 part d.
+   - Confidence: high; medium for a departed warp member target, as S-0306 claim 17 rates it,
+     and medium for an aircraft that cannot land, in flight.
 
 2. **Refused-hit side effects.** A delivered erasing hit on infantry, a vehicle, aircraft or
    a building clears its spawner slots (S-0506 claim 13) and frees units it mind-controls.
