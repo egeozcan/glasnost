@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 120
+revision: 121
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -819,7 +819,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       edge,
     - T2's *guard* row keeps it; for an armed aircraft with no dock types this is claim 45, where
       the *move* that *guard* queues for a human-controlled house replaces it (claim 40),
-    - a visiting aircraft without ammunition forgets it (T2), and its *retreat* chooses an edge
+    - a visiting aircraft without ammunition that is not on the ground in a team forgets it (T2), and its *retreat* chooses an edge
       cell again (claim 34), on its house's arrival edge, which can differ from the computed
       edge of the first choice; a pad-bound one with no pad found crashes instead (claim 45),
     - a visiting aircraft with ammunition left that is not in a team keeps it in *hunt* (T2).
@@ -856,9 +856,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     (claim 46 gives how that crash starts, claim 9 its fall), and any other aircraft, an unarmed
     pad-bound one included (claim 50), gets a landing spot near its house's buildings (Formula F8)
     and queues *move*. On the ground it forgets its target and destination and queues *guard*, or
-    *area guard* for a computer-controlled house's aircraft outside a team. A visiting aircraft
-    without passengers queues *retreat*. Whatever the table chose, an armed aircraft without
-    ammunition that has no contact looks for a pad once more. This search asks the pad for no
+    *area guard* for a computer-controlled house's aircraft outside a team. A visiting aircraft is
+    excepted (T2): with passengers it queues *unload*, or *guard* in a team. Without passengers it
+    queues *retreat* outside a team, and in a team it keeps its target and destination and queues
+    *guard*. Whatever the table chose, an armed aircraft without ammunition that has no contact
+    looks for a pad once more. This search asks the pad for no
     contact: it only finds a pad that accepts the aircraft (claims 21 and 22). If it finds one, it
     gets the pad as destination, forgets its target and queues *enter*. That acceptance makes a
     contact only when *enter* is already current or queued (claim 24, claim 49). If it finds none
@@ -1724,7 +1726,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     with dock types is part of it, since AC21's carrier set-up uses a type without them.
     A visiting slot aircraft instead takes T2's visiting rows at its run end, as any visiting
     aircraft does (claims 17 and 45). With its ammunition spent it forgets its target and
-    destination and is in *retreat*, unless an earlier row of T2 applies or it is pad-bound (T2's after-the-row entry, claim 45). With ammunition left after its target is lost it is in
+    destination and is in *retreat*, unless an earlier row of T2 applies, it is on the ground in a team, or it is pad-bound (T2's after-the-row entry, claim 45). With ammunition left after its target is lost it is in
     *hunt*, and the next pass's *move* or *attack* applies to it as above. An aircraft in
     *retreat* does not accept that pass's *move* or *attack* (claim 34). So for one in *retreat*
     the pass clears its target and makes its spawner its destination, but no *move* is queued and
@@ -1813,7 +1815,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       the destination given at the end of a run (claim 17) use S-0522 claim 4's no-reference
       edge-cell selection: one ranged draw, or two for south, with that claim's ranges and
       order. A visiting aircraft that ends its run without ammunition therefore takes these
-      draws twice: at the run end, and again when its *retreat* chooses (claim 34), except a pad-bound one, which crashes or gets a pad at the run end's fall-back instead of retreating (claim 45), and a carrier slot aircraft whose next
+      draws twice: at the run end, and again when its *retreat* chooses (claim 34), except one on the ground in a team (T2), a pad-bound one, which crashes or gets a pad at the run end's fall-back instead of retreating (claim 45), and a carrier slot aircraft whose next
       launch pass gives it its spawner as destination before a *retreat* processing (claim 35).
       Spy-plane arrival uses the same selection (S-0513
       claim 43), as do the spy exit destinations of claim 34 on their computed opposite edge.
@@ -2241,7 +2243,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       (Terms), does not reach the rules above: T2's visiting rows apply to it (Q-1776 questions
       2 and 3). The owner changes neither case below. A visiting carrier slot aircraft takes the
       same rows; its next launch pass makes its spawner its destination (claim 35).
-      - With its ammunition spent, it forgets its target (claim 17) and its destination and
+      - With its ammunition spent, unless it is on the ground in a team, it forgets its target (claim 17) and its destination and
         queues *retreat* (T2), whose first processing chooses an edge cell again with S-0522
         claim 4's draws (claims 34 and 37). It flies there and is removed, without dying, as
         soon as its position is outside the usable area (claim 10). Neither flight flag changes
@@ -3571,6 +3573,7 @@ else it then finds; its rows below apply after that.
 | queued behaviour is *paradrop approach* or *spy-plane approach* | that behaviour starts now |
 | on the ground, visiting, with passengers | *unload* (in a team: *guard*) |
 | on the ground, visiting, no passengers, not in a team | forgets target and destination; *retreat* |
+| on the ground, visiting, no passengers, in a team | target and destination kept; *guard* |
 | on the ground, otherwise | forgets target and destination; *guard* (*area guard* for an armed aircraft of a computer-controlled house outside a team) |
 | in flight, with passengers | destination: landing spot F8; visiting: *unload* (in a team: *guard*); else *move* |
 | in flight, unarmed, in a team | unchanged |
