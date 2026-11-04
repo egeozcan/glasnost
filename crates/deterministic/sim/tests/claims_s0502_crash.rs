@@ -195,7 +195,10 @@ fn claim_27_a_crashing_jumpjet_is_dropped_at_its_killing_hit() {
             assert_ne!(w.obj(x).unwrap().target, Some(Target::Object(u)));
         }
     }
-    assert_eq!(shots, 0, "no holder fires at the crashing unit or its place");
+    assert_eq!(
+        shots, 0,
+        "no holder fires at the crashing unit or its place"
+    );
 }
 
 // spec: S-0502 claim 18 and S-0312 claim 16 (a crash started without a kill ends in the destruction of the unit by damage equal to its health, ignoring defences, with no attacker: no kill is credited)

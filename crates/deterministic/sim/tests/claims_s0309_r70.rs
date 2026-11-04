@@ -351,7 +351,11 @@ fn p2_the_rank_5_keep_for_an_infantry_holder() {
     // The countdown runs while the tick number is below n + 40: check ticks n + 15 and n + 31 fall in it.
     w.obj_mut(d).unwrap().combat.rearm_until = n + 40;
     let dropped = drop_tick(&mut w, d, x, 80);
-    assert_eq!(dropped, Some(next_check(n + 39)), "kept past n + 15 and n + 31");
+    assert_eq!(
+        dropped,
+        Some(next_check(n + 39)),
+        "kept past n + 15 and n + 31"
+    );
     assert_eq!(dropped, Some(n + 47));
     // Control: with no countdown the same holder drops at the first check tick.
     let (mut c, d2, x2) = duel(Kind::Infantry, "GI");

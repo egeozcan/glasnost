@@ -1161,7 +1161,11 @@ fn claim_13_crew_refused_by_a_moving_blocker() {
         (Outcome::StationaryFriendly, 0),
         "control: three still allies refuse too"
     );
-    assert_eq!(run(None), (Outcome::Clear, 1), "control: an empty cell takes the crew");
+    assert_eq!(
+        run(None),
+        (Outcome::Clear, 1),
+        "control: an empty cell takes the crew"
+    );
 }
 
 /// A game of `r` on the testkit's empty map with its local area cut by 2

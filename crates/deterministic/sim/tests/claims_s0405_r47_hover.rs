@@ -145,7 +145,14 @@ fn claim_13_a_placed_hover_is_disabled_on_its_placement_cell() {
 fn claim_13_the_hovers_building_exception_reads_the_cell_it_stands_in() {
     let mut w = game();
     // A building of its own house in the placement cell.
-    let tower = testkit::spawn(&mut w, Kind::Building, "TOWER", 0, testkit::mid(SIZE, 0, 0), 0);
+    let tower = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "TOWER",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     let bot = put(&mut w, "HOVERBOT", 0, 0, 0);
     let home = cell_of(&w, bot);
     assert!(
@@ -176,7 +183,11 @@ fn claim_13_the_hovers_building_exception_reads_the_cell_it_stands_in() {
         glasnost_sim::tick::step(&mut w);
         ticks += 1;
     }
-    assert_ne!(cell_of(&w, bot), home, "disabled outside the building's cell");
+    assert_ne!(
+        cell_of(&w, bot),
+        home,
+        "disabled outside the building's cell"
+    );
 }
 
 /// A disabled HOVERBOT and a CART hunter of house 1 run for up to 2000
