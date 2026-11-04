@@ -142,7 +142,9 @@ The layer file does not change.
 On the tree rebased onto origin/main dad1756 (intake 90, S-0214 r80, S-0216 r69; an earlier
 pass on a097d11, intake 86, gave the same results with 7480 workspace tests). The branch was
 then rebased onto 21ad0fe, which adds only spec and measurement text over dad1756 (S-0216 r70,
-the M-0001 to M-0003 revisions); `cargo xtask check` was run again there with the same result.
+the M-0001 to M-0003 revisions). `cargo xtask check` and `cargo test --workspace` were run again
+there with the same results (7486 passed, 0 failed, 120 ignored; `every_spec_quirk_has_a_switch`
+passes).
 
 - `cargo test --workspace --no-fail-fast`: 7486 passed, 0 failed, 120 ignored;
   `every_spec_quirk_has_a_switch` passes.
@@ -157,9 +159,11 @@ the M-0001 to M-0003 revisions); `cargo xtask check` was run again there with th
   `duel-m6c`, `duel-m7a`, `duel-m7b`, `scripted`, `skirmish`), each from its first hashed tick
   with its line count unchanged: `revert_gave_departed` is new hashed state. Regenerated again on
   the dad1756 tree, none moves against the a097d11 regeneration (intake 90 moves no golden).
-- Intake 90's `combat::check` comments (Q-2426 answered) agree with this intake's held-rearming
-  rule: the rank 4 held-target answer is asked only when the check does not pass over answers,
-  so with `moment_reason_attack_cursor` off it is passed over with every other rearming.
+- Intake 90's `combat::check` comments (Q-2426 answered) read as consistent with this intake's
+  held-rearming rule. This is a reading of the code, not a test: the rank 4 held-target answer is
+  asked only when the check does not pass over answers (`!pass`), so with
+  `moment_reason_attack_cursor` off it should be passed over along with every other rearming. No
+  test covers a held temporal target on a protected target with the switch off (see Seams).
 
 ## Lanes
 
@@ -168,8 +172,10 @@ Baselines, built in the same target directory and run on the same machine:
 - the arena against origin/main **dad1756** (intake 90, which re-seeds arena games to 1000 + s);
 - the sweeps and the AI quick lane against origin/main **a097d11** (intake 86). Intake 90's
   simulation and rules source diff against a097d11 is comments only (`combat/check.rs`,
-  `targeting.rs`, the `quirks.rs` doc line), and its behaviour change is the arena seed in
-  `glasnost-tools`, so these results carry over to dad1756.
+  `targeting.rs`, the `quirks.rs` doc line). Its behaviour change is the arena seed in
+  `glasnost-tools`: `oracle::game_seed`. In the sources it is called only from `oracle::setup`, which only
+  `glasnost-headless arena --record` (through `oracle::run_cli`) and `oracle_trace` reach. So these
+  results carry over to dad1756.
 
 A first baseline at 85b2d32, taken before intake 86 landed, is superseded and not compared here:
 intake 86 changes aircraft behaviour.
@@ -211,3 +217,8 @@ intake 86 changes aircraft behaviour.
   it. Interim: the fall-back releases the beam in *attack*; in *guard* it stays.
 - **SW12 l9 and the *sticky* row are harness-only.** l9's deploy order and *sticky*'s approach
   step are not run through orders: our *sticky* is processed as *guard*.
+- **Held temporal target with `moment_reason_attack_cursor` off: untested.** Under S-0214 r80
+  (Q-2426), part (e) with the switch off passes over every answer that is not *illegal*. The
+  rank 4 held-target rearming sits behind the `!pass` gate in `combat::check`, so by reading the
+  code it is passed over and a protected target's *illegal* answers. No claim test exercises
+  this pairing yet.
