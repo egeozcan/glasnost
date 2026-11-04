@@ -1,9 +1,9 @@
 ---
 id: Q-2418
 title: A deployed infantry firer beyond range, and a SAM building short of power, holding a departed warp member
-status: open
+status: answered
 related: [S-0513, S-0215, S-0517, S-0309, S-0405]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
