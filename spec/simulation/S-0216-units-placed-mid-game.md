@@ -2,7 +2,7 @@
 id: S-0216
 title: Units placed after the game has started
 topic: simulation
-revision: 69
+revision: 70
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -483,23 +483,19 @@ S-0208 claim 3 reads it. In addition:
      comes the final R(0, 65535). Every other group before the set-up is as S-0202's map-loading
      table gives it. So the base units' creation numbers come before every set-up object's.
    - **Seeds and the human player house's country (Q-2446, Q-2447).** The records name their
-     games' seeds 0 to 5 (M-0001's naming, which M-0016, M-0017 and M-0019 keep). Their scenario
-     streams behave as S-0202's generator seeded with 1000 + *s* for the game with seed number
-     *s*: so seeded, the draws of *Game start* and S-0202's map-loading table reach M-0019's *N*₀
-     exactly for each of the six seed numbers, and seeded with *s* itself they do not. So the
-     arena's game for seed number *s* seeds that generator with 1000 + *s*, and the M-0019
-     acceptance item below, PT6 and every other per-seed comparison with the records use that
-     seed. How the records' setup turns seed number *s* into that seed is not recorded. The human
-     player house takes side A's country (design). The country picks the house's base unit
-     (S-0009 claim 45). The house-creation draws do not depend
-     on the country (S-0202 claim 14).
-     - Backing: that the records' streams start as from 1000 + *s*, `measured` (M-0019: its six
-       *N*₀ values, which the acceptance item below checks). The seed rule and the country are
-       design rules of our arena, `unmeasured` (a design decision; no measurement of the
-       original decides it).
-     - Confidence: high for the seed rule and the country as design rules (fixed by this
-       claim). Medium that the records' games were seeded so: one added constant fits all six *N*₀
-       values exactly, but no record states the seed.
+     games' seeds 0 to 5 (M-0001's naming, which M-0016, M-0017 and M-0019 keep). The game with
+     seed number *s* was played with the random seed 1000 + *s*, and the records' human player
+     house is British (M-0001 to M-0003, Setup). So the arena's game for seed number *s* seeds
+     S-0202's generator with 1000 + *s*, and the M-0019 acceptance item below, PT6 and every
+     other per-seed comparison with the records use that seed. So seeded, the draws of *Game
+     start* and S-0202's map-loading table reach M-0019's *N*₀ exactly for each of the six seed
+     numbers, and seeded with *s* itself they do not. The human player house is British. The
+     country picks the house's base unit (S-0009 claim 45). The house-creation draws do not
+     depend on the country (S-0202 claim 14).
+     - Backing: the seed and the country, `measured` (M-0001 to M-0003, Setup). That the streams
+       so seeded reach the recorded *N*₀ values, `measured` (M-0019: its six *N*₀ values, which
+       the acceptance item below checks).
+     - Confidence: high.
    - **Removal before the groups (Q-2336).** After resource-glint setup and before the first
      group's first creation, the arena takes off the map every vehicle that the human player
      house does not own: the two computer houses' base units and every vehicle the map gave the
@@ -1043,9 +1039,6 @@ at the first set-up object's creation draw (*N*₀, read as M-0019 reads it).
 
 ## Open questions
 
-- **Q-2446 question 1.** No committed record gives the records' human player house's country,
-  nor how their setup turns seed number *s* into the game seed (claim 8, *Seeds and the human
-  player house's country*). A Setup line in the records would settle both.
 - **Q-1711 question 1.** Whether the moments at which placed hunting units start to move, find a
   target and fire vary from seed to seed, and by how much. Claims 3 and 4 say what placement
   contributes: no placement draw for vehicles of types without the visceroid flags, one draw
