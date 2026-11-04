@@ -3,7 +3,7 @@ id: Q-2416
 title: A warp member protected or cloaked at its departure, while it waits to land
 status: answered
 related: [S-0513, S-0514, S-0309, S-0516]
-answered-by: [S-0513]
+answered-by: [S-0513, S-0301]
 ---
 
 ## Need
