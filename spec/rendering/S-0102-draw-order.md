@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 42
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1786,6 +1786,11 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
   from the ground), where its own rows give the ground layer, so the sweep does not move it then.
   For a unit with jumpjet movement or an aircraft whose type can land that moves from one bridge
   deck to another, with the switch on, when a moment of claim 4 moves it is open (claim 3).
+  The switch is a drawing setting, which each client may set for itself. Its alternative moves
+  objects only between the lists the drawing reads. Simulation rules that read an object's list
+  (S-0309 claim 7's ground-layer pass, also in S-0501 claim 48 (a)) read the membership that the
+  switch's on position gives, in both positions (S-0306 claim 17). This is our engine's design,
+  high.
 - **`quirks.cliff_fudge_far_cliff_weaker`** (default: on). A high cell two steps in front gives the
   cliff fudge factor 1 and overrides a high cell one step in front, which alone gives factor 2.
   Alternative: factor 2 whenever either cell qualifies.
