@@ -329,7 +329,7 @@ fn claim_24_a_refusal_ends_the_contact_and_the_processing_without_one_follows() 
     }
 }
 
-// spec: S-0501 claim 24 (r110, Q-2437: for an aircraft in contact that approaches, the sale acts through the run-away notice the pad sends when it starts selling: it ends the contact, gives a landing spot, F8, as destination, queues move and, in enter, guard after it, which replaces the move; the next processing of enter is one without a contact, which with guard queued waits, so guard becomes current at the end of that tick, claim 31's third point) and claim 46 (the sale replaces the pad as destination with a landing spot)
+// spec: S-0501 claim 24 (r110, Q-2437: for an aircraft in contact that approaches, the sale acts through the run-away notice the pad sends when it starts selling: it ends the contact, gives a landing spot, F8, as destination, queues move and, in enter, guard after it, which replaces the move) and claim 31 (the approaching aircraft is ready to change, so the queued guard becomes current at the next of the three points, here the third, once more each update tick, before enter's next processing comes due; guard's processing then follows, with no fall-back) and claim 46 (the sale replaces the pad as destination with a landing spot)
 #[test]
 fn claim_24_a_sale_during_the_approach_sends_the_run_away_notice() {
     let (mut w, k, a) = approaching(&rules());
@@ -358,10 +358,10 @@ fn claim_24_a_sale_during_the_approach_sends_the_run_away_notice() {
         Some(Behaviour::Guard),
         "guard replaced the move"
     );
-    // Guard becomes current at the end of enter's next processing (the wait,
-    // 1 tick); guard's own processing then queues move for the landing spot
-    // (claim 33: not pad-bound, with a destination), so the first processing
-    // seen may already be guard's.
+    // Guard becomes current at claim 31's third point in the next update
+    // tick, before enter's next processing comes due, so the first processing
+    // seen is guard's (which, not pad-bound and with a destination, queues
+    // move, claim 33).
     let (t, _) = next_processing(&mut w, a);
     assert!(w.obj(k).is_some(), "while the pad is being sold");
     let o = w.obj(a).unwrap();

@@ -467,7 +467,7 @@ fn ac31g4_the_touchdown_on_the_pad_forgets_the_destination_and_keeps_the_contact
 // ---------------------------------------------------------------------------
 // The docking stage without a contact
 
-// spec: S-0501 claim 24 (r103: in the docking stage without a contact, the first processing that finds the aircraft no longer landing makes it fall back to rest, whatever is queued; that is the processing after an accepted touchdown, whose own movement update makes no fall-back, claim 7; a refusal that ends the contact once it is in the docking stage leaves it to that stage's rules without a contact)
+// spec: S-0501 claim 24 (r103: in the docking stage without a contact, the first processing that finds the aircraft no longer landing makes it fall back to rest, whatever is queued; that is the processing after an accepted touchdown, whose own movement update makes no fall-back, claim 7; a contact ended once it is in the docking stage leaves it to that stage's rules without a contact; r110: the test ends it, since no request is made there, and the fall-back's pad search may grant a contact again)
 #[test]
 fn claim_24_after_an_accepted_touchdown_the_docking_stage_without_a_contact_falls_back() {
     let (mut w, k, a) = approaching(&rules());
