@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 75
+revision: 80
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-05
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526]
 supersedes: []
 ---
 
@@ -831,11 +831,10 @@ S-0501 claim 20.
     (S-0501 Terms) and whether it stood as the map placed it or had landed: its appearance at
     the landing point (S-0513 claims 38 and 39) sets that height and does not follow S-0501
     claim 1's placement rule, so an aircraft whose type cannot land does not appear at its cruise
-    height (Changes for other specs, S-0501 and S-0513). An aircraft member then stays at rest at
-    that height after its hold until an order, its own behaviour or a seize gives it a
-    destination, as an aircraft that the map places on the ground does: its height changes only
-    in a tick in which its own movement moves it (S-0501 claims 2 to 4). What follows a seize is
-    S-0607's (claims 5 and 7). A member
+    height (Changes for other specs, S-0501 and S-0513). An aircraft member then keeps that height
+    after its hold until an order, its own behaviour or a seize gives it a destination: its height
+    changes only in a tick in which its own movement moves it (S-0501 claims 2 to 4). What follows a
+    seize is S-0607's (claims 5 and 7). A member
     leaves the ground layer only when its own movement raises it, at that movement's moment of
     S-0102 claim 4, except an aircraft whose type cannot land, which keeps the ground list while it
     flies, until a crash (S-0102 claim 4). For a member moving from one bridge deck to another, its
@@ -845,6 +844,42 @@ S-0501 claim 20.
     the threshold 42 for a warp member, also for one that departed from a high-bridge deck and
     counts as airborne by the paragraph above. No member uses 128 then: an aircraft is never warped
     while in the air (S-0513 claim 34).
+
+    *Fall-backs of a warp member, and an aircraft's retreat.* At each of the two target searches of
+    S-0513 claim 39, when its warp's 60-tick wait expires and when its arrival hold ends, a member
+    that the search leaves with no target, the gates refusing the search included, falls back to
+    rest at once, in that update, as an object does at the end of phasing in after an own jump
+    (S-0207 claim 20 (f)). S-0215 gives which behaviour follows, and S-0501 table T2 for an aircraft
+    (Changes for other specs, S-0513). At the first fall-back the member still stands at its old
+    position (S-0513 claim 39). A member whose height at the launch is 0, as P46's landed aircraft,
+    is then still at no height above its surface, so an aircraft takes T2's rows for an aircraft on
+    the ground. Which of T2's rows an aircraft member in flight at the launch takes there, by
+    S-0501's tests at its height then, is not traced here. On the ground, unless an earlier row of
+    T2 applies (T2: where more than one situation applies, the earlier row decides), an aircraft
+    that is visiting (S-0501 Terms: the type test marks every aircraft whose type cannot land), has
+    no passengers and is not in a team forgets target and destination and takes *retreat*, which
+    becomes current at the end of that fall-back (S-0501 claim 31). At the second fall-back T2
+    leaves *retreat* unchanged. For an aircraft member, a destination given while it phases in, its
+    arrival hold included, does not hold: it is dropped as soon as it is given, as S-0207 claim 20
+    (a) drops one for an object that phases in after an own jump. In the original its behaviour is
+    processed from its departure on, in each tick as for an aircraft that is not warped (S-0513
+    claim 39a gives the exception of an attached beam), so each *retreat* processing until then
+    chooses a cell on its house's arrival edge, with that choice's draws (S-0501 claim 34, S-0522
+    claim 4), and none of those choices holds. In our engine S-0513 claim 51's design rule gives
+    which of the warp's updates process a member's behaviour, and so which of those choices are made
+    (Changes for other specs, S-0513). Its first destination that holds comes at most 3 ticks after
+    its hold ends (S-0501 claim 34's delay), at a *retreat* processing after it stops phasing in: a
+    cell on its house's arrival edge. In the tick in which its hold ends, the hold-end test comes
+    before its behaviour processing (S-0513 claim 48), but in the original an aircraft member takes
+    a further warp update later in that tick, after that processing, and that update forgets a
+    destination the processing gave. That destination went to the warp's movement, since the
+    aircraft's own movement comes back only at the end of that tick, so it starts no take-off and
+    the aircraft stays at height 0. So where a *retreat* processing falls in that tick, the first
+    destination that holds comes at the next one (`quirks.warp_hold_end_forgets_destination`, Edge
+    cases). It takes off towards it (S-0501 claims 2 to 4), its height above 0 by the end of the
+    tick after the one in which it gets that destination, and is removed when it leaves the usable
+    area (S-0501 claims 10 and 34). For a member of another kind, the update in which a destination
+    first holds after its hold is not traced here.
 
     *An aircraft that cannot land, in flight.* This paragraph is about an aircraft whose type
     cannot land and whose movement is neither rocket nor drop-pod movement. An aircraft with either
@@ -862,8 +897,9 @@ S-0501 claim 20.
       (a), from its take-off) and above height 0, the scan looks at it as at any aircraft in
       flight,
     - S-0607 claim 3's seizing reads the layer from state and height, so a seizing shot that
-      detonates while the aircraft is above height 0 does not seize it. At rest at height 0 it
-      meets that test (for a warp member, after its arrival hold, by the design rule above),
+      detonates while the aircraft is above height 0 does not seize it. On the ground at height 0 it
+      meets that test (for a warp member, once its arrival hold has ended, by the design rule
+      above),
     - S-0514 claim 1's erasure test and claim 20 (c) here also read the layer from state and
       height: above height 0 the aircraft is not erased, and claim 20 (c) gives it 128 while it is
       airborne (S-0307) and 42 otherwise.
@@ -879,56 +915,76 @@ S-0501 claim 20.
       for a projectile that keeps a warp member and turns towards its landing point; P38 for a
       building target whose target point is the world origin). The other warp parts are
       `unmeasured`: P11 run f judges post-appearance flight and damage, and it provides no
-      distinguishing expectation for flight while the member is off the map. No part here
-      detonates a projectile of ordinary damage near a member then, places an ordinary hit before
-      or after the end of a member's phasing in, has the landing check kill a member that a
-      projectile targets, or tests whether a member that departed from a deck counts as airborne
-      (run j's threshold 42 holds either way). That S-0307's off-the-map rule does not apply is
-      `unmeasured` as well.
-      The special hits are `measurable` by run g (off the map) and run h (phasing in). The
-      effects of an erasure lock made while the member phases in, or after, are S-0513 claim
-      39a's: `unmeasured` for a lock while it phases in, by that claim's stated reason, and
-      `measurable` by S-0513 SW12 part l5 for a lock after the phasing-in hold, within the limits
-      that claim gives for part l5, with the exact removal tick `unmeasured`. The
-      refusal rule of the deck count is
-      `measurable` in our engine by run i; the original has no refused placement to compare. The
-      rule of no seizing is `measurable` in our engine by run h part h run there; run in the
-      original, that part only records the original's outcome. The threshold 42 for a member
-      that counts as airborne is `measurable` by run j. The ground render layer until the
-      member's own movement applies again after its hold, and its leaving that layer at that
-      movement's moment, are `measurable` (S-0102 D49 (b)). They are `unmeasured` for a landing
-      on a high-bridge deck, from the ground or from another deck, since D49 runs on a flat map,
-      and for an aircraft member, since no scenario there warps one. For an aircraft that cannot
-      land, in flight: the ground-layer pass, the seizing test and the erasure test are
-      `measurable` by scenario P46 parts a, c and d (run 1 placed on the ground by the map, run 2
-      warped first). The airborne scan's reading is `unmeasured`: a map-wide search that looks
-      for aircraft also runs the ground-layer pass, which already considers the aircraft, and a
-      range search that looks for aircraft alone can miss a tracked aircraft in another sector
-      (S-0309 claim 9), so no part here shows the scan's reading on its own. Claim 20 (c)'s
-      reading is `unmeasured`: no part here places a miss at a distance between the two
-      thresholds at will. The switch's scope to the drawing is our engine's design: the original
-      has only the on position. The height 0 at the appearance of an aircraft member whose type
-      cannot land, and its rest there with no order after its hold, are `measurable` by P46 run 2
-      (its height record from the appearance on, parts c2 and d2). For an aircraft member of a
-      landable type they are `unmeasured`: no scenario here warps one.
-    - Confidence: high; medium for the target point at the world origin; medium for the warp
-      member kept as target, the turn towards its landing point and the hit there (run f), and
-      medium, unmeasured, for the position read while the member is off the map, for the lack of
-      area damage to it then, for the hit while it phases in, for the loss when its landing check
-      kills it, for the deck rule and for the airborne count of a departed member. Medium for each
-      special-hit row on a departed member (runs g and h), medium for an erasure lock's effects
-      while the member phases in or after (S-0513 claim 39a), medium for the threshold 42 (run j),
-      medium for the ground render layer until the member's own movement applies again after its
-      hold and its leaving that layer then (S-0102 claims 3 and 4), low for a member that moves
-      from one bridge deck to another, and high
-      for the two engine-design rules (the deck count after a refused placement, and no seizing
-      of a member from its departure until its arrival hold ends) as design contracts. Medium for
-      the ground-layer pass, the seizing test and the erasure test of an aircraft that cannot
-      land, in flight (P46), medium, unmeasured, for its airborne scan reading and for claim 20
-      (c)'s reading, and high for the switch's scope to the drawing as a design contract. High
-      for the height 0 at the appearance of an aircraft member whose type cannot land and medium
-      for its rest there with no order (P46 run 2), medium, unmeasured,
-      for both with an aircraft member of a landable type
+      distinguishing expectation for flight while the member is off the map. No part here detonates
+      a projectile of ordinary damage near a member then, places an ordinary hit before or after the
+      end of a member's phasing in, has the landing check kill a member that a projectile targets,
+      or tests whether a member that departed from a deck counts as airborne (run j's threshold 42
+      holds either way). That S-0307's off-the-map rule does not apply is `unmeasured` as well. The
+      special hits are `measurable` by run g (off the map) and run h (phasing in). The effects of an
+      erasure lock made while the member phases in, or after, are S-0513 claim 39a's: `unmeasured`
+      for a lock while it phases in, by that claim's stated reason, and `measurable` by S-0513 SW12
+      part l5 for a lock after the phasing-in hold, within the limits that claim gives for part l5,
+      with the exact removal tick `unmeasured`. The refusal rule of the deck count is `measurable`
+      in our engine by run i; the original has no refused placement to compare. The rule of no
+      seizing is `measurable` in our engine by run h part h run there; run in the original, that
+      part only records the original's outcome. The threshold 42 for a member that counts as
+      airborne is `measurable` by run j. The ground render layer until the member's own movement
+      applies again after its hold, and its leaving that layer at that movement's moment, are
+      `measurable` (S-0102 D49 (b)). They are `unmeasured` for a landing on a high-bridge deck, from
+      the ground or from another deck, since D49 runs on a flat map, and for an aircraft member,
+      since no scenario there warps one. For an aircraft that cannot land, in flight: the
+      ground-layer pass, the seizing test and the erasure test are `measurable` by scenario P46
+      parts a, c and d (run 1 placed on the ground by the map, run 2 warped first). The airborne
+      scan's reading is `unmeasured`: a map-wide search that looks for aircraft also runs the
+      ground-layer pass, which already considers the aircraft, and a range search that looks for
+      aircraft alone can miss a tracked aircraft in another sector (S-0309 claim 9), so no part here
+      shows the scan's reading on its own. Claim 20 (c)'s reading is `unmeasured`: no part here
+      places a miss at a distance between the two thresholds at will. The switch's scope to the
+      drawing is our engine's design: the original has only the on position. The height 0 at the
+      appearance of an aircraft member whose type cannot land, and its staying there through its
+      hold, are `measurable` by P46 run 2 (its height record from the appearance on). For an
+      aircraft member of a landable type they are `unmeasured`: no scenario here warps one. Keeping
+      that height with no order after the hold is `unmeasured` for a member that its fall-backs
+      leave at rest: run 2's member takes *retreat*, and no scenario here warps another. The
+      fall-back at the wait's expiry with T2's *retreat* for a visiting aircraft on the ground, its
+      first destination that holds, a cell on its house's arrival edge within 3 ticks after the tick
+      in which its hold ends, and its take-off are `measurable` by P46 run 2 (its behaviour,
+      destination and height records). They separate the claim from the reading in which the member
+      keeps *guard* and rests until an order, and from the one in which a destination given before
+      its own movement applies again holds, which leaves it a destination or a height above 0 at the
+      end of the tick in which its hold ends. The original's forget of a destination given in the
+      tick in which its hold ends, and that this destination starts no take-off (the switch's
+      default), are `unmeasured`: the record shows it only in a run where a *retreat* processing
+      falls in that tick, and no set-up here places one there or records processing ticks. A
+      destination at the end of that tick would still falsify it (P46 run 2). The fall-back at the
+      hold's end is `unmeasured`: in run 2 it leaves *retreat* unchanged, so nothing shows it. Which
+      updates process the member's behaviour before its hold ends, the edge choices made there and
+      their draws are `unmeasured`: no part here records draws, or choices that do not hold.
+    - Confidence: high; medium for the target point at the world origin; medium for the warp member
+      kept as target, the turn towards its landing point and the hit there (run f), and medium,
+      unmeasured, for the position read while the member is off the map, for the lack of area damage
+      to it then, for the hit while it phases in, for the loss when its landing check kills it, for
+      the deck rule and for the airborne count of a departed member. Medium for each special-hit row
+      on a departed member (runs g and h), medium for an erasure lock's effects while the member
+      phases in or after (S-0513 claim 39a), medium for the threshold 42 (run j), medium for the
+      ground render layer until the member's own movement applies again after its hold and its
+      leaving that layer then (S-0102 claims 3 and 4), low for a member that moves from one bridge
+      deck to another, and high for the two engine-design rules (the deck count after a refused
+      placement, and no seizing of a member from its departure until its arrival hold ends) as
+      design contracts. Medium for the ground-layer pass, the seizing test and the erasure test of
+      an aircraft that cannot land, in flight (P46), medium, unmeasured, for its airborne scan
+      reading and for claim 20 (c)'s reading, and high for the switch's scope to the drawing as a
+      design contract. High for the height 0 at the appearance of an aircraft member whose type
+      cannot land, medium for its staying there through its hold (P46 run 2), and medium,
+      unmeasured, for both with an aircraft member of a landable type. Medium, unmeasured, for
+      keeping that height with no order after the hold, for a member that its fall-backs leave at
+      rest. Medium for the fall-back at the wait's expiry and T2's *retreat* there (P46 run 2),
+      medium for a destination's not holding before the member's own movement applies again, for its
+      first destination that holds and for its take-off (P46 run 2), and medium, unmeasured, for the
+      original's forget of a destination given in the tick in which its hold ends and its starting
+      no take-off, for the fall-back
+      at the hold's end, for the updates that process the member's behaviour before its hold ends
+      and for the edge choices and draws made there
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
@@ -2147,6 +2203,19 @@ that no fix would change.
   the projectile loses its target according to claim 17's airborne classification (a steering one
   left without target climbs, claim 15). Off: until it appears, the member counts as standing on
   the deck it departed from, so it is not airborne and its loss gives the deck cell it stood in.
+- **`quirks.warp_hold_end_forgets_destination`** (default on). This is about an aircraft warp
+  member, the kind claim 17 traces. In the tick in which its arrival hold ends, the hold-end test
+  comes before its behaviour processing (S-0513 claim 48), but in the original a further warp update
+  later in that tick, after that processing, forgets a destination the processing gave (claim 17).
+  That destination went to the warp's movement, the aircraft's own movement coming back only at the
+  end of that tick, so it starts no take-off: the aircraft stays at height 0 until its first
+  destination that holds. So an aircraft member that takes *retreat* at its fall-backs has its first
+  destination that holds, and its take-off, at a *retreat* processing in a later tick, at most one
+  such processing later. Off: no step forgets a destination after the member's behaviour processing
+  in that tick, as S-0513 claim 51's order alone gives, so a destination given in that tick holds
+  and the aircraft takes off towards it once its own movement is back (S-0501 claim 8). For a member
+  of another kind the switch is not defined here: its update in which a destination first holds
+  after its hold is not traced.
 
 - **A voxel-flagged projectile without voxel art (departure, a fault of the original).** When a
   projectile type's voxel art is absent or discarded (S-0007 claim 18), the original keeps the
@@ -3746,20 +3815,22 @@ b and 6 a, T1's first row).**
   give, (b) a projectile flies on after a turn in which its height after the turn (*h*′) is
   negative.
 
-**P46. Layer readings for an aircraft that cannot land, in flight (claim 17; Q-2417).**
-- Setup: a flat test map, one human player H2 and one computer house H1 with nothing but *A* and
-  the objects named here. A test aircraft type *A* whose test file clears its landable flag,
-  gives it no weapon and gives it a movement that is neither rocket nor drop-pod movement,
-  owned by H1. Its
-  cruise-height field is below 208 leptons, so its
-  in-air answer stays *no* in flight (S-0501 Terms) and a weapon that is not anti-air may fire at
-  it. H1 owns nothing else that a
-  search of house H2 can take: any object the harness needs for H1 stands on an island that no
-  H2 unit's movement zone reaches. Run 1: the map places *A* on the ground. Run 2: as run 1,
-  then H2 launches a warp superweapon with *A* its only member, as in P11 run f, onto a level
-  empty landing cell, and the part begins after *A*'s arrival hold has ended (S-0513 claim 39).
-  *A*'s move order comes from a map trigger with an elapsed-time event, set to fire after the
-  part begins, that gives *A* a team script with a move to a waypoint at the cell below.
+**P46. Layer readings for an aircraft that cannot land, in flight (claim 17; Q-2417, Q-2526).**
+- Setup: a flat test map, one human player H2 and one computer house H1 with nothing but *A* and the
+  objects named here. A test aircraft type *A* whose test file clears its landable flag, gives it no
+  weapon and gives it a movement that is neither rocket nor drop-pod movement, owned by H1 and in no
+  team until run 1's trigger fires. The map places *A* on the ground with *guard* as its behaviour.
+  Its cruise-height field is below 208 leptons, so its in-air answer stays *no* in flight (S-0501
+  Terms) and a weapon that is not anti-air may fire at it. H1 owns no building and its map section
+  names no edge, so its arrival edge is north (S-0522 claim 5). H1 owns nothing else that a search
+  of house H2 can take: any object the harness needs for H1 stands on an island that no H2 unit's
+  movement zone reaches, south of run 2's landing cell. Run 1: *A*'s move order comes from a map
+  trigger with an elapsed-time event, set to fire after the part begins, that gives *A* a team
+  script with a move to a waypoint at a cell far enough away that the part ends while *A* is in
+  flight. Run 2: the map has no trigger, and H2 launches a warp superweapon with *A* its only
+  member, as in P11 run f, in tick *t*_L, onto a level empty landing cell far enough from every edge
+  of the usable area that *A*'s flight from it to any edge lasts until the part ends. *A*'s own
+  *retreat* flight (claim 17) is run 2's flight, and the part begins at the launch.
   - Part a: a test vehicle type *V* of H2 whose weapon is anti-ground only, in *sleep* (S-0215
     claim 4) from the start, so it takes no target before its *hunt* order. The test file sets
     every property that a row of S-0309 table C reads so that *A* passes as *V*'s candidate:
@@ -3773,37 +3844,55 @@ b and 6 a, T1's first row).**
     S-0309 claims 1 to 20, among them claim 5's no-auto-fire flag and claim 20's distributed
     fire, and it is not a type that deploys to fire.
   - Part c: a vehicle *L* of H2 with a seizing weapon (S-0607) whose damage the test file sets
-    above *A*'s size. Part c2, the control: the same with the map trigger left out, so *A* gets
-    no move order and stays at rest at height 0 until it is seized.
-  - Part d: a vehicle *E* of H2 with a temporal weapon (S-0514). Part d2, the control: the same
-    with the map trigger left out, so *A* gets no move order and stays at rest at height 0.
-- Procedure: in every part but c2 and d2 the trigger gives *A* its move order to a cell far
-  enough away that the part ends while *A* is in flight. The human player gives every other
-  order and the launch by normal input: in part a *V*'s *hunt* order once *A* is above height 0,
-  in parts c and d *L*'s or *E*'s attack order on *A* once *A* is above height 0, and in c2 and
-  d2 that order with *A* at rest.
-- Observable: *A*'s position and height above its surface in each tick, in run 2 from its
-  appearance at its landing point on. Part a: *V*'s target in each tick. Parts c and d: each
-  shot's detonation tick and point, *A*'s height above its surface at that tick, and whether
-  *A* is seized or is being erased in each tick after it.
-- Runs: 1 per part and run.
-- Expected: (run 2, every part) *A* appears at its landing point at height 0, not at its
-  cruise height, and stays at rest there until the trigger's move order. In part c2 it stays
-  there until it is seized (what follows the seize is not judged here), and in part d2 until
-  the part ends. (a) *V* takes *A* as its target while *A* flies (the ground-layer pass
-  reads the ground list). (c) after a shot detonates at *A* while *A* is above height 0, *A* is
-  not seized and flies on. (c2) *A* is seized. (d) after such a detonation *A* is not erased.
-  (d2) *A* is being erased from the detonation on.
-- Falsified if: (run 2) *A* appears above height 0, or leaves height 0 before the trigger's
-  move order (in part c2 before it is seized, in part d2 before the part ends); (a) *V*'s
-  target stays empty while *A* flies; (c) *A* is seized; (d) *A* is being erased. Apart from
-  run 2's height, parts c2 and d2 falsify nothing here: when c2's seize or d2's erasure fails
-  in a run, part c of that run is void, and likewise d2 for part d.
-- Void if: in run 2 the landing check does not pass at its first try, or the trigger fires
-  before *A*'s arrival hold has ended; in a part other than c2 and d2, *A* does not take off on
-  its move order; in any part, *A* takes any other order; in part a *V*'s target is not empty
-  when its *hunt* order is given; in part c or d no shot detonates at *A* while *A* is above
-  height 0; in part c2 or d2 no shot detonates at *A*.
+    above *A*'s size. Part c2, the control, in run 1 only: the same with the map trigger left
+    out, so *A* gets no move order and stays at rest at height 0 until it is seized.
+  - Part d: a vehicle *E* of H2 with a temporal weapon (S-0514). Part d2, the control, in run 1
+    only: the same with the map trigger left out, so *A* gets no move order and stays at rest at
+    height 0.
+- Procedure: in run 1, in every part but c2 and d2, the trigger gives *A* its move order. In run
+  2 nothing orders *A*. The human player gives every other order and the launch by normal
+  input: in part a *V*'s *hunt* order once *A* is above height 0, in parts c and d *L*'s or
+  *E*'s attack order on *A* once *A* is above height 0, and in c2 and d2 that order with *A* at
+  rest.
+- Observable: *A*'s position and height above its surface in each tick. In run 2, at the end of
+  each tick from *t*_L on: *A*'s current behaviour, its destination (a cell, or none)
+  and whether it is phasing in (S-0513 Terms). Let *h* be the first tick after its appearance at
+  whose end it is no longer phasing in, the tick in which its hold ends. Part a: *V*'s target in
+  each tick. Parts c and d: each shot's detonation tick and point, *A*'s height above its
+  surface at that tick, and whether *A* is seized or is being erased in each tick after it.
+- Runs: 1 per part and run. In run 2 each part lasts at least to the end of tick *h* + 4.
+- Expected: (run 2, parts a, c and d) at the end of *t*_L + 61 *A*'s current behaviour
+  is *retreat*, which it was not before. It appears at its landing point
+  at height 0, not at its cruise height, and its height is 0 at the end of every tick from its
+  appearance to *h*. It has no destination at the end of every tick from *t*_L + 61 to *h*, the end
+  of *h* included (where a *retreat* processing falls in *h*, by
+  `quirks.warp_hold_end_forgets_destination` on), and has one at the end of one of ticks *h* + 1 to
+  *h* + 3: a cell on H1's arrival edge, north (S-0522 claims 4 and 5). Its height is above 0 by the
+  end of the tick after the first tick at whose end it has that destination, and it flies on with
+  that cell as its destination. (a) *V* takes *A* as its target while *A* flies (the ground-layer
+  pass reads the ground list). (c) after a shot detonates at *A* while *A* is above height 0, *A* is
+  not seized and flies on. (c2) *A* is seized. (d) after such a detonation *A* is not erased. (d2)
+  *A* is being erased from the detonation on.
+- Falsified if: (run 2) *A*'s current behaviour at the end of *t*_L + 61 is not *retreat* (in
+  particular, it keeps its behaviour from before the launch), *A* appears above height 0, its height
+  is above 0 at the end of a tick from its appearance to *h*, it has a destination at the end of a
+  tick from *t*_L + 61 to *h* (at the end of *h*: the switch off instead of the original's, where a
+  *retreat* processing fell in *h*), it has none at the end of *h* + 3, its first destination is not
+  a cell on the north edge, its height is still 0 at the end of the tick after the first tick at
+  whose end it has a destination, or its destination at the end of a later tick, before *A* is
+  removed or the part ends, is not that cell; (a) *V*'s target stays empty while *A* flies; (c) *A*
+  is seized; (d) *A* is being erased. Parts c2 and d2 falsify nothing here: they are the controls of
+  part c and part d of both runs, and when c2's seize or d2's erasure fails, part c, or likewise
+  part d, of both runs is void.
+- Void if: in run 2 the landing check does not pass at its first try, or *A* is removed before the
+  part's shot detonates or, in part a, before *V* takes a target; in run 1, in a part other than c2
+  and d2, *A* does not take off on its move order; in any part, *A* takes an order other than run
+  1's move order; in part a *V*'s target is not empty when its *hunt* order is given, or *A* is over
+  a cell outside the connected region of *V*'s movement zone that holds *V*'s cell before *V* takes
+  it as its target; in part c or d no shot detonates at *A* while *A* is above height 0 (in run 2
+  only where *A*'s height has risen above 0: run 2's falsifiers on *A*'s behaviour, destination and
+  height are judged from the record first, so a run 2 in which *A* stays at height 0 is falsified,
+  not void); in part c2 or d2 no shot detonates at *A*.
 
 ## Open questions
 
@@ -3972,6 +4061,36 @@ b and 6 a, T1's first row).**
   A member moving from one bridge deck to another stays as claim 36 has it. A clarification
   with no behaviour change. High for an aircraft whose type
   cannot land, `measurable` by scenario P46 run 2 here; medium, `unmeasured`, for other aircraft.
+
+- S-0513 claim 39: its paragraph on the two target searches, at the wait's expiry and at the hold's
+  end, can add that a member that the search leaves with no target, the gates refusing the search
+  included, falls back to rest at once in that update, as an object does at the end of phasing in
+  after an own jump (S-0207 claim 20 (f)). S-0215 gives which behaviour follows, and S-0501 table T2
+  for an aircraft: at the wait's expiry, unless an earlier row of T2 applies, a visiting aircraft on
+  the ground with no passengers and not in a team takes *retreat*, which the fall-back at the hold's
+  end leaves unchanged (claim 17 here). Medium at the wait's expiry, `measurable` by scenario P46
+  run 2 here; medium, `unmeasured`, at the hold's end, which leaves that member's *retreat*
+  unchanged.
+
+- S-0513 claims 48 and 51: claim 48 can add, as evidence from the original, that an aircraft member
+  that phases in with no temporal beam attached has its behaviour processed from its departure on,
+  in each tick as for an aircraft that is not warped, and that while it phases in it takes two warp
+  updates in each tick, only one of which processes its behaviour. What that second update does to
+  claim 39's tick labels for an aircraft is not traced. Claim 51's table permits behaviour
+  processing and ordinary movement in the arrival hold, and none of its permissions overrides
+  another movement refusal. For an aircraft member, claim 17 here drops a destination given before
+  its own movement applies again, so that permission moves it nowhere in the hold, and its first
+  destination that holds comes at a *retreat* processing after it stops phasing in, at most 3 ticks
+  after its hold ends. This agrees with claim 48's hold row and S-0215's arrival-hold sentence: in
+  the tick in which the hold ends, the hold-end test precedes the member's behaviour processing in
+  the original too. But in the original a further warp update of an aircraft member later in that
+  tick, after its behaviour processing, forgets a destination that processing gave (claim 17 here).
+  That forget is `quirks.warp_hold_end_forgets_destination`, on by default. With it off, as claim
+  51's order alone gives, a destination given in that tick holds. Claim 51 can name that switch for
+  an aircraft member in that tick, medium, `unmeasured` (claim 17 here gives why). Which of the
+  warp's updates process its behaviour, and so which of *retreat*'s edge choices are made there with
+  their draws, stays claim 51's design rule. Medium, `unmeasured`: no scenario reads which updates
+  process an aircraft member's behaviour.
 
 - S-0405 claim 20 (its bullet on a disabled vehicle as a target) and its Open questions on Q-1710
   leave open what sets where M-0005's stall shells land, and why some hunters make a fire attempt
