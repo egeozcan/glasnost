@@ -51,7 +51,8 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   where `enter_of` says, `enter_docking` set, a last delay of 3, which only that processing
   returns with the docking stage set), so no state is added.
 
-No state is added, so the save format (94) and the AI game format (57) are unchanged.
+No state is added, so the save format and the AI game format are unchanged (95 and 58 on intake
+87's main).
 
 ## Claims
 
@@ -87,14 +88,32 @@ contact), the regenerated goldens are byte for byte those of the full change. Th
 the heading point without a contact, the touchdown's lost docking and the ready mark move no
 golden on their own. The straight duel still exercises everything it must (transport, launch).
 
-## Lanes
+Rebased onto intake 87 (f8553f5, which moves all nine goldens), 87's goldens were taken and
+regenerated: again only the duel (from about tick 12340) and the naval duel (from about tick
+13570) move.
 
-Before: main 53e846c with this intake's requests; after: that base with this intake's code commit
-("sim: aircraft enter without a contact, …"); same machine, release. The lanes ran before the
-rebase onto 7f29fee (intake 85, S-0214, which changes sim and AI code but no golden); on the
-rebased tree the checks and the gate were run again (the goldens hold), the lanes were not.
-Intake 87 moves every golden, the arena and the quick lane, so after this intake is rebased onto
-it the two goldens are regenerated there and the arena and the quick lane are run again.
+## Lanes on intake 87 (final)
+
+Before: main f8553f5; after: this intake rebased onto it; same machine, release.
+
+| lane | before | after |
+|---|---|---|
+| M6c sweep, seeds 1 to 16 | smallest counter 0 | identical output |
+| M7a sweep, seeds 1 to 16 | smallest counter 0 | identical output |
+| M7b sweep, seeds 1 to 16 | smallest drain minimum 3 | identical output |
+| arena (`--record all`) | 10 of 155 pairings fail | identical output and recorded files; the same 10 (LTNK–E1, MIND–E1, TELE–ROBO, TELE–BFRT, TELE–APOC, TELE–V3, CAOS–E1, DISK–FV, INIT–E2, ROBO–HTK), none changed |
+| `glasnost-ai --include-ignored` | not run on f8553f5 | 246 passed |
+| AI quick lane, seeds 7 to 10 × sides 0,1 / 0,2 / 1,2 × maps 0, 2, 8 | 36 of 36 games over with a winner | 36 of 36 over with a winner |
+
+Again every game of sides 1 and 2 is unchanged and the games with side 0 change course. Side 0
+won 20 of its 24 games before and 16 after (against side 1: 10 of 12, then 10; against side 2: 10
+of 12, then 6). At the games' ends 62 army objects were in *enter* before, 47 after, and side 0
+made 360 aircraft before, 384 after.
+
+## Lanes on main 53e846c (first run)
+
+Before: main 53e846c with this intake's requests; after: that base with this intake's code commit;
+same machine, release. Run before the rebases onto intake 85 (7f29fee) and intake 87.
 
 | lane | before | after |
 |---|---|---|
