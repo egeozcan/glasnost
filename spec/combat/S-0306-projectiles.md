@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 65
+revision: 72
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417]
 supersedes: []
 ---
 
@@ -828,14 +828,40 @@ S-0501 claim 20.
     no height above its surface (on the deck when it lands on a high-bridge cell from the
     ground), so its own rows of S-0102's layer table give the ground layer as well. It leaves
     that layer only when its own movement raises it, at that movement's moment of S-0102 claim
-    4, except an aircraft whose type cannot land, which keeps the ground layer while it flies,
-    until a crash. For a member moving from one bridge deck to another, its height at the
-    landing point is not established (S-0513 claim 36), and so, for a unit with jumpjet movement
-    or an aircraft whose type can land, neither is when it leaves the ground layer (S-0102 claim
-    3 and Open questions). So claim 20 (c) uses the threshold 42 for a warp
-    member, also for one that departed from a high-bridge deck and counts as airborne by the
-    paragraph above. No member uses 128 there:
+    4, except an aircraft whose type cannot land, which keeps the ground list while it flies,
+    until a crash (S-0102 claim 4). For a member moving from one bridge deck to another, its
+    height at the landing point is not established (S-0513 claim 36), and so, for a unit with
+    jumpjet movement or an aircraft whose type can land, neither is when it leaves the ground
+    layer (S-0102 claim 3 and Open questions). So, until its own movement applies again, claim
+    20 (c) uses the threshold 42 for a warp member, also for one that departed from a high-bridge
+    deck and counts as airborne by the paragraph above. No member uses 128 then:
     an aircraft is never warped while in the air (S-0513 claim 34).
+
+    *An aircraft that cannot land, in flight.* This paragraph is about an aircraft whose type
+    cannot land and whose movement is neither rocket nor drop-pod movement. An aircraft with either
+    movement is in the air layer and listed in no cell (S-0102 claim 3, S-0209 claim 13), so none
+    of this applies to it. Once such an aircraft flies after its hold, the ground list it stays
+    in (S-0102 claim 4) and the layer its state and height give it (S-0102 claim 3's aircraft
+    row, the top layer from a height above its surface of more than 0) differ. The same holds for
+    any such aircraft placed on the ground, warped or not. Of the rules that read a target's layer:
+    - S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight
+      as it considers a landed aircraft there: in both passes of a search that looks for aircraft,
+      and in the second pass alone otherwise. That claim's connected-region test and table C apply
+      as to any candidate,
+    - S-0309 claim 9's airborne scan reads the layer from state and height, so it does not leave
+      the aircraft out as a ground-layer object: once the aircraft is tracked (S-0501 claim 47
+      (a), from its take-off) and above height 0, the scan looks at it as at any aircraft in
+      flight,
+    - S-0607 claim 3's seizing reads the layer from state and height, so a seizing shot that
+      detonates while the aircraft is above height 0 does not seize it. At rest at height 0 it
+      meets that test (for a warp member, after its arrival hold, by the design rule above),
+    - S-0514 claim 1's erasure test and claim 20 (c) here also read the layer from state and
+      height: above height 0 the aircraft is not erased, and claim 20 (c) gives it 128 while it is
+      airborne (S-0307) and 42 otherwise.
+
+    With S-0102's `quirks.layer_change_on_events_only` off, that switch's sweep moves the aircraft
+    out of the ground list in the first tick its state and height give another layer, so S-0309
+    claim 7's ground-layer pass no longer considers it. The other rules above are unchanged.
     - Backing: `measurable` (scenario P11: run a for the airborne target, run c for the target on
       the ground, run d for a target that teleports, run e for a firer that leaves the game, run f
       for a projectile that keeps a warp member and turns towards its landing point; P38 for a
@@ -860,7 +886,16 @@ S-0501 claim 20.
       member's own movement applies again after its hold, and its leaving that layer at that
       movement's moment, are `measurable` (S-0102 D49 (b)). They are `unmeasured` for a landing
       on a high-bridge deck, from the ground or from another deck, since D49 runs on a flat map,
-      and for an aircraft member, since no scenario there warps one.
+      and for an aircraft member, since no scenario there warps one. For an aircraft that cannot
+      land, in flight: the ground-layer pass, the seizing test and the erasure test are
+      `measurable` by scenario P46 parts a, c and d (run 1 placed on the ground by the map, run 2
+      warped first). The airborne scan's reading is `unmeasured`: a map-wide search that looks
+      for aircraft also runs the ground-layer pass, which already considers the aircraft, and a
+      range search that looks for aircraft alone can miss a tracked aircraft in another sector
+      (S-0309 claim 9), so no part here shows the scan's reading on its own. Claim 20 (c)'s
+      reading is `unmeasured`: no part here places a miss at a distance between the two
+      thresholds at will. The rule with the switch off is
+      `unmeasured`: the original has no such state, and it follows from S-0102's alternative.
     - Confidence: high; medium for the target point at the world origin; medium for the warp
       member kept as target, the turn towards its landing point and the hit there (run f), and
       medium, unmeasured, for the position read while the member is off the map, for the lack of
@@ -872,7 +907,10 @@ S-0501 claim 20.
       hold and its leaving that layer then (S-0102 claims 3 and 4), low for a member that moves
       from one bridge deck to another, and high
       for the two engine-design rules (the deck count after a refused placement, and no seizing
-      of a member from its departure until its arrival hold ends) as design contracts
+      of a member from its departure until its arrival hold ends) as design contracts. Medium for
+      the ground-layer pass, the seizing test and the erasure test of an aircraft that cannot
+      land, in flight (P46), medium, unmeasured, for its airborne scan reading, for claim 20 (c)'s
+      reading and for the rule with the switch off
 
 18. **Degeneration.** A projectile type with the degenerating flag loses 1 point of its shot damage in
     each turn in which it does not detonate, but not below 5.
@@ -3690,6 +3728,59 @@ b and 6 a, T1's first row).**
   give, (b) a projectile flies on after a turn in which its height after the turn (*h*′) is
   negative.
 
+**P46. Layer readings for an aircraft that cannot land, in flight (claim 17; Q-2417).**
+- Setup: a flat test map, one human player H2 and one computer house H1 with nothing but *A* and
+  the objects named here. A test aircraft type *A* whose test file clears its landable flag,
+  gives it no weapon and gives it a movement that is neither rocket nor drop-pod movement,
+  owned by H1. Its
+  cruise-height field is below 208 leptons, so its
+  in-air answer stays *no* in flight (S-0501 Terms) and a weapon that is not anti-air may fire at
+  it. H1 owns nothing else that a
+  search of house H2 can take: any object the harness needs for H1 stands on an island that no
+  H2 unit's movement zone reaches. Run 1: the map places *A* on the ground. Run 2: as run 1,
+  then H2 launches a warp superweapon with *A* its only member, as in P11 run f, onto a level
+  empty landing cell, and the part begins after *A*'s arrival hold has ended (S-0513 claim 39).
+  *A*'s move order comes from a map trigger with an elapsed-time event, set to fire after the
+  part begins, that gives *A* a team script with a move to a waypoint at the cell below.
+  - Part a: a test vehicle type *V* of H2 whose weapon is anti-ground only, in *sleep* (S-0215
+    claim 4) from the start, so it takes no target before its *hunt* order. The test file sets
+    every property that a row of S-0309 table C reads so that *A* passes as *V*'s candidate:
+    *V*'s search classes include vehicles (S-0309 claim 5), its land-targeting mode is not 2,
+    its target-health scan mode is not *strong*, and its warhead's versus value against *A*'s
+    armour is the full value. *A*'s type is a legal target and is not insignificant, and no
+    behaviour has the no-threat property. *A* cannot cloak. H1 is not a multiplayer-passive
+    house, and the map sets no harvester immunity and has no bridges. *A*'s path lies on the
+    playfield over cells of the connected region of *V*'s movement zone that holds *V*'s cell
+    (S-0309 claim 7). *V*'s type sets none of the flags that stop or narrow its searches in
+    S-0309 claims 1 to 20, among them claim 5's no-auto-fire flag and claim 20's distributed
+    fire, and it is not a type that deploys to fire.
+  - Part c: a vehicle *L* of H2 with a seizing weapon (S-0607) whose damage the test file sets
+    above *A*'s size. Part c2, the control: the same with the map trigger left out, so *A* gets
+    no move order and stays at rest at height 0.
+  - Part d: a vehicle *E* of H2 with a temporal weapon (S-0514). Part d2, the control: the same
+    with the map trigger left out, so *A* gets no move order and stays at rest at height 0.
+- Procedure: in every part but c2 and d2 the trigger gives *A* its move order to a cell far
+  enough away that the part ends while *A* is in flight. The human player gives every other
+  order and the launch by normal input: in part a *V*'s *hunt* order once *A* is above height 0,
+  in parts c and d *L*'s or *E*'s attack order on *A* once *A* is above height 0, and in c2 and
+  d2 that order with *A* at rest.
+- Observable: *A*'s position and height above its surface in each tick. Part a: *V*'s target in
+  each tick. Parts c and d: each shot's detonation tick and point, *A*'s height above its
+  surface at that tick, and whether *A* is seized or is being erased in each tick after it.
+- Runs: 1 per part and run.
+- Expected: (a) *V* takes *A* as its target while *A* flies (the ground-layer pass reads the
+  ground list). (c) after a shot detonates at *A* while *A* is above height 0, *A* is not seized
+  and flies on. (c2) *A* is seized. (d) after such a detonation *A* is not erased. (d2) *A* is
+  being erased from the detonation on.
+- Falsified if: (a) *V*'s target stays empty while *A* flies; (c) *A* is seized; (d) *A* is being
+  erased. Parts c2 and d2 falsify nothing here: when c2 fails in a run, part c of that run is
+  void, and likewise d2 for part d.
+- Void if: in run 2 the landing check does not pass at its first try, or the trigger fires
+  before *A*'s arrival hold has ended; in a part other than c2 and d2, *A* does not take off on
+  its move order; in any part, *A* takes any other order; in part a *V*'s target is not empty
+  when its *hunt* order is given; in part c or d no shot detonates at *A* while *A* is above
+  height 0; in part c2 or d2 no shot detonates at *A*.
+
 ## Open questions
 
 - Q-1761 question 2, beyond this spec: this spec answers it for the firing check on every route
@@ -3811,6 +3902,23 @@ b and 6 a, T1's first row).**
   departed warp member is an ordinary target object for these hits, off the map or phasing in
   (claim 17 here). Each can point here for that case. S-0514 claim 1's ground-layer test passes
   for a warp member by claim 17's render-layer rule. Medium, `measurable` by P11 runs g and h.
+
+- S-0309 claims 7 and 9: an aircraft whose type cannot land and whose movement is neither rocket
+  nor drop-pod movement flies in the ground list, while its
+  state and height give it the top layer (claim 17 here, *An aircraft that cannot land, in
+  flight*). Claim 7 can say that its ground-layer pass considers such an aircraft in flight, as it
+  considers a landed one, and claim 9 that its airborne scan does not leave it out as a
+  ground-layer object once it is tracked and above height 0. Both follow the readings those claims
+  already state. Claim 7's reading: medium, `measurable` by scenario P46 part a here. Claim 9's:
+  medium, `unmeasured`, since a map-wide search that looks for aircraft also runs claim 7's
+  ground-layer pass, which already considers the aircraft, and a range search that looks for
+  aircraft alone can miss a tracked aircraft in another sector (claim 9).
+
+- S-0607 claim 3 and S-0514 claim 1: their ground-render-layer tests read the layer from state and
+  height (S-0102 claim 3), not the list. So an aircraft whose type cannot land (and whose
+  movement is neither rocket nor drop-pod movement) is not seized or
+  erased by a hit while it is above height 0, although it stays in the ground list (claim 17
+  here). Each can say so. Medium, `measurable` by scenario P46 parts c and d here.
 
 - S-0405 claim 20 (its bullet on a disabled vehicle as a target) and its Open questions on Q-1710
   leave open what sets where M-0005's stall shells land, and why some hunters make a fire attempt
