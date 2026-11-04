@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 114
+revision: 116
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1426,7 +1426,10 @@ index 1. This is a design rule, not an additional claim about the original.
     member, approaches it, or drops it with the destination as that claim's parts (a), (d) and (g)
     give. A deployed infantry firer of a human-controlled owner instead neither moves nor turns, and
     S-0517 claim 16's deployed-firing rule applies to the member at the old position as to a target
-    on the map there, while its beam stays attached (S-0513 claim 39a). A firer that moves goes
+    on the map there. Its beam stays attached in *guard*, and in *attack* the fall-back to rest
+    that follows a drop with no target found lets it go, unless its type is a jumpjet type, which
+    does not fall back there, or a fall-back to rest has already taken its common effects in that
+    tick (S-0513 claim 39a). A firer that moves goes
     towards the old position and lets the beam go at its first arrival in a new cell (S-0514 claim
     14, S-0513 claim 39a, *The firer*). A member that a revert gives
     back to a holder while it is off the map
@@ -1493,8 +1496,12 @@ index 1. This is a design rule, not an additional claim about the original.
       beyond range at the departure). For targets on the map, the drop of a SAM-flag building that
       is not charged while S-0215 claim 32's power row applies, no later than its checking turn in
       the first check tick of claim 29 after the power loss, is `measurable` (S-0513 SW12 part
-      l10), and so is the deployed infantry firer's drop by S-0517 claim 16 before the departure
-      (part l9). Both are `unmeasured` with a member waiting to land, and a charged SAM-flag
+      l10), and so are the deployed infantry firer's drop by S-0517 claim 16, its release in
+      *attack* and its keeping the beam in *guard* before the departure (parts l9 and l9b). A
+      jumpjet-type firer's keeping its beam in *attack* follows from S-0517 claim 16 and takes its
+      backing, and the once-per-tick exception follows from S-0215 claim 13 and takes its backing
+      (S-0513 claim 39a). The SAM-flag building's drop and the deployed infantry firer's drop,
+      release and keep are `unmeasured` with a member waiting to land, and a charged SAM-flag
       building's keep is `unmeasured`. How a building takes a target after the drop is
       claims 1, 2 and 18 and table C's, with their backing.
     - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
@@ -1526,7 +1533,9 @@ index 1. This is a design rule, not an additional claim about the original.
       *aimed*-stage processing and claim 29's check, and for a charged one's keeping it, as S-0513
       claim 39a rates them; medium for a firer beyond
       range of the old position; medium for a deployed infantry firer's drop of the member by
-      S-0517 claim 16 with its beam still attached, low for its taking a target that rule's search
+      S-0517 claim 16, with its beam still attached in *guard* and let go by the fall-back to rest
+      in *attack*, and for a jumpjet-type firer's keeping it in *attack* and the once-per-tick
+      exception, as S-0513 claim 39a rates them, low for its taking a target that rule's search
       finds, as S-0513 claim 39a rates them; medium for the absence of the timer draw during game
       set-up
 
