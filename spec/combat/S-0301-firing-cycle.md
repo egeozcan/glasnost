@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 71
+revision: 73
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-05
 measurements: [M-0004, M-0021]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567]
 supersedes: []
 ---
 
@@ -641,9 +641,32 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    **A held temporal target within rank 4 (S-0514 claim 19).** The held-temporal-target
    *rearming* outranks the hidden-target *impossible* (S-0516 claim 24) and the *illegal* for a
    protected target (S-0513 claim 28). So a firer whose temporal beam is attached to a target
-   that is hidden from its house or protected keeps that target at S-0309 claim 29's check, unless an answer that this
-   claim ranks above that *rearming* holds, on the map or, for a superweapon warp member, off it (S-0513 claim 39a). Both rules are
-   `unmeasured`, as S-0513 claim 39a gives, and rated medium, as that claim rates the keep.
+   that is hidden from its house or protected keeps that target at S-0309 claim 29's check,
+   unless an answer that this claim ranks above that *rearming* holds, on the map or, for a
+   superweapon warp member, off it (S-0513 claim 39a). Both rules are `unmeasured`, as S-0513
+   claim 39a gives, and rated medium, as that claim rates the keep.
+
+   **A building's own answers above a held temporal target (Q-2567).** Every answer of S-0405 table
+   T1 ranks above the held-temporal-target *rearming*, as it does above a pending delayed shot's
+   *rearming* (above), and no T1 answer ranks below it. So a building whose temporal beam is
+   attached to its target gets *illegal* or *impossible* for that target, not *rearming*, while a
+   row of T1 holds: while it is not in operation (S-0405 claim 8: among other cases, switched off or
+   short of power, and not charged, or under a pulse), drained, occupiable without occupants who can
+   fire, or in its *construction* or *selling* behaviour. It does not keep the target. It drops it
+   at the first of two updates, whichever comes first: its next *attack* processing while *attack*
+   is its current behaviour, where S-0215 claim 32's row for those answers drops the target and
+   starts *guard* in the same processing, and its checking turn in a check tick of S-0309 claim 29,
+   where that claim drops it. This holds for a target on the map and for a superweapon warp member
+   that has departed (S-0513 claim 39a, *The firer*). Dropping the target does not let the beam go
+   (S-0514 claim 14): a building does not fall back to rest in S-0215 claim 13's sense, so the beam
+   stays attached after the drop. In its *construction* or *selling* behaviour no *attack*
+   processing runs, and its behaviour stays as it is. There its turn in a check tick drops the
+   target, if it still holds it then, and an opportunity target (S-0215 Terms) goes earlier: S-0215
+   claim 33 drops one in every tick of either behaviour. A pulse-cannon type gets one of S-0405
+   table T1's answers in every state, so no ordinary shot of its own attaches a beam, and its row
+   does not arise here. A building whose type has the SAM flag takes S-0215 claim 32's SAM rows
+   instead, as S-0513 claim 39a reads their power row. This follows the original, with no quirk
+   switch: a building that cannot fire also keeps no target that its beam holds.
 
    **Drain refusals within rank 4 (S-0608 claim 3).** The refusal against the firer's own
    current drained building and the refusals specific to a draining weapon have different
@@ -787,10 +810,22 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      ground layer below that height, and S-0307 Terms makes it airborne from it. Both rows
      answer *illegal* at rank 4, so part e cannot tell which of the two refuses the unit, and it
      needs to tell neither.
+     That a building whose temporal beam is attached to its target drops that target, with the beam
+     still attached, while it is switched off or short of power and not charged is `measurable` for
+     a target on the map (scenario F22, parts a and b). For a superweapon warp member that has
+     departed it is `unmeasured`: with a clean landing the member appears in the tick after its
+     departure (S-0513 claim 39), so no switch order or change of power can fall between the two,
+     and no scenario here sets up a landing that is not clean. The other rows of S-0405 table T1
+     against the held-temporal-target *rearming* are `unmeasured`: no scenario here drains, pulses,
+     empties or sells a building that holds a beam, and S-0215 claim 33's per-tick drop of an
+     opportunity target is that spec's.
    - Confidence: medium (a building's pending delayed shot ahead of the water, land,
      render-layer and airborne rows of S-0306 claim 23, until F21 runs; F21 tests it through the
      target kept and dropped, and S-0306 claim 23 leaves this rank unstated), medium (its place against every other reason,
      ahead of the rest of rank 4 and the later ranks and behind S-0405 table T1's answers),
+     medium (S-0405 table T1's answers ahead of the held-temporal-target *rearming*, and the drop
+     with the beam kept that they cause, until F22 runs; medium for the rows that F22 does not set
+     up and for a departed warp member),
      medium (the deactivated refusal, its unmeasured within-rank precedence,
      and ordinary firing inactivity during erasure), high
      (the two grip-refusal comparisons against projectile and target-layer refusals within rank 4,
@@ -2519,6 +2554,55 @@ is absent (the control).
   take the second vehicle as its target at the order, and a run in which a shot is expected at
   the end of the delay but the building's facing then does not point at the target (a *not
   facing* or *still turning* answer, S-0310).
+
+**F22. A building whose temporal beam holds its target goes out of operation (claim 9; Q-2567).**
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on, the measurement
+  harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made
+  test maps excepted), one bystander computer player outside the test area under the glossary's void
+  rule. A test building type *T* of the scenario's named test rules file (no stock file changed),
+  owned by the human-controlled house, which builds it during the run: not occupiable, not a pulse
+  cannon, without the SAM flag, turret-snap, animation delay or upgrades, with the needs-power flag
+  and a base drain above 0, and armed with one test temporal weapon (Terms) as its only weapon. That
+  weapon's projectile detonates within a few ticks of the shot, and its damage field is small enough
+  against the target's strength field that the target's erasure (S-0514 formula F3) lasts at least
+  100 ticks after the lock. The human's house has power plants whose output covers *T*'s drain with
+  a margin. In range of *T* stands an enemy vehicle *V* of a second computer house, of a weaponless
+  test type, which the test map gives no order. Parts:
+  - a: switched off. In a tick *w* after the lock (S-0514), at least 20 ticks before the erasure
+    would complete, the human switches *T* off (S-0405 claim 10). *T* has no chargers.
+  - b: short of power. A second test building *P* of the human's house, with the needs-power flag
+    and a base drain such that *P*'s and *T*'s drains together exceed the house's output while *T*'s
+    alone does not, is switched off by the human once built. After the lock the human switches *P*
+    on. Here *w* is the first tick at whose end the house has low power (S-0405 claims 4 and 7),
+    which must fall at least 20 ticks before the erasure would complete.
+  - c: control. Parts a and b's fixtures with no switch order after the lock and *P* left switched
+    off.
+- Procedure: the human orders *T* to attack *V* without force-fire. Vary *w* over 10 runs per part
+  a and b, so that it falls at both parities of *T*'s *attack* processing ticks and at different
+  distances from the next check tick of S-0309 claim 29 (a tick whose number is a multiple of 16).
+  With tick-labelled capture and a read-only recorder, record per tick, from the order to the end of
+  the erasure or the run: whether *T*'s beam is attached to the target, *T*'s target and current
+  behaviour just after each of its updates, the ticks of *T*'s *attack* processings and of its
+  shots, whether *T* took its turn (S-0203 claim 10), *T*'s switch state, the house's low-power
+  state at the end of the tick, and the target's presence. No injection or state writes are
+  permitted.
+- Expected (claim 9, *A building's own answers above a held temporal target*): call *u* the first
+  of *T*'s updates in a tick after *w* that is an *attack* processing or falls in a check tick. In
+  parts a and b, *T* holds the target and is in *attack* just after each of its updates from the
+  lock to the last one before tick *w*. It drops the target at one of its updates from tick *w* to
+  *u*, both included, that is an *attack* processing or falls in a check tick: just after that
+  update it holds no target, its beam is still attached, and, when the update is an *attack*
+  processing, it is in *guard*. In part c, *T* holds *V* and stays in *attack* just after every
+  update from the lock until the erasure ends, its *attack* processings fall every other tick, it
+  makes no second shot, and its beam stays attached.
+- Falsified by, in parts a and b, *T* still holding the target just after *u*, a drop before tick
+  *w* or at an update that is neither an *attack* processing nor in a check tick, *T* in *attack*
+  just after a dropping update that is an *attack* processing, or a beam let go from tick *w* to
+  *u*; in part c, by a drop, *guard*, a second shot, processings one tick apart or a beam let go
+  before the erasure ends. A run in which the beam is not attached at the end of the tick before *w*
+  (in part c, from the lock on), *T* misses a turn from tick *w* to *u*, *V* moves or is damaged by
+  anything but *T*'s beam, or the erasure ends before *u*, judges nothing. What *T* does after the
+  dropping update (its *guard* may take a target again) judges nothing.
 
 ## Changes for other specs
 
