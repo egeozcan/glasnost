@@ -526,6 +526,36 @@ fn claim39a_a_vehicle_member_with_a_beam_drops_in_its_departure_and_off_map_turn
 }
 
 #[test]
+fn claim39a_an_aircraft_member_with_a_beam_drops_in_its_departure_and_off_map_turns() {
+    // spec: S-0513 claim 39a (Drops: the departure update ends its being erased, so it makes this drop there as a vehicle or aircraft with a beam attached; Departure: while it phases in, a vehicle or aircraft with a beam attached has its turns cut short) and claim 51 (S-0514 claim 17's clearing after the warp work in each turn in which the member is a vehicle or aircraft phasing in with a beam attached); S-0514 claim 17
+    // LANDP: a landable twin of PDPLANE standing on the block, so a member
+    // (claim 3: an aircraft on the ground is listed in its cell).
+    let mut r = rules();
+    let mut p = r.sim.aircraft["PDPLANE"].clone();
+    p.strength = Some(10_000);
+    p.econ.landable = Some(true);
+    r.sim.aircraft.insert("LANDP".into(), p);
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("LANDP".into());
+    let (mut w, _, x, m, tl) = locked(&r, "LANDP", 61);
+    assert_eq!(stage(&w, m), Some(Stage::Expired), "a member");
+    for t in [tl + 61, tl + 62, tl + 63] {
+        run_through(&mut w, t);
+        give(&mut w, m, x);
+        step(&mut w);
+        assert!(!temporal::erased(&w, m));
+        assert_eq!(
+            (target(&w, m), dest(&w, m)),
+            (None, None),
+            "dropped in t_L + {}",
+            t + 1 - tl
+        );
+    }
+}
+
+#[test]
 fn claim39a_an_infantry_member_with_a_beam_drops_off_the_map_only_with_the_switch_off() {
     // spec: S-0203 r43 claim 4 (the clearing after the warp work for an infantry member phasing in with a beam attached, with quirks.phase_in_beam_spares_infantry off)
     // spec: S-0513 claim 39a and Edge cases (quirks.phase_in_beam_spares_infantry: on, an infantry member phasing in with a beam attached and not being erased is not cut short and makes no drop; off, it is cut short and drops) and claim 51 (the clearing after the warp work for an infantry member in that state with the switch off); S-0514 claim 17
@@ -819,6 +849,38 @@ fn claim39a_a_vehicle_firer_keeps_a_member_that_waits_to_land_with_its_turns_unc
     // spec: S-0513 claim 39a (The firer, Q-2317: the same for a vehicle firer, unmeasured) and S-0514 claim 19
     // spec: S-0309 r95 claim 27 (the same for a vehicle firer, unmeasured)
     assert_kept_while_waiting(waiting(&rules(), "CART", -3, -2));
+}
+
+#[test]
+fn claim39a_the_firers_rearm_countdown_runs_while_the_member_waits_to_land() {
+    // spec: S-0513 claim 39a (The firer: its firing step on rearming neither turns it nor clears its target; its behaviour stays as it was and its rearm countdown runs as in any turn) and S-0514 claim 19
+    let Waiting {
+        mut w,
+        f,
+        m,
+        dep,
+        app,
+        ..
+    } = waiting(&rules(), "CART", -3, -2);
+    assert_eq!(w.tick, dep);
+    // A countdown that ends while the member is off the map.
+    let end = dep + (app - dep) / 2;
+    w.obj_mut(f).unwrap().combat.rearm_until = end;
+    let rearming = |w: &World| w.tick < w.obj(f).unwrap().combat.rearm_until;
+    assert!(rearming(&w));
+    while w.tick < app {
+        w.effects.clear();
+        step(&mut w);
+        assert_eq!(
+            w.obj(f).unwrap().combat.rearm_until,
+            end,
+            "neither restarted nor held, tick {}",
+            w.tick
+        );
+        assert_eq!(shots_by(&w, f), 0);
+    }
+    assert!(!rearming(&w), "it ran out before the appearance");
+    assert_eq!(target(&w, f), Some(Target::Object(m)));
 }
 
 #[test]
@@ -1595,7 +1657,12 @@ fn r91_claim39a_a_member_removed_by_its_erasure_update_in_a_sparkle_tick_sparkle
 /// A CART of ALPHA whose temporal beam is locked on a BUGGY of BETA on the
 /// map, holding it as its target, with no warp.
 fn beamed_on_the_map() -> (World, ObjectId, ObjectId) {
-    let mut w = ready(&rules());
+    beamed_on_the_map_with(&rules())
+}
+
+/// [`beamed_on_the_map`] with the ruleset `r`.
+fn beamed_on_the_map_with(r: &Ruleset) -> (World, ObjectId, ObjectId) {
+    let mut w = ready(r);
     let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
     let f = spawn(&mut w, "CART", ALPHA, -3, -2);
     temporal::deliver(&mut w, Some(f), Some(Target::Object(m)));
@@ -1672,6 +1739,33 @@ fn r108_claim39a_the_held_temporal_rearming_outranks_a_hidden_targets_impossible
         Answer::Impossible,
         "with no beam: the hidden target's impossible"
     );
+}
+
+#[test]
+fn r108_part_e_passes_over_the_held_temporal_rearming_only_with_the_switch_off() {
+    // spec: S-0214 r80 Edge cases (Attack offered over a reason of the moment, Q-2426: with quirks.moment_reason_attack_cursor off, part (e) passes over every rearming of rank 4, so a reason that gives illegal at a lower rank fails it; on, the highest-ranked answer that holds decides) and claim 6 (e)
+    // spec: S-0513 r108 claim 39a and S-0301 r70 claim 9 (A held temporal target within rank 4: the held-temporal-target rearming outranks the illegal for a protected target, S-0513 claim 28, which a firer that is not a player-human gets)
+    use glasnost_sim::combat::check;
+    use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
+    for on in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.moment_reason_attack_cursor = on;
+        let (mut w, f, m) = beamed_on_the_map_with(&r);
+        computer_alpha(&mut w);
+        protect_now(&mut w, m);
+        let t = Some(Target::Object(m));
+        assert_eq!(check(&w, f, t, 0, false), Answer::Rearming, "on {on}");
+        assert!(
+            check::illegal_at_any_rank(&w, f, t, 0),
+            "the protected target's illegal holds at a lower rank"
+        );
+        let action = targeting::action(&w, ALPHA, f, ClickOn::Object(m), Modifiers::default());
+        assert_eq!(action == Action::Attack, on, "action, on {on}");
+        let orders =
+            targeting::click(&w, ALPHA, &[f], ClickOn::Object(m), Modifiers::default()).orders;
+        let attack = matches!(orders.as_slice(), [orders::Order::Behaviour { actor, behaviour: Behaviour::Attack, target: Some(Target::Object(x)), .. }] if *actor == f && *x == m);
+        assert_eq!(attack, on, "click, on {on}");
+    }
 }
 
 #[test]
