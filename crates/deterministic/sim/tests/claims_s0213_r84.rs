@@ -417,6 +417,23 @@ fn claim_16c_a_loop_close_makes_attack_moves() {
     }
 }
 
+/// spec: S-0213 claim 16c, Attack moves in a loop (the change is made at every loop close, a second loop closed in the same tick included; the original's disagreement between clients there is not copied) and claim 1 (all orders issued in the same tick are applied together) (M8 seam sweep 5a)
+#[test]
+fn claim_16c_a_second_loop_closed_in_the_same_tick_changes_too() {
+    let mut w = game();
+    let v = put(&mut w, Kind::Vehicle, "CART", 0, 0, 0);
+    let u = put(&mut w, Kind::Vehicle, "CART", 0, 1, 0);
+    let vs = route(&mut w, v, &[at(2, 6), at(4, 6), at(6, 6)]);
+    let us = route(&mut w, u, &[at(2, 9), at(4, 9), at(6, 9)]);
+    // Both loop closes in one tick.
+    let (jv, ju) = (join(&w, v, vs[0]), join(&w, u, us[1]));
+    give(&mut w, vec![jv, ju]);
+    assert_eq!(w.routes.routes[&v].loop_from, Some(0));
+    assert_eq!(w.routes.routes[&u].loop_from, Some(1));
+    assert_eq!(marks(&w, v), vec![true; 3], "the first loop");
+    assert_eq!(marks(&w, u), vec![false, true, true], "the second loop");
+}
+
 /// spec: S-0213 claim 16c, Attack moves in a loop (revision 84: the test is made per holder: at a point that holds different actions for different holders, each holder whose action there is a move gets the attack-move order and each whose action is not a move keeps it; eligibility is read from the holders of the loop's first point only; the change is made for every holder of each point)
 #[test]
 fn claim_16c_attack_moves_per_holder() {
@@ -733,6 +750,51 @@ fn claim_16b_a_buildings_attack_click_adds_a_point() {
         1,
         "a first point add raises the count"
     );
+}
+
+/// spec: S-0213 claim 16d (an aircraft or building in the route-holder limit: a first point add raises the count, and at the release it counts as a new object) and claim 16 with Formulas (refused when the count plus the selected objects whose routes hold no point would be more than 128) (M8 seam sweep 5a)
+#[test]
+fn claim_16d_a_building_and_an_aircraft_count_against_the_holder_limit() {
+    use glasnost_sim::routes::HOLDER_LIMIT;
+    for (kind, name) in [(Kind::Building, "TOWER"), (Kind::Aircraft, "HELI")] {
+        let mut w = game();
+        let b = put(&mut w, kind, name, 0, 0, 0);
+        let e = put(&mut w, Kind::Vehicle, "BUGGY", 1, 5, 0);
+        testkit::run(&mut w, 2);
+        let on = if kind == Kind::Building {
+            ClickOn::Object(e)
+        } else {
+            ClickOn::Cell(at(4, 4))
+        };
+        // At the limit: refused, as a new object.
+        w.routes.counts.insert(A, HOLDER_LIMIT);
+        assert_eq!(
+            routes::click(&w, A, &[b], on, Modifiers::default()),
+            RouteClick::Refused("MSG:PlannerMaximum"),
+            "{name} at the limit"
+        );
+        // One below: the point add is given and raises the count to the limit.
+        w.routes.counts.insert(A, HOLDER_LIMIT - 1);
+        let RouteClick::Orders(os) = routes::click(&w, A, &[b], on, Modifiers::default()) else {
+            panic!("{name}: a point add")
+        };
+        give(&mut w, os);
+        assert_eq!(steps(&w, b).len(), 1, "{name}");
+        assert_eq!(routes::count(&w, A), HOLDER_LIMIT, "{name}: the count rose");
+        // Now holding a point, it is no new object: a second add passes.
+        let on2 = if kind == Kind::Building {
+            on
+        } else {
+            ClickOn::Cell(at(6, 4))
+        };
+        assert!(
+            matches!(
+                routes::click(&w, A, &[b], on2, Modifiers::default()),
+                RouteClick::Orders(_)
+            ),
+            "{name}: no new object"
+        );
+    }
 }
 
 /// spec: S-0213 claim 16b (revision 84, Q-2192 question 3: a click on a cell that sets a factory's rally point sends that order directly: it is not a behaviour order, adds no point and takes effect when applied; it meets claim 16d's release-time tests and is sent at the release); Scenario O8 part h's third game
