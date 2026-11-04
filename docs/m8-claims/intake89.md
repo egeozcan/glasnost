@@ -139,9 +139,10 @@ The layer file does not change.
 
 ## Checks
 
-On the tree rebased onto origin/main a097d11 (intake 86, S-0501 r103):
+On the tree rebased onto origin/main dad1756 (intake 90, S-0214 r80, S-0216 r69; an earlier
+pass on a097d11, intake 86, gave the same results with 7480 workspace tests):
 
-- `cargo test --workspace --no-fail-fast`: 7480 passed, 0 failed, 120 ignored;
+- `cargo test --workspace --no-fail-fast`: 7486 passed, 0 failed, 120 ignored;
   `every_spec_quirk_has_a_switch` passes.
 - `cargo clippy --workspace --all-targets -- -D warnings`: clean. `cargo fmt --all -- --check`:
   clean.
@@ -150,23 +151,40 @@ On the tree rebased onto origin/main a097d11 (intake 86, S-0501 r103):
 - `cargo test --release -p glasnost-sim -- --include-ignored`: only `pathing_c7p4::diag` fails,
   as on main.
 - `cargo test --release -p glasnost-ai -- --include-ignored`: 246 passed, 0 failed.
-- Goldens, regenerated on the rebased tree: all nine move (`combat`, `duel`, `duel-diagonal`,
-  `duel-naval`, `duel-m6c`, `duel-m7a`, `duel-m7b`, `scripted`, `skirmish`), each from its first
-  hashed tick with its line count unchanged: `revert_gave_departed` is new hashed state.
+- Goldens: all nine move against main (`combat`, `duel`, `duel-diagonal`, `duel-naval`,
+  `duel-m6c`, `duel-m7a`, `duel-m7b`, `scripted`, `skirmish`), each from its first hashed tick
+  with its line count unchanged: `revert_gave_departed` is new hashed state. Regenerated again on
+  the dad1756 tree, none moves against the a097d11 regeneration (intake 90 moves no golden).
+- Intake 90's `combat::check` comments (Q-2426 answered) agree with this intake's held-rearming
+  rule: the rank 4 held-target answer is asked only when the check does not pass over answers,
+  so with `moment_reason_attack_cursor` off it is passed over with every other rearming.
 
 ## Lanes
 
-Baseline: origin/main **a097d11** (intake 86), built in the same target directory and run on the
-same machine. A first baseline at 85b2d32, taken before intake 86 landed, is superseded and not
-compared here: intake 86 changes aircraft behaviour.
+Baselines, built in the same target directory and run on the same machine:
+
+- the arena against origin/main **dad1756** (intake 90, which re-seeds arena games to 1000 + s);
+- the sweeps and the AI quick lane against origin/main **a097d11** (intake 86). Intake 90's
+  simulation and rules source diff against a097d11 is comments only (`combat/check.rs`,
+  `targeting.rs`, the `quirks.rs` doc line), and its behaviour change is the arena seed in
+  `glasnost-tools`, so these results carry over to dad1756.
+
+A first baseline at 85b2d32, taken before intake 86 landed, is superseded and not compared here:
+intake 86 changes aircraft behaviour.
 
 - **Sweeps, seeds 1 to 16.** M6c, M7a and M7b: every counter's minimum, median and maximum is
   the same before and after; only the run time differs.
-- **Arena** (`--record all --threads 8`, not yet re-seeded: intake 90 is not on origin/main).
-  Identical output apart from timings. The same 10 pairings fail before and after, none
-  changed: LTNK–E1, TELE–APOC, TELE–V3, TELE–ROBO, TELE–BFRT, CAOS–E1, DISK–FV (win test),
-  INIT–E2, ROBO–HTK, MIND–E1.
-- **AI tests** (`glasnost-ai --include-ignored`): 246 passed, 0 failed.
+- **Arena** (`--record all --threads 8`, re-seeded). Before (dad1756) and after: identical
+  output apart from timings. The same 13 pairings fail before and after, none changed:
+  - M-0001 (10): MIND–E1, TELE–ROBO, TELE–BFRT, TELE–APOC, TELE–V3, CAOS–APOC, CAOS–TTNK,
+    CAOS–E1, CAOS–E2, DISK–FV (win test and side outcome; the rest side outcome only);
+  - M-0002 (2): INIT–E2, YURI–SHK;
+  - M-0003 (1): ROBO–HTK.
+
+  On the unseeded a097d11 arena the same 10 failed before and after this intake (LTNK–E1,
+  TELE–APOC, TELE–V3, TELE–ROBO, TELE–BFRT, CAOS–E1, DISK–FV, INIT–E2, ROBO–HTK, MIND–E1).
+- **AI tests** (`glasnost-ai --include-ignored`): 246 passed, 0 failed, on a097d11 and again on
+  dad1756.
 - **AI quick lane**, seeds 7 to 10, maps 0, 2 and 8, side pairs 0–1, 0–2 and 1–2 (36 games):
   every game's output is identical before and after apart from timing lines (end tick, winner,
   every counter). 15 games launch a Chrono warp, once each, in both lanes.
