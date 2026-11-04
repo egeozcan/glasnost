@@ -1,9 +1,9 @@
 ---
 id: Q-2419
 title: Whether a jumpjet listed in its cell but above its surface is "in flight" for the warp
-status: open
+status: answered
 related: [S-0513, S-0102, S-0209, S-0502]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
