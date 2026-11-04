@@ -235,7 +235,7 @@ fn claim_24_with_the_pad_full_the_fall_back_takes_claim_18s_outcome() {
 // ---------------------------------------------------------------------------
 // The processing without a contact, a behaviour queued
 
-// spec: S-0501 claim 24 (r99, Q-2326: with a behaviour queued, a processing of enter after its first that finds no contact keeps the destination and enter, asks no pad and waits, returning 1 tick, whether or not the pad has a free contact place; a behaviour queued without an immediate start before the aircraft's processing, S-0215 claim 12, is still queued at it) and claim 31 (the third start opportunity then makes the queued behaviour current at the end of the update)
+// spec: S-0501 claim 24 (r99, Q-2326, and r103: with a behaviour queued, a processing of enter after its first that finds no contact keeps the destination and enter, asks no pad and waits, returning 1 tick, whether or not the pad has a free contact place; a behaviour queued without an immediate start before the aircraft's processing, S-0215 claim 12, is still queued at it; that processing leaves the aircraft ready to change) and claim 31 (the third start opportunity then makes the queued behaviour current at the end of the update: the wait lasts that one processing)
 #[test]
 fn claim_24_with_a_behaviour_queued_it_keeps_the_pad_and_waits() {
     for full in [false, true] {
@@ -384,11 +384,11 @@ fn s0404_claim_15_the_release_place_is_the_place_a_new_contact_takes() {
 }
 
 // ---------------------------------------------------------------------------
-// A waiting aircraft landing over its pad
+// The docking stage without a contact (r103)
 
-// spec: S-0501 claim 24 (r99: a waiting aircraft that lands over its destination pad is moved while landing as the docking stage moves one in contact, toward a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: the same docking position for an aircraft that lands over the pad without a contact); S-0501 claim 24 (each axis by the difference limited to −5 … +5 leptons, the height unchanged; so does an aircraft whose contact ends during the docking stage)
+// spec: S-0501 claim 24 (r103, Q-2366: a refusal that ends the contact once the aircraft is in the docking stage leaves it to that stage's rules without a contact: while it is landing, each processing moves it as the docking stage moves one in contact, makes no test of a queued behaviour, toward a docking position that does not depend on whether the pad has a free contact place: with one docking place that place's docking position, otherwise the pad's foundation centre with no displacement) and S-0404 claim 15 (r23: the same docking position for an aircraft without a contact); S-0501 claim 24 (each axis by the difference limited to −5 … +5 leptons, the height unchanged). r103 replaced r99's move of a waiting aircraft: a waiting aircraft is never moved toward the pad
 #[test]
-fn claim_24_a_waiting_aircraft_is_moved_toward_its_docking_position_without_a_contact() {
+fn claim_24_in_the_docking_stage_without_a_contact_it_is_moved_toward_its_docking_position() {
     let offsets = Some(vec![[0, -30, 0], [30, 0, 0]]);
     for docks in [1, 2] {
         let (mut w, k, a) = approaching(&rules_with(docks, offsets.clone()));
