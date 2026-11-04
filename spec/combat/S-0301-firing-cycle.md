@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 69
+revision: 70
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-04
 measurements: [M-0004]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416]
 supersedes: []
 ---
 
@@ -631,6 +631,13 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    to 16. So a firer whose rearm countdown is running, or whose weapon's own effect is alive,
    gets *illegal* for such a target. This test is not the test of a target being erased: what
    that one answers for a target that a temporal beam holds outside a warp is not settled here.
+
+   **A held temporal target within rank 4 (S-0514 claim 19).** The held-temporal-target
+   *rearming* outranks the hidden-target *impossible* (S-0516 claim 24) and the *illegal* for a
+   protected target (S-0513 claim 28). So a firer whose temporal beam is attached to a target
+   that is hidden from its house or protected keeps that target at S-0309 claim 29's check, unless an answer that this
+   claim ranks above that *rearming* holds, on the map or, for a superweapon warp member, off it (S-0513 claim 39a). Both rules are
+   `unmeasured`, as S-0513 claim 39a gives, and rated medium, as that claim rates the keep.
 
    **Drain refusals within rank 4 (S-0608 claim 3).** The refusal against the firer's own
    current drained building and the refusals specific to a draining weapon have different
