@@ -3,7 +3,7 @@ id: M-0021
 title: Unit arena, a test pairing after Q-1714's (fragments per shot, first shots, gaps, stages)
 topic: combat
 specs: [S-0318, S-0609, S-0301, S-0307]
-requests: [Q-1714, Q-2516]
+requests: [Q-1714, Q-2516, Q-2536, Q-2546]
 verdict: confirms
 value-visibility: local
 measured-on: 2026-11-04
@@ -121,10 +121,13 @@ S-0301 claim 2 for the firing house's rate-of-fire factor, whose value is kept l
 
 ## Procedure
 
-The recorder logs, for every run: every shot (its tick, firer, target and weapon); every hit (its
-tick, the object hit, its warhead, its attacker, and the health before and after); every vehicle's
-position in leptons each tick, and its cell (the position divided by 256, truncated); and each G
+The recorder logs, for every run: every shot (its tick, firer, target and weapon, and the firer's
+and the target's positions in leptons as the shot's own row gives them); every hit (its tick, the
+object hit, its warhead, its attacker, and the health before and after); every vehicle's position
+in leptons each tick, its cell (the position divided by 256, truncated) and its health; and each G
 vehicle's spin value and stage each tick. F's two warheads tell a shot's hit from a fragment's.
+The per-tick rows of tick *t* are said to be *stamped t*. Where in a tick the per-tick rows and the
+shot rows read their positions is given under *Reading points* in the Result.
 
 1. Void check: a run in which F fires any weapon other than its primary is void.
 2. For each F shot at tick *t* on target *X*, the shot's *window* runs from *t* up to, but not
@@ -145,7 +148,9 @@ vehicle's spin value and stage each tick. F's two warheads tell a shot's hit fro
    candidate cells in S-0303 table T1's order, the cells read at *t*, and again with the cells read
    at *t* − 1 and at *t* + 1 (the recording gives no burst tick, and positions once a tick).
 6. Who fires first: the first shot of each side, and the centre distance from its firer to its
-   target at that tick.
+   target computed from the positions in that shot's own row, not from the per-tick rows. Also,
+   for that shot, whether the target is within the weapon's range by the per-tick rows stamped
+   *t* − 1 and *t*.
 7. Shot gaps: for each vehicle and weapon, the shortest gap between two of its shots in ticks 0 to
    299.
 8. Stages: for each G vehicle, the value and stage it reads in the tick before and the tick of each
@@ -155,6 +160,12 @@ vehicle's spin value and stage each tick. F's two warheads tell a shot's hit fro
 10. For each shot, whether its target was the firer's nearest, second, third or a further enemy
     in range by centre distance at *t*, or out of range (Q-1714's question 4). This is not part of
     this record's rows (Notes).
+11. Reading points: for every shot, which per-tick row, stamped *t* − 1 or *t*, holds the firer's
+    and the target's positions that the shot's row gives, where the two rows differ; and for every
+    hit at *t*, which per-tick row first shows its health after.
+12. Seeds: for each part and side, the first tick at which the three seeds' runs differ in a shot
+    (tick, firer, target, weapon), a hit (tick, object hit, warhead, attacker, health before and
+    after) or a per-tick row, the vehicles matched by their place in the creation order.
 
 ## Result
 
@@ -199,11 +210,39 @@ game lists a moving vehicle.
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
 | Side that fires first | side | 16 runs | F in every run | | exact |
-| Centre distance at F's first shot | leptons | 16 runs | 1527 (5.96 cells), at equal heights | none | exact |
-| Centre distance at G's first shot | leptons | 16 runs | 1280 (5.00 cells), at equal heights | none | exact |
+| Centre distance at F's first shot, from the shot row's positions | leptons | 16 runs, every F shot of that tick | 1527 (5.96 cells), at equal heights | none | exact |
+| Centre distance at G's first shot, from the shot row's positions | leptons | 16 runs, every G shot of that tick | 1280 (5.00 cells), at equal heights | none | exact |
+| F's first shot: target within F's range by the per-tick rows stamped *t* − 1, *t* | yes or no | same | yes, yes | none | exact |
+| G's first shot: target within G's range by the per-tick rows stamped *t* − 1, *t* | yes or no | same | no, yes | none | exact |
+| G's first shot: the per-tick distance stamped *t* | leptons | same | 1280, equal to the shot row's | none | exact |
 
 Both first shots are within the firing weapon's own range (S-0307 claim 1): G's is at exactly its
-range.
+range. So F's target is already within F's range (6 cells, 1536 leptons) at the end of the tick
+before F's first shot, and F does not fire in that tick. G's target is outside G's range at the end
+of the tick before G's first shot and within it at the end of the shot's tick. How many ticks before
+its first shot F's target came within range, the per-tick distances at the other ticks before the
+shots, and the shots' absolute ticks are kept `local` (Notes): with the published distances they
+would bound the countries' speed factors. Every vehicle's own first shot, not only each side's
+first, falls in a tick *t* in which the distance from the firer's position stamped *t* to its
+target's stamped *t* − 1 (an F shot) or stamped *t* (a G shot) is within the weapon's range: the
+positions a shot row gives (*Reading points*).
+
+**Reading points (every shot and hit, 16 runs).**
+
+| Quantity | Unit | n | Value | Spread | Tolerance for tests |
+|---|---|---|---|---|---|
+| Per-tick row that first shows a hit's health after, for a hit at *t* | row | every hit with a per-tick row at its tick | the row stamped *t*; never the row stamped *t* − 1 | none | exact |
+| Last per-tick row of a vehicle destroyed by a hit at *t* | row | every death (part B) | the row stamped *t*, with no health left | none | exact |
+| F shot at *t*: the per-tick row whose position equals the firer's in the shot row, where rows *t* − 1 and *t* differ | row | every such shot | *t* | none | exact |
+| F shot at *t*: the same for the target, a G vehicle | row | every such shot | *t* − 1 | none | exact |
+| G shot at *t*: the same for the firer | row | every such shot | *t* | none | exact |
+| G shot at *t*: the same for the target, an F vehicle | row | every such shot | *t* | none | exact |
+
+Each of the four shot rows holds with F on side A and with F on side B, and no shot row's
+position equals neither row. In the remaining shots the object did not move during *t*. So the
+per-tick rows stamped *t* show each vehicle's health after the hits recorded at *t*, and no single
+per-tick row gives the shot rows' positions: an F shot's row holds its firer's position from the
+row stamped *t* and its target's from the row stamped *t* − 1.
 
 **Shot gaps (ticks 0 to 299).**
 
@@ -239,6 +278,21 @@ range.
 
 In every part B run, every G vehicle first read stage 1 before the run's first death of either
 side, by 54 to 182 ticks over all 96 G vehicles.
+
+**Seeds (parts A and B, each side).**
+
+| Quantity | Unit | n | Value | Spread | Tolerance for tests |
+|---|---|---|---|---|---|
+| Runs of one part and side whose shots, hits and per-tick rows agree in every tick | runs | parts A and B, each side, seeds 1000 to 1002 | none: the three seeds differ | | exact |
+| What agrees in the three seeds before the first difference | | same | every shot's tick, firer, target and weapon, every hit, and every per-tick row, including every vehicle's first shot | none | exact |
+| The first difference | | same | the tick of some G vehicles' second shots: a G vehicle fires its second shot in a tick in one seed and not in another | none | exact |
+
+The first difference falls in the same tick in parts A and B and on both sides, after each side's
+first shots and before any vehicle's death; that tick is kept `local`. It is a shot's tick, not a
+target and not a hit's health: in that tick the shots that the seeds share have the same firers and
+targets, each shot fired then in one seed only is fired by the same vehicle at the same target a few
+ticks later in the others, and every hit up to it took the same health. Part B's deaths differ
+between the seeds later, after further shots have moved apart.
 
 ## Evidence
 
@@ -277,6 +331,30 @@ side, by 54 to 182 ticks over all 96 G vehicles.
   difficulty row is the easy row (S-0412 claim 4). A comparison in our engine, whose AI houses
   use the normal row, sets both houses' row to the easy row through the handicap (S-0412 claim 5),
   and gives its two houses the same rules (S-0215, houses in our engine).
+- **Reading points (inferred, not identified by the recordings).** The per-tick rows stamped *t* are
+  read after tick *t* has run, as M-0004, M-0011 and M-0015 state for theirs: they show the health
+  after the hits of *t*. Only each shot's firer and target were compared with the per-tick rows.
+  Their positions in the shot rows fit one reading only: they are the positions as the firer and
+  target stand when the shot is fired, an F vehicle's movement of that tick done, and of a G
+  target's not. That fits F's vehicles taking their turns before G's in every tick (S-0203 claim 3,
+  with the creation order of the Setup, F's group first on either side), and each vehicle moved
+  before it fired in its own turn. Under any per-tick reading instead, after the shot's tick or
+  before it, either F's first-shot distance or G's would differ from the shot rows'. A comparison
+  reads step 6's distance at the shot. Read from the per-tick rows stamped *t*, it would give a
+  smaller distance for F's first shot, the target having moved on after the shot, and the same for
+  G's.
+- **Seeds (inferred).** The ticks of the second shots follow each vehicle's full delay after its
+  first, which takes one ranged draw from the scenario random stream (S-0301 claim 2). That draw
+  is the likely source of the first difference between the seeds. The recordings do not show
+  whether other seed-dependent draws or choices act later, and part B's different deaths may come
+  from any of them. No draw of S-0318 claim 4 was reached (*Result*).
+- **Kept local: movement.** The vehicles' speed field is a test value, but a vehicle's movement
+  per tick also takes its country's speed factor (S-0413 claim 1), which comes from rules data. So
+  per-tick distances or displacements over known ticks, the absolute ticks of the first shots, the
+  lead of F's first shot over G's and the ticks between the groups' start and a shot would bound
+  that factor, and are kept `local`. The movement of single vehicles between two ticks is not
+  given for the same reason. The ticks between a vehicle's first and second shots are local as a
+  shot gap.
 - **Reproducing it.** A comparison builds the two test types on a tank type of its own choice.
   The per-shot rows and the stage rows do not depend on the fields kept from the copied stock
   types in any way this record states. The first-shot distances and part B's outcome may: they
