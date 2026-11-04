@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 113
+revision: 114
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -477,7 +477,10 @@ index 1. This is a design rule, not an additional claim about the original.
    The ground-layer pass reads the layer list an object was last filed in (S-0102 claim 4), not
    the layer its state and height give it at that moment (S-0102 claim 3). The two differ only
    for an object whose layer changed without a re-file, such as an aircraft released above its
-   pad (S-0501 claim 48).
+   pad (S-0501 claim 48). An aircraft whose type cannot land and whose movement is neither rocket
+   nor drop-pod movement stays in the ground list in flight, while its state and height give it
+   the top layer (S-0306 claim 17). So the ground-layer pass considers it in flight, as it
+   considers a landed one.
    The order of the two passes decides ties (claim 17), not which distance unit an aircraft uses.
 
    *Cells of no reach region.* Except for the no-link searcher case below, the connected-region
@@ -561,7 +564,8 @@ index 1. This is a design rule, not an additional claim about the original.
      no fixture here keeps a hovering jumpjet within its search at will. The ground-layer pass's
      reading of the last-filed list is `unmeasured`, as S-0501 claim 48 rates it: no scenario
      sets up an observable map-wide search against an object whose layer changed without a
-     re-file.
+     re-file. The ground-layer pass's consideration of an aircraft that cannot land, in flight:
+     `measurable` (scenario P46 part a of S-0306).
    - Confidence: high (the ground-layer restriction, for a hunting vehicle whose weapon can hit
      aircraft, as parts f and k run 1 have), medium (the ground-layer restriction for other
      searchers, the zone test and the order of the passes),
@@ -570,7 +574,8 @@ index 1. This is a design rule, not an additional claim about the original.
      claim 9's airborne scan, rated medium there; the original's *area guard* after it),
      high (cells of no reach region), low (the deck read
      of the searcher's own cell and the no-link deck exception), medium (the ground-layer
-     pass's reading of the last-filed list, as S-0501 claim 48 rates it)
+     pass's reading of the last-filed list, as S-0501 claim 48 rates it), medium (the
+     ground-layer pass's consideration of an aircraft that cannot land, in flight)
 
 8. **Radius of range and area searches.** The radius *R* in leptons, and from it the number of
    rings *n*, follow Formulas F1. For a range search *R* is the type's guard range if that is not 0
@@ -606,6 +611,9 @@ index 1. This is a design rule, not an additional claim about the original.
    no one-object-per-cell rule (claim 10), and objects allied with the searcher only when its type
    attacks friendlies, it is berserk or it is a passenger of a mind-controlled open-topped
    transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; registration during jumpjet movement follows S-0502 claim 29, including its placement and touchdown exceptions. In particular, a jumpjet becomes registered in its take-off update, normally at height 0 leptons, without waiting for a rise. Ordinary registration ends at touchdown, crash end or going off the map, not at a height threshold. With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
+   So an aircraft whose type cannot land and whose movement is neither rocket nor drop-pod
+   movement is not left out as a ground-layer object once it is tracked and above height 0,
+   although it flies in the ground list (S-0306 claim 17).
    Except in a range search that looks for aircraft and nothing else, cell candidates are drawn from legal cells in rings around the centre cell, from ring 0 through at most ring *n* − 1. Equal-score cell candidates are resolved by ring order and then by the F2 order of legal cells within a ring. For *n* = 0 no ring is looked at, whatever the
    airborne objects hold. For *n* ≥ 1, let *r*₁ = trunc(*n* / 4) and *r*₂ = trunc(*n* / 2), and let
    *K*(*r*) be the candidates among the airborne objects together with those in rings 0 … *r*. The
@@ -627,9 +635,14 @@ index 1. This is a design rule, not an additional claim about the original.
      does not isolate their rejection by the airborne scan from their later cell consideration.
      The scan's reading of the layer from state and height has S-0501 claim 48's backing
      (`measurable`, S-0501 scenario AC30 part k (5), for an aircraft released above its pad).
+     The scan's reading for an aircraft that cannot land, in flight, is `unmeasured`: a map-wide
+     search that looks for aircraft also runs claim 7's ground-layer pass, which already
+     considers the aircraft, and a range search that looks for aircraft alone can miss a tracked
+     aircraft in another sector.
    - Confidence: high for the ring order and the early stops; medium for the airborne scan (the
      set of tracked objects and F7 are S-0303's, claim 6), and for its reading of the layer from
-     state and height, as S-0501 claim 48 rates it
+     state and height, as S-0501 claim 48 rates it, and for that reading for an aircraft that
+     cannot land, in flight
 
 10. **One object per cell.** Each visited cell offers the search at most one object, its *offered
     object*, and only that object can be a candidate from that cell. Which objects of the cell
