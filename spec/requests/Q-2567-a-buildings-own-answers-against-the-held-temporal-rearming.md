@@ -1,9 +1,9 @@
 ---
 id: Q-2567
 title: Which of a building's own answers (S-0405 table T1) S-0301 claim 9 ranks above the held-temporal-target rearming
-status: open
+status: answered
 related: [S-0301, S-0513, S-0405, S-0514]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need
