@@ -444,6 +444,16 @@ impl Brain {
             }
             _ => true,
         });
+        // S-0601 claims 2, 7 and 9: a capacity-1 controller that holds a victim may still fire its takeover weapon at a new target, and that takeover releases the victim back to its owner; no part of the brain sends one at capacity at another object with that weapon, as a person keeps the victim rather than swapping (our own design, PLAN §4.7; M8 seam trace 4: a controller swapped a plant and a tank back and forth while the army's attack on a near enemy sent it at whichever was the enemy's)
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target: Some(t @ Target::Object(_)),
+                ..
+            } => !crate::mind::swaps_victim(w, *actor, *t),
+            _ => true,
+        });
         self.script.end_think();
         out
     }

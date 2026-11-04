@@ -22,7 +22,8 @@ fn d(s: &str) -> Decimal {
 }
 
 /// The fixture's rules with the takeover warhead MIND, the weapons RAY
-/// (capacity 2) and RAYU (unlimited, capacity 2), the infantry CLONE (RAY)
+/// (capacity 2), RAYU (unlimited, capacity 2) and RAY1 (capacity 1), the
+/// infantry CLONE (RAY) and SOLO (RAY1)
 /// and the vehicle MASTER (RAYU), both beyond the sidebar's tech level;
 /// the psionics-immune vehicle STOIC and the costly vehicle RICH; the
 /// overload lists count (1, 9), damage (0, 5), frames (10, 10).
@@ -39,11 +40,11 @@ fn rules() -> Arc<SimRules> {
             ..Default::default()
         },
     );
-    for (name, unlimited) in [("RAY", false), ("RAYU", true)] {
+    for (name, unlimited, capacity) in [("RAY", false, 2), ("RAYU", true, 2), ("RAY1", false, 1)] {
         r.sim.weapons.insert(
             name.into(),
             WeaponType {
-                damage: Some(2),
+                damage: Some(capacity),
                 rof: Some(40),
                 range: Some(d("2")),
                 speed: Some(100),
@@ -58,8 +59,12 @@ fn rules() -> Arc<SimRules> {
     c.primary = Some("RAY".into());
     c.secondary = None;
     c.tech_level = Some(99);
+    let mut one = c.clone();
+    one.primary = Some("RAY1".into());
     r.sim.infantry.insert("CLONE".into(), c);
     reg(&mut r, "infantry", "CLONE");
+    r.sim.infantry.insert("SOLO".into(), one);
+    reg(&mut r, "infantry", "SOLO");
     let mut m = r.sim.vehicles["GUNR"].clone();
     m.primary = Some("RAYU".into());
     m.secondary = None;
@@ -181,6 +186,34 @@ fn no_order_to_a_controller_at_capacity() {
     let mut b = brain(&w);
     assert_eq!(attack_of(&b.think(&w), u[0]), None);
     assert_eq!(b.special_uses().takeovers, 0);
+}
+
+// S-0601 claims 2, 7 and 9, PLAN §4.7 (our own AI's design, M8 seam trace 4): a capacity-1 controller may still fire at a new target, and the new takeover releases its victim back to its owner. No part of the brain sends one that holds a victim at another enemy (here the army's attack on a near enemy did), as a person keeps the victim rather than swapping; in the lane a controller swapped a power plant and a tank back and forth for some 1 500 ticks. A free controller is still sent (the tests above).
+#[test]
+fn no_part_of_the_brain_swaps_a_capacity_one_controllers_victim() {
+    let g = game();
+    // The gunner stands beyond the controller's reach, so its own search does not pick it.
+    let (mut w, u, ids) = scene(
+        &g,
+        &[(Kind::Infantry, "SOLO")],
+        &[("GUNR", 6, 0), ("RICH", 2, 0)],
+    );
+    assert_eq!(
+        mind::controlled_by(&w, ids[1]),
+        Some(u[0]),
+        "its own shot took the near one"
+    );
+    assert!(mind::at_capacity(&w, u[0]));
+    // S-0309 claim 29: a target of its own house (the victim) is dropped at a check tick.
+    testkit::run(&mut w, 32);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(w.obj(u[0]).expect("the controller").target, None);
+    let mut b = brain(&w);
+    let orders = b.think(&w);
+    assert_eq!(attack_of(&orders, u[0]), None, "{orders:?}");
+    assert_eq!(mind::controlled_by(&w, ids[1]), Some(u[0]));
 }
 
 // S-0601 claim 16, PLAN §4.7: an unlimited controller is sent while one more victim keeps it at a harmless overload level, and not once the next victim would bring damaging pulses.

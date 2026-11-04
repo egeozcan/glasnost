@@ -22,7 +22,12 @@
 //!   controller's own target search when it guards is the game's, not the
 //!   brain's, and is left alone;
 //! - leaves a capacity-1 controller that holds a victim alone (it is at
-//!   capacity, claim 2), as a person keeps the victim rather than swapping;
+//!   capacity, claim 2), as a person keeps the victim rather than swapping.
+//!   The brain drops any attack order on an object that another part of it
+//!   (the army's attack on a near enemy, the base defence) gives such a
+//!   controller with its takeover weapon ([`swaps_victim`]): that takeover
+//!   would release the victim (claims 7 and 9), and the next order would
+//!   send it back at the released one (M8 seam trace 4);
 //! - uses the objects it controls like any other of its own: they belong to
 //!   the house (claim 6), so the waves take the armed ones along
 //!   (`scripted::Script::of_role`).
@@ -72,6 +77,20 @@ pub fn safe_more(w: &World, c: ObjectId) -> bool {
 /// safely.
 pub fn free_controller(w: &World, c: ObjectId) -> bool {
     mind::controller(w, c).is_some() && !mind::at_capacity(w, c) && safe_more(w, c)
+}
+
+/// Whether an attack order on `t` would make controller `c` swap its
+/// victim: `c` is at capacity (claim 2), which for a limited controller
+/// that may still fire means capacity 1 (claim 7), and the weapon it would
+/// use against `t` is a takeover weapon, whose landing releases the victim
+/// it holds (claims 7 and 9). A weapon without the takeover warhead may
+/// still be used.
+pub fn swaps_victim(w: &World, c: ObjectId, t: Target) -> bool {
+    if !mind::at_capacity(w, c) {
+        return false;
+    }
+    let (_, weapon) = glasnost_sim::combat::weapon::would_use(w, c, Some(t));
+    weapon.is_some_and(|wp| mind::takeover_weapon(w, wp))
 }
 
 impl Special {

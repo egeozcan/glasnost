@@ -627,6 +627,13 @@ fn play_ai(
                 p.get(2)?.parse().ok()?,
             ))
         });
+    // `GLASNOST_AI_WATCH_VS=id`: with the watch, the firing check's answers
+    // (every reason, and the own AI's lasting test, both without range) of
+    // the watched object against object `id`, the slot it would use, its
+    // infantry sequence and the AI's attack test.
+    let watch_vs: Option<u32> = std::env::var("GLASNOST_AI_WATCH_VS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok());
     // `GLASNOST_AI_LINES=h`: every item house h starts or loses on its
     // production lines (tick, line kind, unit class or building, cost,
     // credits), and every 300 ticks a still item's progress.
@@ -866,6 +873,12 @@ fn play_ai(
                 o.contact,
                 o.path
             );
+            if let Some(vs) = watch_vs {
+                println!(
+                    "{}",
+                    watch_vs_line(w, o.id, glasnost_sim::world::ObjectId(vs))
+                );
+            }
         }
         if dump_at.contains(&w.tick) {
             print!("{}", dump(w));
@@ -1709,6 +1722,31 @@ fn diagnosis(game: &AiGame) -> Vec<String> {
 
 /// A diagnostic dump of every object of the player houses at this tick: its
 /// type, cell, behaviour, destination and target (counts and states only).
+/// The watch's line against a second object (`GLASNOST_AI_WATCH_VS`): the
+/// slot and weapon the watched object would use, the firing check with
+/// every reason and the own AI's lasting test (both without range), the
+/// target's health and owner, and the watched object's infantry sequence.
+fn watch_vs_line(
+    w: &World,
+    id: glasnost_sim::world::ObjectId,
+    vs: glasnost_sim::world::ObjectId,
+) -> String {
+    use glasnost_sim::combat::{check, weapon};
+    let t = Some(glasnost_sim::world::Target::Object(vs));
+    let (slot, wp) = weapon::would_use(w, id, t);
+    let every = check::check(w, id, t, slot, false);
+    let lasting = check::check_lasting(w, id, t, slot);
+    let seq = w
+        .obj(id)
+        .and_then(|o| o.infantry.as_ref())
+        .and_then(|s| s.seq);
+    let (hp, owner) = w.obj(vs).map_or((0, None), |o| (o.health, o.owner));
+    format!(
+        "  vs {}: slot {slot} weapon {:?} check {every:?} lasting {lasting:?} target hp {hp} owner {owner:?} seq {seq:?}",
+        vs.0, wp
+    )
+}
+
 fn dump(w: &World) -> String {
     let mut s = String::new();
     let cell_of = |t: &Option<glasnost_sim::world::Target>| match t {
