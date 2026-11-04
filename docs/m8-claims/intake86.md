@@ -52,7 +52,7 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   returns with the docking stage set), so no state is added.
 
 No state is added, so the save format and the AI game format are unchanged (95 and 58 on intake
-87's main).
+88's main, 7e0ea74).
 
 ## Claims
 
@@ -91,6 +91,15 @@ golden on their own. The straight duel still exercises everything it must (trans
 Rebased onto intake 87 (f8553f5, which moves all nine goldens), 87's goldens were taken and
 regenerated: again only the duel (from about tick 12340) and the naval duel (from about tick
 13570) move.
+
+Rebased onto intake 88 (7e0ea74, which moves the naval duel and four others but not the duel)
+and regenerated: the duel is unchanged from the rebase, and the naval duel is regenerated (the
+automatic merge of the two sides' files was not a run). The divergence from main is the same as
+on 87: the duel from about tick 12340, the naval duel from about tick 13570. `cargo xtask gate`
+passes native and wasm.
+
+The lanes below were run on intake 87's base and not re-run on 88's. Intake 88 changes armed
+walkers taking obstacles; this intake changes only aircraft in *enter*.
 
 ## Lanes on intake 87 (final)
 
