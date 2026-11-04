@@ -218,6 +218,36 @@ fn claim39_sw12_j_holders_in_attack_and_guard_drop_at_the_first_check_tick() {
 }
 
 #[test]
+fn claim39_a_building_holder_drops_the_member_at_the_first_check_tick() {
+    // spec: S-0513 r62 claim 39 (every holder covered by S-0309 claim 29, of any kind, drops the member at its first checking turn in the check ticks after the launch, with no draw over 4 to 8 ticks) and S-0309 claim 29 (a building holding a target in attack or guard makes the check); the building's own attack processing (S-0215 claim 32) is held back so the periodic drop shows alone (M8 seam sweep 5a)
+    for (rem, b) in [(1, Behaviour::Guard), (9, Behaviour::Attack)] {
+        let mut w = ready(&rules());
+        let h = spawn(&mut w, "TOWER", ALPHA, 0, 3);
+        let m = spawn(&mut w, "BUGGY", BETA, 0, 0);
+        let tl = launch_at(&mut w, rem);
+        hold(&mut w, h, m, b);
+        let t = w.tick;
+        w.obj_mut(h).unwrap().beh.processed(t, 1000);
+        let timer = w.obj(h).unwrap().targeting_timer;
+        w.effects.clear();
+        let c = next_check(tl);
+        while w.tick < c {
+            step(&mut w);
+            assert_eq!(
+                target(&w, h),
+                Some(Target::Object(m)),
+                "{b:?}: kept to the check tick (tick {})",
+                w.tick - 1
+            );
+        }
+        step(&mut w);
+        assert_eq!(target(&w, h), None, "{b:?}: dropped in tick {c}");
+        assert_eq!(w.obj(h).unwrap().targeting_timer, timer, "{b:?}: no draw");
+        assert_eq!(shots_by(&w, h), 0, "{b:?}: no shot");
+    }
+}
+
+#[test]
 fn claim39_an_attacking_holder_stops_its_attack_at_its_next_processing() {
     // spec: S-0513 r62 claim 39 (an attacking holder then stops its attack at its next processing, S-0309 claim 29) and S-0309 r70 claim 29 (the drop itself changes no behaviour)
     let mut w = ready(&rules());
