@@ -1631,8 +1631,13 @@ type ShotKey = (usize, (u8, i64, i64), WeaponId);
 /// attacker by place, the health before and after.
 type HitKey = (usize, Option<WarheadId>, Option<usize>, (i32, i32));
 /// A vehicle's per-tick row as the runs are compared: place, position,
-/// health; and its spin value and stage.
+/// health.
 type RowKey = (usize, (i32, i32, i32), i32);
+/// A vehicle's per-tick spin row as the runs are compared: place, spin value
+/// and stage.
+type SpinKey = (usize, i32, i32);
+/// A vehicle's first shot in a run: tick, target and weapon.
+type OwnFirstShot = (i32, (u8, i64, i64), WeaponId);
 
 /// A shot fired at the first differing tick in some of the runs and not in
 /// all.
@@ -1756,14 +1761,14 @@ pub fn compare_seeds(recs: &[&Recording]) -> SeedDiff {
             v.sort();
         }
     }
-    let rows_at = |i: usize, t: i32| -> Option<(Vec<RowKey>, Vec<(usize, i32, i32)>)> {
+    let rows_at = |i: usize, t: i32| -> Option<(Vec<RowKey>, Vec<SpinKey>)> {
         let rows = recs[i].rows.get(&t)?;
         let mut a: Vec<RowKey> = rows
             .iter()
             .filter_map(|(id, &(p, h))| Some((*places[i].get(id)?, (p.x, p.y, p.z), h)))
             .collect();
         a.sort();
-        let mut s: Vec<(usize, i32, i32)> = recs[i]
+        let mut s: Vec<SpinKey> = recs[i]
             .spins
             .get(&t)
             .map(|m| {
@@ -1876,7 +1881,7 @@ pub fn compare_seeds(recs: &[&Recording]) -> SeedDiff {
         }
     }
     // Each vehicle's first shot in each run (tick, target, weapon), by place.
-    let firsts: Vec<BTreeMap<usize, (i32, (u8, i64, i64), WeaponId)>> = recs
+    let firsts: Vec<BTreeMap<usize, OwnFirstShot>> = recs
         .iter()
         .enumerate()
         .map(|(i, r)| {
