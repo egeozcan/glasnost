@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 110
+revision: 111
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -244,8 +244,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 ### Flight
 
 1. **Placement.** When an aircraft is put on the map (by production, a map, a carrier launch or
-   a superweapon), it is placed on the ground when it is not a visiting aircraft and its position
-   lies inside the usable area. Otherwise it is placed at its cruise height above the terrain.
+   a superweapon that creates the aircraft), it is placed on the ground when it is not a
+   visiting aircraft and its position lies inside the usable area. Otherwise it is placed at its
+   cruise height above the terrain.
    Its current speed fraction starts at 1 when it is placed exactly at cruise height and at 0
    otherwise. Ground placement replaces the requested world height with the terrain height.
    It does not preserve an elevated launch request or a docking displacement's height.
@@ -261,11 +262,17 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    *retreat*, and it makes no further fall-back while it rests there. Orders, and a carrier's
    launch pass (claim 35), reach it in that behaviour. A later fall-back to rest on the ground
    takes T2's visiting rows (Terms).
+   A superweapon warp member's appearance at its landing point does not follow this rule: unless
+   it moves from one bridge deck to another, it appears at no height above its surface whatever
+   its visiting mark, so an aircraft whose type cannot land does not appear at its cruise height
+   (S-0306 claim 17).
    - Backing: `measurable` (scenario AC1; AC29 parts g (4) and h for a type that is not both
-     selectable and landable)
+     selectable and landable, and S-0306 scenario P46 run 2 for a warp member whose type cannot
+     land), `unmeasured` for a warp member of a landable type, which no scenario warps
    - Confidence: high; medium for the placement fall-back of a type marked visiting only by the
      type test, until AC29 parts g (4) and h run; medium for the factory release's move to the
-     docking position, as S-0404 claim 15 rates it
+     docking position, as S-0404 claim 15 rates it; high for a warp member whose type cannot
+     land, as S-0306 claim 17 rates it; medium for a warp member of a landable type
 
 2. **Climbing.** In an ordinary movement tick with a living aircraft below its held height,
    height rises by min(*FL*ₕ − *h*, *c*) leptons, where *c* = 10 for an aircraft that carries
@@ -2438,7 +2445,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       objects filed in the ground render layer's list, whatever their height, so for a searcher
       without the connected-region test it takes this aircraft too; for a mobile searcher other
       than an aircraft that test's outcome was not traced (Open question 25). Table C of S-0309
-      then decides. With S-0102's switch off only the aircraft pass considers it.
+      then decides. S-0102's `quirks.layer_change_on_events_only` does not change this: the
+      ground-layer pass reads the list as that switch's on position keeps it, in both positions
+      (S-0306 claim 17). This is our engine's design (the switch is a drawing setting), high.
 
     The two readings, the filed list for the ground-layer pass and the height's layer for the
     airborne scan, are this spec's finding (claim 7; (c); Changes for other specs, S-0309); they
