@@ -8,7 +8,7 @@
 mod common;
 mod econ_common;
 
-use econ_common::{SIZE, building, factory, game, issue, ready, switch};
+use econ_common::{SIZE, building, factory, game, issue, ready};
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Locomotor, UnitType, WeaponType};
@@ -192,6 +192,15 @@ fn at_next_processing(w: &mut World, a: ObjectId, f: impl FnOnce(&mut World)) ->
         step(w);
     }
     panic!("no processing due: {}", describe(w, a));
+}
+
+/// Ends `a`'s contact (as claim 32's end of a contact would; r110 asks the
+/// pad no request while a destination is held, so a switched-off pad no
+/// longer ends it in these stages).
+fn end_contact(w: &mut World, a: ObjectId) {
+    let o = w.obj_mut(a).unwrap();
+    o.contact = None;
+    o.econ.exit = None;
 }
 
 /// Runs `without_contact` to the approaching stage in contact (the
@@ -443,7 +452,7 @@ fn ac31g4_the_touchdown_on_the_pad_forgets_the_destination_and_keeps_the_contact
     assert!(in_foundation(&w, k, o.pos.cell()), "{}", describe(&w, a));
     let service = |w: &World| w.obj(k).unwrap().air.as_ref().and_then(|s| s.service);
     assert_eq!(service(&w), None, "no entry report at the touchdown");
-    // spec: S-0501 claim 24 (the next processing, in the docking stage, reports that it has entered: the pad starts servicing, claim 26, and the behaviour becomes sleep with guard queued, which claim 31's third point makes current at the end of that tick)
+    // spec: S-0501 claim 24 (the next processing, in the docking stage, reports that it has entered: the pad starts servicing, claim 26; r110, Q-2438: the pad has it queue sleep and it then queues guard, which replaces the sleep, and that processing sets the ready mark, so claim 31's third point makes guard current at the end of that tick)
     let (t, _) = next_processing(&mut w, a);
     let o = w.obj(a).unwrap();
     assert!(
@@ -482,14 +491,17 @@ fn claim_24_after_an_accepted_touchdown_the_docking_stage_without_a_contact_fall
         "the touchdown made no fall-back"
     );
     let (t, d) = at_next_processing(&mut w, a, |w| {
-        // The pad refuses the next request (switched off, claim 22); a
-        // behaviour is queued.
-        switch(w, k, false);
+        // The contact ends before the next processing (r110 asks the pad
+        // nothing in the docking stage while a destination is held, so the
+        // test ends it, as claim 32's end of a contact would); a behaviour
+        // is queued.
+        end_contact(w, a);
         w.obj_mut(a).unwrap().beh.queue(Some(Behaviour::AreaGuard));
     });
     assert_eq!(d, 1, "{}", describe(&w, a));
     let o = w.obj(a).unwrap();
-    assert_eq!(o.contact, None, "{}", describe(&w, a));
+    // The fall-back's pad search (T2's after-the-row entry, its ammunition
+    // spent) may give the switched-on pad back with a new contact.
     assert_eq!(
         o.beh.last_common_effects,
         Some(t),
@@ -508,9 +520,10 @@ fn claim_24_after_an_accepted_touchdown_the_docking_stage_without_a_contact_fall
 fn claim_24_after_a_refused_touchdown_the_docking_stage_without_a_contact_falls_back() {
     let (mut w, k, a) = approaching(&rules());
     to_docking_stage(&mut w, a);
-    // At the next processing, in the docking stage, the pad refuses (switched
-    // off): the contact ends and the stage's rules without a contact follow.
-    let (t, d) = at_next_processing(&mut w, a, |w| switch(w, k, false));
+    // Before the next processing, in the docking stage, the contact ends
+    // (set by the test, r110 asking no request there while a destination is
+    // held): the stage's rules without a contact follow.
+    let (t, d) = at_next_processing(&mut w, a, |w| end_contact(w, a));
     assert_eq!(d, 1, "{}", describe(&w, a));
     let o = w.obj(a).unwrap();
     assert_eq!(o.contact, None);
@@ -584,12 +597,13 @@ fn claim_24_a_processing_without_a_contact_that_finds_it_landing_moves_it_on_to_
     }
     assert!(found, "{}", describe(&w, a));
     let (t, d) = at_next_processing(&mut w, a, |w| {
-        switch(w, k, false);
+        end_contact(w, a);
         w.obj_mut(a).unwrap().beh.queue(Some(Behaviour::AreaGuard));
     });
     assert_eq!(d, 1, "{}", describe(&w, a));
     let o = w.obj(a).unwrap();
     assert_eq!(o.contact, None);
+    assert!(w.obj(k).is_some());
     assert!(st(&w, a).enter_docking, "moved on to the docking stage");
     assert_ne!(o.beh.last_common_effects, Some(t), "a wait");
     assert_eq!(

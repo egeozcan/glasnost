@@ -284,11 +284,30 @@ fn approaching(r: &Ruleset) -> (World, ObjectId, ObjectId) {
     (w, k, a)
 }
 
-// spec: S-0501 claim 24 (r99: a refusal that ends the contact while the pad stays the destination leaves it to the processing without a contact: with a behaviour queued it keeps the pad and enter and waits; with none it forgets the destination and falls back to rest) and claim 46 (a refusal clears the destination when no behaviour is queued); Open question 19 (the refusal itself stays open: our engine meets it at enter's request to be loaded, here a pad switched off, S-0501 claim 22, and the processing without a contact follows in that processing)
+// spec: S-0501 claim 24 (r99: a refusal that ends the contact while the pad stays the destination leaves it to the processing without a contact: with a behaviour queued it keeps the pad and enter and waits; with none it forgets the destination and falls back to rest; r110, Q-2436: the request is asked in flight with no destination, or by a pad-bound aircraft in flight in the approaching stage, so this is a pad-bound one in flight) and claim 46 (a refusal clears the destination when no behaviour is queued, and a pad-bound aircraft that no other pad grants contact then crashes at that fall-back, its ammunition spent); Open question 19 (the refusal itself stays open: our engine meets it at enter's request to be loaded, here a pad switched off, S-0501 claim 22, and the processing without a contact follows in that processing)
 #[test]
 fn claim_24_a_refusal_ends_the_contact_and_the_processing_without_one_follows() {
     for queued in [false, true] {
-        let (mut w, k, a) = approaching(&rules());
+        let mut r = rules();
+        r.sim.aircraft.get_mut("JET").unwrap().econ.airport_bound = Some(true);
+        let (mut w, k, a) = without_contact(&r);
+        {
+            // In flight before its first processing: on the ground away
+            // from the pad the pad-bound rule would end its contact.
+            let o = w.obj_mut(a).unwrap();
+            o.pos.z += 300;
+            o.air.as_mut().unwrap().ground = false;
+        }
+        next_processing(&mut w, a);
+        next_processing(&mut w, a);
+        assert_eq!(w.obj(a).unwrap().contact, Some(k), "{}", describe(&w, a));
+        for _ in 0..200 {
+            if air::height(&w, a) > 100 {
+                break;
+            }
+            step(&mut w);
+        }
+        assert!(!air::on_ground(&w, a), "in flight: {}", describe(&w, a));
         let (t, d) = at_next_processing(&mut w, a, |w| {
             switch(w, k, false);
             if queued {
@@ -303,16 +322,16 @@ fn claim_24_a_refusal_ends_the_contact_and_the_processing_without_one_follows() 
             assert_eq!(o.dest, Some(Target::Object(k)), "{}", describe(&w, a));
         } else {
             assert_eq!(o.beh.last_common_effects, Some(t), "a fall-back");
-            // spec: S-0501 T2 (the take-off has begun on the ground: the ground row forgets the destination, guard; the switched-off pad grants no contact after the row)
             assert_eq!(o.dest, None, "{}", describe(&w, a));
-            assert!(has(&w, a, Behaviour::Guard), "{}", describe(&w, a));
+            // spec: S-0501 claim 46 (pad-bound, in flight, its ammunition spent and no pad granting contact: the switched-off pad grants none, so it crashes at that fall-back)
+            assert_eq!(o.health, 0, "a crash: {}", describe(&w, a));
         }
     }
 }
 
-// spec: S-0501 claim 24 (r99: if the pad stops being its destination while it approaches, a sale, claim 32, the aircraft falls back to rest, even with a behaviour queued) and claim 46 (a sale removes the pad as the aircraft's destination before it falls back)
+// spec: S-0501 claim 24 (r110, Q-2437: for an aircraft in contact that approaches, the sale acts through the run-away notice the pad sends when it starts selling: it ends the contact, gives a landing spot, F8, as destination, queues move and, in enter, guard after it, which replaces the move; the next processing of enter is one without a contact, which with guard queued waits, so guard becomes current at the end of that tick, claim 31's third point) and claim 46 (the sale replaces the pad as destination with a landing spot)
 #[test]
-fn claim_24_a_sale_during_the_approach_falls_back_with_a_behaviour_queued() {
+fn claim_24_a_sale_during_the_approach_sends_the_run_away_notice() {
     let (mut w, k, a) = approaching(&rules());
     w.tick = w.tick.max(w.orders_blocked_through + 1);
     assert!(issue(&mut w, 0, Order::Sell { actor: k }));
@@ -326,13 +345,40 @@ fn claim_24_a_sale_during_the_approach_falls_back_with_a_behaviour_queued() {
         }
     }
     assert!(selling, "the sale started");
-    assert_eq!(w.obj(a).unwrap().contact, Some(k), "{}", describe(&w, a));
-    let (t, d) = at_next_processing(&mut w, a, |w| queue(w, a, Behaviour::Guard));
-    assert_eq!(d, 1, "{}", describe(&w, a));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.contact, None, "the notice ends the contact");
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "a landing spot: {}",
+        describe(&w, a)
+    );
+    assert_eq!(o.beh.current, Some(Behaviour::Enter));
+    assert_eq!(
+        o.beh.queued,
+        Some(Behaviour::Guard),
+        "guard replaced the move"
+    );
+    // Guard becomes current at the end of enter's next processing (the wait,
+    // 1 tick); guard's own processing then queues move for the landing spot
+    // (claim 33: not pad-bound, with a destination), so the first processing
+    // seen may already be guard's.
+    let (t, _) = next_processing(&mut w, a);
     assert!(w.obj(k).is_some(), "while the pad is being sold");
     let o = w.obj(a).unwrap();
-    assert_eq!(o.beh.last_common_effects, Some(t), "a fall-back");
-    assert_eq!(o.contact, None);
+    assert_ne!(o.beh.last_common_effects, Some(t), "a wait, no fall-back");
+    assert!(
+        matches!(
+            o.beh.current,
+            Some(Behaviour::Guard) | Some(Behaviour::Move)
+        ),
+        "enter left for guard: {}",
+        describe(&w, a)
+    );
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "the landing spot kept: {}",
+        describe(&w, a)
+    );
     assert_ne!(
         o.dest,
         Some(Target::Object(k)),
@@ -413,7 +459,12 @@ fn claim_24_in_the_docking_stage_without_a_contact_it_is_moved_toward_its_dockin
         let (_, d) = at_next_processing(&mut w, a, |w| {
             before = w.obj(a).unwrap().pos;
             height = air::height(w, a);
-            switch(w, k, false);
+            // The contact ends before that processing (r110 asks no
+            // request in the docking stage while a destination is held, so
+            // the test ends it, as claim 32's end of a contact would).
+            let o = w.obj_mut(a).unwrap();
+            o.contact = None;
+            o.econ.exit = None;
             queue(w, a, Behaviour::Guard);
         });
         assert_eq!(d, 1, "docks {docks}: {}", describe(&w, a));

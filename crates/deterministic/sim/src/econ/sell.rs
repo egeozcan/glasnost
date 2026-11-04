@@ -244,6 +244,8 @@ fn sell_building(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claim 22 (a depot that starts selling gives every vehicle in contact a run-away notice)
     crate::depot::sale_started(w, id);
+    // spec: S-0501 claim 24 (r110, Q-2437: a pad that starts selling sends every aircraft in contact with it the run-away notice of S-0314 claim 22)
+    crate::air::sale_started(w, id);
 }
 
 /// A sell order on a vehicle or aircraft (S-0408 claim 11).

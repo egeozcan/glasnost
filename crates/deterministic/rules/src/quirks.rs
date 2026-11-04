@@ -1550,6 +1550,14 @@ pub struct Quirks {
     // spec: S-0501 claims 4, 10 and 51, Edge cases
     #[serde(default = "on")]
     pub aircraft_edge_hold: bool,
+    /// An aircraft in enter's approaching stage that holds a contact, is on the ground by its height, is not landing and is not pad-bound is never moved on to the docking stage: each processing returns 3 ticks and changes nothing, so it is never serviced; off: every aircraft in contact on the ground and not landing is moved on to the docking stage as a pad-bound one is, so it reports entry at its next processing.
+    // spec: S-0501 claim 24, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_grounded_enter_stall: bool,
+    /// An aircraft whose ready mark enter cleared and that is then forced into another behaviour stays not ready in it until a processing sets the mark again, so a queued behaviour or an order waits, under a forced guard below cruise height for as long as it keeps that height; off: the cleared mark holds it not ready only while enter is current.
+    // spec: S-0501 claim 31, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_ready_mark_outlives_enter: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -2600,6 +2608,8 @@ impl Default for Quirks {
             aircraft_released_above_pad: true,
             unarmed_pad_bound_hover: true,
             aircraft_edge_hold: true,
+            aircraft_grounded_enter_stall: true,
+            aircraft_ready_mark_outlives_enter: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -3708,6 +3718,14 @@ impl Quirks {
             ),
             ("unarmed_pad_bound_hover", self.unarmed_pad_bound_hover),
             ("aircraft_edge_hold", self.aircraft_edge_hold),
+            (
+                "aircraft_grounded_enter_stall",
+                self.aircraft_grounded_enter_stall,
+            ),
+            (
+                "aircraft_ready_mark_outlives_enter",
+                self.aircraft_ready_mark_outlives_enter,
+            ),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
             (
