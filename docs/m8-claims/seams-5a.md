@@ -16,22 +16,25 @@ with no test, not built, or seam.
 - Every bullet of a ledger's *Seams* section.
 
 A bullet that repeats a table row gets that row's outcome and is counted again as a bullet. The
-capture ledger's open items and the two trace rows' open items are counted one per item. Rows are
-named by ledger line (`intake52b:130` is line 130 of the intake 52b ledger).
+capture ledger's open items and the two trace rows' open items are counted one per item.
+
+A row tested in part is counted once, under Tested. Its untested part is listed under Left but not
+counted there. Rows are named by ledger line (`intake52b:130` is line 130 of the intake 52b ledger).
 
 **Result.**
 
 | | Table rows | Seam bullets | Capture and trace items | Total |
 |---|---|---|---|---|
-| Read | 159 | 51 | 10 | 220 |
-| Closed earlier | 17 | 6 | 7 | 30 |
-| Not a seam row (tested at its intake; the word is in its text) | 8 | 0 | 0 | 8 |
+| Read | 159 | 53 | 10 | 222 |
+| Closed earlier | 15 | 5 | 7 | 27 |
+| Claim gone (current revision) | 2 | 1 | 0 | 3 |
+| Not a seam row (tested at its intake, or a note; the word is only in its text) | 8 | 2 | 0 | 10 |
 | Blocked by an open request | 1 | 2 | 0 | 3 |
 | Tested here | 12 | 3 | 1 | 16 |
 | Built here | 0 | 0 | 0 | 0 |
 | Left | 121 | 40 | 2 | 163 |
 
-- 12 test functions in 8 files.
+- 12 test functions in 9 files.
 - No test found the code differing from an approved claim, so no simulation code changed.
 - No hashed state was added, so there is no format bump (save 98, AI game 61, wire 12).
 - Goldens and lanes are not affected; lanes were not run, since the simulation is unchanged.
@@ -39,9 +42,12 @@ named by ledger line (`intake52b:130` is line 130 of the intake 52b ledger).
 
 ## Built
 
-None. No in-scope "not built" row has a spec that says exactly what to build and is not a feature
-our engine lacks (tunnels, underground travel, patrol processing, aircraft sinking, trigger
-action 32, a command bar).
+Nothing was built. Most in-scope "not built" rows name a feature our engine lacks: tunnels,
+underground travel, patrol processing, aircraft sinking, trigger action 32, a command bar.
+
+One row is specified and not built: S-0215 r104 claim 16's damage-triggered fall-back for a
+no-threat behaviour (intake57:185). It was left out because it changes play and so needs its own
+intake with lanes (see Left).
 
 ## Tested
 
@@ -58,7 +64,7 @@ action 32, a command bar).
 | 9 | intake63:103 | S-0213 | claim 16c, a second loop closed in the same tick changes too | `claims_s0213_r84::claim_16c_a_second_loop_closed_in_the_same_tick_changes_too`. Two loop-close orders are given in one tick, and both routes change. Code agrees. |
 | 10 | intake63:115 | S-0213 | claim 16d, an aircraft or building in the route-holder limit | `claims_s0213_r84::claim_16d_a_building_and_an_aircraft_count_against_the_holder_limit`. At the limit, the click is refused with `MSG:PlannerMaximum`. Below it, the first point add raises the count. Code agrees. |
 | 11 | intake60:92, intake71:77 | S-0513 | claim 39 with S-0309 claim 29, a building holder of a warp member | `claims_s0513_r62::claim39_a_building_holder_drops_the_member_at_the_first_check_tick`. The building is tested in guard and in attack, with its processing held back. It keeps the target to the first check tick after the launch and drops it there, with no draw and no shot. Code agrees. Aircraft holders are left. |
-| 12 | capture: units inside | S-0215, S-0203 | claim 2 (processing only in the actor's own turn) with S-0203 claim 3 (a unit inside a building or a closed transport takes no turns) | `claims_s0215_capture::claim_28_a_unit_inside_is_not_processed_until_it_is_back`. A unit in *capture* with nothing is not processed while inside, and gets row 2 (*guard*) at its first processing back on the map. Code agrees. The capture seam's question is answered by the spec text, so no request is needed. An open-topped passenger takes turns (S-0203 claim 3), which is not tested here. |
+| 12 | capture: units inside | S-0215, S-0203 | claim 2 (processing only in the actor's own turn) with S-0203 claim 3 (a unit inside a building or a closed transport takes no turns) | `claims_s0215_capture::claim_28_a_unit_inside_is_not_processed_until_it_is_back`. A unit in *capture* with nothing is taken inside by `objects::take_inside`. It is not processed while inside, and gets row 2 (*guard*) at its first processing back on the map. Code agrees. `take_inside` is the path that garrison entry (`structures/garrison.rs` `go_inside`, S-0508 claim 5) and transport boarding (`transport::board`) both use. It takes the unit out of the update order. Boarding an open-topped transport puts it back at the end (`w.update.enter`, S-0203 claim 3), so such a passenger takes turns; that case is not tested here. The capture seam's question is answered by the spec text, so no request is needed. |
 
 ## Closed earlier
 
@@ -71,7 +77,6 @@ action 32, a command bar).
 | intake55a bullet 167 (Q-2181) | S-0301 r63, intake 63. |
 | intake56:69, :73, :77 (Q-2191, Q-2192, Q-2193) | S-0213 r84, intake 63. |
 | intake57:126 (more listed aircraft than pads) | Tested by S-0501's own tests (the row says so). |
-| intake57:130 (T12 run 8 d), :132, bullet 219 (S-0411 claim 3, the darkening while *D* ≥ *T*) | Spec revision: S-0411 r49 claim 3 lists the darkening causes, among them the build limit (S-0407 claim 9's answer), and adds that dock occupancy plays no part. S-0407 claim 16 says its pad test is distinct from claim 9's answer. Our icon darkens on claim 9's answer only, as the claim now reads. |
 | intake57 bullet 221 (S-0502 claim 24, part e's clearing) | Intake 74 (S-0215 r104 claim 37 part e: no effective clear and no jumpjet stop), tested by `claims_s0215_r104::part_e_clearing_is_no_effective_clear_and_no_stop_follows`. |
 | intake60:79 (Q-2211 interim for a fate's member) | Intake 71: S-0513 r62 answers Q-2211, and question 3's interim stays under Q-2276 (sweep 5b's). |
 | intake63:88 (Q-2227), :119 (Q-2226) | S-0213 r89, intake 66. |
@@ -80,14 +85,21 @@ action 32, a command bar).
 | intake68:102 (warp members) | Tested since intake 71 (the row says so). |
 | intake71:78 (Q-2263, neutral and special holders) | Intake 74, S-0309 r94 (`a_neutral_holder_makes_the_check_and_no_processing_drop`, `p9a_a_special_holder_…`). |
 | capture row 2b (Q-2251), part 4 (Q-2252) | Intake 76, S-0501 r93 claims 49 and 50. |
-| capture: the golden run left unverified | Superseded: every later merge ran `cargo xtask gate` with the capture code in. |
+| capture: the golden run left unverified | Superseded. Later merges regenerated and checked the goldens with the capture code in, for example the trace row (9242973): `duel`, `duel-diagonal`, `duel-naval`, `skirmish`, `m6c`, `m7a` and `m7b`. |
 | trace 1: the overfly's approach heading | Trace 2 (the run lock suppresses body guidance, and our code matches). Q-2291 was answered at intake 76 (claim 51). |
 | trace 2: `stale_guard_target`, the crate on-its-way test | *Seam (AI: stale guard target, crate on-its-way)*, 09cbd2c. |
 | trace 2: the fly-back at the edge (Q-2291) | Intake 76, S-0501 r93 claim 51. |
 
+## Claim gone
+
+| Row | Current revision |
+|---|---|
+| intake57:130 (T12 run 8 d), :132, bullet 219 (S-0411 claim 3, an icon darkened while S-0407 claim 16's test refuses its type, *D* ≥ *T*) | S-0411 r49 claim 3 lists the causes of the darkening: a building line with an item, no switched-on factory, and the build limit (S-0407 claim 9's answer). It adds that dock occupancy plays no part. S-0407 claim 16 now says its pad test is distinct from claim 9's answer, and that a refusal at issue is S-0411 claim 4's row that gives no order. The darkening that intake 57 waited for is no longer claimed. Our icon darkens on claim 9's answer only, as the claim now reads. |
+
 ## Not seam rows
 
-These rows are marked tested; one of the words appears only in their text.
+These rows are marked tested at their intake, or are notes; one of the words appears only in
+their text.
 
 | Rows | What the word names |
 |---|---|
@@ -97,6 +109,8 @@ These rows are marked tested; one of the words appears only in their text.
 | intake57:180 | — |
 | intake63:94 | — |
 | intake72:48 | — |
+| intake55a bullet 172 | A note: nothing depends on intake 55b's or 56's specs. |
+| intake69 bullet 91 | A lane note: the before shots predate the scroll-button shots. |
 
 ## Blocked
 
@@ -146,7 +160,7 @@ sweep wrote no test for it. Each such row is still open for a later sweep.
 | intake57:159, :160, :162, bullet 225 | S-0215 claim 37 (a1) | No zone-less unit, no tunnel travel state, no loaner or team member. |
 | intake57:161 | S-0215 claim 37 (a1) | Not reached: the scatter reference point and heading point of a1. |
 | intake57:179, bullet 227 | S-0607 claim 9 | r33's open question. |
-| intake57:185, bullet 223 | S-0215 claim 16, S-0607 claim 9 | The damage-triggered fall-back for a no-threat behaviour is not built. Not checked against S-0215 r104 in this sweep. |
+| intake57:185, bullet 223 | S-0215 claim 16, S-0607 claim 9 | S-0215 r104 claim 16 does specify the fall-back: a mobile actor that is not a team member, with the no-threat property and not the zombie property, falls back to rest at once when it survives damage from a known attacker (high; medium for which damage triggers it). It is still not built: the code has only the search exclusion (`combat::acquire`). Building it changes play, so it needs lanes and goldens. Its place among the other damage responses (claims 18 and 39) was not checked here. This is a build item for an S-0215 intake, not this test sweep. |
 | intake57 bullet 229 | S-0214 | Viewer prune only, not the game's selection. |
 | intake58:12, :15, :16, :17, :20 | S-0102 | Client view wiring. The rule is tested. The simulation keeps no tunnel or melee-link answer. |
 | intake59:35 | S-0311, S-0011 | Trigger action 32 is not built (S-0011 is not in scope). |
