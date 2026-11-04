@@ -11105,6 +11105,11 @@
           "type": "boolean",
           "default": true
         },
+        "walker_attacks_unhittable_obstacle": {
+          "description": "Rows WP13, WP24 and WP28 ask no firing check: an armed walker meets an enemy building, a\nclosed enemy gate or another enemy object that its weapon cannot fire at as *enemy\nobstacle* and takes it as its target. Off, those rows give *blocked* when the firing\ncheck without the range test, for the weapon it would use against that occupant,\nanswers *illegal*.",
+          "type": "boolean",
+          "default": true
+        },
         "walker_bridge_destination_deck": {
           "description": "A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on; off: the arrival test uses the centre's height on the walker's arrival layer.",
           "type": "boolean",

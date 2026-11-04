@@ -13,7 +13,7 @@ use glasnost_rules::sim::{
 };
 use glasnost_sim::cells::position;
 use glasnost_sim::occupancy::{self, Outcome};
-use glasnost_sim::rules::Kind;
+use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 use glasnost_sim::{crush, objects, path, scatter, tick, trace};
 
@@ -783,6 +783,11 @@ fn walker_targets_first_listed_enemy() {
     let o = w.obj(m).unwrap();
     assert_eq!(o.target, Some(Target::Object(cart)));
     assert!(o.path.steps.is_empty());
+    // spec: S-0209 claim 9 (r55: the take is an override, S-0215 claim 10, to attack with that target and no destination; the move is suspended and the destination put aside)
+    assert_eq!(o.beh.current, Some(Behaviour::Attack));
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.suspended, Some(Behaviour::Move));
+    assert_eq!(o.beh.aside, Some((None, Some(Target::Cell(cell(6, 0))))));
 }
 
 // spec: S-0209 claim 9 (an allied object listed first: nothing is attacked)
@@ -801,6 +806,9 @@ fn walker_spares_allied_first_listed() {
     let o = w.obj(m).unwrap();
     assert_eq!(o.target, None);
     assert!(o.path.steps.is_empty());
+    // spec: S-0209 claim 9 (no take, so no override: the move stays current with its destination)
+    assert_eq!(o.beh.current, Some(Behaviour::Move));
+    assert_eq!(o.dest, Some(Target::Cell(cell(6, 0))));
 }
 
 // ---------------------------------------------------------------------------

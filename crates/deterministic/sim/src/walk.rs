@@ -550,13 +550,13 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
                         None => Some(Target::Cell(next)),
                     };
                     if let Some(ob) = w.obj_mut(id) {
+                        // spec: S-0209 claim 9 (in every case the walker stops and discards its path)
                         ob.path.steps.clear();
-                        if tgt.is_some() {
-                            ob.target = tgt;
-                        }
                     }
-                    // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
-                    crate::emitters::retarget_let_go(w, id);
+                    if let Some(tgt) = tgt {
+                        // spec: S-0209 claim 9 (r55: the take is an override, S-0215 claim 10, to attack with that target and no destination; the current or queued behaviour is suspended and the earlier target and destination are put aside; the let-go of S-0301 claim 5 comes with the target change)
+                        crate::combat::acquire::override_attack_on(w, id, tgt);
+                    }
                 }
                 // spec: S-0209 claim 7 (repeated ask blocked: keep the new path, wait; cloaked: wait)
                 _ => {}
