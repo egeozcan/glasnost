@@ -154,6 +154,13 @@ pub struct House {
     /// The infiltrated-infantry-factory flag (S-0510 claim 5).
     #[serde(default)]
     pub infiltrated_infantry_factory: bool,
+    /// An idle test house (S-0216 claim 8, *Removal before the groups*,
+    /// design): no house treats it as an enemy, so no object's target
+    /// search takes its objects and no hit damages them. Only our arena's
+    /// human player house sets it; every house of a game the loader starts
+    /// has it clear.
+    #[serde(default)]
+    pub idle_test_house: bool,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).
@@ -536,6 +543,16 @@ impl World {
                 .is_some_and(|h| h.allied_with(b)),
             _ => false,
         }
+    }
+
+    /// Whether object `id` belongs to an idle test house
+    /// ([`House::idle_test_house`]; S-0216 claim 8, *Removal before the
+    /// groups*).
+    pub fn of_idle_house(&self, id: ObjectId) -> bool {
+        self.obj(id)
+            .and_then(|o| o.owner)
+            .and_then(|h| self.houses.get(usize::from(h.0)))
+            .is_some_and(|h| h.idle_test_house)
     }
 
     /// The facing an object's body has now.

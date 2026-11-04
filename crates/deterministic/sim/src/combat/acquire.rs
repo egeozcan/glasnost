@@ -64,6 +64,10 @@ pub fn anger(w: &mut World, victim: ObjectId, attacker: ObjectId, dealt: i32) {
     ) else {
         return;
     };
+    // spec: S-0216 claim 8 (Removal before the groups: no house treats an idle test house as an enemy; design)
+    if w.of_idle_house(attacker) {
+        return;
+    }
     let mode = w.rules().mode;
     let s = crate::combat::damage::strength(w, victim);
     let c = type_cost(w, victim);
@@ -156,6 +160,10 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
     };
     if o.kind == Kind::Terrain || o.kind == Kind::Aircraft {
         // Aircraft retaliation belongs to the aircraft specs.
+        return;
+    }
+    // spec: S-0216 claim 8 (Removal before the groups: no object targets an idle test house's objects, a retaliation included; design)
+    if w.of_idle_house(attacker) {
         return;
     }
     let rules = w.rules_arc();
@@ -651,6 +659,10 @@ fn candidate(
     };
     // spec: S-0309 table C (exists, self)
     if t == a || to.health <= 0 || !to.on_map || crate::combat::damage::dead(to) {
+        return Verdict::Reject;
+    }
+    // spec: S-0216 claim 8 (Removal before the groups: no object targets an idle test house's objects; design)
+    if w.of_idle_house(t) {
         return Verdict::Reject;
     }
     let ttc = type_combat(w, t);

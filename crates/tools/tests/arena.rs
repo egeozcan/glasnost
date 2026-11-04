@@ -319,6 +319,119 @@ fn m0006_placements_parse() {
     assert!(oracle::placed_for(&all, "M-0011").is_empty());
 }
 
+/// The local lane's part of scenario PT6 for claim 8's *Game start* and
+/// *Removal before the groups* (S-0216 r67; never in CI): on the records'
+/// map at seed 0, for the first pairing of M-0001, five houses in S-0009
+/// claim 19's order, every vehicle that neither the human player house nor
+/// a side's group owns off the map at tick 0 and gone at tick 1, the
+/// neutral house's buildings and infantry kept, and the human player
+/// house's base unit on its base cell, unmoved and unhurt, to the game's
+/// end.
+#[test]
+fn pt6_the_records_game_start_in_our_setup() {
+    let Some((records, g)) = stock_m0001() else {
+        return;
+    };
+    let game = &oracle::find_record(&records, "M-0001").unwrap().games[0];
+    let types = [game.row.as_str(), game.col.as_str()];
+    let a = oracle::setup(&g, types, oracle::Side::A, 0).unwrap();
+    let mut w = a.world.clone();
+    use glasnost_sim::world::HouseRole;
+    // spec: S-0216 claim 8 (Game start: the human player house, the two computer houses, the neutral and the special house)
+    let roles: Vec<HouseRole> = w.houses.iter().map(|h| h.role).collect();
+    assert_eq!(
+        roles,
+        [
+            HouseRole::Player,
+            HouseRole::Player,
+            HouseRole::Player,
+            HouseRole::Neutral,
+            HouseRole::Special
+        ]
+    );
+    println!(
+        "start waypoints 0 to 7 on the map: {:?}; the houses' starts: {:?}",
+        (0..8u16)
+            .filter(|k| g.map.waypoints.contains_key(k))
+            .collect::<Vec<_>>(),
+        w.houses.iter().map(|h| h.start).collect::<Vec<_>>()
+    );
+    // spec: S-0216 claim 8 (Game start: the human player house at start 3, so no random-position draw)
+    assert_eq!(
+        w.houses[usize::from(oracle::HUMAN.0)].start,
+        Some(oracle::HUMAN_START)
+    );
+    // Everything created before the groups' first unit is the game start's.
+    let first_group_unit = a.units.iter().flatten().min().copied().unwrap();
+    let human: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(oracle::HUMAN))
+        .map(|o| (o.id, o.pos.cell(), o.health))
+        .collect();
+    assert_eq!(
+        human.len(),
+        1,
+        "the human player house owns its base unit only"
+    );
+    let (base_unit, base, health) = human[0];
+    if let Some(&(x, y)) = g.map.waypoints.get(&(oracle::HUMAN_START as u16)) {
+        // spec: S-0216 claim 8 (Game start: the base unit put directly on its base cell, S-0009 claim 46)
+        assert_eq!(base, glasnost_map::CellXY::new(i32::from(x), i32::from(y)));
+    }
+    // spec: S-0216 claim 8 (Removal before the groups: every vehicle the human player house does not own off the map at tick 0, the neutral house's included)
+    let stray: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| {
+            o.kind == glasnost_sim::rules::Kind::Vehicle
+                && o.id != base_unit
+                && o.id < first_group_unit
+        })
+        .map(|o| o.id)
+        .collect();
+    assert!(stray.is_empty(), "vehicles left at tick 0: {stray:?}");
+    assert!(a.removed.len() >= 2, "at least the two computer base units");
+    println!(
+        "taken off before the groups: {} vehicles; neutral objects kept: {}",
+        a.removed.len(),
+        w.objects
+            .values()
+            .filter(|o| o
+                .owner
+                .is_some_and(|h| w.houses[usize::from(h.0)].role == HouseRole::Neutral))
+            .count()
+    );
+    // The map's vehicles by owner and type, for the local log only.
+    let mut placed = std::collections::BTreeMap::<(String, String), usize>::new();
+    for u in &g.map.objects.units {
+        let key = (
+            String::from_utf8_lossy(&u.placed.owner).into_owned(),
+            String::from_utf8_lossy(&u.placed.type_name).into_owned(),
+        );
+        *placed.entry(key).or_default() += 1;
+    }
+    println!(
+        "the map's vehicles by owner and type ({} in all): {placed:?}",
+        g.map.objects.units.len()
+    );
+    // spec: S-0216 claim 8 (Removal before the groups: none of them at the next tick; the human's base unit on its base cell for the whole game, neither targeted nor damaged)
+    while w.tick < oracle::FRAME_LIMIT && !w.econ.end.finished {
+        glasnost_sim::tick::step(&mut w);
+        let o = w.obj(base_unit).expect("the human's base unit stays");
+        assert_eq!((o.pos.cell(), o.health), (base, health), "tick {}", w.tick);
+        if w.tick == 1 {
+            assert!(a.removed.iter().all(|&id| w.obj(id).is_none()));
+        }
+        if a.units
+            .iter()
+            .any(|u| u.iter().all(|&id| w.obj(id).is_none_or(|o| o.health <= 0)))
+        {
+            break;
+        }
+    }
+}
+
 /// The local lane's acceptance check of our set-up against M-0006 (S-0216
 /// claim 8, *Acceptance*, and scenario PT6's acceptance items; never in
 /// CI): with `GLASNOST_GAME_DIR` set, our W of the record's map is
@@ -495,7 +608,10 @@ fn m0019_creation_order_and_positions_in_our_setup() {
 /// the set-up's first object's creation draw takes the scenario stream's
 /// raw value at place *N*₀ of M-0019, in every pairing. Our place is the
 /// raw values our map loading and game start take (S-0202 claims 10 and
-/// 14); claim 8 adds no draw to reach it. Prints ours beside M-0019's.
+/// 14, the two house-creation rounds included) with claim 8's *Game start*
+/// (r67: the three base units' creation draws and the final R(0, 65535));
+/// its *Removal before the groups* takes no draw. Prints ours beside
+/// M-0019's.
 #[test]
 fn m0019_the_first_creation_draw_takes_the_raw_value_at_n0() {
     let Some((records, g)) = stock_m0001() else {
@@ -517,6 +633,31 @@ fn m0019_the_first_creation_draw_takes_the_raw_value_at_n0() {
         }
     }
     println!("first creation draw's place by seed, ours: {ours:?}; M-0019: {N0:?}");
+    // The two house rounds' raw values by seed: with every start fixed the
+    // early phase takes no draw, so the rounds are adjacent from place 0
+    // (S-0202 claim 14; claims_s0202_houses). Diagnostics for the log.
+    let houses = 5;
+    for seed in 0..6u32 {
+        let mut r = glasnost_sim::rng::Rng::new(seed);
+        let half = g.rules.quirks.ranged_draw_half_span;
+        for _ in 0..houses {
+            // spec: S-0202 claim 14 (one ranged draw R(450, 1800) per house created)
+            let _ = r.ranged(450, 1800, half);
+        }
+        let first = r.taken();
+        for _ in 0..houses {
+            // spec: S-0202 claim 14 (the second round, the same list)
+            let _ = r.ranged(450, 1800, half);
+        }
+        let both = r.taken();
+        let s = seed as usize;
+        println!(
+            "seed {seed}: round 1 takes places 0..{first} ({first} raw values), round 2 {first}..{both} ({} raw values); after the rounds, ours {} raw values to the first creation draw, M-0019 {}",
+            both - first,
+            ours[s].map_or(0, |n| n as i64 - both as i64),
+            N0[s] as i64 - both as i64
+        );
+    }
     assert!(
         differs.is_empty(),
         "the place depends on the pairing: {differs:#?}"

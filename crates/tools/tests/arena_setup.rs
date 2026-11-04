@@ -15,14 +15,17 @@ use std::sync::Arc;
 use glasnost_map::{Cell, CellGrid, CellXY, Footprint};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::UnitType;
+use glasnost_sim::rng::Rng;
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, ObjectId, World};
+use glasnost_sim::world::{HouseId, HouseRole, ObjectId, World};
 use glasnost_tools::oracle::{self, Ground, Side};
 
-/// The synthetic combat rules with test costs for CART and WALKER.
+/// The synthetic arena rules ([`oracle::synthetic_ruleset`]: the combat
+/// rules with a base-unit type and the neutral and special countries) with
+/// test costs for CART and WALKER.
 fn costs(cart: i32, walker: i32) -> Arc<SimRules> {
-    let mut r: Ruleset = testkit::combat_ruleset();
+    let mut r: Ruleset = oracle::synthetic_ruleset();
     r.sim.vehicles.get_mut("CART").unwrap().cost = Some(cart);
     r.sim.infantry.get_mut("WALKER").unwrap().cost = Some(walker);
     Arc::new(SimRules::new(&r, "intake71-arena-setup"))
@@ -130,6 +133,8 @@ fn edge_ground(raised: &[CellXY]) -> Ground {
         (0, wp(35, 41)),
         (1, wp(42, 38)),
         (oracle::W_WAYPOINT, wp(40, 41)),
+        // The human player house's start (S-0216 claim 8, Game start), well away from W.
+        (oracle::HUMAN_START as u16, wp(30, 46)),
     ]);
     g
 }
@@ -420,4 +425,199 @@ fn pt6_a_full_cell_moves_infantry_on_and_the_mission_is_queued() {
         CellXY::new(c.x - 1, c.y - 1),
         "the full cell moves the fourth on"
     );
+}
+
+// --- PT6, synthetic part: the game start (r67, Q-2336) ---------------------------------
+
+/// The base unit of house `h` in `w`: its only object.
+fn base_unit_of(w: &World, h: HouseId) -> ObjectId {
+    let mine: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(h))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(mine.len(), 1, "house {h:?} owns its base unit only");
+    mine[0]
+}
+
+#[test]
+fn pt6_game_start_houses_in_claim_19s_order() {
+    // spec: S-0216 claim 8 (Game start: a human player house at start 3, a player and not an observer, then the two computer houses, then the neutral and the special house, in S-0009 claim 19's order)
+    let g = ground(1500, 1500);
+    let a = oracle::setup(&g, ["CART", "WALKER"], Side::A, 0).unwrap();
+    let w = &a.world;
+    let roles: Vec<HouseRole> = w.houses.iter().map(|h| h.role).collect();
+    assert_eq!(
+        roles,
+        [
+            HouseRole::Player,
+            HouseRole::Player,
+            HouseRole::Player,
+            HouseRole::Neutral,
+            HouseRole::Special
+        ]
+    );
+    let human = &w.houses[usize::from(oracle::HUMAN.0)];
+    assert!(human.human && human.idle_test_house);
+    assert!(!human.econ.setup.observer, "a player, not an observer");
+    assert_eq!(human.start, Some(oracle::HUMAN_START));
+    assert_eq!(a.houses, oracle::SIDE_HOUSES);
+    for h in oracle::SIDE_HOUSES {
+        let house = &w.houses[usize::from(h.0)];
+        assert!(
+            !house.human && !house.idle_test_house,
+            "{h:?}: a computer house"
+        );
+    }
+    // spec: S-0216 claim 8 (Game start: crates off)
+    assert_eq!(w.econ.settings.crates, Some(false));
+}
+
+#[test]
+fn pt6_game_start_two_house_rounds_three_base_units_then_the_final_draw() {
+    // spec: S-0216 claim 8 (Game start: five houses created in each of the two rounds of S-0202 claim 14, three base units created, each with its creation draw and put on its base cell with no draw, no budget unit, then the final R(0, 65535); Removal before the groups: no draw) and PT6 (Expected, rules)
+    let g = ground(1500, 1500);
+    for seed in [0, 1, 2, 5] {
+        let a = oracle::setup(&g, ["CART", "WALKER"], Side::A, seed).unwrap();
+        let w = &a.world;
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let k = creation_draws(w, Kind::Vehicle, oracle::SYNTHETIC_BASE_UNIT);
+        let mut want = Rng::new(seed);
+        for _ in 0..2 * w.houses.len() {
+            // spec: S-0202 claim 14 (one R(450, 1800) per house and round)
+            let _ = want.ranged(450, 1800, half);
+        }
+        let rounds = want.taken();
+        for _ in 0..3 * k {
+            want.raw();
+        }
+        // spec: S-0009 claim 20 and Constants (the final R(0, 65535) after the last house)
+        let _ = want.ranged(0, 65535, half);
+        assert_eq!(
+            a.first_raw,
+            want.taken(),
+            "seed {seed}: no other draw before the first group (houses {}, rounds' raw values {rounds}, creation draws per base unit {k})",
+            w.houses.len()
+        );
+    }
+}
+
+#[test]
+fn pt6_computer_base_units_are_taken_off_and_the_humans_stays() {
+    // spec: S-0216 claim 8 (Removal before the groups: the two computer houses' base units taken off the map, none of them at the next tick, their creation numbers taken; the human player house's base unit on its base cell; the base units' creation numbers before every set-up object's)
+    let g = ground(1500, 1500);
+    let a = oracle::setup(&g, ["CART", "WALKER"], Side::A, 0).unwrap();
+    let mut w = a.world.clone();
+    assert_eq!(a.removed.len(), 2, "the two computer houses' base units");
+    let human = base_unit_of(&w, oracle::HUMAN);
+    let o = w.obj(human).unwrap();
+    let base = ground_cell(&g, oracle::HUMAN_START);
+    assert_eq!(
+        w.rules()
+            .index_of(Kind::Vehicle, oracle::SYNTHETIC_BASE_UNIT),
+        Some(o.type_index)
+    );
+    assert_eq!(o.pos.cell(), base, "the human's base unit on its base cell");
+    let health = o.health;
+    // The three base units in house order, before every set-up object.
+    let first_unit = a.units.iter().flatten().min().copied().unwrap();
+    assert!(human < a.removed[0] && a.removed[0] < a.removed[1]);
+    assert!(a.removed[1] < first_unit);
+    for id in &a.removed {
+        assert!(w.obj(*id).is_none(), "{id:?} is out of the game");
+    }
+    // spec: S-0216 claim 8 (Removal before the groups: the human's base unit stays on its base cell for the whole game; no object targets or damages it)
+    for _ in 0..600 {
+        glasnost_sim::tick::step(&mut w);
+        let o = w.obj(human).expect("the human's base unit stays");
+        assert_eq!((o.pos.cell(), o.health), (base, health), "tick {}", w.tick);
+        for id in &a.removed {
+            assert!(w.obj(*id).is_none(), "{id:?} never comes back");
+        }
+    }
+}
+
+/// The cell of start waypoint `i` of `g`'s map.
+fn ground_cell(g: &Ground, i: u32) -> CellXY {
+    let (x, y) = g.map.waypoints[&(i as u16)];
+    CellXY::new(i32::from(x), i32::from(y))
+}
+
+#[test]
+fn pt6_the_removal_takes_no_draw_starts_no_animation_and_frees_the_cells() {
+    // spec: S-0216 claim 8 (Removal before the groups: every vehicle the human player house does not own, the neutral house's included, taken off with no random draw and no animation, its cells freed for the take test, its creation number kept; the neutral house's infantry stay)
+    let r = oracle::synthetic_ruleset();
+    let mut w = testkit::game_with_non_players(&r, 30, 3);
+    let neutral = HouseId(2);
+    let human = HouseId(0);
+    let c = |dx| testkit::mid(30, dx, 0);
+    let mine = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, c(-6), 0);
+    let theirs = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(0), 0);
+    let neutral_vehicle = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", neutral.0, c(3), 0);
+    let neutral_man = testkit::spawn(&mut w, Kind::Infantry, "WALKER", neutral.0, c(6), 0);
+    let (rng, anims, next) = (w.rng.clone(), w.anims.clone(), w.next_id);
+    let gone = oracle::take_off_before_the_groups(&mut w, human);
+    assert_eq!(gone, vec![theirs, neutral_vehicle]);
+    assert_eq!(w.rng, rng, "no random draw");
+    assert_eq!(w.anims, anims, "no animation");
+    assert_eq!(w.next_id, next, "the creation numbers stay taken");
+    assert!(w.obj(mine).is_some() && w.obj(neutral_man).is_some());
+    // The take test no longer sees them: a new vehicle stands on each freed cell.
+    let ti = w.rules().index_of(Kind::Vehicle, "CART").unwrap();
+    for at in [c(0), c(3)] {
+        let (_, cell, why) = oracle::place_unit(&mut w, Kind::Vehicle, ti, human, at, 64).unwrap();
+        assert_eq!((cell, why), (at, None), "{at:?} is free");
+    }
+}
+
+#[test]
+fn pt6_no_object_targets_or_damages_the_idle_house() {
+    // spec: S-0216 claim 8 (Removal before the groups: no house treats the human player house as an enemy; no object targets or damages its objects; design) — with the flag clear, the same scene fights, so the flag is what keeps it out
+    for idle in [true, false] {
+        let mut w = testkit::game_with(&testkit::combat_ruleset(), 30, 3);
+        w.houses[0].idle_test_house = idle;
+        let quiet = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(30, 0, 0), 0);
+        let gun = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, testkit::mid(30, 3, 0), 0);
+        let full = w.obj(quiet).unwrap().health;
+        // A hit with the combat ruleset's first warhead.
+        let hit = glasnost_sim::combat::damage::Hit {
+            amount: 50,
+            warhead: Some(0),
+            distance: 0,
+            attacker: Some(gun),
+            house: Some(HouseId(1)),
+            ignore_defences: false,
+            no_escape: false,
+        };
+        let result = glasnost_sim::combat::damage::apply(&mut w, quiet, hit);
+        if idle {
+            assert_eq!(result, glasnost_sim::combat::damage::HitResult::Unaffected);
+            assert_eq!(w.obj(quiet).unwrap().health, full, "a hit does no damage");
+        } else {
+            assert!(
+                w.obj(quiet).unwrap().health < full,
+                "control: the hit damages"
+            );
+        }
+        let before = w.obj(quiet).unwrap().health;
+        let mut targeted = false;
+        for _ in 0..300 {
+            glasnost_sim::tick::step(&mut w);
+            targeted |= w.obj(gun).and_then(|o| o.target)
+                == Some(glasnost_sim::world::Target::Object(quiet));
+        }
+        let after = w.obj(quiet).map_or(0, |o| o.health);
+        if idle {
+            assert!(!targeted, "nothing targets it");
+            assert_eq!(after, before, "nothing damages it");
+            assert_ne!(
+                w.houses[1].combat.enemy,
+                Some(HouseId(0)),
+                "no house makes it its enemy house"
+            );
+        } else {
+            assert!(targeted && after < before, "control: it is fought");
+        }
+    }
 }

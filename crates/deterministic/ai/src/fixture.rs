@@ -603,19 +603,26 @@ pub fn map_islands() -> Map {
     m
 }
 
-/// The lobby setup (S-0412): two AI houses, Alpha and Beta, random start
-/// positions, every other setting at the rules' default.
+/// The lobby setup (S-0412): two AI houses, Alpha at start 0 (west) and
+/// Beta at start 1 (east), every other setting at the rules' default.
+/// The tests' cells are laid out for that order. Until intake 87 both
+/// starts were random, and seed 5 happened to give this order; S-0202
+/// claim 14's house draws now come before the position draw, so the
+/// starts are fixed instead of left to the seed.
 pub fn setup(seed: u32) -> GameSetup {
-    let player = |name: &str, country: &str| Player {
+    let player = |name: &str, country: &str, start: u32| Player {
         name: name.into(),
         country: country.into(),
-        start: None,
+        start: Some(start),
         ai: true,
         values: Default::default(),
     };
     setup::skirmish(
         &rules(),
-        &[player("Alpha", "Alphaland"), player("Beta", "Betaland")],
+        &[
+            player("Alpha", "Alphaland", 0),
+            player("Beta", "Betaland", 1),
+        ],
         Settings::default(),
         0,
         seed,

@@ -601,6 +601,21 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
 /// pass (S-0203 claim 10), its marks and claims are cleared and its cells
 /// recomputed.
 pub fn remove(w: &mut World, id: ObjectId) {
+    remove_with(w, id, true);
+}
+
+/// Takes an object out of the game as [`remove`] does, but without the
+/// recalculation of its occupied ground cells, so with no random draw and
+/// no tile animation: our arena's *Removal before the groups* (S-0216
+/// claim 8, design), which frees the cells and keeps the creation numbers
+/// taken.
+pub fn take_out_quietly(w: &mut World, id: ObjectId) {
+    // spec: S-0216 claim 8 (Removal before the groups: the removal takes no random draw, starts no animation and frees the cells)
+    remove_with(w, id, false);
+}
+
+/// [`remove`], with the ground-cell recalculation only when `recalc`.
+fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
@@ -717,7 +732,7 @@ pub fn remove(w: &mut World, id: ObjectId) {
         }
     }
     w.objects.remove(&id);
-    if on_ground {
+    if on_ground && recalc {
         crate::load::recalc_cells(w, &touched);
     }
     for c in touched {

@@ -712,22 +712,40 @@ fn claim_19_farthest_sum() {
     assert_eq!(second, want, "first {first}");
 }
 
-/// spec: S-0009 claim 20 (the early phase's random-position draw comes before the initial fill's draws; quirks.double_start_resolution off: one assignment after the terrain)
+/// The raw values that `rounds` house-creation rounds of `houses` houses
+/// take from the start of the stream of `seed` (S-0202 claim 14: one
+/// R(450, 1800) per house and round, by claim 4's range rule).
+fn house_rounds(seed: u32, houses: usize, rounds: usize, half: bool) -> usize {
+    let mut r = glasnost_sim::rng::Rng::new(seed);
+    for _ in 0..houses * rounds {
+        // spec: S-0202 claim 14 (house creation: one ranged draw R(450, 1800) per house)
+        let _ = r.ranged(450, 1800, half);
+    }
+    r.taken() as usize
+}
+
+/// spec: S-0009 claim 20 (the early phase's random-position draw comes before the initial fill's draws; quirks.double_start_resolution off: one assignment after the terrain); S-0202 claim 14 (the first house-creation round before the early phase, the second after it and before the fill)
 #[test]
 fn claim_20_early_draws_before_the_fill() {
     let mut s = skirmish();
     s.map.fill = glasnost_map::Fill::Water;
     s.map.waypoints.insert(0, (30, 40));
     s.map.waypoints.insert(1, (50, 40));
+    let half = s.ruleset.globals.quirks.ranged_draw_half_span;
+    let h = s.setup.houses.len();
     // N = 2 and no random entry: the position draw R(0, 1) takes one raw value.
     let mut r = glasnost_sim::rng::Rng::new(s.setup.seed);
-    let raws: Vec<u32> = (0..3200).map(|_| r.raw()).collect();
+    let raws: Vec<u32> = (0..4000).map(|_| r.raw()).collect();
     let fill = 40 * (2 * 40 - 1); // H · (2W − 1) visited cells, one draw each
     let w = load(&s).expect("loads");
-    assert_eq!(w.houses[0].start, Some(raws[0] % 2));
+    // spec: S-0202 claim 14 (the position draw directly after the first round's raw values)
+    let first = house_rounds(s.setup.seed, h, 1, half);
+    assert_eq!(w.houses[0].start, Some(raws[first] % 2));
     s.ruleset.globals.quirks.double_start_resolution = false;
     let w = load(&s).expect("loads");
-    assert_eq!(w.houses[0].start, Some(raws[fill] % 2));
+    // spec: S-0202 claim 14 (with no early phase, both rounds come before the fill)
+    let both = house_rounds(s.setup.seed, h, 2, half);
+    assert_eq!(w.houses[0].start, Some(raws[both + fill] % 2));
 }
 
 /// spec: S-0009 claim 33 (the early phase judges passivity by the base rules' country data, quirks.early_phase_stale_country_data; a house passive in the late phase receives no starting units)
@@ -1042,9 +1060,14 @@ fn claim_46_switch_off_standing_position() {
         .collect();
     // n = 1 (MAN), C = 50: B = trunc(50 / 1) × 1 = 50: one MAN.
     assert_eq!(men.len(), 1);
-    // Replay the draws: the early lists (position 0 defined, no random entry), then the starting unit:
+    // Replay the draws: the two house-creation rounds of the one house around the early lists
+    // (position 0 defined, no random entry), then the starting unit:
     // its type R(0, 0) (no draw), its creation draw, the base cell accepts with no search draw, R(0, 3).
     let mut r = Rng::new(s.setup.seed);
+    for _ in 0..2 {
+        // spec: S-0202 claim 14 (house creation: one R(450, 1800) per house in each of the two rounds)
+        let _ = r.ranged(450, 1800, true);
+    }
     let _ = r.raw();
     let _ = r.ranged(0, 3, true);
     let _ = r.ranged(0, 65535, true);
