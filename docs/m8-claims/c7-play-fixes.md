@@ -464,3 +464,17 @@ quirks, both new switches of `quirks.rs` with the original's position as default
 **Version effects.** The layer file changes, so the layered `sim_rules_hash` moves: a save,
 replay, report or room made with the previous layer is refused on the rules hash. Reference files
 are unaffected.
+
+## Intake 94 (S-0306 r75, S-0513 r115, S-0309 r116, S-0501 r111, S-0102 r43): the layer-change switch judged again
+
+Ledger: [intake94.md](intake94.md). S-0306 r75 answers Q-2467: `quirks.layer_change_on_events_only`
+is a drawing setting with no consequence in the simulation. S-0102 r43 and S-0501 r111 claim 48
+(a) say the same. S-0513 r115 and S-0309 r116 answer Q-2466 and Q-2468 and name no switch. No
+revision adds a switch or changes a switch's default.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `layer_change_on_events_only` | S-0102 claim 4, Edge cases (r43: a drawing setting each client may set for itself); S-0306 r75 claim 17; S-0501 r111 claim 48 (a) | rejected (not in the layer), unchanged; condition 3 holds again | Condition 2 still fails: no play note or request names a stuck unit or glitch in either position. Condition 3 holds again, as intake 83 judged it before intake 89 doubted it. The off position moves objects only between the lists the drawing reads. S-0309 claim 7's ground-layer pass reads the on position's membership in both positions, so the switch changes draw order and nothing else. In our engine this was already so: the switch lives in `mapview::quirks::ViewQuirks`, `Layers` reads the world by shared reference, and the pass reads `air::kept_filed` and `air::ground_filed`. Intake 89's seam (Q-2467) is closed with no code change. Tested: `layers::tests::claim4_a_non_landable_aircraft_member_keeps_the_ground_list_while_it_flies` now checks, in both positions, that the drawing's sweep leaves `save::state_hash` unchanged and the aircraft still filed for the pass. The simulation side is tested by `claims_s0306_r62::r72_claim17_p46_part_a_the_ground_layer_pass_considers_a_flying_aircraft_that_cannot_land`, in runs 1 and 2. |
+| `warp_departure_keeps_beam` | S-0513 claim 39a (*The firer*, r115, Q-2468), SW12 parts l9 and l9a | rejected (not in the layer), unchanged | r115 changes no text of the off position. With the switch off the lock is refused at the launch, so no firer holds a beam on a departed member, and the new rows have nothing to release. That is intake 75's refusal. It names no stuck unit or glitch. |
+
+Intake 94 leaves the layer file unchanged.

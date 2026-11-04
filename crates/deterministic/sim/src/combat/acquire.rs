@@ -1168,6 +1168,7 @@ pub fn search(
                 // spec: S-0501 claim 48 (a) and its Changes for S-0309 claim 7 (the ground-layer pass takes the objects filed in the ground render layer's list, whatever their height: an aircraft that a factory release left above its pad, not re-filed since, is among them)
                 // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: it stays in the ground list, S-0102 claim 4, and S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight as a landed aircraft there, in both passes of a search that looks for aircraft and in the second pass alone otherwise; the connected-region test and table C apply as to any candidate)
                 // spec: S-0309 r114 claim 7 (an aircraft whose type cannot land and whose movement is neither rocket nor drop-pod movement stays in the ground list in flight, so the ground-layer pass considers it in flight, as it considers a landed one)
+                // spec: S-0306 r75 claim 17, S-0501 r111 claim 48 (a) and S-0102 r43 (Q-2467: quirks.layer_change_on_events_only is a drawing setting with no consequence in the simulation; the ground-layer pass reads the list as the switch's on position keeps it, in both positions, so this pass reads the simulation's own marks and never the client's switch)
                 if pass == 1
                     && !crate::temporal::ground_layer(w, x)
                     && !crate::air::ground_filed(w, x)

@@ -690,6 +690,14 @@ pub(crate) fn set_dest(w: &mut World, id: ObjectId, d: Option<Target>) {
 
 /// An aircraft was put on the map at its requested position (S-0501 claim
 /// 1); called by [`crate::objects::place`] before the placement fall-back.
+///
+/// A superweapon warp member's appearance at its landing point
+/// (`superweapons::warp`, which calls this while the object is still a
+/// member) does not follow claim 1's rule (S-0501 r111 claim 1, S-0513
+/// r115 claim 36): it appears on the ground at its landing point's height,
+/// whatever its visiting mark and the usable area. That height is its
+/// surface, or the deck when the landing cell is a high-bridge cell, so the
+/// deck mark is set then (claim 43's own standing-on-deck state).
 pub fn placed(w: &mut World, id: ObjectId) {
     if !is_aircraft(w, id) {
         return;
@@ -700,21 +708,31 @@ pub fn placed(w: &mut World, id: ObjectId) {
     let cell = o.pos.cell();
     let usable = w.cells.usable(cell);
     let surface = w.surface_at(o.pos.x, o.pos.y);
+    let warped = crate::superweapons::warp::is_member(w, id);
+    // spec: S-0501 r111 claim 1 (a superweapon warp member's appearance at its landing point does not follow this rule: it appears at no height above its surface whatever its visiting mark, so an aircraft whose type cannot land does not appear at its cruise height) and S-0513 r115 claims 36 and 38 (the appearance at the height of claim 36, whatever its kind and visiting mark; not S-0501 claim 1's rule)
     // spec: S-0501 claim 1 (on the ground when not visiting, by the mark already present, and inside the usable area; else at cruise height)
-    let ground = !a.visiting && usable;
+    let ground = warped || (!a.visiting && usable);
     // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: the same holds for any such aircraft placed on the ground, warped or not; it stays in the ground list, S-0102 claim 4) and S-0102 claim 4 (a placement files it; no take-off of a type that cannot land re-files it)
+    // spec: S-0306 r75 claim 17 (a warp member's appearance sets its height at no height above its surface, whatever its type's landing flag and visiting mark: an aircraft member whose type cannot land is then on the ground and keeps the ground list from there while it flies, until a crash)
     a.kept_filed = ground && !t.landable;
     // spec: S-0501 claim 1 (a type placed carrying passengers is a passenger carrier for life)
     a.passenger_carrier |= passengers(w, id) > 0;
     a.entered = usable;
+    // spec: S-0513 r115 claim 36 (a member that does not move from one bridge deck to another appears on the deck when it lands on a high-bridge cell from the ground; on a high-bridge cell the bridge lift is added) and S-0501 claim 43 (the deck mark is the aircraft's own standing-on-deck state)
+    let on_deck = warped && w.high_bridge(cell) && o.pos.z - surface >= DECK_ALLOWANCE;
     // spec: S-0501 claim 43 (ordinary fresh ground placement replaces the requested height with the terrain height; a placement is no way to require a deck landing: the mark is clear)
-    a.deck = false;
+    a.deck = on_deck;
     let z = if ground {
         // spec: S-0501 claim 1 (ground placement replaces the requested world height with the terrain height)
         a.ground = true;
         a.held = 0;
         a.mark = Some(cell);
-        surface
+        if warped {
+            // spec: S-0513 r115 claim 36 (the landing point's height: the surface, plus the bridge lift on a high-bridge cell; a member moving from one bridge deck to another is as that claim gives) and S-0306 r75 claim 17 (it stands at no height above its surface, on the deck when it lands on a high-bridge cell from the ground)
+            o.pos.z
+        } else {
+            surface
+        }
     } else {
         a.ground = false;
         a.held = t.cruise;
@@ -722,7 +740,8 @@ pub fn placed(w: &mut World, id: ObjectId) {
     };
     let mode = w.rules().mode;
     // spec: S-0501 claim 1 (the current speed fraction starts at 1 exactly at cruise height, else 0)
-    a.cur = if z - surface == t.cruise {
+    // spec: S-0306 r75 claim 17 (an aircraft member stays at rest at that height after its hold, as an aircraft the map places on the ground does)
+    a.cur = if !warped && z - surface == t.cruise {
         F64::from_i64(1, mode)
     } else {
         F64::ZERO

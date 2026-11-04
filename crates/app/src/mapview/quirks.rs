@@ -54,7 +54,10 @@ pub struct ViewQuirks {
     /// after the object's own step, not the list it is in. Off: the checks
     /// give way to a sweep every tick that moves an object whose evaluated
     /// layer differs from the list it is in; claim 4's re-files happen in
-    /// both states.
+    /// both states. A drawing setting (S-0102 r43, Q-2467): its off position
+    /// moves objects only between the lists the drawing reads, and the
+    /// simulation's list readers take the on position's membership in both
+    /// positions, so it never reaches the simulation (S-0306 r75 claim 17).
     pub layer_change_on_events_only: bool,
     /// `quirks.enable_unfreezes_unpowered` (S-0108 claims 13, 26 and 28):
     /// re-enabling a disabled building (a switch-on, also in a house short
