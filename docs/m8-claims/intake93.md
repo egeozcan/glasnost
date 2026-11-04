@@ -53,3 +53,14 @@ run's end).
    projectile of that firer is still in flight at the end (`Findings::cut_short`). Without this
    rule, the control's last shots fail the hit rows: the run stops before their third fragment
    lands.
+
+## Checks and lanes
+
+The base was 6b439cd, rebased onto 445d0f1 before hand-back. On 6b439cd, every lane gave the
+same result before and after this change: the M6c, M7a and M7b sweeps over seeds 1 to 16, the
+AI quick lane (36 games, seeds 7 to 10 on maps 0, 2 and 8), `glasnost-ai` with ignored tests,
+the sim-gate goldens, and the arena (13 of 155 scored pairings failing, the same pairings). The
+new effect fields change no game. After the rebase, the sweeps and the arena match 6b439cd. The
+quick lane's games differ, which comes from main's own AI commits (seam trace 4). All 36 games
+end with a winner. `glasnost-ai` with ignored tests passes. M-0021's rows are the same on both
+bases.
