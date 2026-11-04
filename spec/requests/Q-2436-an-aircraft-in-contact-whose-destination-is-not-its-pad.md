@@ -1,9 +1,9 @@
 ---
 id: Q-2436
 title: An aircraft in enter, in contact, whose destination is not its pad
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
