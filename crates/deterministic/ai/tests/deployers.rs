@@ -15,7 +15,7 @@ use glasnost_sim::econ::inplace::{self, Form};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
+use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
 
 /// The fixture's rules with DEPT (a gun vehicle that deploys in place), FIRE
 /// (a deploy-fire vehicle), DEPI (a rifleman that deploys to fire, with
@@ -282,6 +282,65 @@ fn packs_up_a_deployed_rifleman_with_no_enemy_in_range() {
         }
         assert!(!deployed(&w, unit), "packed up");
     }
+}
+
+fn attacks(orders: &[Order], who: ObjectId, at: ObjectId) -> bool {
+    orders.iter().any(|o| {
+        matches!(
+            o,
+            Order::Behaviour { actor, behaviour: Behaviour::Attack, target: Some(Target::Object(t)), .. }
+                if *actor == who && *t == at
+        )
+    })
+}
+
+// S-0213 claim 10, S-0517 claim 16 and S-0309 table C (row *harmless building*), PLAN §4.7 (our own AI's design, M8 seam trace 4): the deploy order clears a rifleman's target and, deployed, its range search never takes an enemy building with no weapon and no threat, so it stands with no target beside it; the brain then clicks it on that building, once, as a person would, and it fires from its deployed form.
+#[test]
+fn clicks_a_deployed_rifleman_on_a_harmless_building_in_range() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, unit) = scene(&g, Kind::Infantry, "DEPI", None);
+    let at = w.obj(unit).expect("the rifleman").pos.cell();
+    let plant_cell = CellXY::new(at.x + 2, at.y);
+    let plant = testkit::spawn(&mut w, Kind::Building, "POWR", 1, plant_cell, 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, HouseId(0), Pos::centre(plant_cell, 0), 3);
+    glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Deploy { actor: unit });
+    for _ in 0..150 {
+        testkit::run(&mut w, 1);
+    }
+    let full = w.obj(plant).expect("the plant").health;
+    assert!(deployed(&w, unit), "deployed");
+    assert_eq!(
+        w.obj(unit).expect("the rifleman").target,
+        None,
+        "the sim gives it no target"
+    );
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(attacks(&orders, unit, plant), "{orders:?}");
+    assert!(!deploys(&orders, unit), "it stays deployed: {orders:?}");
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..150 {
+        testkit::run(&mut w, 1);
+    }
+    assert!(deployed(&w, unit), "still deployed");
+    assert_eq!(
+        w.obj(unit).expect("the rifleman").target,
+        Some(Target::Object(plant))
+    );
+    assert!(
+        w.obj(plant).expect("the plant").health < full,
+        "it fires at the plant"
+    );
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    assert!(!attacks(&brain.think(&w), unit, plant), "once");
 }
 
 // S-0215 claim 31 rows 3 to 5, PLAN §4.7 (M8 step B7): a radiation-immune firing infantry unit fires at its own cell when deployed, so it is deployed with a seen enemy near though beyond its rifle's range, stays deployed while one is near, and is packed up when none is.

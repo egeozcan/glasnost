@@ -17,11 +17,11 @@ use glasnost_sim::econ::{deploy, inplace};
 use glasnost_sim::infantry::Seq;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
-use glasnost_sim::targeting;
+use glasnost_sim::targeting::{self, Action};
 use glasnost_sim::world::{ObjectId, Target, World};
 
 use crate::scripted::{self, Script, dist2};
-use crate::special::Special;
+use crate::special::{Special, click_if};
 
 /// How near, in cells, an enemy must be for the house to deploy a unit.
 const NEAR: i64 = 9; // nocite: tuning of our own opponent
@@ -186,7 +186,63 @@ impl Special {
             if order {
                 out.push(Order::Deploy { actor: id });
                 self.count_deploy();
+            } else if firing_infantry(w, id)
+                && !own_cell_firer(w, id)
+                && let Some(e) = self.retarget(id, &enemies, w)
+                && let Some(orders) = click_if(w, script.house, id, e, &[Action::Attack])
+            {
+                out.extend(orders);
             }
         }
+    }
+
+    /// The enemy a deployed firing infantry unit that rests with no target
+    /// is told to attack: the nearest seen enemy in the range of its
+    /// deployed weapon that it can attack, one it was not already sent at
+    /// from where it stands (`memory`).
+    ///
+    /// The deploy order clears the unit's target (S-0213 claim 10), and
+    /// deployed it finds targets only by its range search (S-0517 claim
+    /// 16), which never takes a building with no weapon or no threat for a
+    /// player house's searcher (S-0309 table C, row *harmless building*;
+    /// Terms, *Houses in our engine*). A rifleman deployed by a power plant
+    /// it was firing at therefore stood with no target while the plant
+    /// stood (M8 seam trace 4: about 5 200 ticks in one quick-lane game),
+    /// as nothing else gives a deployed unit an order: it is not idle for a
+    /// wave (`scripted::idle`), and with an enemy in range it is not packed
+    /// up. A person who deploys a rifleman beside such a building clicks it
+    /// on the building.
+    fn retarget(
+        &self,
+        id: ObjectId,
+        enemies: &[(ObjectId, CellXY)],
+        w: &World,
+    ) -> Option<ObjectId> {
+        let o = w.obj(id)?;
+        // design: only once the deploy has settled (a click during the deploy sequence is not given), with no target and in a resting behaviour (M8 seam trace 4)
+        let settled = o
+            .infantry
+            .as_ref()
+            .and_then(|s| s.seq)
+            .is_some_and(|s| s.is_deploy() && s != Seq::Deploy);
+        let resting = matches!(
+            o.beh.current,
+            None | Some(Behaviour::Guard | Behaviour::AreaGuard | Behaviour::Stop)
+        );
+        if !settled || !resting || o.target.is_some() {
+            return None;
+        }
+        let at = o.pos.cell();
+        enemies
+            .iter()
+            .filter(|&&(e, _)| {
+                // spec: S-0215 claim 37 (b) (the range test of S-0307 with the weapon chosen for the target)
+                glasnost_sim::approach::in_range(w, id, Target::Object(e))
+                    && scripted::can_attack(w, id, e)
+                    && self.memory.ok(w, id, Target::Object(e))
+                    && !self.memory.pending(w, id, Target::Object(e))
+            })
+            .min_by_key(|&&(e, c)| (dist2(c, at), e))
+            .map(|&(e, _)| e)
     }
 }
