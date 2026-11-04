@@ -2,13 +2,13 @@
 id: S-0609
 title: Gattling spin-up
 topic: combat
-revision: 6
-sources-class: [decomp, design]
+revision: 7
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
-measurements: []
-requests: [Q-1220, Q-1151]
+approved-on: 2026-11-04
+measurements: [M-0021]
+requests: [Q-1220, Q-1151, Q-1714]
 supersedes: []
 ---
 
@@ -87,7 +87,10 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
 
    Because the rise test reads the value before the update, a stage rises one update after the
    update that first carried the value to its threshold.
-   - Backing: `measurable` (G1, G2)
+   - Backing: `measured` (M-0021, for a vehicle type with two stages, thresholds 30 and 60 and
+     a spin-up amount of 1: at every rise from stage 0 to stage 1 the value reads 30 in the tick
+     before and 31 in the tick of the rise, and the largest value read is the cap, 60, in every
+     run); `measurable` (G1, G2) for other amounts, stage counts and the overshoot
    - Confidence: high
 
 3. **Spin-down update.** A spin-down update with multiplier *m* lowers the value by *a* = *d* × *m*,
@@ -95,7 +98,10 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
    value is below *T*_s, the threshold that raised it to its current stage (F2). A stage falls by at
    most one per update, even when the value falls by more than one band. When *a* = 0 (a spin-down
    amount of 0) the update sets the value to 0 (`quirks.gattling_zero_spin_down_empties`).
-   - Backing: `measurable` (G2, G6)
+   - Backing: `measured` (M-0021's part B, for the same type with a spin-down amount of 1: at
+     every fall from stage 1 to stage 0 the value reads 30 in the tick before and 29 in the tick
+     of the fall); `measurable` (G2, G6) for falls of more than one band and the
+     amount of 0
    - Confidence: high
 
 4. **Normal and elite thresholds.** Every comparison of claims 2, 3 and 9 uses the thresholds in
