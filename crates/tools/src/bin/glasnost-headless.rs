@@ -41,7 +41,10 @@
 //!   arena records (M-0001 to M-0003: front matter plus the sibling CSV)
 //!   played in our engine with their setup and compared per pairing;
 //!   writes the git-ignored `local-lane/m7b/arena/ours-<ID>.csv` and
-//!   `oracle-<ID>.txt`.
+//!   `oracle-<ID>.txt`. `--record M-0021` (and `all`, with no other
+//!   option) plays M-0021's test pairing on M-0001's ground and judges each
+//!   row of its Result (`glasnost_tools::oracle_m0021`); its report, with
+//!   the record's local values, goes to `oracle-M-0021.txt`.
 //! - `glasnost-headless desync <bundle A> <bundle B>`: two peers' desync
 //!   reports (M9 N4, `glasnost_tools::desync`) compared: the first
 //!   differing tick and a field-by-field diff of objects, houses, the

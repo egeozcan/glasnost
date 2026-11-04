@@ -141,6 +141,9 @@ pub enum Effect {
         /// The firer's type has the gattling flag: it plays no per-shot
         /// report (S-0609 claim 13).
         gattling: bool,
+        /// The shot's target (read by the arena's M-0021 recorder, which
+        /// judges each shot against its target).
+        target: crate::world::Target,
     },
     /// A hit's damage-state result (S-0302 claim 12), for the sound
     /// reactions of S-0701 claims 20 and 28. Not reported for a hit that
@@ -159,6 +162,11 @@ pub enum Effect {
         result: crate::combat::damage::HitResult,
         /// The attacker, if any.
         attacker: Option<ObjectId>,
+        /// The hit's warhead, if any (read by the arena's M-0021 recorder,
+        /// which tells a shot's hits from its fragments' by warhead).
+        warhead: Option<crate::combat::data::WarheadId>,
+        /// The object's health before the hit and after it.
+        health: (i32, i32),
     },
     /// A gas particle hit an object (S-0613 claim 13); the hit itself is
     /// ordinary damage, reported as for any other.

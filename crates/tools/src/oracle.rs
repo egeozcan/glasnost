@@ -995,6 +995,17 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 /// sha256; the map inside it is decoded with the install's rules and the
 /// map's rules layer.
 pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, String> {
+    stock_inputs(dir, map_file, sha256).map(|(g, _, _)| g)
+}
+
+/// [`stock_ground`], with the resolved ruleset it was built from and that
+/// ruleset's hash, for a record that adds test types of its own to the
+/// install's rules (M-0021).
+pub fn stock_inputs(
+    dir: &Path,
+    map_file: &str,
+    sha256: &str,
+) -> Result<(Ground, glasnost_rules::schema::Ruleset, String), String> {
     let entry = std::fs::read_dir(dir)
         .map_err(|e| format!("could not read the install ({:?})", e.kind()))?
         .flatten()
@@ -1042,14 +1053,15 @@ pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, 
             .waypoints
             .get(&W_WAYPOINT)
             .ok_or_else(|| format!("{map_file} has no waypoint {W_WAYPOINT}"))?;
-        Ok(Ground {
+        let ground = Ground {
             rules: Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)),
             map,
             tiles: Arc::new(tiles),
             w: CellXY::new(i32::from(x), i32::from(y)),
             countries: COUNTRIES.map(str::to_owned),
             computer: true,
-        })
+        };
+        Ok((ground, resolved.ruleset, resolved.sim_rules_hash))
     })
 }
 
@@ -1453,6 +1465,67 @@ pub fn setup(
     row_side: Side,
     seed: u32,
 ) -> Result<Arena, String> {
+    setup_with(ground, types, row_side, seed, &SetupOptions::default())
+}
+
+/// What a record's set-up changes in [`setup`]'s (M-0021, Setup).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SetupOptions {
+    /// Each group's count, in place of the budget's ([`group`]).
+    pub count: Option<u32>,
+    /// The house whose group stands on side A's cells, and side B's. The
+    /// default is [`SIDE_HOUSES`]; swapped, side A's house's group stands
+    /// on side B's cells, facing as side B's, and the houses keep their
+    /// countries and start positions.
+    pub houses: [HouseId; 2],
+    /// Every object of the neutral house is taken off before the groups,
+    /// as the vehicles of *Removal before the groups* are.
+    pub clear_neutral: bool,
+}
+
+impl Default for SetupOptions {
+    fn default() -> Self {
+        Self {
+            count: None,
+            houses: SIDE_HOUSES,
+            clear_neutral: false,
+        }
+    }
+}
+
+/// Takes off the map every object of the neutral house (M-0021, Setup:
+/// every object of the map's neutral house removed), as
+/// [`take_off_before_the_groups`] takes its vehicles: with no draw and no
+/// recalculation of its cells. Returns the objects taken, in creation order.
+pub fn take_off_neutral(w: &mut World) -> Vec<ObjectId> {
+    let neutral: Vec<HouseId> = w
+        .houses
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| h.role == glasnost_sim::world::HouseRole::Neutral)
+        .filter_map(|(i, _)| u8::try_from(i).ok().map(HouseId))
+        .collect();
+    let gone: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner.is_some_and(|h| neutral.contains(&h)))
+        .map(|o| o.id)
+        .collect();
+    for &id in &gone {
+        // measure: M-0021 (Setup, What is not stock: every object of the map's neutral house removed; taken out as claim 8's vehicles are, our choice)
+        glasnost_sim::objects::take_out_quietly(w, id);
+    }
+    gone
+}
+
+/// [`setup`] with a record's changes ([`SetupOptions`]).
+pub fn setup_with(
+    ground: &Ground,
+    types: [&str; 2],
+    row_side: Side,
+    seed: u32,
+    opts: &SetupOptions,
+) -> Result<Arena, String> {
     let rules = &ground.rules;
     // spec: S-0216 claim 8 (Seeds and the human player house's country, r69: the game for seed number s seeds the generator with 1000 + s)
     let stream_seed = game_seed(seed).ok_or_else(|| format!("seed number {seed} is too large"))?;
@@ -1494,7 +1567,7 @@ pub fn setup(
     // spec: S-0216 claim 8 (Game start, r67: the bases setting on, so each player house gets its base unit, S-0009 claims 45 and 46)
     gs.bases = true;
     gs.game_speed = FASTEST;
-    let houses = SIDE_HOUSES;
+    let houses = opts.houses;
     if ground.computer {
         // measure: M-0001 (Setup, Players: two computer houses). Both
         // houses are test-only computer-controlled player houses (glossary;
@@ -1508,7 +1581,10 @@ pub fn setup(
     // spec: S-0216 claim 8 (Game start, r67: no house treats the human player house as an enemy; no object targets or damages its objects; design, copied from M-0001's Setup)
     w.houses[usize::from(HUMAN.0)].idle_test_house = true;
     // spec: S-0216 claim 8 (Removal before the groups, r67: after resource-glint setup, the last of new_game's draws, and before the first group's first creation)
-    let removed = take_off_before_the_groups(&mut w, HUMAN);
+    let mut removed = take_off_before_the_groups(&mut w, HUMAN);
+    if opts.clear_neutral {
+        removed.extend(take_off_neutral(&mut w));
+    }
     if ground.computer {
         // spec: S-0215 Terms and S-0309 Terms (Test-only exception: a marked test house takes its oracle house's skill level and difficulty index, and has no teams)
         // spec: S-0412 claim 3 (a computer player house: the rules' maximum house skill level)
@@ -1537,7 +1613,8 @@ pub fn setup(
     };
     for side in order {
         let s = side.index();
-        let (kind, n, _) = group(rules, types[s])?;
+        let (kind, budget_n, _) = group(rules, types[s])?;
+        let n = opts.count.unwrap_or(budget_n);
         let ti = rules
             .index_of(kind, types[s])
             .ok_or_else(|| format!("{}: no type of that ID", types[s]))?;
@@ -2206,6 +2283,82 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
 /// the install (`None`: only `--compare-only` works). Returns the report.
 pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
     let records = load_records(&cli.measurements)?;
+    let only_m0021 = cli.record.eq_ignore_ascii_case(crate::oracle_m0021::ID);
+    if only_m0021 {
+        return run_m0021(cli, game_dir, &records);
+    }
+    let mut out = run_records(cli, game_dir, &records)?;
+    let plain = cli.pairings.is_empty()
+        && !cli.compare_only
+        && !cli.groups
+        && cli.spread.is_none()
+        && cli.trace.is_none()
+        && cli.seed_range.is_none()
+        && cli.watch.is_none();
+    if cli.record.eq_ignore_ascii_case("all") && plain {
+        out.push_str(&run_m0021(cli, game_dir, &records)?);
+    }
+    Ok(out)
+}
+
+/// M-0021's test pairing ([`crate::oracle_m0021`]) on M-0001's ground: the
+/// verdicts to the output, the whole report (with its local values) to
+/// `oracle-M-0021.txt` in the output directory. Skipped when M-0021's
+/// record file is not in the measurements directory.
+pub fn run_m0021(
+    cli: &Cli,
+    game_dir: Option<&Path>,
+    records: &[OracleRecord],
+) -> Result<String, String> {
+    use crate::oracle_m0021 as m21;
+    let present = record_paths(&cli.measurements).iter().any(|p| {
+        p.file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with(m21::ID))
+    });
+    if !present {
+        return Ok(format!(
+            "skipped: no {} record in {}\n",
+            m21::ID,
+            cli.measurements.display()
+        ));
+    }
+    let Some(map) = find_record(records, m21::MAP_RECORD) else {
+        return Ok(format!(
+            "skipped: {} plays on {}'s map, and {} is not in {}\n",
+            m21::ID,
+            m21::MAP_RECORD,
+            m21::MAP_RECORD,
+            cli.measurements.display()
+        ));
+    };
+    let dir = game_dir.ok_or_else(|| {
+        format!(
+            "{} is not set: the oracle arena needs the install (local lane only)",
+            crate::local_lane::GAME_DIR_VAR
+        )
+    })?;
+    let (ground, base, hash) = stock_inputs(dir, &map.map_file, &map.map_sha256)?;
+    let from = m21::base_from_env(m21::DEFAULT_BASE);
+    let t0 = std::time::Instant::now();
+    let (summary, full) = m21::run(&ground, &base, &hash, &from, cli.threads)?;
+    std::fs::create_dir_all(&cli.out).map_err(|e| format!("{}: {e}", cli.out.display()))?;
+    let txt = cli.out.join(format!("oracle-{}.txt", m21::ID));
+    std::fs::write(&txt, &full).map_err(|e| format!("{}: {e}", txt.display()))?;
+    Ok(format!(
+        "{}: played on {} threads in {} s\n{summary}wrote {} (git-ignored, with local values; never commit it)\n",
+        m21::ID,
+        cli.threads,
+        t0.elapsed().as_secs(),
+        txt.display()
+    ))
+}
+
+/// [`run_cli`] for the records with a games file (M-0001 to M-0003).
+fn run_records(
+    cli: &Cli,
+    game_dir: Option<&Path>,
+    records: &[OracleRecord],
+) -> Result<String, String> {
     if records.is_empty() {
         return Ok(format!(
             "skipped: no oracle arena record in {}\n",
@@ -2216,7 +2369,7 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
         records.iter().collect()
     } else {
         vec![
-            find_record(&records, &cli.record)
+            find_record(records, &cli.record)
                 .ok_or_else(|| format!("no oracle arena record {}", cli.record))?,
         ]
     };

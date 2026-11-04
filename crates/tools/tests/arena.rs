@@ -723,6 +723,48 @@ fn arena_matches_the_oracle() {
     );
 }
 
+/// The local lane's check of M-0021 (never in CI): with `GLASNOST_GAME_DIR`
+/// set, the record's 16 runs of its test pairing are played on M-0001's
+/// ground with its setup (`glasnost_tools::oracle_m0021`) and each row of
+/// its Result is judged. The verdicts are printed; the report with the
+/// record's local values goes to the git-ignored
+/// `local-lane/m7b/arena/oracle-M-0021.txt`. Fails while a row the record
+/// marks `exact` fails; see docs/development.md, *Arena mode*, for the
+/// rows that do.
+#[test]
+fn m0021_rows_hold_in_our_engine() {
+    let records = oracle::load_records(&measurements()).unwrap();
+    let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+        println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
+        return;
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let cli = oracle::Cli {
+        record: glasnost_tools::oracle_m0021::ID.into(),
+        pairings: Vec::new(),
+        threads: 4,
+        out: root.join("local-lane/m7b/arena"),
+        measurements: measurements(),
+        compare_only: false,
+        watch: None,
+        trace: None,
+        groups: false,
+        spread: None,
+        ai_houses: false,
+        seed_range: None,
+    };
+    let report = oracle::run_m0021(&cli, Some(Path::new(&dir)), &records).unwrap();
+    println!("{report}");
+    if report.starts_with("skipped") {
+        return;
+    }
+    // measure: M-0021 (every row marked exact holds)
+    assert!(
+        report.contains("M-0021: rows failing: 0 of"),
+        "a row of M-0021 fails in our engine"
+    );
+}
+
 /// The oracle comparison end to end on the synthetic ground: a record made
 /// in a temporary folder from our own games passes; the same record with
 /// the winners swapped fails. Invented test data, not measurements.

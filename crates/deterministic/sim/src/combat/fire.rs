@@ -315,7 +315,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let _ = mode;
     // spec: S-0615 claim 12 (a disc laser shot plays no report at the shot; claim 16: the report comes with the damage)
     if !wr.disk_laser {
-        crate::combat::projectile::shot_effect(w, firer, weapon, fp);
+        crate::combat::projectile::shot_effect(w, firer, weapon, fp, shot_target);
         crate::combat::effects::line(w, firer, weapon, fp, shot_target);
     }
     // spec: S-0316 claims 1 and 2 (a shot that put its projectile on the map makes one bolt and its sparks in the tick of the shot, after the report; a firing that launches no projectile, such as a spawner's or a disc laser's, and a void shot make neither; each shot of a burst its own)
