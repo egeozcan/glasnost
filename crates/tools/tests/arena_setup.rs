@@ -392,7 +392,8 @@ fn pt6_the_row_types_group_is_created_first_on_whichever_side_it_plays() {
             a.moved.iter().all(|m| m.side != row_side || m.index > 0),
             "the first unit stands on its stated cell"
         );
-        let mut fresh = glasnost_sim::rng::Rng::new(2);
+        // spec: S-0216 claim 8 (Seeds, r69: seed number 2's stream is seeded with 1000 + 2)
+        let mut fresh = glasnost_sim::rng::Rng::new(oracle::game_seed(2).unwrap());
         for _ in 0..a.first_raw {
             fresh.raw();
         }
@@ -470,8 +471,43 @@ fn pt6_game_start_houses_in_claim_19s_order() {
             "{h:?}: a computer house"
         );
     }
+    // spec: S-0216 claim 8 (Seeds and the human player house's country, r69: the human player house takes side A's country, design)
+    let country =
+        |h: HouseId| w.rules().country_names[w.houses[usize::from(h.0)].country as usize].clone();
+    assert_eq!(country(oracle::HUMAN), g.countries[0]);
+    assert_eq!(country(oracle::SIDE_HOUSES[0]), g.countries[0]);
     // spec: S-0216 claim 8 (Game start: crates off)
     assert_eq!(w.econ.settings.crates, Some(false));
+}
+
+#[test]
+fn pt6_seed_number_s_seeds_the_stream_with_1000_plus_s() {
+    // spec: S-0216 claim 8 (Seeds and the human player house's country, r69, Q-2447 answered: the arena's game for seed number s seeds S-0202's generator with 1000 + s; the Acceptance item, PT6 and every per-seed comparison use that seed)
+    assert_eq!(oracle::game_seed(0), Some(1000));
+    assert_eq!(oracle::game_seed(5), Some(1005));
+    assert_eq!(oracle::game_seed(u32::MAX), None);
+    let g = ground(1500, 1500);
+    for seed in oracle::SEEDS {
+        let a = oracle::setup(&g, ["CART", "WALKER"], Side::A, seed).unwrap();
+        let first = a.units[0][0];
+        // The first set-up object's creation draw takes the raw value at
+        // place first_raw of the stream seeded with 1000 + s, not of the
+        // stream seeded with s.
+        let at = |s: u32| {
+            let mut r = Rng::new(s);
+            for _ in 0..a.first_raw {
+                r.raw();
+            }
+            (r.raw() & 0xFFFF) as u16
+        };
+        let got = a.world.obj(first).unwrap().report_value;
+        assert_eq!(got, at(1000 + seed), "seed number {seed}");
+        assert_ne!(
+            got,
+            at(seed),
+            "seed number {seed}: not the stream seeded with {seed}"
+        );
+    }
 }
 
 #[test]
@@ -483,7 +519,8 @@ fn pt6_game_start_two_house_rounds_three_base_units_then_the_final_draw() {
         let w = &a.world;
         let half = w.rules().quirks.ranged_draw_half_span;
         let k = creation_draws(w, Kind::Vehicle, oracle::SYNTHETIC_BASE_UNIT);
-        let mut want = Rng::new(seed);
+        // spec: S-0216 claim 8 (Seeds, r69: seed number s's stream is seeded with 1000 + s)
+        let mut want = Rng::new(oracle::game_seed(seed).unwrap());
         for _ in 0..2 * w.houses.len() {
             // spec: S-0202 claim 14 (one R(450, 1800) per house and round)
             let _ = want.ranged(450, 1800, half);

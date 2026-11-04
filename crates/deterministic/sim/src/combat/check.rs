@@ -356,9 +356,14 @@ pub fn check_lasting(w: &World, firer: ObjectId, target: Option<Target>, slot: u
 /// against `target`, at any rank, every other answer passed over: S-0214
 /// claim 6 (e) with `quirks.moment_reason_attack_cursor` off. No range
 /// test is asked (part (d) is the range part), and with no weapon in the
-/// slot nothing is (part (e) holds for an actor with no weapon). Which
-/// answers the switch passes over is under Q-2426 (interim: every answer
-/// that is not *illegal*).
+/// slot nothing further is (part (e) holds for an actor with no weapon).
+/// S-0214 r80's Edge case (Q-2426 answered) names what is passed over:
+/// every answer that is not *illegal*, so an *illegal* reason ranked below
+/// one still answers: *busy* (rank 2), every *rearming* of ranks 4 and 5
+/// (the own-gripped-unit and magnetic-beam answers among them), every
+/// *impossible* (the hidden target's, the held spawner's, the other
+/// weapon's live effect, a building's own), out of ammunition, *cloaked*,
+/// *must deploy* and the other lower ranks.
 pub fn illegal_at_any_rank(
     w: &World,
     firer: ObjectId,
@@ -377,7 +382,8 @@ enum Ask {
     /// to 8 passed over.
     Lasting,
     /// Only the reasons that give *illegal*, at any rank (S-0214 claim 6
-    /// (e) with `quirks.moment_reason_attack_cursor` off; Q-2426 interim).
+    /// (e) with `quirks.moment_reason_attack_cursor` off; r80, Q-2426
+    /// answered).
     IllegalOnly,
 }
 
@@ -393,7 +399,7 @@ fn answer(
 ) -> Answer {
     // The reasons of ranks 5 to 8 and the materialising rearming are asked.
     let moment = ask == Ask::Every;
-    // An answer other than illegal is passed over, so that an illegal reason ranked below it still answers.
+    // spec: S-0214 r80 Edge cases (Q-2426 answered: with quirks.moment_reason_attack_cursor off, part (e) passes over every answer that is not illegal, so an illegal reason ranked below such an answer still answers; two stops remain, the empty slot and the range test, which is not asked)
     let pass = ask == Ask::IllegalOnly;
     let Some(o) = w.obj(firer) else {
         return Answer::Impossible;

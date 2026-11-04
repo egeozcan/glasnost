@@ -604,7 +604,9 @@ fn m0019_creation_order_and_positions_in_our_setup() {
 }
 
 /// The local lane's check of claim 8's M-0019 acceptance item (S-0216
-/// claim 8, *Acceptance*; never in CI): with the records' seeds 0 to 5,
+/// claim 8, *Acceptance*; never in CI): with the records' seed numbers 0
+/// to 5, each game's stream seeded with 1000 + *s* (r69, *Seeds and the
+/// human player house's country*; [`oracle::game_seed`]),
 /// the set-up's first object's creation draw takes the scenario stream's
 /// raw value at place *N*₀ of M-0019, in every pairing. Our place is the
 /// raw values our map loading and game start take (S-0202 claims 10 and
@@ -638,7 +640,8 @@ fn m0019_the_first_creation_draw_takes_the_raw_value_at_n0() {
     // (S-0202 claim 14; claims_s0202_houses). Diagnostics for the log.
     let houses = 5;
     for seed in 0..6u32 {
-        let mut r = glasnost_sim::rng::Rng::new(seed);
+        // spec: S-0216 claim 8 (Seeds, r69: seed number s's stream is seeded with 1000 + s)
+        let mut r = glasnost_sim::rng::Rng::new(oracle::game_seed(seed).unwrap());
         let half = g.rules.quirks.ranged_draw_half_span;
         for _ in 0..houses {
             // spec: S-0202 claim 14 (one ranged draw R(450, 1800) per house created)
@@ -663,7 +666,7 @@ fn m0019_the_first_creation_draw_takes_the_raw_value_at_n0() {
         "the place depends on the pairing: {differs:#?}"
     );
     let ours: Vec<u64> = ours.iter().map(|x| x.unwrap_or(0)).collect();
-    // spec: S-0216 claim 8 (Acceptance, r59: the first object's creation draw takes the raw value at place N₀ of M-0019 for the seed, in every pairing)
+    // spec: S-0216 claim 8 (Acceptance, r69: with the records' seed numbers 0 to 5, each game seeded as the bullet on seeds gives, the first object's creation draw takes the raw value at place N₀ of M-0019 for the seed, in every pairing)
     assert_eq!(
         ours, N0,
         "our place of the first creation draw against M-0019's N₀"

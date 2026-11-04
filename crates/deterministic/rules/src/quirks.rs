@@ -556,8 +556,8 @@ pub struct Quirks {
     // spec: S-0214 claim 21 and Edge cases
     #[serde(default = "on")]
     pub damaging_entry_cursor_retained: bool,
-    /// The attack rule's part (e) takes the firing check's answer, so a reason of the moment that ranks above a target test hides it: while the rearm countdown runs, out of ammunition, cloaked, or with an early rearming of rank 4 (phasing in among them) the attack is offered over a target only those tests refuse; off: part (e) asks only whether a reason that gives illegal holds, at any rank, passing over every reason of the moment.
-    // spec: S-0214 claim 6 (e) and Edge cases (Attack offered over a reason of the moment)
+    /// The attack rule's part (e) takes the firing check's answer, so a reason of the moment that ranks above a target test hides it: while the rearm countdown runs, out of ammunition, cloaked, or with an early rearming of rank 4 (phasing in among them) the attack is offered over a target only those tests refuse; off: part (e) asks only whether a reason that gives illegal holds, at any rank, passing over every answer that is not illegal (busy, every rearming and impossible, out of ammunition, cloaked, must deploy and the lower ranks), a design choice.
+    // spec: S-0214 claim 6 (e) and Edge cases (Attack offered over a reason of the moment; r80, Q-2426 answered: the off position passes over every answer that is not illegal)
     #[serde(default = "on")]
     pub moment_reason_attack_cursor: bool,
     /// View-arrow presses and releases made during an order block are discarded; off: they are accepted (unit orders stay blocked).
