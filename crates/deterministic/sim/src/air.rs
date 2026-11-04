@@ -280,6 +280,20 @@ pub struct AirState {
     /// replaced by that processing's delay (S-0215 claims 2 and 3), so the
     /// start flag alone does not mark its first processing.
     pub first_moved: Option<i32>,
+    /// The flight point was given with no destination object: being given
+    /// no destination in flight, moving and not landing, the aircraft lands
+    /// where it is (claim 6, r120, Q-2507). While it has no destination its
+    /// flight flies to [`AirState::flying_to`]; cleared with that point.
+    pub own_point: bool,
+    /// The destination claim 8's exception ignored when it was handed to
+    /// the flight (r120: the test is made only at hand-over): while the
+    /// aircraft's destination is this one, its flight keeps its flight
+    /// point.
+    pub ignored: Option<Target>,
+    /// A refused touchdown forgot the destination and the flight point
+    /// (claim 7, r120): nothing moves the aircraft, which holds 10 leptons
+    /// above the refused cell until it gets a destination.
+    pub stranded: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -941,6 +955,9 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
         return;
     }
     pad_accepted(w, id, dest);
+    if dest.is_none() {
+        given_no_destination(w, id);
+    }
     if !st(w, id).released {
         return;
     }
@@ -957,6 +974,76 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
     {
         o.contact = None;
         o.econ.exit = None;
+    }
+}
+
+/// Aircraft `id` is given no destination (claims 6 and 8, r120, Q-2507):
+/// in flight, moving and not landing, it lands where it is. It gets a new
+/// flight point with no destination object, the centre of the cell claim
+/// 40's selection gives around the cell it is over now, with that
+/// selection's draws; in *attack* with a target it keeps its flight point
+/// (claim 42), and in *attack* with no target it takes an F8 landing spot.
+/// An aircraft that is not moving (no flight point: after a refused
+/// touchdown that forgot it, claim 7, or above claim 45's edge cell) is
+/// left as it is. The stop order, which clears the destination without
+/// [`crate::econ::assign_destination`], calls this too; the first movement
+/// update after any other clear does ([`tick_flight`]).
+pub(crate) fn given_no_destination(w: &mut World, id: ObjectId) {
+    if !is_aircraft(w, id) {
+        return;
+    }
+    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(a) = o.air.clone() else { return };
+    if o.dest.is_some() || !o.on_map || crate::combat::damage::dead(&o) {
+        return;
+    }
+    // spec: S-0501 claim 6 (r120, Q-2507: moving means that it holds a flight point or that its pitch is above zero; pitch is not modelled, claim 38, so it counts as 0; an aircraft claim 7 leaves with nothing to move it, or that claim 45 leaves above its edge cell, holds none: being given no destination changes nothing for it)
+    if a.flying_to.is_none() {
+        return;
+    }
+    // spec: S-0501 claim 6 (r120: an aircraft in flight, Terms: not on the ground by its height)
+    if a.ground || on_ground(w, id) {
+        return;
+    }
+    if a.landing {
+        // design: S-0501 Open question 28 and Q-2576 (being given no destination while its landing is under way was not traced; interim: the flight keeps the flight point it is landing at, with no destination object, and the landing goes on)
+        if let Some(s) = st_mut(w, id) {
+            s.own_point = true;
+            s.ignored = None;
+        }
+        return;
+    }
+    let attack_current = o.beh.current == Some(Behaviour::Attack);
+    let attack = attack_current || o.beh.queued == Some(Behaviour::Attack);
+    if attack && o.target.is_some() {
+        // spec: S-0501 claim 6 (r120) and claim 42 (an aircraft in attack, current or queued, that holds a target keeps its flight point and unfinished flight when its destination is cleared)
+        return;
+    }
+    let here = o.pos.cell();
+    let cell = if attack_current {
+        // spec: S-0501 claim 6 (r120, Q-2507: with attack current and no target, the cleared destination gives the flight an F8 landing spot as its flight point) and claim 41 (F8 always gives a cell: at worst its own current cell)
+        landing_spot(w, id).unwrap_or(here)
+    } else {
+        // spec: S-0501 claim 6 (r120, Q-2507: otherwise the centre of the cell claim 40's selection gives around the cell it is over at that moment; with attack queued, another behaviour current and no target too)
+        // design: S-0501 claim 6 and Q-2577 (r120: over a cell outside the usable area the selection starts from a cell on that area's edge, which is not traced; interim: it starts from the cell it is over, which F7 refuses, so the replacement search runs around that cell)
+        // spec: S-0501 claim 6 (r120: that cell itself when F7 and the flight-reservation test accept it, claim 40's test: F7 with the cell as the destination object, the reservation test without self)
+        if landing_cell_ok(w, id, here, Target::Cell(here)) && reservation_ok(w, id, here, false) {
+            here
+        } else {
+            // spec: S-0501 claim 6 (r120: else claim 40's replacement search around it, with that search's direction draws) and claim 40 (failure of all 32 radii retains the original cell)
+            replacement_search(w, id, here).unwrap_or(here)
+        }
+    };
+    let raised = raise_now(w, id);
+    if let Some(s) = st_mut(w, id) {
+        // spec: S-0501 claim 6 (r120, Q-2507: a new flight point with no destination object, the centre of that cell; the aircraft flies to it)
+        s.flying_to = Some(Target::Cell(cell));
+        s.own_point = true;
+        s.ignored = None;
+        // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
+        s.raised = raised;
+        // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
+        s.unfinished = true;
     }
 }
 
@@ -1207,13 +1294,18 @@ fn request(w: &mut World, id: ObjectId, which: Facet, f: Facing) {
 /// The destination whose flight point the aircraft flies to: its
 /// destination, or, after that was cleared in *attack* (current or
 /// queued) while it has a target, the destination of its still unfinished
-/// flight (claim 42).
+/// flight (claim 42), or, landing where it is, the flight point its cleared
+/// destination gave it (claim 6, [`AirState::own_point`]).
 fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
     let o = w.obj(id)?;
     if o.dest.is_some() {
         return o.dest;
     }
     let a = st(w, id);
+    if a.own_point {
+        // spec: S-0501 claim 6 (r120, Q-2507: landing where it is, the flight flies to the new flight point with no destination object)
+        return a.flying_to;
+    }
     let attack =
         o.beh.current == Some(Behaviour::Attack) || o.beh.queued == Some(Behaviour::Attack);
     // spec: S-0501 claim 42 (clearing the destination of an aircraft in attack, current or queued, that has a target does not end its flight: the flight point and unfinished flight remain)
@@ -1299,6 +1391,7 @@ fn take_off(w: &mut World, id: ObjectId, cruise: i32) {
         a.landing = false;
         a.ground = false;
         a.released = false;
+        a.stranded = false;
     }
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0501 claim 8 and claim 24 (standing on a pad, it leaves its reservation for any destination other than that pad); S-0417 claim 11 (the tether ends when it leaves the ground)
@@ -1613,6 +1706,9 @@ fn touchdown(w: &mut World, id: ObjectId) {
         a.tgt = F64::ZERO;
         a.flying_to = None;
         a.raised = false;
+        a.own_point = false;
+        a.ignored = None;
+        a.stranded = false;
         // spec: S-0501 claim 40 (landing settled: the completion clears the unfinished flight and the destination)
         a.unfinished = false;
         a.released = false;
@@ -1622,6 +1718,38 @@ fn touchdown(w: &mut World, id: ObjectId) {
     crate::threat::landed(w, id);
     // spec: S-0501 claim 7 (r103, Q-2366: an accepted touchdown forgets the aircraft's destination in that same movement update; neither an accepted nor a refused touchdown makes a fall-back to rest or an entry report itself: for an aircraft in enter its next processing makes the docking stage's step of claim 24)
     set_dest(w, id, None);
+}
+
+/// Claim 7's forget at touchdown (r120): whether the touchdown forgets the
+/// aircraft's destination and flight point before its cell is tested. It
+/// does when the aircraft is in the flight point's cell, and, wherever it
+/// is, when that cell holds the building it is in contact with; for an
+/// aircraft with no contact, a flight point's cell with no building counts
+/// as holding it. With no flight point there is nothing to compare.
+fn touchdown_forgets(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(f) = st(w, id).flying_to else {
+        return false;
+    };
+    let fc = flight_point(w, id, f).cell();
+    // spec: S-0501 claim 7 (r120: in the cell of that flight point, claim 40)
+    if o.pos.cell() == fc {
+        return true;
+    }
+    // The buildings a cell holds: those listed in its ground layer, which
+    // every foundation cell of a building lists.
+    let mut buildings = w
+        .cells
+        .list(fc, Layer::Ground)
+        .iter()
+        .copied()
+        .filter(|&x| w.obj(x).is_some_and(|b| b.kind == Kind::Building));
+    match o.contact {
+        // spec: S-0501 claim 7 (r120: wherever it is, when the flight point's cell holds the building it is in contact with; the owner, the pad-bound status and the kind of destination do not enter this test)
+        Some(k) => buildings.any(|x| x == k),
+        // spec: S-0501 claim 7 (r120: for an aircraft with no contact, a flight point's cell with no building counts as holding it)
+        None => buildings.next().is_none(),
+    }
 }
 
 /// Whether the aircraft stands in a cell of pad `k`'s foundation.
@@ -1884,12 +2012,19 @@ fn st_opt(w: &World, id: ObjectId) -> Option<&AirState> {
 /// off.
 fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
     if dest.is_some_and(|d| ignores(w, id, d)) {
-        // spec: S-0501 claim 8 (r110, Q-2437: a landing aircraft given a destination in the cell of its flight point ignores it: no take-off, the flight point stays as it was and it goes on landing there)
+        // spec: S-0501 claim 8 (r110, Q-2437: a landing aircraft given a destination in the cell of its flight point ignores it: no take-off, the flight point stays as it was and it goes on landing there) and r120 (Q-2507: the test is made only when the destination is handed to the flight; an ignored destination is still the aircraft's destination)
+        if let Some(a) = st_mut(w, id) {
+            a.ignored = dest;
+        }
         return;
     }
     let raised = raise_now(w, id);
     if let Some(a) = st_mut(w, id) {
         a.flying_to = dest;
+        a.own_point = false;
+        a.ignored = None;
+        // spec: S-0501 claim 7 (r120: the hold after a refused touchdown that forgot the destination lasts until it gets a destination)
+        a.stranded = false;
         // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
         a.raised = raised;
         // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
@@ -1908,23 +2043,20 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
 
 /// Claim 8's exception: whether landing aircraft `id`'s flight ignores
 /// destination `d`, given in the cell of the point it is landing at (claim
-/// 40's flight point: its docking position when it docks, claim 24; its own
-/// position when it lands where it is, claim 6).
+/// 40's flight point: its docking position when it docks, claim 24; the
+/// flight point its cleared destination gave it when it lands where it is,
+/// claim 6). The test is made only when a destination is handed to the
+/// flight ([`give_point`]); an ignored one is kept in
+/// [`AirState::ignored`].
 fn ignores(w: &World, id: ObjectId, d: Target) -> bool {
     let Some(a) = st_opt(w, id) else { return false };
     if !a.landing || a.flying_to == Some(d) {
         return false;
     }
-    // spec: S-0501 claim 8 (r110: the point it is landing at, its flight point, claim 40; its own position when it lands where it is, claim 6, read as its position now, Q-2507)
-    let at = match a.flying_to {
-        Some(f) => flight_point(w, id, f).cell(),
-        None => match w.obj(id) {
-            Some(o) => o.pos.cell(),
-            None => return false,
-        },
-    };
-    // spec: S-0501 claim 8 (r110: a destination in that cell, the cell of the point the destination gives the flight, claim 40)
-    flight_point(w, id, d).cell() == at
+    // spec: S-0501 claim 8 (r120, Q-2507: the point it is landing at is its flight point, claim 40, the one its cleared destination gave it when it lands where it is, claim 6, not its position; with no flight point there is no such point)
+    let Some(f) = a.flying_to else { return false };
+    // spec: S-0501 claim 8 (r120: the cell compared is that of the new destination's heading point, claim 40, with that of the flight point)
+    heading_point_for(w, id, d).cell() == flight_point(w, id, f).cell()
 }
 
 fn tick_flight(w: &mut World, id: ObjectId) -> bool {
@@ -1983,10 +2115,22 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
+    if alive
+        && o.dest.is_none()
+        && a.flying_to.is_some()
+        && !a.own_point
+        && flight_target(w, id).is_none()
+    {
+        // spec: S-0501 claim 6 (r120, Q-2507: an aircraft in flight, moving and not landing that is given no destination lands where it is; a clear that did not go through the destination assignment is met at this movement update, with the aircraft where the clear left it)
+        given_no_destination(w, id);
+        let s = st(w, id);
+        (a.flying_to, a.own_point, a.ignored, a.raised, a.unfinished) =
+            (s.flying_to, s.own_point, s.ignored, s.raised, s.unfinished);
+    }
     // spec: S-0501 claim 42 (a destination cleared in attack with a target keeps the flight point: guidance and claim 5's slowing go on toward it)
     let mut dest = if dead { None } else { flight_target(w, id) };
-    if dest.is_some_and(|d| ignores(w, id, d)) {
-        // spec: S-0501 claim 8 (r110, Q-2437: its flight ignores a destination in the cell of the point it is landing at: the flight point stays as it was and it goes on landing there)
+    if dest.is_some() && dest == a.ignored {
+        // spec: S-0501 claim 8 (r110, Q-2437: its flight ignores a destination in the cell of the point it is landing at: the flight point stays as it was and it goes on landing there) and r120 (the test is made only at hand-over, not at the movement updates in between)
         dest = a.flying_to;
     }
     let dp = dest.map(|d| flight_point(w, id, d));
@@ -2028,6 +2172,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     if alive && dest.is_none() {
         a.flying_to = None;
         a.raised = false;
+        a.own_point = false;
     }
     if alive && a.released && dest.is_none() && a.cur == F64::ZERO {
         // spec: S-0501 claim 48 (a) (its movement updates move it only toward a destination: while it has none, neither its height nor its position changes)
@@ -2036,6 +2181,19 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         }
         return false;
     }
+    if alive && !a.landing && a.taking_off && a.held == 0 {
+        // spec: S-0501 claim 7 (r120: the take-off a refused touchdown starts ends in the next movement update after the one that refused it, whose take-off step clears it, and leaves its held height as it was, the landing's; only that take-off keeps the landing height 0 as held height, claim 8's take-off gives the cruise height)
+        a.taking_off = false;
+        // design: S-0501 claim 7 and Q-2578 (r120: the flight after a refusal that kept the destination is not traced; interim: from this update it is ordinary flight toward that destination, claims 4 to 6, with the held height of ordinary flight)
+    }
+    if alive && a.stranded && dest.is_none() {
+        // spec: S-0501 claim 7 (r120: a refused touchdown that forgot the destination and the flight point leaves the aircraft with nothing to move it: its movement updates change neither its height nor its position, and claim 6's landing triggers do not apply; it stays in flight, not landing, 10 leptons above the refused cell until it gets a destination)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.air = Some(a);
+        }
+        return false;
+    }
+    a.stranded = false;
     // The held height in ordinary flight (claim 6).
     let ordinary_held = |a: &AirState| {
         // spec: S-0501 claim 6 (below 768 leptons from the destination every marked approach uses the destination height minus the terrain height there)
@@ -2160,14 +2318,16 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             a.taking_off = false;
         }
         // spec: S-0501 claim 4 (a living descending aircraft with a destination moves 5 more leptons toward its destination cell's centre, after the forward step and the height reduction, except in enter toward a helipad building)
+        // spec: S-0501 claim 6 (r120, Q-2507: with no destination the descent move does not apply: landing where it is, the descent does not steer toward the flight point) and claim 8 (r120: an ignored destination is still the destination, so the descent move draws it toward that destination's cell centre)
+        let own_dest = o.dest;
         let toward_helipad = o.beh.current == Some(Behaviour::Enter)
-            && matches!(dest, Some(Target::Object(k)) if helipad(w, k));
+            && matches!(own_dest, Some(Target::Object(k)) if helipad(w, k));
         if alive
             && nh < h
             && !toward_helipad
-            && let Some(p) = dp
+            && let Some(od) = own_dest
         {
-            let c = p.cell();
+            let c = flight_point(w, id, od).cell();
             let centre = Pos::centre(c, 0);
             let now = w.obj(id).map_or(o.pos, |x| x.pos);
             // spec: S-0501 claim 4 (the direction by S-0204 claim 8, F3's facing conversion and table trigonometry with step length 5, no clamp; the world height kept)
@@ -2191,6 +2351,19 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     }
     // Touchdown (claim 7): changing into the ground layer.
     if alive && a.landing && height(w, id) <= 0 {
+        // spec: S-0501 claim 7 (r120: before its cell is tested, the touchdown forgets the destination and the flight point when the aircraft is in the flight point's cell, or, wherever it is, when that cell holds the building it is in contact with)
+        let forgot = touchdown_forgets(w, id);
+        if forgot {
+            // spec: S-0501 claim 7 (r120: the destination and the flight point are forgotten; the landing is still under way, so claim 6's landing where it is does not apply)
+            set_dest(w, id, None);
+            if let Some(s) = st_mut(w, id) {
+                s.flying_to = None;
+                s.raised = false;
+                s.unfinished = false;
+                s.own_point = false;
+                s.ignored = None;
+            }
+        }
         if landing_accepted(w, id) {
             touchdown(w, id);
         } else {
@@ -2201,7 +2374,10 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             if let Some(s) = st_mut(w, id) {
                 s.landing = false;
                 s.taking_off = true;
-                s.held = cruise;
+                // spec: S-0501 claim 7 (r120: that take-off leaves its held height as it was, the landing's)
+                s.ignored = None;
+                // spec: S-0501 claim 7 (r120: a refusal that forgot the destination and the flight point leaves nothing to move it)
+                s.stranded = forgot;
                 // spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts)
                 s.deck = false;
             }
@@ -2372,8 +2548,8 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool, ordinary: O
     }
     // spec: S-0501 claim 6 (r93, Q-2252: the cell tested is that of the flight point the flight holds, claim 40, not that of the destination object; with no flight point the test does not apply)
     let trigger = match flight_target(w, id) {
-        // spec: S-0501 claim 8 (no destination in flight: it lands where it is) and Terms (claim 48 (c)'s low release at height 0 is on the ground by its height, not in flight, as after its fall-back to rest, which stays at height 0 in its cell)
-        None => !low_release_at_height_0(w, id, &a),
+        // spec: S-0501 claim 6 (with no flight point the test does not apply) and r120 (Q-2507: an aircraft given no destination in flight, moving and not landing lands where it is through the flight point that gives it, [`given_no_destination`]; one that is not moving holds no flight point and starts no landing)
+        None => false,
         Some(dd) => {
             let p = flight_point(w, id, dd);
             let dist = planar(w, o.pos, p);
@@ -3046,7 +3222,7 @@ pub fn sale_started(w: &mut World, k: ObjectId) {
             )
         })
         .collect();
-    // design: S-0501 claim 24 and Q-2508 (r110: the order in which the aircraft in contact receive the notice is not given; interim: contact-place order, as a service step takes them, claim 26, and as depot::sale_started takes vehicles, since each notice can draw for its landing spot, F8)
+    // spec: S-0501 claim 24 (r120, Q-2508: the pad sends its notices in contact-place order, from place 0 up, S-0404 claim 15, each handled in full, its landing spot given and its contact ended, before the next is sent; ending a contact moves no other contact to another place; the order of granting counts only through the places taken; F8 takes no draws and reads no other aircraft's destination, so no spot depends on those given before it). A contact with no place of this pad, and equal places, follow in object order, which keeps the sort total
     list.sort_unstable();
     for (_, x) in list {
         if is_aircraft(w, x) {
@@ -3177,7 +3353,7 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
             // spec: S-0501 T2 (on the ground, visiting, with passengers: unload)
             Some(Behaviour::Unload)
         } else if a.visiting {
-            // spec: S-0501 T2 (on the ground, visiting, no passengers: forgets target and destination; retreat)
+            // spec: S-0501 T2 (on the ground, visiting, no passengers, not in a team: forgets target and destination; retreat) and r121 (the row in a team keeps target and destination and gives guard; our engine has no teams, claim 18, so it never applies)
             forget(w, id);
             Some(Behaviour::Retreat)
         } else {
@@ -3644,11 +3820,15 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
             dock(w, id, k);
             return 1; // spec: S-0501 claim 24 (the docking and entered-report stage returns 1 tick)
         }
-        // design: S-0501 claim 24 and Q-2506 (r110 gives no outcome for a processing of the docking stage in contact that finds the aircraft in flight and not landing, as after a refused touchdown; interim: back to the approaching stage, as before r110, which moves it on again when it next finds it landing)
-        if let Some(a) = st_mut(w, id) {
-            a.enter_docking = false;
+        if w.obj(id)
+            .is_some_and(|x| x.beh.start_tick != o.beh.start_tick)
+        {
+            // design: S-0501 claim 24 and Q-2579 (r120, Q-2506: with a behaviour queued, the pad's answer to the second rule's request starts entry again instead of the report; when the restarted entry's first processing comes is not given; interim: 1 tick later, as the docking stage's own delay, where the entry delay of 1 tick makes that first processing)
+            return 1; // design: S-0501 claim 24 and Q-2579 (interim: the docking stage's 1 tick)
         }
-        return APPROACH_DELAY; // design: S-0501 claim 24 and Q-2506 (interim: the approaching stage's 3 ticks)
+        // spec: S-0501 claim 24 (r120, Q-2506: the docking stage's processing tests whether the aircraft is landing, not its height: one in contact that finds it in flight and not landing, after a refused touchdown, reports entry at once, in flight, as after a touchdown; it is neither kept in the docking stage nor sent back to the approaching stage, and that processing does not move it)
+        report_entered(w, id, k);
+        return 1; // spec: S-0501 claim 24 (r120: the processing returns 1 tick and leaves it ready to change)
     }
     // spec: S-0501 claim 24 (r110, Q-2436: in the approaching stage, a processing in contact that finds the aircraft landing moves it on to the docking stage, and so does one that finds a pad-bound aircraft on the ground by its height and not landing; neither tests the position) and Edge cases (quirks.aircraft_grounded_enter_stall on: one that is not pad-bound, on the ground and not landing is never moved on; off: it is moved on as a pad-bound one is)
     let stall = w.rules().quirks.aircraft_grounded_enter_stall;
@@ -3765,7 +3945,7 @@ fn docking_without_contact(w: &mut World, id: ObjectId) -> i32 {
             docking_step(w, id, d);
         }
     } else {
-        // spec: S-0501 claim 24 (r103: the first processing that finds it no longer landing makes it fall back to rest, claim 18, whatever is queued: after an accepted touchdown, whose own movement update makes no fall-back, claim 7, or after a refused one; r110, Q-2437: it does not forget the destination first, so the fall-back sees the destination as it stands, none after an accepted touchdown, and in flight the destination it still has, for which T2's row of an armed aircraft already flying to its enter destination keeps it and gives guard)
+        // spec: S-0501 claim 24 (r103: the first processing that finds it no longer landing makes it fall back to rest, claim 18, whatever is queued: after an accepted touchdown, whose own movement update makes no fall-back, claim 7, or after a refused one that kept the destination; r110, Q-2437: it does not forget the destination first, so the fall-back sees the destination as it stands, none after an accepted touchdown, and in flight the destination it still has, for which T2's row of an armed aircraft already flying to its enter destination keeps it and gives guard; r120: a refused touchdown in its flight point's cell has made it forget its destination, so the second rule decides first, enter, and it falls back to rest at once with no destination)
         fall_back(w, id);
     }
     1 // spec: S-0501 claim 24 (r103: the docking stage's processings are 1 tick apart; the docking and entered-report stage returns 1 tick)
