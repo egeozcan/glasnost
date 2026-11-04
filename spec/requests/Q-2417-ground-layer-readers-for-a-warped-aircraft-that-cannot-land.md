@@ -1,9 +1,9 @@
 ---
 id: Q-2417
 title: Target search and seizing of a warped aircraft that cannot land, flying in the ground layer
-status: open
+status: answered
 related: [S-0306, S-0102, S-0309, S-0607, S-0501]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
