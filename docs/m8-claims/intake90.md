@@ -116,7 +116,20 @@ The four new failures and LTNK–E1's pass are seed noise of the same kind as be
 games of 12 flip a unanimous side). CAOS–APOC, CAOS–TTNK and CAOS–E2 failed before intake 87 too.
 We changed nothing to fit them: r69 fixes the seed, and with it M-0019's *N*₀ now holds exactly.
 
-The simulation code is unchanged apart from comments, so the M6c, M7a and M7b sweeps, the AI quick
-lane and the goldens cannot move; they were not run again (none goes through `oracle::setup`).
-`cargo test --release -p glasnost-ai -- --include-ignored` was run on the rebased tree (see the
-report).
+The simulation code is unchanged apart from comments, and none of the sweeps, the AI quick lane or
+the goldens goes through `oracle::setup`, so main's numbers are the same as the branch's by
+construction; `cargo xtask gate` passes with no golden moved. The M6c, M7a and M7b sweeps (seeds 1
+to 16, release) were run once on the branch and pass:
+
+- M6c: smallest minimum over 16 seeds 0 (seed 16 ends at tick 5801; its jumpjet orders, charger
+  orders and support beams counters are 0).
+- M7a: smallest minimum 0 (seed 10's hostile intent seen by a sensor is 0); psychic sensor orders
+  min 1, median 2.
+- M7b (8000 ticks a seed): no drain counter below the margin on any seed (drain orders min 3,
+  median 3; links formed min 3; mutator launches min 3, median 5; dominator launches min 6, median
+  7). Of the M7a counters it prints, gattling, gas, bunkered vehicles, lifts and seizures are 0 on
+  every seed; the margin applies to the drain counters only.
+
+The AI quick lane was not run: the intake brief ties it to a change of draw order, and there is
+none. `cargo test --release -p glasnost-ai -- --include-ignored` on the rebased tree: 246 passed,
+0 failed.
