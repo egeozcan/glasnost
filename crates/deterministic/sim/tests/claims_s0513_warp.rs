@@ -731,7 +731,7 @@ fn r108_claim34_a_listed_jumpjet_in_any_state_below_the_airborne_height_joins_th
 }
 
 #[test]
-fn r108_claim34_a_listed_jumpjet_at_the_airborne_height_is_not_examined() {
+fn r108_claim34_an_airborne_object_is_not_examined_listed_or_not() {
     // spec: S-0513 r108 claim 34 (one that is airborne, S-0307: at least 208 leptons above its surface, is not examined even while listed, so nothing applies to it); S-0307 Terms (airborne at 208)
     // A jumpjet's own turn lists it out of the ground layer at 208 leptons
     // (S-0502 claim 4), so the launch does not find it in the block's lists.
@@ -777,7 +777,8 @@ fn r108_claim34_the_height_of_a_jumpjet_on_a_deck_is_taken_above_the_deck() {
         // The deck is 416 above the terrain (S-0307 Constants): standing on
         // it, the jumpjet is at least 208 above the terrain, but at no
         // height above the deck. (Its take-off unsets the on-deck state,
-        // S-0502 claim 4, so in flight its height is the terrain's.)
+        // S-0502 claim 4 and scenario J3: "on-deck state ends at first
+        // rise", so in flight its height is the terrain's.)
         o.pos.z = terrain + 416; // spec: S-0307 Constants (bridge deck height 416)
         let jj = o.jump.as_mut().unwrap();
         jj.on_deck = true;
