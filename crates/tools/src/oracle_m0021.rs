@@ -1276,9 +1276,9 @@ fn reading_points(rec: &Recording) -> (Reading, Reach) {
                 match (last_row.get(&id), row(t, id)) {
                     (Some(&r), Some((_, h))) if r == t && h <= 0 => out.deaths_last_at_t += 1,
                     (r, at) => out.deaths_other.push(format!(
-                        "object {} hit at {t}: last row {:?}, row stamped t {:?}",
+                        "object {}: last row at t plus {:?}, health at row stamped t {:?}",
                         id.0,
-                        r,
+                        r.map(|r| r - t),
                         at.map(|(_, h)| h)
                     )),
                 }
@@ -1982,14 +1982,16 @@ pub fn seed_verdicts(groups: &[SeedGroup]) -> Vec<(String, Verdict)> {
         ),
     ));
     // measure: M-0021 (Result, Seeds: what agrees in the three seeds includes every vehicle's first shot: the other reading of that row, the first shot of each vehicle is the same in the seeds wherever it falls)
+    // Our own supplementary reading, not a row of the record: shown, not counted in the rows failing.
     let moved = bad(&|g| !g.diff.first_shots_same);
     out.push((
-        "seeds: every vehicle's first shot (tick, target, weapon) is the same in the three seeds"
+        "seeds (our reading): every vehicle's first shot (tick, target, weapon) is the same in the three seeds"
             .into(),
-        check(
-            moved.is_empty(),
-            format!("otherwise in: {}", moved.join(", ")),
-        ),
+        Verdict::Shown(if moved.is_empty() {
+            "holds in every part and side".into()
+        } else {
+            format!("does not hold in: {}", moved.join(", "))
+        }),
     ));
     // measure: M-0021 (Result, Seeds: the first difference is the tick of some G vehicles' second shots, exact)
     let kind = bad(&|g| {
