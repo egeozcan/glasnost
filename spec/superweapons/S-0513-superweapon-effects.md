@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 113
+revision: 115
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -963,10 +963,21 @@ presentation and swept-layer rules below also apply where those specs cite them.
     position in the destination's effect block as its own cell has in the source's block (F1): the
     group keeps its 3 × 3 shape, with no rotation. A vehicle lands at that cell's centre. An
     infantry unit or aircraft keeps its position within the cell. On a high-bridge cell the bridge
-    lift is added.
-    - Backing: `measurable` (scenario SW12 part c)
-    - Confidence: high; low for an object moving from one bridge deck to another (the lift may be
-      added twice)
+    lift is added. A member that does not move from one bridge deck to another appears at its
+    landing point at no height above its surface (on the deck when it lands on a high-bridge cell
+    from the ground), whatever its kind and, for an aircraft, whatever its visiting mark. This
+    appearance does not follow S-0501 claim 1's placement rule, so an aircraft whose type cannot
+    land does not appear at its cruise height (S-0306 claim 17). A member moving from one bridge
+    deck to another is as the confidence line below gives.
+    - Backing: `measurable` (scenario SW12 part c for the landing points; S-0306 scenario P46 run 2
+      for the height of an aircraft whose type cannot land). `unmeasured` for the height of every
+      other kind of member and for a landing from the ground onto a high-bridge deck: SW12 part c
+      judges no height and has no high-bridge cell, no scenario warps an aircraft of a landable
+      type, and S-0102 claim 3 gives the same reason for the deck case
+    - Confidence: high for the landing points; low for an object moving from one bridge deck to
+      another (the lift may be added twice); high for the height of an aircraft whose type cannot
+      land, as S-0306 claim 17 rates it; medium for the height of every other kind of member and
+      for a landing from the ground onto a deck, as S-0102 claim 3 rates it
 
 ### Teleport landing and timing
 
@@ -993,7 +1004,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Confidence: high for the outcomes; medium for the search settings
 
 38. **Fate on arrival.** In a member's arrival effects, the update after its placement at its
-    landing point (claim 39):
+    landing point (claim 39, an appearance at the height of claim 36, not S-0501 claim 1's rule):
     - if any protected object is listed in the landing cell's ground layer (even under a deck),
       the member is killed as in claim 37,
     - a member that lands on water, is not infantry, not naval, not a hover type (a hover type
