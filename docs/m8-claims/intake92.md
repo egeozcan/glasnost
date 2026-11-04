@@ -126,5 +126,5 @@ Before: main 445d0f1; after: this intake on it (main had not moved); same machin
 
 As at intake 86, the 12 games of sides 1 and 2 are unchanged, and 20 of the 24 games with side 0
 change course. Side 0 won 17 of its 24 games before and 16 after (against side 1: 10 of 12, then 8;
-against side 2: 7, then 8). Median game length per seed: 42691, 37441, 37704 and 46224 ticks
-before; 41299, 41586, 42364 and 42614 after.
+against side 2: 7, then 8). Median game length per seed: 42691, 30851, 37704 and 46224 ticks
+before; 41299, 41586, 42364 and 40980 after.
