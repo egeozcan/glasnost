@@ -1014,6 +1014,7 @@ impl Audio {
                 pos,
                 result,
                 attacker,
+                ..
             } => self.hit(w, *id, *of, *owner, *pos, *result, *attacker, unsync),
             // A detonation's sounds are those of the animations it creates
             // (claim 22); a kill's are claim 20's, through Effect::Hit.

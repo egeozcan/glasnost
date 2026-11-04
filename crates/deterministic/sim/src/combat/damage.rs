@@ -534,6 +534,8 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         pos: o.pos,
         result,
         attacker: hit.attacker,
+        warhead: hit.warhead,
+        health: (h, w.obj(target).map_or(0, |o| o.health)),
     });
     reactions(w, target, &hit, h, result);
     result

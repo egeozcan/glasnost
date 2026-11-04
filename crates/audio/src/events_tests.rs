@@ -533,6 +533,8 @@ fn hit(w: &World, of: TypeRef, owner: u8, result: HitResult, attacker: Option<Ob
         pos: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
         result,
         attacker,
+        warhead: None,
+        health: (0, 0),
     }
 }
 
@@ -738,6 +740,7 @@ fn weapon_report() {
             from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
             report: r,
             gattling: false,
+            target: Target::Object(ObjectId(999)),
         };
         a.tick(&w, &[fx], &mut u);
         assert_eq!(u.taken(), 0);
@@ -1389,6 +1392,8 @@ fn base_under_attack() {
         pos: Pos::centre(testkit::mid(SIZE, dx, 0), 0),
         result: HitResult::Unchanged,
         attacker,
+        warhead: None,
+        health: (0, 0),
     };
     let at = |dx: i32| hit_by(dx, Some(foe));
     a.tick(&w, &[at(0)], &mut u);
@@ -2066,6 +2071,7 @@ fn spin_sound_draws() {
         from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
         report: 4,
         gattling: true,
+        target: Target::Object(ObjectId(999)),
     };
     a.tick(&w, &[shot], &mut u);
     assert_eq!(u.taken(), 0);
