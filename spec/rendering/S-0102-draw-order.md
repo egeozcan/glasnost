@@ -2,14 +2,14 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 41
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-04
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490,
-Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346]
+Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346, Q-2419]
 supersedes: []
 ---
 
@@ -152,8 +152,10 @@ screen rows.
    objects that are listed in a cell and are not in the air (S-0513 claims 4 and 34). An aircraft
    is listed only at no height above its surface or deck, and a unit with jumpjet movement only
    where its own rows give the ground layer (S-0209 claim 13). There the moments of claim 4 have
-   filed it in the ground list, and a unit with jumpjet movement at its cruise height is never a
-   member. Units with rocket movement are listed in no cell (S-0209 claim 13), nor are units with
+   filed it in the ground list, and a unit with jumpjet movement that is airborne (S-0307) is
+   never a member, whether or not it is listed, while one listed there and not airborne is
+   examined (S-0513 claim 34). Units with rocket movement are listed in no cell (S-0209 claim
+   13), nor are units with
    drop-pod movement and tunnelling units while digging, so none of them is ever a member. A
    member that does not move from one bridge deck to another is put down at its landing point at
    no height above its surface there (S-0513 claim 36). On a high-bridge cell that surface is the
@@ -222,10 +224,15 @@ screen rows.
      - a warp member landing on a high-bridge deck from the ground: its on-deck state, its height
        above the deck and its ground layer there, for every kind: D49 runs on a flat map, and no
        scenario here warps a member onto a high bridge.
+     - that a unit with jumpjet movement is left out because it is airborne, listed or not, and
+       not only because it is unlisted, and the one hovering on a kept listing: as S-0513 claim
+       34 gives, no block there has such a unit listed and airborne at once, and no part isolates
+       a kept listing.
 
      `measurable` for the rest of the warp member's part: its ground list from the launch until
      its own climb after the hold, the hovering jumpjet left out of the warp, and its height and
-     ground layer at a landing point off a high bridge (D49).
+     ground layer at a landing point off a high bridge (D49), and a listed unit with jumpjet
+     movement ascending below the airborne height being examined (S-0513 scenario SW12 part b8).
      Rocket movement's absence from the cell lists is
      S-0209 claim 13's, `measurable` there (S-0506 scenario R17).
    - Confidence: high for the table, except: the tunnel rows (low: tunnelling units may in practice
@@ -243,7 +250,10 @@ screen rows.
      its landing point); a member landing on a high-bridge deck from the ground standing on the
      deck at no height above it, its own rows giving the ground layer, whatever its kind
      (medium); an aircraft member whose type cannot land keeping the
-     ground list after the hold, whatever its landing point (medium)
+     ground list after the hold, whatever its landing point (medium); a listed unit with jumpjet
+     movement ascending below the airborne height being examined (high, as S-0513 claim 34 rates
+     it); a unit with jumpjet movement left out for being airborne, listed or not, and one
+     hovering on a kept listing (medium, as S-0513 claim 34 rates them)
 4. **When an object changes layer.** An object's layer is evaluated from the table under *State
    and ordering*, for its state and height at that moment, only at the moments below. Between them
    the object stays in the list it was last put into, even if its height has crossed a threshold
