@@ -158,6 +158,46 @@ fn claim_18_crash_crossing_a_deck() {
     );
 }
 
+// spec: S-0309 claim 27 (a destroyed object is dropped at the killing hit, also when it stays in play after that hit, a crashing object; every vehicle and building holder, no owner exception; no holder fires at it or its place) with S-0502 claim 18 (the killed crashable jumpjet stays in play) (M8 seam sweep 5a)
+#[test]
+fn claim_27_a_crashing_jumpjet_is_dropped_at_its_killing_hit() {
+    use glasnost_sim::combat::effects::Effect;
+    let mut w = game();
+    let u = flier(&mut w);
+    let holders = [
+        put(&mut w, "CART", Kind::Vehicle, 1, -4, 3),
+        put(&mut w, "LOW", Kind::Building, 1, 2, 4),
+        put(&mut w, "CART", Kind::Vehicle, 0, -6, -3),
+    ];
+    for &x in &holders {
+        w.obj_mut(x).unwrap().target = Some(Target::Object(u));
+    }
+    kill(&mut w, u);
+    assert!(w.obj(u).is_some(), "it stays in play");
+    assert!(jump::crashing(&w, u));
+    for &x in &holders {
+        assert_eq!(w.obj(x).unwrap().target, None, "dropped at the killing hit");
+    }
+    w.effects.clear();
+    let mut shots = 0;
+    for _ in 0..10 {
+        step(&mut w);
+        shots += w
+            .effects
+            .iter()
+            .filter(|e| matches!(e, Effect::Shot { firer, .. } if holders.contains(firer)))
+            .count();
+        w.effects.clear();
+        if w.obj(u).is_none() {
+            break;
+        }
+        for &x in &holders {
+            assert_ne!(w.obj(x).unwrap().target, Some(Target::Object(u)));
+        }
+    }
+    assert_eq!(shots, 0, "no holder fires at the crashing unit or its place");
+}
+
 // spec: S-0502 claim 18 and S-0312 claim 16 (a crash started without a kill ends in the destruction of the unit by damage equal to its health, ignoring defences, with no attacker: no kill is credited)
 #[test]
 fn claim_18_living_crash_credits_nobody() {
