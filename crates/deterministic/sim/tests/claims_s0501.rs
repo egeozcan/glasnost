@@ -3579,6 +3579,66 @@ fn ac29f6_pad_bound_asleep_on_its_pad_with_no_ammunition_when_sold_crashes() {
     pad_removed_then_falls(&mut w, k, a, losses);
 }
 
+// spec: S-0501 claim 46 (r110: an aircraft standing on its pad after its run, its ammunition being restored, when the pad is sold takes the notice there: guard queued with an immediate start, so guard is queued or current; no contact, a cell as destination; its height rises, claim 8, and with no other pad it crashes in flight at a later fall-back without a landing) and claim 24; AC29 part f (5)
+#[test]
+fn ac29f5_pad_bound_on_its_pad_with_ammunition_rising_when_sold_crashes() {
+    let mut r = pad_bound(Some(vec!["APAD".into()]));
+    r.sim.general.economy.curley_shuffle = Some(true);
+    assert_eq!(
+        r.sim.aircraft.get("JET1").and_then(|u| u.combat.ammo),
+        Some(2),
+        "a maximum ammunition of 2 (test value)"
+    );
+    let (mut w, k, a) = built_with(&r, "JET1");
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    // The cycle after its ammunition first rises to 1 on its pad.
+    let rising = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 1);
+    assert!(
+        rising,
+        "its ammunition rises on its pad: {}",
+        describe(&w, a)
+    );
+    assert!(
+        air::on_ground(&w, a),
+        "standing on its pad: {}",
+        describe(&w, a)
+    );
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    open(&mut w);
+    assert!(orders::issue(&mut w, ALPHA, Order::Sell { actor: k }));
+    let selling = run_until(&mut w, 20, |w| {
+        w.obj(k).unwrap().beh.current == Some(Behaviour::Selling)
+    });
+    assert!(selling, "the sale");
+    let o = w.obj(a).unwrap();
+    // Void if it reaches 2 before the pad's behaviour is its sale.
+    assert!(o.combat.ammo < 2, "void: full before the sale");
+    assert_eq!(o.contact, None, "{}", describe(&w, a));
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "a landing spot: {}",
+        describe(&w, a)
+    );
+    assert!(
+        o.beh.current == Some(Behaviour::Guard) || o.beh.queued == Some(Behaviour::Guard),
+        "guard queued or current: {}",
+        describe(&w, a)
+    );
+    let h = air::height(&w, a);
+    assert!(run_until(&mut w, 20, |w| air::height(w, a) > h), "it rises");
+    let mut landed = false;
+    let crash = run_until(&mut w, 3000, |w| {
+        landed |= w.obj(a).unwrap().air.as_ref().is_some_and(|s| s.ground);
+        w.obj(a).unwrap().health == 0
+    });
+    assert!(crash, "a crash: {}", describe(&w, a));
+    assert!(!landed, "without a landing");
+    crashed(&w, a);
+    pad_removed_then_falls(&mut w, k, a, losses);
+}
+
 /// The bomb rules of claim 46's planted-bomb case: a bomb warhead whose
 /// spread reaches every object near the crash, a delay longer than the
 /// record, `quirk` for `quirks.crash_drops_planted_bomb`.
@@ -3740,11 +3800,24 @@ fn claim_45_computer_area_guard_at_flight_height() {
     });
     assert!(guard, "area guard: {}", describe(&w, a));
     let mut seen = 0;
+    let mut held = false;
     for _ in 0..200 {
         let before = w.obj(a).unwrap().beh.last;
         let at_height = air::height(&w, a) == CRUISE;
+        let was = w.obj(a).unwrap().air.clone().unwrap();
         step(&mut w);
         let o = w.obj(a).unwrap();
+        let s = o.air.clone().unwrap();
+        // spec: S-0501 claim 45 (r120: until its first touchdown there it keeps the edge cell as destination; that touchdown, in its flight point's cell, forgets the edge cell and its flight point before the cell test, claim 7; F7 refuses it outside the usable area, so it rises 10 leptons and holds above the edge cell, not landing, with no destination; whether area guard then gives it one is Open question 18)
+        if was.landing && !s.landing && !s.ground {
+            assert_eq!(o.pos.cell(), e, "in the edge cell: {}", describe(&w, a));
+            assert_eq!(o.dest, None, "the edge cell forgotten: {}", describe(&w, a));
+            assert_eq!(s.flying_to, None, "the flight point forgotten");
+            assert_eq!(air::height(&w, a), 10, "10 leptons above the edge cell");
+            assert_eq!(o.beh.current, Some(Behaviour::AreaGuard));
+            held = true;
+            break;
+        }
         assert_eq!(
             dest_cell(&w, a),
             Some(e),
@@ -3768,6 +3841,11 @@ fn claim_45_computer_area_guard_at_flight_height() {
         }
     }
     assert!(seen > 10, "processed at flight height: {seen}");
+    assert!(
+        held,
+        "the refused touchdown at the edge cell: {}",
+        describe(&w, a)
+    );
 }
 
 // ---------------------------------------------------------------------------

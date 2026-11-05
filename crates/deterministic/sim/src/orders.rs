@@ -455,6 +455,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 }
                 crate::jump::stop_ordered(w, actor);
             }
+            // spec: S-0501 claims 6 and 8 (r120, Q-2507: setting no destination while an aircraft is in flight, moving and not landing makes it land where it is, through a new flight point chosen at the order)
+            crate::air::given_no_destination(w, actor);
         }
         Order::Scatter { actor } => {
             // spec: S-0213 claim 9 (a mobile actor, live, on the map and not tethered: no threat point, forced, not move-anywhere)

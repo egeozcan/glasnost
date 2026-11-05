@@ -672,7 +672,7 @@ fn claim_31_the_ready_mark_after_a_forced_change_switch_both_positions() {
 // ---------------------------------------------------------------------------
 // AC4's same-cell part: claim 8's exception
 
-// spec: S-0501 claim 8 (r110, Q-2437: a landing aircraft given a destination in the cell of the point it is landing at, its own position when it lands where it is, claim 6, ignores it: no take-off, it goes on landing to a touchdown in that cell; a destination two cells away makes it take off) and claim 6 (no destination in flight: it lands where it is); AC4 same-cell part
+// spec: S-0501 claim 8 (r110, Q-2437: a landing aircraft given a destination in the cell of the point it is landing at ignores it: no take-off, it goes on landing to a touchdown in that cell; a destination two cells away makes it take off; r120, Q-2507: that point is its flight point, which landing where it is puts in the cell claim 40's selection gives at the order, and this run asserts the touchdown cell; the flight point's cell apart from the cell it is over is `claims_s0501_r120::ac4_runs_2_and_3_…`) and claim 6 (no destination in flight: it lands where it is); AC4 same-cell part
 #[test]
 fn ac4_same_cell_a_landing_aircraft_ignores_a_destination_in_its_cell() {
     for far in [false, true] {
