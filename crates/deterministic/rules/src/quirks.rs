@@ -1558,6 +1558,18 @@ pub struct Quirks {
     // spec: S-0501 claim 31, Edge cases
     #[serde(default = "on")]
     pub aircraft_ready_mark_outlives_enter: bool,
+    /// Claim 3's descent brings every landing to height 0 before its landing step, so no touchdown is tested: no cell test, no refusal and none of an accepted touchdown's effects, the forget of the destination in any case included; only the touchdown's own forget test applies, so an aircraft can touch down in a cell that F7 refuses, and one whose forget test keeps its destination goes on as after a refusal that kept the destination; off: every touchdown is tested, and when accepted has the accepted touchdown's effects.
+    // spec: S-0501 claim 7, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_descent_touchdown_untested: bool,
+    /// After a refused touchdown that kept its destination, or an untested touchdown that kept it, the aircraft is on the ground by its height with held height 0 and slides on along its heading with no climb and no steering until the movement update after the first one that leaves its target speed fraction at 1, which climbs; off: it takes the held height of ordinary flight at once and climbs from its next movement update on.
+    // spec: S-0501 claim 7, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_refused_kept_drop: bool,
+    /// An aircraft that is not visiting and may not leave the map now, given no destination over a cell outside the usable area, starts claim 40's selection from the cell of a local point with one coordinate moved to 1 or to one less than the local area's size along it (the coordinate nearer the centre, rows counted by the local area's height); off: from the cell it is over.
+    // spec: S-0501 claim 6, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_offmap_stop_start: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -2614,6 +2626,9 @@ impl Default for Quirks {
             aircraft_edge_hold: true,
             aircraft_grounded_enter_stall: true,
             aircraft_ready_mark_outlives_enter: true,
+            aircraft_descent_touchdown_untested: true,
+            aircraft_refused_kept_drop: true,
+            aircraft_offmap_stop_start: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -3731,6 +3746,18 @@ impl Quirks {
             (
                 "aircraft_ready_mark_outlives_enter",
                 self.aircraft_ready_mark_outlives_enter,
+            ),
+            (
+                "aircraft_descent_touchdown_untested",
+                self.aircraft_descent_touchdown_untested,
+            ),
+            (
+                "aircraft_refused_kept_drop",
+                self.aircraft_refused_kept_drop,
+            ),
+            (
+                "aircraft_offmap_stop_start",
+                self.aircraft_offmap_stop_start,
             ),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),

@@ -98,6 +98,13 @@ fn rules() -> Ruleset {
     rules_with(1, Some(vec![[0, 0, 0]]))
 }
 
+/// `r` with claim 7's tested touchdown: r120's refusals.
+// spec: S-0501 Edge cases (r132: quirks.aircraft_descent_touchdown_untested off: every touchdown is tested, so claim 7's refusal, claim 24's refused touchdown in contact and claim 45's arise wherever F7 refuses the cell; on, the untested touchdown is claims_s0501_r132's)
+fn tested(mut r: Ruleset) -> Ruleset {
+    r.globals.quirks.aircraft_descent_touchdown_untested = false;
+    r
+}
+
 /// AC31 part h (1)'s displacement (test value): from the 2 × 2 foundation's
 /// centre to the centre of the cell two cells east of its east column, in
 /// its south row, at height 0.
@@ -455,7 +462,7 @@ fn ac4_runs_2_and_3_the_point_compared_is_the_flight_points_cell() {
 // spec: S-0501 claim 7 (r120: before its cell is tested, the touchdown forgets the destination and the flight point when the aircraft is in the flight point's cell; a refused touchdown rises 10 leptons and starts a take-off that ends in the next movement update and leaves the landing's held height; with nothing to move it, it stays in flight, not landing, 10 leptons above the refused cell until it gets a destination, and claim 6's triggers do not apply) and F7 (an occupant other than its contact refuses the cell); AC4 occupant part
 #[test]
 fn claim_7_a_refused_touchdown_in_the_flight_points_cell_forgets_and_holds() {
-    let mut w = game(&rules());
+    let mut w = game(&tested(rules()));
     ready(&mut w);
     let a = put(&mut w, "JET", -8, 0);
     step(&mut w);
@@ -535,7 +542,7 @@ fn claim_7_a_refused_touchdown_in_the_flight_points_cell_forgets_and_holds() {
 /// then stands there. Returns whether the refused touchdown forgot the
 /// destination, or `None` when it touched down in the flight point's cell.
 fn forget_case(dest: impl Fn(&World) -> Target, contact: bool) -> Option<bool> {
-    let mut w = game(&rules());
+    let mut w = game(&tested(rules()));
     let k = building(&mut w, "APAD", 0, -2, 8);
     ready(&mut w);
     let a = put(&mut w, "JET", -8, 0);
@@ -641,7 +648,7 @@ fn claim_7_the_forget_outside_the_flight_points_cell() {
 // spec: S-0501 claim 24 (r120, Q-2506: a refused touchdown in contact in the docking position's cell, its flight point's, forgets the destination and the flight point, claim 7; with nothing to move it, it is 10 leptons above the refused cell, so the second rule asks the pad to be loaded; a switched-on pad finds it settled and gives itself back as destination, and with enter current and nothing queued the processing then finds it not landing and reports entry at once, in flight: the pad starts servicing and has it queue sleep, it queues guard, and the processing returns 1 tick and leaves it ready, so guard is current by the end of that tick; it is not sent back to the approaching stage) and claim 7; AC31 part h (4)
 #[test]
 fn ac31h4_a_refused_touchdown_at_the_docking_position_reports_entry_in_flight() {
-    let r = rules_with(1, Some(vec![OFF_PAD]));
+    let r = tested(rules_with(1, Some(vec![OFF_PAD])));
     let mut w = game(&r);
     let k = building(&mut w, "APAD", 0, 0, 0);
     ready(&mut w);
