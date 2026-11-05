@@ -1,9 +1,9 @@
 ---
 id: Q-2578
 title: How an aircraft flies after a refused touchdown that kept its destination
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
