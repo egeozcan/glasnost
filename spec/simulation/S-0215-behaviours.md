@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 115
+revision: 118
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-05
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586]
 supersedes: []
 ---
 
@@ -1695,13 +1695,57 @@ Terms used by this spec:
 ### Behaviour properties
 
 16. **No-threat.** While an actor's current behaviour has the no-threat property, no other actor's
-    automatic search picks it as a target. When a mobile actor that is not a team member, with
-    the no-threat property but not the zombie property, takes damage from a known attacker and
-    survives, it falls back to rest at once (claims 13 to 15), which normally ends the no-threat
+    automatic search picks it as a target. A mobile actor that is not a team member falls back to
+    rest at once (claims 13 to 15; S-0501 claim 18 for an aircraft) after a hit that names an
+    attacker (S-0302 claim 1), lowers its health and reports *unchanged*, *now yellow* or *now red*
+    (S-0302 claim 12), when the behaviour that is current at that point of the hit (below) has the
+    no-threat property and not the zombie property. The fall-back normally ends the no-threat
     behaviour.
-    - Backing: `measurable` (scenario B5)
-    - Confidence: high (the search exclusion and the fall-back); medium (the exact damage outcomes
-      that trigger the fall-back: any damage that changes health and leaves the actor alive)
+    - **Results.** A hit that reports *unaffected* never triggers it. So a healing hit (S-0302
+      claim 11), which raises health and reports *unaffected*, does not, and neither does any
+      other hit that reports *unaffected*, such as one that changes no health. A hit that reports
+      *now dead* or *post-mortem* does not trigger it either. A berserk hit, which lowers no health,
+      is open here (Open questions).
+    - **Order within the hit.** The test comes after the hit's change of health (S-0302), the
+      anger change (S-0309 claim 16), the retaliation (claim 18) and the scatter from damage
+      (claim 19, and request A of S-0208 claim 15 for infantry). It comes before the actor's other
+      reactions to the hit: for an infantry unit, request B of S-0208 claim 15 and the change of
+      fear (S-0107 claim 16), and for a vehicle the crush response (claim 39). An aircraft has no
+      reaction to the hit after it. So:
+      - an actor that retaliates at that hit has *attack* current (claim 10) when the test is made.
+        It does not fall back unless *attack* has the no-threat property, and its no-threat
+        behaviour stays suspended until the revert. An actor that does not retaliate at that hit is
+        tested on the behaviour that the scatter from damage leaves current. For an aircraft that is
+        sent the scatter from damage (claim 19) while its current behaviour has the scatter
+        property, that request has already made it fall back to rest (S-0501 claims 49 and 18), so
+        the test is made on the behaviour that this first fall-back leaves current. For any other
+        actor it is the behaviour it had when the hit landed,
+      - the scatter from damage of claim 19 (request A for infantry) is decided on the target and
+        destination that the actor had before the fall-back, and request B on the state that the
+        fall-back leaves,
+      - the anger and fear changes depend on nothing that the fall-back changes,
+      - the crush response's *move* replaces whatever the fall-back queued (claim 39).
+    - Backing: `measurable` (scenario B5: part a for the search exclusion and the fall-back after a
+      hit that lowers health, part b for the zombie property, part c for the order against
+      retaliation, part d for a healing hit; claim 39's own backing for the crush response). The
+      other *unaffected* hits, the *now dead* and *post-mortem* results, the team exception and the
+      order against the scatter requests are `unmeasured`: no scenario here lands another
+      *unaffected* hit from a known attacker on an actor in a no-threat behaviour, puts a team
+      member in one, or gives a no-threat infantry unit a guard spot on another cell or makes it a
+      fraidycat, and an actor that a hit kills has no behaviour left to observe. Part a, whose
+      subject does not retaliate and is not an aircraft, backs the test on the behaviour it had when
+      the hit landed. For an aircraft sent that request while its behaviour has the scatter
+      property, the test on the behaviour that its first fall-back leaves is `unmeasured`: no
+      scenario here hits an aircraft in a no-threat behaviour. The order against anger and fear, and
+      the aircraft's lack of a later reaction, are `unmeasured` as well: they change nothing that a
+      run can record.
+    - Confidence: high (the search exclusion, the fall-back after a hit that lowers health, the
+      zombie exception, the order against retaliation, the test on the behaviour at the hit for an
+      actor that does not retaliate and is not an aircraft, and the healing hit); medium (the test
+      for an aircraft sent the scatter from damage while its behaviour has the scatter property, the
+      other *unaffected* hits, the *now dead* and *post-mortem* results, the team exception, the
+      order against the scatter requests, anger and fear, and the aircraft's lack of a later
+      reaction), and the crush response's place after it has claim 39's confidence
 
 17. **Zombie and paralysed.** At a fall-back to rest, the zombie or the paralysed property of the
     current behaviour matters only through its row in the tables of claims 14 and 15 (row 6 for
@@ -3863,7 +3907,7 @@ human-controlled owner):
 | *unload*, vehicle that deploys in place | taken over by mind control | no takeover guard reset; S-0601 claim 6 owns the exception and claim 9 owns release |
 | *area guard* | target leads it beyond the leash | target dropped, returns to the guard spot (claim 26) |
 | *hunt* (skirmish) | no target found | stays in *hunt*, idles, searches again next processing (claim 27) |
-| a behaviour with the no-threat property but not zombie, mobile actor not in a team | survives damage from a known attacker | falls back to rest (claim 16) |
+| a behaviour with the no-threat property but not zombie, mobile actor not in a team | a hit from a known attacker that lowers its health and leaves it alive (claim 16) | falls back to rest (claim 16) |
 | *sticky* | behaviour order | queued but never started while *sticky* lasts (claim 25); stop has claim 12's separate effects |
 | a behaviour with the zombie or paralysed property | falls back to rest with no target, destination or queued destinations (infantry), or as an armed vehicle that is not a harvester, with no destination or queued destinations | the behaviour stays current and nothing is queued (claim 17) |
 
@@ -4328,15 +4372,31 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Falsified by any other resting behaviour, or by a recorded skill level other than 0 for the
   human-controlled house or 5 for the computer-controlled house (claim 15 gives those levels in a
   skirmish). Runs: one per case and run.
-- **B5 (claim 16).** Named test file: rules giving *harmless* the no-threat property and not the
-  zombie property. Test map: a unit of one house placed in *harmless* next to an enemy unit in
-  *guard*. Expected: the guarding unit never targets it by itself over 2000 ticks. Then damage the
-  harmless unit with a third unit; expected: on that tick it falls back to rest, and the guarding
-  unit targets it within one targeting delay. Falsified by a target choice before the damage, or no
-  fall-back after it. Runs: three. (b) Zombie suppresses the fall-back: the same map with a second
-  test file that also gives *harmless* the zombie property. Expected: the damaged unit does not
-  fall back to rest, *harmless* stays current, and the guarding unit still never targets it by
-  itself over 2000 ticks. Falsified by a fall-back after the damage. Runs: three.
+- **B5 (claim 16).** Named test file: rules giving *harmless* the no-threat property and neither the
+  zombie nor the retaliate property. Test map: a unit of one house placed in *harmless* next to an
+  enemy unit in *guard*. Expected: the guarding unit never targets it by itself over 2000 ticks.
+  Then damage the harmless unit with a third unit; expected: on that tick it falls back to rest, and
+  the guarding unit targets it within one targeting delay. Falsified by a target choice before the
+  damage, or no fall-back after it. Runs: three. (b) Zombie suppresses the fall-back: the same map
+  with a second test file that also gives *harmless* the zombie property. Expected: the damaged unit
+  does not fall back to rest, *harmless* stays current, and the guarding unit still never targets it
+  by itself over 2000 ticks. Falsified by a fall-back after the damage. Runs: three. (c) Retaliation
+  first: a third test file giving *harmless* the no-threat and the retaliate properties and not the
+  zombie property, giving *attack* neither the no-threat nor the zombie property, and turning player
+  return fire on (claim 18). The subject is an armed vehicle of the human-controlled house whose
+  weapon can fire at vehicles, placed in *harmless* with no target and no destination. An enemy
+  vehicle, within the subject's weapon range and ordered by a test-map team to attack it, hits it.
+  Record the subject's target each tick, and its current, suspended and queued behaviours at the end
+  of the tick of the first hit. Expected: *attack* current, *harmless* suspended and nothing queued.
+  Falsified by any other behaviour current, suspended or queued at that end, such as *guard* or
+  *area guard* queued or current (the fall-back first: claim 15, rows 10 to 12). A run in which the
+  subject has a target before the first hit, or in which its target at that end is not the attacker,
+  is void. Runs: one. (d) Healing hit: the first test file. An infantry subject of the
+  human-controlled house is placed in *harmless* with reduced health, next to an own-house healer
+  that is ordered to heal it, with no enemy within 10 cells. Record the subject's health and its
+  behaviour slots each tick until it is at full health. Expected: its health rises, *harmless* stays
+  current and nothing is queued. Falsified by a fall-back to rest, or anything queued, on a tick on
+  which its health rises. A run in which its health never rises is void. Runs: one.
 - **B6 (claims 17, 19, 25).** Named test file: rules giving *sticky* the paralysed and the scatter
   properties and turning its retaliate property off, giving *sleep* the zombie property, the
   scatter property and no retaliate property, giving *guard* the paralysed and the scatter
@@ -6045,6 +6105,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ## Open questions
 
+- **A berserk hit and the no-threat fall-back.** A hit that makes its target go berserk reports
+  *unchanged* without lowering health (S-0302 claim 10). Whether it makes an actor in a no-threat
+  behaviour fall back to rest (claim 16), as a hit that lowers health does, is open here: S-0302
+  claim 12 states that a berserk hit has none of the reactions.
 - **Claim 39 and a later revert.** When an ordinary hit makes the vehicle retaliate under an
   *attack* override (claims 10 and 18) and the crush response then gives it the attacker as its
   destination, whether a later revert of that override brings back the destination put aside
@@ -6256,6 +6320,16 @@ checks, not additional rules of this spec.
   `unmeasured`, since no scenario makes a berserk warp member phase in with a beam attached; the off
   setting of the switch is design.
 
+- **S-0208 (approved, revision 34), S-0309 (revision 116), S-0107 (revision 40) and S-0607
+  (revision 39): the no-threat fall-back within a hit (claim 16 here).**
+  - S-0208 claim 15 should point to claim 16 here for the place of the fall-back between its
+    requests A and B: request A comes before it and request B after it.
+  - S-0309 claim 16 (anger) and S-0107 claim 16 (fear) should point to claim 16 here for their
+    order against the fall-back. Neither rule changes.
+  - S-0607's *A fall-back to rest in the grip* should name the hit that triggers it as claim 16
+    here gives it, in place of "survives damage from a known attacker". A gripped unit never
+    retaliates (S-0607 claim 9), so the order against retaliation changes nothing there.
+  - Level and backing: those of claim 16 here.
 - **S-0107 (approved, revision 31), claim 11, the switch `quirks.prone_attack_state_persists`
   and scenario M8 parts (a) and (d).**
   - *End of the attack state* should list the shot first: when the weapon fires at the fire
