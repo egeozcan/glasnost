@@ -43,6 +43,16 @@ pub fn rank(w: &World, b: ObjectId) -> u8 {
     }
 }
 
+/// The tech buildings that pay (rank 0), held by a passive house, on cells
+/// the house has explored, in object order.
+pub fn paying_in_sight(w: &World, house: HouseId) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| rank(w, o.id) == 0 && shroud::explored(w, house, o.pos.cell()))
+        .map(|o| o.id)
+        .collect()
+}
+
 /// Whether the house sees a tech building held by a passive house on a cell
 /// it has explored.
 pub fn in_sight(w: &World, house: HouseId) -> bool {

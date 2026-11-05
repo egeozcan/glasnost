@@ -391,6 +391,19 @@ impl Brain {
             o.actor()
                 .is_none_or(|a| !glasnost_sim::psychic::berserk(w, a))
         });
+        // design: no attack order and no attack move (from any part of the brain) to an aircraft with no ammunition left (S-0501 T1). The order is offered (S-0214 claim 6 (e)), and the aircraft takes off for it (S-0501 claim 8), ends its run without a shot (T1) and flies back to its pad, losing the service time; a person waits for it to rearm (M8 step A4 round 8, the lead's note 50: `defend` sent spent aircraft from their pads at intruders)
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour,
+                attack_move,
+                ..
+            } if *behaviour == Behaviour::Attack || *attack_move => {
+                w.obj(*actor).is_none_or(|x| x.kind != Kind::Aircraft)
+                    || glasnost_sim::air::ammo_left(w, *actor)
+            }
+            _ => true,
+        });
         // S-0609 claims 5 and 11: no attack order at another object (from any part of the brain) to a gattling unit firing at its target, so it keeps its spin
         let before = out.len();
         out.retain(|o| match o {
@@ -2253,7 +2266,9 @@ impl Brain {
                 || glasnost_sim::structures::bunker::bunkered(w, id);
             // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: the brain gives it none, and counts none)
             let berserk = glasnost_sim::psychic::berserk(w, id);
-            if busy || sent || bound || berserk {
+            // design: an aircraft with no ammunition left rearms first (the think's filter, M8 step A4 round 8)
+            let spent = o.kind == Kind::Aircraft && !glasnost_sim::air::ammo_left(w, id);
+            if busy || sent || bound || berserk || spent {
                 continue;
             }
             // A unit already sent at the raider from where it stands, or

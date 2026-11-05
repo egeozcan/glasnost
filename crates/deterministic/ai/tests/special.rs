@@ -800,3 +800,169 @@ fn an_engineer_on_its_way_is_not_given_up() {
     }
     assert!(w.obj(unit).is_some());
 }
+
+/// Whether `orders` send `unit` at building `b` (any behaviour, by its
+/// destination or target).
+fn sent_at(orders: &[Order], unit: ObjectId, b: ObjectId) -> bool {
+    orders.iter().any(|o| {
+        matches!(o, Order::Behaviour { actor, dest, target, .. }
+            if *actor == unit && (*dest == Some(Target::Object(b)) || *target == Some(Target::Object(b))))
+    })
+}
+
+/// The cell of house 0's first object on the map.
+fn home_of(w: &World) -> glasnost_map::CellXY {
+    w.objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.pos.cell())
+        .expect("an object of house 0")
+}
+
+// design (M8 step A4 round 8, the lead's note 51; S-0509, S-0214 rows I4 to I7): the AI spends an engineer on an own building only for one it cannot do without (a factory here) at half its strength or below; not on a factory that is only scratched, and not on a building of no economy or production role (a power plant here), however damaged.
+#[test]
+fn an_engineer_repairs_only_an_important_badly_damaged_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    let pill = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        0,
+        glasnost_map::CellXY::new(home.x + 6, home.y),
+        0,
+    );
+    let powr = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "POWR",
+        0,
+        glasnost_map::CellXY::new(home.x + 6, home.y + 4),
+        0,
+    );
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "ENGI",
+        0,
+        glasnost_map::CellXY::new(home.x + 3, home.y + 3),
+        0,
+    );
+    run_to_think(&mut w, 2);
+    let full = |w: &World, b| glasnost_sim::combat::damage::strength(w, b);
+    let set = |w: &mut World, b, num: i32, den: i32| {
+        let s = full(w, b);
+        w.obj_mut(b).unwrap().health = s * num / den;
+    };
+    // The factory at three quarters, the power plant at a quarter.
+    set(&mut w, pill, 3, 4);
+    set(&mut w, powr, 1, 4);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!sent_at(&orders, unit, pill), "scratched: {orders:?}");
+    assert!(!sent_at(&orders, unit, powr), "no role: {orders:?}");
+    // The factory at a third: the engineer goes.
+    set(&mut w, pill, 1, 3);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(sent_at(&orders, unit, pill), "{orders:?}");
+    assert!(!sent_at(&orders, unit, powr));
+}
+
+/// A world copy where house 0 has a barracks, no engineer and no credits,
+/// and sees `derricks` tech buildings that pay (DERR of the Neutral house).
+fn derrick_scene(g: &Game, derricks: i32) -> (World, Vec<ObjectId>) {
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y),
+        0,
+    );
+    let mut all = Vec::new();
+    for i in 0..derricks {
+        let c = glasnost_map::CellXY::new(home.x + 8 + 3 * i, home.y + 8);
+        all.push(testkit::spawn(&mut w, Kind::Building, "DERR", 2, c, 0));
+        reveal(&mut w, 0, c);
+    }
+    run_to_think(&mut w, 20);
+    w.houses[0].credits = 0;
+    (w, all)
+}
+
+fn orders_engineer(w: &World, orders: &[Order]) -> bool {
+    let engi = w.rules().index_of(Kind::Infantry, "ENGI").unwrap();
+    orders
+        .iter()
+        .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == engi))
+}
+
+// design (M8 step A4 round 8, the lead's note 48; S-0515 claims 3 and 5): a seen tech building that pays has the house queue an engineer at once, with no credits in hand (the line pays as money comes in), where before it waited for twice the price.
+#[test]
+fn queues_an_engineer_for_a_paying_tech_building_at_once() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let (w, _) = derrick_scene(&g, 1);
+    assert_eq!(w.houses[0].credits, 0);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(orders_engineer(&w, &orders), "{orders:?}");
+}
+
+// design (M8 step A4 round 8, the lead's note 48): with three paying tech buildings in sight the house keeps up to two engineers for them: one engineer, it queues another; two, it does not.
+#[test]
+fn keeps_up_to_two_engineers_for_paying_tech_buildings() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    for (have, want) in [(1, true), (2, false)] {
+        let (mut w, _) = derrick_scene(&g, 3);
+        let home = home_of(&w);
+        for i in 0..have {
+            testkit::spawn(
+                &mut w,
+                Kind::Infantry,
+                "ENGI",
+                0,
+                glasnost_map::CellXY::new(home.x + 2, home.y + 2 + i),
+                0,
+            );
+        }
+        run_to_think(&mut w, 1);
+        let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+        assert_eq!(orders_engineer(&w, &orders), want, "{have}: {orders:?}");
+    }
+}
+
+// design (M8 step A4 round 8, the lead's note 48): an engineer sent to a tech building takes the nearest idle army unit within reach along, attack-moved to the building; a unit far away is not sent.
+#[test]
+fn an_engineer_for_a_tech_building_takes_an_escort() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    // Toward the middle of the map (house 0 starts in the west): one cell
+    // off, and beyond the reach.
+    for (dx, escorted) in [(-1, true), (18, false)] {
+        let (mut w, _lab, derr, unit) = tech_scene(&g);
+        let at = w.obj(unit).unwrap().pos.cell();
+        let tank = testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "GUNR",
+            0,
+            glasnost_map::CellXY::new(at.x + dx, at.y),
+            0,
+        );
+        let goal = w.obj(derr).unwrap().pos.cell();
+        run_to_think(&mut w, 1);
+        let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+        let orders = brain.think(&w);
+        assert!(garrison_orders(&orders, unit, derr), "{orders:?}");
+        let escort = orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, behaviour: Behaviour::Move, attack_move: true, dest: Some(Target::Cell(c)), .. }
+                if *actor == tank && *c == goal)
+        });
+        assert_eq!(escort, escorted, "{dx}: {orders:?}");
+        assert_eq!(brain.special_uses().escorts, u32::from(escorted));
+    }
+}
