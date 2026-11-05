@@ -2762,6 +2762,7 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool, ordinary: O
             let p = flight_point(w, id, dd);
             let dist = planar(w, o.pos, p);
             // spec: S-0501 claim 6 (r93, Q-2252: standing in its flight point's cell with the target fraction of the same tick's ordinary calculation of claim 5 at 0; a replacement target is never tested, so within 128 leptons it does not start to land while its ordinary target is positive) and claim 5 (r93: that calculation runs in every tick in which the test can apply)
+            // design: S-0501 claim 7 and Q-2648 (a sliding aircraft is on the ground by its height but not settled, so the exact-cell trigger applies to it as written: it starts a landing in its flight point's cell, and the next update's touchdown forgets and rests)
             let exact = o.pos.cell() == p.cell() && ordinary.is_some_and(|x| x.eq_num(F64::ZERO));
             // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claims 42 and 48 (c) (At height 0: the close-approach trigger is a request of guidance, which runs only for an aircraft above the terrain, whatever the aircraft; the exact-cell trigger applies at any height, Q-1941)
             let close =
