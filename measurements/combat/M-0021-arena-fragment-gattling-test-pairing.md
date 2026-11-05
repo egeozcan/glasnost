@@ -11,8 +11,6 @@ method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-05
-approved-by:
-approved-on:
 ---
 
 # M-0021: Unit arena, a test pairing after Q-1714's
