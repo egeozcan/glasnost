@@ -1782,6 +1782,10 @@ pub struct Quirks {
     // spec: S-0513 claim 40; S-0214 Terms (being erased, phasing in)
     #[serde(default = "on")]
     pub warp_hold_persists: bool,
+    /// An aircraft warp member's destination given by its behaviour processing in the tick in which its arrival hold ends is forgotten and starts no take-off, so its first destination that holds comes at its next processing; off: that destination holds and the aircraft takes off towards it.
+    // spec: S-0306 claim 17 and Edge cases; S-0513 claims 48 and 51
+    #[serde(default = "on")]
+    pub warp_hold_end_forgets_destination: bool,
     /// A temporal projectile in flight at a superweapon warp's launch, or a fragment, locks a beam on a member; the warp and the erasure both go on, and from its departure the member is no longer being erased while the beam stays attached, up to a later lock; off: a pending warp, from the launch until the departure update, is one more lock refusal.
     // spec: S-0513 claim 39a and Edge cases; S-0514 claims 3, 9, 14 and 17
     #[serde(default = "on")]
@@ -2666,6 +2670,8 @@ impl Default for Quirks {
             second_stage_order_unchecked: true,
             superweapon_kind_as_list_position: true,
             warp_hold_persists: true,
+            // spec: S-0306 claim 17 and Edge cases (default on = original)
+            warp_hold_end_forgets_destination: true,
             // spec: S-0513 claim 39a and Edge cases (default on = original)
             warp_departure_keeps_beam: true,
             // spec: S-0513 claim 39a and Edge cases (default on = original)
@@ -3881,6 +3887,10 @@ impl Quirks {
                 self.superweapon_kind_as_list_position,
             ),
             ("warp_hold_persists", self.warp_hold_persists),
+            (
+                "warp_hold_end_forgets_destination",
+                self.warp_hold_end_forgets_destination,
+            ),
             ("warp_departure_keeps_beam", self.warp_departure_keeps_beam),
             (
                 "phase_in_beam_spares_infantry",

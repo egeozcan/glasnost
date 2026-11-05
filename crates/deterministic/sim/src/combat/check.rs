@@ -463,6 +463,7 @@ fn answer(
         return Answer::Impossible;
     };
     // spec: S-0405 claim 9 and T1 (a building's own answers, at rank 4)
+    // spec: S-0301 r73 claim 9 (A building's own answers above a held temporal target, Q-2567 answered: every answer of S-0405 table T1 ranks above the held-temporal-target rearming below, so a building whose temporal beam is attached to its target gets illegal or impossible while a row of T1 holds, on the map or for a departed warp member; the beam stays attached, S-0514 claim 14)
     if kind == Kind::Building
         && let Some(a) = crate::econ::power::firing_answer(w, firer)
         && (!pass || a == Answer::Illegal)

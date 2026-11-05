@@ -1449,6 +1449,14 @@ pub fn may_search_passively(w: &World, a: ObjectId) -> bool {
     if !tc.passive_acquire || !armed(w, a) {
         return false;
     }
+    // spec: S-0309 claim 2 (no temporal weapon of its own is erasing a target) and S-0301 r73 claim 9 (a building that drops the target its beam holds keeps the beam attached, so while that target is being erased it takes none by a search; a departed warp member is no longer being erased, S-0513 claim 39a)
+    if w.temporal
+        .beams
+        .get(&a)
+        .is_some_and(|b| crate::temporal::erased(w, b.target))
+    {
+        return false;
+    }
     if o.kind == Kind::Building {
         let b = &r.buildings[o.type_index as usize].building;
         if b.can_be_occupied {

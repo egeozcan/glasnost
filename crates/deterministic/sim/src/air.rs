@@ -954,6 +954,13 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
     if !is_aircraft(w, id) {
         return;
     }
+    // spec: S-0306 r80 claim 17 (Q-2526: for an aircraft warp member, a destination given while it phases in, its arrival hold included, does not hold; it is dropped as soon as it is given, as S-0207 claim 20 (a) drops one for an object that phases in after an own jump)
+    if dest.is_some() && crate::superweapons::warp::phasing(w, id) {
+        if let Some(o) = w.obj_mut(id) {
+            o.dest = None;
+        }
+        return;
+    }
     pad_accepted(w, id, dest);
     if dest.is_none() {
         given_no_destination(w, id);
@@ -974,6 +981,30 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
     {
         o.contact = None;
         o.econ.exit = None;
+    }
+}
+
+/// The tick in which aircraft warp member `id`'s arrival hold ended, after
+/// its behaviour processing (S-0306 r80 claim 17, Q-2526): with
+/// `quirks.warp_hold_end_forgets_destination` on, a destination that
+/// processing gave (`before` is the destination before it) is forgotten,
+/// so it starts no take-off and the aircraft stays where it is until its
+/// first destination that holds. Off, nothing is forgotten: S-0513 claim
+/// 51's order alone, and the destination holds.
+pub(crate) fn hold_end_forget(w: &mut World, id: ObjectId, before: Option<Target>) {
+    if !is_aircraft(w, id) {
+        // spec: S-0306 Edge cases (quirks.warp_hold_end_forgets_destination: for a member of another kind the switch is not defined)
+        return;
+    }
+    // spec: S-0306 Edge cases (quirks.warp_hold_end_forgets_destination, default on = original; off: no step forgets a destination after the member's behaviour processing in that tick)
+    if !w.rules().quirks.warp_hold_end_forgets_destination {
+        return;
+    }
+    if let Some(o) = w.obj_mut(id)
+        && o.dest.is_some()
+        && o.dest != before
+    {
+        o.dest = None;
     }
 }
 

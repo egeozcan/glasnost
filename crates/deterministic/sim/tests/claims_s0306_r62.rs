@@ -1062,12 +1062,12 @@ fn p46(r: &Ruleset, run: u8) -> (World, ObjectId) {
             glasnost_sim::air::kept_filed(&w, a),
             "set-up: in the ground list after its hold"
         );
-        // Q-2526 seam: at its wait's expiry (S-0513 claim 39) the search's
-        // fall-back of S-0207 claim 20 (f) gave this visiting aircraft
-        // S-0501 table T2's on-ground *retreat*, so from the hold's end it
-        // flies, not at rest until the trigger's move order as P46 run 2
-        // expects. Parts a, c and d judge it in flight, which holds either
-        // way; the controls c2 and d2 run in run 1 only.
+        // spec: S-0306 r80 claim 17 (Fall-backs of a warp member, and an aircraft's retreat: at its wait's expiry the search's fall-back gives this visiting aircraft on the ground S-0501 table T2's retreat, and its own retreat flight, from a cell on its house's arrival edge as its first destination that holds, is run 2's flight) and scenario P46 run 2 (nothing orders A; the controls c2 and d2 are run 1's only)
+        assert_eq!(
+            w.obj(a).unwrap().beh.current,
+            Some(glasnost_sim::rules::Behaviour::Retreat),
+            "set-up: retreat from its wait's expiry"
+        );
     }
     (w, a)
 }
@@ -1075,6 +1075,22 @@ fn p46(r: &Ruleset, run: u8) -> (World, ObjectId) {
 /// Whether *A* stands at rest at height 0, as parts c2 and d2 have it.
 fn at_rest(w: &World, a: ObjectId) -> bool {
     w.height_above_surface(a) == 0
+}
+
+/// Puts *A* in flight, above height 0. Run 1: the trigger's move order to
+/// a cell far enough away. Run 2: no order; its own *retreat* flight
+/// (S-0306 r80 claim 17, P46 run 2).
+fn take_off_in(w: &mut World, a: ObjectId, run: u8) {
+    if run == 2 {
+        // spec: S-0306 r80 scenario P46 run 2 (A's own retreat flight is run 2's flight; A takes no order)
+        until(w, 100, |w| w.height_above_surface(a) > 0);
+        assert!(
+            !temporal::ground_layer(w, a),
+            "its state and height: in the air"
+        );
+        return;
+    }
+    take_off(w, a);
 }
 
 /// Gives *A* a move order to a cell far enough away, and runs until it is
@@ -1118,9 +1134,10 @@ fn r72_claim17_p46_part_a_the_ground_layer_pass_considers_a_flying_aircraft_that
     // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: once it flies, the ground list it stays in, S-0102 claim 4, and the layer its state and height give differ; the same holds for any such aircraft placed on the ground, warped or not; S-0309 claim 7's ground-layer pass reads the list, so it considers the aircraft in flight as it considers a landed aircraft there, in the second pass alone for a search that does not look for aircraft) and scenario P46 part a (runs 1 and 2)
     // spec: S-0309 r114 claim 7 (such an aircraft stays in the ground list in flight, so the ground-layer pass considers it in flight, as it considers a landed one)
     use glasnost_sim::combat::acquire::{SearchContext, SearchKind, search};
+    // spec: S-0306 r80 scenario P46 part a (run 2 flies on its own retreat, with no order)
     for run in [1, 2] {
         let (mut w, a) = p46(&rules_p46(), run);
-        take_off(&mut w, a);
+        take_off_in(&mut w, a, run);
         assert!(
             glasnost_sim::air::kept_filed(&w, a),
             "run {run}: in the ground list"
@@ -1148,10 +1165,11 @@ fn r72_claim17_p46_part_a_control_a_flying_aircraft_that_can_land_is_not_in_the_
 fn r72_claim17_p46_parts_c_and_d_no_seizing_and_no_erasure_above_height_0() {
     // spec: S-0306 r72 claim 17 (An aircraft that cannot land, in flight: S-0607 claim 3's seizing and S-0514 claim 1's erasure test read the layer from state and height, so a seizing shot or an erasure hit that detonates while the aircraft is above height 0 does nothing to it; at rest at height 0 it meets that test, for a warp member after its arrival hold by the design rule above) and scenario P46 parts c, c2, d and d2 (runs 1 and 2)
     // spec: S-0607 r39 claim 3 and S-0514 r17 claim 1 (the layer is the one the target's state and height give it, not the list it is filed in: such an aircraft is not seized or erased by a hit while it is above height 0)
+    // spec: S-0306 r80 scenario P46 parts c and d (run 2 flies on its own retreat, with no order) and parts c2 and d2 (the controls, in run 1 only)
     for run in [1, 2] {
         let (w, a) = p46(&rules_p46(), run);
-        // Parts c2 and d2, the controls: A at rest at height 0. Run 2's rest
-        // after the hold waits on Q-2526 (see `p46`), so they run in run 1.
+        // Parts c2 and d2, the controls: A at rest at height 0, in run 1
+        // only (r80, Q-2526 answered).
         if run == 1 {
             assert!(at_rest(&w, a), "run {run}: at rest at height 0");
             assert!(
@@ -1161,7 +1179,7 @@ fn r72_claim17_p46_parts_c_and_d_no_seizing_and_no_erasure_above_height_0() {
             assert!(erasable(&w, a), "run {run}, d2: erased at rest");
         }
         let mut w = w;
-        take_off(&mut w, a);
+        take_off_in(&mut w, a, run);
         assert!(
             glasnost_sim::air::kept_filed(&w, a),
             "run {run}: in the ground list"
@@ -1184,7 +1202,7 @@ fn r72_claim17_the_airborne_scan_and_claim_20c_read_the_layer_from_state_and_hei
             !projectile::target_airborne(&w, a),
             "run {run}: at rest or at a cruise height below 208 not airborne, so claim 20 (c) gives 42"
         );
-        take_off(&mut w, a);
+        take_off_in(&mut w, a, run);
         assert!(
             glasnost_sim::air::kept_filed(&w, a),
             "run {run}: in the ground list"
@@ -1203,7 +1221,7 @@ fn r72_claim17_the_airborne_scan_and_claim_20c_read_the_layer_from_state_and_hei
 #[test]
 fn r75_claim17_p46_run_2_an_aircraft_member_that_cannot_land_rests_on_the_ground_through_its_hold()
 {
-    // spec: S-0306 r75 claim 17 (an aircraft member then stays at rest at that height after its hold until an order, its own behaviour or a seize gives it a destination, as an aircraft that the map places on the ground does: its height changes only in a tick in which its own movement moves it) and scenario P46 run 2 (Expected: A appears at its landing point at height 0, not at its cruise height)
+    // spec: S-0306 r80 claim 17 (an aircraft member keeps that height after its hold until an order, its own behaviour or a seize gives it a destination: its height changes only in a tick in which its own movement moves it) and scenario P46 run 2 (Expected: A appears at its landing point at height 0, not at its cruise height, and its height is 0 at the end of every tick from its appearance to h)
     // spec: S-0501 r111 claim 1 (a warp member's appearance does not follow the placement rule: an aircraft whose type cannot land does not appear at its cruise height)
     let (w, a, seen) = warp_aircraft("JET", true, false);
     for s in &seen {
@@ -1211,20 +1229,22 @@ fn r75_claim17_p46_run_2_an_aircraft_member_that_cannot_land_rests_on_the_ground
         assert!(s.on_ground && s.rest, "on the ground at rest: {s:?}");
         assert!(s.kept_filed, "in the ground list: {s:?}");
     }
-    // Q-2526 seam: what the cited rules give after the hold, not what P46
-    // run 2 expects. Its wait's expiry search found no target and fell back
-    // to rest while it stood on the ground at its old cell; as a visiting
-    // aircraft it took *retreat* there, and that *retreat*, its own
-    // behaviour, gives it a destination when the hold ends.
-    // spec: S-0513 claim 39 (when the 60-tick wait expires, a member with no target tries a target search with the conditional draw of S-0207 claim 20 f) and S-0207 claim 20 (f) (when the attempt sets no target the object falls back to its idle behaviour) and S-0501 table T2 (on the ground, visiting, no passengers, not in a team: retreat; current retreat: unchanged)
+    // spec: S-0306 r80 claim 17 (Fall-backs of a warp member: at the wait's expiry a visiting aircraft on the ground with no passengers, not in a team, takes retreat; the fall-back at the hold's end leaves it unchanged) and S-0501 table T2 (on the ground, visiting, no passengers, not in a team: retreat; current retreat: unchanged)
     assert_eq!(
         w.obj(a).unwrap().beh.current,
         Some(glasnost_sim::rules::Behaviour::Retreat),
         "retreat from its wait's expiry"
     );
-    assert!(
-        w.height_above_surface(a) > 0,
-        "it takes off when the hold ends"
+    // spec: S-0306 r80 claim 17 and quirks.warp_hold_end_forgets_destination (default on: a destination its retreat processing gave in the tick in which its hold ends is forgotten and starts no take-off, so it is still at height 0 at the end of that tick)
+    assert_eq!(
+        w.obj(a).unwrap().dest,
+        None,
+        "no destination at the end of h"
+    );
+    assert_eq!(
+        w.height_above_surface(a),
+        0,
+        "still at height 0 at the end of h"
     );
     // spec: S-0306 r75 claim 17 (an aircraft whose type cannot land keeps the ground list while it flies, until a crash)
     assert!(glasnost_sim::air::kept_filed(&w, a));
@@ -1331,4 +1351,278 @@ fn r115_claim36_an_aircraft_member_landing_on_a_high_bridge_cell_from_the_ground
         assert!(s.on_ground && s.rest, "{s:?}");
         assert!(s.deck_listed, "listed on the deck (S-0209 claim 13): {s:?}");
     }
+}
+
+// --- Revision 80: an aircraft member's retreat after its hold (Q-2526) ---------------
+
+/// One row of P46 run 2's record (r80 Observable): at the end of tick `t`,
+/// *A*'s current behaviour, destination, whether it is phasing in (S-0513
+/// Terms), whether it has appeared at its landing point, and its height
+/// above its surface.
+#[derive(Clone, Copy, Debug)]
+struct Row {
+    t: i32,
+    beh: Option<glasnost_sim::rules::Behaviour>,
+    dest: Option<Target>,
+    phasing: bool,
+    appeared: bool,
+    h: i32,
+}
+
+/// P46 run 2 with no order (r80): *A*, a JET of BETA standing at (2, 2)
+/// with *guard*, is the only member of ALPHA's warp to (6, 2), launched in
+/// tick *t*_L. `prep` runs on the world just after *A* is placed. Records a
+/// [`Row`] at the end of each tick from *t*_L on, through tick *h* + 6,
+/// where *h* is the first tick after the appearance at whose end *A* is no
+/// longer phasing in. Returns the world, *A*, *t*_L, *h* and the record.
+fn p46_record(
+    r: &Ruleset,
+    prep: impl Fn(&mut World, ObjectId),
+) -> (World, ObjectId, i32, i32, Vec<Row>) {
+    let mut w = ready(r);
+    let a = testkit::spawn(&mut w, Kind::Aircraft, "JET", BETA.0, at(2, 2), 0);
+    prep(&mut w, a);
+    assert_eq!(
+        w.obj(a).unwrap().beh.current,
+        Some(glasnost_sim::rules::Behaviour::Guard),
+        "set-up: placed with guard"
+    );
+    fire_now(&mut w, ALPHA, SOURCE, at(2, 2));
+    while glasnost_sim::orders::blocked(&w) {
+        step(&mut w);
+    }
+    fire(&mut w, ALPHA, WARP, at(6, 2));
+    let tl = w.tick;
+    let mut rows = Vec::new();
+    let mut appeared = false;
+    let mut h = None;
+    for _ in 0..400 {
+        step(&mut w);
+        let t = w.tick - 1;
+        let o = w.obj(a).expect("A stays in play through the record");
+        if warp::is_member(&w, a) && o.on_map && o.pos.cell() == at(6, 2) {
+            appeared = true;
+        }
+        let phasing = warp::phasing(&w, a);
+        rows.push(Row {
+            t,
+            beh: o.beh.current,
+            dest: o.dest,
+            phasing,
+            appeared,
+            h: w.height_above_surface(a),
+        });
+        if appeared && !phasing && h.is_none() {
+            h = Some(t);
+        }
+        if h.is_some_and(|h| t >= h + 6) {
+            break;
+        }
+    }
+    let h = h.expect("set-up: the hold ended");
+    (w, a, tl, h, rows)
+}
+
+/// The cells of the north edge's candidate points (S-0522 claim 4: the
+/// points (a, 0) for a = 0 … Lw − 1, as cells by S-0522 F2).
+fn north_edge(w: &World) -> Vec<CellXY> {
+    let fp = w.cells.footprint();
+    let [lx, ly, lw, _] = fp.local;
+    (0..lw)
+        .map(|a| {
+            // spec: S-0522 F2 (X = a + Lx, Y = b + Ly; x = ⌊(Y + 1) / 2⌋ + X, y = W + ⌊Y / 2⌋ − X) and claim 4 (north: the points (a, 0))
+            let (x, y) = (a + lx, ly);
+            CellXY::new((y + 1).div_euclid(2) + x, fp.width + y.div_euclid(2) - x)
+        })
+        .collect()
+}
+
+fn row(rows: &[Row], t: i32) -> Row {
+    *rows.iter().find(|r| r.t == t).expect("a row for the tick")
+}
+
+/// The ruleset of P46 with `quirks.warp_hold_end_forgets_destination` set
+/// to `on`.
+fn rules_forget(on: bool) -> Ruleset {
+    let mut r = rules_p46();
+    r.globals.quirks.warp_hold_end_forgets_destination = on;
+    r
+}
+
+#[test]
+fn r80_claim17_p46_run_2_retreat_from_the_expiry_and_a_first_destination_on_the_north_edge() {
+    // spec: S-0306 r80 claim 17 (Fall-backs of a warp member, and an aircraft's retreat: at the wait's expiry a member left with no target falls back to rest at once; a visiting aircraft on the ground with no passengers, not in a team, forgets target and destination and takes retreat; at the second fall-back T2 leaves retreat unchanged; a destination given while it phases in does not hold; its first destination that holds comes at most 3 ticks after its hold ends, a cell on its house's arrival edge; it takes off towards it, above 0 by the end of the tick after the one in which it gets it) and scenario P46 run 2 (Expected)
+    // spec: S-0501 claim 34 (retreat: a cell on its house's arrival edge, delay 3) and S-0522 claim 5 (no building and no named edge: north)
+    let (w, _, tl, h, rows) = p46_record(&rules_p46(), |_, _| {});
+    assert_eq!(
+        w.houses[usize::from(BETA.0)].computed_edge,
+        0,
+        "set-up: H1's arrival edge is north"
+    );
+    assert!(
+        !w.objects
+            .values()
+            .any(|o| o.owner == Some(BETA) && o.kind == Kind::Building),
+        "set-up: H1 owns no building"
+    );
+    for r in rows.iter().filter(|r| r.t < tl + 61) {
+        assert_eq!(
+            r.beh,
+            Some(glasnost_sim::rules::Behaviour::Guard),
+            "not retreat before t_L + 61: {r:?}"
+        );
+    }
+    assert_eq!(
+        row(&rows, tl + 61).beh,
+        Some(glasnost_sim::rules::Behaviour::Retreat),
+        "retreat at the end of t_L + 61"
+    );
+    for r in rows.iter().filter(|r| r.appeared && r.t <= h) {
+        assert_eq!(r.h, 0, "height 0 from the appearance to h: {r:?}");
+    }
+    assert!(
+        rows.iter().any(|r| r.appeared && r.t < h),
+        "set-up: appeared before h"
+    );
+    for r in rows.iter().filter(|r| r.t >= tl + 61 && r.t <= h) {
+        assert_eq!(r.dest, None, "no destination from t_L + 61 to h: {r:?}");
+        assert_eq!(
+            r.beh,
+            Some(glasnost_sim::rules::Behaviour::Retreat),
+            "retreat unchanged: {r:?}"
+        );
+    }
+    let first = rows
+        .iter()
+        .find(|r| r.t > h && r.dest.is_some())
+        .expect("a destination after h");
+    assert!(
+        first.t <= h + 3,
+        "the first destination by the end of h + 3: {first:?} (h {h})"
+    );
+    let Some(Target::Cell(c)) = first.dest else {
+        panic!("a cell destination: {first:?}");
+    };
+    assert!(
+        north_edge(&w).contains(&c),
+        "a cell on the north edge: {c:?}"
+    );
+    assert!(
+        row(&rows, first.t + 1).h > 0,
+        "above height 0 by the end of the tick after: {rows:?}"
+    );
+    for r in rows.iter().filter(|r| r.t > first.t) {
+        assert_eq!(r.dest, first.dest, "it flies on to that cell: {r:?}");
+    }
+}
+
+#[test]
+fn r80_quirk_warp_hold_end_forgets_destination_both_positions() {
+    // spec: S-0306 r80 Edge cases (quirks.warp_hold_end_forgets_destination, default on: in the tick in which its arrival hold ends, a further warp update after its behaviour processing forgets a destination that processing gave, which starts no take-off, so its first destination that holds comes at a retreat processing in a later tick, at most one such processing later; off: no step forgets it, so a destination given in that tick holds and the aircraft takes off towards it once its own movement is back, S-0501 claim 8) and claim 17 (where a retreat processing falls in h, the first destination that holds comes at the next one)
+    // spec: S-0501 claim 34 (retreat processing has a delay of 3 ticks)
+    assert!(
+        glasnost_rules::quirks::Quirks::default().warp_hold_end_forgets_destination,
+        "default on"
+    );
+    // On: the processing in h gave a destination that was forgotten; the
+    // next processing, 3 ticks later, gives the one that holds.
+    let (w, _, _, h, rows) = p46_record(&rules_forget(true), |_, _| {});
+    assert_eq!(row(&rows, h).dest, None, "on: none at the end of h");
+    assert_eq!(row(&rows, h).h, 0, "on: no take-off in h");
+    for t in h + 1..h + 3 {
+        assert_eq!(
+            row(&rows, t).dest,
+            None,
+            "on: none until the next processing"
+        );
+    }
+    let Some(Target::Cell(c)) = row(&rows, h + 3).dest else {
+        panic!("on: a destination at the next processing, h + 3: {rows:?}");
+    };
+    assert!(north_edge(&w).contains(&c), "on: on the north edge");
+    assert!(row(&rows, h + 4).h > 0, "on: in flight by the end of h + 4");
+    // Off: the destination its processing gave in h holds.
+    let (w, _, _, h, rows) = p46_record(&rules_forget(false), |_, _| {});
+    let Some(Target::Cell(c)) = row(&rows, h).dest else {
+        panic!("off: a destination at the end of h: {rows:?}");
+    };
+    assert!(north_edge(&w).contains(&c), "off: on the north edge");
+    assert!(
+        row(&rows, h + 1).h > 0,
+        "off: in flight by the end of h + 1"
+    );
+    for r in rows.iter().filter(|r| r.t > h) {
+        assert_eq!(
+            r.dest,
+            Some(Target::Cell(c)),
+            "off: it flies on to it: {r:?}"
+        );
+    }
+}
+
+#[test]
+fn r80_claim17_a_destination_given_while_an_aircraft_member_phases_in_is_dropped() {
+    // spec: S-0306 r80 claim 17 (for an aircraft member, a destination given while it phases in, its arrival hold included, does not hold: it is dropped as soon as it is given, as S-0207 claim 20 (a) drops one for an object that phases in after an own jump; its first destination that holds comes at a retreat processing after it stops phasing in)
+    // spec: S-0513 claim 40 and quirks.warp_hold_persists (on: the arrival hold uses the member's held delay, which nothing resets after a redirected landing; a held delay of 12 from an earlier redirected warp stands in for that here) and claim 51 (behaviour processing in the arrival hold, after the hold-end test)
+    let (w, a, _, h, rows) = p46_record(&rules_p46(), |w, a| {
+        w.obj_mut(a).unwrap().sw.held_delay = 12;
+    });
+    let held: Vec<&Row> = rows.iter().filter(|r| r.appeared && r.phasing).collect();
+    assert!(
+        held.len() >= 12,
+        "set-up: phasing in for the 12-tick hold and more: {rows:?}"
+    );
+    for r in &held {
+        assert_eq!(
+            r.dest, None,
+            "its retreat's destinations are dropped: {r:?}"
+        );
+        assert_eq!(r.h, 0, "it stays at height 0 while it phases in: {r:?}");
+    }
+    let first = rows
+        .iter()
+        .find(|r| r.t > h && r.dest.is_some())
+        .expect("a destination after h");
+    assert!(first.t <= h + 3, "the first that holds by h + 3: {first:?}");
+    assert!(w.obj(a).is_some());
+}
+
+#[test]
+fn r80_claim17_a_move_order_while_an_aircraft_member_phases_in_does_not_hold() {
+    // spec: S-0306 r80 claim 17 (for an aircraft member, a destination given while it phases in, its arrival hold included, does not hold: it is dropped as soon as it is given) and S-0213 table T3 (f) (an order's destination)
+    // An order given in the tick of its arrival effects is applied after
+    // that tick's turn pass (S-0203 claim 7), while the arrival hold holds.
+    let (mut w, a) = {
+        let mut w = ready(&rules_p46());
+        let a = testkit::spawn(&mut w, Kind::Aircraft, "JET", BETA.0, at(2, 2), 0);
+        fire_now(&mut w, ALPHA, SOURCE, at(2, 2));
+        while glasnost_sim::orders::blocked(&w) {
+            step(&mut w);
+        }
+        fire(&mut w, ALPHA, WARP, at(6, 2));
+        step(&mut w);
+        until(&mut w, 200, |w| stage(w, a) == Some(Stage::Placed));
+        (w, a)
+    };
+    let ok = glasnost_sim::orders::issue(
+        &mut w,
+        BETA,
+        glasnost_sim::orders::Order::Behaviour {
+            actor: a,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(-8, 8))),
+        },
+    );
+    assert!(ok, "the order is taken");
+    step(&mut w);
+    assert!(
+        matches!(stage(&w, a), Some(Stage::Hold(_))),
+        "set-up: applied in the hold"
+    );
+    assert_eq!(w.obj(a).unwrap().dest, None, "the destination is dropped");
+    step(&mut w);
+    assert!(!warp::is_member(&w, a), "set-up: the hold has ended");
+    assert_eq!(w.height_above_surface(a), 0, "no take-off towards it");
 }
