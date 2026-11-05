@@ -290,8 +290,7 @@ fn slides_then_climbs(w: &mut World, a: ObjectId, d: Target) -> usize {
     let stall = w.rules().quirks.aircraft_unit_step_stall;
     let ti = w.obj(a).unwrap().type_index;
     let v = w.rules().unit(Kind::Aircraft, ti).unwrap().speed;
-    let mut on_ground = 0;
-    for _ in 0..200 {
+    for on_ground in 0..200 {
         let o = w.obj(a).unwrap().clone();
         let was = o.air.clone().unwrap();
         let turning = o.body.turning(w.tick) || o.body.turning(w.tick + 1);
@@ -328,7 +327,6 @@ fn slides_then_climbs(w: &mut World, a: ObjectId, d: Target) -> usize {
                 describe(w, a)
             );
         }
-        on_ground += 1;
     }
     panic!("it never climbs: {}", describe(w, a));
 }
