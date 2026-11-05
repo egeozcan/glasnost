@@ -325,6 +325,63 @@ fn claim_6_a_refused_cell_takes_the_replacement_search() {
     assert_ne!(w.rng, rng, "the search's draws");
 }
 
+// spec: S-0501 claim 8 (r120, Q-2507: the point it is landing at is its flight point; the cell compared is that of the new destination's heading point, claim 40, a mobile object's position; the exception ignores the destination: no take-off, the flight point stays as it was, and the ignored destination is still the aircraft's destination)
+#[test]
+fn claim_8_a_destination_object_whose_heading_point_is_in_the_flight_points_cell_is_ignored() {
+    let (mut w, a, c) = stopped();
+    to_landing_start(&mut w, a);
+    let h0 = air::height(&w, a);
+    assert!(h0 > 0);
+    let fp = st(&w, a).flying_to;
+    assert_eq!(fp, Some(Target::Cell(c)), "{}", describe(&w, a));
+    // A vehicle standing in the flight point's cell: its heading point, its
+    // position, is in that cell, but it is not the flight point.
+    let v = tank(&mut w, c);
+    assert!(issue(
+        &mut w,
+        0,
+        Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(v)),
+        }
+    ));
+    let mut h = h0;
+    let mut ignored = false;
+    for i in 0..6 {
+        step(&mut w);
+        let s = st(&w, a);
+        let nh = air::height(&w, a);
+        assert!(
+            !s.taking_off && nh <= h,
+            "no take-off (tick {i}): {}",
+            describe(&w, a)
+        );
+        h = nh;
+        if s.ground {
+            break;
+        }
+        assert!(s.landing, "{}", describe(&w, a));
+        assert_eq!(
+            s.flying_to,
+            fp,
+            "the flight point kept: {}",
+            describe(&w, a)
+        );
+        // The order applies after the turn pass; its first movement update
+        // hands the destination over in the next tick.
+        if i > 0 {
+            assert_eq!(w.obj(a).unwrap().dest, Some(Target::Object(v)));
+            assert_eq!(s.ignored, Some(Target::Object(v)), "{}", describe(&w, a));
+            ignored = true;
+        }
+    }
+    assert!(ignored, "handed over and ignored: {}", describe(&w, a));
+    assert!(h < h0, "it goes on landing");
+}
+
 // spec: S-0501 claim 8 (r120, Q-2507: the point it is landing at is its flight point, not its position; the cell compared is that of the new destination's heading point, and the test is made only when the destination is handed over: a landing aircraft that is over another cell than its flight point's still ignores a destination in the flight point's cell, and an ignored destination is still its destination, so claim 4's descent move draws it toward that cell's centre; it takes off for one in the cell it is now over); AC4 same-cell part, runs (2) and (3)
 #[test]
 fn ac4_runs_2_and_3_the_point_compared_is_the_flight_points_cell() {
