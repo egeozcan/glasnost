@@ -79,7 +79,8 @@ and `scripted` do not. `cargo xtask gate` (native and wasm32) matches all nine.
 | 6, an aircraft that is not moving (no flight point) given no destination: nothing changes | Partly: built; the hold with no flight point and no destination is tested (`claim_7_a_refused_touchdown_in_the_flight_points_cell_forgets_and_holds`, `claims_s0501::claim_45_…`), a clear given during the hold is not |
 | 6, given no destination while landing | Seam (Q-2576, Open question 28): the landing goes on to its flight point, interim |
 | 6, over a cell outside the usable area | Seam (Q-2577): the selection starts from the cell it is over, interim |
-| 8, the flight point's cell, not the position; the heading point's cell; tested only at hand-over; the ignored destination draws the descent | Tested: `ac4_runs_2_and_3_the_point_compared_is_the_flight_points_cell` (AC4's runs (2) and (3), with the flight point set by hand in the next cell), `claims_s0501_r110::ac4_same_cell_…` |
+| 8, the exception at hand-over: a destination other than the flight point whose heading point is in the flight point's cell is ignored, kept as destination, the flight point and the landing kept | Tested: `claim_8_a_destination_object_whose_heading_point_is_in_the_flight_points_cell_is_ignored` (a vehicle standing in the flight point's cell as destination; fails with the exception switched off by hand) |
+| 8, the flight point's cell, not the position; a destination in the cell it is now over makes it take off; the descent drawn toward the destination's cell | Tested: `ac4_runs_2_and_3_the_point_compared_is_the_flight_points_cell` (AC4's runs (2) and (3), with the flight point set by hand in the next cell; run (2)'s destination is the flight point itself, so it shows the outcome, not the exception), `claims_s0501_r110::ac4_same_cell_…`. Partly: AC4's drift out of the flight point's cell is not produced, the flight point is set by hand |
 | 7, the forget in the flight point's cell; the 10-lepton rise; the take-off ending at the next update with the landing's held height; the hold until a destination | Tested: `claim_7_a_refused_touchdown_in_the_flight_points_cell_forgets_and_holds` |
 | 7, the forget outside the flight point's cell: no contact and no building there, forgotten; a building that is not the contact, kept; the contact's cell, forgotten | Tested: `claim_7_the_forget_outside_the_flight_points_cell` (the three cases) |
 | 7, the flight after a refusal that kept the destination | Seam (Q-2578): ordinary flight toward that destination with ordinary flight's held height, interim |
@@ -94,8 +95,9 @@ and `scripted` do not. `cargo xtask gate` (native and wasm32) matches all nine.
 
 ## Lanes
 
-Before: main c09e56d (binaries built there); after: this intake rebased on main ddda868 (seam
-sweeps 5a and 5b, tests only, and the lead's M-0021 revision); same machine, release.
+Before: the pre-rebase base c09e56d (binaries built there); after: this intake rebased on main
+ddda868, which since gained only tests, docs, the M-0021 record and the r121 text (seam sweeps 5a
+and 5b); same machine, release.
 
 | lane | before | after |
 |---|---|---|
