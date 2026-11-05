@@ -159,12 +159,29 @@
 //! disableable superweapon type with the setting off, in both positions of
 //! `quirks.ungranted_super_reads_clock`, printing their running slots.
 //!
+//! M8 step A4 round 8 (the lead's notes 44, 50 and 53): `r8-carrier-squid`
+//! puts a carrier ship of the local house on open water, sends its slot
+//! aircraft at an enemy vehicle and has an enemy grappling parasite attack
+//! the carrier (and, in a second run, kill it), following each slot
+//! aircraft tick by tick: its slot state, behaviour, destination, whether
+//! it leaves play alive outside the usable area (S-0506 claims 9 to 13;
+//! S-0501 claims 10, 17, 34, 35, 45; S-0614 claims 7 and 8).
+//! `r8-pad-no-ammo` gives a pad-bound aircraft with no ammunition an attack
+//! order, on its pad and while it flies home, and counts its heights,
+//! behaviours and the ticks to full ammunition against a control with no
+//! order (S-0214 claim 6 part e; S-0501 claims 8, 17, 24, 26, 28, T1 to
+//! T3). `r8-garrison-fire` garrisons a civilian building that lets its
+//! occupants fire, with an enemy in range before and after the entry, and
+//! counts the ticks to the building's first hit (S-0309 claims 1 to 3;
+//! S-0508 claim 5; S-0308 claim 13). Ids, cells, counts and ticks only.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
 
 #![allow(missing_docs)]
 
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -225,6 +242,9 @@ const SCENES: &[Scene] = &[
     ("barracks-no-rally", barracks_no_rally),
     ("body-rocking", body_rocking),
     ("super-ungranted", super_ungranted),
+    ("r8-carrier-squid", r8_carrier_squid),
+    ("r8-pad-no-ammo", r8_pad_no_ammo),
+    ("r8-garrison-fire", r8_garrison_fire),
 ];
 
 #[test]
@@ -5061,5 +5081,565 @@ fn super_ungranted(_: &mut Lane) {
             crops(&mut l, &key, "60", &[("building", id)]);
             l.save(&key);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// M8 step A4 round 8 (the lead's notes 44, 50 and 53)
+
+/// An armed vehicle type that grapples: naval and organic (S-0614 Terms).
+fn grappler(w: &World) -> Option<String> {
+    let r = w.rules();
+    (0..r.vehicles.len())
+        .find(|&i| {
+            r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                u.combat.naval && u.combat.organic && u.combat.slots[0].is_some() && u.strength > 0
+            })
+        })
+        .map(|i| r.vehicles[i].name.clone())
+}
+
+/// A short word for a destination or target.
+fn target_word(w: &World, t: Option<glasnost_sim::world::Target>) -> String {
+    use glasnost_sim::world::Target;
+    match t {
+        None => "none".into(),
+        Some(Target::Cell(c)) => {
+            let usable = w.cells.usable(c);
+            format!("cell ({}, {}) usable {usable}", c.x, c.y)
+        }
+        Some(Target::Object(o)) => format!("object #{}", o.0),
+    }
+}
+
+/// Note 44: a carrier ship's slot aircraft while an enemy grappling
+/// parasite holds the carrier (run 1) and kills it (run 2); run 0 is the
+/// control without the parasite. In runs 3 and 4 the grappler is itself the
+/// carrier's target: it grapples once a slot aircraft attacks it, and in
+/// run 4 the carrier is killed. In run 5 the grappler comes once a slot
+/// aircraft is 15 cells out. Every slot aircraft is followed for 1500
+/// ticks: the changes of its slot state, behaviour and destination, and
+/// how it leaves play (docked, dead, or alive outside the usable area).
+fn r8_carrier_squid(_lane: &mut Lane) {
+    let probe = Lane::start_on(0).expect("the install is set");
+    let pick = {
+        let w = probe.world();
+        let r = w.rules();
+        r.missiles
+            .spawners
+            .iter()
+            .find(|((k, ti), sr)| {
+                *k == Kind::Vehicle
+                    && r.missiles.set_of(sr.spawned).is_none()
+                    && r.unit(*k, *ti)
+                        .is_some_and(|u| u.locomotor == glasnost_sim::rules::Locomotor::Ship)
+            })
+            .map(|(k, v)| (*k, *v))
+    };
+    let squid = grappler(probe.world());
+    let victim_name = plain_vehicle(probe.world());
+    drop(probe);
+    let (Some(((kind, ti), sr)), Some(squid), Some(victim_name)) = (pick, squid, victim_name)
+    else {
+        println!("r8-carrier-squid: no carrier ship, grappler or plain vehicle type");
+        return;
+    };
+    for run in 0..6 {
+        let mut found = None;
+        for map in 0..env_num("GLASNOST_LANE_MAPS", 8) {
+            let l = Lane::start_on(map).expect("the install is set");
+            let home = l.home();
+            if let Some(at) = l.area(home, (1, 1), 3, |x| x == land::WATER) {
+                found = Some((l, at, map));
+                break;
+            }
+        }
+        let Some((mut l, at, map)) = found else {
+            println!("r8-carrier-squid: no open water on the maps tried");
+            return;
+        };
+        let Some(enemy) = l.enemy() else { return };
+        let local = l.local();
+        let name = type_name_of(l.world(), kind, ti as usize);
+        let car = l.spawn(kind, &name, local, at);
+        // Runs 3 and 4: the carrier's own target is the grappler, on water
+        // beside it (a person's carrier that answers the parasite).
+        let wet = l
+            .area(CellXY::new(at.x + 3, at.y), (1, 1), 0, |x| x == land::WATER)
+            .unwrap_or(CellXY::new(at.x + 3, at.y));
+        let near = if run >= 3 {
+            wet
+        } else {
+            l.open_land(CellXY::new(at.x + 6, at.y))
+        };
+        let victim = if run >= 3 {
+            l.spawn(Kind::Vehicle, &squid, enemy, near)
+        } else {
+            l.spawn(Kind::Vehicle, &victim_name, enemy, near)
+        };
+        if let Some(o) = l.world_mut().obj_mut(victim) {
+            o.health = i32::MAX / 4;
+        }
+        l.ticks(2);
+        let orders = l.order(local, car, ClickOn::Object(victim));
+        let attacking = |w: &World| {
+            w.obj(car).and_then(|o| o.spawn.as_ref()).is_some_and(|c| {
+                c.slots
+                    .iter()
+                    .any(|s| s.state == glasnost_sim::spawn::SlotState::Attacking)
+            })
+        };
+        let waited = until(&mut l, 1500, attacking);
+        println!(
+            "r8-carrier-squid run {run}: map {map}, carrier #{} at ({}, {}), victim #{} at ({}, {}), order {orders}, ticks to a slot attacking {waited:?}",
+            car.0, at.x, at.y, victim.0, near.x, near.y
+        );
+        let mut sq = None;
+        if run >= 3 {
+            let n = l.order(enemy, victim, ClickOn::Object(car));
+            println!(
+                "r8-carrier-squid run {run}: the grappler is the carrier's target, order {n}"
+            );
+            sq = Some(victim);
+        } else if run == 1 || run == 2 {
+            let s = l.spawn(Kind::Vehicle, &squid, enemy, wet);
+            let n = l.order(enemy, s, ClickOn::Object(car));
+            println!(
+                "r8-carrier-squid run {run}: grappler #{} at ({}, {}), order {n}",
+                s.0, wet.x, wet.y
+            );
+            sq = Some(s);
+        }
+        let t0 = l.world().tick;
+        let mut held_at = None;
+        let mut killed_at = None;
+        // Per aircraft of the spawned type: the last state line, how it left.
+        let mut last: BTreeMap<ObjectId, String> = BTreeMap::new();
+        let mut gone: BTreeMap<ObjectId, String> = BTreeMap::new();
+        let mut far: BTreeMap<ObjectId, i32> = BTreeMap::new();
+        let mut lines = 0usize;
+        let mut seen: BTreeMap<ObjectId, (bool, i32, CellXY)> = BTreeMap::new();
+        for _ in 0..1500 {
+            l.ticks(1);
+            let w = l.world();
+            let dt = w.tick - t0;
+            if held_at.is_none() && glasnost_sim::parasite::held(w, car) {
+                held_at = Some(dt);
+                println!("r8-carrier-squid run {run}: +{dt} the carrier is held");
+            }
+            // Run 5: the grappler comes once a slot aircraft is far out.
+            if run == 5 && sq.is_none() && far.values().any(|&d| d >= 15) {
+                let s = l.spawn(Kind::Vehicle, &squid, enemy, wet);
+                let n = l.order(enemy, s, ClickOn::Object(car));
+                println!(
+                    "r8-carrier-squid run {run}: +{dt} grappler #{} at ({}, {}) with the aircraft far out, order {n}",
+                    s.0, wet.x, wet.y
+                );
+                sq = Some(s);
+            }
+            if (run == 2 || run == 4)
+                && killed_at.is_none()
+                && held_at.is_some_and(|h| dt >= h + 40)
+            {
+                killed_at = Some(dt);
+                let h = warhead_of_kind(l.world(), 0).unwrap_or(0);
+                kill_with(&mut l, car, h);
+                println!("r8-carrier-squid run {run}: +{dt} the carrier is killed");
+            }
+            let w = l.world();
+            let slots: Vec<(Option<ObjectId>, glasnost_sim::spawn::SlotState)> = w
+                .obj(car)
+                .and_then(|o| o.spawn.as_ref())
+                .map(|c| c.slots.iter().map(|s| (s.object, s.state)).collect())
+                .unwrap_or_default();
+            let carrier_cell = w.obj(car).map(|o| o.pos.cell());
+            for o in w.objects.values() {
+                if o.kind != Kind::Aircraft || o.type_index != sr.spawned || !o.on_map {
+                    continue;
+                }
+                let slot = slots
+                    .iter()
+                    .find(|(x, _)| *x == Some(o.id))
+                    .map_or("detached", |(_, s)| slot_word(*s));
+                let visiting = o.air.as_ref().is_some_and(|a| a.visiting);
+                let line = format!(
+                    "slot {slot}, behaviour {:?} (queued {:?}), destination {}, target {}, ammunition {}, health {}, visiting {visiting}",
+                    o.beh.current,
+                    o.beh.queued,
+                    target_word(w, o.dest),
+                    target_word(w, o.target),
+                    o.combat.ammo,
+                    o.health
+                );
+                let c = o.pos.cell();
+                seen.insert(o.id, (o.health > 0, o.health, c));
+                if let Some(cc) = carrier_cell {
+                    let d = (c.x - cc.x).abs().max((c.y - cc.y).abs());
+                    let e = far.entry(o.id).or_insert(0);
+                    *e = (*e).max(d);
+                }
+                if last.get(&o.id) != Some(&line) {
+                    if lines < 120 {
+                        println!(
+                            "r8-carrier-squid run {run}: +{dt} aircraft #{} at ({}, {}) usable {}: {line}",
+                            o.id.0,
+                            c.x,
+                            c.y,
+                            w.cells.usable(c)
+                        );
+                    }
+                    lines += 1;
+                    last.insert(o.id, line);
+                }
+            }
+            let ids: Vec<ObjectId> = seen.keys().copied().collect();
+            for id in ids {
+                if gone.contains_key(&id) {
+                    continue;
+                }
+                let here = w.obj(id).is_some_and(|o| o.on_map);
+                if here {
+                    continue;
+                }
+                let (alive, _, c) = seen[&id];
+                let docked = slots.iter().any(|(x, s)| {
+                    *x == Some(id) && *s == glasnost_sim::spawn::SlotState::Reloading
+                });
+                let how = if docked {
+                    "docked in the carrier".to_string()
+                } else if alive && !w.cells.usable(c) {
+                    format!("left play alive outside the usable area at ({}, {})", c.x, c.y)
+                } else if alive {
+                    format!("left play alive inside the usable area at ({}, {})", c.x, c.y)
+                } else {
+                    "left play dead".to_string()
+                };
+                println!(
+                    "r8-carrier-squid run {run}: +{dt} aircraft #{} {how}",
+                    id.0
+                );
+                gone.insert(id, how);
+            }
+            // A docked aircraft comes back as the same object: forget it.
+            gone.retain(|id, how| {
+                !(how.starts_with("docked") && w.obj(*id).is_some_and(|o| o.on_map))
+            });
+        }
+        let alive_off = gone
+            .values()
+            .filter(|h| h.starts_with("left play alive outside"))
+            .count();
+        println!(
+            "r8-carrier-squid run {run}: carrier in play {}, held from {held_at:?}, killed at {killed_at:?}, grappler {:?}; aircraft followed {}, left play alive outside the usable area {alive_off}, furthest from the carrier in cells {far:?}; state lines {lines}",
+            l.world().obj(car).is_some_and(|o| o.on_map),
+            sq.map(|s| s.0),
+            seen.len()
+        );
+    }
+}
+
+/// A pad-bound, armed aircraft type with ammunition, and its first pad type.
+fn pad_aircraft(w: &World) -> Option<(String, String)> {
+    let r = w.rules();
+    (0..r.aircraft.len()).find_map(|i| {
+        let u = r.unit(Kind::Aircraft, i as u32)?;
+        if !u.raw.econ.airport_bound.unwrap_or(false)
+            || u.combat.slots[0].is_none()
+            || u.combat.ammo <= 0
+            || u.strength <= 0
+        {
+            return None;
+        }
+        let pad = u.raw.econ.dock.as_ref()?.first()?.clone();
+        r.index_of(Kind::Building, &pad)?;
+        Some((r.aircraft[i].name.clone(), pad))
+    })
+}
+
+/// Note 50: a pad-bound aircraft released at its pad with no ammunition;
+/// run 0 is the control (no order), run 1 gets an attack order on its pad
+/// as soon as it sleeps there; in run 2 it spends its rounds on a first
+/// attack and gets a second order while it flies home spent. Counts
+/// the heights, behaviours, take-offs and landings, and the ticks to half
+/// and full ammunition.
+fn r8_pad_no_ammo(_lane: &mut Lane) {
+    for run in 0..3 {
+        let mut l = Lane::start_on(0).expect("the install is set");
+        let Some((plane_name, pad_name)) = pad_aircraft(l.world()) else {
+            println!("r8-pad-no-ammo: no pad-bound armed aircraft type");
+            return;
+        };
+        let Some(victim_name) = plain_vehicle(l.world()) else {
+            return;
+        };
+        let Some(enemy) = l.enemy() else { return };
+        let local = l.local();
+        let home = l.home();
+        let pi = l.world().rules().index_of(Kind::Building, &pad_name).unwrap() as usize;
+        let fp = l.world().rules().buildings[pi].foundation;
+        let Some(pad_at) = l.area(
+            CellXY::new(home.x + 8, home.y + 4),
+            fp,
+            1,
+            |x| x != land::WATER && x != land::ROCK,
+        ) else {
+            println!("r8-pad-no-ammo: no place for the pad");
+            return;
+        };
+        let pad = l.spawn(Kind::Building, &pad_name, local, pad_at);
+        l.ticks(2);
+        // Made at its pad, as its factory releases it (S-0501 claim 24).
+        let ai = l.world().rules().index_of(Kind::Aircraft, &plane_name).unwrap();
+        let plane = glasnost_sim::objects::create(l.world_mut(), Kind::Aircraft, ai, Some(local));
+        let released = glasnost_sim::econ::release::release(l.world_mut(), pad, plane);
+        let start = l.world().obj(plane).map_or(pad_at, |o| o.pos.cell());
+        let max = l
+            .world()
+            .rules()
+            .unit(Kind::Aircraft, ai)
+            .map_or(0, |u| u.combat.ammo);
+        // Every run spends its rounds on a first attack run; run 0 is then
+        // ordered to attack again once it sleeps on its pad, run 2 while it
+        // flies home with none, and run 1 is the control with no second
+        // order.
+        let vat = l.open_land(CellXY::new(pad_at.x - 14, pad_at.y + 10));
+        let victim = l.spawn(Kind::Vehicle, &victim_name, enemy, vat);
+        if let Some(o) = l.world_mut().obj_mut(victim) {
+            o.health = i32::MAX / 4;
+        }
+        let first = l.order(local, plane, ClickOn::Object(victim));
+        println!(
+            "r8-pad-no-ammo run {run}: pad #{} at ({}, {}), aircraft #{} at ({}, {}) released {released:?}, half-reload switch {}, its full ammunition {max}, victim #{} at ({}, {}), first attack orders {first}",
+            pad.0,
+            pad_at.x,
+            pad_at.y,
+            plane.0,
+            start.x,
+            start.y,
+            l.world().rules().quirks.aircraft_half_reload_with_target,
+            victim.0,
+            vat.x,
+            vat.y
+        );
+        let t0 = l.world().tick;
+        let mut ordered = None;
+        let mut last = String::new();
+        let mut spent_at = None;
+        let mut full_at = None;
+        let mut took_off = 0;
+        let mut landed = 0;
+        let mut was_ground = glasnost_sim::air::on_ground(l.world(), plane);
+        let mut peak_after = 0;
+        let mut slept_at = None;
+        for _ in 0..4000 {
+            l.ticks(1);
+            let w = l.world();
+            let dt = w.tick - t0;
+            let Some(o) = w.obj(plane).filter(|o| o.on_map) else {
+                println!(
+                    "r8-pad-no-ammo run {run}: +{dt} the aircraft left play (object kept {})",
+                    w.obj(plane).is_some()
+                );
+                break;
+            };
+            let h = glasnost_sim::air::height(w, plane);
+            let ground = glasnost_sim::air::on_ground(w, plane);
+            if ground != was_ground {
+                if ground {
+                    landed += 1;
+                } else {
+                    took_off += 1;
+                }
+                was_ground = ground;
+            }
+            if ordered.is_some() {
+                peak_after = peak_after.max(h);
+            }
+            let ammo = o.combat.ammo;
+            if spent_at.is_none() && ammo == 0 {
+                spent_at = Some(dt);
+            }
+            if spent_at.is_some() && full_at.is_none() && ammo >= max {
+                full_at = Some(dt);
+            }
+            let sleeping = o.beh.current == Some(glasnost_sim::rules::Behaviour::Sleep);
+            if slept_at.is_none() && sleeping && spent_at.is_some() {
+                slept_at = Some(dt);
+            }
+            let enter = o.beh.current == Some(glasnost_sim::rules::Behaviour::Enter);
+            let now = match run {
+                0 => slept_at.is_some() && ground && ammo < max && ordered.is_none(),
+                2 => enter && !ground && h > 200 && ammo == 0 && ordered.is_none(),
+                _ => false,
+            };
+            let line = format!(
+                "behaviour {:?} (queued {:?}), on the ground {ground}, height band {}, ammunition {ammo}, target {}, destination {}",
+                o.beh.current,
+                o.beh.queued,
+                h / 100,
+                target_word(w, o.target),
+                target_word(w, o.dest)
+            );
+            if line != last {
+                println!("r8-pad-no-ammo run {run}: +{dt} {line}");
+                last = line;
+            }
+            if now {
+                let n = l.order(local, plane, ClickOn::Object(victim));
+                println!(
+                    "r8-pad-no-ammo run {run}: +{dt} attack order on the victim with ammunition {ammo}: orders {n}"
+                );
+                ordered = Some(dt);
+            }
+            if full_at.is_some() && dt > full_at.unwrap() + 60 {
+                break;
+            }
+        }
+        println!(
+            "r8-pad-no-ammo run {run}: spent +{spent_at:?}, first sleep after +{slept_at:?}, order +{ordered:?}, take-offs {took_off}, landings {landed}, peak height after the order {peak_after}, full ammunition again +{full_at:?}"
+        );
+    }
+}
+
+/// A civilian building type that infantry can occupy and fire from, and
+/// an armed occupier infantry type.
+fn garrison_types(w: &World) -> Option<(String, String)> {
+    let r = w.rules();
+    let b = (0..r.buildings.len()).find(|&i| {
+        let t = &r.buildings[i];
+        t.building.can_be_occupied
+            && t.building.can_occupy_fire
+            && t.building.max_occupants >= 3
+            && t.raw.tech_level == Some(-1)
+            && t.foundation.0 <= 3
+            && t.foundation.1 <= 3
+    })?;
+    let inf = (0..r.infantry.len()).find(|&i| {
+        r.unit(Kind::Infantry, i as u32).is_some_and(|u| {
+            u.raw.occupier.unwrap_or(false) && u.combat.slots[0].is_some() && u.strength > 0
+        })
+    })?;
+    Some((r.buildings[b].name.clone(), r.infantry[inf].name.clone()))
+}
+
+/// An unarmed infantry type (an enemy in range that cannot shoot back).
+fn unarmed_infantry(w: &World) -> Option<String> {
+    let r = w.rules();
+    (0..r.infantry.len())
+        .find(|&i| {
+            r.unit(Kind::Infantry, i as u32).is_some_and(|u| {
+                u.combat.slots[0].is_none() && u.combat.slots[1].is_none() && u.strength > 0
+            })
+        })
+        .map(|i| r.infantry[i].name.clone())
+}
+
+/// Note 53: three occupiers enter a civilian building; an enemy stands in
+/// range before the entry (runs 0 and 2) or arrives after it (runs 1 and
+/// 3); the enemy is unarmed (runs 0 and 1) or a plain armed vehicle (runs
+/// 2 and 3). Counts the ticks from the last entry to the building's first
+/// target and first hit, and whether the enemy hit the building first.
+fn r8_garrison_fire(_lane: &mut Lane) {
+    for run in 0..4 {
+        let mut l = Lane::start_on(0).expect("the install is set");
+        let Some((bname, iname)) = garrison_types(l.world()) else {
+            println!("r8-garrison-fire: no garrison building or occupier type");
+            return;
+        };
+        let armed_enemy = run >= 2;
+        let enemy_name = if armed_enemy {
+            plain_vehicle(l.world())
+        } else {
+            unarmed_infantry(l.world())
+        };
+        let Some(enemy_name) = enemy_name else {
+            println!("r8-garrison-fire: no enemy type");
+            return;
+        };
+        let enemy_kind = if armed_enemy {
+            Kind::Vehicle
+        } else {
+            Kind::Infantry
+        };
+        let Some(enemy) = l.enemy() else { return };
+        let Some(civ) = glasnost_sim::structures::garrison::civilian_house(l.world()) else {
+            println!("r8-garrison-fire: no civilian house");
+            return;
+        };
+        let local = l.local();
+        let home = l.home();
+        let bi = l.world().rules().index_of(Kind::Building, &bname).unwrap() as usize;
+        let fp = l.world().rules().buildings[bi].foundation;
+        let Some(tl) = l.area(
+            CellXY::new(home.x + 10, home.y),
+            fp,
+            3,
+            |x| x != land::WATER && x != land::ROCK,
+        ) else {
+            println!("r8-garrison-fire: no place for the building");
+            return;
+        };
+        let b = l.spawn(Kind::Building, &bname, civ, tl);
+        let mut men = Vec::new();
+        for k in 0..3 {
+            let c = CellXY::new(tl.x - 2, tl.y + k);
+            men.push(l.spawn(Kind::Infantry, &iname, local, c));
+        }
+        let ecell = CellXY::new(tl.x + fp.0 + 1, tl.y);
+        let place_enemy = |l: &mut Lane| {
+            let e = l.spawn(enemy_kind, &enemy_name, enemy, ecell);
+            if let Some(o) = l.world_mut().obj_mut(e) {
+                o.health = i32::MAX / 4;
+            }
+            e
+        };
+        let before = run % 2 == 0;
+        let mut e = if before { Some(place_enemy(&mut l)) } else { None };
+        l.ticks(2);
+        let mut orders = 0;
+        for &m in &men {
+            orders += l.order(local, m, ClickOn::Object(b));
+        }
+        let t0 = l.world().tick;
+        let all_in = until(&mut l, 900, |w| {
+            glasnost_sim::structures::garrison::count(w, b) == 3
+        });
+        let t_in = l.world().tick;
+        if e.is_none() {
+            e = Some(place_enemy(&mut l));
+        }
+        let e = e.unwrap();
+        let eh0 = l.world().obj(e).map_or(0, |o| o.health);
+        let bh0 = l.world().obj(b).map_or(0, |o| o.health);
+        let mut first_target = None;
+        let mut first_hit = None;
+        let mut building_hit = None;
+        for _ in 0..1200 {
+            l.ticks(1);
+            let w = l.world();
+            let dt = w.tick - t_in;
+            let Some(o) = w.obj(b) else { break };
+            if first_target.is_none() && o.target.is_some() {
+                first_target = Some(dt);
+            }
+            if building_hit.is_none() && o.health < bh0 {
+                building_hit = Some(dt);
+            }
+            if first_hit.is_none() && w.obj(e).is_some_and(|x| x.health < eh0) {
+                first_hit = Some(dt);
+                break;
+            }
+        }
+        let w = l.world();
+        let o = w.obj(b);
+        println!(
+            "r8-garrison-fire run {run}: enemy {} {}, entry orders {orders}, ticks to three inside {all_in:?} (from +{}), occupants {}, building owner is the local house {}, behaviour {:?}; after the entry: first target +{first_target:?}, first hit on the enemy +{first_hit:?}, building hit +{building_hit:?}",
+            if armed_enemy { "armed" } else { "unarmed" },
+            if before { "before the entry" } else { "after the entry" },
+            t_in - t0,
+            glasnost_sim::structures::garrison::count(w, b),
+            o.and_then(|o| o.owner) == Some(local),
+            o.and_then(|o| o.beh.current)
+        );
     }
 }
