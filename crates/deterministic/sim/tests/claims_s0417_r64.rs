@@ -131,20 +131,21 @@ fn claim_17_one_draw_then_refusals() {
     assert_eq!(probe.obj(g).unwrap().dest, first, "the destination is kept");
 }
 
-// spec: S-0417 claim 17 (No path, revision 68: a walking unit holding a destination while its retry delay runs has movement in progress, so each later request is refused with no draw and the destination kept, Q-1980)
+// spec: S-0417 claim 17 (No path, r79: a destination different from the one the walking unit holds ends a running retry delay, S-0212 claim 21, so the request's destination is searched for at once; r68's walker that held it unsearched while the delay ran is gone)
 #[test]
-fn claim_17_destination_without_a_path_is_kept() {
+fn claim_17_running_delay_ended_by_the_request() {
     let (mut w, k, g) = released(&ruleset());
-    // The retry delay of a fresh search runs past the next ticks.
+    let mut plain = w.clone();
+    // A retry delay that runs past the next ticks.
     let wait = w.tick + 30;
     w.obj_mut(g).unwrap().path.retry_at = wait;
     step(&mut w);
     let d = w.obj(g).unwrap().dest;
     assert!(d.is_some(), "the first request gives a destination");
-    for _ in 0..20 {
-        step(&mut w);
-        assert!(glasnost_sim::occupancy::in_progress(&w, g));
-    }
+    assert!(
+        !glasnost_sim::path::delay_runs(&w, g),
+        "the different destination ended it"
+    );
     // A refused request takes no draw.
     let req = ScatterRequest {
         threat: None,
@@ -155,20 +156,26 @@ fn claim_17_destination_without_a_path_is_kept() {
     let before = probe.rng.taken();
     assert!(!scatter::request_resting(&mut probe, g, req));
     assert_eq!(probe.rng.taken(), before, "no draw");
+    // It steps long before the delay would be over.
+    let mut look = w.clone();
+    let at = look.obj(g).unwrap().pos;
+    let mut moved = false;
+    for _ in 0..5 {
+        step(&mut look);
+        moved |= look.obj(g).unwrap().pos != at;
+    }
+    assert!(moved && look.tick < wait, "it walks while the delay would run");
+    // It walks off as the unit with no delay does, tick for tick.
+    let n = until_free(&mut w, g, 200).expect("contact ends");
+    let m = until_free(&mut plain, g, 201).expect("contact ends");
+    assert_eq!(n + 1, m, "the same tick as without the delay");
+    assert!(!holds(&w, cell_of(&w, g), k));
     let asked = answers(&trace::take(&w), g);
-    assert_eq!(asked.len(), 21, "a request in each turn: {asked:?}");
     assert!(asked[0].1);
     assert!(
         asked[1..].iter().all(|a| !a.1),
         "the later ones refused: {asked:?}"
     );
-    assert_eq!(w.obj(g).unwrap().dest, d, "the destination is kept");
-    assert!(holds(&w, cell_of(&w, g), k), "still on K");
-    // Once the delay is over it walks there.
-    let n = until_free(&mut w, g, 200).expect("contact ends");
-    assert!(n < 200);
-    let asked = answers(&trace::take(&w), g);
-    assert!(asked.iter().all(|a| !a.1), "no new destination: {asked:?}");
 }
 
 /// Runs until `g`'s contact with K ends, at most `limit` ticks; returns

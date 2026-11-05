@@ -649,7 +649,7 @@ fn drive_to(w: &mut World, id: ObjectId, dest: Target) {
     if let Some(o) = w.obj_mut(id) {
         // A new destination starts a new path search (S-0212 claim 20).
         o.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
     // spec: S-0207 claim 20 (a) (a teleporting harvester's landing point and mark move at once)
     super::assign_destination(w, id, Some(dest));
@@ -659,7 +659,7 @@ fn drive_to(w: &mut World, id: ObjectId, dest: Target) {
 fn drive_to_none(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
         o.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
     super::assign_destination(w, id, None);
 }
@@ -1385,7 +1385,10 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0402 claim 10 row 2 (not on the docking cell: its destination is set to it, an ordinary move)
         // spec: S-0402 claim 10 row 2 (revision 26: the docking cell is offered at each such processing; an unchanged offer is ignored unless pending destination refresh makes it effective, S-0207 claim 27, so it reaches the dock test again after a fallback)
         if o.dest != Some(Target::Cell(dc)) || crate::refresh::pending(w, id) {
+            // spec: S-0402 claim 10a (the path computation on an offer of the docking cell waits for a running retry delay like any fresh search) and S-0212 claim 21 (r97: those offers are left to S-0402 claim 10a, so the change to the docking cell does not end the delay)
+            let held = crate::path::running_delay(w, id);
             drive_to(w, id, Target::Cell(dc));
+            crate::path::keep_delay(w, id, held);
         }
         // spec: S-0207 claim 28 (One jump: when the offer and the repeated dock test both act in one processing, the offer comes first)
         repeated_dock_test(w, id);

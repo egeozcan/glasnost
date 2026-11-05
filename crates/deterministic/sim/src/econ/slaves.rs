@@ -342,7 +342,7 @@ fn free_to_guard(w: &mut World, s: ObjectId) {
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         ob.queued_dests.clear();
         ob.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
         // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (queued to guard)
         ob.beh.queue(Some(Behaviour::Guard));
     }
@@ -497,7 +497,7 @@ pub fn recall(w: &mut World, master: ObjectId) {
             ob.guard_spot = None;
             ob.queued_dests.clear();
             ob.path.steps.clear();
-            // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+            // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
             // spec: S-0213 table T3 part (h) (its slaves are sent back to guard it)
             ob.beh.force(Behaviour::Guard, t, stale);
         }
@@ -513,7 +513,7 @@ fn walk_to(w: &mut World, id: ObjectId, c: CellXY) {
     if let Some(o) = w.obj_mut(id) {
         // A new destination starts a new path search (S-0212 claim 20).
         o.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
     super::assign_destination(w, id, Some(Target::Cell(c)));
 }

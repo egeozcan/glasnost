@@ -42,6 +42,13 @@ pub struct PathState {
     /// a destination reaches the locomotor or a path is found.
     #[serde(default)]
     pub failed_for: Option<Target>,
+    /// The destination the unit held when its running retry delay started
+    /// ([`start_delay`]). For the driving and walk locomotors the delay
+    /// ends once the destination is no longer this one (S-0212 claim 21,
+    /// [`waits`]); none: the delay is tied to no destination and runs
+    /// until its tick.
+    #[serde(default)]
+    pub retry_for: Option<Target>,
     /// The unit gives way in a deadlock with no way round
     /// (`quirks.deadlock_no_yield` off; our design, C7 part 5); none
     /// otherwise.
@@ -3080,6 +3087,100 @@ pub fn give_up_destination(w: &mut World, id: ObjectId, centre: CellXY) -> Optio
     )
 }
 
+/// Whether a change of the unit's destination ends its running retry
+/// delay: for the driving and walk locomotors (S-0212 claim 21). The ship
+/// locomotor and every other one keep it (claim 21's carve-outs and the
+/// state table, row *destination changes*, low confidence); the hovering
+/// locomotor's delay is S-0503's ([`crate::hover`]).
+fn ends_at_change(w: &World, id: ObjectId) -> bool {
+    // spec: S-0212 claim 21 (for the driving and walk locomotors a running retry delay ends when the destination is changed to a different one or cleared)
+    matches!(
+        crate::lift::current_locomotor(w, id),
+        Some(Locomotor::Drive | Locomotor::Walk)
+    )
+}
+
+/// Starts the retry delay *R* at tick `t` (S-0212 claim 21), tied to the
+/// destination the unit holds now ([`PathState::retry_for`]).
+pub fn start_delay(ob: &mut crate::world::Object, t: i32, r: i32) {
+    ob.path.retry_at = t.wrapping_add(r);
+    ob.path.retry_for = ob.dest;
+}
+
+/// Whether a retry delay runs for `id` on this tick (S-0212 claim 21): its
+/// tick is not reached and, for the driving and walk locomotors, the unit
+/// still holds the destination the delay started with. Reads state only.
+pub fn delay_runs(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if w.tick >= o.path.retry_at {
+        return false;
+    }
+    // spec: S-0212 claim 21 (a destination changed to a different one or cleared ends the delay, a delay started earlier in the same tick included)
+    o.path.retry_for.is_none() || o.dest == o.path.retry_for || !ends_at_change(w, id)
+}
+
+/// [`delay_runs`], ending a delay that a change of destination has ended
+/// (S-0212 claim 21) so that it stays over. Every fresh search and re-path
+/// of the driving and walk locomotors asks this before it waits.
+pub fn waits(w: &mut World, id: ObjectId) -> bool {
+    let runs = delay_runs(w, id);
+    let t = w.tick;
+    if !runs
+        && let Some(ob) = w.obj_mut(id)
+        && ob.path.retry_at > t
+    {
+        // spec: S-0212 claim 21 (the delay ended at the destination's change)
+        ob.path.retry_at = t;
+    }
+    runs
+}
+
+/// What a change of `id`'s destination from `before` does to a running
+/// retry delay (S-0212 claim 21 and its state table, row *destination
+/// changes*): for the driving and walk locomotors a different destination,
+/// or none, ends it, a delay started earlier in the same tick included;
+/// the same destination given again keeps it (claim 21's Open questions).
+/// The other locomotors keep it. Called where a destination reaches the
+/// locomotor ([`crate::infantry::destination_assigned`]); [`waits`] ends it
+/// too for a destination written elsewhere.
+pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>) {
+    let t = w.tick;
+    if !ends_at_change(w, id) {
+        return;
+    }
+    if let Some(ob) = w.obj_mut(id)
+        && ob.dest != before
+        && ob.path.retry_at > t
+    {
+        // spec: S-0212 claim 21 (a destination changed to a different one or cleared ends a running retry delay for the driving and walk locomotors)
+        ob.path.retry_at = t;
+    }
+}
+
+/// The tick a running retry delay of `id` ends at, if one runs
+/// ([`delay_runs`]); with [`keep_delay`], for an assignment whose new
+/// destination leaves a running delay as it was.
+pub fn running_delay(w: &World, id: ObjectId) -> Option<i32> {
+    if !delay_runs(w, id) {
+        return None;
+    }
+    w.obj(id).map(|o| o.path.retry_at)
+}
+
+/// Puts back a delay [`running_delay`] read before an assignment, now tied
+/// to the new destination: a harvester's offer of its docking cell leaves a
+/// running delay running (S-0212 claim 21 and its state table, which leave
+/// those offers to S-0402 claim 10a; S-0402 claim 10a: the path computation
+/// on such an offer waits for a running retry delay like any fresh search).
+pub fn keep_delay(w: &mut World, id: ObjectId, held: Option<i32>) {
+    let Some(at) = held else { return };
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0402 claim 10a (an offer of the docking cell waits for a running retry delay) and S-0212 claim 21 (the docking offers left to that claim)
+        ob.path.retry_at = at;
+        ob.path.retry_for = ob.dest;
+    }
+}
+
 /// What follows a failed path computation (S-0212 claims 21 and 23).
 /// `repath`: the computation was a re-path for a blocked step.
 pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
@@ -3097,12 +3198,12 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             // spec: S-0417 claim 17 (No path: a walking unit whose fresh search fails at the gate has its destination cleared in the same movement update)
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
+                // spec: S-0212 claim 21 (the delay runs after a fresh search, and after a walker's re-path; for the driving and walk locomotors the clearing below ends it again in the same update, so none remains)
+                if !repath || walker {
+                    start_delay(ob, t, r.general.retry_delay);
+                }
                 if drive || walker {
                     ob.dest = None;
-                }
-                // spec: S-0212 claim 21 (the delay runs after a fresh search, and after a walker's re-path)
-                if !repath || walker {
-                    ob.path.retry_at = t.wrapping_add(r.general.retry_delay);
                 }
             }
         }
@@ -3125,8 +3226,8 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             gave_up = gives_up;
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
-                // spec: S-0212 claim 23 (the unit stops and the retry delay R starts)
-                ob.path.retry_at = t.wrapping_add(r.general.retry_delay);
+                // spec: S-0212 claim 23 (the unit stops and the retry delay R starts, which the clearing of its destination below ends again for the driving and walk locomotors, claim 21)
+                start_delay(ob, t, r.general.retry_delay);
                 if drive {
                     ob.dest = None;
                 }
@@ -3154,6 +3255,8 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             }
         }
     }
+    // spec: S-0212 claims 21 and 23 (for the driving and walk locomotors the failure's clearing, or the new destination of claim 23a, ends the delay it started: no delay remains after a failed gate or a failure that clears the destination; a walker that keeps its destination, row 3, waits for R)
+    destination_changed(w, id, o.dest);
     // spec: S-0309 claim 22 (a route failure of a vehicle with the driving locomotor that does not give the move up, the vehicle standing still after it, S-0212 claim 23: a held target not within reach, claim 23, is dropped and the limited-scan mark set; the hovering and ship locomotors' conditions were not examined, Open questions, so they set none here)
     if res != Search::Found
         && !gave_up

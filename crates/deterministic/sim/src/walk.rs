@@ -302,8 +302,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             stopped(w, id);
             return false;
         }
-        // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over)
-        if t < o.path.retry_at {
+        // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over; r97: for the walk locomotor a destination changed to a different one or cleared has ended it)
+        if path::waits(w, id) {
             return false;
         }
         match path::compute(w, id, Mode::Fresh) {
@@ -574,11 +574,13 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.blocked_since = Some(since);
             }
+            let waiting = path::delay_runs(w, id);
             trace::record(w, id, || trace::What::Blocked {
                 since,
-                waiting_until: (t < o.path.retry_at).then_some(o.path.retry_at),
+                waiting_until: waiting.then_some(o.path.retry_at),
             });
-            if t >= o.path.retry_at {
+            // spec: S-0212 claim 21 (r97: the re-path waits for a running delay, which a destination changed to a different one or cleared has ended for the walk locomotor)
+            if !path::waits(w, id) {
                 let delay = w.rules().general.blockage_delay;
                 // spec: S-0209 claim 10 (re-path when the retry timer allows; avoid blockers once the delay has run out)
                 let mode = if t.wrapping_sub(since) >= delay {
@@ -587,10 +589,10 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
                     Mode::Blocked
                 };
                 let res = path::compute(w, id, mode);
-                // spec: S-0212 claim 21 (walker: after a re-path for a moving blocker the delay R starts again)
+                // spec: S-0212 claim 21 (walker: after a re-path for a moving blocker the delay R starts again, unless the failure clears the destination, path::failed)
                 let r = w.rules().general.retry_delay;
                 if let Some(ob) = w.obj_mut(id) {
-                    ob.path.retry_at = t.wrapping_add(r);
+                    path::start_delay(ob, t, r);
                 }
                 if !matches!(res, Search::Found) {
                     path::failed(w, id, res, true);

@@ -360,7 +360,7 @@ fn clear_destination(w: &mut World, id: ObjectId) {
     crate::econ::assign_destination(w, id, None);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
 }
 
@@ -416,7 +416,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         crate::econ::assign_destination(w, id, Some(Target::Object(k)));
         if let Some(ob) = w.obj_mut(id) {
             ob.path.steps.clear();
-            // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+            // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
         }
     }
     // spec: S-0215 claim 29 (enter chooses the standard delay)
@@ -450,7 +450,7 @@ pub fn arrival(w: &mut World, id: ObjectId) -> bool {
     crate::drive::stop_point(w, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
     // spec: S-0606 claim 5 (the completion report: accepted unless the bunker's current behaviour is selling; it sets its ready mark and queues repair without an immediate start; the vehicle stays in enter and queues no sleep)
     if let Some(b) = w.obj_mut(k)
@@ -881,7 +881,7 @@ pub fn process_unload(w: &mut World, v: ObjectId) -> i32 {
     crate::econ::assign_destination(w, v, Some(Target::Cell(dest)));
     if let Some(o) = w.obj_mut(v) {
         o.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
         // spec: S-0606 claim 12 (queues move, without an immediate start; it starts under S-0215 claim 11 when the vehicle is ready, whatever the delay)
         o.beh.queue(Some(Behaviour::Move));
     }

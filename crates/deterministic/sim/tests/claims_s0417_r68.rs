@@ -1,7 +1,8 @@
 //! Claim tests of S-0417 revision 68 (answers Q-1980): claim 17's request
 //! to a walking unit whose destination gets no path (*No path*): the
-//! gate's failure, a failed search, the wait for the retry delay and the
-//! repeated cycle. Synthetic data only: the production ruleset's invented
+//! gate's failure, a failed search and the cycle with no delay, as
+//! revision 79 leaves them (no wait for the retry delay after the gate's
+//! failure; claims_s0417_r79.rs). Synthetic data only: the production ruleset's invented
 //! barracks and infantry types, our own water cells, no game data.
 
 mod econ_common;
@@ -113,8 +114,7 @@ fn probe(w: &World, g: ObjectId) -> (bool, u64) {
 }
 
 // spec: S-0417 claim 17 (No path, failed at the reachability gate: the destination is cleared in the same movement update and movement in progress ends; the behaviour is unchanged; the first request after it is accepted with its draw; no request finds the destination that failed)
-// spec: S-0212 claim 21 (the delay R starts at the failed fresh search)
-// spec: S-0417 U10 g (the expectations of run 2, R = 90)
+// spec: S-0212 claim 21 (r97: the clearing ends the delay R the failed fresh search started, so the accepted destination is searched for without a wait)
 #[test]
 fn claim_17_gate_failure_clears_then_accepts() {
     let (mut w, k, g) = released(&ruleset_r90());
@@ -129,7 +129,7 @@ fn claim_17_gate_failure_clears_then_accepts() {
     let failed = failures(&ev, g);
     assert_eq!(failed, vec![(t, Search::GateFailed, true)], "{failed:?}");
     let o = w.obj(g).unwrap();
-    assert_eq!(o.path.retry_at, t + 90, "R from the failure's tick");
+    assert!(o.path.retry_at <= w.tick, "no delay left (r97)");
     assert_eq!(o.beh.current, Some(Behaviour::Guard), "behaviour unchanged");
     let asked = answers(&ev, g);
     assert_eq!(asked.len(), 1, "{asked:?}");
@@ -137,37 +137,18 @@ fn claim_17_gate_failure_clears_then_accepts() {
     let d = asked[0].2.expect("a new destination");
     assert_ne!(d, isle);
     assert!(!holds(&w, d, k));
-    // While the new destination waits for the rest of R: moving, the same
-    // destination, no draw, then the walk off once the delay is over.
-    while w.tick < t + 90 {
-        assert!(in_progress(&w, g));
-        assert_eq!(w.obj(g).unwrap().dest, Some(Target::Cell(d)));
-        assert_eq!(probe(&w, g), (false, 0));
-        step(&mut w);
-    }
-    let asked = answers(&trace::take(&w), g);
-    assert_eq!(
-        asked.len(),
-        89,
-        "a request in each turn of the wait: {asked:?}"
-    );
-    assert!(
-        asked.iter().all(|a| !a.1),
-        "refused during the wait: {asked:?}"
-    );
-    assert!(
-        holds(&w, w.obj(g).unwrap().pos.cell(), k),
-        "no step before the delay is over"
-    );
+    // The new destination is searched for at once and walked to.
     let mut off = false;
-    for _ in 0..200 {
+    for _ in 0..60 {
+        assert_eq!(w.obj(g).unwrap().dest, Some(Target::Cell(d)));
         step(&mut w);
         if !holds(&w, w.obj(g).unwrap().pos.cell(), k) {
             off = true;
             break;
         }
     }
-    assert!(off, "it walks off the foundation");
+    assert!(off, "it walks off the foundation well before R is over");
+    assert!(w.tick < t + 88, "fewer than R - 2 ticks after the failure");
     assert!(failures(&trace::take(&w), g).is_empty());
 }
 
@@ -236,24 +217,10 @@ fn moated(r: &Ruleset, ticks: i32) -> (usize, usize, Vec<(i32, Search, bool)>, u
     (yes, asked.len() - yes, failures(&ev, g), draws)
 }
 
-// spec: S-0417 claim 17 (No path, the repeated cycle: a destination accepted after a failed search waits for the rest of R with each request refused and no draw; its search fails at the gate, the next request is accepted with a draw; one draw per failed fresh search, not one per turn)
-#[test]
-fn claim_17_one_draw_per_failed_search() {
-    let (yes, no, failed, _) = moated(&ruleset_r90(), 400);
-    assert!(failed.len() >= 3, "{failed:?}");
-    assert!(failed.iter().all(|f| f.1 == Search::GateFailed && f.2));
-    // The first request comes before any search; each failure gives the
-    // next accepted one.
-    assert!(
-        yes == failed.len() + 1 || yes == failed.len(),
-        "accepted {yes}, failed {}",
-        failed.len()
-    );
-    assert!(no > yes * 50, "refused while each destination waits: {no}");
-    for p in failed.windows(2) {
-        assert_eq!(p[1].0 - p[0].0, 90, "one failed search per delay R");
-    }
-}
+// S-0417 r79 replaced the repeated cycle's wait (one draw per failed
+// search): each differing destination is now searched for without a wait,
+// so a draw is taken in each turn, R = 90 as for R = 0
+// (claims_s0417_r79.rs).
 
 // spec: S-0417 claim 17 (No path: when R is 0 there is no wait, and the unit takes one draw in each turn in which a request comes)
 #[test]
