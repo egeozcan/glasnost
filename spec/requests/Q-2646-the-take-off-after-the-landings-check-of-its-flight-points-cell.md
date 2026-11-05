@@ -1,9 +1,9 @@
 ---
 id: Q-2646
 title: What follows the take-off that a landing's check of its flight point's cell gives
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
