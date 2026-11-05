@@ -6312,6 +6312,56 @@ fn claim_1_culling_margins() {
     assert_eq!(count(&mut live, &mut scene, (ax, ay)), all);
 }
 
+/// spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's
+/// house, S-0516 claim 35; its owner still sees it). M8 A4 round 8 note 49.
+#[test]
+fn claim_18_a_disguised_unit_shows_no_insignia_to_whom_it_fools() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, _cart, walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let two = glasnost_num::F64::from_i64(2, glasnost_num::Rounding::TowardZero)
+        .to_f32(glasnost_num::Rounding::TowardZero);
+    live.world.obj_mut(walker).unwrap().combat.experience = two;
+    let status = |live: &mut Live, scene: &mut Scene| {
+        live.redraw_status(&inputs, scene);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(walker)))
+            .count()
+    };
+    live.set_marks(&[], None);
+    live.set_viewer(Some(HouseId(0)));
+    assert_eq!(status(&mut live, &mut scene), 1, "elite, not disguised");
+    live.world.obj_mut(walker).unwrap().cloak.disguise =
+        Some(glasnost_sim::cloak::disguise::Disguise {
+            what: None,
+            house: None,
+            since: 0,
+        });
+    assert!(glasnost_sim::cloak::disguise::appears_disguised(
+        &live.world,
+        walker,
+        Some(HouseId(0))
+    ));
+    assert_eq!(status(&mut live, &mut scene), 0, "disguised to house 0");
+    live.set_viewer(Some(HouseId(1)));
+    assert_eq!(status(&mut live, &mut scene), 1, "its owner sees it");
+}
+
 /// spec: S-0111 claim 2 and scenario OV2's shape (the bracket image and the insignia take the
 /// light-alpha shade at neutral brightness, so a shroud piece darkens them; health segments are
 /// not shaded and keep their palette colour under it)

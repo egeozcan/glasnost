@@ -4237,7 +4237,10 @@ impl Live {
                 }
             }
             let bar = shows.iter().find(|(id, _)| *id == o.id).map(|(_, s)| *s);
-            let insignia = combat::insignia(o.combat.experience, infantry);
+            // spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's house, S-0516 claims 35–36, even when drawn as its real type)
+            let disguised = self.viewer.is_some()
+                && glasnost_sim::cloak::disguise::appears_disguised(&self.world, o.id, self.viewer);
+            let insignia = combat::insignia(o.combat.experience, infantry).filter(|_| !disguised);
             if bar.is_none() && insignia.is_none() {
                 continue;
             }
