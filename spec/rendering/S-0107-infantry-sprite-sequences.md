@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 31
+revision: 40
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-05
 measurements: [M-0008]
-requests: [Q-0087, Q-0212, Q-1525, Q-1715]
+requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566]
 supersedes: []
 ---
 
@@ -324,9 +324,9 @@ used by this spec only:
     *deployed-fire*. That sequence presents an already-made shot, not a pending second shot
     under this claim. A later independently acquired target follows the ordinary rules below.
 
-    On a tick on which an infantry unit has a target, is not in the attack state and
-    its weapon is ready to fire, it enters the attack state, its body facing is set at once (no
-    turning) to the direction of the target, and it asks (not forced) for a firing kind. The
+    On a tick on which an infantry unit has a target, is not in the attack state and its firing
+    check answers *can fire* (S-0301), it enters the attack state, its body facing is set at once
+    (no turning) to the direction of the target, and it asks (not forced) for a firing kind. The
     highest row of this table whose situation holds decides:
 
     | Priority | Situation | Request |
@@ -339,7 +339,8 @@ used by this spec only:
     | 6 | It is prone | *fire-prone* |
     | 7 | Any other case | *fire-standing* |
 
-    The attack state is entered even when the request is turned down.
+    The attack state is entered whether the request is taken or turned down, and it does not wait
+    for the shot.
 
     **Fire frame** *F*: one of the type's four fire-frame fields (Import mapping), chosen by the
     unit's stance and the weapon it fires:
@@ -354,36 +355,79 @@ used by this spec only:
     *wet-fire* use the standing or prone value (`quirks.fire_frame_by_stance`).
 
     **Shot:** on every tick in the attack state on which the stage of the current sequence equals
-    *F*, the weapon fires if it is ready. If it is not ready, the attack state ends and the unit asks
-    (not forced) for *deployed* when deploying, for *prone* when prone, and for *stand* otherwise.
-    With *F* = 0 the shot leaves on the tick the firing kind starts.
+    *F*, the weapon fires if its firing check answers *can fire*. If it does not, the attack state
+    ends and the unit asks (not forced) for *deployed* when deploying, for *prone* when prone, and
+    for *stand* otherwise. With *F* = 0 the shot leaves on the tick the firing kind starts.
 
-    **End of the attack state**, besides the case above: on a tick that begins with a current
+    **End of the attack state.** When the weapon fires at the fire frame *F*, the attack state ends
+    with that shot (S-0215 claim 11, *In the middle of firing*, places this and each ending below
+    within the unit's update). It begins again only on a later tick that meets the entry above, so
+    at or after the end of the rearm countdown (S-0301), and does not depend on the end of the
+    firing kind. Besides the shot and the case above, it ends on a tick that begins with a current
     sequence whose stage delay is 0 (only *stand* and guard have one), in which case the unit also
-    asks (not forced) for *stand*; when the unit has no target; when its target changes; and when a
-    completed *secondary-fire* or *secondary-fire-prone* is repeated for an airstrike (State and
-    ordering). When a firing kind completes and its follow-up (State and ordering) is *stand*, whose
-    delay is 0, the unit leaves the attack state on the next tick and can start a new firing kind
-    once its weapon is ready. A prone unit's follow-up, *prone*, has a non-zero delay, so it stays
-    in the attack state.
-    It then fires again without a new firing sequence when the stage of *prone* equals *F* while
-    the weapon is ready (`quirks.prone_attack_state_persists`). The test uses the stage itself, not
-    the displayed *k* mod *C*, and the stage only grows while *prone* loops (claim 8), so it equals
-    *F* only on the *d* = 6 consecutive ticks (T1) of one stage value per start of *prone*. On the
-    first of those ticks the weapon fires if it is ready, and on any of them on which it is not
-    ready the attack state ends (shot rule). This repeat shot therefore happens at most once per
-    start of *prone*, provided a shot leaves the weapon not ready on the following tick (firing
-    cycle, S-0301).
+    asks (not forced) for *stand*; when the unit has no target; when its target changes, to another
+    target or to none, at once when the order takes effect, the target leaves play, or the unit's
+    own processing or per-tick search changes it; and when a completed *secondary-fire* or
+    *secondary-fire-prone* is repeated for an airstrike (State and ordering). A change of target
+    also asks (not forced) for *deployed* when deploying, for *prone* when prone and for *stand*
+    otherwise, as the not-ready fire frame does, whether or not the unit is in the attack state at
+    that change (claim 6 decides whether the request is taken), so a firing kind still playing gives
+    way to it. The attack-move rule of S-0309 claim 23 discards a target, and puts a remembered
+    target back, without this change-of-target ending (S-0215 claim 11).
+
+    A unit is in the attack state when its firing kind completes only if its firing check answered
+    *can fire* again while the kind still played, so that the attack state began again with the
+    request turned down, or if the kind completed before its stage reached *F*. For a standing unit
+    in the attack state then, whose follow-up (State and ordering) is *stand*, with a delay of 0,
+    the attack state ends at the stage-delay-0 ending in the first update that begins with *stand*
+    current after the kind completes, so a behaviour queued meanwhile becomes current at that
+    update's late start and is first processed at the next update (S-0215 claim 11). The unit can
+    start a new firing kind once its weapon is ready. A prone unit's follow-up after *fire-prone*,
+    or *secondary-fire-prone* that is not repeated for an airstrike (State and ordering), is
+    *prone*, which has a non-zero delay, so with `quirks.prone_attack_state_persists` on, its
+    default, a prone unit that is in the attack state when such a kind completes stays in it. A
+    repeated *secondary-fire-prone* ends the attack state instead (the airstrike ending above). If
+    the rearm countdown outlasts the firing kind, the unit is not in the attack state when the kind
+    completes, and its next shot comes from a new firing kind.
+
+    Such a prone unit then fires again without a new firing sequence when the stage of *prone*
+    equals *F* while its firing check answers *can fire* (`quirks.prone_attack_state_persists`). The
+    test uses the stage itself, not the displayed *k* mod *C*, and the stage only grows while
+    *prone* loops (claim 8), so it equals *F* only on the *d* = 6 consecutive ticks (T1) of one
+    stage value per start of *prone*. On the first of those ticks the weapon fires if its firing
+    check answers *can fire*, and otherwise the attack state ends (shot rule), so either way the
+    state ends on that tick. The shot ends the attack state (*End of the attack state*), and a later
+    begin asks for a new firing kind, so this repeat shot happens at most once per start of *prone*.
 
     Shot timing beyond this belongs to the firing-cycle spec (S-0301). Firing kinds are
     interruptible.
-    - Backing: `measurable` (scenario M8: part (a) for the shot timing, the facing snap, fire
-      frames 0 and *C* and the prone repeat shot; part (b) for the airstrike reset; part (c) for
-      the shot during *go-prone*; part (d) for the end of the attack state on a change of target, and
-      part (e) for the immediate own-cell exception)
-    - Confidence: high (the kind choice, the fire-frame rule, the facing snap, the immediate
-      own-cell exception), medium (the end
-      conditions of the attack state and the prone repeat shot)
+    - Backing: `measurable` (scenario M8: part (a) for the shot timing, the facing snap, fire frames
+      0 and *C* and the prone repeat shot within its scope; part (b) for the airstrike reset; part
+      (c) for the shot during *go-prone*; part (d) for the request that an order's change of target
+      makes, for a standing unit that does not move, in whichever of the two states the order finds
+      it, and part (e) for the immediate own-cell exception), and by S-0215 scenario B45: runs c1
+      and c2 for the end at the shot, the begin again while the kind still plays and the
+      stage-delay-0 ending with the late start after it, and run c3 for the end at an order's change
+      of target. The attack-move exception is `unmeasured` here, as in S-0215 claim 11, since no
+      part here isolates it from the order route. The request at a change of target for a deploying
+      or prone unit is `unmeasured`, as in S-0215 claim 11: no part here changes the target of a
+      firing unit that is deploying or prone. That the request is made both in and out of the attack
+      state, and for a unit that is moving, is `unmeasured` as well: part (d) does not record the
+      attack state at the order and gives no moving unit. The end and the request at a change of
+      target made by the unit's own processing or search, or by the target leaving play, are
+      `unmeasured` too: no part here places that change within the unit's update. The attack state
+      at the completion of a kind that completed before its stage reached *F* is `unmeasured` as
+      well: no part here gives a firing kind that completes before its fire frame. So are the case
+      of a rearm countdown that ends on the tick on which the kind completes, which no part places,
+      and the prone repeat shot after *secondary-fire-prone*, which no part gives.
+    - Confidence: high (the kind choice, the fire-frame rule, the facing snap where the request is
+      taken, the immediate own-cell exception), medium, as S-0215 claim 11 rates being in the middle
+      of firing (the facing snap where the request is turned down, the attack state's begin, its end
+      at the shot, the begin again while the firing kind still plays, the request at a change of
+      target, the end at an order's change of target until S-0215 scenario B45 run c3 runs, the
+      other end conditions of the attack state, the attack-move exception, and the follow-up
+      sentences and the prone repeat shot for a unit that is in the attack state when its firing
+      kind completes)
 
 12. **Facing toward a target for jumpjets.** For a jumpjet that has a target, the facing used in
     claim 2 is the direction from the unit to its target rather than its body facing. This applies
@@ -1085,9 +1129,9 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   replace an interruptible sequence on the tick it would complete, the new sequence is not complete
   (unless it has no image frames, claim 7), so that tick has no follow-up and no declared-direction snap (claim 9) from the replaced one.
 - When the attack state ends because a tick begins with a stage delay of 0 (claim 11), it has
-  already ended for the fear and firing rules of that same tick. A unit whose firing kind
-  completed on tick *t* with *stand* as its follow-up leaves the attack state on tick *t* + 1 and
-  can start a new firing kind on that same tick *t* + 1.
+  already ended for the fear and firing rules of that same tick. A unit that is in the attack state
+  when its firing kind completes on tick *t* with *stand* as its follow-up leaves the attack state
+  on tick *t* + 1 and can start a new firing kind on that same tick *t* + 1.
 - When the fire frame equals *C*, the shot is still released, on the tick the sequence completes.
 - A sequence that a completion follow-up starts on a tick already holds for the movement rule
   (claim 10) on that same tick. The sound cues of a tick are those of the sequence current before
@@ -1175,14 +1219,17 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   rule picks another field. The case the kind choice of claim 11 produces is a prone unit firing
   its secondary weapon whose request fell back to *secondary-fire*: it uses the prone field when
   on and the secondary field when off.
-- **`quirks.prone_attack_state_persists`** (default: on). Only a sequence with a stage delay of 0
-  ends the attack state at the start of a tick, so a prone unit stays in the attack state after
-  *fire-prone* completes. It fires again, with no firing sequence, when the stage of *prone* equals the
-  fire frame while the weapon is ready. This can happen at most once per start of *prone*, provided
-  a shot leaves the weapon not ready on the following tick (S-0301): the stage keeps
-  growing while *prone* loops, and on the later ticks of the same stage value the weapon is not
-  ready, which ends the attack state (claim 11). Off: end the attack state whenever a
-  firing kind completes.
+- **`quirks.prone_attack_state_persists`** (default: on). A prone unit that is in the attack state
+  when *fire-prone*, or *secondary-fire-prone* that is not repeated for an airstrike (State and
+  ordering), completes stays in it: only a sequence with a stage delay of 0 ends the attack state at
+  the start of a tick, and *prone* has a non-zero delay. A unit whose rearm countdown outlasts that
+  kind has left the attack state at its shot (claim 11) and fires next from a new firing kind. A
+  unit still in the attack state when that kind completes fires again, with no firing sequence, when
+  the stage of *prone* equals the fire frame while its firing check answers *can fire*. This can
+  happen at most once per start of *prone*: the stage keeps growing while *prone* loops, the shot
+  ends the attack state (claim 11), and a later begin asks for a new firing kind. Off: a prone
+  unit's attack state ends when such a kind completes. A standing unit's ending is the same in both
+  settings.
 - **`quirks.air_death_fall_generic_follow_up`** (default: on). A completed *air-death-fall* gets the
   general follow-up (*stand*, *walk*, *prone* or *crawl*, forced), even while the unit is still in
   the air. Off: *air-death-fall* loops until *air-death-end* replaces it.
@@ -1554,17 +1601,29 @@ whose …") means any stock type with that property; the property is a precondit
     runs with the declared direction removed show the same groups). Falsified if the group jumps to
     the declared direction on a *parachute* or *shovel* completion tick. Runs: three per variant.
 - **M8 (claim 11; State and ordering, the go-prone bullet).**
-  - (a) Make a soldier attack a wall and log the image frames and its facing per tick from the
-    start of *fire-standing*. Expected: the facing jumps to the target direction on the start
-    tick; the projectile leaves on the tick the stage equals the standing fire frame (fire frame
-    × 1 tick after the start); the next firing sequence starts no earlier than one tick after the
-    previous one completed. Repeat with a prone soldier (hit it first) whose weapon reloads
-    quickly. Expected: an extra shot with no firing sequence when the *prone* stage reaches the
-    prone fire frame. Falsified by any other delay, or if the facing turns gradually. Runs: ten
-    shots standing and ten prone. Then repeat with test art that gives the standing fire frame 0,
-    and with test art that gives it the value of *C* of *fire-standing*. Expected: the shot leaves
-    on the tick the sequence starts, and on the tick it completes, respectively. Falsified by a
-    shot on any other tick. Runs: three per variant.
+  - (a) Make a soldier attack a wall and log the image frames and its facing per tick from the start
+    of *fire-standing*. Expected: the facing jumps to the target direction on the start tick; the
+    projectile leaves on the tick the stage equals the standing fire frame (fire frame × 1 tick
+    after the start); the next firing sequence starts no earlier than one tick after the previous
+    one completed. Repeat with a prone soldier (hit it first) whose weapon, from test rules data,
+    has a rearm delay (S-0301) longer than the stage delay of *fire-prone* (claim 5), so that it
+    does not end while the stage still equals the prone fire frame, and that ends at least 3 ticks
+    before *fire-prone* completes (test art may lengthen *fire-prone*), judged from the recorded
+    tick of each shot and the recorded tick on which *fire-prone* completes. Expected: an extra shot
+    with no firing sequence when the *prone* stage reaches the prone fire frame. Then repeat with
+    test art that gives the prone fire frame a value of at least 2 and test rules data that give a
+    rearm delay that ends after *fire-prone* completes and fewer than *F* × *d* ticks after it,
+    where *F* is the prone fire frame and *d* the stage delay of *prone* (T1), judged from the
+    recorded tick of each shot and of *fire-prone*'s completion. A unit still in the attack state
+    would then fire during *prone* once its stage reaches *F*, so a long-delay run whose countdown
+    ends outside that window judges nothing. Expected there: every shot leaves on a tick on which a
+    *fire-prone* is current, each from a new *fire-prone*. Falsified by any other delay, by no extra
+    shot in a short-delay run, by a shot while *prone* is current in the long-delay runs, or if the
+    facing turns gradually. Runs: ten shots standing, ten prone with the short delay and five
+    long-delay runs whose countdown ends in that window. Then repeat with test art that gives the
+    standing fire frame 0, and with test art that gives it the value of *C* of *fire-standing*.
+    Expected: the shot leaves on the tick the sequence starts, and on the tick it completes,
+    respectively. Falsified by a shot on any other tick. Runs: three per variant.
   - (b) The airstrike reset. Use an infantry type that can designate an airstrike, whose
     *secondary-fire* entry has *C* ≥ 4 and whose weapon's delay between shots is longer than *C*
     ticks (stock data, or test rules and art data that give one type these properties). Let it
@@ -1586,15 +1645,19 @@ whose …") means any stock type with that property; the property is a precondit
     frame is drawn before the shot, and the projectile leaves on the tick after *go-prone* starts
     (its stage 1). Falsified by a firing kind drawn first, or by a shot on any other tick. Runs:
     three runs in which the two events fall on the same tick.
-  - (d) The end of the attack state on a change of target. Use a soldier whose weapon fires again
-    in fewer ticks than the *fire-standing* entry has image frames. It attacks wall A; after its
-    shot and before its sequence completes, the human player orders it to attack wall B, which lies
-    in a clearly different direction. Variant: instead, wall A is destroyed by a trigger in that
-    interval and a new target comes within the soldier's reach a few ticks later, while the
-    sequence still runs. Expected: the body facing turns to the new target at once, within the
-    running sequence, and the stage of the sequence is not restarted (the same kind is requested
-    again and turned down). Falsified if the facing stays on the old direction until the sequence
-    completes. Runs: three per variant.
+  - (d) The request at a change of target. Use a soldier whose weapon fires again in fewer ticks
+    than the *fire-standing* entry has image frames. It attacks wall A; after its shot and before
+    its sequence completes, the human player orders it to attack wall B, which lies in a clearly
+    different direction and within the weapon's range of the soldier's cell, so that the soldier
+    does not move. Record the soldier's target per tick. Expected (claim 11, *End of the attack
+    state* and the entry): at the read after the tick of the order the *fire-standing* that was
+    playing is no longer current: *stand* is, or a new *fire-standing* that started on that tick. A
+    new *fire-standing* starts at its first image frame once the weapon is ready, and on the tick it
+    starts the body facing is set at once to the new target's direction. Falsified by the earlier
+    *fire-standing* still current at that read (its image frame not back at the first), by a facing
+    not on the new target's direction on the tick the new *fire-standing* starts, by a new
+    *fire-standing* whose first drawn image frame is not its first, or by no new *fire-standing*
+    within three times the weapon's rearm delay after the order. Runs: three.
   - (e) Immediate own-cell exception: use the setup, procedure and recording of S-0215
     claim 31's measurement scenario B19(e). Expected: the secondary shot occurs on the
     deciding behaviour-processing tick, its own-cell target is cleared on that tick before
