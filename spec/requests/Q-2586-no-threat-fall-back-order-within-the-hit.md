@@ -1,9 +1,9 @@
 ---
 id: Q-2586
 title: Where S-0215 claim 16's no-threat fall-back falls among the other reactions to the same hit, and whether a heal triggers it
-status: open
+status: answered
 related: [S-0215, S-0302, S-0309, S-0208, S-0107, S-0607]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
