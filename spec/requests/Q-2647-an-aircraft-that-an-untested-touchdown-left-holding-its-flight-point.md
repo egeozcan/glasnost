@@ -1,9 +1,9 @@
 ---
 id: Q-2647
 title: Tracking, listing and movement of an aircraft that an untested touchdown left holding its flight point
-status: open
+status: answered
 related: [S-0501, S-0209, S-0303]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
