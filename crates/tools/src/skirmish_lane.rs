@@ -203,16 +203,16 @@ impl R8Watch {
             {
                 self.tech_bound[h] = Some(w.tick);
             }
-            match goal.and_then(|b| w.obj(b)).filter(|b| {
-                b.kind == Kind::Building && b.owner == o.owner && b.on_map
-            }) {
+            match goal
+                .and_then(|b| w.obj(b))
+                .filter(|b| b.kind == Kind::Building && b.owner == o.owner && b.on_map)
+            {
                 Some(b) => {
                     let strength = glasnost_sim::combat::damage::strength(w, b.id);
                     let role = role_of(w, tech::type_of(b));
-                    let matters = matches!(
-                        role,
-                        Some(Role::Yard | Role::Refinery | Role::Factory(_))
-                    ) || cash(b);
+                    let matters =
+                        matches!(role, Some(Role::Yard | Role::Refinery | Role::Factory(_)))
+                            || cash(b);
                     let wasteful = b.health * 2 > strength || !matters;
                     self.bound.insert(o.id, (h, b.id, wasteful));
                 }

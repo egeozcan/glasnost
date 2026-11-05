@@ -5197,9 +5197,7 @@ fn r8_carrier_squid(_lane: &mut Lane) {
         let mut sq = None;
         if run >= 3 {
             let n = l.order(enemy, victim, ClickOn::Object(car));
-            println!(
-                "r8-carrier-squid run {run}: the grappler is the carrier's target, order {n}"
-            );
+            println!("r8-carrier-squid run {run}: the grappler is the carrier's target, order {n}");
             sq = Some(victim);
         } else if run == 1 || run == 2 {
             let s = l.spawn(Kind::Vehicle, &squid, enemy, wet);
@@ -5308,16 +5306,19 @@ fn r8_carrier_squid(_lane: &mut Lane) {
                 let how = if docked {
                     "docked in the carrier".to_string()
                 } else if alive && !w.cells.usable(c) {
-                    format!("left play alive outside the usable area at ({}, {})", c.x, c.y)
+                    format!(
+                        "left play alive outside the usable area at ({}, {})",
+                        c.x, c.y
+                    )
                 } else if alive {
-                    format!("left play alive inside the usable area at ({}, {})", c.x, c.y)
+                    format!(
+                        "left play alive inside the usable area at ({}, {})",
+                        c.x, c.y
+                    )
                 } else {
                     "left play dead".to_string()
                 };
-                println!(
-                    "r8-carrier-squid run {run}: +{dt} aircraft #{} {how}",
-                    id.0
-                );
+                println!("r8-carrier-squid run {run}: +{dt} aircraft #{} {how}", id.0);
                 gone.insert(id, how);
             }
             // A docked aircraft comes back as the same object: forget it.
@@ -5375,21 +5376,26 @@ fn r8_pad_no_ammo(_lane: &mut Lane) {
         let Some(enemy) = l.enemy() else { return };
         let local = l.local();
         let home = l.home();
-        let pi = l.world().rules().index_of(Kind::Building, &pad_name).unwrap() as usize;
+        let pi = l
+            .world()
+            .rules()
+            .index_of(Kind::Building, &pad_name)
+            .unwrap() as usize;
         let fp = l.world().rules().buildings[pi].foundation;
-        let Some(pad_at) = l.area(
-            CellXY::new(home.x + 8, home.y + 4),
-            fp,
-            1,
-            |x| x != land::WATER && x != land::ROCK,
-        ) else {
+        let Some(pad_at) = l.area(CellXY::new(home.x + 8, home.y + 4), fp, 1, |x| {
+            x != land::WATER && x != land::ROCK
+        }) else {
             println!("r8-pad-no-ammo: no place for the pad");
             return;
         };
         let pad = l.spawn(Kind::Building, &pad_name, local, pad_at);
         l.ticks(2);
         // Made at its pad, as its factory releases it (S-0501 claim 24).
-        let ai = l.world().rules().index_of(Kind::Aircraft, &plane_name).unwrap();
+        let ai = l
+            .world()
+            .rules()
+            .index_of(Kind::Aircraft, &plane_name)
+            .unwrap();
         let plane = glasnost_sim::objects::create(l.world_mut(), Kind::Aircraft, ai, Some(local));
         let released = glasnost_sim::econ::release::release(l.world_mut(), pad, plane);
         let start = l.world().obj(plane).map_or(pad_at, |o| o.pos.cell());
@@ -5570,12 +5576,9 @@ fn r8_garrison_fire(_lane: &mut Lane) {
         let home = l.home();
         let bi = l.world().rules().index_of(Kind::Building, &bname).unwrap() as usize;
         let fp = l.world().rules().buildings[bi].foundation;
-        let Some(tl) = l.area(
-            CellXY::new(home.x + 10, home.y),
-            fp,
-            3,
-            |x| x != land::WATER && x != land::ROCK,
-        ) else {
+        let Some(tl) = l.area(CellXY::new(home.x + 10, home.y), fp, 3, |x| {
+            x != land::WATER && x != land::ROCK
+        }) else {
             println!("r8-garrison-fire: no place for the building");
             return;
         };
@@ -5594,7 +5597,11 @@ fn r8_garrison_fire(_lane: &mut Lane) {
             e
         };
         let before = run % 2 == 0;
-        let mut e = if before { Some(place_enemy(&mut l)) } else { None };
+        let mut e = if before {
+            Some(place_enemy(&mut l))
+        } else {
+            None
+        };
         l.ticks(2);
         let mut orders = 0;
         for &m in &men {
@@ -5635,7 +5642,11 @@ fn r8_garrison_fire(_lane: &mut Lane) {
         println!(
             "r8-garrison-fire run {run}: enemy {} {}, entry orders {orders}, ticks to three inside {all_in:?} (from +{}), occupants {}, building owner is the local house {}, behaviour {:?}; after the entry: first target +{first_target:?}, first hit on the enemy +{first_hit:?}, building hit +{building_hit:?}",
             if armed_enemy { "armed" } else { "unarmed" },
-            if before { "before the entry" } else { "after the entry" },
+            if before {
+                "before the entry"
+            } else {
+                "after the entry"
+            },
             t_in - t0,
             glasnost_sim::structures::garrison::count(w, b),
             o.and_then(|o| o.owner) == Some(local),

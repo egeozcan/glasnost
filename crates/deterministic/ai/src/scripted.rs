@@ -1929,8 +1929,11 @@ impl Script {
                 .filter_map(|&id| w.obj(id).map(|o| (dist2(o.pos.cell(), h), id)))
                 .collect();
             by_home.sort_unstable();
-            let guard: BTreeSet<ObjectId> =
-                by_home.into_iter().take(guard_n).map(|(_, id)| id).collect();
+            let guard: BTreeSet<ObjectId> = by_home
+                .into_iter()
+                .take(guard_n)
+                .map(|(_, id)| id)
+                .collect();
             waiting.retain(|id| !guard.contains(id));
         }
         let size = (self.plan.wave + WAVE_GROWTH * self.waves)
@@ -1958,9 +1961,8 @@ impl Script {
                     })
                     .min()
                     .and_then(|(_, _, owner)| owner);
-                let other = |e: ObjectId| {
-                    focus.is_some_and(|f| w.obj(e).and_then(|o| o.owner) != Some(f))
-                };
+                let other =
+                    |e: ObjectId| focus.is_some_and(|f| w.obj(e).and_then(|o| o.owner) != Some(f));
                 by_home.sort_by_key(|&(e, c)| (other(e), dist2(c, h), e));
             }
             let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();

@@ -895,9 +895,9 @@ fn derrick_scene(g: &Game, derricks: i32) -> (World, Vec<ObjectId>) {
 
 fn orders_engineer(w: &World, orders: &[Order]) -> bool {
     let engi = w.rules().index_of(Kind::Infantry, "ENGI").unwrap();
-    orders
-        .iter()
-        .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == engi))
+    orders.iter().any(
+        |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == engi),
+    )
 }
 
 // design (M8 step A4 round 8, the lead's note 48; S-0515 claims 3 and 5): a seen tech building that pays has the house queue an engineer at once, with no credits in hand (the line pays as money comes in), where before it waited for twice the price.

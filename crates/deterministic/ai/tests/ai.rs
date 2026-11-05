@@ -1865,7 +1865,10 @@ fn waves_wait_for_the_opening_and_leave_a_guard() {
     let opening = glasnost_ai::scripted::OPENING;
     w.tick = (opening + period - 1) / period * period;
     let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
-    assert!(far.iter().all(|&id| sent(&orders, id)), "the wave: {orders:?}");
+    assert!(
+        far.iter().all(|&id| sent(&orders, id)),
+        "the wave: {orders:?}"
+    );
     assert!(
         !near.iter().any(|&id| sent(&orders, id)),
         "the guard stays: {orders:?}"
@@ -1913,8 +1916,14 @@ fn a_scout_explores_the_houses_own_side() {
     assert_eq!(sent.len(), 1, "one scout: {sent:?}");
     let (who, c) = sent[0];
     assert!(far.contains(&who), "the scout is not of the guard");
-    assert!(!shroud::explored(&w, HouseId(0), c), "it goes to an unexplored cell");
-    assert!(d2(c, yard) < d2(c, enemy), "on the house's own side ({c:?})");
+    assert!(
+        !shroud::explored(&w, HouseId(0), c),
+        "it goes to an unexplored cell"
+    );
+    assert!(
+        d2(c, yard) < d2(c, enemy),
+        "on the house's own side ({c:?})"
+    );
     // The whole map explored: no scout.
     let spots: Vec<glasnost_map::CellXY> = w
         .cells
@@ -1924,7 +1933,12 @@ fn a_scout_explores_the_houses_own_side() {
         .filter(|c| c.x % 4 == 0 && c.y % 4 == 0)
         .collect();
     for c in spots {
-        shroud::area_reveal(&mut w, HouseId(0), glasnost_sim::world::Pos::centre(c, 0), 5);
+        shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(c, 0),
+            5,
+        );
     }
     assert!(scouted(&w).is_empty(), "nothing left to scout");
 }
@@ -1934,9 +1948,13 @@ fn a_scout_explores_the_houses_own_side() {
 fn no_attack_order_to_an_aircraft_with_no_ammunition() {
     let map = fixture::map();
     for ammo in [0, 2] {
-        let mut w =
-            glasnost_sim::load::new_game(fixture::rules(), &map, fixture::catalogue(), &fixture::setup(5))
-                .expect("loads");
+        let mut w = glasnost_sim::load::new_game(
+            fixture::rules(),
+            &map,
+            fixture::catalogue(),
+            &fixture::setup(5),
+        )
+        .expect("loads");
         let pad = testkit::spawn(&mut w, Kind::Building, "HPAD", 0, fixture::at(-16, 4), 0);
         testkit::run(&mut w, 2);
         let t = w.rules().index_of(Kind::Aircraft, "JET").unwrap();
