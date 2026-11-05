@@ -2,13 +2,13 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 21
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-05
 measurements: []
-requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032]
+requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032, Q-2671]
 supersedes: []
 ---
 
@@ -17,12 +17,13 @@ supersedes: []
 ## Summary
 
 Skirmish parasite attachment, drone and grappling deliveries, hold effects, release and experience.
-S-0315 claims 6 and 7 own suppression by damage and healing; network games and campaigns are
-out of scope. Claims 15, 20 and 23 answer Q-0620. Claims 21 and 22 answer Q-0621 and Q-0623,
-and claim 18 answers Q-0622. S-0209 claims 4 and 5 already supply entry outcomes, and S-0208
-claim 3 already supplies standing-position choice; this spec establishes their placement uses.
-Claim 24 answers Q-1032: a higher selected special hit strands the carried parasite rather
-than returning it after a failed latch. S-0514 claim 20 already owns effect precedence.
+S-0315 claims 6 and 7 own suppression by damage and healing; network games and campaigns are out of
+scope. Claims 15, 20 and 23 answer Q-0620. Claims 21 and 22 answer Q-0621 and Q-0623, and claim 18
+answers Q-0622. S-0209 claims 4 and 5 already supply entry outcomes, and S-0208 claim 3 already
+supplies standing-position choice; this spec establishes their placement uses. Claim 24 answers
+Q-1032: a higher selected special hit strands the carried parasite rather than returning it after a
+failed latch. Claim 25 answers Q-2671: the grab animation of a grappling parasite. S-0514 claim 20
+already owns effect precedence.
 
 ## Terms
 
@@ -72,6 +73,7 @@ addition:
   off a weakened host (claim 11).
 - **Grappling cycle.** The repeating sequence of a grappling parasite's phases (claim 10 and the
   state table).
+- **Grab animation.** The animation that shows a grappling parasite holding its host (claim 25).
 - **Health colour.** As S-0111 (Terms, claim 5): green, yellow or red, from the health ratio and the
   two game-wide condition ratios, compared in binary64.
 
@@ -116,13 +118,14 @@ addition:
      no practical setup is known for an on-map mobile target without a cell)
    - Confidence: high
 
-3. **Latching onto a target.** When the projectile detonates, parasite attachment is selected
-   under S-0514 claim 20, and its target is latchable, the parasite becomes attached to it:
-   the target becomes its host. The parasite stays off the map,
-   travels with the host and is not hit by anything that hits the host. Its first delivery
-   (claims 6 and 10) happens at the host's next turn (S-0203): in the same tick when the host's
-   turn in the update order comes after the projectile's, otherwise in the next tick. The parasite
-   keeps no target and does not retarget while attached.
+3. **Latching onto a target.** When the projectile detonates, parasite attachment is selected under
+   S-0514 claim 20, and its target is latchable, the parasite becomes attached to it: the target
+   becomes its host. The parasite stays off the map (while a grappling parasite holds its host, the
+   parasite is not drawn, and its own picture in the hold is at most its grab animation, claim 25),
+   travels with the host and is not hit by anything that hits the host. Its first delivery (claims 6
+   and 10) happens at the host's next turn (S-0203): in the same tick when the host's turn in the
+   update order comes after the projectile's, otherwise in the next tick. The parasite keeps no
+   target and does not retarget while attached.
    - Backing: `measurable` (scenario P1)
    - Confidence: high; medium (the first-delivery tick)
 
@@ -236,6 +239,8 @@ addition:
     a hit of its weapon's damage with its warhead, at distance 0, not ignoring defences, with the
     no-escape marker, with the parasite as known attacker and no attacking house. Draws from the
     scenario random stream, in this order:
+    - in the grab's first turn: the creation draws of the grab animation, when it is created (claim
+      25),
     - at the end of the grab: one draw with range 0 … 1 (which way the first push rocks),
     - at each strike, before the cull test: three splash effects, each with one draw with range
       0 … 1 and then one draw with range 0 … *n* − 1, *n* being the number of entries in the
@@ -254,7 +259,7 @@ addition:
     turn, in the turn in which a push phase ends and at the strike: S-0113 claim 14 gives which turn
     writes which *k* (0 to 9, none from 10), the cadence and the sign of each push, from that push's
     own way draw, and S-0113 F4 the value and its rounding. Wake animations are created at the start
-    of each push.
+    of each push. The grab animation is claim 25's.
     - Backing: `measurable` (P6 for timing, hits and the no-escape outcome; P8 for ranged choices),
       `unmeasured` (the absence of a separate attacking house, for the same reason as claim 6)
     - Confidence: high (no use of the rate of fire, the draw count per strike); medium (the exact
@@ -583,6 +588,173 @@ addition:
     - Backing: `measurable` (P14)
     - Confidence: high
 
+25. **The grab animation (Q-2671).** In this claim a *hold* is the time from a grappling parasite's
+    latch until it leaves its host, not claim 7's paralysis hold. While a grappling parasite holds a
+    host, the parasite itself is not drawn. In its place it has at most one animation of the fixed
+    grab animation type (Import mapping), from its creation (below) until its removal or its end.
+    The splash effects and wakes that claim 10 creates during the hold are other animations, not the
+    parasite's picture. No field of the parasite's type, weapon or warhead names that type, so it is
+    the same for every grappling parasite type.
+    - **Creation.** It is created once per hold, in the grab's first turn (the host's turn *g* of
+      F3), before that turn's phase-frame step. Like every step of the cycle, this happens only in a
+      turn of the host that reaches the attached-parasite step (claim 18): when the host's first
+      turns after the latch do not (claim 18's warp turns in our engine), the grab and the creation
+      start in the first turn that does. When the host's cell in that turn is not water, the
+      parasite leaves at once (claim 10) and no animation is created. It is created at the host's
+      position, height included, with no initial loop delay, a repeat factor of 1 and no reverse
+      request. It is not created at the end of the grab, at a push start or at a strike. A later
+      latch, starting a new hold, creates a new one. When no animation type has the fixed name, none
+      is created and the cycle runs as claim 10 gives.
+    - **Attachment.** In that same turn the parasite attaches it to the host with no displacement
+      (S-0109 claim 22), and it attaches it again in any later turn of the hold that reaches that
+      step and finds it detached. So it follows the host's position, height included, and is in the
+      ground render layer. The host's rocking (S-0113 claim 14) tilts the host's body but not the
+      animation, which is always drawn upright.
+    - **Stage.** The cycle sets the animation's stage *k* (S-0109 claim 1). Each time the phase
+      frame *j* of table G steps to a value from 1 to 9, the parasite sets *k* = *b* + 10 × *d* +
+      *j*, leaves the animation's direction of play unchanged, and restarts its stage clock with a
+      stage delay of 128 ticks. That restart is in ticks at every game speed: S-0109 claim 4's
+      normalisation does not replace it, even for a type marked normalised. *d* is the 8-direction
+      (glossary, S-0204 F4) of the host's current body facing at that step. *b* is 0 in the grab, 80
+      in a push with *σ* = −1 and 160 in a push with *σ* = +1 (*σ* as S-0113 claim 14 gives it from
+      the push's way draw). Counting a phase's first turn as turn 1, in turns that reach the
+      attached-parasite step (claim 18), *k* is therefore set in the grab's turns 3, 6, …, 27 and in
+      a push's turns 4, 8, …, 36, never more than 8 such turns apart. When the host takes such a
+      turn in every tick, the settings are at most 8 ticks apart, inside the 128-tick restart, so
+      the animation does not advance by itself between them. When ticks pass without such a turn (a
+      missed turn, S-0203 claims 3, 4 and 10, or a warp turn of claim 18), its clock runs on from
+      the last setting under S-0109's rules (below). A step to phase frame 10 sets nothing, and
+      phase frame 0 is never set: a push's first three turns set nothing, so the animation keeps the
+      last value set unless its clock runs out under S-0109's rules (below). The image frame shown
+      is *a* + *k*, *a* being the type's start frame (S-0109 claim 1).
+    - **Before the first setting.** In the grab's first two turns the animation plays by its own
+      type's fields under S-0109's rules (claims 2 to 8). Its first update follows S-0109 claim 5:
+      it takes its first turn in the creation tick, after every object already in the update order,
+      unless a removal costs it that turn, and its first advance is the one that claim's
+      first-image-frame rule gives, including its case of a 1-tick delay whose first update falls in
+      the next tick. In the grab's third turn the host's step sets the stage before the animation's
+      own update. So, when the host takes its turn in each tick from the latch to the grab's third
+      turn and each of those turns reaches the attached-parasite step (no removal costs it one,
+      S-0203 claims 3, 4 and 10, and no warp suppresses the step, claim 18), only a type whose stage
+      delay is 1 tick can advance by itself before the first setting, and whether it does follows
+      those rules of S-0109 claim 5. When the host misses a turn there, or takes one that does not
+      reach the step, more ticks pass before the first setting, and S-0109's rules decide whether a
+      longer delay also runs out first. The creation's lack of a reverse request does not override
+      the type's own reverse flag: a type marked reversed starts at *k* = λ<sub>e</sub> − 1 and
+      plays reversed (S-0109 claim 8), while the cycle's settings are the same for both directions.
+    - **Between settings and after a switch.** Outside the cycle's settings, S-0109's rules (claims
+      2 to 16) apply from the stage, direction and clock the cycle last left (before the first
+      setting, from those of the creation): an own advance once the clock runs out, a loop delay at
+      the end of a pass that a new pass follows (S-0109 claim 11), the end of its last pass (S-0109
+      claim 16, including its rule for a refused placement) or the switch to its type's follow-up
+      type with that type's fresh stage delay (S-0109 claim 15). This happens in the grab's first
+      two turns and in turns of the host that do not reach the attached-parasite step (claim 18's
+      warp turns in our engine), where nothing sets the stage or restarts its clock. When the
+      animation has ended, nothing recreates it in that hold. When it has switched, the cycle's
+      later settings set the new animation's stage and restart its clock as above.
+    - **Palette and brightness.** In each of the host's turns of the hold that reaches the
+      attached-parasite step (claim 18), its creation turn included, the parasite gives the
+      animation the house-colour palette of the parasite's house, the one the parasite is drawn with
+      when it is on the map (S-0103 claim 8), and, when the host is in a cell, the unscaled ground
+      level of the host's cell (S-0104) as its brightness. In a turn that does not reach the step
+      (claim 18's warp turns in our engine), it gives neither, so the palette and brightness keep
+      the values last given and a change of the cell's light shows from the next turn that reaches
+      the step. It is then drawn by row 3 of S-0103 claim 8 (Changes for other specs), as an
+      object's own animation drawn with its object, unless an earlier row of that table, or its
+      tiled-copies rule, applies to its type: so the type's normal-light flag still gives it
+      brightness 1000, and a tiled type's copies use the anim palette with this brightness kept.
+      Otherwise the palette is the parasite's house colour, not the host's. The parasite sets the
+      palette itself, so the art flag for drawing an animation with its object (S-0103 Import
+      mapping) does not change it.
+    - **Translucency and viewers.** Its creator asks for no translucency, so its type's own
+      translucency and detail fields apply (S-0109 claim 20 for translucency, claim 19 for the
+      detail field). It is drawn for every viewer by the ordinary animation rules. Neither the cloak
+      or submerged state of the parasite, which is off the map, nor the host's cloak changes whether
+      it is drawn. These states seldom last: a held host is uncloaked (claim 8), and a parasite
+      uncloaks when it fires its latching weapon (S-0516 claim 11).
+    - **Removal.** Apart from an end under S-0109's rules (above), it never ends by itself. It is
+      removed at once when the parasite leaves the host by any way of claims 11 to 13 (a cull, any
+      way of claim 12, a host cell that is not water), when the strike's own hit destroys the host
+      (in that strike's turn), when the host is lost otherwise (claim 15) and when the parasite is
+      removed from the game. A culled host therefore sinks without it. At each of these removals it
+      stops being drawn from that turn on and leaves play in that turn, as an animation that ends
+      does (S-0203 claim 10). The parasite removes it before the host leaves play, so S-0109 claim
+      22's deletion at the animation's next update after its owner's removal does not apply. Created
+      during the host's turn, it stands after the host in the update order (S-0109 claim 29), so its
+      leaving during the host's turn costs no object a turn. When it leaves during another object's
+      turn, as at a host loss of claim 15 caused by another object, S-0203 claim 10 decides by its
+      place against that object.
+    - **Draws.** Its creation takes, from the scenario random stream, the draws S-0109 gives any
+      animation created with no loop delay: claim 3's stage-delay draw, when its type has a
+      random rate, then claim 13's start-event draws. They are taken at the creation, in turn
+      *g*. Setting its stage, palette, brightness or attachment takes no draw. It belongs to the
+      simulation like every animation (S-0109 claim 28), and no cosmetic stream is used.
+    - Backing: `measurable` (P15 for the type, creation, the position on the map, no tilt, stage,
+      no own advance between settings when every turn reaches the step, the start before the first
+      setting for a type with a stage delay of exactly 2 ticks, as P15's test type has, and a host
+      that misses no turn, a reversed type, palette, brightness, its following of a light change,
+      the type's own translucency, the viewers owning the parasite and the host, the attachment
+      and the animation following the host while it moves in the release variant, a new animation
+      at a second latch, and removal on the off-water release, at the destroying strike and at the
+      cull; P8 for the draws; the tiled-copies rule and the precedence of S-0103's earlier rows
+      have S-0103 claim 8's backing, and the detail field has S-0109 claim 19's). `unmeasured` for
+      where the removed animation leaves the update order and so for its effect on later objects'
+      turns: P15 records only the drawing. `unmeasured` for the creation's lack of an initial loop
+      delay and its repeat factor of 1: the first setting restarts the clock, and no run reaches a
+      pass end before it. `unmeasured` for the level being the unscaled ground level rather than a
+      scaled one: P15's lighting variants change the ambient level only, which may move both
+      alike. P15's extra-light variant tells the unscaled ground level from the host's own
+      brightness. `unmeasured` for a first grab turn that finds a cell that is not water: the
+      latch needs a water cell (claim 2), and no run is known to move the host off water between
+      the latch and the grab's first turn. Removal by the other ways of claim 12 is `measurable`
+      by claim 12's scenarios with P15's recording of the grab animation added to them.
+      `unmeasured` for the art flag for drawing with its object, which no P15 variant sets: it
+      matters only to a type that sets it off, and the flag is on when absent (S-0103 Import
+      mapping). `unmeasured` for the 128-tick value itself, its being in ticks at every game
+      speed, and for the animation's own rules between settings and after a switch: in turns that
+      reach the step the settings come at most 8 turns apart, so 128 shows only in turns without a
+      step, which in our engine are claim 18's engine-design warp turns while the original's step
+      through them is unresolved (S-0513 claim 52), and a follow-up switch, a loop delay or a pass
+      end before the first setting needs a type with a 1-tick delay, whose first advance S-0109
+      claim 5 conditions on the update order. `unmeasured` for removal with the parasite removed
+      from the game while attached: no skirmish action removes an attached grappling parasite
+      without it leaving the host or the host being lost. The rows of claim 12 that remove the
+      parasite silently do so as it exits the host (their last column), so they are ways of
+      leaving the host. `unmeasured` for the absent type, which needs an install without that
+      animation type, and the stock-data setup offers none. `unmeasured` for the reattachment of a
+      detached animation: no skirmish event is known to detach it during a hold (S-0109 claim 22
+      rates detachment `unmeasured`). The creation, settings, palette and brightness in turns that
+      do not reach the step follow claim 18's engine-design warp contract and take its backing.
+      `unmeasured` for the cloak and submerged states: a held host is uncloaked (claim 8) and a
+      parasite uncloaks when it fires its latching weapon (S-0516 claim 11), so no run is known to
+      hold either state while the animation is drawn. `unmeasured` for the height: a host held by
+      a grappling parasite is on water, where no run tells its height from the cell's.
+    - Confidence: high (the fixed type, one creation per hold in the grab's first turn on water, the
+      position on the map at creation, the stage formula, the type's own reverse flag applying, the
+      parasite's palette in turns that reach the step for a type that meets no earlier row of S-0103
+      claim 8 and is not tiled, the normal-light flag's brightness 1000, no translucency asked by
+      the creator, no tilt, no draw for the settings, removal at the off-water release, at the
+      destroying strike and at the cull, the animation no longer drawn from that turn on, the
+      viewers owning the parasite and the host); medium (the attachment and the animation following
+      the host's position, a new animation at a later latch, the removed animation leaving play in
+      that turn and its effect on later objects' turns, the creation's lack of an initial loop delay
+      and its repeat factor of 1, the same type for every other grappling parasite type, the palette
+      where an earlier row or the tiled-copies rule applies, as S-0103 rates the precedence between
+      rows, the detail field, the art flag for drawing with its object not changing the palette, no
+      creation when the first grab turn finds a cell that is not water, removal by the other ways of
+      claim 12, the brightness and its following of a light change, as S-0103 claim 8 rates the
+      brightness of row 3, the height, the cloak and submerged states, no own advance between
+      settings, which rests on the 128-tick value, the 128-tick value of the restart and its being
+      in ticks at every game speed, the reattachment of a detached animation, the creation,
+      settings, palette and brightness in turns that do not reach the step, which follow claim 18's
+      engine-design contract, the turns that set the stage, which rest on the phase stepping of
+      claim 10 and S-0113 claim 14's frame count *k*, the first update and any own advance before
+      the first setting, and the start when the host misses a turn or takes one that does not reach
+      the step, S-0109's rules between settings and after a switch, viewers other than the owners of
+      the parasite and of the host, which P15 does not run, removal at host loss and at the
+      parasite's removal, the creation draws, which depend on the type's fields under S-0109, the
+      absent type)
+
 ## Formulas
 
 **F1, drone delivery ticks and the hold.** *t*₀ is the first delivery tick (claim 3), *R* ≥ 0 the
@@ -607,7 +779,8 @@ The push point is S-0113 F3's: about 2 leptons to the host's left when the side 
 about 2 leptons to its right when it gives 1, with floating-point trigonometry and truncation
 toward zero to whole leptons.
 
-**F3, grappling cycle timing.** *g* is the host's first turn after latching (the grab's first tick):
+**F3, grappling cycle timing.** *g* is the host's first turn after latching that reaches the
+attached-parasite step of claim 18 (the grab's first tick):
 
 > first strike at *g* + 69; strike *j* (j = 1, 2, …) at *g* + 69 + 40 × (*j* − 1)
 
@@ -676,7 +849,7 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 
 | Phase | Each turn | When the phase ends | Draws at the end |
 |---|---|---|---|
-| grab (starts at latching) | host held | a push phase starts in the same tick | 1 (range 0 … 1: push way), then six wake-displacement choices (claim 10) |
+| grab (starts at latching) | host held; the grab animation created in the first turn (claim 25) | a push phase starts in the same tick | 1 (range 0 … 1: push way), then six wake-displacement choices (claim 10) |
 | push (either way) | host held; host roll per Constants | the strike happens in the next tick | none |
 | strike (one tick) | host roll 0; three splash effects; cull test (F6) | cull: the parasite leaves, not held afterwards (claim 11); otherwise the hit, then, when the host still has the parasite, a push phase starts in the same tick | 3 × (range 0 … 1, range 0 … *n* − 1) before the test; 1 (range 0 … 1) and six wake-displacement choices after a hit that leaves the attachment intact |
 
@@ -759,9 +932,13 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 | rules `[CombatDamage]` | `SplashList` | list of animation names | the splash effects and the size *n* of claim 10 | as S-0303 |
 | rules `[General]` | `Wake` | animation name | the wakes of claim 10 | as S-0312 |
 
-The grab animation of claim 10 is not read from a key: the original selects the animation type
-identified by a fixed engine constant (presentation). When no such animation type exists, no
-grab animation is shown and the cycle runs as described.
+The grab animation of claim 25 is not named by any key of the parasite's type, weapon or warhead:
+the original uses a fixed animation type name, given in the table below. It is an engine constant,
+not stock data, and it is the same for every grappling parasite type.
+
+| Source | Key | Parse form | Feeds | Absent-key default |
+|---|---|---|---|---|
+| none (fixed in the original) | animation type `SQDG` | name, found without regard to letter case (S-0004 claims 2 and 7) | the grab animation (claim 25) | none: no grab animation, and the cycle runs as claim 10 gives |
 
 The team keys that ask a parasite to rejoin its team after coming out concern the original's
 computer player and are out of scope.
@@ -877,14 +1054,16 @@ For every part, a result different from its stated expectation falsifies that pa
   at launch at its old position. Apply a locomotor-replacing weapon to a latchable host carrying
   a naval parasite and then a non-naval one (named map variants if needed); expected release
   only for the naval parasite.
-- **P8, random choices (claims 9, 10).** Use P1 and P6 setups and the random-state recorder for
+- **P8, random choices (claims 9, 10, 25).** Use P1 and P6 setups and the random-state recorder for
   twenty deliveries and twenty surviving strikes. Predict ranged choices with S-0202 claim 4.
   Named map overrides disable optional particles and animation randomness to isolate these
   choices, then restore each effect separately. Expected: a non-infantry drone delivery's one
   0 … 1 choice before its hit; no such choice for an infantry delivery. For grappling, expected
   the push-direction choice, six wake-displacement choices in the listed order, six splash
   choices before each cull test, and a new direction plus wake choices only after a surviving
-  hit. Account separately for raw-value rejection and effect-owned randomness; an extra
+  hit. In the grab's first turn, expected only the grab animation's creation draws that S-0109
+  claims 3 and 13 give for its type's fields, and none from its later settings. Account
+  separately for raw-value rejection and effect-owned randomness; an extra
   unaccounted ranged choice, a different range or a changed order falsifies the explicit list.
 - **P9, hold, reuse and selection (claims 8, 14, 19).** Release a parasite from a vehicle by
   a sonic hit, then immediately issue move and attack orders to the released parasite.
@@ -1017,6 +1196,101 @@ For every part, a result different from its stated expectation falsifies that pa
   attachment-selected control that becomes non-latchable during flight: it returns under
   claim 4. The recorder must distinguish an extant off-map unit from silent removal, not
   infer either from disappearance on screen. No completed oracle measurement is claimed.
+- **P15, grab animation (claim 25; Q-2671).** Use P6's set-up: a grappling-parasite test unit
+  latching onto a ship on open water, the parasite's and the ship's houses with different house
+  colours. A named test art file gives the fixed grab animation type a test sprite whose image
+  frames each show their own index and each hold a block of pixels in the house-colour remap range
+  of the palette (S-0103), with start frame 0, 240 image frames (enough for every stage *k* of claim
+  25), a loop end of 240 and an end field of 240 given in the test art section, a stage delay of
+  exactly 2 ticks and no reverse or tiled flag, and a named map lighting variant gives the map an
+  ambient level other than neutral. Record frame by frame, from the latch to the sixth strike, and
+  repeat with further seeds until a push of each way (S-0113 claim 14's *σ*, read from the host's
+  rocking) has been recorded: every animation created near the host, with its tick, type, image
+  frame, screen position against the host's draw point, render layer, palette remap colour and
+  brightness, the host's body facing, each push's rocking way and whether the picture is rotated or
+  skewed against the test sprite. Then release by moving the host onto a cell that is not water
+  (P6's zero-paralysis amphibious variant) and record the same until two ticks after the release.
+  Run it with the host at each of the eight 8-directions in turn, with the viewer owning the
+  parasite and with the viewer owning the host. No superweapon is fired. The test map places no
+  terrain object that takes turns and has the host as its first vehicle entry, so the host is the
+  first map-placed object in S-0203 claim 3's order. The parasite, the second ship and the starting
+  units stand after it, and every object created during the run, the splash effects, wakes and
+  ending animations of the hold included, enters play after it (S-0203 claims 3 and 4), so a removal
+  of any of them costs the host no turn (S-0203 claim 10). Only the game-start animations and the
+  shared gas system, which S-0203 claim 3 does not order, can stand before it. Record every removal
+  from the map with its tick for the whole run, and note which objects were in play at game start. A
+  run is used for the frames and setting turns only up to its first removal of a game-start object
+  other than the map-placed ones, which may cost the host a turn. Until then the host takes a turn
+  in every tick and every one reaches the attached-parasite step, so its turns are counted by ticks.
+  Repeat with further seeds until the grab and a push of each way have been recorded before any such
+  removal. Named variants: a weak host that the first strike's hit destroys, with the cull flag off,
+  and a culled host. In the weak-host variant a second ship of the host's house, put in play after
+  the host, stands on open water near the first, and the parasite, back on the map on water, is
+  ordered to attack it, so that it latches onto it. A named art variant of the test type with its
+  reverse flag set, one with its translucency field set to a level other than none, and one with its
+  normal-light flag set. A named rules variant sets the game-wide extra unit light (S-0104 claim 13)
+  to a value other than 0, so that the host's own brightness differs from the unscaled ground level
+  of its cell. Also record each drawn animation's translucency level. A named light-change variant
+  sets the ambient change step and rate in the test map's game-wide visual section and fires a map
+  trigger action that changes the ambient level (S-0104 claims 14 and 4) in the grab's first turn,
+  so that the fade ends before the first strike. Expected: one grab animation, created in the grab's
+  first turn at the host's position and in the ground layer, following the host while it moves in
+  the release variant until it is removed, no second one in the hold, and a new one in the second
+  ship's hold. Image frame 0 in the grab's first two turns; image frames 10 × *d* + *j* in grab
+  turns 3*j* and *b* + 10 × *d* + *j* in push turns 4*j*, each held until the next setting, with *b*
+  = 80 for a push of way *σ* = −1 and 160 for *σ* = +1. The parasite's house colour and the shade of
+  the unscaled ground level of the host's cell, following that level in the light-change variant
+  with a lag of at most one host turn (claim 25: a change shows from the next turn that reaches the
+  step), brightness 1000 in the normal-light variant, the unscaled ground level, not the host's
+  brightness, in the extra-light variant, and the same picture for both viewers; no translucency in
+  the base run and the set level in the translucent variant; in the reversed variant, image frame
+  239, which is λ<sub>e</sub> − 1 for the fixture's loop end (S-0109 claim 8), in the grab's first
+  two turns and the base run's frames from the grab's third turn on; removal in the release turn, in
+  the destroying strike's turn and at the cull, with no grab animation while the culled host sinks.
+  Falsified by: a second grab animation in one hold, none in the second ship's hold, the animation
+  left behind while the held host moves, a picture rotated or skewed with the host's rocking, an
+  image frame or a setting turn other than these in the first ship's hold, an image frame change
+  between settings, the host's house colour or the anim palette on the remap block, a viewer who
+  does not see it, a translucency other than the type's, a brightness that lags the cell's level by
+  more than one host turn, or the animation remaining after the release.
+
+## Changes for other specs
+
+- **For S-0103 claim 8 (*Which own animations are drawn with their object (row 3)* and *Brightness
+  of row 3*), its Terms entry *Object's own animation*, its Import mapping row for the art flag for
+  drawing an animation with its object, and its Open question on rows 2 and 3 of claim 8.** The list
+  and the Terms entry can add a grappling parasite's grab animation (S-0614 claim 25): it always is
+  an own animation drawn with its object, that object being the parasite, so it takes the parasite's
+  house-colour palette, not the host's. The Import mapping row can add it to the animations that
+  ignore that art flag, since the parasite sets its palette itself. The Open question's list of own
+  animations, which may be incomplete, gains the grab animation. *Brightness of row 3* can add that
+  a grab animation is drawn at the unscaled ground level of its host's cell (S-0104), set when it is
+  created and set again in each of the host's turns that reach the attached-parasite step (S-0614
+  claims 18 and 25), so it follows changes to that cell's light from the next such turn. The
+  normal-light flag and the tiled-copies rule apply to it as to the other row-3 animations, and
+  S-0103's precedence between rows is unchanged. Confidence: high for the palette in turns that
+  reach the step for a type that meets no earlier row and is not tiled, and for the normal-light
+  flag's brightness 1000; medium for ignoring the art flag, for the brightness and its following of
+  a light change, as S-0103 already rates the brightness of row 3, and for both in turns that do not
+  reach the step, which follow S-0614 claim 18's engine-design contract. Backing: `measurable`
+  (S-0614 P15, its light-change and normal-light variants included), and `unmeasured` for the art
+  flag, which no P15 variant sets, and for the level being the unscaled ground level rather than a
+  scaled one (S-0614 claim 25's Backing).
+- **For S-0104 claim 13 (*Object brightness*, the row-3 list of its *Animations* item), its Formulas
+  table *Object brightness*, its Formulas line on the unscaled ground level and its Open question on
+  the brightness of an object's own animation drawn with its object.** Beside "Any other animation
+  of this row: not established", claim 13 can add the grab animation: *U* of its host's cell, given
+  as in the S-0103 entry above, with the normal-light flag's 1000 taking precedence. The other
+  animations of that row stay open. The Formulas table *Object brightness* can add a row: grab
+  animation of a grappling parasite, *U* of the host's cell, given at creation and in each of the
+  host's turns that reach the attached-parasite step (S-0614 claims 18 and 25), 1000 with the
+  normal-light flag. The Formulas line on who uses the unscaled ground level can add the grab
+  animation beside a building's own animations and parachutes, and the Open question can name it
+  beside them as an exception. Confidence: high for the normal-light flag's 1000, medium for *U* and
+  its following of a light change. Backing: `measurable` (S-0614 P15, its normal-light and
+  light-change variants included), and `unmeasured` for *U* being the unscaled ground level rather
+  than a scaled one: P15's lighting variants change the ambient level only (S-0614 claim 25's
+  Backing).
 
 ## Open questions
 
