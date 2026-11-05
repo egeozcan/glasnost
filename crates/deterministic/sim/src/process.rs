@@ -287,20 +287,26 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
 /// S-0501 claim 18 for an aircraft). The rest tables then decide, so the
 /// fall-back queues what they give, without an immediate start.
 pub fn no_threat_fall_back(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id) else { return };
+    if no_threat_applies(w, id) {
+        // spec: S-0215 claim 16 (it falls back to rest at once, claims 13 to 15; an ordinary fall-back, not the placement one)
+        fall_back(w, id, false);
+    }
+}
+
+/// Whether the no-threat fall-back of S-0215 claim 16 would apply to `id`
+/// now: judged on the behaviour it sees. A berserk hit judges it before the
+/// berserk entry queues *hunt* (S-0302 claim 10).
+pub fn no_threat_applies(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
     // spec: S-0215 claim 16 (a mobile actor; not a team member: no house of our engine has teams, Terms)
     if !o.kind.is_mobile() {
-        return;
+        return false;
     }
     // spec: S-0215 claim 16 and claim 1 (the current behaviour, or with none current the queued one)
-    let Some(b) = o.beh.seen() else { return };
+    let Some(b) = o.beh.seen() else { return false };
     let p = w.rules().behaviour(b);
     // spec: S-0215 claim 16 and claim 17 (the no-threat property, and no fall-back while the zombie property holds)
-    if !p.no_threat || p.zombie {
-        return;
-    }
-    // spec: S-0215 claim 16 (it falls back to rest at once, claims 13 to 15; an ordinary fall-back, not the placement one)
-    fall_back(w, id, false);
+    p.no_threat && !p.zombie
 }
 
 /// The guard-area veterancy ability at the actor's current rank (S-0311 claim 3).
