@@ -735,7 +735,9 @@ fn counts_drain_links_and_credits_drained() {
     .expect("the M7b skirmish loads");
     let mut tally = Tally::default();
     let mut paid = 0;
-    while g.world.tick < 3000 && paid < 3 {
+    // The AI's opening holds its first wave back (M8 step A4 round 8), so
+    // the first link forms later than tick 3000.
+    while g.world.tick < 12000 && paid < 3 {
         g.step();
         for e in &g.world.effects {
             tally.effect(e);
