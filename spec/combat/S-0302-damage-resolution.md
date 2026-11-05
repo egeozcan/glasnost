@@ -2,13 +2,13 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 41
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-05
 measurements: []
-requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
+requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648, Q-2626]
 supersedes: []
 ---
 
@@ -691,19 +691,24 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       hit's own damage step makes: no anger change (S-0309 claim 16), no retaliation (S-0215 claim
       18), no scatter from damage (S-0215 claim 19, and request A of S-0208 claim 15 for infantry),
       no trigger event of the target's tag, no damage effect or marking of one (claim 13) and no
-      loss of a disguise (D23, part f). The reactions that a mobile target makes after that step to
-      a surviving hit that reports *unchanged* do follow it, as their own claims give them: the
-      no-threat fall-back (S-0215 claim 16), then for an infantry unit request B (S-0208 claim 15)
-      and the change of fear (S-0107 claim 16), and for a vehicle the crush response (S-0215 claim
-      39) and the announcement that a harvester is under attack (S-0701 claim 28). Each of them that
-      needs a known attacker needs one here too. A team member that the hit makes berserk has left
-      its team by then (S-0215 claim 39), so the team exception of the no-threat fall-back does not
-      hold it back. In the three excepted cases nothing happens and the hit reports *unaffected*. A
-      further berserk hit on a target that is already berserk sets the remaining time to the new
-      *T*, even when that is shorter. A berserk hit is not stopped by the stage 4 rows, so a target
-      that is immune to all damage still goes berserk. A berserk hit that a stage 1 or stage 2 row
-      stops, for example one of a radiation warhead on a target immune to radiation, causes no
-      berserk state and reports *unaffected*.
+      loss of a disguise (D23, part f). It makes no sound reaction of the hit either: although it
+      reports *unchanged*, the target type's damage sound, which S-0701 claim 20 gives for other
+      hits that report *unchanged*, is not played. The reactions that a mobile target makes after
+      that step to a surviving hit that reports *unchanged* do follow it, as their own claims give
+      them: the no-threat fall-back (S-0215 claim 16), then for an infantry unit request B (S-0208
+      claim 15) and the change of fear (S-0107 claim 16), and for a vehicle the crush response
+      (S-0215 claim 39) and the announcement that a harvester is under attack (S-0701 claim 28).
+      Each of them that needs a known attacker needs one here too. Of the announcements that S-0701
+      claim 28 lists, that is the only one a berserk hit can make. Its base and ally announcements
+      come only from hits on buildings, which a berserk hit leaves *unaffected*, so a berserk hit on
+      any other unit, the local player's or an ally's, makes none of them and no radar event. A team
+      member that the hit makes berserk has left its team by then (S-0215 claim 39), so the team
+      exception of the no-threat fall-back does not hold it back. In the three excepted cases
+      nothing happens and the hit reports *unaffected*. A further berserk hit on a target that is
+      already berserk sets the remaining time to the new *T*, even when that is shorter. A berserk
+      hit is not stopped by the stage 4 rows, so a target that is immune to all damage still goes
+      berserk. A berserk hit that a stage 1 or stage 2 row stops, for example one of a radiation
+      warhead on a target immune to radiation, causes no berserk state and reports *unaffected*.
     - **Who goes berserk from ordinary fire.** A detonation whose firer has not been killed,
       removed or (believed, low) started to cloak since the shot carries an attacking house
       (claim 1), so a berserk warhead never makes the firer's own side
@@ -713,27 +718,32 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       shot (claim 1) carries no attacking house: then an allied target goes berserk too (and the
       allies row of claim 8 does not apply to it either, since that row needs an attacker).
     - Backing: `measurable` (scenario D10 for readiness loss, D23 part f for the kept disguise after
-      a berserk hit, S-0215 claim 39's backing (S-0210 scenario K15) for the crush response after
-      it, D17 for berserk, its duration, its reset, its stages and who goes berserk, including parts
-      g, g2, g3 and g4, with entry and update-count expiry through S-0610 claims 4 and 5, scenario
-      P2, and *T* ≤ 0 through D17 part i, supplementing S-0610 scenario P3's conditional stock
-      setup). `unmeasured` (*T* for a hit that ignores defences: a trigger kill with a berserk
-      demolition warhead can deliver one, but the original then hangs on its survivor, preventing
-      observation of when the berserk state ends; the absence of trigger reactions to a berserk hit:
-      D23 f observes disguise only and no tag-event test is supplied here; the other reactions of
-      the damage step that a berserk hit does not make, and the later reactions that it makes other
-      than the crush response: no scenario here lands a berserk hit on a subject whose record shows
-      anger, a retaliation, a scatter request, a fall-back, fear or the announcement; the direction
-      of the one-way alliance exception: D17 uses mutual alliances; readiness loss at strength 0:
-      D10 uses positive strength and no setup keeps a strength-0 target alive to receive a hit)
+      a berserk hit, S-0701 scenario F1's berserk hit for the absent damage sound on a vehicle,
+      S-0215 claim 39's backing (S-0210 scenario K15) for the crush response after it, D17 for
+      berserk, its duration, its reset, its stages and who goes berserk, including parts g, g2, g3
+      and g4, with entry and update-count expiry through S-0610 claims 4 and 5, scenario P2, and *T*
+      ≤ 0 through D17 part i, supplementing S-0610 scenario P3's conditional stock setup).
+      `unmeasured` for the absent damage sound on a target that is not a vehicle, and for the absent
+      announcements and radar events of a berserk hit: no scenario here has an enemy house fire a
+      chosen warhead once at a chosen unit while the announcements are recorded. `unmeasured` (*T*
+      for a hit that ignores defences: a trigger kill with a berserk demolition warhead can deliver
+      one, but the original then hangs on its survivor, preventing observation of when the berserk
+      state ends; the absence of trigger reactions to a berserk hit: D23 f observes disguise only
+      and no tag-event test is supplied here; the other reactions of the damage step that a berserk
+      hit does not make, and the later reactions that it makes other than the crush response: no
+      scenario here lands a berserk hit on a subject whose record shows anger, a retaliation, a
+      scatter request, a fall-back, fear or the announcement; the direction of the one-way alliance
+      exception: D17 uses mutual alliances; readiness loss at strength 0: D10 uses positive strength
+      and no setup keeps a strength-0 target alive to receive a hit)
     - Confidence: medium (readiness loss, including that it uses the amount before the versus value
       and happens even when a later row stops the hit); medium (berserk duration, its reset, and the
       stages); medium (a detonation of a firer that has been killed carries no attacking house; one
       of a death weapon carries the dying object's house); low (that one of a firer in a closed
       transport carries its house; *T* for a hit that ignores defences). Entry and update-count
       expiry, including *T* ≤ 0: medium (S-0610 claims 4 and 5). The reactions that a berserk hit
-      makes and does not make: medium, and the crush response after it has S-0215 claim 39's
-      confidence
+      makes and does not make, the damage sound and the announcements included: medium (the
+      announcements, and the damage sound on a target that is not a vehicle, `unmeasured`), and the
+      crush response after it has S-0215 claim 39's confidence
 
 11. **Health change.** A hit whose amount *m* after claims 5 to 8 is not 0 changes the target's
     health *H* (Formulas F4):
@@ -1768,65 +1778,64 @@ parts use their stated replay checks and rejection thresholds instead.
   is unchanged and ticks stop at that firing. *Falsified if* its health falls or ticks continue. In d3 and d4 record health
   and ticks with the read-only recorder, and keep a second tagged target for the never-reached
   continuation as in d2. These tests deliberately hang the original and must each run alone.
-- **D17 (claim 8 stages, claim 10).** (a) A test warhead that makes targets go berserk (damage
-  300, versus 100 %) hits a test vehicle of another house. *Observable:* the tick at which the
-  target stops firing at units of its own side, and each countdown update read-only.
-  *Expected:* expiry on the 300th countdown update after application, health unchanged.
-  A second hit of damage 50 at tick 100 resets the remaining count to 50, rather than adding
-  time; expiry is on the 50th countdown update after reapplication. Count an update in the hit
-  tick when it follows the hit (S-0610 claim 5). (b) The same warhead, fired by a unit that is not killed
-  until the shot lands (force-fired by scripted input where the target is not otherwise legal),
-  against a target of an allied house and against a target of the firing unit's own house, against a
-  target whose type is immune to psionics, and against a test building: no berserk state and no
-  health change. (c) The same warhead, flagged also as a radiation warhead, against a
-  target immune to radiation: no berserk state; against a target not immune: berserk. The same with
-  the psychic-damage flag against a target immune to psychic weapons, and with the poison flag
-  against a target immune to poison. Plain hits (no berserk flag) of each of the three warheads on
-  the immune target do no damage, and on a target that is not immune do damage. (d) The
-  berserk warhead against a temporarily invulnerable target: no berserk state. (e) The berserk
-  warhead against a target whose type is marked immune (to all damage): the target goes berserk.
-  (f) The radiation-immune target of (c) and the invulnerable target of (d) are of the test
-  aircraft type of D10 (ammunition 10, readiness reduction factor 1.0, strength 100): the ammunition falls
-  in (c), and does not fall in (d). (g) The warhead of (b) is fired with a slow test projectile
-  (a flight of at least 100 ticks) at a target of an allied house, and a third unit kills the
-  firing unit while the projectile flies; the firing unit is a plain test vehicle that neither
-  sinks nor crashes and has no death animation, so that it is gone at once (S-0203, claim 6a).
-  *Expected:* the allied target goes berserk for about 300 ticks (the shot carries no attacking
-  house, claim 1); run with the firing unit left alive, the same shot causes no berserk state.
-  (g2) As (g), but the firing unit is an infantry unit of the human house whose death sequence
-  outlasts the flight, killed by the third unit: it is killed though it stays in play, so the
-  shot carries no attacking house, and the allied target goes berserk. (g3) As (g), but instead of
-  being killed the firing unit (infantry) is ordered into a closed test transport right after
-  the shot and has entered it before the shot lands: it is out of play but not killed, so (if
-  loading a passenger does not stop the shot from carrying it as its attacker, as claim 1
-  believes) the shot carries it and its house, and the allied target does not go berserk; if the
-  allied target goes berserk, loading stops the shot from carrying its firer, and claims 1, 10 and
-  14 are to say so. The claimed continued carrying is falsified by that berserk state.
-  (g4) *The death weapon's house.* A test vehicle
-  *F* of the human house has a death weapon (its explodes flag on) whose warhead is the berserk
-  warhead of (a) with a spread of 2 cells. A second vehicle *G* of the human house and a vehicle
-  *E* of the computer house stand inside the spread, a cell or more from *F* and well away from
-  each other. A computer unit whose warhead has no spread destroys *F* and nothing else.
-  *Expected:* *E* goes berserk for about 300 ticks and *G* does not (the detonation carries *F*
-  and *F*'s house, claim 1, so the berserk row's own-side exception applies to *G*). (g5) The same
-  setup with a death weapon whose warhead has the affects-allies field off, no berserk effect,
-  damage high enough to be noticed and versus 100 %: *E* loses health and *G* loses none (the
-  allies row of claim 8 needs an attacker, which the detonation carries). (h) The amount that decides the duration: the warhead of (a)
-  (damage 300) on a target whose country has the armour factor 2.0 for its kind, once with versus
-  100 % and once with versus 50 %. *Expected:* about 150 ticks (the defended amount trunc(300 / 2),
-  not 300) and about 75 ticks (versus applied to the defended amount: trunc(150 × 0.5)).
-  (i) Named test map D17-zero-duration gives the berserk warhead a zero versus value for the
-  susceptible vehicle's armour class; repeat with a negative versus value and positive shot
-  damage. Keep other protections off. Start the human-owned vehicle attacking a durable enemy,
-  apply one hit and record target, queued behaviour, berserk state and countdown updates
-  read-only, including between events in the hit tick. Expected: unchanged health, target
-  dropped and *hunt* queued at entry, then berserk cleared, time set to 0, target dropped and
-  *guard* queued at the first countdown update. Repeat with the hit before and after the
-  vehicle's update to distinguish same-tick from later-tick expiry. No entry effects or expiry
-  at a different update falsifies this part (S-0610 claims 4 and 5).
-  *Falsified if* any of these differs, in particular a berserk state in (c) with an immune target
-  or in (d), none in (e), none in (g) or (g2) with the firer killed, one in (g) with the firer
-  alive, or berserk in *G* in (g4) or damage to *G* in (g5), or none in *E* in either; (g3) is the open case of claim 1.
+- **D17 (claim 8 stages, claim 10).** (a) A test warhead that makes targets go berserk (damage 300,
+  versus 100 %) hits a test vehicle of another house. *Observable:* the tick at which the target
+  stops firing at units of its own side, and each countdown update read-only. *Expected:* expiry on
+  the 300th countdown update after application, health unchanged. A second hit of damage 50 at tick
+  100 resets the remaining count to 50, rather than adding time; expiry is on the 50th countdown
+  update after reapplication. Count an update in the hit tick when it follows the hit (S-0610 claim
+  5). (b) The same warhead, fired by a unit that is not killed until the shot lands (force-fired by
+  scripted input where the target is not otherwise legal), against a target of an allied house and
+  against a target of the firing unit's own house, against a target whose type is immune to
+  psionics, and against a test building: no berserk state and no health change. (c) The same
+  warhead, flagged also as a radiation warhead, against a target immune to radiation: no berserk
+  state; against a target not immune: berserk. The same with the psychic-damage flag against a
+  target immune to psychic weapons, and with the poison flag against a target immune to poison.
+  Plain hits (no berserk flag) of each of the three warheads on the immune target do no damage, and
+  on a target that is not immune do damage. (d) The berserk warhead against a temporarily
+  invulnerable target: no berserk state. (e) The berserk warhead against a target whose type is
+  marked immune (to all damage): the target goes berserk. (f) The radiation-immune target of (c) and
+  the invulnerable target of (d) are of the test aircraft type of D10 (ammunition 10, readiness
+  reduction factor 1.0, strength 100): the ammunition falls in (c), and does not fall in (d). (g)
+  The warhead of (b) is fired with a slow test projectile (a flight of at least 100 ticks) at a
+  target of an allied house, and a third unit kills the firing unit while the projectile flies; the
+  firing unit is a plain test vehicle that neither sinks nor crashes and has no death animation, so
+  that it is gone at once (S-0203, claim 6a). *Expected:* the allied target goes berserk for about
+  300 ticks (the shot carries no attacking house, claim 1); run with the firing unit left alive, the
+  same shot causes no berserk state. (g2) As (g), but the firing unit is an infantry unit of the
+  human house whose death sequence outlasts the flight, killed by the third unit: it is killed
+  though it stays in play, so the shot carries no attacking house, and the allied target goes
+  berserk. (g3) As (g), but instead of being killed the firing unit (infantry) is ordered into a
+  closed test transport right after the shot and has entered it before the shot lands: it is out of
+  play but not killed, so (if loading a passenger does not stop the shot from carrying it as its
+  attacker, as claim 1 believes) the shot carries it and its house, and the allied target does not
+  go berserk; if the allied target goes berserk, loading stops the shot from carrying its firer, and
+  claims 1, 10 and 14 are to say so. The claimed continued carrying is falsified by that berserk
+  state. (g4) *The death weapon's house.* A test vehicle *F* of the human house has a death weapon
+  (its explodes flag on) whose warhead is the berserk warhead of (a) with a spread of 2 cells. A
+  second vehicle *G* of the human house and a vehicle *E* of the computer house stand inside the
+  spread, a cell or more from *F* and well away from each other. A computer unit whose warhead has
+  no spread destroys *F* and nothing else. *Expected:* *E* goes berserk for about 300 ticks and *G*
+  does not (the detonation carries *F* and *F*'s house, claim 1, so the berserk row's own-side
+  exception applies to *G*). (g5) The same setup with a death weapon whose warhead has the
+  affects-allies field off, no berserk effect, damage high enough to be noticed and versus 100 %:
+  *E* loses health and *G* loses none (the allies row of claim 8 needs an attacker, which the
+  detonation carries). (h) The amount that decides the duration: the warhead of (a) (damage 300) on
+  a target whose country has the armour factor 2.0 for its kind, once with versus 100 % and once
+  with versus 50 %. *Expected:* about 150 ticks (the defended amount trunc(300 / 2), not 300) and
+  about 75 ticks (versus applied to the defended amount: trunc(150 × 0.5)). (i) Named test map
+  D17-zero-duration gives the berserk warhead a zero versus value for the susceptible vehicle's
+  armour class; repeat with a negative versus value and positive shot damage. Keep other protections
+  off. Start the human-owned vehicle attacking a durable enemy, apply one hit and record target,
+  queued behaviour, berserk state and countdown updates read-only, including between events in the
+  hit tick. Expected: unchanged health, target dropped and *hunt* queued at entry, then berserk
+  cleared, time set to 0, target dropped and *guard* queued at the first countdown update. Repeat
+  with the hit before and after the vehicle's update to distinguish same-tick from later-tick
+  expiry. No entry effects or expiry at a different update falsifies this part (S-0610 claims 4 and
+  5). *Falsified if* any of these differs, in particular a berserk state in (c) with an immune
+  target or in (d), none in (e), none in (g) or (g2) with the firer killed, one in (g) with the
+  firer alive, or berserk in *G* in (g4) or damage to *G* in (g5), or none in *E* in either; (g3) is
+  the open case of claim 1.
 - **D18 (claim 13: building fires, a statistical scenario with a recorder).** 200 test buildings
   of the 2 × 2 foundation word (strength 100) stand far enough apart that their fires do not overlap, on
   a test map with three test fire animations as the damage-fire list. A test warhead with its
