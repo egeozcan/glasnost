@@ -505,3 +505,16 @@ all new switches of `quirks.rs` with the original's position as default.
 **Version effects.** The layer file changes, so the layered `sim_rules_hash` moves: a save,
 replay, report or room made with the previous layer is refused on the rules hash. Reference files
 are unaffected.
+
+## A4 round 8 (note 50): the half-reload switch judged
+
+Ledger: [a4-play-notes.md](a4-play-notes.md), round 8, note 50. The lead's note says that a
+pad aircraft ordered to attack before it has reloaded takes off and lands again, and that
+this delays its reload. The specs give that behaviour, as the note's row says. No earlier C7
+entry judged this switch.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `aircraft_half_reload_with_target` | S-0501 claim 28, Edge cases (*Half reload with a target*) | rejected (not in the layer) | Condition 1 holds: the Edge case states the off position (the aircraft is reloaded to full whatever its target, and takes off at full ammunition), built in the pad's service step in `air.rs`. Condition 2 is met in part. For a type with one round, ⌊*A* / 2⌋ is 0. On, an order given on the pad then sends the aircraft out at once with no round, it turns back at once (claim 17), and it lands again. That is note 50, and in the lane it put the full reload off by 270 ticks. Condition 3 fails. The off position changes every aircraft with two rounds or more as well: with a target it now waits on its pad for full ammunition, where the original sends it out at half. That changes how soon air attacks go and how much they carry, which is a balance change (D14), the reason `aircraft_unit_step_stall` was rejected. A switch that held only an aircraft with no round would be a new rule, and no spec states one; the lead may rule on it as our own design. Tests: the two positions, `claims_s0501::claim_28_half_reload_both_ways`. |
+
+The layer file is unchanged.
