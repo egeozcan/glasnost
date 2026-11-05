@@ -1,9 +1,9 @@
 ---
 id: Q-2650
 title: When an entry restarted by the pad's answer in the approaching stage makes its beginning
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
