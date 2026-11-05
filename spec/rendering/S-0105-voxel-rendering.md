@@ -2,13 +2,14 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 39
+revision: 44
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-11-05
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950, Q-1760, Q-1885]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950,
+Q-1760, Q-1885, Q-2672]
 supersedes: []
 ---
 
@@ -101,7 +102,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **Draw point.** The screen point a part image is placed around: the object's position (S-0101)
   plus any shift its locomotor applies when drawing (claim 25).
 - **Shadow draw point.** The screen point a shadow image is placed around. Claim 40
-  gives it for aircraft; vehicle placement outside that claim remains open. The
+  gives it for aircraft, claim 44 for vehicles. The
   footprint's own displacement and scale (claim 31) are relative to this point.
 - **Aircraft deck mark.** The aircraft's own standing-on-deck state, whose landing,
   climbing and departure transitions are owned by S-0501 claim 43. It is not inferred
@@ -1086,13 +1087,17 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     part-image pixel, not on whether that pixel passes the scene's depth test. The shadow
     otherwise darkens qualifying scene pixels after the parts have contributed. Consequently,
     where both would pass, a freshly made vehicle shadow leaves its own visible part pixels
-    undarkened. This applies on flat ground, on slopes and to hovering vehicles. Suppression
-    and depth tests still apply (claim 31; S-0102 claim 18).
+    undarkened. This applies on flat ground, on slopes and to hovering vehicles, wherever
+    claim 44 places the shadow. Claim 44 gives the original's comparison, which is not always
+    at the same screen position. Suppression and depth tests still apply (claim 31; S-0102
+    claim 18).
     - **Reuse.** Cache only the unmasked footprint. Exclude this object's current
       completed part image on every appearance, even when another object supplied the
       cached footprint. No old-pose cutouts persist.
-    - Backing: `measurable` (MS-27; fresh exclusions are oracle-testable, corrected
-      reuse is a lead-confirmed departure tested against this spec)
+    - Backing: `measurable` (MS-27; fresh exclusions of a vehicle at height 0 above the
+      surface are oracle-testable, corrected reuse is a lead-confirmed departure tested
+      against this spec, and the comparison above the surface is claim 44's correction,
+      tested by MS-34 against this spec)
     - Confidence: high
 
 40. **Aircraft shadow anchor (Q-0799).** For an aircraft drawn as a voxel model,
@@ -1127,9 +1132,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       whenever it supplies an otherwise eligible voxel shadow (claim 31); locomotor
       eligibility and shadow shape are not made universal by this placement rule.
       The original uses the stated anchor for the flying locomotor, but for the
-      other locomotors it places the anchor *L(a)* rows below *P* even over a
-      qualifying deck, where *L* is S-0101 claim 3's signed height lift; this
-      height-dependent presentation glitch is corrected here without a switch.
+      other locomotors it places the anchor Λ(*a*) rows below *P* even over a
+      qualifying deck, Λ being the original's own drawing lift (claim 44, *Which
+      lift*); this height-dependent presentation glitch is corrected here without
+      a switch.
     All height subtractions and threshold tests above are exact signed integer
     operations; 60 is an integer pixel translation, with no further rounding.
     S-0101 claim 3 owns the projection's height rounding. S-0102 claim 18 still owns
@@ -1287,6 +1293,92 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       effect on it, until MS-33 part l runs; creation by
       every route, keeping the index through veterancy and transport; the original's drawn
       frame without a turret before the first turn, until MS-33 part j runs)
+
+### Vehicle shadow anchor
+
+44. **Vehicle shadow anchor (Q-2672).** For a vehicle drawn as a voxel model, let *B* be its body's
+    draw point (Terms) and *a* its signed integer height above the surface, in leptons (glossary):
+    its world height minus the terrain surface height at its exact horizontal position (S-0106 claim
+    2), minus a further 416 leptons while it is on a bridge deck. Its shadow draw point is *B* moved
+    down by the lift of *a*, in rows, using the same lift that lifts *B* by the vehicle's whole
+    world height. *B* is lifted by its world height and the anchor is lowered by its height above
+    the surface, so, when its locomotor applies no draw shift to *B* (Terms, claim 25), the shadow
+    lies at the projection of its horizontal position at the height of its surface, to within the
+    rounding of the lifts, not at the body's lifted point (except at a height whose lift is 0). A
+    hovering vehicle, at rest or moving, on land or on water, casts its shadow on the surface under
+    it, and the shadow shows wherever the vehicle's own image does not cover it. Claim 31's shift
+    and scale and F10's copy placement apply around this anchor, and claim 39 excludes the vehicle's
+    own image at the same screen position.
+    - **Which lift.** Our engine uses S-0101 claim 3's signed lift *L*, following that claim's
+      lead-confirmed departure, for both *B* and the anchor. On a surface at a whole height level
+      the anchor is then exactly the surface projection (S-0101 F2 gives 15 pixels per level), and
+      elsewhere, on a slope, within one row of it. The original uses its own drawing lift Λ
+      (S-0313's term) for both, so its anchor is *B* moved down by Λ(*a*) rows. On a surface at
+      level 0 that is exactly the ground projection whatever Λ is, for a locomotor that applies no
+      draw shift to *B*, since *B*'s lift and the anchor's lowering are then both Λ(*a*). Elsewhere
+      its distance from the surface projection depends on Λ: under S-0313 claim 11b's hypothesis
+      that Λ is S-0409 F2's lift, it is within one row on a surface at whole levels 1 to 13 for
+      *a* ≥ 0 and not bounded here elsewhere, as on higher levels and slopes.
+    - **Surface.** Over water the surface is the water cell's terrain surface: there is no
+      separate water height. On a bridge deck it is the deck. A vehicle under a high bridge,
+      not on its deck, uses the terrain. No building roof is substituted.
+    - **Height and rocking.** Changing *a* alone, as a hovering vehicle's bob does (S-0503
+      claim 8), moves the body, while the anchor stays within the rounding band above: exactly
+      fixed in our engine on a surface at a whole level, and in the original on level 0. Rocking
+      (S-0106) does not enter the anchor or the footprint's outline (claim 30): it changes only
+      the body's own image, and so which shadow pixels claim 39 excludes. The ramp tilt of the
+      cell under the vehicle enters the footprint (claim 30), not the anchor.
+    - **Other heights.** The rule is the same at *a* = 0, where the anchor is *B*, at *a* < 0, where
+      the signed lift places the anchor at or above *B*, and on a slope's upper edge, with whatever
+      height above the surface the vehicle has there.
+    - **Lifted vehicle.** While a carrier aircraft lifts the vehicle, the anchor is raised by
+      14 rows. When in addition the vehicle is not on a bridge deck, *a ≥ 416* and claim 40's
+      bridge qualification holds for its current cell and that cell's neighbour, the anchor is
+      raised by a further 60 rows. When the lifted state begins and ends is not given here: it
+      belongs to the transport specs.
+    - **Locomotors.** The original uses this anchor for every vehicle locomotor except the flying
+      one: a vehicle with the flying locomotor gets *B* itself. A vehicle whose type has the
+      hunter-seeker property (Import mapping) gets the projection of its horizontal position at
+      terrain height, with the original's lift Λ, moved down by 2·Λ(*a*) rows with a non-flying
+      locomotor. Our engine uses the rule above for the flying locomotor too, and claim 40's *P*
+      itself for a hunter-seeker type, which is at terrain height under claim 40's bridge
+      qualification, so a hunter-seeker type on a deck below that qualification gets the terrain
+      point. Both are presentation glitches, corrected here without a switch.
+    - **Own-image comparison in the original.** The original compares each shadow pixel with the
+      own-image pixel at the same position relative to *B* moved down by Λ(*a*) rows, plus one row
+      while *a* > 0, whatever anchor it actually uses. So for a vehicle above its surface it tests
+      the own-image pixel one row below each shadow pixel, and for a lifted vehicle, a hunter-seeker
+      type or a vehicle with the flying locomotor it is also off by the raise or by the anchor's
+      difference (for the flying locomotor, whose anchor is *B*, by Λ(*a*) rows plus that one row).
+      Our engine compares at the same screen position (claim 39), correcting this presentation
+      glitch without a switch. All height subtractions above are exact signed integer operations,
+      and 14 and 60 are integer pixel translations with no further rounding. S-0101 claim 3 owns the
+      rounding of *L*, and S-0102 claim 18 owns the shadow's render layer and scene-depth test. A
+      sinking vehicle draws no shadow at all (S-0504 claim 16).
+    - Backing: `measurable` (MS-34 parts a, b and d for the original's anchor on a level-0 surface,
+      for the surface choice on and under a deck, and through the bob and rocking; MS-34 part c for
+      the original's own-image comparison). Our engine's lift, the corrections of the
+      flying-locomotor and hunter-seeker anchors and of the own-image comparison are engine
+      conformance, tested by MS-34 part e against this spec. `unmeasured` for *a* < 0 and for a
+      lifted vehicle: no situation this spec covers draws a vehicle below its surface, and a lifted
+      vehicle needs a carrier aircraft lifting it, whose start and end are the transport specs' to
+      set up, not a shadow scenario's. `unmeasured` for the original's flying-locomotor and
+      hunter-seeker anchors: our engine corrects both, so no result of ours depends on them.
+      `unmeasured` for the anchor's distance below *B* off a level-0 surface: MS-34 records it, but
+      the original's lift there is known only under S-0313 claim 11b's hypothesis, so no run can
+      tell a departure of the anchor from one of the lift.
+    - Confidence: high (the anchor of a vehicle with a non-flying locomotor and without the
+      hunter-seeker property, not lifted, at *a* ≥ 0, on a level-0 surface, as *B* moved down by the
+      lift of *a* with *B*'s own lift and so, for a locomotor that applies no draw shift, the exact
+      ground projection, on land, on water and under a bridge over level-0 ground; the surface
+      choice on and under a bridge deck; rocking and the bob not entering it; our engine's forms:
+      S-0101's lift, the rule above for the flying locomotor, *P* for a hunter-seeker type and the
+      comparison at the same screen position), medium (whether the hovering locomotor applies a draw
+      shift to *B* (S-0313 Open questions), the anchor's distance below *B* off a level-0 surface,
+      which MS-34 records but which only S-0313 claim 11b's hypothesis would falsify, *a* < 0, the
+      lifted vehicle's raises, the original's flying-locomotor and hunter-seeker anchors, and the
+      original's own-image comparison, until MS-34 part c runs), low (the original's row bounds off
+      a level-0 surface, which rest on S-0313 claim 11b's hypothesis, itself low)
 
 ## Formulas
 
@@ -1612,6 +1704,8 @@ darkens.
 | Shadow shift | +3 (2.9999964) | pixels, screen x | Claim 31 |
 | Turret table size | 18 | entries, one per weapon number 0 … 17 | Terms, claim 43; every entry *none* unless imported |
 | Aircraft-like shadow scale | 1/2 | dimensionless (scale factor) | Claim 31 |
+| Lifted-vehicle shadow raise | 14 | pixels, screen y (upward) | Claim 44 |
+| Lifted-vehicle bridge raise | 60 | pixels, screen y (upward) | Claim 44, with claim 40's bridge qualification |
 | Normal tables | 16 / 36 / 64 / 245 | entries | Modes 1 / 2 / 3 / 4; see below |
 | Sine table | 8192 per turn | entries | F1 |
 | Turret recoil defaults | travel 2, compress 1, hold 1, recover 1 | model units, ticks | Absent-key defaults; each absent barrel value defaults to the type's turret value, again in every rules layer that has the type's section (claim 27, `quirks.barrel_recoil_layer_reset`) |
@@ -2248,6 +2342,7 @@ own name, even when the type's image names a different section.
 | `UseBuffer` | Art [type] | boolean | no | Per-type depth buffering for fresh part draws only (claims 24 and 32); shadows never enable it. |
 | `ShadowIndex` | Art [image] | integer | 0 | Shadow section (claim 29) |
 | `NoShadow` | Rules [type] | boolean | no | Suppresses the shadow (claim 31); no-shadow control for claim 39 |
+| `HunterSeeker` | Rules [type], vehicles | boolean | no | Hunter-seeker property (S-0307 owns it); here only the shadow anchor, the original's and ours (claim 44) |
 | `ConsideredAircraft` | Rules [type] | boolean | yes for an aircraft type, no for every other type (S-0501 Import mapping; medium, as S-0501 rates it) | Half-size shadow (claim 31) |
 | `DisableVoxelCache`, `DisableShadowCache` | Art [image] | boolean | no | Disable reuse of part images and of shadow images (claims 26, 31) |
 | `FireAngle` | Rules [type] | integer, 1/256 turn (256 facing units), used modulo 256 | 8 | Barrel elevation target (claim 6) |
@@ -3424,7 +3519,9 @@ and a hovering vehicle resting and rocking. Capture one paused image per pose an
 Calculate qualifying footprint/body overlaps from the test data and S-0102's scene-depth
 rule. Expected: each own-body overlap pixel equals its no-shadow control, while qualifying
 footprint pixels outside the own image are darkened. Darkened own pixels in fresh-shadow
-runs, or a reversal for hovering or ramps, falsify claim 39.
+runs, or a reversal for ramps, falsify claim 39. A hovering vehicle is above its surface, so
+in the original its poses follow claim 44's own-image comparison (MS-34 part c), and for them
+this part is engine conformance for claim 39.
 
 For reuse, enable shadow caching only. Frame 0 has a hole at a shadow-marked pixel,
 frame 1 fills it. Capture 0 first, then move to select 1 without changing facing or
@@ -3582,26 +3679,25 @@ conformance for lead-confirmed departures, not an oracle experiment.
   tick. At that interior cell the shadow remains at the deck anchor across the
   landing and take-off transitions whenever claim 40's height test still qualifies,
   regardless of render-layer or occupant-list changes.
-- *Named test-data extensions:* when stock routes cannot sample exact thresholds,
-  use a test map and named type overrides for landing/cruise positions, and a
-  named placement fixture for signed heights, without altering the executable.
-  Sample *a = −1, 0, 1* on terrain and *415, 416, 417* over the bridge, with and
-  without the deck mark where legal. A state that normal placement cannot produce
-  is instead an engine-conformance fixture, not an oracle measurement. Replay
-  aircraft with the jumpjet and rocket locomotors and each further supported
-  locomotor using named test types, comparing only appearances that actually cast
-  voxel shadows. The corrected-engine expectation is always claim 40; record the
-  original's non-flying anchor *P + (0, L(a))* separately, not as its target.
-- *Falsified if:* an eligible flying-locomotor shadow's recovered anchor differs
-  from the surface rule, moves with height away from a bridge threshold, uses a
-  pad roof, clamps to the body, or selects a deck without the specified neighbour.
-  A transition contrary to S-0501 claim 43 falsifies that transition rule; a shadow
-  anchor contrary to claim 40 using the recorded mark falsifies this anchor rule.
-  The engine-conformance extension fails if a non-flying aircraft uses a different
-  anchor under equal surface inputs. A reproducible original non-flying anchor
-  other than *P + (0, L(a))* falsifies that recorded original rule, not the corrected
-  surface rule. Negative-height and artificial-locomotor
-  variants that cannot be created in the original remain conformance tests only.
+- *Named test-data extensions:* when stock routes cannot sample exact thresholds, use a test map and
+  named type overrides for landing/cruise positions, and a named placement fixture for signed
+  heights, without altering the executable. Sample *a = −1, 0, 1* on terrain and *415, 416, 417*
+  over the bridge, with and without the deck mark where legal. A state that normal placement cannot
+  produce is instead an engine-conformance fixture, not an oracle measurement. Replay aircraft with
+  the jumpjet and rocket locomotors and each further supported locomotor using named test types,
+  comparing only appearances that actually cast voxel shadows. The corrected-engine expectation is
+  always claim 40; record the original's non-flying anchor, Λ(*a*) rows below *P* (claim 40),
+  separately, not as its target, with *a* from the recorder.
+- *Falsified if:* an eligible flying-locomotor shadow's recovered anchor differs from the surface
+  rule, moves with height away from a bridge threshold, uses a pad roof, clamps to the body, or
+  selects a deck without the specified neighbour. A transition contrary to S-0501 claim 43 falsifies
+  that transition rule; a shadow anchor contrary to claim 40 using the recorded mark falsifies this
+  anchor rule. The engine-conformance extension fails if a non-flying aircraft uses a different
+  anchor under equal surface inputs. A reproducible original non-flying anchor not straight below
+  *P* falsifies that recorded original rule, not the corrected surface rule. Its distance below *P*
+  is recorded against S-0409 F2's lift of *a*: a departure bears on S-0313 claim 11b's hypothesis
+  for Λ, not on claim 40. Negative-height and artificial-locomotor variants that cannot be created
+  in the original remain conformance tests only.
 
 **MS-31 — Rocket body pitch, shadow and reuse (claims 26, 30, 41; Q-0950).**
 Use the common skirmish setup, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), speed index 2,
@@ -3909,6 +4005,59 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
 - *Tool:* the measurement harness, with the read-only recorder for weapon number, countdowns and
   (part l) ammunition.
 
+**MS-34 — Vehicle shadow anchor (claims 39, 44; Q-2672).**
+
+- *Setup:* the common setup, speed index 2, 800×600, one human house and one bystander
+  computer player outside the observed area. A tiny purpose-made map with flat clear ground
+  at level 0 and at one whole level from 1 to 9, a slope between them, a water area at level
+  0, and an intact high bridge over water and one over level-0 land, with visible terrain
+  beneath each. A stock hovering vehicle type and a stock driving vehicle type, both drawn as
+  voxel models that cast shadows. Screen capture plus a read-only recorder of tick,
+  horizontal position, world height, terrain surface height and whether the vehicle is on a
+  bridge deck.
+- *Procedure:* (a) rest the hovering vehicle on flat ground at each level, on water, on each
+  bridge deck and under each bridge, at two facings each, and capture several consecutive
+  drawn frames through its bob. Repeat while it moves along a straight route over each
+  surface. (b) Rest the driving vehicle on flat ground at each level, on the slope (its
+  lower half and its upper edge) and on a deck. (c) Give the hovering type MS-27's test body
+  (art database copy, test models, cache controls), whose own image has a horizontal lower
+  or upper edge inside the shadow footprint, and capture it at rest, with MS-27's no-shadow
+  control. From the test data, select the footprint pixels where the own image is opaque one
+  row below but transparent at the same position, and those where it is opaque at the same
+  position but transparent one row below. (d) Set the resting hovering vehicle rocking with
+  a hit (S-0106) and capture while it rocks.
+- *Observable:* the anchor recovered by matching the known footprint (claims 30 and 31, F10),
+  as MS-30 does, against the body's draw point and the projection at the surface height,
+  with *a* from the recorder, for every selected frame. In part c, whether each selected
+  footprint pixel is darkened against the control.
+- *Expected:* parts a, b and d, in the original: the anchor lies exactly at the ground projection on
+  a level-0 surface (flat ground, water, under a bridge over level-0 land) and stays there through
+  the bob and the rocking while the body moves. On the higher level and on a deck the anchor's
+  distance from the surface projection and below the body's draw point is recorded for each frame:
+  under S-0313 claim 11b's hypothesis it is within one row of the projection and S-0409 F2's lift of
+  *a* below the body. The footprint's outline does not change with the rocking. The driving vehicle
+  has *a* = 0 and the anchor at its body's point on flat ground and on the deck, and on the slope
+  the anchor lies below its body's point by the lift of the recorder's *a* (0 where *a* is 0). Part
+  c, in the original: a selected pixel stays undarkened exactly where the own image is opaque one
+  row below it, so the two selected sets give opposite results.
+- *Falsified if:* on a level-0 surface, an anchor off the ground projection by any row (for a
+  vehicle whose body is drawn at the projection of its position and world height, so with no draw
+  shift), or one moving with the bob or the rocking, falsifies claim 44. On the higher level and on
+  a deck, a recorded distance outside one row of the projection, or a distance below the body other
+  than S-0409 F2's lift of *a*, bears on S-0313 claim 11b's hypothesis and the row bounds that rest
+  on it, not on claim 44. A deck, water or under-bridge anchor at another surface falsifies the
+  surface rule. In part c, both sets darkened or both undarkened, or the set opaque at the same
+  position undarkened, falsifies claim 44's original comparison, not the engine rule.
+- *Engine conformance (part e):* named test types with the flying locomotor and with the
+  hunter-seeker property, and fixtures for *a* < 0, for a lifted vehicle, for a slope and for a
+  hunter-seeker type on a deck below claim 40's bridge qualification, run in our engine only: every
+  anchor follows claim 44's rule with S-0101's lift (for the hunter-seeker fixtures, claim 40's *P*,
+  so the terrain point on that deck; for other fixtures that are not lifted, exactly the surface
+  projection at whole levels and within one row on the slope; for the lifted fixture, that anchor
+  raised by 14 rows, and by a further 60 rows in claim 44's bridge case), and every own-image
+  comparison is at the same screen position. This is not an oracle check.
+- *Tool:* the measurement harness, with the read-only recorder named in the setup.
+
 ## Open questions
 
 - **Second condition of the tall-image split.** Claim 12 (*Depth*) splits the composed image of
@@ -3918,9 +4067,6 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
   differently, with a shift derived from its weapon position and a pitch correction. Not yet
   understood; left out.
-- **Vehicle shadow vertical placement.** Claim 40 settles aircraft, including
-  bridge qualification and non-positive heights. Vehicle anchors outside that
-  claim, including the earlier suspected one-pixel airborne adjustment, remain open.
 - **Own-image exclusion outside vehicles.** Claim 39 fixes vehicles, including hovering
   vehicles, only. Whether other voxel object kinds also exclude their own images is not
   determined here; S-0102 owns the aircraft observable.
@@ -3952,6 +4098,23 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
 
 ## Cross-spec reconciliation
 
+- **S-0102 claim 18 and its open questions, S-0106 T10 and Open questions (Q-2672).** Claim 44 here
+  gives the vehicle shadow draw point: above, on and below the surface, on water, on and under a
+  bridge deck, and for a lifted vehicle. S-0102 claim 18's "vehicle shadow points remain unresolved
+  (Open questions)" should cite claim 44, and its open question on the vehicle voxel shadow point
+  should be dropped, keeping its sentence on own-image overlap. S-0106's open question on where an
+  airborne vehicle's shadow lands vertically should point to claim 44, and neither of those changes
+  behaviour. S-0102 D23 (d)'s hovering poses do change: its expectation that every own-body overlap
+  pixel of a hovering vehicle equals the no-shadow control, with "a reversal on slopes or hovering"
+  as a falsifier and "fresh variants remain oracle-testable", is our engine's rule (claim 39) but
+  not the original's, which compares one row lower while the vehicle is above its surface (claim
+  44). D23 (d) should keep that expectation for the hovering poses as engine conformance, take the
+  hovering vehicle out of its fresh oracle variants, and point to MS-34 part c for the original's
+  comparison. S-0106 T10's separate hovering-vehicle run, expecting filled own-image pixels
+  undarkened on every appearance and offering fresh-shadow overlaps as an oracle check, likewise
+  tests our engine's same-position comparison: it should keep that expectation as engine
+  conformance, drop the oracle check for a hovering vehicle, and point to MS-34 part c for the
+  original's comparison.
 - **S-0106 claims 5, 8, 11 and 12.** Claims 26 and 41–42 here resolve the flying/rocket
   body-attitude and reuse questions. Claim 11 there and its aircraft heading open question must be
   updated: flying shadows use the 32-step aiming facing, rocket shadows the 32-step body facing,
