@@ -1,9 +1,9 @@
 ---
 id: Q-2672
 title: Where the voxel shadow of a vehicle above its surface (a hovering one) is drawn
-status: open
+status: answered
 related: [S-0105, S-0102, S-0106, S-0101]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
