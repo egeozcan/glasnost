@@ -678,7 +678,12 @@ counter below 3, several at 1). M7b sweep: the drain's smallest counter 3 before
 dominator launches median 7 before, 9 after; mutator launches median 5 before, 10 after; credits
 drained median 7 440 before, 1 960 after (the drained building stands for a shorter time). The
 three gate exercise tests (M6c, M7a with seed 17, M7b with seed 11) pass. The arena reads the
-same as before, row for row (M-0021: 3 of 41 rows failing, as on main).
+same as before, row for row (M-0021: 3 of 41 rows failing, as on main). The B-track exits in the
+quick lane (36 games, 72 houses): houses that held two construction yards at once 23 before, 43
+after, the first such tick at a median of 30 661 before and 28 420 after; the first tick a main
+superweapon (chronosphere, dominator, genetic mutator, iron curtain, missile, storm) stood ready,
+pooled over kinds and houses, 83 times at a median of 24 741 before, 107 times at a median of
+22 209 after (the earliest 12 823 before, 14 023 after).
 
 **By eye (round 8, simulation and AI).**
 - Note 53: put three riflemen in a civilian building that lets them fire, with an enemy tank in range: the building opens fire at once, before the tank shoots it. Before, it fired only once the tank had hit it.
