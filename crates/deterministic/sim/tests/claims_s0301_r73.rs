@@ -206,11 +206,19 @@ fn run_part(part: Part, k: i32) -> (i32, i32, i32) {
         .find(|e| is_u(e))
         .map(|e| e.tick)
         .expect("u within the run");
+    // spec: S-0309 claim 2 (no passive acquisition while a temporal weapon of its own is erasing a target: the guard that the drop starts does not take V back in the dropping update)
     let drop = tail
         .iter()
         .find(|e| e.target.is_none())
         .copied()
         .expect("dropped");
+    // spec: S-0309 claim 2 (while its beam stays attached to V, being erased, the building takes no target by passive acquisition)
+    for e in tail.iter().filter(|e| e.tick >= drop.tick && e.beam) {
+        assert!(
+            e.target.is_none(),
+            "no target taken while the beam erases V: {e:?}"
+        );
+    }
     assert!(
         drop.tick >= wt && drop.tick <= u,
         "dropped from w to u (w {wt}, u {u}): {tail:?}"
