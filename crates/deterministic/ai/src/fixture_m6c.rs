@@ -133,13 +133,18 @@ pub fn ruleset() -> Ruleset {
     let mut r = fixture::ruleset();
     // The neutral country the tech and garrison buildings belong to.
     register(&mut r, "countries", "Neutral");
-    r.sim.countries.insert(
-        "Neutral".into(),
-        Country {
-            multiplay_passive: Some(true),
-            ..Default::default()
-        },
-    );
+    let mut neutral = Country {
+        multiplay_passive: Some(true),
+        ..Default::default()
+    };
+    // The civilian side (S-0414 claim 12 and Import mapping): its house is
+    // the civilian house, so a HUT a player garrisons becomes the player's
+    // (S-0508 claim 7) and returns to it when emptied (claim 8). Without it
+    // a garrisoned HUT stayed the neutral house's (claim 24) and, once a
+    // garrisoned building searched (S-0309 claim 2, M8 step A4 round 8),
+    // fired at both players, its occupants' own house too.
+    neutral.econ.side = Some(glasnost_sim::econ::setup::CIVILIAN_SIDE.into());
+    r.sim.countries.insert("Neutral".into(), neutral);
 
     // Spyable buildings of the houses: the power plant, the barracks and
     // the war factory have an infiltration effect each.
