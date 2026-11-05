@@ -10,7 +10,7 @@ measured-on: 2026-11-02
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-05
 ---
 
 # M-0019: Unit arena, the records' placements at tick 0
@@ -28,7 +28,8 @@ taken before tick 0, after the first *N*₀, are as many as that model gives the
 spawned objects (Setup). For every unit, the number of the set-up's objects left off the map
 before it equals the place *p* of its cell in S-0216 claim 8's order (0 for its stated cell), and
 each of those objects is of that unit's type. That each refused cell made a new object is the
-inferred reading of that count.
+inferred reading of that count. At tick 0 no vehicle of the map's neutral house is on the map, and
+the observer house owns one object, a vehicle on the map.
 
 ## Setup
 
@@ -137,6 +138,10 @@ inferred reading of that count.
    take their houses and kinds, whether each is on the map at tick 0, and whether the recorder
    gives its identifier at the next tick. For the spawned objects, take whether each is on the map
    at tick 0.
+8. For every game, take the objects of the houses other than the two players' at tick 0 and at
+   the next tick: their houses and kinds, whether each is on the map, and whether the recorder
+   gives each identifier at the next tick. Take the observer house's row in every sample of the
+   periodic sampler (every 304 ticks, M-0017 Procedure 2) to the run's end.
 
 ## Result
 
@@ -257,6 +262,22 @@ in step 6.
   first, no start fits in any of the 96 side-B all-infantry games) are findings that the specs
   this record tests state only by citing it (S-0216 claims 3, 7 and 8).
 
+**Other houses at tick 0.**
+
+- In every one of the 1860 games the recorder gives objects of exactly one house besides the two
+  players' houses and the observer's: the house that owns the map's four bunkers, the map's
+  neutral house.
+- **The neutral house.** At tick 0 every vehicle it owns is off the map, and none of their
+  identifiers is among the objects the recorder gives at the next tick. Its infantry and its
+  buildings are all on the map at tick 0. Counts and types are not given: they are the stock map's
+  content. That those vehicles are the map's own, taken off the map before play, is a reading, as
+  for the starting objects (*Placement raw values*).
+- **The observer house.** At tick 0 and at the next tick it owns one object, a vehicle on the map,
+  and nothing else. That it is the observer's starting construction vehicle is a reading. In every
+  sample to the run's end, the observer house's row gives a unit count of 1, and the house
+  is not defeated. The sample does not say whether it counts objects off
+  the map, so the samples alone do not show that the vehicle stays on the map.
+
 **Tolerance for tests.** Exact, per game (n = 1 for each of the 1860 seeded games; there is no
 spread, since each game replays from its seed). What a test may require depends on what it runs:
 
@@ -285,13 +306,16 @@ spread, since each game replays from its seed). What a test may require depends 
 
 - Recordings: those of the state recorder (Setup), made during the replays of M-0016 and M-0017
   (2026-10-28) and kept local. M-0016 and M-0017 do not use or describe them. The replays were
-  not run again for this record: its readings come from those recordings, read on 2026-11-02.
+  not run again for this record: its readings come from those recordings, read on 2026-11-02 (*Other houses at tick 0*: on
+  2026-11-05).
   Per game: per-object state at tick 0 and the next tick, and the scenario stream's state at the
   start of tick 0. SHA-256 of the sorted list of SHA-256 sums of the 1860 games'
   object-state and stream-state files:
   `88ace101541b91c644a848bfdab0871edd0bb255facaa7b692d700676839a6fd`.
 - The stream model is the generator of S-0202. Replaying it from each game's seed reaches the
   recorded state at the start of tick 0 in every one of the 1860 games.
+- The observer house's rows (*Other houses at tick 0*) are those of the periodic sampler of
+  M-0016's and M-0017's replays, from the same runs.
 - Nothing went wrong in these readings.
 
 ## Notes
