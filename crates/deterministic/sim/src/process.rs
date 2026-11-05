@@ -107,6 +107,10 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
             if o.fall.falling {
                 return false;
             }
+            // spec: S-0215 r118 claim 11 (infantry: in the middle of firing, which is S-0107 claim 11's attack state and nothing else; Q-2566 answered)
+            if o.infantry.as_ref().is_some_and(|s| s.attack) {
+                return false;
+            }
             let seq = o.infantry.as_ref().and_then(|s| s.seq);
             // spec: S-0215 claim 11 (infantry: moving while not in guard, hunt or attack without a target)
             let excused = matches!(cur, Some(Behaviour::Guard | Behaviour::Hunt))
@@ -281,7 +285,9 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
 }
 
 /// The no-threat fall-back on damage (S-0215 claim 16): called for a hit
-/// from a known attacker that lowered the actor's health and left it alive.
+/// from a known attacker that lowered the actor's health and reported
+/// unchanged, now yellow or now red, after the hit's retaliation, so an
+/// actor that retaliated is tested on *attack* (claim 10).
 /// A mobile actor whose current behaviour has the no-threat property and
 /// not the zombie property falls back to rest at once (claims 13 to 15;
 /// S-0501 claim 18 for an aircraft). The rest tables then decide, so the
@@ -720,7 +726,10 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
         AttackMoveMemory::Target(x) => {
             // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
             ob.beh.queue_and_start_at_once(Behaviour::Attack, t, stale);
+            let before = ob.target;
             ob.target = Some(x);
+            // spec: S-0215 r118 claim 11 (a remembered target put back is no change of target)
+            crate::infantry::watch_carry(w, id, before);
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
             crate::emitters::retarget_let_go(w, id);
         }

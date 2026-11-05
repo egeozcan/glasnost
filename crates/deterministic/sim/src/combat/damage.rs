@@ -562,7 +562,7 @@ fn berserk_reactions(w: &mut World, id: ObjectId, hit: &Hit, falls: bool) {
         crate::process::fall_back(w, id, false);
     }
     let Some(o) = w.obj(id) else { return };
-    // spec: S-0302 r43 claim 10 and S-0107 claim 16 (the table of fear applies to a berserk hit, with the health ratio as it stands; a known attacker only selects its rows)
+    // spec: S-0302 r43 claim 10 and S-0107 claim 16 (the table of fear applies to a berserk hit, with the health ratio as it stands; a known attacker only selects its rows); S-0215 r118 claim 16, Order within the hit (fear after the no-threat test)
     if o.kind == Kind::Infantry && o.health > 0 {
         crate::combat::fear::damaged(w, id, hit.attacker.is_some());
     }
@@ -737,23 +737,20 @@ fn building_fires(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The reactions of a hit outside S-0302: fear (S-0107 claim 16), anger
-/// (S-0309 claim 16), the no-threat fall-back (S-0215 claim 16),
-/// retaliation (S-0309 claim 18).
+/// The reactions of a hit outside S-0302, in S-0215 claim 16's order:
+/// anger (S-0309 claim 16), retaliation (S-0309 claim 18), the no-threat
+/// fall-back (S-0215 claim 16), fear (S-0107 claim 16). The scatter from
+/// damage (S-0215 claim 19) and S-0208 claim 15's requests A and B have no
+/// place here yet (seam); the crush response (S-0215 claim 39) follows in
+/// `apply`.
 fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result: HitResult) {
     let Some(o) = w.obj(id).cloned() else { return };
     let dealt = health_before - o.health;
+    // spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the change of health, then anger, then retaliation, then the scatter from damage, then the no-threat test, then fear)
     if dealt != 0
         && let Some(a) = hit.attacker
     {
         crate::combat::acquire::anger(w, id, a, dealt);
-    }
-    if o.kind == Kind::Infantry && o.health > 0 && dealt > 0 {
-        crate::combat::fear::damaged(w, id, hit.attacker.is_some());
-    }
-    // spec: S-0215 claim 16 (damage from a known attacker that the actor survives: rated medium, "any damage that changes health and leaves the actor alive"; a heal is not damage, Q-2586 interim) and Q-2586 interim (after the hit's own effects, anger and fear, before retaliation; judged on the behaviour current when the hit lands); S-0215 claim 39 (the crush response, in `apply`, still follows)
-    if dealt > 0 && o.health > 0 && hit.attacker.is_some() {
-        crate::process::no_threat_fall_back(w, id);
     }
     if dealt > 0
         && o.health > 0
@@ -761,6 +758,20 @@ fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result:
         && let Some(a) = hit.attacker
     {
         crate::combat::acquire::retaliate(w, id, a);
+    }
+    // spec: S-0215 r118 claim 16 (a hit that names an attacker, lowers health and reports unchanged, now yellow or now red; Results: unaffected, now dead and post-mortem never trigger it) and Order within the hit (tested on the behaviour current at this point: attack after a retaliation, claim 10)
+    if dealt > 0
+        && matches!(
+            result,
+            HitResult::Unchanged | HitResult::NowYellow | HitResult::NowRed
+        )
+        && hit.attacker.is_some()
+    {
+        crate::process::no_threat_fall_back(w, id);
+    }
+    // spec: S-0215 r118 claim 16, Order within the hit (for an infantry unit the change of fear, S-0107 claim 16, comes after the test)
+    if o.kind == Kind::Infantry && o.health > 0 && dealt > 0 {
+        crate::combat::fear::damaged(w, id, hit.attacker.is_some());
     }
 }
 

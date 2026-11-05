@@ -187,46 +187,21 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
     };
     let tick = w.tick;
     let Some(s) = o.infantry.clone() else { return };
-    let begins_frozen = s.attack && s.seq_delay == 0;
-    let end_attack = |w: &mut World, ask: bool| {
-        let prone = w
-            .obj(id)
-            .and_then(|o| o.infantry.as_ref())
-            .is_some_and(|s| s.prone);
-        let deploying = w
-            .obj(id)
-            .and_then(|o| o.infantry.as_ref())
-            .and_then(|s| s.seq)
-            .is_some_and(Seq::is_deploy);
-        if let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
-            st.attack = false;
-        }
-        if ask {
-            // spec: S-0107 claim 11 (the unit asks, not forced, for deployed, prone or stand)
-            let q = if deploying {
-                Seq::Deployed
-            } else if prone {
-                Seq::Prone
-            } else {
-                Seq::Stand
-            };
-            crate::infantry::request(w, id, q, false);
-        }
-    };
-    if begins_frozen {
-        // spec: S-0107 claim 11 (a tick that begins with a current sequence whose stage delay is 0 ends the attack state and asks for stand)
-        end_attack(w, true);
-    }
+    // The stage-delay-0 ending runs before the late start (`tick`,
+    // `infantry::stage_delay_zero_end`), and a change of target by an order,
+    // the target's leaving or the unit's own turn at once
+    // (`infantry::target_changed`), so the firing turn sees them ended.
+    let end_attack = |w: &mut World, ask: bool| crate::infantry::end_attack(w, id, ask);
     // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
     let Some(t) = crate::combat::held::firing_target(w, &o) else {
         if s.attack {
-            // spec: S-0107 claim 11 (the attack state ends when the unit has no target)
+            // spec: S-0107 claim 11 (the attack state ends when the unit has no target) and S-0215 r118 claim 11 (Other endings: no target at the firing turn, in the firing turn)
             end_attack(w, false);
         }
         return;
     };
     if s.attack && o.combat.last_shot_target != Some(t) {
-        // spec: S-0107 claim 11 (the attack state ends when its target changes)
+        // spec: S-0107 claim 11 (the attack state ends when its target changes) and Q-2616 interim (a change by a route that S-0215 claim 11 does not place, such as a retaliation in another actor's turn, ends the state here, with no request)
         end_attack(w, false);
     }
     let attack = w
@@ -314,6 +289,8 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
     if st.stage(tick) == f {
         if check(w, id, Some(t), slot, true) == Answer::CanFire {
             crate::combat::fire::shot(w, id, slot, t);
+            // spec: S-0107 r40 claim 11 (End of the attack state: when the weapon fires at the fire frame F, the attack state ends with that shot) and S-0215 r118 claim 11 (Ends at the shot, in the same firing turn; Q-2566 answered)
+            end_attack(w, false);
         } else {
             // spec: S-0107 claim 11 (not ready at the fire frame: the attack state ends)
             end_attack(w, true);

@@ -1871,10 +1871,10 @@ fn rifleman(ff: [i32; 4]) -> Ruleset {
     r
 }
 
-// spec: S-0107 claim 11 (with a target and the weapon ready: enters the attack state, the body facing set at once to the target's direction)
+// spec: S-0107 claim 11 (with a target and the weapon ready: enters the attack state, the body facing set at once to the target's direction). The fire frame is 3, so no shot ends the state in the same step (r40, End of the attack state)
 #[test]
 fn s0107_claim_11_enters_attack_and_snaps_facing() {
-    let r = rifleman([0; 4]);
+    let r = rifleman([3; 4]);
     let (mut w, a, b) = duel_of(&r, Kind::Infantry, "WALKER", 7);
     w.obj_mut(a).unwrap().body = glasnost_sim::turning::Turning::at(0);
     behave::infantry_step(&mut w, a);
@@ -1977,8 +1977,10 @@ fn s0107_claim_11_firing_kind_by_stance() {
         };
         assert_eq!(w.obj(a).unwrap().infantry.as_ref().unwrap().seq, Some(want));
     }
-    // A type without a fire-standing entry: the request is turned down, the attack state entered.
-    let mut r = rifleman([0; 4]);
+    // A type without a fire-standing entry: the request is turned down, the
+    // attack state entered. The fire frame is 3, so no shot ends it in the
+    // same step (S-0107 r40 claim 11, End of the attack state).
+    let mut r = rifleman([3; 4]);
     r.sim
         .infantry
         .get_mut("WALKER")
@@ -2020,7 +2022,8 @@ fn s0107_claim_11_shot_at_the_fire_frame() {
         let o = w.obj(a).unwrap();
         if o.last_fired == t {
             let st = o.infantry.clone().unwrap();
-            assert!(st.attack);
+            // spec: S-0107 r40 claim 11 (End of the attack state: the attack state ends with the shot)
+            assert!(!st.attack, "the shot ends the attack state");
             assert_eq!(st.seq, Some(Seq::FireStanding));
             assert_eq!(st.stage(t), 2);
             shot = Some(t);
@@ -2074,16 +2077,36 @@ fn s0107_fire_frame_equal_to_the_count_still_fires() {
     assert_eq!(st.seq, Some(Seq::Stand));
 }
 
-// spec: S-0107 State and ordering (a unit whose firing kind completed on tick t with stand as its follow-up leaves the attack state on tick t + 1, not on t)
+// spec: S-0107 r40 claim 11 (End of the attack state: a unit is in the attack state when its firing kind completes if the kind completed before its stage reached F) and State and ordering (a unit in the attack state whose firing kind completed on tick t with stand as its follow-up leaves the attack state on tick t + 1, not on t). The fire frame 7 is past the kind's 6 image frames, so the kind completes with no shot
 #[test]
 fn s0107_attack_state_ends_the_tick_after_completion() {
-    let (mut w, a, _, _) = first_shot(2).expect("the rifleman fired");
+    let r = rifleman([7, 0, 0, 0]);
+    let mut w = testkit::game_with(&r, N, 7);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(N, -2, 0),
+        EAST,
+    );
+    testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(N, 2, 0),
+        WEST,
+    );
+    let mut fired_kind = false;
     let mut completed = None;
-    for _ in 0..50 {
+    for _ in 0..200 {
         let t = w.tick;
         testkit::run(&mut w, 1);
         let st = w.obj(a).unwrap().infantry.clone().unwrap();
-        if st.seq == Some(Seq::Stand) {
+        if st.seq == Some(Seq::FireStanding) {
+            fired_kind = true;
+        } else if fired_kind && st.seq == Some(Seq::Stand) {
             completed = Some(t);
             assert!(
                 st.attack,
@@ -2092,9 +2115,19 @@ fn s0107_attack_state_ends_the_tick_after_completion() {
             break;
         }
     }
-    assert!(completed.is_some(), "the firing kind completed");
+    assert!(fired_kind, "the rifleman started its firing kind");
+    let t = completed.expect("the firing kind completed");
+    // On t + 1 the stage-delay-0 ending comes first, and the unit, whose
+    // weapon never fired and so is ready, starts a new firing kind on that
+    // same tick: only a unit out of the attack state begins it.
     testkit::run(&mut w, 1);
-    assert!(!w.obj(a).unwrap().infantry.as_ref().unwrap().attack);
+    let st = w.obj(a).unwrap().infantry.clone().unwrap();
+    assert_eq!(
+        st.seq,
+        Some(Seq::FireStanding),
+        "a new firing kind on t + 1"
+    );
+    assert_eq!(st.stage(t + 1), 0, "it started on t + 1");
 }
 
 // spec: S-0215 claim 32 (SAM attack, aimed stage, can fire: fires both weapons in this processing although the primary shot starts the countdown; back to aiming)

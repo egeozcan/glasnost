@@ -309,7 +309,15 @@ pub fn apply_pending(w: &mut World) {
         for o in orders.iter().filter(|o| !is_behaviour(o)) {
             // spec: S-0213 claim 17 (every order naming an actor ends its route when it is applied, route orders excepted)
             crate::routes::order_ends(w, o);
+            let actor = o.actor();
+            if let Some(a) = actor {
+                crate::infantry::watch_set(w, a);
+            }
             apply_other(w, HouseId(hi as u8), unrouted(o));
+            if let Some(a) = actor {
+                // spec: S-0215 r118 claim 11 (Other endings: a change of an infantry unit's target by an order ends its attack state when the order takes effect, so no start after it sees the state) and S-0107 r40 claim 11 (the change asks for deployed, prone or stand)
+                crate::infantry::watch_test(w, a);
+            }
             // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike when the change applies, in the tick of the order)
             crate::strike::sweep(w);
         }
@@ -320,7 +328,15 @@ pub fn apply_pending(w: &mut World) {
         for ((o, d), m) in behaviour.iter().zip(dests).zip(&marked) {
             // spec: S-0213 claim 17 (a behaviour order ends the actor's route when applied, unless a route issued it)
             crate::routes::order_ends(w, m);
+            let actor = o.actor();
+            if let Some(a) = actor {
+                crate::infantry::watch_set(w, a);
+            }
             apply_behaviour(w, o, d);
+            if let Some(a) = actor {
+                // spec: S-0215 r118 claim 11 (Other endings: a change of target by an order, at once) and S-0107 r40 claim 11 (its request)
+                crate::infantry::watch_test(w, a);
+            }
             // spec: S-0519 claim 19 (revision 3: cancellation when the change applies)
             crate::strike::sweep(w);
         }

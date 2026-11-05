@@ -43,7 +43,7 @@ claim 11's infantry "in the middle of firing" names a firing state that no spec 
 
 | Request | Spec | Rows |
 |---|---|---|
-| Q-2566 | S-0215 r104 claim 11, S-0107 r31 claim 11, S-0513 r115 claim 39a | intake 94: SW12 l9b (the release at an *attack* processing before *unload* starts), and the firing state ending after both of the first update's per-tick starts. The infantry "in the middle of firing" names a firing state that no spec defines, gives no start and gives no end for a unit that keeps its target. |
+| Q-2566 | S-0215 r104 claim 11, S-0107 r31 claim 11, S-0513 r115 claim 39a | intake 94: SW12 l9b (the release at an *attack* processing before *unload* starts), and the firing state ending after both of the first update's per-tick starts. The infantry "in the middle of firing" names a firing state that no spec defines, gives no start and gives no end for a unit that keeps its target. Answered by S-0215 r118 claim 11, S-0107 r40 claim 11 and S-0513 r122 claim 39a (the attack state); built in intake 99 ([intake99.md](intake99.md)): l9b is dropped by r122, and the firing state's endings are placed. |
 | Q-2567 | S-0301 r71 claim 9, S-0513 r115 claim 39a, S-0405 table T1 | intake 84: a building firer's outranking *illegal* or *impossible* drops the member and starts *guard*. S-0301 does not order T1's answers against the held-temporal-target *rearming*, so the test would assert an order no claim gives. |
 
 ## Closed earlier

@@ -1558,14 +1558,24 @@ fn r115_claim39a_sw12_l9a_and_l9_a_deploy_order_then_an_attack_order_on_the_memb
         step(&mut w);
         rec.push(l9_row(&w, f, m));
     }
-    // (l9a) unload current no later than T's second update after the order
-    // (S-0215 claim 30: its processing forces guard at once), and no
+    // spec: S-0513 r122 claim 39a (The firer, Q-2566 answered: the deploy order's change of target ends the attack state as the order takes effect, S-0215 claim 11, so unload becomes current at the first update's first per-tick start and is processed in it, before any attack processing) and SW12 part l9a (just after that update its deploy has started and guard is current)
+    // (l9a) unload current and processed in T's first update after the
+    // order (S-0215 claim 30: its processing forces guard at once), and no
     // attack processing before it: no target held and no beam let go.
     let unload_at = rec
         .iter()
         .position(|x| x.current == Some(Behaviour::Guard) && x.seq.is_some_and(|q| q.is_deploy()))
         .unwrap_or_else(|| panic!("l9a: unload made current and processed: {rec:#?}"));
-    assert!(unload_at <= 1, "l9a: unload by the second update: {rec:#?}");
+    // The order is applied after the turn pass of the tick it is given in
+    // (S-0203 claim 7), so rec[0] is that tick: the order has taken effect
+    // (target cleared, unload queued) and attack is still current. rec[1]
+    // is T's first update after the order.
+    assert_eq!(
+        (rec[0].current, rec[0].queued, rec[0].target),
+        (Some(Behaviour::Attack), Some(Behaviour::Unload), None),
+        "l9a: the order taken in its own tick: {rec:#?}"
+    );
+    assert_eq!(unload_at, 1, "l9a: unload in the first update: {rec:#?}");
     for x in &rec[..=unload_at] {
         assert_eq!(x.target, None, "l9a: no target from the order on: {x:?}");
         assert!(x.beam, "l9a: the beam stays attached: {x:?}");

@@ -1582,6 +1582,9 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                 ob.beh
                     .queue_and_start_at_once(Behaviour::Attack, tick, stale);
                 ob.combat.engaged = true;
+            } else {
+                // spec: S-0215 r118 claim 11 (the attack-move rule discards a target without the change-of-target ending: where its search finds no other, the attack state lasts to the no-target ending in the firing turn)
+                crate::infantry::watch_carry(w, a, o.target);
             }
         }
         AttackMoveMemory::Target(mem) => {
@@ -1605,6 +1608,10 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                     // spec: S-0309 claim 23 (nothing found: the memory's target again)
                     ob.target = Some(mem);
                 }
+            }
+            if !found {
+                // spec: S-0215 r118 claim 11 (the attack-move rule puts a remembered target back without the change-of-target ending: the state stays as it was)
+                crate::infantry::watch_carry(w, a, o.target);
             }
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
             crate::emitters::retarget_let_go(w, a);
