@@ -1,7 +1,7 @@
 ---
 id: Q-1714
 title: How the M-0001 YTNK against SREF fight unfolds
-status: open
+status: answered
 related: [S-0609, S-0518, S-0301, S-0309, S-0307]
 answered-by: [S-0318, M-0021, S-0301, S-0609]
 ---
