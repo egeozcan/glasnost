@@ -1,9 +1,9 @@
 ---
 id: Q-2671
 title: The grab animation of a grappling parasite, and what a held ship shows of its parasite
-status: open
+status: answered
 related: [S-0614, S-0113, S-0109]
-answered-by: []
+answered-by: [S-0614]
 ---
 
 ## Need
