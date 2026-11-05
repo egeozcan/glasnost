@@ -1,9 +1,9 @@
 ---
 id: Q-2286
 title: Where did M-0001's infantry stand in their cells at tick 0, given that CAOS against E1 turns on it in our arena?
-status: open
+status: answered
 related: [S-0216, S-0208, S-0610, M-0001, M-0006]
-answered-by: []
+answered-by: [M-0020]
 ---
 
 ## Need
