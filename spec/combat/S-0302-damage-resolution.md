@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-05
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
 supersedes: []
@@ -673,30 +673,37 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       A hit that ignores defences bypasses that particular protection (claim 8; S-0514 claim 17).
       Quirks `quirks.readiness_from_defended_damage` and, for a negative hit that raises
       ammunition above the type's field, `quirks.readiness_heal_over_max` (Edge cases).
-    - **Berserk instead of damage** (unless a stage 1 or stage 2 row stops the hit). A hit whose warhead makes targets go
-      berserk changes no health. When no stage 1 or stage 2 row stops it, it has the following
-      effect, whatever its column. Unless an attacking house is given and the target's owner is
-      allied with it, the target's type is immune to psionics or the target is a building, the
-      target receives a remaining berserk time of *T* countdown updates (S-0610 claim 5),
-      as the berserk duration of Formulas gives: the modified
-      amount of claim 6 (F3) at distance 0, taken of the hit's amount after the defences of claim 5,
-      or of its delivered amount when the hit ignores defences. Ignoring defences changes only which
-      amount enters: every case of claim 6 (inert game, healing reach, falloff, versus value, cap)
-      applies to *T* in both cases. So *T* is 0 in an inert game and for an amount of 0, and a
-      negative amount stays negative. S-0610 claims 4 and 5 own entry and expiry: a new
-      berserk state drops the target and queues *hunt*, even for *T* ≤ 0, which expires at
-      the next countdown update. For *T* ≥ 1, expiry is on the *T*-th countdown update
-      following the hit; the first may be in the hit tick, so *T* is not necessarily the
-      number of elapsed ticks. S-0610 claim 5 owns expiry's target loss and queued behaviour.
-      Such a hit
-      reports *unchanged*, but it sets off none of the reactions that claim 12 ties to a result: no
-      trigger event of the target's tag, no damage effect or marking of one (claim 13), no loss of a
-      disguise (D23, part f). In the three excepted cases nothing happens and the hit reports
-      *unaffected*. A further berserk hit on a target that is already berserk sets the remaining
-      time to the new *T*, even when that is shorter. A berserk hit is not stopped by the stage 4
-      rows, so a target that is immune to all damage still goes berserk. A berserk hit that a stage 1
-      or stage 2 row stops, for example one of a radiation warhead on a target immune to radiation,
-      causes no berserk state and reports *unaffected*.
+    - **Berserk instead of damage** (unless a stage 1 or stage 2 row stops the hit). A hit whose
+      warhead makes targets go berserk changes no health. When no stage 1 or stage 2 row stops it,
+      it has the following effect, whatever its column. Unless an attacking house is given and the
+      target's owner is allied with it, the target's type is immune to psionics or the target is a
+      building, the target receives a remaining berserk time of *T* countdown updates (S-0610 claim
+      5), as the berserk duration of Formulas gives: the modified amount of claim 6 (F3) at distance
+      0, taken of the hit's amount after the defences of claim 5, or of its delivered amount when
+      the hit ignores defences. Ignoring defences changes only which amount enters: every case of
+      claim 6 (inert game, healing reach, falloff, versus value, cap) applies to *T* in both cases.
+      So *T* is 0 in an inert game and for an amount of 0, and a negative amount stays negative.
+      S-0610 claims 4 and 5 own entry and expiry: a new berserk state drops the target and queues
+      *hunt*, even for *T* ≤ 0, which expires at the next countdown update. For *T* ≥ 1, expiry is
+      on the *T*-th countdown update following the hit; the first may be in the hit tick, so *T* is
+      not necessarily the number of elapsed ticks. S-0610 claim 5 owns expiry's target loss and
+      queued behaviour. Such a hit reports *unchanged*. It sets off none of the reactions that the
+      hit's own damage step makes: no anger change (S-0309 claim 16), no retaliation (S-0215 claim
+      18), no scatter from damage (S-0215 claim 19, and request A of S-0208 claim 15 for infantry),
+      no trigger event of the target's tag, no damage effect or marking of one (claim 13) and no
+      loss of a disguise (D23, part f). The reactions that a mobile target makes after that step to
+      a surviving hit that reports *unchanged* do follow it, as their own claims give them: the
+      no-threat fall-back (S-0215 claim 16), then for an infantry unit request B (S-0208 claim 15)
+      and the change of fear (S-0107 claim 16), and for a vehicle the crush response (S-0215 claim
+      39) and the announcement that a harvester is under attack (S-0701 claim 28). Each of them that
+      needs a known attacker needs one here too. A team member that the hit makes berserk has left
+      its team by then (S-0215 claim 39), so the team exception of the no-threat fall-back does not
+      hold it back. In the three excepted cases nothing happens and the hit reports *unaffected*. A
+      further berserk hit on a target that is already berserk sets the remaining time to the new
+      *T*, even when that is shorter. A berserk hit is not stopped by the stage 4 rows, so a target
+      that is immune to all damage still goes berserk. A berserk hit that a stage 1 or stage 2 row
+      stops, for example one of a radiation warhead on a target immune to radiation, causes no
+      berserk state and reports *unaffected*.
     - **Who goes berserk from ordinary fire.** A detonation whose firer has not been killed,
       removed or (believed, low) started to cloak since the shot carries an attacking house
       (claim 1), so a berserk warhead never makes the firer's own side
@@ -705,22 +712,28 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       dying object's house (claim 1). A detonation of a firer that has been killed since the
       shot (claim 1) carries no attacking house: then an allied target goes berserk too (and the
       allies row of claim 8 does not apply to it either, since that row needs an attacker).
-    - Backing: `measurable` (scenario D10 for readiness loss, D23 part f for the lack of reactions to a berserk hit, D17 for berserk, its duration, its
-      reset, its stages and who goes berserk, including parts g, g2, g3 and g4, with
-      entry and update-count expiry through S-0610 claims 4 and 5, scenario P2, and
-      *T* ≤ 0 through D17 part i, supplementing S-0610 scenario P3's conditional stock setup).
-      `unmeasured` (*T* for a hit that ignores defences: a trigger kill with a berserk demolition warhead
-      can deliver one, but the original then hangs on its survivor, preventing observation of
-      when the berserk state ends; the absence of trigger reactions to a berserk hit: D23 f
-      observes disguise only and no tag-event test is supplied here; the direction of the
-      one-way alliance exception: D17 uses mutual alliances; readiness loss at strength 0:
+    - Backing: `measurable` (scenario D10 for readiness loss, D23 part f for the kept disguise after
+      a berserk hit, S-0215 claim 39's backing (S-0210 scenario K15) for the crush response after
+      it, D17 for berserk, its duration, its reset, its stages and who goes berserk, including parts
+      g, g2, g3 and g4, with entry and update-count expiry through S-0610 claims 4 and 5, scenario
+      P2, and *T* ≤ 0 through D17 part i, supplementing S-0610 scenario P3's conditional stock
+      setup). `unmeasured` (*T* for a hit that ignores defences: a trigger kill with a berserk
+      demolition warhead can deliver one, but the original then hangs on its survivor, preventing
+      observation of when the berserk state ends; the absence of trigger reactions to a berserk hit:
+      D23 f observes disguise only and no tag-event test is supplied here; the other reactions of
+      the damage step that a berserk hit does not make, and the later reactions that it makes other
+      than the crush response: no scenario here lands a berserk hit on a subject whose record shows
+      anger, a retaliation, a scatter request, a fall-back, fear or the announcement; the direction
+      of the one-way alliance exception: D17 uses mutual alliances; readiness loss at strength 0:
       D10 uses positive strength and no setup keeps a strength-0 target alive to receive a hit)
     - Confidence: medium (readiness loss, including that it uses the amount before the versus value
-      and happens even when a later row stops the hit); medium (berserk duration, its reset, and
-      the stages); medium (a detonation of a firer that has been killed carries no attacking
-      house; one of a death weapon carries the dying object's house); low (that one of a firer in a
-      closed transport carries its house; *T* for a hit that ignores defences).
-      Entry and update-count expiry, including *T* ≤ 0: medium (S-0610 claims 4 and 5)
+      and happens even when a later row stops the hit); medium (berserk duration, its reset, and the
+      stages); medium (a detonation of a firer that has been killed carries no attacking house; one
+      of a death weapon carries the dying object's house); low (that one of a firer in a closed
+      transport carries its house; *T* for a hit that ignores defences). Entry and update-count
+      expiry, including *T* ≤ 0: medium (S-0610 claims 4 and 5). The reactions that a berserk hit
+      makes and does not make: medium, and the crush response after it has S-0215 claim 39's
+      confidence
 
 11. **Health change.** A hit whose amount *m* after claims 5 to 8 is not 0 changes the target's
     health *H* (Formulas F4):
@@ -757,18 +770,19 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     narrowing. For a red ratio written as 0.6 without a percent sign and strength 1000, the hit
     from 601 to 600 reports *now red*, not the next hit from 600 to 599.
 
-    The result decides the reactions to the hit (a berserk hit has none, whatever it reports,
-    claim 10). This claim owns two of them: the damage effect of claim 13, and, for a target whose type can disguise itself but does not keep its
-    disguise permanently, the loss of its current disguise and a disguise-disruption countdown of
-    2*m*′ ticks, *m*′ the health it lost, after any hit that reports *unchanged*, *now yellow* or
-    *now red* (S-0516 claims 33–34 own disguise loss and re-disguise eligibility). It also owns one reaction of a building: on *now
-    yellow* the intensity of its light source is scaled by a fixed factor (D11, part c). Two
-    more are pointers only, owned elsewhere and not claims of this spec: the trigger events that
-    a hit sets off through the target's tag, whose list S-0011 leaves to a later revision, and the
-    building's sound reactions, owned by S-0701 claims 20 and 37. Claim 37 specifies the
-    any-owner building damage fallback on *now yellow* or *now red* and the death fallback
-    when a lethal hit begins the destruction reaction, not at later removal. Quirk
-    `quirks.yellow_state_at_half` (Edge cases).
+    The result decides the reactions to the hit (a berserk hit has none of those below, whatever it
+    reports, claim 10). This claim owns two of them: the damage effect of claim 13, and, for a
+    target whose type can disguise itself but does not keep its disguise permanently, the loss of
+    its current disguise and a disguise-disruption countdown of 2*m*′ ticks, *m*′ the health it
+    lost, after any hit that reports *unchanged*, *now yellow* or *now red* (S-0516 claims 33–34 own
+    disguise loss and re-disguise eligibility). It also owns one reaction of a building: on *now
+    yellow* the intensity of its light source is scaled by a fixed factor (D11, part c). Two more
+    are pointers only, owned elsewhere and not claims of this spec: the trigger events that a hit
+    sets off through the target's tag, whose list S-0011 leaves to a later revision, and the
+    building's sound reactions, owned by S-0701 claims 20 and 37. Claim 37 specifies the any-owner
+    building damage fallback on *now yellow* or *now red* and the death fallback when a lethal hit
+    begins the destruction reaction, not at later removal. Quirk `quirks.yellow_state_at_half` (Edge
+    cases).
     - *Post-mortem when a reaction removes the target.* When one of those reactions takes the
       target out of play (a trigger that the hit sets off can destroy it, S-0011), the hit reports
       *post-mortem* instead of the result above. Only the source of the hit receives this result,
@@ -1918,7 +1932,7 @@ parts use their stated replay checks and rejection thresholds instead.
   yellow*) loses the disguise as in (a). (e) A stock type that keeps its disguise permanently, hit
   as in (a): the disguise is kept. (f) A berserk hit (the warhead of D17 (a), the test map making
   the spy type not immune to psionics) on the spy of (a), which makes it go berserk: the disguise
-  is kept (claim 10: a berserk hit has none of the reactions). (g) Start a fresh disguised spy
+  is kept (claim 10). (g) Start a fresh disguised spy
   at health 300, strength 1000 and red ratio 0.25, and hit for 100: the crossing from 300 to
   200 reports *now red* and loses the disguise as in (a). (h) For the countdown, use a still,
   non-permanently-disguised disguise-when-still vehicle, with no contact or neighbouring enemy
@@ -2197,6 +2211,22 @@ parts use their stated replay checks and rejection thresholds instead.
   `unmeasured`: no scenario here isolates its hit consequences | medium, resting on S-0302"
   should read that the hit consequences are `measurable` through S-0302 scenario D34, still
   medium and resting on S-0302 until D34 runs.
+- **S-0215 claim 16 and its open question on a berserk hit.** The trigger should also name a hit
+  that makes its target berserk or renews that state and reports *unchanged* (claim 10 here), which
+  lowers no health, and the open question can then be closed. When the hit makes the actor berserk,
+  a behaviour that the fall-back queues replaces the *hunt* that the berserk entry queued (S-0610
+  claim 4). Level and backing: those of claim 10 here for the trigger. The replacement of the queued
+  *hunt* is medium and `unmeasured`: no scenario here makes an actor in a no-threat behaviour
+  berserk.
+- **S-0215 claim 39.** No rule change: its berserk sentences agree with claim 10 here.
+- **S-0208 claim 15.** Request B is also sent after a berserk hit with a known attacker (claim 10
+  here), which takes no health. Request A is not. Its "takes damage and survives it" should cover
+  that hit. Level and backing: those of claim 10 here.
+- **S-0107 claim 16.** Its table also applies to a berserk hit (claim 10 here), which takes no
+  health, with the health ratio as it stands. Level and backing: those of claim 10 here.
+- **S-0701 claim 28.** The announcement that a harvester is under attack is also made for a berserk
+  hit on the local player's harvester (claim 10 here), which takes no health. Level and backing:
+  those of claim 10 here.
 
 ## Open questions
 
