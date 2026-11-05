@@ -127,6 +127,32 @@ fn s0308_claim_13_the_weapon_of_the_current_occupant() {
     }
 }
 
+// spec: S-0309 claim 2 (only an occupiable building that holds no occupants is kept from searching passively: a garrisoned building picks an enemy in range by itself, before anything shoots at it)
+#[test]
+fn s0309_claim_2_a_garrisoned_building_searches() {
+    let r = rules_with(|_| {});
+    let (mut w, b, _, cart) = fixture(&r, &["GARRI"], 2);
+    assert!(glasnost_sim::combat::acquire::may_search_passively(&w, b));
+    let full = w.obj(b).unwrap().health;
+    let mut picked = None;
+    for t in 0..60 {
+        testkit::run(&mut w, 1);
+        if w.obj(b).unwrap().target == Some(Target::Object(cart)) {
+            picked = Some(t);
+            break;
+        }
+    }
+    assert!(picked.is_some(), "the garrison took the enemy in range");
+    assert_eq!(
+        w.obj(b).unwrap().health,
+        full,
+        "it was not shot first: no retaliation"
+    );
+    // Emptied, the same building is kept from searching.
+    let (w, b, _, _) = fixture(&r, &[], 2);
+    assert!(!glasnost_sim::combat::acquire::may_search_passively(&w, b));
+}
+
 // spec: S-0308 table P row 2 (a garrisoned building whose occupants fire uses slot 0)
 #[test]
 fn s0308_table_p_row_2() {

@@ -1704,6 +1704,7 @@ fn a_wave_goes_for_an_enemy_it_can_reach() {
         d2(sea, tank_at) > 100,
         "the ship is out of the tank's engage radius"
     );
+    past_the_opening(&mut w, 0);
     let mut plan = glasnost_ai::brain::default_plan();
     plan.wave = 1;
     let mut brain = Brain::with_plan(&w, &map, HouseId(0), plan);
@@ -1765,6 +1766,7 @@ fn a_wave_sends_a_long_range_unit_to_the_shore_facing_the_enemy() {
         glasnost_sim::world::Pos::centre(enemy_at, 0),
         3,
     );
+    past_the_opening(&mut w, 0);
     let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
         i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
     };
@@ -1804,4 +1806,181 @@ fn a_wave_sends_a_long_range_unit_to_the_shore_facing_the_enemy() {
         d2(tank_to, enemy_at) * 256 * 256 > range(tank) * range(tank),
         "the tank is not sent to stand at the shore ({tank_to:?})"
     );
+}
+
+/// Makes a world copy ready for a wave of the waves' tests: the house's
+/// guard ([`glasnost_ai::scripted::GUARD_MIN`] tanks beside its yard,
+/// nearer home than any unit the test places) and the clock moved on to
+/// the first think tick past the opening ([`glasnost_ai::scripted::OPENING`]),
+/// before which no wave goes (M8 step A4 round 8). Returns the guards.
+fn past_the_opening(w: &mut World, h: u8) -> Vec<ObjectId> {
+    let yard = w.obj(of(w, h, "YARD")[0]).unwrap().pos.cell();
+    let guards: Vec<ObjectId> = free_cells(w, yard, glasnost_ai::scripted::GUARD_MIN)
+        .into_iter()
+        .map(|c| testkit::spawn(w, Kind::Vehicle, "GUNR", h, c, 0))
+        .collect();
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let opening = glasnost_ai::scripted::OPENING;
+    w.tick = (w.tick.max(opening) + period - 1) / period * period;
+    guards
+}
+
+// design (M8 step A4 round 8, the lead's note 52): no wave goes before the opening is over; after it, a wave goes and the guard (a third of the army, the units nearest home) stays home.
+#[test]
+fn waves_wait_for_the_opening_and_leave_a_guard() {
+    let mut g = start(5);
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()
+        && !of(w, 1, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let mut w = g.world.clone();
+    assert!(w.tick < glasnost_ai::scripted::OPENING);
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    let near: Vec<ObjectId> = free_cells(&w, yard, 3)
+        .into_iter()
+        .map(|c| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, c, 0))
+        .collect();
+    let far: Vec<ObjectId> = free_cells(&w, glasnost_map::CellXY::new(yard.x, yard.y + 10), 6)
+        .into_iter()
+        .map(|c| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, c, 0))
+        .collect();
+    let army = of(&w, 0, "GUNR").len();
+    assert_eq!(army, 9, "no other tank yet");
+    let sent = |orders: &[Order], id: ObjectId| {
+        orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, dest: Some(Target::Cell(_)), .. } if *actor == id)
+        })
+    };
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    let moved: Vec<&Order> = orders
+        .iter()
+        .filter(|o| near.iter().chain(&far).any(|&id| o.actor() == Some(id)))
+        .collect();
+    assert!(
+        moved.len() <= 1
+            && moved.iter().all(|o| matches!(o, Order::Behaviour { attack_move: false, actor, .. } if far.contains(actor))),
+        "no wave in the opening, at most a scout: {orders:?}"
+    );
+    let opening = glasnost_ai::scripted::OPENING;
+    w.tick = (opening + period - 1) / period * period;
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(
+        far.iter().all(|&id| sent(&orders, id)),
+        "the wave: {orders:?}"
+    );
+    assert!(
+        !near.iter().any(|&id| sent(&orders, id)),
+        "the guard stays: {orders:?}"
+    );
+}
+
+// design (M8 step A4 round 8, the lead's note 48): while no wave goes, the fastest waiting army unit scouts the unexplored cell of the house's own side nearest home; with that side explored, none does.
+#[test]
+fn a_scout_explores_the_houses_own_side() {
+    let mut g = start(5);
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()
+        && !of(w, 1, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let mut w = g.world.clone();
+    assert!(w.tick < glasnost_ai::scripted::OPENING);
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    let enemy = w.obj(of(&w, 1, "YARD")[0]).unwrap().pos.cell();
+    let guards = past_the_opening(&mut w, 0);
+    w.tick = g.world.tick;
+    let far: Vec<ObjectId> = free_cells(&w, glasnost_map::CellXY::new(yard.x, yard.y + 10), 2)
+        .into_iter()
+        .map(|c| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, c, 0))
+        .collect();
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+    };
+    let scouted = |w: &World| {
+        Brain::new(w, &fixture::map(), HouseId(0))
+            .think(w)
+            .into_iter()
+            .filter_map(|o| match o {
+                Order::Behaviour {
+                    actor,
+                    attack_move: false,
+                    dest: Some(Target::Cell(c)),
+                    ..
+                } if far.contains(&actor) || guards.contains(&actor) => Some((actor, c)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let sent = scouted(&w);
+    assert_eq!(sent.len(), 1, "one scout: {sent:?}");
+    let (who, c) = sent[0];
+    assert!(far.contains(&who), "the scout is not of the guard");
+    assert!(
+        !shroud::explored(&w, HouseId(0), c),
+        "it goes to an unexplored cell"
+    );
+    assert!(
+        d2(c, yard) < d2(c, enemy),
+        "on the house's own side ({c:?})"
+    );
+    // The whole map explored: no scout.
+    let spots: Vec<glasnost_map::CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|c| c.x % 4 == 0 && c.y % 4 == 0)
+        .collect();
+    for c in spots {
+        shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(c, 0),
+            5,
+        );
+    }
+    assert!(scouted(&w).is_empty(), "nothing left to scout");
+}
+
+// design (M8 step A4 round 8, the lead's note 50; S-0501 T1 and claim 17): the AI gives no attack order to an aircraft with no ammunition left (it would take off, end its run without a shot and fly back), here at an intruder near its base; with ammunition left it does.
+#[test]
+fn no_attack_order_to_an_aircraft_with_no_ammunition() {
+    let map = fixture::map();
+    for ammo in [0, 2] {
+        let mut w = glasnost_sim::load::new_game(
+            fixture::rules(),
+            &map,
+            fixture::catalogue(),
+            &fixture::setup(5),
+        )
+        .expect("loads");
+        let pad = testkit::spawn(&mut w, Kind::Building, "HPAD", 0, fixture::at(-16, 4), 0);
+        testkit::run(&mut w, 2);
+        let t = w.rules().index_of(Kind::Aircraft, "JET").unwrap();
+        let jet = objects::create(&mut w, Kind::Aircraft, t, Some(HouseId(0)));
+        glasnost_sim::econ::release::release(&mut w, pad, jet);
+        assert!(w.obj(jet).is_some_and(|o| o.on_map), "made at its pad");
+        w.obj_mut(jet).unwrap().combat.ammo = ammo;
+        let foe = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, fixture::at(-12, 4), 0);
+        shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(fixture::at(-12, 4), 0),
+            3,
+        );
+        let period = glasnost_ai::scripted::THINK_PERIOD;
+        while w.tick % period != 0 {
+            testkit::run(&mut w, 1);
+        }
+        let orders = Brain::new(&w, &map, HouseId(0)).think(&w);
+        let attacked = orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, behaviour, attack_move, .. }
+                if *actor == jet && (*behaviour == glasnost_sim::rules::Behaviour::Attack || *attack_move))
+        });
+        assert_eq!(attacked, ammo > 0, "ammunition {ammo}: {orders:?}");
+        if ammo > 0 {
+            assert!(orders.iter().any(|o| matches!(o, Order::Behaviour { target: Some(Target::Object(e)), .. } if *e == foe)));
+        }
+    }
 }

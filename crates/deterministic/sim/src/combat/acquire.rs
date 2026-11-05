@@ -1459,7 +1459,8 @@ pub fn may_search_passively(w: &World, a: ObjectId) -> bool {
     }
     if o.kind == Kind::Building {
         let b = &r.buildings[o.type_index as usize].building;
-        if b.can_be_occupied {
+        // spec: S-0309 claim 2 (only an occupiable building that holds no occupants is kept from searching: a garrisoned one searches)
+        if b.can_be_occupied && crate::structures::garrison::count(w, a) == 0 {
             return false;
         }
     }

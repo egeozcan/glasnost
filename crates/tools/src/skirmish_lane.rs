@@ -70,11 +70,188 @@ fn plan() -> Plan {
     }
 }
 
+/// The tick at which [`R8Watch`] counts the cash tech buildings each house
+/// holds.
+const R8_SAMPLE: i32 = 9000; // nocite: our own lane's sampling tick
+
+/// Army units beyond half the way to the enemy's yard that make a push for
+/// [`R8Watch`].
+const R8_PUSH: usize = 4; // nocite: our own lane's threshold
+
+/// M8 step A4 round 8 (the lead's notes 48, 51 and 52), counts only, per
+/// player house: the first tick it saw (explored) and held a cash-producing
+/// tech building and how many it held at [`R8_SAMPLE`]; its engineers that
+/// went into its own buildings, and of those the ones into a building above
+/// half strength or of no economy or production role; its first push (the
+/// tick at which [`R8_PUSH`] of its army units first stood beyond half the
+/// way from its yard to the enemy's, its army units then beyond that and
+/// within a quarter of the way home) and its largest number of army units
+/// beyond half the way at once.
+#[derive(Debug, Default)]
+struct R8Watch {
+    tech_seen: [Option<i32>; PLAYERS],
+    tech_held: [Option<i32>; PLAYERS],
+    tech_at: [usize; PLAYERS],
+    repairs: [usize; PLAYERS],
+    wasteful: [usize; PLAYERS],
+    /// Engineers bound for an own building: house, building, wasteful.
+    bound: BTreeMap<glasnost_sim::world::ObjectId, (usize, glasnost_sim::world::ObjectId, bool)>,
+    push: [Option<(i32, usize, usize)>; PLAYERS],
+    out_max: [usize; PLAYERS],
+    /// Every engineer seen on the map, with its house.
+    engineers: BTreeMap<glasnost_sim::world::ObjectId, usize>,
+    /// Engineers killed.
+    eng_lost: [usize; PLAYERS],
+    /// The first tick an engineer of the house was bound for a cash tech
+    /// building it does not hold.
+    tech_bound: [Option<i32>; PLAYERS],
+}
+
+impl R8Watch {
+    fn observe(&mut self, w: &World, killed: &BTreeSet<glasnost_sim::world::ObjectId>) {
+        use glasnost_sim::world::{ObjectId, Target};
+        let cash = |o: &glasnost_sim::world::Object| {
+            o.kind == Kind::Building
+                && o.on_map
+                && o.health > 0
+                && w.rules()
+                    .buildings
+                    .get(o.type_index as usize)
+                    .is_some_and(|t| t.raw.needs_engineer.unwrap_or(false))
+                && glasnost_sim::structures::tech::cash_producing(w, o.id)
+        };
+        let yards: Vec<Option<glasnost_map::CellXY>> = (0..PLAYERS)
+            .map(|h| {
+                w.objects
+                    .values()
+                    .find(|o| {
+                        o.owner == Some(HouseId(h as u8))
+                            && o.on_map
+                            && glasnost_ai::scripted::is_yard(w, o)
+                    })
+                    .map(|o| o.pos.cell())
+            })
+            .collect();
+        for h in 0..PLAYERS {
+            let house = HouseId(h as u8);
+            if self.tech_seen[h].is_none()
+                && w.objects.values().any(|o| {
+                    cash(o)
+                        && o.owner != Some(house)
+                        && glasnost_sim::econ::shroud::explored(w, house, o.pos.cell())
+                })
+            {
+                self.tech_seen[h] = Some(w.tick);
+            }
+            let held = w
+                .objects
+                .values()
+                .filter(|o| cash(o) && o.owner == Some(house))
+                .count();
+            if held > 0 && self.tech_held[h].is_none() {
+                self.tech_held[h] = Some(w.tick);
+            }
+            if w.tick == R8_SAMPLE {
+                self.tech_at[h] = held;
+            }
+            // The push: army units beyond half the way to the enemy's yard.
+            let (Some(me), Some(them)) = (yards[h], yards[1 - h]) else {
+                continue;
+            };
+            let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+                i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+            };
+            let way = d2(me, them);
+            let (mut out, mut home) = (0usize, 0usize);
+            for o in w.objects.values().filter(|o| {
+                o.owner == Some(house)
+                    && o.on_map
+                    && o.health > 0
+                    && o.kind != Kind::Building
+                    && o.kind != Kind::Aircraft
+                    && role_of(w, tech::type_of(o)) == Some(Role::Army)
+            }) {
+                let d = d2(o.pos.cell(), me);
+                if d * 4 > way {
+                    out += 1;
+                } else if d * 16 <= way {
+                    home += 1;
+                }
+            }
+            self.out_max[h] = self.out_max[h].max(out);
+            if out >= R8_PUSH && self.push[h].is_none() {
+                self.push[h] = Some((w.tick, out, home));
+            }
+        }
+        // Engineers bound for an own building, and those that went in.
+        for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            if !glasnost_sim::structures::engineer::is_engineer(w, o.id) {
+                continue;
+            }
+            self.engineers.insert(o.id, h);
+            let goal = match (o.dest, o.target) {
+                (Some(Target::Object(b)), _) | (_, Some(Target::Object(b))) => Some(b),
+                _ => None,
+            };
+            if self.tech_bound[h].is_none()
+                && goal
+                    .and_then(|b| w.obj(b))
+                    .is_some_and(|b| b.owner != o.owner && cash(b))
+            {
+                self.tech_bound[h] = Some(w.tick);
+            }
+            match goal
+                .and_then(|b| w.obj(b))
+                .filter(|b| b.kind == Kind::Building && b.owner == o.owner && b.on_map)
+            {
+                Some(b) => {
+                    let strength = glasnost_sim::combat::damage::strength(w, b.id);
+                    let role = role_of(w, tech::type_of(b));
+                    let matters =
+                        matches!(role, Some(Role::Yard | Role::Refinery | Role::Factory(_)))
+                            || cash(b);
+                    let wasteful = b.health * 2 > strength || !matters;
+                    self.bound.insert(o.id, (h, b.id, wasteful));
+                }
+                None => {
+                    self.bound.remove(&o.id);
+                }
+            }
+        }
+        for (e, &h) in &self.engineers {
+            if killed.contains(e) {
+                self.eng_lost[h] += 1;
+            }
+        }
+        let gone: Vec<ObjectId> = self
+            .bound
+            .keys()
+            .copied()
+            .filter(|&e| w.obj(e).is_none_or(|o| !o.on_map))
+            .collect();
+        for e in gone {
+            let (h, b, wasteful) = self.bound.remove(&e).unwrap();
+            if killed.contains(&e) || w.obj(b).is_none_or(|o| !o.on_map) {
+                continue;
+            }
+            self.repairs[h] += 1;
+            if wasteful {
+                self.wasteful[h] += 1;
+            }
+        }
+    }
+}
+
 /// One map's game.
 #[derive(Debug, Default)]
 struct Game {
     index: usize,
     load_ms: u128,
+    /// M8 step A4 round 8's counts ([`R8Watch`]).
+    r8: R8Watch,
     cells: usize,
     /// Cells of land type water once the game is set up (a navy needs them).
     water: usize,
@@ -699,7 +876,11 @@ fn play_ai(
         }
         classes(w, &starting, &mut g.offered, &mut g.made);
         // The effects pile up when nobody drains them: count the new ones.
+        let mut killed_now = BTreeSet::new();
         for e in w.effects.iter().skip(drained) {
+            if let Effect::Killed { id, .. } = e {
+                killed_now.insert(*id);
+            }
             match e {
                 Effect::Shot { .. } => g.shots += 1,
                 Effect::Killed { .. } => g.killed += 1,
@@ -756,6 +937,7 @@ fn play_ai(
             }
         }
         drained = w.effects.len();
+        g.r8.observe(w, &killed_now);
         tally.observe(w);
         occasions(w, &mut g.occasions);
         features(w, &mut g.features);
@@ -3205,6 +3387,21 @@ fn report(
                 .map(|(r, t)| format!("{} {t}", role_name(*r)))
                 .collect();
             let _ = writeln!(s, "  house {h} first tick by role: {}", first.join(", "));
+            let r8 = &g.r8;
+            let _ = writeln!(
+                s,
+                "  house {h} round 8: cash tech building first seen {:?} first held {:?}, held at tick {R8_SAMPLE} {}; engineers into own buildings {} (above half strength or of no economy or production role {}); first push (tick, beyond half way, near home) {:?}, most beyond half way at once {}; engineers on the map {}, killed {}, first bound for a cash tech building {:?}",
+                r8.tech_seen[h],
+                r8.tech_held[h],
+                r8.tech_at[h],
+                r8.repairs[h],
+                r8.wasteful[h],
+                r8.push[h],
+                r8.out_max[h],
+                r8.engineers.values().filter(|&&x| x == h).count(),
+                r8.eng_lost[h],
+                r8.tech_bound[h]
+            );
             if !g.early[h].is_empty() || g.first[h].len() < 3 {
                 let early: Vec<String> = g.early[h]
                     .iter()

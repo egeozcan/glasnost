@@ -38,8 +38,16 @@
 //!    knowledge: the map's start waypoints), and once every start position
 //!    has been visited, to the nearest cell of a coarse search grid that
 //!    the house does not see now; idle units attack seen enemies near them.
-//!    A smaller wave goes too once units have waited long enough, so a house
-//!    that cannot afford a full wave still attacks. A unit whose goal lies
+//!    A smaller wave (at least half the size) goes too once units have
+//!    waited long enough, so a house that cannot afford a full wave still
+//!    attacks. No wave goes before the opening is over, a guard (a share of
+//!    the army, the waiting units nearest home) stays home, each wave asks
+//!    for more units than the last, a wave takes on the enemy whose
+//!    building stands nearest home first, and while it sees no enemy it
+//!    goes to the nearest start that may still hold an enemy base. The
+//!    fastest waiting unit scouts the house's own side of the map (the
+//!    unexplored cell nearest home, nearer home than any enemy start), one
+//!    at a time. A unit whose goal lies
 //!    outside its reach region (a ship, for a goal on land) goes to the
 //!    nearest cell of its region instead. An idle aircraft with ammunition
 //!    left attacks the nearest seen enemy and flies back to rearm by
@@ -53,7 +61,7 @@
 //! The numbers here (think period, spiral size, engage distance, wave patience) are tuning
 //! of our own opponent, not game behaviour.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;
@@ -139,6 +147,27 @@ const RALLY_AHEAD: i32 = 3; // nocite: tuning of our own opponent
 /// Ticks after which idle army units go as a wave even when fewer than the
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
+
+/// The tick before which no wave goes: the house builds up and defends
+/// first (M8 step A4 round 8, the lead's note 52; in the quick lane the
+/// first pushes came from about tick 6600 before, so this stops only a rush
+/// in the first minutes).
+pub const OPENING: i32 = 4500; // nocite: tuning of our own opponent
+
+/// The share of the house's army (one in this many) that stays home as its
+/// guard when a wave goes.
+const GUARD_SHARE: usize = 3; // nocite: tuning of our own opponent
+/// The fewest units of the guard.
+pub const GUARD_MIN: usize = 2; // nocite: tuning of our own opponent
+/// The most units of the guard: a large army does not keep a third of
+/// itself at home (in the quick lane an uncapped guard left one game of 36
+/// without a winner after 120000 ticks).
+const GUARD_MAX: usize = 10; // nocite: tuning of our own opponent
+
+/// How many more units each wave the house has sent asks for, and the
+/// largest wave asked for.
+const WAVE_GROWTH: usize = 2; // nocite: tuning of our own opponent
+const WAVE_MAX: usize = 14; // nocite: tuning of our own opponent
 
 /// Resource cells around a refinery, slave miner or home that keep one
 /// harvester at work ([`Script::harvesters_wanted`]).
@@ -528,6 +557,14 @@ pub struct Script {
     next_army: [usize; ARMY_KINDS.len()],
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
+    /// The waves the house has sent (each asks for [`WAVE_GROWTH`] more
+    /// units than the last, M8 step A4 round 8).
+    #[serde(default)]
+    waves: usize,
+    /// The army unit sent to explore the house's own side of the map
+    /// ([`Script::scout_cell`], M8 step A4 round 8).
+    #[serde(default)]
+    scout: Option<ObjectId>,
     /// The economy watch: credits and the harvesters' summed loads at the
     /// last think, the tick since which neither showed income, the last
     /// sale's tick, and whether the house is selling out (it then builds no
@@ -641,6 +678,8 @@ impl Script {
             next_target: 0,
             next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
+            waves: 0,
+            scout: None,
             watch: Watch::default(),
             placed: PlaceMemo::default(),
         }
@@ -826,13 +865,39 @@ impl Script {
     /// nearest home, else the next enemy start cell.
     pub(crate) fn attack_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
-        self.seen_enemies(w)
-            .into_iter()
+        let seen = self.seen_enemies(w);
+        seen.iter()
+            .copied()
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
-            .or_else(|| {
-                let targets = self.enemy_starts(w);
-                (!targets.is_empty()).then(|| targets[self.next_target % targets.len()])
+            .or_else(|| self.next_start(w, &seen))
+    }
+
+    /// The enemy start cell waves go to while they see no enemy: the
+    /// nearest start that may still hold an enemy base, one the house has
+    /// not explored or where it sees an enemy building within
+    /// [`ALLY_BASE`] cells; with none, the start of the visiting order.
+    /// A person takes on one enemy base at a time, the nearest, and moves
+    /// on once it is gone (M8 step A4 round 8, the lead's note 52: each
+    /// wave went to the next start in turn, so in a game of three or more
+    /// the waves were spread over every enemy).
+    fn next_start(&self, w: &World, seen: &[(ObjectId, CellXY)]) -> Option<CellXY> {
+        let targets = self.enemy_starts(w);
+        targets
+            .iter()
+            .copied()
+            .find(|&c| !self.cleared(w, c, seen))
+            .or_else(|| (!targets.is_empty()).then(|| targets[self.next_target % targets.len()]))
+    }
+
+    /// Whether start cell `c` holds no enemy base the house knows of: it has
+    /// explored the cell and sees no enemy building within [`ALLY_BASE`]
+    /// cells of it.
+    fn cleared(&self, w: &World, c: CellXY, seen: &[(ObjectId, CellXY)]) -> bool {
+        let r = i64::from(ALLY_BASE) * i64::from(ALLY_BASE);
+        shroud::explored(w, self.house, c)
+            && !seen.iter().any(|&(e, at)| {
+                dist2(at, c) <= r && w.obj(e).is_some_and(|o| o.kind == Kind::Building)
             })
     }
 
@@ -842,15 +907,13 @@ impl Script {
     /// stands where no one walks.
     pub(crate) fn base_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
-        self.seen_enemies(w)
-            .into_iter()
+        let seen = self.seen_enemies(w);
+        seen.iter()
+            .copied()
             .filter(|&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
-            .or_else(|| {
-                let targets = self.enemy_starts(w);
-                (!targets.is_empty()).then(|| targets[self.next_target % targets.len()])
-            })
+            .or_else(|| self.next_start(w, &seen))
     }
 
     /// Whether the line of `t` holds an item or a queue.
@@ -1852,17 +1915,55 @@ impl Script {
         if waiting.is_empty() {
             self.waiting_since = None;
         }
-        let patient = !waiting.is_empty() && w.tick - since >= WAVE_PATIENCE;
-        if waiting.len() >= self.plan.wave.max(1) || patient {
+        // design: a guard stays home when a wave goes, a share of the
+        // army between GUARD_MIN and GUARD_MAX: its units nearest home, whether they wait or fight
+        // there; no wave goes before the opening is over; each wave asks
+        // for more units than the last, and a wave that goes for patience
+        // alone is at least half the size asked for (M8 step A4 round 8,
+        // the lead's note 52: every unit went as soon as six waited, from
+        // the start of the game)
+        let guard_n = (army.len() / GUARD_SHARE).clamp(GUARD_MIN, GUARD_MAX);
+        if let Some(h) = home {
+            let mut by_home: Vec<(i64, ObjectId)> = army
+                .iter()
+                .filter_map(|&id| w.obj(id).map(|o| (dist2(o.pos.cell(), h), id)))
+                .collect();
+            by_home.sort_unstable();
+            let guard: BTreeSet<ObjectId> = by_home
+                .into_iter()
+                .take(guard_n)
+                .map(|(_, id)| id)
+                .collect();
+            waiting.retain(|id| !guard.contains(id));
+        }
+        let size = (self.plan.wave + WAVE_GROWTH * self.waves)
+            .min(WAVE_MAX.max(self.plan.wave))
+            .max(1);
+        let patient = waiting.len() >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE; // nocite: tuning of our own opponent (half a wave)
+        if w.tick >= OPENING && (waiting.len() >= size || patient) {
             self.waiting_since = None;
+            self.waves += 1;
             // Each unit goes to the seen enemy nearest home that it can
             // reach and attack (a person does not send riflemen to stand at
             // the shore by a ship), else all go to the next enemy start cell.
+            // design: the seen enemy of the house whose building stands
+            // nearest home comes first, so that in a game of three or more
+            // a wave takes on one enemy (M8 step A4 round 8, note 52)
             let home = self.home(w);
             let from = w.obj(waiting[0]).map(|o| o.pos.cell());
             let mut by_home: Vec<(ObjectId, CellXY)> = enemies.clone();
             if let Some(h) = home {
-                by_home.sort_by_key(|&(e, c)| (dist2(c, h), e));
+                let focus = enemies
+                    .iter()
+                    .filter_map(|&(e, c)| {
+                        let o = w.obj(e)?;
+                        (o.kind == Kind::Building).then_some((dist2(c, h), e, o.owner))
+                    })
+                    .min()
+                    .and_then(|(_, _, owner)| owner);
+                let other =
+                    |e: ObjectId| focus.is_some_and(|f| w.obj(e).and_then(|o| o.owner) != Some(f));
+                by_home.sort_by_key(|&(e, c)| (other(e), dist2(c, h), e));
             }
             let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();
             let mut fallback: Option<Option<CellXY>> = None;
@@ -1881,12 +1982,11 @@ impl Script {
                 let goal = pick.or_else(|| {
                     *fallback.get_or_insert_with(|| {
                         let targets = self.enemy_starts(w);
-                        (self.next_target < targets.len())
-                            .then(|| {
-                                let c = targets[self.next_target];
-                                self.next_target += 1;
-                                c
-                            })
+                        // design: the nearest start that may still hold an enemy base (`next_start`), M8 step A4 round 8
+                        targets
+                            .iter()
+                            .copied()
+                            .find(|&c| !self.cleared(w, c, &enemies))
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
                             .or_else(|| {
                                 (!targets.is_empty()).then(|| {
@@ -1908,8 +2008,49 @@ impl Script {
                     });
                 }
             }
+        } else if let Some(h) = home {
+            self.send_scout(w, h, &waiting, &mut out);
         }
         out
+    }
+
+    /// design: while no wave goes, one army unit at a time, the fastest of
+    /// those waiting (not the guard), explores the house's own side of the
+    /// map ([`Script::scout_cell`]), so the house finds the tech buildings
+    /// near it while its army builds up; a person scouts for oil derricks
+    /// first thing (M8 step A4 round 8, the lead's note 48: with no early
+    /// wave the house saw them late). The scout is kept until it is idle
+    /// again or gone.
+    fn send_scout(&mut self, w: &World, h: CellXY, waiting: &[ObjectId], out: &mut Vec<Order>) {
+        self.scout = self
+            .scout
+            .filter(|&s| w.obj(s).is_some_and(|o| o.on_map && o.health > 0) && !idle(w, s));
+        if self.scout.is_some() {
+            return;
+        }
+        let speed = |id: ObjectId| {
+            w.obj(id)
+                .and_then(|o| w.rules().unit(o.kind, o.type_index))
+                .map_or(0, |u| u.speed)
+        };
+        let Some(s) = waiting
+            .iter()
+            .copied()
+            .filter(|&id| self.reach_region(w, id).is_some())
+            .max_by_key(|&id| (speed(id), std::cmp::Reverse(id)))
+        else {
+            return;
+        };
+        if let Some(c) = self.scout_cell(w, s, h) {
+            out.push(Order::Behaviour {
+                actor: s,
+                behaviour: Behaviour::Move,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Cell(c)),
+            });
+            self.scout = Some(s);
+        }
     }
 
     /// The reach region unit `id` stands in for its movement zone (S-0212
@@ -2044,6 +2185,33 @@ impl Script {
             .filter(|c| c.x % SEARCH_STEP == 0 && c.y % SEARCH_STEP == 0)
             .filter(|&c| w.cells.usable(c) && !shroud::seen(w, self.house, c))
             .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
+    /// Where scout `s` goes from home `h`: the cell of the search grid
+    /// nearest `h` that the house has not explored (S-0409 Terms), in the
+    /// usable area and in the scout's reach region (S-0212 claim 4), and
+    /// nearer `h` than every enemy start; the first in cell order on equal
+    /// distance. `None` when the house's side is explored.
+    fn scout_cell(&self, w: &World, s: ObjectId, h: CellXY) -> Option<CellXY> {
+        let o = w.obj(s)?;
+        let zone = w.rules().unit(o.kind, o.type_index)?.zone;
+        let Reach::Region(r) = regions::reach_in(w, o.pos.cell(), zone) else {
+            return None;
+        };
+        let starts = self.enemy_starts(w);
+        w.cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|c| c.x % SEARCH_STEP == 0 && c.y % SEARCH_STEP == 0)
+            .filter(|&c| {
+                let d = dist2(c, h);
+                w.cells.usable(c)
+                    && !shroud::explored(w, self.house, c)
+                    && starts.iter().all(|&e| d < dist2(c, e))
+                    && regions::reach_in(w, c, zone) == Reach::Region(r)
+            })
+            .min_by_key(|&c| (dist2(c, h), c.y, c.x))
     }
 
     /// Enemy objects on cells the house has explored, with their cells: fog

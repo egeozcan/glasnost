@@ -186,6 +186,22 @@ fn a_wave_sends_its_jumpjets_across() {
         CellXY::new(home.x + 1, home.y + 5),
         0,
     );
+    // The house's guard stays home (the units nearest it), and no wave goes
+    // before the opening is over (M8 step A4 round 8): two tanks beside
+    // home, and the clock past the opening.
+    for dx in [-2, 2] {
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "GUNR",
+            0,
+            CellXY::new(home.x + dx, home.y),
+            0,
+        );
+    }
+    assert_eq!(glasnost_ai::scripted::GUARD_MIN, 2);
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    w.tick = (glasnost_ai::scripted::OPENING + period - 1) / period * period;
     let mut plan = default_plan();
     plan.wave = 1;
     let mut brain = Brain::with_plan(&w, &fixture::map_strait(), HouseId(0), plan);

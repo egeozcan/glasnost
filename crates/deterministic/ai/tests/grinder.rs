@@ -109,6 +109,23 @@ fn spawn(w: &mut World, kind: Kind, name: &str, house: u8, dx: i32, dy: i32) -> 
 fn scene(g: &Game) -> (World, ObjectId) {
     let mut w = g.world.clone();
     let b = spawn(&mut w, Kind::Building, "GRND", 0, 0, 6);
+    // The whole map explored, so no waiting unit is sent to scout (M8 step
+    // A4 round 8) and the surplus is what the scene places.
+    let spots: Vec<CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|c| c.x % 4 == 0 && c.y % 4 == 0)
+        .collect();
+    for c in spots {
+        glasnost_sim::econ::shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(c, 0),
+            5,
+        );
+    }
     testkit::run(&mut w, 1);
     (w, b)
 }

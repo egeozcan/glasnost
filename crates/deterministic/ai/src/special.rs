@@ -40,6 +40,14 @@ const GARRISON_LIMIT: i32 = 6; // nocite: tuning of our own opponent
 /// it orders an engineer or a spy.
 const SPECIAL_RESERVE: i32 = 2; // nocite: tuning of our own opponent
 
+/// The most engineers a house keeps for the tech buildings that pay in its
+/// sight ([`Special::engineers`]).
+const TECH_ENGINEERS: usize = 2; // nocite: tuning of our own opponent
+
+/// How far, in cells, from an engineer bound for a tech building its
+/// escort is looked for ([`Special::escort`]).
+const ESCORT_REACH: i64 = 15; // nocite: tuning of our own opponent
+
 /// How many orders the AI gave to use each special ability.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Uses {
@@ -189,6 +197,10 @@ pub struct Uses {
     /// (S-0404 claim 6, `Brain::economy_first`, M8 step B7).
     #[serde(default)]
     pub non_fighter_cancels: u32,
+    /// Army units sent along with an engineer bound for a tech building
+    /// (`Special::escort`, M8 step A4 round 8).
+    #[serde(default)]
+    pub escorts: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -671,13 +683,29 @@ impl Special {
             .filter(|&b| Self::seen(w, house, b))
             .filter_map(|b| {
                 let a = targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods);
-                matches!(
-                    a,
-                    Action::Capture | Action::DamagingEntry | Action::RepairBuilding
-                )
+                (matches!(a, Action::Capture | Action::DamagingEntry)
+                    || (a == Action::RepairBuilding && Self::worth_repair(w, b)))
                 .then_some((b, a))
             })
             .collect()
+    }
+
+    /// Whether an own damaged building is worth an engineer, who is spent
+    /// by the repair (S-0509): one the house cannot do without (its
+    /// construction yard, a factory, a refinery, or a tech building that
+    /// pays, S-0515 claims 3 and 5), at half its strength or below. Our own
+    /// design (M8 step A4 round 8, the lead's note 51: engineers went into
+    /// any damaged building, walls and barely scratched ones too).
+    fn worth_repair(w: &World, b: ObjectId) -> bool {
+        let Some(o) = w.obj(b) else { return false };
+        let role = scripted::role_of(w, tech::type_of(o));
+        let matters = matches!(
+            role,
+            Some(scripted::Role::Yard | scripted::Role::Refinery | scripted::Role::Factory(_))
+        ) || glasnost_sim::structures::tech::cash_producing(w, b);
+        let strength = glasnost_sim::combat::damage::strength(w, b);
+        // design: half strength or below, the point at which a person spends an engineer on a building
+        matters && o.health * 2 <= strength // nocite: tuning of our own opponent (half strength)
     }
 
     /// Engineers (S-0509): every idle engineer is sent to the nearest
@@ -730,16 +758,82 @@ impl Special {
                 self.uses.engineers += 1;
                 if tech_buildings::passive_tech(w, b) {
                     self.uses.tech += 1;
+                    if let Some(order) = Self::escort(script, w, id, b, out) {
+                        out.push(order);
+                        self.uses.escorts += 1;
+                    }
                 }
             }
         }
-        if !any
-            && let Some(t) = Self::buildable_infantry(w, house, |u| u.engineer)
-            && !Self::has_or_makes(w, house, |id| engineer::is_engineer(w, id))
+        let Some(t) = Self::buildable_infantry(w, house, |u| u.engineer) else {
+            return;
+        };
+        // design: every tech building that pays, in sight and with no
+        // engineer bound for it, wants an engineer of its own, up to
+        // TECH_ENGINEERS at once, and the house queues it at once, paying as
+        // money comes in (a person buys the engineer for an oil derrick
+        // first thing: M8 step A4 round 8, the lead's note 48, where an
+        // engineer was ordered only with twice its price in hand and only
+        // when the house had none)
+        let open = tech_buildings::paying_in_sight(w, house)
+            .into_iter()
+            .filter(|&b| Self::en_route(w, house, b) == 0)
+            .count();
+        let have = Self::count_of(w, house, |id| engineer::is_engineer(w, id));
+        if open > 0 && have < open.min(TECH_ENGINEERS) {
+            self.queue_unit(script, w, t, out);
+        } else if !any
+            && have == 0
             && (Self::captureable_in_sight(w, house) || tech_buildings::in_sight(w, house))
         {
             self.order_unit(script, w, t, out);
         }
+    }
+
+    /// The house's infantry, on the map, off it or in a line, that
+    /// satisfies `f`.
+    fn count_of(w: &World, house: HouseId, f: impl Fn(ObjectId) -> bool) -> usize {
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(house) && o.kind == Kind::Infantry && f(o.id))
+            .count()
+    }
+
+    /// An escort for engineer `eng` bound for tech building `b`: the idle
+    /// army unit nearest the engineer, within [`ESCORT_REACH`] cells, that
+    /// walks or drives and has no order in this think yet, attack-moved to
+    /// the building. Our own design (M8 step A4 round 8, the lead's note
+    /// 48): a person sends a tank along with an engineer when one is near.
+    fn escort(
+        script: &Script,
+        w: &World,
+        eng: ObjectId,
+        b: ObjectId,
+        out: &[Order],
+    ) -> Option<Order> {
+        let at = w.obj(eng)?.pos.cell();
+        let goal = w.obj(b)?.pos.cell();
+        let ordered = |id: ObjectId| out.iter().any(|o| o.actor() == Some(id));
+        let unit = script
+            .of_role(w, scripted::Role::Army)
+            .into_iter()
+            .filter(|&id| {
+                w.obj(id)
+                    .is_some_and(|o| o.kind == Kind::Vehicle || o.kind == Kind::Infantry)
+                    && scripted::idle(w, id)
+                    && !ordered(id)
+            })
+            .filter_map(|id| w.obj(id).map(|o| (dist2(o.pos.cell(), at), id)))
+            .filter(|&(d, _)| d <= ESCORT_REACH * ESCORT_REACH)
+            .min()?
+            .1;
+        Some(Order::Behaviour {
+            actor: unit,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: true,
+            target: None,
+            dest: Some(Target::Cell(goal)),
+        })
     }
 
     /// Whether the house sees an enemy building an engineer would capture.

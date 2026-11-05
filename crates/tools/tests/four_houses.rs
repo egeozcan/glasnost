@@ -52,6 +52,20 @@ fn name(w: &World, kind: Kind, index: u32) -> String {
 // nocite: our own harness (the soak's rows and teams, `soak::TEAMS`)
 const TEAMS: [u8; 4] = [1, 2, 1, 2];
 
+/// The rows' teams: `GLASNOST_FH_TEAMS` (four comma-separated team numbers,
+/// `1,2,3,4` for every house on its own), else [`TEAMS`].
+fn teams() -> [u8; 4] {
+    let mut t = TEAMS;
+    if let Ok(v) = std::env::var("GLASNOST_FH_TEAMS") {
+        for (i, x) in v.split(',').take(4).enumerate() {
+            if let Ok(n) = x.trim().parse() {
+                t[i] = n;
+            }
+        }
+    }
+    t
+}
+
 #[derive(Clone)]
 struct Seen {
     owner: HouseId,
@@ -71,7 +85,7 @@ fn start(c: &mut Client, map: usize, seed: u32, ai: bool) -> Result<(), String> 
     for (i, slot) in setup.slots.iter_mut().enumerate() {
         if i < 4 {
             slot.kind = if ai { SlotKind::Ai } else { SlotKind::Human };
-            slot.team = Some(TEAMS[i]);
+            slot.team = Some(teams()[i]);
         } else {
             slot.kind = SlotKind::Closed;
         }
@@ -185,6 +199,10 @@ fn play(
     let mut in_flight: Vec<Vec<(i32, Order)>> = vec![Vec::new(); players.len()];
     let mut drained = 0usize;
     let mut first_loss: BTreeMap<u8, i32> = BTreeMap::new();
+    // M8 step A4 round 8: the first building each house lost, and per
+    // house the objects it killed by the victim's house.
+    let mut first_building_loss: BTreeMap<u8, i32> = BTreeMap::new();
+    let mut kills: BTreeMap<u8, BTreeMap<u8, u32>> = BTreeMap::new();
     let mut no_yard_at: BTreeMap<u8, i32> = BTreeMap::new();
     let mut ever_yard: BTreeMap<u8, i32> = BTreeMap::new();
     let mut lost: BTreeMap<u8, (u32, u32)> = BTreeMap::new();
@@ -336,6 +354,27 @@ fn play(
                 e.1 += 1;
             }
             first_loss.entry(b.owner.0).or_insert(w.tick);
+            if b.kind == Kind::Building && how == "killed" {
+                first_building_loss.entry(b.owner.0).or_insert(w.tick);
+            }
+            if how == "killed" {
+                let mut by_house: Vec<u8> = targets
+                    .iter()
+                    .filter(|(_, t)| t == id)
+                    .filter_map(|(f, _)| {
+                        w.obj(*f)
+                            .and_then(|o| o.owner)
+                            .or_else(|| before.get(f).map(|s| s.owner))
+                    })
+                    .filter(|h| players.contains(h) && *h != b.owner)
+                    .map(|h| h.0)
+                    .collect();
+                by_house.sort_unstable();
+                by_house.dedup();
+                for a in by_house {
+                    *kills.entry(a).or_default().entry(b.owner.0).or_default() += 1;
+                }
+            }
             if log > 0 && (how == "killed" || how == "changed owner" || b.kind != Kind::Infantry) {
                 let _ = writeln!(
                     out,
@@ -386,7 +425,7 @@ fn play(
             line,
             " | h{} team{} yard@{} lostyard@{} inf {} veh {} bld {} killed {} other-gone {} orders {}",
             h.0,
-            TEAMS[i],
+            teams()[i],
             ever_yard.get(&h.0).map_or("-".into(), |t| t.to_string()),
             no_yard_at.get(&h.0).map_or("-".into(), |t| t.to_string()),
             n(Kind::Infantry),
@@ -395,6 +434,14 @@ fn play(
             k,
             r,
             given[i]
+        );
+        let _ = write!(
+            line,
+            " firstbldlost@{} kills-by-victim {:?}",
+            first_building_loss
+                .get(&h.0)
+                .map_or("-".into(), |t| t.to_string()),
+            kills.get(&h.0).cloned().unwrap_or_default()
         );
         for o in w.objects.values().filter(|o| {
             o.owner == Some(h)
