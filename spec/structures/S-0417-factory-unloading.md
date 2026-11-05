@@ -2,12 +2,12 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 76
-sources-class: [decomp, design]
+revision: 79
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-05
-measurements: []
+measurements: [M-0023]
 requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110, Q-1757, Q-1850, Q-1980]
 supersedes: []
 ---
@@ -53,23 +53,26 @@ from the one it holds ends a running retry delay (S-0212 claim 21), so no walkin
 different destination holds it unsearched because the delay runs. Whether giving it the destination
 it already holds ends the delay is left open, as S-0212 leaves it. A walking unit that keeps its
 destination after a failed search waits for the delay with it, but its movement in progress ended at
-the failure, so the first request after the failure is accepted with its draw (question 2). For a walking unit other than a
-fraidycat whose current behaviour has the scatter property (claim 17, *During the walk-off*), each
-accepted destination that differs from any destination it kept is searched for without a wait, so a
-unit whose every scatter destination fails, each differing from any destination it kept, takes a
-request's draw in each turn in which a request comes (question 3). Where a request gives it the
-destination it kept, whether later requests are refused is not established (Open question 16).
-Question 1, and the search for a new destination without a wait after the gate's failure, are rated
-medium (`unmeasured`: U10 g needs an order at the unit's release, which only a harness not
-established here can give). That a new, different destination ends a retry delay still running is
-rated medium (`unmeasured`), as S-0212 claim 21 rates it. The kept destination of question 2 and the
-repeated cycle of question 3 are rated low (both `unmeasured`). Still open: whether a released
-jumpjet infantry unit is in *guard* or *area guard* over K's foundation and so receives that request
-(Open question 3), whether a busy second finished item differs between factories with one contact
-place and those with several (Open question 10), and the draws of putting a released unit on the map
-(Open question 8). Claim 14 owns the contact-place count, infantry candidate acceptance and
-edge-entry nearby destination, including the search's no-draw rule; their untested cases remain
-qualified there.
+the failure, so the first request after the failure is accepted with its draw (question 2). For a
+walking unit other than a fraidycat whose current behaviour has the scatter property (claim 17,
+*During the walk-off*), each accepted destination that differs from any destination it kept is
+searched for without a wait, so a unit whose every scatter destination fails, each differing from
+any destination it kept, takes a request's draw in each turn in which a request comes (question 3).
+Where a request gives it the destination it kept, whether later requests are refused is not
+established (Open question 16). Question 1 is rated medium, and M-0023 (U10 g run 1) measures part
+of it: no destination and no step after the unit's first turn, then a new destination off the
+factory in the first later turn in which the unit rests there, with its first step as soon after
+that turn as in M-0023's own run of part b's set-up. The walk to that destination without a wait for
+the retry delay is rated medium (`unmeasured`: M-0023 does not compare the walk with the stock retry
+delay). That a new, different destination ends a retry delay still running is rated medium
+(`unmeasured`), as S-0212 claim 21 rates it. The kept destination of question 2 and the repeated
+cycle of question 3 are rated low (both `unmeasured`). Still open: whether a released jumpjet
+infantry unit is in *guard* or *area guard* over K's foundation and so receives that request (Open
+question 3), whether a busy second finished item differs between factories with one contact place
+and those with several (Open question 10), and the draws of putting a released unit on the map (Open
+question 8). Claim 14 owns the contact-place count, infantry candidate acceptance and edge-entry
+nearby destination, including the search's no-draw rule; their untested cases remain qualified
+there.
 
 **Paired hand-offs.** S-0404 claim 13 retains the fulfilled release hand-off: release queues
 *unload*, and contact-place count, infantry candidate acceptance and edge-entry nearby destination
@@ -952,18 +955,25 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
       for the reason given for the repeat above: no stock setup is known in which the search around
       a factory's foundation gives no cell. That the gate's failure clears a walker's destination
       and leaves no retry delay is `measurable` by S-0212 scenario P25(a), as S-0212 claim 21 rates
-      it. The rest of *No path* is `unmeasured`: U10 g tests the accepted request after the gate's
-      failure with its draw, and the walk to the new destination without a wait for the retry delay,
-      which the gate's clearing leaves, but it runs only with a harness that can give an order at
-      the unit's release, which is not established. That a new, different destination ends a retry
-      delay still running is `unmeasured`: in U10 g no delay runs when the new destination is given,
-      and no part of U10 gives a walker a new destination while its delay runs. The cycle repeated
-      over several failed searches is `unmeasured`: U10 g gives one destination behind the gate, and
-      no stock setup is known in which every scatter destination around a factory fails the gate. A
-      failed search that passes the gate, and so the wait with a kept destination, is `unmeasured`
-      here: no part of U10 makes one for a resting unit. That the request follows the start of the
-      resting behaviour in the same turn is our engine's rule (design), and the original's order
-      within the turn is `unmeasured` (Open question 11).
+      it. That a walking unit ordered, before its first turn, to a cell in another reach region has
+      no destination at the end of that turn and takes no step, and that its first later turn in
+      which *guard* is current on a cell that holds K gives it a new destination on a cell that does
+      not hold K, with its first step as many ticks after that turn as the first step after the
+      first request in M-0023's baseline, is `measured` (M-0023, U10 g run 1). That baseline is part
+      b's set-up on M-0023's map, at one seed, without part b's second unit and rally-point step.
+      That this turn's request is accepted with its draw is `measurable` by U10 g, with the
+      recorder's source of each draw (the common setup). M-0023 records each draw's source, but ties
+      none of them to the request. That the walk to that destination starts without a wait for the
+      retry delay is `unmeasured`: M-0023 does not compare the walk with the stock path-retry field,
+      and neither its run 2 nor its control runs test it. That a new, different destination ends a
+      retry delay still running is `unmeasured`: in U10 g no delay runs when the new destination is
+      given, and no part of U10 gives a walker a new destination while its delay runs. The cycle
+      repeated over several failed searches is `unmeasured`: U10 g gives one destination behind the
+      gate, and no stock setup is known in which every scatter destination around a factory fails
+      the gate. A failed search that passes the gate, and so the wait with a kept destination, is
+      `unmeasured` here: no part of U10 makes one for a resting unit. That the request follows the
+      start of the resting behaviour in the same turn is our engine's rule (design), and the
+      original's order within the turn is `unmeasured` (Open question 11).
     - Confidence:
       - the conditions and the absence of a threat point, for *guard* infantry on a cell that
         holds a factory or cloning building: medium, until U10 b is run.
@@ -983,12 +993,14 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
         the fall-back's queued *move* and the jump after a fall-back destination: low
         (`unmeasured`).
       - *No path*: medium for the cleared destination and no retry delay after the gate's failure
-        (`measurable`, S-0212 P25(a)), and for the accepted request after it and the walk to its
-        destination without a wait for the retry delay (`unmeasured`, U10 g, as above). Medium
+        (`measurable`, S-0212 P25(a)), for the new destination off K in the first later turn and its
+        first step (`measured`, M-0023, one stock type at one seed, against its own baseline of part
+        b's set-up), for the request's draw in that turn (`measurable`, U10 g), and for the walk to
+        that destination without a wait for the retry delay (`unmeasured`, as above). Medium
         (`unmeasured`) for a new, different destination ending a retry delay still running, as
         S-0212 claim 21 rates it. Low for the end of movement in progress after a failed search that
-        passes the gate, as S-0212 claim 23 rates that sentence, for the first request accepted while a
-        kept destination waits, and for the repeated cycle (all `unmeasured`).
+        passes the gate, as S-0212 claim 23 rates that sentence, for the first request accepted
+        while a kept destination waits, and for the repeated cycle (all `unmeasured`).
       - *area guard*, other buildings, the enslaved unit's exception, the request in the same
         turn as a later behaviour change, the repeat in every turn, the exempt buildings and the
         bridge-cell destination (all `unmeasured` here), and the jumpjet case: low.
@@ -1171,7 +1183,19 @@ relative actor update orders; confidence medium.
 
 ## Measurement scenarios
 
-Use stock data, no engine add-on and no mods (the named test files of a scenario excepted), a tiny flat clear map, one human house and one bystander computer player, fixed game speed index 2 (S-0201 supplies real-time pacing). Run each part with three recorded seeds. Use scripted input and a read-only recorder for tick numbers, positions, destinations, contact/tether, behaviours and scenario stream state. These are recorder proposals, not claims that all fields are currently exposed. The observed area comprises the tested factories, their foundations, exit tracks, aprons and neighbours, and every route or destination followed by a named test unit. Apply the bystander void rule: repeat a run if an unnamed bystander object enters that area or acts on a test object, or if the bystander is defeated before observation ends. Do not assume the bystander remains idle. Separate other actors' draws and animation events from unloading draws; recording only the global tick draw count is insufficient. Do not change data to manufacture the unmeasured cases above.
+Use stock data, no engine add-on and no mods (the named test files of a scenario, and the harness's
+order of U10 part g, excepted), a tiny flat clear map, one human house and one bystander computer
+player, fixed game speed index 2 (S-0201 supplies real-time pacing). Run each part with three
+recorded seeds. Use scripted input and a read-only recorder for tick numbers, positions,
+destinations, contact/tether, behaviours and scenario stream state, and for each scenario stream
+draw the game process that takes it (for a scatter request, the draw that picks its direction).
+These are recorder proposals, not claims that all fields are currently exposed. The observed area
+comprises the tested factories, their foundations, exit tracks, aprons and neighbours, and every
+route or destination followed by a named test unit. Apply the bystander void rule: repeat a run if
+an unnamed bystander object enters that area or acts on a test object, or if the bystander is
+defeated before observation ends. Do not assume the bystander remains idle. Separate other actors'
+draws and animation events from unloading draws; recording only the global tick draw count is
+insufficient. Do not change data to manufacture the unmeasured cases above.
 
 - **U1, factory kinds.** Produce a vehicle, ship, infantry and aircraft from their respective
   factories. Record factory behaviours and door state after release. Expect only the vehicle and
@@ -1372,13 +1396,14 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   building does not occupy: a run in which the cell does not hold K is reported so and does
   not test claim 17's request. Expect:
   - no destination and no *move* from the release itself,
-  - in the tick after the release, the unit's first turn, in which its queued resting
-    behaviour becomes current (S-0215 claim 11), a scatter request with no threat point that
-    the unit accepts (claim 17; since the type has no fraidycat flag, only a forced request is
-    accepted, so this tells forced from not forced, but not move-anywhere), its
-    single draw, and a destination by S-0208
-    claim 13 that is not a cell that holds K (bridge cells aside, claim 17, *Where it goes*; the
-    test ground has no bridge),
+  - in the tick after the release, the unit's first turn, in which its queued resting behaviour
+    becomes current (S-0215 claim 11), a scatter request with no threat point that the unit accepts
+    (claim 17; since the type has no fraidycat flag, only a forced request is accepted, so this
+    tells forced from not forced, but not move-anywhere), its single draw (M-0023's run of this
+    set-up records other draws in that turn as well: score the draw the recorder ties to the
+    request's direction, not the turn's total), and a destination by S-0208 claim 13 that is not a
+    cell that holds K (bridge cells aside, claim 17, *Where it goes*; the test ground has no
+    bridge),
   - that destination kept, unchanged, while the unit's position is on a cell that holds K,
     since the requests of its later turns there are refused while it walks (claim 17, *During
     the walk-off*),
@@ -1446,33 +1471,35 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   (S-0212 P25 a), an exception to the no-data-change instruction above limited to this part. With
   the random-state recorder, record per tick from release, for 300 ticks: current and queued
   behaviour, destination, movement in progress, the remaining retry delay, position, cell, whether
-  the cell holds K, and the draws. Give the unit by scripted input a move to a cell of that area, as
-  an order that takes effect after its release and before its first turn, so that it is still on the
-  release cell when it first searches. Give it through a team script if targeting would replace that
-  cell (as P3 does). The part runs only with a harness that can queue that order at the release
-  itself, for the unit just created, in the tick of the release (S-0215 claim 12 for when it takes
-  effect), which is not established. An order given in a later window, after the unit's first turn,
-  does not test the part, and such a run is reported so (below). Run 2 counts only if S-0212
-  P25(a)'s passed-gate search, run with the same test rules file in the same game folder, reads the
-  90 ticks that P25(a) expects. Otherwise it does not test the part and is reported so. Expect:
+  the cell holds K, and the draws. Give the unit a move order to a cell of that area, as an order
+  that takes effect after its release and before its first turn, so that it is still on the release
+  cell when it first searches. Give it through a team script if targeting would replace that cell
+  (as P3 does). The part needs a harness that gives that order directly to the unit just created, in
+  the tick of the release, after the release (S-0215 claim 12 for when it takes effect), an
+  exception to the no-engine-add-on instruction above limited to this part. M-0023 runs run 1 with
+  such a harness. An order given in a later window, after the unit's first turn, does not test the
+  part, and such a run is reported so (below). Run 2 counts only if S-0212 P25(a)'s passed-gate
+  search, run with the same test rules file in the same game folder, reads the 90 ticks that P25(a)
+  expects. Otherwise it does not test the part and is reported so. Expect:
   - no step towards the area,
   - the destination cleared and movement in progress ended in the tick of the fresh search that
     fails at the gate, with no retry delay left at the end of that tick (S-0212 claim 21),
   - in the first later turn in which *guard* is current and the unit is on a cell that holds K, an
-    accepted request with its draw and a new destination,
+    accepted request with its draw (scored as in part b) and a new destination,
   - the walk towards that destination without a wait for the retry delay: its first step comes as
     many ticks after the accepted request as part b's first step comes after its first request, and
     in run 2 fewer than *R* − 2 = 88 ticks after the gate's failure.
 
-  Falsifiers: the area's destination still held in a later tick; no draw at the first request after
-  the gate's failure although *guard* is current and the unit is on a cell that holds K; a remaining
-  retry delay above 0 at the end of the tick of the gate's failure; a first step towards the new
-  destination later after the accepted request than part b's after its first request; in run 2, that
-  step 88 or more ticks after the gate's failure; a request's draw or a destination change between
-  the new destination and that step. A run in which the unit has left the cells of K when the gate
-  fails, or whose first request comes before the order to the area takes effect, does not test the
-  part and is reported so. Which tick the first request falls on, relative to the failure, is not
-  scored (Open question 11).
+  Falsifiers: the area's destination still held in a later tick; no new destination in the first
+  turn after the gate's failure in which *guard* is current and the unit is on a cell that holds K,
+  or no draw in that turn that the recorder ties to the request's direction; a remaining retry delay
+  above 0 at the end of the tick of the gate's failure; a first step towards the new destination
+  later after the accepted request than part b's after its first request; in run 2, that step 88 or
+  more ticks after the gate's failure; a request's draw or a destination change between the new
+  destination and that step. A run in which the unit has left the cells of K when the gate fails, or
+  whose first request comes before the order to the area takes effect, does not test the part and is
+  reported so. Which tick the first request falls on, relative to the failure, is not scored (Open
+  question 11).
 - **U11, idle apron clearing.** Part a: an idle stock ground vehicle factory in *guard*, no
   production. Place an idle vehicle of the factory's own house on E by map pre-placement or a move
   order. Record the factory's guard processings, the scatter requests and the vehicle's
@@ -1656,19 +1683,19 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
     place and those with several is not established: claim 14's counts other than one are
     `unmeasured`.
 
-11. Q-1757 question 1, the unmeasured parts of claim 17. Claim 17 states them, with their
-    backing: the request in the same turn as a later behaviour change, the repeat in every turn
-    while each request gets no destination, *area guard*, buildings other than factories and cloning
-    buildings, the enslaved unit's exception, and the turns of erasure or a warp's leaving
-    stage. No setup in this spec reaches them, and they stay open until one does. The turn in
-    which the request comes is claimed in claim 17, including a turn in which a queued
-    behaviour becomes current: U10 b tests it for the first turn after a release (medium there),
-    and for a later behaviour change it is `unmeasured` and low. A request only from the next
-    turn would show as a request one tick later. U10 b observes only the tick of the first
-    request and its draw. Where the request falls within the turn, relative to the behaviour
-    processing, its draws and the locomotor's progress, is not established for the original,
-    since no U10 part makes a processing draw and the request's draw fall in one turn. Claim 17
-    gives our engine's order (design).
+11. Q-1757 question 1, the unmeasured parts of claim 17. Claim 17 states them, with their backing:
+    the request in the same turn as a later behaviour change, the repeat in every turn while each
+    request gets no destination, *area guard*, buildings other than factories and cloning buildings,
+    the enslaved unit's exception, and the turns of erasure or a warp's leaving stage. No setup in
+    this spec reaches them, and they stay open until one does. The turn in which the request comes
+    is claimed in claim 17, including a turn in which a queued behaviour becomes current: U10 b
+    tests it for the first turn after a release (medium there), and for a later behaviour change it
+    is `unmeasured` and low. A request only from the next turn would show as a request one tick
+    later. U10 b observes the tick of the first request and the draw the recorder ties to it. Where
+    the request falls within the turn, relative to the behaviour processing, its draws and the
+    locomotor's progress, is not established for the original: M-0023 records other draws in the
+    request's turn of U10 b's set-up, but no record here gives their order
+    against the request's draw. Claim 17 gives our engine's order (design).
 12. Claim 17 and a superweapon warp, in the original. At the update boundaries of a warp before
     its arrival hold (S-0513 claim 51), our engine does not send claim 17's request (design).
     Whether the original sends it at those boundaries, other than in the leaving stage (claim
