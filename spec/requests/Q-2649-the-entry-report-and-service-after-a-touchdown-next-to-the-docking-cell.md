@@ -3,7 +3,7 @@ id: Q-2649
 title: The entry report and the service after a touchdown in a cell next to the docking position's
 status: open
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
