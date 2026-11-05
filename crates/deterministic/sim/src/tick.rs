@@ -259,6 +259,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::combat::fire::reload_elapsed(w, id);
         return;
     }
+    // The member's arrival hold ended in this turn's hold-end test (S-0513 claim 40).
+    let hold_ended = member && !crate::superweapons::warp::is_member(w, id);
     // spec: S-0608 claims 12 and 15 (Q-1440: a vehicle drainer's position check samples its position before that turn's behaviour start, behaviour processing, movement and firing, and before its erasure exit; the warp-only stages, which returned above, exclude it, S-0513 claim 51; a pulse-disabled drainer still checks)
     crate::drain::position_check(w, id);
     if !crate::temporal::cut_short(w, id) {
@@ -334,8 +336,13 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::drain::building_turn(w, id);
     }
     if behaves {
+        let before = w.obj(id).and_then(|o| o.dest);
         // The behaviour processing.
         process::tail(w, id);
+        if hold_ended {
+            // spec: S-0306 r80 claim 17 and Edge cases (quirks.warp_hold_end_forgets_destination: in the tick in which an aircraft member's arrival hold ends, a destination its behaviour processing gave is forgotten after that processing and starts no take-off)
+            crate::air::hold_end_forget(w, id, before);
+        }
     }
     if on {
         p.mark(Phase::BeforeMove);

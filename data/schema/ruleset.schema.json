@@ -11165,6 +11165,11 @@
           "type": "boolean",
           "default": true
         },
+        "warp_hold_end_forgets_destination": {
+          "description": "An aircraft warp member's destination given by its behaviour processing in the tick in which its arrival hold ends is forgotten and starts no take-off, so its first destination that holds comes at its next processing; off: that destination holds and the aircraft takes off towards it.",
+          "type": "boolean",
+          "default": true
+        },
         "warp_hold_persists": {
           "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp.",
           "type": "boolean",

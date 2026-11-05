@@ -478,3 +478,15 @@ revision adds a switch or changes a switch's default.
 | `warp_departure_keeps_beam` | S-0513 claim 39a (*The firer*, r115, Q-2468), SW12 parts l9 and l9a | rejected (not in the layer), unchanged | r115 changes no text of the off position. With the switch off the lock is refused at the launch, so no firer holds a beam on a departed member, and the new rows have nothing to release. That is intake 75's refusal. It names no stuck unit or glitch. |
 
 Intake 94 leaves the layer file unchanged.
+
+## Intake 98 (S-0306 r80, S-0301 r73): the hold-end forget switch judged
+
+Ledger: [intake98.md](intake98.md). S-0306 r80 answers Q-2526 and adds one quirk, a new switch of
+`quirks.rs` with the original's position as default. S-0301 r73 answers Q-2567 and names no
+switch.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `warp_hold_end_forgets_destination` | S-0306 claim 17, Edge cases (r80, Q-2526) | rejected (not in the layer) | Condition 1 holds: the Edge case states the off position (no step forgets a destination after the member's behaviour processing in the tick in which its hold ends, so that destination holds and the aircraft takes off towards it), and it is built in `air::hold_end_forget`, called from the object turn in `tick.rs` after the behaviour processing. Condition 2 fails: on, the aircraft stays at height 0 only until its next *retreat* processing, at most 3 ticks later (S-0501 claim 34's delay), where its first destination that holds comes and it takes off. That is a short delay, not a unit stuck, a give-up or a visible glitch, and no play note or request names it. Tests: both positions in `claims_s0306_r62::r80_quirk_warp_hold_end_forgets_destination_both_positions` (on: no destination at the end of tick *h*, height 0, a destination on the arrival edge at *h* + 3 and the take-off by *h* + 4; off: the destination at the end of *h* and the take-off by *h* + 1). |
+
+Intake 98 leaves the layer file unchanged.

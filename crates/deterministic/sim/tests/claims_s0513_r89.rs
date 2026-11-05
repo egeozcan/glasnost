@@ -1156,6 +1156,93 @@ fn r108_claim39a_a_charged_sam_building_firer_short_of_power_keeps_the_member() 
     );
 }
 
+/// The ruleset of revision 91 with the TOWER a type that needs and drains
+/// power (S-0405 Terms) and GEN, a weaponless twin, a plant whose output
+/// covers that drain.
+fn rules_tower_drain() -> Ruleset {
+    let mut r = rules_r91();
+    let mut plant = r.sim.buildings["TOWER"].clone();
+    plant.primary = None;
+    plant.econ.power = Some(100);
+    r.sim.buildings.insert("GEN".into(), plant);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("GEN".into());
+    let t = r.sim.buildings.get_mut("TOWER").unwrap();
+    t.econ.power = Some(-10);
+    t.powered = Some(true);
+    r
+}
+
+#[test]
+fn r73_claim9_a_switched_off_building_firer_drops_a_departed_member_and_starts_guard() {
+    // spec: S-0301 r73 claim 9 (A building's own answers above a held temporal target, Q-2567: every answer of S-0405 table T1 ranks above the held-temporal-target rearming; while a row of T1 holds, here switched off and not charged, S-0405 claims 8 and 10, the building drops the target its beam holds at the first of its next attack processing, where S-0215 claim 32's row drops it and starts guard, and its checking turn in a check tick of S-0309 claim 29, and the beam stays attached; the same for a superweapon warp member that has departed) and S-0513 claim 39a (The firer: a building firer without the SAM flag keeps a departed member by the rearming row only while no T1 answer outranks it; seam sweep 5b's row of intake 84)
+    let mut s = given_at_departure(&rules_tower_drain(), "TOWER", -3, -3, |w, _| {
+        spawn(w, "GEN", ALPHA, -8, 8);
+    });
+    assert!(
+        glasnost_sim::econ::power::in_operation(&s.w, s.f),
+        "set-up: in operation"
+    );
+    assert_eq!(
+        glasnost_sim::econ::power::chargers(&s.w, s.f),
+        0,
+        "set-up: not charged"
+    );
+    glasnost_sim::econ::power::switch(&mut s.w, s.f, false);
+    assert!(
+        s.w.obj(s.f).unwrap().econ.building.switched_off,
+        "set-up: switched off"
+    );
+    // The switch-off comes before the departure tick runs.
+    assert_eq!(s.w.tick, s.dep, "set-up: at the departure tick");
+    let off = s.w.tick;
+    let mut drop = None;
+    while s.w.tick < s.app {
+        let t = s.w.tick;
+        let was_attack = s.w.obj(s.f).unwrap().beh.current == Some(Behaviour::Attack);
+        step(&mut s.w);
+        assert!(
+            superweapons::warp::departed(&s.w, s.m),
+            "set-up: departed at the end of tick {t}"
+        );
+        assert!(
+            temporal::holds(&s.w, s.f, s.m),
+            "S-0514 claim 14: the beam stays attached in tick {t}"
+        );
+        let o = s.w.obj(s.f).unwrap();
+        let processed = was_attack && o.beh.last.is_some_and(|(at, _)| at == t);
+        if o.target.is_none() {
+            drop = Some((t, processed, o.beh.current));
+            break;
+        }
+        assert!(
+            !processed && !held_check(t),
+            "kept past an attack processing or a check tick: tick {t}"
+        );
+    }
+    let (t, processed, beh) = drop.expect("dropped while the member waits to land");
+    assert!(t >= off, "not before the switch");
+    assert!(
+        processed || held_check(t),
+        "dropped at a processing or a check tick"
+    );
+    if processed {
+        // spec: S-0215 claim 32 (the illegal and impossible row drops the target and starts guard)
+        assert_eq!(beh, Some(Behaviour::Guard), "guard at that processing");
+    }
+    assert!(
+        superweapons::warp::departed(&s.w, s.m),
+        "dropped while the member is off the map"
+    );
+    assert_eq!(
+        check(&s.w, s.f, Some(Target::Object(s.m)), 0, true),
+        Answer::Impossible,
+        "T1's impossible, not rearming"
+    );
+}
+
 /// The distance in leptons between two points on the ground.
 fn flat(a: Pos, b: Pos) -> i64 {
     let (x, y) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
