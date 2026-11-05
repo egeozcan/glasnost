@@ -23,6 +23,7 @@ pub mod local_lane;
 pub mod net_client;
 pub mod netem;
 pub mod oracle;
+pub mod oracle_m0020;
 pub mod oracle_m0021;
 pub mod oracle_trace;
 pub mod path_report;

@@ -93,7 +93,7 @@
 //! seed on a side, whether ours shows that same winner for every seed on
 //! that side. A pairing passes when both hold.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -272,7 +272,8 @@ pub enum Winner {
 }
 
 impl Winner {
-    fn text(self) -> &'static str {
+    /// The winner as the CSV writes it.
+    pub fn text(self) -> &'static str {
         match self {
             Self::Row => "row",
             Self::Col => "col",
@@ -1231,6 +1232,9 @@ pub struct Arena {
     /// *Removal before the groups*), in creation order. None of them is
     /// in `world`.
     pub removed: Vec<ObjectId>,
+    /// Every unit of the two groups with its tries ([`place_unit_logged`]),
+    /// in creation order (the tool's log, read only).
+    pub placements: Vec<Placement>,
 }
 
 /// The units off their stated cells, one line each (shown by `--watch` and
@@ -1623,6 +1627,7 @@ pub fn setup_with(
     }
     let mut units: [Vec<ObjectId>; 2] = [Vec::new(), Vec::new()];
     let mut moved = Vec::new();
+    let mut placements = Vec::new();
     let first_raw = w.rng.taken();
     // spec: S-0216 claim 8 (Order, r59: the group of the pairing's row type first, on whichever side it plays, then the other group, each in increasing unit index; each unit created, then tested and placed, before the next is created; measure: M-0019, creation order puts the row type's units first)
     let order = match row_side {
@@ -1644,8 +1649,16 @@ pub fn setup_with(
                     types[s], stated.x, stated.y
                 ));
             }
-            let (id, cell, why) = place_unit(&mut w, kind, ti, houses[s], stated, FACINGS[s])
-                .map_err(|e| format!("{}: unit {i}: {e}", types[s]))?;
+            let (id, cell, why, tries) =
+                place_unit_logged(&mut w, kind, ti, houses[s], stated, FACINGS[s])
+                    .map_err(|e| format!("{}: unit {i}: {e}", types[s]))?;
+            placements.push(Placement {
+                side,
+                index: i,
+                id,
+                kind,
+                tries,
+            });
             if let Some(why) = why {
                 moved.push(Moved {
                     side,
@@ -1686,6 +1699,7 @@ pub fn setup_with(
         moved,
         first_raw,
         removed,
+        placements,
     })
 }
 
@@ -1712,12 +1726,72 @@ pub fn place_unit(
     stated: CellXY,
     v: u8,
 ) -> Result<(ObjectId, CellXY, Option<String>), String> {
+    place_unit_logged(w, kind, ti, house, stated, v).map(|(id, cell, why, _)| (id, cell, why))
+}
+
+/// One try of a unit's placement ([`place_unit`]), as our tool reads it
+/// from the scenario stream's count of raw values and the world's creation
+/// numbers around each step (read only; the tool's own log, M-0020
+/// Procedure 4 and M-0019's model's count *c*).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Try {
+    /// The cell tried.
+    pub cell: CellXY,
+    /// The raw values the stream had taken when the try's creation began.
+    pub start: u64,
+    /// The raw values the try's creation took (its creation set's draws).
+    pub creation_raw: u64,
+    /// The objects the creation made (creation numbers taken), the unit's
+    /// own included.
+    pub created: u32,
+    /// Whether the cell took the unit.
+    pub took: bool,
+    /// The raw values taken after the creation: a refused cell's unused
+    /// R(0, 3), or the placement's draws on the cell that took it.
+    pub after_raw: u64,
+}
+
+/// One unit of the set-up with its tries, in creation order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Placement {
+    /// Its side.
+    pub side: Side,
+    /// Its index *i* in its group.
+    pub index: u32,
+    /// The unit.
+    pub id: ObjectId,
+    /// Its kind.
+    pub kind: Kind,
+    /// Its tries, the stated cell's first; the last took it.
+    pub tries: Vec<Try>,
+}
+
+/// [`place_unit`] with its tries ([`Try`]) logged.
+pub fn place_unit_logged(
+    w: &mut World,
+    kind: Kind,
+    ti: u32,
+    house: HouseId,
+    stated: CellXY,
+    v: u8,
+) -> Result<(ObjectId, CellXY, Option<String>, Vec<Try>), String> {
     let mut refused: Vec<String> = Vec::new();
     let mut why = None;
+    let mut tries = Vec::new();
     // spec: S-0216 claim 8 (Moving on: the stated cell, then its eight neighbours in order; if none takes the unit, set-up stops and reports an error)
     for cell in std::iter::once(stated).chain(neighbours(stated)) {
+        let (start, numbers) = (w.rng.taken(), w.next_id);
         // spec: S-0216 claim 8 (Order and Draws of a refused cell, r59: each cell is tried with a new try, a unit of the unit's own type created with its creation draws, its own then those of the objects its creation makes, each with its creation number, before the take test)
         let id = glasnost_sim::objects::create(w, kind, ti, Some(house));
+        let mut t = Try {
+            cell,
+            start,
+            creation_raw: w.rng.taken() - start,
+            created: w.next_id - numbers,
+            took: false,
+            after_raw: 0,
+        };
+        let after = w.rng.taken();
         let Some(r) = refusal(w, id, kind, cell) else {
             // spec: S-0216 claim 8 (Placement: a play-time placement on the cell that takes the unit, as claims 1 to 4 give it: the facings of claim 1, an infantry unit's standing position of claim 2 with its one draw R(0, 3), claim 3's draws, claim 4's fall-back)
             if !glasnost_sim::objects::place_in_play(w, id, cell, v) {
@@ -1726,16 +1800,21 @@ pub fn place_unit(
                     cell.x, cell.y
                 ));
             }
+            t.took = true;
+            t.after_raw = w.rng.taken() - after;
+            tries.push(t);
             let o = w.obj_mut(id).ok_or("not created")?;
             // spec: S-0216 claim 8 and claim 4 (the group's mission is then queued as a placing step's behaviour, S-0215 claim 7, without being started); S-0009 claim 41 (hunt, measure: M-0001)
             o.beh.queue(Some(Behaviour::Hunt));
-            return Ok((id, cell, why));
+            return Ok((id, cell, why, tries));
         };
         if kind == Kind::Infantry {
             let half = w.rules().quirks.ranged_draw_half_span;
             // spec: S-0216 claim 8 (Draws of a refused cell, r59: for an infantry unit, one draw R(0, 3) after the try's creation draws, taken whether or not claim 2's first row would refuse the cell, its result not used)
             let _ = w.rng.ranged(0, 3, half);
         }
+        t.after_raw = w.rng.taken() - after;
+        tries.push(t);
         // spec: S-0216 claim 8 (Draws of a refused cell, r59: the refused try never enters play and our engine keeps no object of it, a documented departure with no switch; its creation numbers stay reserved, as S-0611 claim 11's never-placed units)
         glasnost_sim::objects::discard_unplaced(w, id);
         refused.push(format!("({}, {}) {r}", cell.x, cell.y));
@@ -1778,25 +1857,180 @@ pub fn play(
     seed: u32,
     watch: bool,
 ) -> Result<(Game, String), String> {
+    play_checked(ground, row, col, row_side, seed, watch).map(|(g, s, _)| (g, s))
+}
+
+/// What one game shows of the houses other than the two players' (M-0019
+/// Procedure 8, revised 2026-11-05), read from our state only. *Tick 0* is
+/// the state after tick 0's update (measure: M-0019, Setup, *Tick 0*: after
+/// tick 0's update), which is ours after the game's first step, the tick
+/// numbered 0 (spec: S-0201 claim 1, the tick number 0 at game start, grown
+/// by 1 at the end of every tick); *the next tick* is ours after the second.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OtherHouses {
+    /// At tick 0 and at the next tick: the houses, other than the two
+    /// players' and the observer's, that own an object, with their role.
+    pub owners: [Vec<(u8, glasnost_sim::world::HouseRole)>; 2],
+    /// The neutral house's vehicles at tick 0: on the map, off the map.
+    pub neutral_vehicles: (usize, usize),
+    /// Of the neutral house's vehicles at tick 0, those whose identifier
+    /// the next tick still has.
+    pub neutral_vehicles_next: usize,
+    /// The neutral house's infantry and buildings at tick 0: on the map,
+    /// off the map.
+    pub neutral_rest: (usize, usize),
+    /// The owners of the tank bunkers (S-0606 Terms) at tick 0.
+    pub bunker_owners: Vec<Option<u8>>,
+    /// The observer house's objects at tick 0 and at the next tick: kind
+    /// and whether on the map.
+    pub observer: [Vec<(Kind, bool)>; 2],
+    /// The samples (every [`SAMPLE_PERIOD`] ticks, M-0017 Procedure 2) to
+    /// the game's end, and those at which the observer house does not own
+    /// exactly one object by [`owned`]'s count, or is defeated: (tick,
+    /// count, defeated).
+    pub samples: (usize, Vec<(i32, usize, bool)>),
+}
+
+/// The objects of `w` that the houses other than `players` and `observer`
+/// own, by owner house and role.
+fn other_owners(
+    w: &World,
+    players: [HouseId; 2],
+    observer: HouseId,
+) -> Vec<(u8, glasnost_sim::world::HouseRole)> {
+    let owners: BTreeSet<u8> = w
+        .objects
+        .values()
+        .filter_map(|o| o.owner)
+        .filter(|h| !players.contains(h) && *h != observer)
+        .map(|h| h.0)
+        .collect();
+    owners
+        .into_iter()
+        .map(|h| {
+            (
+                h,
+                w.houses
+                    .get(usize::from(h))
+                    .map_or(Default::default(), |x| x.role),
+            )
+        })
+        .collect()
+}
+
+/// [`play`] with the M-0019 facts of the other houses ([`OtherHouses`]),
+/// read after each step without changing the game.
+pub fn play_checked(
+    ground: &Ground,
+    row: &str,
+    col: &str,
+    row_side: Side,
+    seed: u32,
+    watch: bool,
+) -> Result<(Game, String, OtherHouses), String> {
+    play_with(
+        ground,
+        row,
+        col,
+        row_side,
+        seed,
+        watch,
+        &mut |_| Ok(()),
+        &mut |_, _| {},
+    )
+}
+
+/// [`play_checked`] with two hooks of a record's harness: `prepare` sees
+/// the set-up before the game's first step (and may change it: M-0020's
+/// moved arms), `observe` reads the world and the tick's effects after
+/// each step, before the game's own reading of them (read only).
+#[allow(clippy::too_many_arguments)]
+pub fn play_with(
+    ground: &Ground,
+    row: &str,
+    col: &str,
+    row_side: Side,
+    seed: u32,
+    watch: bool,
+    prepare: &mut dyn FnMut(&mut Arena) -> Result<(), String>,
+    observe: &mut dyn FnMut(&World, &[glasnost_sim::combat::effects::Effect]),
+) -> Result<(Game, String, OtherHouses), String> {
+    use glasnost_sim::world::HouseRole;
     let types = match row_side {
         Side::A => [row, col],
         Side::B => [col, row],
     };
+    let mut arena = setup(ground, types, row_side, seed)?;
+    prepare(&mut arena)?;
     let Arena {
         world: mut w,
         houses,
         units,
         moved,
         ..
-    } = setup(ground, types, row_side, seed)?;
+    } = arena;
     let mut seen = String::new();
     if watch {
         seen.push_str(&moved_text(&moved));
     }
+    let mut facts = OtherHouses::default();
+    let neutral: Vec<HouseId> = w
+        .houses
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| h.role == HouseRole::Neutral)
+        .filter_map(|(i, _)| u8::try_from(i).ok().map(HouseId))
+        .collect();
+    let mut neutral_vehicles_at_0: Vec<ObjectId> = Vec::new();
     let mut shots = [0u32; 2];
     let (winner_side, end_frame) = loop {
         glasnost_sim::tick::step(&mut w);
+        // measure: M-0019 (Procedure 8: the objects of the other houses at tick 0, after its update, and at the next tick); spec: S-0201 claim 1 (our step run while the tick number is 0 is tick 0)
+        if w.tick == 1 || w.tick == 2 {
+            let k = (w.tick - 1) as usize;
+            facts.owners[k] = other_owners(&w, houses, HUMAN);
+            facts.observer[k] = w
+                .objects
+                .values()
+                .filter(|o| o.owner == Some(HUMAN))
+                .map(|o| (o.kind, o.on_map))
+                .collect();
+            if k == 0 {
+                let owners: BTreeSet<Option<u8>> = w
+                    .objects
+                    .values()
+                    .filter(|o| glasnost_sim::structures::bunker::is_bunker(&w, o.id))
+                    .map(|o| o.owner.map(|h| h.0))
+                    .collect();
+                facts.bunker_owners = owners.into_iter().collect();
+                for o in w.objects.values() {
+                    if !o.owner.is_some_and(|h| neutral.contains(&h)) {
+                        continue;
+                    }
+                    if o.kind == Kind::Vehicle {
+                        neutral_vehicles_at_0.push(o.id);
+                        if o.on_map {
+                            facts.neutral_vehicles.0 += 1;
+                        } else {
+                            facts.neutral_vehicles.1 += 1;
+                        }
+                    } else if matches!(o.kind, Kind::Infantry | Kind::Building) {
+                        if o.on_map {
+                            facts.neutral_rest.0 += 1;
+                        } else {
+                            facts.neutral_rest.1 += 1;
+                        }
+                    }
+                }
+            } else {
+                facts.neutral_vehicles_next = neutral_vehicles_at_0
+                    .iter()
+                    .filter(|&&id| w.obj(id).is_some())
+                    .count();
+            }
+        }
         let effects = std::mem::take(&mut w.effects);
+        observe(&w, &effects);
         for e in effects {
             if watch
                 && let glasnost_sim::combat::effects::Effect::Shot { firer, .. } = e
@@ -1818,6 +2052,15 @@ pub fn play(
             continue;
         }
         let o = houses.map(|h| owned(&w, h));
+        // measure: M-0019 (Procedure 8: the observer house's row in every sample of the periodic sampler to the run's end: a unit count of 1, not defeated); our count is [`owned`]'s
+        let (n, lost) = (
+            owned(&w, HUMAN).0,
+            glasnost_sim::econ::victory::defeated(&w, HUMAN),
+        );
+        facts.samples.0 += 1;
+        if n != 1 || lost {
+            facts.samples.1.push((frame, n, lost));
+        }
         if watch {
             let _ = writeln!(
                 seen,
@@ -1945,7 +2188,112 @@ pub fn play(
             end_frame,
         },
         seen,
+        facts,
     ))
+}
+
+/// M-0019's rows under *Other houses at tick 0* (revised 2026-11-05) over
+/// our games: (game, its facts) to (row, verdict), in the record's order.
+pub fn other_houses_verdicts(
+    games: &[(String, OtherHouses)],
+) -> Vec<(String, crate::oracle_m0021::Verdict)> {
+    use crate::oracle_m0021::Verdict;
+    use glasnost_sim::world::HouseRole;
+    let rows = [
+        "M-0019 other houses: every game has objects of exactly one house besides the two players' and the observer's, the map's neutral house, which owns the bunkers",
+        "M-0019 other houses: the neutral house: at tick 0 every vehicle it owns is off the map",
+        "M-0019 other houses: the neutral house: none of those vehicles' identifiers is among the objects at the next tick",
+        "M-0019 other houses: the neutral house: its infantry and buildings are all on the map at tick 0",
+        "M-0019 other houses: the observer house: at tick 0 and at the next tick it owns one object, a vehicle on the map, and nothing else",
+        "M-0019 other houses: the observer house: every sample to the run's end gives it a unit count of 1, not defeated",
+    ];
+    if games.is_empty() {
+        return rows
+            .iter()
+            .map(|r| {
+                (
+                    (*r).to_owned(),
+                    Verdict::NotCheckable("no game was played".into()),
+                )
+            })
+            .collect();
+    }
+    let mut bad: [Vec<String>; 6] = Default::default();
+    let mut vacuous = 0;
+    for (name, f) in games {
+        // measure: M-0019 (Other houses at tick 0: in every game the recorder gives objects of exactly one house besides the two players' and the observer's, the house that owns the map's four bunkers, the map's neutral house)
+        let neutral_only =
+            (0..2).all(|k| f.owners[k].len() == 1 && f.owners[k][0].1 == HouseRole::Neutral);
+        let bunkers_neutral = f
+            .bunker_owners
+            .iter()
+            .all(|b| f.owners[0].first().is_some_and(|o| Some(o.0) == *b));
+        if !(neutral_only && bunkers_neutral) {
+            bad[0].push(format!(
+                "{name}: other owners {:?} / {:?}, bunker owners {:?}",
+                f.owners[0], f.owners[1], f.bunker_owners
+            ));
+        }
+        // measure: M-0019 (Other houses at tick 0: the neutral house: at tick 0 every vehicle it owns is off the map)
+        // The counts are the stock map's content (M-0019: not given), so only the local file holds them.
+        if f.neutral_vehicles.0 > 0 {
+            bad[1].push(format!("{name}: some on the map"));
+        }
+        if f.neutral_vehicles == (0, 0) {
+            vacuous += 1;
+        }
+        // measure: M-0019 (Other houses at tick 0: none of their identifiers is among the objects the recorder gives at the next tick)
+        if f.neutral_vehicles_next > 0 {
+            bad[2].push(format!("{name}: some still there"));
+        }
+        // measure: M-0019 (Other houses at tick 0: its infantry and its buildings are all on the map at tick 0)
+        if f.neutral_rest.1 > 0 || f.neutral_rest.0 == 0 {
+            bad[3].push(format!(
+                "{name}: {}",
+                if f.neutral_rest.0 == 0 {
+                    "none on the map"
+                } else {
+                    "some off the map"
+                }
+            ));
+        }
+        // measure: M-0019 (Other houses at tick 0: the observer house: at tick 0 and at the next tick it owns one object, a vehicle on the map, and nothing else)
+        if !(0..2).all(|k| f.observer[k] == [(Kind::Vehicle, true)]) {
+            bad[4].push(format!("{name}: {:?} / {:?}", f.observer[0], f.observer[1]));
+        }
+        // measure: M-0019 (Other houses at tick 0: in every sample to the run's end, the observer house's row gives a unit count of 1, and the house is not defeated)
+        if f.samples.0 == 0 || !f.samples.1.is_empty() {
+            bad[5].push(format!(
+                "{name}: {} samples, off: {:?}",
+                f.samples.0,
+                f.samples.1.first()
+            ));
+        }
+    }
+    let n = games.len();
+    rows.iter()
+        .zip(bad)
+        .enumerate()
+        .map(|(i, (r, b))| {
+            let v = if b.is_empty() {
+                Verdict::Pass
+            } else {
+                Verdict::Fail(format!(
+                    "{} of {n} games: {}",
+                    b.len(),
+                    b.iter().take(3).cloned().collect::<Vec<_>>().join("; ")
+                ))
+            };
+            let row = if i == 1 && vacuous > 0 {
+                format!(
+                    "{r} (ours has none at tick 0 in {vacuous} of {n} games: S-0216 claim 8's removal before the groups takes them out of the world, so the row holds there with no vehicle to read)"
+                )
+            } else {
+                (*r).to_owned()
+            };
+            (row, v)
+        })
+        .collect()
 }
 
 /// One line per object of the two houses (and per object a side's group
@@ -2119,9 +2467,22 @@ pub fn jobs(record: &OracleRecord, only: &[(String, String)]) -> Vec<Job> {
 /// Plays `jobs` on `threads` worker threads (each game is its own world;
 /// the results come back in job order).
 pub fn run_jobs(ground: &Ground, jobs: &[Job], threads: usize) -> Vec<Result<Game, String>> {
+    run_jobs_checked(ground, jobs, threads)
+        .into_iter()
+        .map(|r| r.map(|(g, _)| g))
+        .collect()
+}
+
+/// [`run_jobs`] with each game's M-0019 facts of the other houses
+/// ([`play_checked`]).
+pub fn run_jobs_checked(
+    ground: &Ground,
+    jobs: &[Job],
+    threads: usize,
+) -> Vec<Result<(Game, OtherHouses), String>> {
     let next = AtomicUsize::new(0);
-    let results: Vec<std::sync::Mutex<Option<Result<Game, String>>>> =
-        jobs.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    type Slot = std::sync::Mutex<Option<Result<(Game, OtherHouses), String>>>;
+    let results: Vec<Slot> = jobs.iter().map(|_| std::sync::Mutex::new(None)).collect();
     std::thread::scope(|s| {
         for _ in 0..threads.max(1) {
             s.spawn(|| {
@@ -2131,7 +2492,8 @@ pub fn run_jobs(ground: &Ground, jobs: &[Job], threads: usize) -> Vec<Result<Gam
                         break;
                     };
                     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        play(ground, row, col, *side, *seed, false).map(|(g, _)| g)
+                        play_checked(ground, row, col, *side, *seed, false)
+                            .map(|(g, _, facts)| (g, facts))
                     }))
                     .unwrap_or_else(|_| Err(format!("{row} against {col}: panic")));
                     if let Ok(mut slot) = results[i].lock() {
@@ -2326,6 +2688,9 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
     if only_m0021 {
         return run_m0021(cli, game_dir, &records);
     }
+    if cli.record.eq_ignore_ascii_case(crate::oracle_m0020::ID) {
+        return run_m0020(cli, game_dir, &records);
+    }
     let mut out = run_records(cli, game_dir, &records)?;
     let plain = cli.pairings.is_empty()
         && !cli.compare_only
@@ -2336,8 +2701,75 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
         && cli.watch.is_none();
     if cli.record.eq_ignore_ascii_case("all") && plain {
         out.push_str(&run_m0021(cli, game_dir, &records)?);
+        out.push_str(&run_m0020(cli, game_dir, &records)?);
     }
     Ok(out)
+}
+
+/// M-0020's games ([`crate::oracle_m0020`]) on M-0001's ground: the
+/// verdicts to the output, the whole report (with its local values, beside
+/// the record's from `measurements/local/M-0020.json` when present) to
+/// `oracle-M-0020.txt` in the output directory. Skipped when M-0020's
+/// record file is not in the measurements directory.
+pub fn run_m0020(
+    cli: &Cli,
+    game_dir: Option<&Path>,
+    records: &[OracleRecord],
+) -> Result<String, String> {
+    use crate::oracle_m0020 as m20;
+    let present = record_paths(&cli.measurements).iter().any(|p| {
+        p.file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with(m20::ID))
+    });
+    if !present {
+        return Ok(format!(
+            "skipped: no {} record in {}\n",
+            m20::ID,
+            cli.measurements.display()
+        ));
+    }
+    let Some(map) = find_record(records, m20::MAP_RECORD) else {
+        return Ok(format!(
+            "skipped: {} plays on {}'s map, and {} is not in {}\n",
+            m20::ID,
+            m20::MAP_RECORD,
+            m20::MAP_RECORD,
+            cli.measurements.display()
+        ));
+    };
+    let dir = game_dir.ok_or_else(|| {
+        format!(
+            "{} is not set: the oracle arena needs the install (local lane only)",
+            crate::local_lane::GAME_DIR_VAR
+        )
+    })?;
+    let mut ground = stock_ground(dir, &map.map_file, &map.map_sha256)?;
+    // measure: M-0020 (Setup: two computer houses, as in M-0001 to M-0003)
+    ground.computer = true;
+    // measure: M-0020 (Setup: part 1 replays M-0001's and M-0002's archived games; part 2's arm S at seeds 0 to 5 against them)
+    let archived: Vec<Game> = records
+        .iter()
+        .filter(|r| r.id == "M-0001" || r.id == "M-0002")
+        .flat_map(|r| r.games.iter().cloned())
+        .collect();
+    let json = std::fs::read_to_string(
+        cli.measurements
+            .join("local")
+            .join(format!("{}.json", m20::ID)),
+    )
+    .ok();
+    let t0 = std::time::Instant::now();
+    let (summary, full) = m20::run(&ground, &archived, json.as_deref(), cli.threads)?;
+    std::fs::create_dir_all(&cli.out).map_err(|e| format!("{}: {e}", cli.out.display()))?;
+    let txt = cli.out.join(format!("oracle-{}.txt", m20::ID));
+    std::fs::write(&txt, &full).map_err(|e| format!("{}: {e}", txt.display()))?;
+    Ok(format!(
+        "{}: played on {} threads in {} s\n{summary}wrote {} (git-ignored, with local values; never commit it)\n",
+        m20::ID,
+        cli.threads,
+        t0.elapsed().as_secs(),
+        txt.display()
+    ))
 }
 
 /// M-0021's test pairing ([`crate::oracle_m0021`]) on M-0001's ground: the
@@ -2550,6 +2982,7 @@ fn run_records(
         return Ok(out);
     }
     std::fs::create_dir_all(&cli.out).map_err(|e| format!("{}: {e}", cli.out.display()))?;
+    let mut other_houses: Vec<(String, OtherHouses)> = Vec::new();
     for r in chosen {
         check_shape(&r.games).map_err(|e| format!("{}: {e}", r.id))?;
         let stored_path = cli.out.join(format!("ours-{}.csv", r.id));
@@ -2564,12 +2997,25 @@ fn run_records(
             let ground = ground_of(r)?;
             let jobs = jobs(r, &cli.pairings);
             let t0 = std::time::Instant::now();
-            let results = run_jobs(&ground, &jobs, cli.threads);
+            let results = run_jobs_checked(&ground, &jobs, cli.threads);
             let secs = t0.elapsed().as_secs();
             let mut fresh = Vec::new();
             for (j, res) in jobs.iter().zip(results) {
                 match res {
-                    Ok(g) => fresh.push(g),
+                    Ok((g, facts)) => {
+                        other_houses.push((
+                            format!(
+                                "{} {} against {} side {} seed {}",
+                                r.id,
+                                j.0,
+                                j.1,
+                                j.2.text(),
+                                j.3
+                            ),
+                            facts,
+                        ));
+                        fresh.push(g);
+                    }
                     Err(e) => {
                         let _ = writeln!(
                             out,
@@ -2611,7 +3057,48 @@ fn run_records(
             txt.display()
         );
     }
+    let m0019 = record_paths(&cli.measurements).iter().any(|p| {
+        p.file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with(M0019))
+    });
+    if m0019 && !other_houses.is_empty() {
+        out.push_str(&other_houses_report(cli, &other_houses)?);
+    }
     Ok(out)
+}
+
+/// M-0019's ID (the record of the placements at tick 0).
+pub const M0019: &str = "M-0019";
+
+/// M-0019's rows of the other houses over the games played: the verdicts
+/// to the output and to `oracle-M-0019.txt` in the output directory, with
+/// every game's facts (counts of the stock map's objects, so local).
+fn other_houses_report(cli: &Cli, games: &[(String, OtherHouses)]) -> Result<String, String> {
+    let v = other_houses_verdicts(games);
+    let failing = v
+        .iter()
+        .filter(|(_, v)| matches!(v, crate::oracle_m0021::Verdict::Fail(_)))
+        .count();
+    let mut text = format!(
+        "{M0019} rows (other houses at tick 0, {} games):\n",
+        games.len()
+    );
+    for (row, verdict) in &v {
+        let _ = writeln!(text, "  {row}: {}", verdict.text());
+    }
+    let _ = writeln!(text, "{M0019}: rows failing: {failing} of {}", v.len());
+    let mut full = text.clone();
+    for (name, f) in games {
+        let _ = writeln!(full, "  {name}: {f:?}");
+    }
+    let txt = cli.out.join(format!("oracle-{M0019}.txt"));
+    std::fs::write(&txt, &full).map_err(|e| format!("{}: {e}", txt.display()))?;
+    let _ = writeln!(
+        text,
+        "wrote {} (git-ignored, with the stock map's counts; never commit it)",
+        txt.display()
+    );
+    Ok(text)
 }
 
 // ---------------------------------------------------------------------------
