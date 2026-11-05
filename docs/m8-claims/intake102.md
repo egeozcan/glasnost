@@ -70,6 +70,11 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   skips it until it rests.
 - **A sliding aircraft whose flight point is gone** comes to rest where it is, with its
   object-present flag (Q-2647 interim).
+- **Claim 6's exact-cell trigger during the slide** (Q-2648 interim): it applies as written, at
+  height 0 too, so a slide into its flight point's cell starts a landing there and the next
+  update's touchdown forgets and rests. This was already the code path; it now carries the cite.
+- **An entry restarted in the approaching stage** (Q-2650 interim): as built before r132, so
+  there is no new code and no cite.
 
 `AirState::sliding` is hashed state: save format 101 → 102, AI game format 64 → 65.
 
