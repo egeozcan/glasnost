@@ -280,6 +280,29 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     }
 }
 
+/// The no-threat fall-back on damage (S-0215 claim 16): called for a hit
+/// from a known attacker that lowered the actor's health and left it alive.
+/// A mobile actor whose current behaviour has the no-threat property and
+/// not the zombie property falls back to rest at once (claims 13 to 15;
+/// S-0501 claim 18 for an aircraft). The rest tables then decide, so the
+/// fall-back queues what they give, without an immediate start.
+pub fn no_threat_fall_back(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0215 claim 16 (a mobile actor; not a team member: no house of our engine has teams, Terms)
+    if !o.kind.is_mobile() {
+        return;
+    }
+    // spec: S-0215 claim 16 and claim 1 (the current behaviour, or with none current the queued one)
+    let Some(b) = o.beh.seen() else { return };
+    let p = w.rules().behaviour(b);
+    // spec: S-0215 claim 16 and claim 17 (the no-threat property, and no fall-back while the zombie property holds)
+    if !p.no_threat || p.zombie {
+        return;
+    }
+    // spec: S-0215 claim 16 (it falls back to rest at once, claims 13 to 15; an ordinary fall-back, not the placement one)
+    fall_back(w, id, false);
+}
+
 /// The guard-area veterancy ability at the actor's current rank (S-0311 claim 3).
 fn guard_area_ability(w: &World, id: ObjectId) -> bool {
     crate::combat::veterancy::has_ability(w, id, crate::combat::data::Ability::GuardArea)

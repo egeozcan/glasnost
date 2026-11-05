@@ -695,7 +695,8 @@ fn building_fires(w: &mut World, id: ObjectId) {
 }
 
 /// The reactions of a hit outside S-0302: fear (S-0107 claim 16), anger
-/// (S-0309 claim 16), retaliation (S-0309 claim 18).
+/// (S-0309 claim 16), the no-threat fall-back (S-0215 claim 16),
+/// retaliation (S-0309 claim 18).
 fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result: HitResult) {
     let Some(o) = w.obj(id).cloned() else { return };
     let dealt = health_before - o.health;
@@ -706,6 +707,10 @@ fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result:
     }
     if o.kind == Kind::Infantry && o.health > 0 && dealt > 0 {
         crate::combat::fear::damaged(w, id, hit.attacker.is_some());
+    }
+    // spec: S-0215 claim 16 (damage from a known attacker that the actor survives: rated medium, "any damage that changes health and leaves the actor alive"; a heal is not damage, Q-2586 interim) and Q-2586 interim (after the hit's own effects, anger and fear, before retaliation; judged on the behaviour current when the hit lands); S-0215 claim 39 (the crush response, in `apply`, still follows)
+    if dealt > 0 && o.health > 0 && hit.attacker.is_some() {
+        crate::process::no_threat_fall_back(w, id);
     }
     if dealt > 0
         && o.health > 0
