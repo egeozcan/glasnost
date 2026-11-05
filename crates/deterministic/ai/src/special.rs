@@ -705,7 +705,7 @@ impl Special {
         ) || glasnost_sim::structures::tech::cash_producing(w, b);
         let strength = glasnost_sim::combat::damage::strength(w, b);
         // design: half strength or below, the point at which a person spends an engineer on a building
-        matters && o.health * 2 <= strength
+        matters && o.health * 2 <= strength // nocite: tuning of our own opponent (half strength)
     }
 
     /// Engineers (S-0509): every idle engineer is sent to the nearest

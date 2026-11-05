@@ -1939,7 +1939,7 @@ impl Script {
         let size = (self.plan.wave + WAVE_GROWTH * self.waves)
             .min(WAVE_MAX.max(self.plan.wave))
             .max(1);
-        let patient = waiting.len() >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE;
+        let patient = waiting.len() >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE; // nocite: tuning of our own opponent (half a wave)
         if w.tick >= OPENING && (waiting.len() >= size || patient) {
             self.waiting_since = None;
             self.waves += 1;
