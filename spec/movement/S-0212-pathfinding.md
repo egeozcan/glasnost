@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 87
+revision: 96
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-29
+approved-on: 2026-11-05
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771, Q-1870, Q-1975]
 supersedes: []
@@ -1607,59 +1607,84 @@ Terms specific to this spec:
       Low for the dropped first step
 
 21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
-    path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
-    computes no new path while its retry delay runs, with these exceptions: the immediate
-    recomputation of claim 20 and immediate fresh searches of S-0207 claim 15
-    (driving locomotor), S-0504 claim 9 (ship locomotor) and S-0503 claim 12
-    (hovering locomotor), the computation a follower car makes when its
-    leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
-    obstacle (S-0209 claim 7, walk locomotor). The delay after a follower car's computation is
-    claim 26's, not the fresh-search rule below: in particular a failed gate leaves the car's delay
-    unchanged. For the driving and ship locomotors:
+path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
+computes no new path while its retry delay runs, with these exceptions: the immediate recomputation
+of claim 20 and immediate fresh searches of S-0207 claim 15 (driving locomotor), S-0504 claim 9
+(ship locomotor) and S-0503 claim 12 (hovering locomotor), the computation a follower car makes when
+its leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
+obstacle (S-0209 claim 7, walk locomotor). For the driving and walk locomotors, a running retry
+delay ends when the unit's destination is changed to a different one or cleared, a delay started
+earlier in the same tick included. So the first search for a new destination is not held back, and
+no delay remains after a failure that clears the destination (claim 23). The offers of a refinery's
+docking cell that S-0402 claim 10a gives a harvester are left to that claim (Open questions). For
+the hovering locomotor, a person's stop, which clears the order-level destination, makes the timer
+eligible (S-0503 claim 16), but every fresh search starts *R* again (below), so after a failed fresh
+search or a failed gate the delay runs from that tick, even where the failure clears the order-level
+destination (claim 23, rows 2 and 3, and scenario P19 for the failed gate). Whether a changed
+order-level destination ends a running delay is not established, and this spec leaves it to S-0503
+(Open questions). S-0503 owns the movement destination a hovering unit keeps and the searches made
+for it. The delay after a follower car's computation is claim 26's, and for a car with the driving
+or walk locomotor its new destination also ends a delay that ran before. For the driving and ship
+locomotors:
     - A fresh search (no stored steps left) waits for the delay to be over. After a fresh search
       that fails, or whose gate fails (claim 6), the delay *R* runs from the tick of that search.
-      After a fresh search that succeeds, no delay runs.
-    - A re-path for a blocked next step (claim 22) also waits for the delay. After such a re-path the
-      delay *R* starts again, whether the re-path succeeded or its search failed. After a re-path
-      whose gate failed, no delay runs.
+      For the driving locomotor it runs only until the destination is cleared: a failed gate and the
+      failures of claim 23's second and third rows clear it in the same update (for a follower car,
+      at the timing of claim 26), so no delay remains (above). After a fresh search that succeeds,
+      no delay runs.
+    - A re-path for a blocked next step (claim 22) also waits for the delay. After such a re-path
+      the delay *R* starts again, whether the re-path succeeded or its search failed, except that
+      for the driving locomotor a failed search that clears the destination ends it again (above).
+      After a re-path whose gate failed, no delay runs.
 
     For the walk locomotor, when its searches are made is S-0209's (claims 7 and 10), and the delay
     after each is as follows. A fresh search, and the immediate new path of S-0209 claim 7, behave
     as a fresh search of the drive locomotor: no delay after a found path, *R* after a failed search
-    or a failed gate. After a re-path for a moving blocker the delay *R* starts again whatever its
-    result, a failed gate included. A new destination does not cut a running delay short for the
-    walk locomotor: the first search for it waits for what remains of *R*.
-    For the hovering locomotor, a fresh search with no stored steps left waits for *R* to
-    expire. Every such fresh search starts *R* again from its tick, whether it finds a path,
-    fails in the search or fails at the gate. In particular, a successful fresh search does not
-    remove the delay as it does for the driving and ship locomotors. The immediate
-    first-check fresh searches of S-0503 claim 12 bypass a running timer but likewise
-    start the full *R* from the actual search tick on success, search failure or gate
-    failure. This covers first-check *cloaked blocker*, *blocked*, *friendly obstacle*,
-    *enemy obstacle* and *stationary friendly*. Later ordinary retries without a heading
-    point wait for that new timer, while another first-check refusal can bypass it again.
-    An accepted person's stop clears the ordinary retry delay, so a hover retaining its
-    movement destination is immediately eligible for a later ordinary search; the absence
-    of an order-level destination does not otherwise waive the timer gate. Eligibility is
-    not itself a search, and only an actual fresh search restarts *R* (S-0503 claim 16).
-    S-0207 claim 19 gives the waits
-    this produces when a hovering unit discards its path while its target is in range.
-    - Backing: `measurable` (S-0207 scenario D21 run 4 for the retained-destination hovering
-      retry wait after success, scenario P19 for its failed-search and failed-gate cases,
-      P18's hover variant and S-0503 H9 for immediate-search timer restarts,
-      S-0503 H12 and H15 for the two destinations and stop-time retry eligibility,
-      scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
-      exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
-      re-paths and C19 for the immediate new path). That a new destination given while the delay
-      runs does not cut it short for the walk locomotor is `unmeasured`. S-0417 scenario U10
-      part g run 2 tests it once input exists that takes effect after a unit's release and before
-      its first turn. P25(a, b) additionally reads the retry
-      timer immediately after a walker's failed search/gate and a follower car's computation.
-      It does not infer that timer from a later search decided by another reaction.
-      S-0504 N11 tests the ship's successful fresh-search clearing, failed-search delay,
-      moving-blocker restart and first-check timer exceptions
-    - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated,
-      low for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4)
+    unless the failure clears the destination, and no delay after a failed gate, which clears it
+    (claim 23). After a re-path for a moving blocker the delay *R* starts again whether it found a
+    path or its search failed, unless the failure clears the destination. A failed gate clears it
+    there too, so no delay remains. A walker that keeps its destination after a failed search (claim
+    23, third row) waits for *R* before it searches for that destination again. For the hovering
+    locomotor, a fresh search with no stored steps left waits for *R* to expire. Every such fresh
+    search starts *R* again from its tick, whether it finds a path, fails in the search or fails at
+    the gate. In particular, a successful fresh search does not remove the delay as it does for the
+    driving and ship locomotors. The immediate first-check fresh searches of S-0503 claim 12 bypass
+    a running timer but likewise start the full *R* from the actual search tick on success, search
+    failure or gate failure. This covers first-check *cloaked blocker*, *blocked*, *friendly
+    obstacle*, *enemy obstacle* and *stationary friendly*. Later ordinary retries without a heading
+    point wait for that new timer, while another first-check refusal can bypass it again. An
+    accepted person's stop clears the ordinary retry delay, so a hover retaining its movement
+    destination is immediately eligible for a later ordinary search; the absence of an order-level
+    destination does not otherwise waive the timer gate. Eligibility is not itself a search, and
+    only an actual fresh search restarts *R* (S-0503 claim 16). S-0207 claim 19 gives the waits this
+    produces when a hovering unit discards its path while its target is in range.
+    - Backing: `measurable` (S-0207 scenario D21 run 4 for the retained-destination hovering retry
+      wait after success, scenario P19 for its failed-search and failed-gate cases, P18's hover
+      variant and S-0503 H9 for immediate-search timer restarts, S-0503 H12 and H15 for the two
+      destinations and stop-time retry eligibility, scenarios P6, P7 run 5, P25(b) for the follower
+      car's delay after its computation; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5
+      for the delay between re-paths and C19 for the immediate new path). That no delay remains
+      after a walker's fresh search whose gate fails, which clears its destination, is `measurable`
+      by P25(a), whose failed-gate control reads the timer at the end of that tick. After a walker's
+      re-path whose gate fails it is `unmeasured`, as claim 23 rates that re-path. S-0417 scenario
+      U10 part g, whose walker would then walk to a new destination without a wait, runs only with a
+      harness that can give an order at the walker's release, which is not established. That
+      clearing or changing the destination ends a delay still running from an earlier tick, a
+      driving follower car's included (claim 26), is `unmeasured` for both locomotors: in U10 g no
+      delay runs when the new destination is given, and no scenario here clears or changes a unit's
+      destination while such a delay runs. P25(a, b) additionally reads the retry timer immediately
+      after a walker's failed search/gate and a follower car's computation. It does not infer that
+      timer from a later search decided by another reaction. S-0504 N11 tests the ship's successful
+      fresh-search clearing, failed-search delay, moving-blocker restart and first-check timer
+      exceptions
+    - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated, low
+      for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4). No delay
+      after a walker's failed gate: medium, until P25(a) is run (`unmeasured` after a re-path). The
+      end of a running delay at a cleared or changed destination: medium (`unmeasured`) for the
+      driving and walk locomotors, a driving follower car's included. The carve-outs: low
+      (`unmeasured`) for the ship locomotor and the locomotors other than the driving, walk and
+      hovering locomotors waiting at a changed destination; a harvester's docking offers as S-0402
+      claim 10a rates them, and the hovering locomotor's as S-0503 rates it
 
 22. **Blocked next step (driving, ship and hovering locomotors).** For a unit with the
     driving, ship or hovering locomotor, when the entry
@@ -1708,9 +1733,9 @@ Terms specific to this spec:
 
     | Case | Result |
     |---|---|
-    | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the driving, ship or walk locomotor has its destination cleared, so it stops where it is. For the walk locomotor this holds after a fresh search and after a re-path for a moving blocker, and its movement in progress ends in the same movement update. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
-    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish is given the house-selected destination of claim 23a, provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every player-house unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. Units of the neutral and special houses keep the original's non-human-owner rule; those houses are not AI houses. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
-    | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For locomotors other than driving, ship and hovering, the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. A unit with the ship or hovering locomotor also has its destination cleared, like a unit with the driving locomotor. |
+    | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the driving, ship or walk locomotor has its destination cleared, so it stops where it is. For the walk locomotor this holds after a fresh search and after a re-path for a moving blocker, and its movement in progress ends in the same movement update. For the driving and walk locomotors the clearing ends the retry delay, so none remains; for the ship locomotor the delay runs after a fresh search (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
+    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts, which the clearing of its destination below ends again for the driving and walk locomotors (claim 21). It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish is given the house-selected destination of claim 23a, provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every player-house unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. Units of the neutral and special houses keep the original's non-human-owner rule; those houses are not AI houses. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
+    | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination and with no retry delay (claim 21). For locomotors other than driving, ship and hovering, the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. A unit with the ship or hovering locomotor also has its destination cleared, like a unit with the driving locomotor, but its retry delay *R* keeps running (claim 21). |
 
     The same clearing ends every failed search of a unit with the driving, ship or hovering
     locomotor, so in rows 2 and 3 such a unit is left without a destination, unless its house has
@@ -1740,24 +1765,25 @@ Terms specific to this spec:
     still complete with a non-refusing no-point choice and an update; unequal points
     follow the no-movement-destination arrival cases (S-0503 claim 16).
     - Backing: `measurable` (P3, P4, P7 runs 5, 5b and 6, P8, P11; P7 run 7b for the walk
-      locomotor's fresh search in the gate row; P19 for ship and hovering units in row 3; S-0503
-      H3 and H9
-      for cached arrival-tick travel, H12 and H15
-      for retained movement destinations and the arrival-search outcome distinctions).
-      `unmeasured` for destination retention and restart in row 3 with locomotors other
-      than driving, ship and hovering: no scenario tests those locomotors after this failure,
-      and the rule remains a low-confidence assumption (Open questions). `unmeasured` for the walk
-      locomotor's re-path in the gate row: that row needs a destination that becomes unreachable
-      while a moving blocker holds the walker back, in the tick window before its re-path, and no
-      scenario of this spec times that change. It is rated medium because the original clears the
-      destination at a failed gate after a re-path as it does after a fresh search.
-      `unmeasured` for the end of the walk locomotor's movement in progress in rows 2 and 3: no
-      scenario of this spec observes it, and S-0417 claim 17 relies on it.
-      The neutral/special distinction is our engine's scope rule from the glossary, not an
-      additional oracle claim
-    - Confidence: medium for driving, ship and hovering, and for the walk locomotor in the gate
-      row. Low for the remaining locomotors in row 3, and for the end of the walk locomotor's
-      movement in progress in rows 2 and 3
+      locomotor's fresh search in the gate row; P19 for ship and hovering units in row 3; S-0503 H3
+      and H9 for cached arrival-tick travel, H12 and H15 for retained movement destinations and the
+      arrival-search outcome distinctions). `unmeasured` for destination retention and restart in
+      row 3 with locomotors other than driving, ship and hovering: no scenario tests those
+      locomotors after this failure, and the rule remains a low-confidence assumption (Open
+      questions). `unmeasured` for the walk locomotor's re-path in the gate row: that row needs a
+      destination that becomes unreachable while a moving blocker holds the walker back, in the tick
+      window before its re-path, and no scenario of this spec times that change. It is rated medium
+      because the original clears the destination at a failed gate after a re-path as it does after
+      a fresh search. `unmeasured` for the end of the walk locomotor's movement in progress in rows
+      2 and 3: no scenario of this spec observes it, and S-0417 claim 17 relies on it. That the
+      clearing ends the retry delay for the driving and walk locomotors rests on claim 21 and has
+      its backing: P27's Failure run reads the timer after a driving harvester's failure in row 2,
+      P25(a) after a walker's fresh search in the gate row, and the rest is `unmeasured`. The
+      neutral/special distinction is our engine's scope rule from the glossary, not an additional
+      oracle claim
+    - Confidence: medium for driving, ship and hovering, and for the walk locomotor in the gate row.
+      Low for the remaining locomotors in row 3, and for the end of the walk locomotor's movement in
+      progress in rows 2 and 3. Medium for the clearing ending the retry delay, as claim 21 rates it
 
 23a. **House-selected destination after give-up (Q-0238).** For both the neutral
     and special houses, row 2 assigns the house-selected destination on the same tick as
@@ -2244,23 +2270,30 @@ Terms specific to this spec:
 ### Linked vehicles
 
 26. **Follower cars are sent after the leader.** When a leading vehicle that is not itself a
-    follower car obtains a path with at least one step, each car of its car chain is given, in that tick, a
-    destination: the first car the cell one step back from the leader's destination, against the
-    direction of the last step of the whole path found (not only of its stored part), and each
-    later car the cell one step further back in the same direction. A car whose current destination
-    already lies in that cell is left alone. Any other car queues *move* with that destination and
-    computes its path at once under this spec, with its own reachability gate and search. It does so
-    even while its own retry delay runs (the second exception of claim 21). Afterwards the car's
-    retry delay is as follows: none after a found path, the delay *R* from that tick after a failed
-    search, and unchanged after a failed gate. The last is an exception to claim 21, by which a
-    failed gate after a fresh search starts *R*: the car's computation is not a fresh search. What
-    else follows a failure is claim 23, except that
-    when exactly a drive-locomotor car's destination is cleared after such a failure is not
-    established (Open questions).
-    - Backing: `measurable` only with test data (scenario P9, follower runs 1 to 3). Stock data is
-      not known to link cars. P25(b) tests the car's retry delay immediately after success,
-      failed search and failed gate, without relying on its still-uncertain later failure handling
-    - Confidence: medium (low for the car's retry delay afterwards)
+follower car obtains a path with at least one step, each car of its car chain is given, in that
+tick, a destination: the first car the cell one step back from the leader's destination, against the
+direction of the last step of the whole path found (not only of its stored part), and each later car
+the cell one step further back in the same direction. A car whose current destination already lies
+in that cell is left alone. Any other car queues *move* with that destination and computes its path
+at once under this spec, with its own reachability gate and search. It does so even while its own
+retry delay runs (an exception of claim 21). For a car with the driving or walk locomotor the new
+destination also ends that delay (claim 21), and afterwards its retry delay is none after a found
+path or a failed gate, and the delay *R* from that tick after a failed search, until its destination
+is cleared (claim 21). For a car of any other locomotor, afterwards its retry delay is none after a
+found path, the delay *R* from that tick after a failed search, and unchanged after a failed gate,
+and whether its new destination ends a delay that ran before is not established (Open questions).
+What else follows a failure is claim 23, except that when exactly a driving or walking car's
+destination is cleared after such a failure is not established (Open questions).
+    - Backing: `measurable` only with test data (scenario P9, follower runs 1 and 2). Stock data is
+      not known to link cars. That a running delay does not hold the car back is `unmeasured` here:
+      a driving car's own failed order clears its destination, which ends the delay, so no simple
+      setup leaves one running when the leader sends it, and no scenario here links cars of another
+      locomotor. For a walking car, the rules stated for the driving car follow from claim 21 and
+      are `unmeasured` here for the same reason. P25(b) tests a driving car's retry delay
+      immediately after success, failed search and failed gate, without relying on its
+      still-uncertain later failure handling.
+    - Confidence: medium (low for any car's retry delay afterwards; the rest of a walking car's
+      rules, and a running delay not holding a car back, medium, `unmeasured`)
 
 ### Entry outcomes for a vehicle mover
 
@@ -2332,41 +2365,41 @@ Terms specific to this spec:
     Other occupants and terrain can still refuse entry. Merely reaching the cell
     establishes neither contact nor unloading (S-0402 claims 10 and 10a).
 
-    Once there without contact, the harvester may remain at rest until an order,
-    its standing behaviour or a general scatter rule moves it. Pathfinding does not
-    evict it just because another harvester reserves the dock. A contacting harvester driving
-    onto the cell can send it a scatter request; that is S-0207 claim 15's movement rule,
-    not an eviction by pathfinding (S-0402 claim 10a; Q-1870). A field destination
-    supplied by S-0402 claim 3a uses the ordinary route rules: the departure cell's
-    docking role adds no forbidden exit direction and does not require dock ownership.
-    Destination changes and movement start use claims 20 and 21, including any
-    running retry delay. The harvester need not be able to re-enter its departure
-    cell for a route out of it to be found.
+    Once there without contact, the harvester may remain at rest until an order, its standing
+    behaviour or a general scatter rule moves it. Pathfinding does not evict it just because another
+    harvester reserves the dock. A contacting harvester driving onto the cell can send it a scatter
+    request; that is S-0207 claim 15's movement rule, not an eviction by pathfinding (S-0402 claim
+    10a; Q-1870). A field destination supplied by S-0402 claim 3a uses the ordinary route rules: the
+    departure cell's docking role adds no forbidden exit direction and does not require dock
+    ownership. Destination changes and movement start use claims 20 and 21: a new destination ends a
+    running retry delay. The harvester need not be able to re-enter its departure cell for a route
+    out of it to be found.
 
     | Departure-route result | Driving harvester's result |
     |---|---|
     | Route found | Follows the stored route under S-0207 claim 15; later blocked steps use that claim and claim 22 here, not a harvest-specific timeout. |
-    | Reachability gate fails | Destination cleared; no behaviour queued by pathfinding; fresh-search retry delay as in claims 21 and 23. |
-    | Search fails, destination more than 1 cell away in Chebyshev distance, or the bridge condition of claim 23 holds | Destination cleared and *guard* queued for every player-house harvester in our engine; retry delay starts. Claim 23 owns the original's non-human-owner exception. |
-    | Search fails otherwise | Destination cleared and retry delay starts, but pathfinding queues no behaviour (claim 23). |
+    | Reachability gate fails | Destination cleared; no behaviour queued by pathfinding; the clearing leaves no retry delay (claims 21 and 23). |
+    | Search fails, destination more than 1 cell away in Chebyshev distance, or the bridge condition of claim 23 holds | Destination cleared and *guard* queued for every player-house harvester in our engine; the clearing leaves no retry delay. Claim 23 owns the original's non-human-owner exception. |
+    | Search fails otherwise | Destination cleared, which leaves no retry delay, and pathfinding queues no behaviour (claim 23). |
 
-    Expiry of the retry delay, or a blocker leaving, does not itself restore a cleared
-    field destination or resume *harvest*. Another movement attempt requires a
-    destination supplied by an order or by behaviour processing. If *harvest*
-    remains current, its next seeking processing may supply one under S-0402
-    claim 3a; if it has ended, that seeking rule does not restart it. Reoffering a
-    destination still obeys claim 21's retry delay and its stated exceptions. A
-    contacting harvester's repeated docking offers are a separate case, owned by
+    A blocker leaving does not itself restore a cleared field destination or resume *harvest*.
+    Another movement attempt requires a destination supplied by an order or by behaviour
+    processing. If *harvest* remains current, its next seeking processing may supply one under
+    S-0402 claim 3a; if it has ended, that seeking rule does not restart it. A reoffered
+    destination is searched without a wait, since a new destination ends a running retry delay
+    (claim 21). A contacting harvester's repeated docking offers are a separate case, owned by
     S-0402 claim 10a, not evidence of automatic retries by this non-contact occupant.
-    - Backing: `measurable` (P27 for entry and resting persistence; S-0402 H20 for the harvest
-      and docking exchange, its part e for the rest after a stop order). The failure reactions
-      in the table are claim 23's and carry its backing. `unmeasured` for the rest after a
-      give-up from the docking cell: no setup is known that is sure to give a departure from the
-      docking cell that gives up (S-0402 claim 3a)
-    - Confidence: high for no docking-specific route restriction; the failure reactions as
-      claim 23 rates them; medium for entry and resting persistence pending P27; medium for the
-      rest after a stop order pending S-0402 H20 part e, and for the rest after a give-up; the
-      contacting harvester's scatter request and its results as S-0402 claim 10a rates them (low)
+    - Backing: `measurable` (P27 for entry and resting persistence; S-0402 H20 for the harvest and
+      docking exchange, its part e for the rest after a stop order). The failure reactions in the
+      table are claim 23's and carry its backing. `unmeasured` for the rest after a give-up from the
+      docking cell: no setup is known that is sure to give a departure from the docking cell that
+      gives up (S-0402 claim 3a). `unmeasured` for a reoffered destination searched without a wait,
+      as claim 21 rates a new destination's end of a running delay
+    - Confidence: high for no docking-specific route restriction; the failure reactions as claim 23
+      rates them; medium for entry and resting persistence pending P27; medium for the rest after a
+      stop order pending S-0402 H20 part e, and for the rest after a give-up; the contacting
+      harvester's scatter request and its results as S-0402 claim 10a rates them (low); medium
+      (`unmeasured`) for a reoffered destination searched without a wait
 
 ## Formulas
 
@@ -2612,7 +2645,7 @@ south and west.
 | stored path, driving or ship locomotor | next step *moving blocker* | blockage timer starts if not running. When the retry delay is over, re-path in mode 1, or 2 once the blockage timer has run out |
 | stored path, driving or ship locomotor | first check of the track's first cell: outcome *blocked* | stored path cleared, fresh search on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 22) |
 | stored path, walk locomotor | next step of any outcome other than *clear* | reacts as S-0209 claims 7 to 10 say, with the delays of claim 21 |
-| any | destination changes | stored path cleared, fresh search, which waits for a running retry delay like any fresh search (claims 20 and 21). For the walk locomotor claim 21 settles it: a new destination does not cut the delay short. For the other locomotors this spec applies the same rule, at low confidence (`unmeasured`, Open questions) |
+| any | destination changes | stored path cleared, fresh search. For the driving and walk locomotors, a change to a different destination ends a running retry delay, so the search is not held back (claim 21), except for a harvester's offer of its docking cell (S-0402 claim 10a). For the ship locomotor and the locomotors other than the driving, walk and hovering locomotors, the search waits for a running delay like any fresh search (claims 20 and 21; a follower car sent by its leader computes at once instead, claim 26), at low confidence (`unmeasured`, Open questions). For the hovering locomotor, S-0503 gives whether it waits |
 
 Ordering consequences:
 - A search made after the only enabled bridge connection is destroyed, even later in the same
@@ -3472,35 +3505,30 @@ acquisition, not a path computation's gate or subsequent route search.
     gives it no new destination.
   - Falsified if: it keeps driving to the river bank and waits there, or it searches and gives up
     with the team exit of claim 23.
-- **P9 (claims 9, 16, 18, 20, 21, 26, 27): tunnels, trains and follower cars (test data).**
+- **P9 (claims 9, 16, 18, 20, 26, 27): tunnels, trains and follower cars (test data).**
   - Setup: named test map containing a tunnel in its tunnel list, a test vehicle type marked as a
     train (override section), and a leading vehicle with two follower cars linked in the map's
     vehicle section.
   - Procedure: order a vehicle to a cell beyond the tunnel. Train runs 1 to 3: the train type stands
     at (*x*, *y*) on open clear ground with no other object within 8 cells, facing map north. Order
-    it onto (*x*, *y* + 1), the cell straight behind it (run 1), onto (*x*, *y* + 6) (run 2) and onto
-    (*x* + 2, *y* + 6) (run 3), placed afresh for each run. Train run 4: as runs 1 to 3, except for
-    wall sections of the human house on (*x* − 2, *y*), (*x* − 1, *y*), (*x* + 1, *y*), (*x*, *y* + 2)
-    and (*x*, *y* + 3); order the train onto (*x* + 1, *y* + 4). Order the leading vehicle to a cell 10 cells away in a straight line along +x, and in a
-    second run to a cell 10 cells along +x and 4 along +y. Train refresh run: on the map of P5
-    run 4 without the three friendly vehicles, with a construction yard (a building that produces
-    buildings) of the human house beside the route, order the train type 30 cells straight north
-    from (*x*, *y*), facing north. Before it
-    has taken 20 steps, build three wall sections of the human house on (*x* − 1, *y*₂₅), (*x*, *y*₂₅)
-    and (*x* + 1, *y*₂₅) (*y*₂₅ as in P5). Repeat the train refresh run with an ordinary vehicle
-    type, not a train, as control. Both the train type and the control type are vehicle types
-    without a weapon (a test override removes it if needed), neither marked as a crusher nor of
-    movement zone *crusher-all*, so that the wall sections give both of them outcome *blocked*
-    (claim 27). Follower run 3: a test override sets the path-retry delay to a value *P* with
-    trunc(*P* × 900) = 9000 ticks. First order the first follower car alone onto a cell of a small
-    island that water separates from it: its fresh search fails the gate, so its retry delay of 9000
-    ticks runs (claim 21). 100 ticks later, order the leading vehicle 10 cells along +x as in the
-    first run.
-  - Observable: whether the tunnel is used, the cells the train enters in train runs 1 to 4 and
-    the tick its destination is cleared in run 1, the destinations and final cells of the two
-    follower cars. Train refresh run: the cells entered from
-    row 23 on, and whether the stored path is emptied by a refused step (recorder). Follower run 3:
-    the tick at which the first car starts to move after the leader's order.
+    it onto (*x*, *y* + 1), the cell straight behind it (run 1), onto (*x*, *y* + 6) (run 2) and
+    onto (*x* + 2, *y* + 6) (run 3), placed afresh for each run. Train run 4: as runs 1 to 3, except
+    for wall sections of the human house on (*x* − 2, *y*), (*x* − 1, *y*), (*x* + 1, *y*), (*x*,
+    *y* + 2) and (*x*, *y* + 3); order the train onto (*x* + 1, *y* + 4). Order the leading vehicle
+    to a cell 10 cells away in a straight line along +x, and in a second run to a cell 10 cells
+    along +x and 4 along +y. Train refresh run: on the map of P5 run 4 without the three friendly
+    vehicles, with a construction yard (a building that produces buildings) of the human house
+    beside the route, order the train type 30 cells straight north from (*x*, *y*), facing north.
+    Before it has taken 20 steps, build three wall sections of the human house on (*x* − 1, *y*₂₅),
+    (*x*, *y*₂₅) and (*x* + 1, *y*₂₅) (*y*₂₅ as in P5). Repeat the train refresh run with an
+    ordinary vehicle type, not a train, as control. Both the train type and the control type are
+    vehicle types without a weapon (a test override removes it if needed), neither marked as a
+    crusher nor of movement zone *crusher-all*, so that the wall sections give both of them outcome
+    *blocked* (claim 27).
+  - Observable: whether the tunnel is used, the cells the train enters in train runs 1 to 4 and the
+    tick its destination is cleared in run 1, the destinations and final cells of the two follower
+    cars. Train refresh run: the cells entered from row 23 on, and whether the stored path is
+    emptied by a refused step (recorder).
   - Map layout for the tunnel: an overland route of *n* clear straight steps, and a tunnel route of
     *a* clear straight steps to the entrance, a tunnel of Chebyshev length *t* and *e* clear straight
     steps after the exit, chosen so that *n* − (*a* + *t* + *e*) = 2.
@@ -3512,42 +3540,38 @@ acquisition, not a path computation's gate or subsequent route search.
     destination is cleared in the tick of the order's path computation (claim 23, row 3). Train run
     2: the search finds the step directions 2, 3, 5, 5, 4, 4, 4 (Terms: 2 is east, 3 south-east, 4
     south, 5 south-west), 7 steps for a Chebyshev distance of 6. Claim 17 flattens the pair 3, 5 to
-    4, 4, and claim 18 shortens the opening 2, 4 to a single step 3. The
-    train enters 6 cells: (*x* + 1, *y* + 1), (*x* + 1, *y* + 2), (*x*, *y* + 3), (*x*, *y* + 4),
-    (*x*, *y* + 5), (*x*, *y* + 6). Train run 3: the search finds 2, 3, 4, 4, 4, 4, 4, and claim 18
-    shortens the opening 2, 3, 4 to 3, 3. The train enters 6 cells: (*x* + 1, *y* + 1),
-    (*x* + 2, *y* + 2), then (*x* + 2, *y* + 3) to (*x* + 2, *y* + 6). Train run 4: the search
-    finds 1, 3, 4, 5, 4, 4; claim 17 leaves it, because flattening the pair 1, 3 would enter the
-    wall cell (*x* + 1, *y*); and claim 18 gives 3, 4, 4, 4 (claim 18, example (a)). The train
-    enters 4 cells: (*x* + 1, *y* + 1) to (*x* + 1, *y* + 4). In runs 2 to 4 the first cell entered
-    lies behind the train (claim 16: the exclusion holds for the search only). No exact tie of *f*
-    arises in these searches. The cars end on the cells 1 and 2 steps back
-    from the leader's destination against the direction of the last step of the leader's path: along
-    −x in the first run, and in the second run against whatever the last step of the found path is
-    (which a reference implementation of claims 7 to 18 gives for the map). Follower run 3: the first
-    car is given its destination and computes its path in the tick of the leader's path computation,
-    although its own retry delay still has about 8900 ticks to run, so it starts to move within a few
-    ticks of the leader. Train refresh run: the walls give outcome *blocked* (claim 27), the only
-    outcome a train's search avoids (claim 8). The control
-    behaves as in P5 run 4: as it begins the step from row 23 to (*x*, row 24) it computes a new path
-    from row 23, whose first step is diagonal to (*x* + 1, row 24). It still takes the old step and
-    then the new path's second step, diagonal towards (*x* + 1, row 25), a wall cell: that step is
-    refused, its stored path is emptied and a fresh search follows (claim 22). The train computes its
-    new path from (*x*, row 24), where the step in progress leads, and keeps that step: from
-    (*x*, row 24) it steps sideways and passes the walls without a refused step.
+    4, 4, and claim 18 shortens the opening 2, 4 to a single step 3. The train enters 6 cells: (*x*
+    + 1, *y* + 1), (*x* + 1, *y* + 2), (*x*, *y* + 3), (*x*, *y* + 4), (*x*, *y* + 5), (*x*, *y* +
+    6). Train run 3: the search finds 2, 3, 4, 4, 4, 4, 4, and claim 18 shortens the opening 2, 3, 4
+    to 3, 3. The train enters 6 cells: (*x* + 1, *y* + 1), (*x* + 2, *y* + 2), then (*x* + 2, *y* +
+    3) to (*x* + 2, *y* + 6). Train run 4: the search finds 1, 3, 4, 5, 4, 4; claim 17 leaves it,
+    because flattening the pair 1, 3 would enter the wall cell (*x* + 1, *y*); and claim 18 gives 3,
+    4, 4, 4 (claim 18, example (a)). The train enters 4 cells: (*x* + 1, *y* + 1) to (*x* + 1, *y* +
+    4). In runs 2 to 4 the first cell entered lies behind the train (claim 16: the exclusion holds
+    for the search only). No exact tie of *f* arises in these searches. The cars end on the cells 1
+    and 2 steps back from the leader's destination against the direction of the last step of the
+    leader's path: along −x in the first run, and in the second run against whatever the last step
+    of the found path is (which a reference implementation of claims 7 to 18 gives for the map).
+    Train refresh run: the walls give outcome *blocked* (claim 27), the only outcome a train's
+    search avoids (claim 8). The control behaves as in P5 run 4: as it begins the step from row 23
+    to (*x*, row 24) it computes a new path from row 23, whose first step is diagonal to (*x* + 1,
+    row 24). It still takes the old step and then the new path's second step, diagonal towards (*x*
+    + 1, row 25), a wall cell: that step is refused, its stored path is emptied and a fresh search
+    follows (claim 22). The train computes its new path from (*x*, row 24), where the step in
+    progress leads, and keeps that step: from (*x*, row 24) it steps sideways and passes the walls
+    without a refused step.
   - Falsified if: the vehicle drives overland (which would mean the entrance, or the tunnel step,
     costs more than claim 9 says), the train of run 1 reaches its destination by any route (claim
-    16), the train of run 2, 3 or 4 enters other cells than expected (7 or more cells in run 2 or
-    3 would mean that claim 18 does not shorten a detour at the start of a path, or that a stored
+    16), the train of run 2, 3 or 4 enters other cells than expected (7 or more cells in run 2 or 3
+    would mean that claim 18 does not shorten a detour at the start of a path, or that a stored
     first step cannot enter the cells the search excluded; in run 4, the 5 cells (*x* + 1, *y* + 1),
     (*x* + 2, *y* + 1), (*x* + 1, *y* + 2), (*x* + 1, *y* + 3), (*x* + 1, *y* + 4) would contradict
-    `quirks.detour_mirrored_reference`, and any other sequence the stretch selection of claim 18), or the cars' cells differ from the
-    expectation. In follower run 3, the first car stays where it is until its retry delay has run
-    out (which would mean a car's computation waits for the delay like a fresh search). In the train
-    refresh run, the train's stored path is emptied by a refused step into a wall cell
-    (which would mean a train drops a step like other vehicles). If the control shows no refused
-    step either, `quirks.path_refresh_keeps_old_step` is contradicted (P5 run 4) and the train
-    refresh run says nothing about trains.
+    `quirks.detour_mirrored_reference`, and any other sequence the stretch selection of claim 18),
+    or the cars' cells differ from the expectation. In the train refresh run, the train's stored
+    path is emptied by a refused step into a wall cell (which would mean a train drops a step like
+    other vehicles). If the control shows no refused step either,
+    `quirks.path_refresh_keeps_old_step` is contradicted (P5 run 4) and the train refresh run says
+    nothing about trains.
 - **P10 (claim 13): threat avoidance.**
   - Setup: test override giving a vehicle type a threat coefficient of 1.0, and an otherwise equal
     type with 0, both of the human house. Two routes from the start to a goal, separated by
@@ -4121,27 +4145,27 @@ recorder as P6, including scripted input and tick-by-tick retry/blockage timer r
 The timer's remaining ticks are the observable: a later movement reaction is not its proxy.
 - (a) Place a walker next to a tile with zero foot multiplier but a passable category and no
   building, so a passed-gate search has no positive-length path under claim 15. Give the move
-  through a team script if targeting substitutes the destination. Control: a destination on
-  an isolated island, for a failed gate. Set retry delay to 0.1 game minutes, giving 90 ticks.
-  One qualifying search of each kind. Expected: on each computation tick the walker's timer
-  is restarted to 90 ticks, even if its destination is cleared afterwards. A different
-  duration/start tick falsifies claim 21's walker-failure rule. A targeting substitution or
-  no computation voids the run.
-- (b) P9's leader and follower, with retry delay 90 ticks. Choose the leader's last-step
-  direction and destination so the first follower's derived destination is separately:
-  a free reachable cell, a blocked cell beside the car that passes the gate but yields no
-  positive-length path, or an isolated reachable-by-leader cell in a different reach region
-  from the car. In the last case ensure the car already has a nonzero running retry delay,
-  by its own earlier failed order. Record its timer immediately before and after the
-  computation triggered by the leader; one qualifying run per case. Expected: success leaves
-  no delay, search failure starts 90 ticks on that tick, gate failure keeps the existing
-  countdown (apart from its ordinary tick decrement). Any other timer transition falsifies
-  claim 26's rule. A leader with no found path, an unchanged follower destination, or no
-  follower computation voids the run. No assumption about when its destination later clears
-  is made. Named type overrides may give the leader an amphibious zone while its car has
-  a normal zone for the failed-gate fixture, or different locomotion classes for the
-  passed-gate blocked-tile fixture. Qualify the derived destination and actual gate result
-  from the recorded state, not from these type differences alone.
+  through a team script if targeting substitutes the destination. Control: a destination on an
+  isolated island, for a failed gate. Set retry delay to 0.1 game minutes, giving 90 ticks. One
+  qualifying search of each kind. Expected: after the passed-gate search the walker keeps its
+  destination and its timer reads 90 ticks from that computation tick. After the failed gate its
+  destination is cleared and its timer has run out at the end of that tick (claim 21). A different
+  duration or start tick, or a running timer after the failed gate, falsifies claim 21's
+  walker-failure rule. A targeting substitution or no computation voids the run.
+- (b) P9's leader and follower, with retry delay 90 ticks. Choose the leader's last-step direction
+  and destination so the first follower's derived destination is separately: a free reachable cell,
+  a blocked cell beside the car that passes the gate but yields no positive-length path, or an
+  isolated reachable-by-leader cell in a different reach region from the car. Record its timer and
+  destination immediately before and after the computation triggered by the leader; one qualifying
+  run per case. Expected: success leaves no delay and gate failure leaves no delay. Search failure
+  leaves 90 ticks from that tick, or no delay where the recorder shows the car's destination already
+  cleared at the reading after the computation, since claim 26 leaves the timing of that clearing
+  open. Any other timer transition falsifies claim 26's rule. A leader with no found path, an
+  unchanged follower destination, or no follower computation voids the run. No assumption about when
+  its destination later clears is made. Named type overrides may give the leader an amphibious zone
+  while its car has a normal zone for the failed-gate fixture, or different locomotion classes for
+  the passed-gate blocked-tile fixture. Qualify the derived destination and actual gate result from
+  the recorded state, not from these type differences alone.
 - (c) Repeat P14's lane fixture with blockage delay shortened enough to expire while the
   blocker still has at least four stored steps. Use a same-type blocker in one run and a
   faster different-type blocker in another, neither qualifying in mode 1. Record a search
@@ -4226,23 +4250,22 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   Refused entry when the ordinary entry table permits it falsifies the absence
   of an additional docking restriction. If no qualifying entry exists, the test
   is inconclusive, not evidence that every docking cell is enterable.
-- Departure: in three qualifying runs, issue harvest with a clear route to the
-  resource field. Expected: A gets a field destination and leaves without taking
-  B's contact. Its first route attempt obeys any running retry timer. A refused
-  departure solely because B holds the dock falsifies the claim.
-- Failure: repeat with a purpose-made map placing the resource field more than
-  1 cell away in the same reach region but behind an unbroken building barrier.
-  Qualify only runs in which A receives that field destination, no nearby
-  substitution changes it and the search actually fails. Expected on the failure
-  tick: destination cleared, retry delay R of F3 started and *guard* queued.
-  Remove the barrier after *guard* becomes current, then observe for R + 300 ticks
-  without an order. Timer expiry alone does not restart the route or harvest.
-  Give a fresh harvest order; a new destination can now produce a route.
-  Retaining the failed destination, omitting queued *guard*, or restoring that
-  destination solely on timer expiry falsifies the stated failure reaction.
-  Record three qualifying runs; inability to obtain the failed-search fixture
-  leaves this part inconclusive. Gate failure and failures within 1 cell retain
-  the discriminating tests of P4 and P19, not this distant-search expectation.
+- Departure: in three qualifying runs, issue harvest with a clear route to the resource field.
+  Expected: A gets a field destination and leaves without taking B's contact. Its first route
+  attempt is not held back by a running retry timer (claims 21 and 27a). No run here starts that
+  attempt while a timer runs, so the timer is not judged. A refused departure solely because B holds
+  the dock falsifies the claim.
+- Failure: repeat with a purpose-made map placing the resource field more than 1 cell away in the
+  same reach region but behind an unbroken building barrier. Qualify only runs in which A receives
+  that field destination, no nearby substitution changes it and the search actually fails.
+  Expected on the failure tick: destination cleared, no retry delay left and *guard* queued.
+  Remove the barrier after *guard* becomes current, then observe for 300 ticks without an
+  order. Nothing restarts the route or harvest in that time. Give a fresh harvest order; a new
+  destination can now produce a route. Retaining the failed destination, omitting queued *guard*,
+  or restoring that destination without an order falsifies the stated failure reaction. Record
+  three qualifying runs; inability to obtain the failed-search fixture leaves this part
+  inconclusive. Gate failure and failures within 1 cell retain the discriminating tests of P4 and
+  P19, not this distant-search expectation.
 
 ### P28: Aircraft landing footprints and ties (claim 25a)
 
@@ -4600,8 +4623,9 @@ proposed recorder runs, not completed measurements.
   moment decides when a moving vehicle's or infantry unit's threat moves to another threat block
   (claim 16a; P30 part e records both). For an aircraft the moments are stated (claims 13 and
   16a, rated medium): placement on the ground and landing.
-- When exactly a drive-locomotor follower car's destination is cleared after its computation of
-  claim 26 fails (at once, or only at the car's next path computation) is not established.
+- When exactly the destination of a follower car with the driving or walk locomotor is cleared after
+  its computation of claim 26 fails (at once, or only at the car's next path computation) is not
+  established.
 - Whether, after a local change (claim 5), the original's result can ever differ from a full
   recomputation for the new map content (for example when the change splits a region) is not
   settled.
@@ -4628,8 +4652,14 @@ proposed recorder runs, not completed measurements.
   applies them in both.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
-- For locomotors other than walking, whether a new destination clears a running retry delay
-  (claim 21) is not established. The state table applies the walk locomotor's rule to them.
+- For the ship and hovering locomotors and every locomotor other than the driving and walk
+  locomotors, whether clearing a unit's destination, or changing it to a different one, ends a
+  running retry delay (claim 21) is not established. For the hovering locomotor the destination
+  meant is the order-level one, and a person's stop is excepted (S-0503 claim 16). This spec keeps
+  the delay running for them, and for the hovering locomotor leaves it to S-0503. Whether a
+  harvester's offer of its docking cell ends a running delay is not established either, and S-0402
+  claim 10a keeps the delay running. For every locomotor, whether giving a unit the destination it
+  already holds ends the delay is not established; this spec keeps the delay running.
 - Which alignments of a straight strip of ground the unit cannot enter fail, and whether lengths
   3, 5, 7 and 9 of such a strip, and of a ledge, behave as P12 run T expects (see the strip entry in
   Edge cases and quirks): not established until run T is run. That lines of buildings (P12 run S,
