@@ -1,9 +1,9 @@
 ---
 id: Q-2566
 title: The infantry firing state that S-0215 claim 11's "in the middle of firing" reads, where it begins and where it ends
-status: open
+status: answered
 related: [S-0215, S-0107, S-0513, S-0301]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
