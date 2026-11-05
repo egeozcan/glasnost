@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 104
+revision: 115
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-05
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566]
 supersedes: []
 ---
 
@@ -389,6 +389,11 @@ Terms used by this spec:
   S-0301 (claim 9), which owns the check, which situations give which answer and the precedence
   among them; S-0214 and the other combat specs give the answers of their own topics. This spec
   uses only the category: claim 32 says what a building in *attack* does with each one.
+- **Firing turn, in the middle of firing:** an infantry unit's *firing turn* is the part of each
+  of its updates, after both of its per-tick starts (claim 11), in which S-0107 claim 11's firing
+  rules apply: the entry to the attack state, the shot at the fire frame and that claim's endings
+  at the fire frame and with no target. An infantry unit is *in the middle of firing* while it is
+  in S-0107 claim 11's attack state. Claim 11 here gives where that state begins and ends.
 - **Armed:** as S-0214 (Terms) defines it: the actor has a weapon in the weapon slot it currently
   uses (its first slot, or, for a type that switches between weapons, the current one). A building
   that holds occupants and whose type lets them fire from inside also counts as armed. Every rule
@@ -989,67 +994,70 @@ Terms used by this spec:
       the list of users)
 
 11. **Ready to change, and the per-tick start.** On each tick on which its update runs, an infantry
-    unit, vehicle or building that is ready to change and has a behaviour queued makes it current
-    by a start-next, its **first per-tick start**. The behaviour that this start makes current is the one
-    processed on that tick (claim 3a). For a building this start also needs the building to have
+    unit, vehicle or building that is ready to change and has a behaviour queued makes it current by
+    a start-next, its **first per-tick start**. The behaviour that this start makes current is the
+    one processed on that tick (claim 3a). For a building this start also needs the building to have
     left its construction state. A building also has a second per-tick start on the same tick,
     without the construction-state condition, which sees the ready mark as that tick's processing
     has left it; a behaviour that the second start makes current is not the one processed on that
-    tick, and is first processed on the next tick (claim 3b); see the building rule below.
-    Infantry and vehicles also have a **late start**, a further ready-and-start chance in the same
-    update, judged with the movement state that update has left. It makes current a queued behaviour
-    of a unit that is then ready under the readiness rules below. For a driving vehicle,
-    the test is the current predicate below, not a remembered indication that it displaced
-    earlier in the update. For an infantry unit the "in the middle of firing" test reads the
-    firing state that earlier updates left and does not see the ordinary firing check of this update.
-    No readiness condition of a vehicle depends on its firing or turret turning. A vehicle's body
-    turning is different: see "moving" in the vehicle rules below.
-    A behaviour made current there is processed as claim 3b states for a start after the actor's
-    processing (on the unit's next update). It is a per-tick start for claim 2's exclusions: it takes
-    no effect on a tunnel, erasing or leaving-stage tick, and in our engine none on a tick that
-    S-0513 claim 51 suppresses it. The behaviour current at the end of an update is the one that the
-    late start leaves; the drop rule and the per-tick search of claim 33 on that tick judged
-    the behaviour as processing left it, before the late start, and so never see a behaviour made
-    current late. After the expiry update of a berserk unit (S-0610 claim 5), for example, a queued
-    *guard* can become current at the late start, but nothing of it (search, hold, processing) happens
-    before the unit's next update. Unless something changes the unit's readiness, its slots or its orders between the late
-    start and the unit's next update, either start gives the same behaviour for processing
-    on that next update. The late start nevertheless has an earlier start tick and changes
-    the current behaviour that a recorder or an actor updating later in the same tick can read. A building and
-    an aircraft do not have a late start; buildings have the second start above and aircraft
-    the end-of-update start below. No quirk switch: it is the original's order, not a defect.
-    Backing for the late start. (i) The expiry-update instance of a berserk unit that is infantry,
-    moving, and ready: `measurable` by B46 below, which reads the current and queued behaviour after
-    the last update of the expiry tick. (ii) An otherwise-ready vehicle whose due *move*
-    processing queues ordinary rest: `measurable` by B3 e, which distinguishes the queue at
-    processing exit from the current behaviour at update end. (iii) Other late-start
-    queued-behaviour cases remain `unmeasured` here: no isolated setup is established for
-    their particular combination of readiness changes and queueing. B47 instead tests a driving
-    vehicle's first start at the tick-based end of a body turn, not a turn-end late start.
-    The empty-slot fall-back to rest below has its own backing. In the unchanged case
-    the queued behaviour is also made current by the next update's first start before it is processed,
-    so the only difference is its earlier start tick and the state observable between those
-    starts, for example by actors updating later in the same tick or by a recorder at update end.
-    Confidence: medium (that readiness reads the movement state this
-    update leaves, and for infantry the firing state that earlier updates left; the position
-    relative to a vehicle's firing and turret turning is not observable and is not asserted).
-    Aircraft have a per-tick start after their processing and movement, not before processing:
-    a behaviour made current there is first processed on a later tick (claim 3b). S-0501 claim 31
-    also permits a ready aircraft to start its queued behaviour during its locomotor's step,
-    while alive and neither landing nor taking off, without a height test, and at the end of
-    an ordinary fall-back to rest. The early exits of S-0501 claim 18 do not reach that last
-    opportunity. S-0501 claim 31 owns all three aircraft start points. An infantry unit that
-    is ready to change and has neither a current nor a queued behaviour falls back to rest (claims
-    13 and 14) at its first per-tick start, and the behaviour that this fall-back queues, if any,
-    becomes current at that same start. The late start does the same: an infantry unit that is ready
-    at the late start with neither a current nor a queued behaviour falls back to rest in that same
-    update, and the behaviour that the fall-back queues, if any, becomes current at that same late
-    start, so a recorder reading after the update sees it current (not queued, and not deferred to
-    the next update). That update's firing check sees the state the fall-back leaves. Like any late
-    start it is not processed until the unit's next update. Backing: `unmeasured`; no setup is
-    known that leaves an infantry unit ready with both slots empty at the late start of a chosen
-    update (claim 22's fall-back happens inside a processing, which leaves a behaviour current or
-    queued, and a newly created actor is the only case that starts with none), so the claim cannot be observed without
+    tick, and is first processed on the next tick (claim 3b); see the building rule below. Infantry
+    and vehicles also have a **late start**, a further ready-and-start chance in the same update,
+    judged with the movement state that update has left. It makes current a queued behaviour of a
+    unit that is then ready under the readiness rules below. For a driving vehicle, the test is the
+    current predicate below, not a remembered indication that it displaced earlier in the update.
+    For an infantry unit, the first start's "in the middle of firing" test (Terms) sees the attack
+    state as earlier updates, the orders applied since and other actors' turns left it. The late
+    start also sees the endings that this update's processing, its per-tick search (claim 33) and
+    its stage-delay-0 test make. Neither start sees this update's firing turn, which comes after
+    both. No readiness condition of a vehicle depends on its firing or turret turning. A vehicle's
+    body turning is different: see "moving" in the vehicle rules below. A behaviour made current
+    there is processed as claim 3b states for a start after the actor's processing (on the unit's
+    next update). It is a per-tick start for claim 2's exclusions: it takes no effect on a tunnel,
+    erasing or leaving-stage tick, and in our engine none on a tick that S-0513 claim 51 suppresses
+    it. The behaviour current at the end of an update is the one that the late start leaves; the
+    drop rule and the per-tick search of claim 33 on that tick judged the behaviour as processing
+    left it, before the late start, and so never see a behaviour made current late. After the expiry
+    update of a berserk unit (S-0610 claim 5), for example, a queued *guard* can become current at
+    the late start, but nothing of it (search, hold, processing) happens before the unit's next
+    update. Unless something changes the unit's readiness, its slots or its orders between the late
+    start and the unit's next update, either start gives the same behaviour for processing on that
+    next update. The late start nevertheless has an earlier start tick and changes the current
+    behaviour that a recorder or an actor updating later in the same tick can read. A building and
+    an aircraft do not have a late start; buildings have the second start above and aircraft the
+    end-of-update start below. No quirk switch: it is the original's order, not a defect. Backing
+    for the late start. (i) The expiry-update instance of a berserk unit that is infantry, moving,
+    and ready: `measurable` by B46 below, which reads the current and queued behaviour after the
+    last update of the expiry tick. (ii) An otherwise-ready vehicle whose due *move* processing
+    queues ordinary rest: `measurable` by B3 e, which distinguishes the queue at processing exit
+    from the current behaviour at update end. (iii) An infantry unit's late start after the
+    stage-delay-0 ending of its attack state (the infantry rule below): `measurable` by B45 run c2.
+    (iv) Other late-start queued-behaviour cases remain `unmeasured` here: no isolated setup is
+    established for their particular combination of readiness changes and queueing. B47 instead
+    tests a driving vehicle's first start at the tick-based end of a body turn, not a turn-end late
+    start. The empty-slot fall-back to rest below has its own backing. In the unchanged case the
+    queued behaviour is also made current by the next update's first start before it is processed,
+    so the only difference is its earlier start tick and the state observable between those starts,
+    for example by actors updating later in the same tick or by a recorder at update end.
+    Confidence: medium (that readiness reads the movement state this update leaves, and for infantry
+    the attack state at the points that the infantry rule below gives; the position relative to a
+    vehicle's firing and turret turning is not observable and is not asserted). Aircraft have a
+    per-tick start after their processing and movement, not before processing: a behaviour made
+    current there is first processed on a later tick (claim 3b). S-0501 claim 31 also permits a
+    ready aircraft to start its queued behaviour during its locomotor's step, while alive and
+    neither landing nor taking off, without a height test, and at the end of an ordinary fall-back
+    to rest. The early exits of S-0501 claim 18 do not reach that last opportunity. S-0501 claim 31
+    owns all three aircraft start points. An infantry unit that is ready to change and has neither a
+    current nor a queued behaviour falls back to rest (claims 13 and 14) at its first per-tick
+    start, and the behaviour that this fall-back queues, if any, becomes current at that same start.
+    The late start does the same: an infantry unit that is ready at the late start with neither a
+    current nor a queued behaviour falls back to rest in that same update, and the behaviour that
+    the fall-back queues, if any, becomes current at that same late start, so a recorder reading
+    after the update sees it current (not queued, and not deferred to the next update). That
+    update's firing turn sees the state the fall-back leaves. Like any late start it is not
+    processed until the unit's next update. Backing: `unmeasured`; no setup is known that leaves an
+    infantry unit ready with both slots empty at the late start of a chosen update (claim 22's
+    fall-back happens inside a processing, which leaves a behaviour current or queued, and a newly
+    created actor is the only case that starts with none), so the claim cannot be observed without
     inventing one; confidence medium. An infantry unit that completes a capture or hijack is
     consumed in that update, so no observable depends on whether the late start follows.
 
@@ -1064,6 +1072,61 @@ Terms used by this spec:
       *rescue*; it is in the middle of firing; it is falling (for example from a parachute); it is
       moving on this tick while its current behaviour is not *guard* or *hunt* and is not *attack*
       without a target; or its current sequence (S-0107) is a kind that is not interruptible.
+      **In the middle of firing** (Terms) is S-0107 claim 11's attack state and nothing else. The
+      rearm countdown (S-0301), a firing kind that is still playing and a shot in flight do not
+      hold readiness back by themselves.
+      - *Begins* in the unit's firing turn on a tick on which it has a target, is not in the
+        attack state and its firing check answers *can fire*, with S-0107 claim 11's request
+        for a firing kind. It begins whether that request is taken or turned down (for example
+        because the kind requested is the one already current), and with the airstrike reset in
+        place of a request. It does not wait for the shot.
+      - *Ends at the shot.* When the weapon fires at the fire frame *F*, the attack state ends
+        with that shot, in the same firing turn. With *F* = 0, when the request is taken, it
+        begins and ends in one firing turn, so no per-tick start sees it.
+      - *Other endings* are S-0107 claim 11's, each at its own point:
+        - a fire frame at which the firing check does not answer *can fire*, and no target at
+          the firing turn: in the firing turn, so both starts of that update still see the
+          state.
+        - a current sequence whose stage delay is 0: after the update's processing and before
+          its late start, so only the first start of that update sees the state.
+        - the airstrike repeat of a completed secondary firing kind (S-0107 State and ordering), for
+          a unit still in the attack state when that kind completes (S-0107 claim 11 gives when it
+          is): after the firing turn, so both starts of that update see the state.
+        - a change of its target, to another target or to none, by an order (a move, deploy or
+          stop order, or an attack order on another target) or because the target leaves play:
+          when the order takes effect or the target leaves, so no start after it sees the state.
+        - a change of its target made by its own processing, for example the drop of S-0517 claim
+          16, or by claim 33's per-tick search, which runs after the processing: in that processing
+          or search, so the first start of that update sees the state and its late start does not.
+
+        A change of target also asks (not forced) for *deployed* when deploying, for *prone* when
+        prone and for *stand* otherwise, as the not-ready fire frame does, whether or not the unit
+        is in the attack state at that change (S-0107 claim 6 decides whether the request is taken),
+        so a firing kind still playing gives way to it. The attack-move rule of S-0309 claim 23
+        discards a target, and puts a remembered target back, without this change-of-target ending.
+        Where it discards the target and its search finds no other, the attack state lasts to the
+        no-target ending in the firing turn. Where it puts the remembered target back, the state
+        stays as it was. A target that its search finds is a change of target as above.
+      - *A unit that keeps its target* is in the attack state from the firing turn that requests a
+        firing kind to the shot. After the shot it is not in the attack state until its firing check
+        answers *can fire* again, which is at or after the end of the rearm countdown and does not
+        depend on the end of the firing kind. If that happens while the firing kind is still
+        current, the attack state begins again with no new sequence (the request is turned down) and
+        lasts to one of the endings above. Unless the airstrike repeat ends it when the kind
+        completes, that is:
+        - for a standing unit, the stage-delay-0 ending in the first update that begins with
+          *stand* current after the kind completes, so a behaviour queued meanwhile becomes
+          current at that update's late start and is first processed at the next update.
+        - for a prone unit, the attack state lasts into *prone*, to S-0107 claim 11's repeat
+          shot or its not-ready fire frame.
+
+        If the rearm countdown outlasts the firing kind, the attack state has ended at the shot,
+        and the next shot comes from a new firing kind.
+      - No quirk switch of this spec: it is the original's order, not a defect. The prone bullet
+        above holds with S-0107's `quirks.prone_attack_state_persists` on, its default. With it off,
+        a prone unit's attack state ends when *fire-prone*, or *secondary-fire-prone* that is not
+        repeated for an airstrike (State and ordering), completes. The rest of this block holds in
+        both settings.
     - **Vehicles** are ready unless any of these holds:
       - the current behaviour is *sticky* or *rescue*,
       - the vehicle is in one of exactly three transitions: it is deploying, it is undeploying
@@ -1157,37 +1220,57 @@ Terms used by this spec:
       *guard* at least once since its last successful per-tick start takes a queued behaviour (for
       example an ordered *attack*) at its next per-tick start, without waiting for its next
       processing.
-    - Backing: the warp start exclusion and hold resumption are `measurable` in our engine
-      (S-0513 scenario SW23 part f, extended by part g); original continuation beyond the
-      leaving-stage exclusion remains `unmeasured` under S-0513 claim 52's incomplete
-      per-kind evidence. Other rules are `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
+    - Backing: the warp start exclusion and hold resumption are `measurable` in our engine (S-0513
+      scenario SW23 part f, extended by part g); original continuation beyond the leaving-stage
+      exclusion remains `unmeasured` under S-0513 claim 52's incomplete per-kind evidence. Other
+      rules are `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
       exceptions of queued *enter* and contact with a vehicle-factory building, and case c for a
-      transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for
-      the construction ready mark and second start; scenario B35 for the body-range rule,
-      and S-0417 U2 for factory release and unloading leaving the mark alone). Further parts are
-      `unmeasured`. Starting *move* inside a deploying or undeploying transition has
-      S-0517 claim 10's unreachable-input qualification. The unload or deploy cycle is always
-      finished for vehicles (S-0517 claim 15, measurable in P6), so it never blocks readiness.
-      The vehicle below the surface: no setup here puts one
-      there. The two
-      *unload* rules with the allowance to interrupt movement: they fire only at the last stage of
-      an unloading or of a descent, which belong to the transport and movement specs, and no setup
-      is known that has the vehicle moving at that instant. Aircraft readiness and queued starts
-      have S-0501 claim 31's backing: AC10 tests ordinary flight, take-off, landing and run-lock
-      timing; its remaining exclusions are `unmeasured` for the reasons that claim gives. The building's
-      second per-tick start is measurable at construction entry under S-0406 claim 17 and PL11.
-      The infantry falling condition is `measurable` with fresh paratroopers (S-0522 claim 17 and
-      scenario B44): placement already queues rest, so no accepted order during descent is needed to
-      test readiness. A move click during the fall gives a move order at once, which starts after
-      landing (S-0522 claim 17, at its confidence). Being in the middle of firing and a sequence
-      that is not interruptible are `measurable` (B45 c): scripted input places an order inside a
-      named test sequence or burst, while a read-only recorder verifies both the input boundary and
-      the independently observed readiness conditions.
-    - Confidence: high (the engine warp-start design contract, infantry, and the vehicle
-      conditions on *sticky* or *rescue* and on moving); low (matching the original's unresolved
-      warp-start continuation); medium (the list of three vehicle transitions, the unload or deploy cycle, the
-      vehicle-factory conditions and buildings); low (the two *unload* rules, the vehicle below the
-      surface); aircraft readiness and start timing have S-0501 claim 31's confidence
+      transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for the
+      construction ready mark and second start; scenario B35 for the body-range rule, and S-0417 U2
+      for factory release and unloading leaving the mark alone). Further parts are `unmeasured`.
+      Starting *move* inside a deploying or undeploying transition has S-0517 claim 10's
+      unreachable-input qualification. The unload or deploy cycle is always finished for vehicles
+      (S-0517 claim 15, measurable in P6), so it never blocks readiness. The vehicle below the
+      surface: no setup here puts one there. The two *unload* rules with the allowance to interrupt
+      movement: they fire only at the last stage of an unloading or of a descent, which belong to
+      the transport and movement specs, and no setup is known that has the vehicle moving at that
+      instant. Aircraft readiness and queued starts have S-0501 claim 31's backing: AC10 tests
+      ordinary flight, take-off, landing and run-lock timing; its remaining exclusions are
+      `unmeasured` for the reasons that claim gives. The building's second per-tick start is
+      measurable at construction entry under S-0406 claim 17 and PL11. The infantry falling
+      condition is `measurable` with fresh paratroopers (S-0522 claim 17 and scenario B44):
+      placement already queues rest, so no accepted order during descent is needed to test
+      readiness. A move click during the fall gives a move order at once, which starts after landing
+      (S-0522 claim 17, at its confidence). Being in the middle of firing is `measurable` by B45 c:
+      runs c1 and c2 for its begin, its end at the shot (not at the end of the firing kind or of the
+      rearm countdown), and its second begin while the kind still plays with the late start that
+      follows; run c3 for the end at an order's change of target. The request that a change of
+      target makes is S-0107 claim 11's, with its backing for an order's change of target on a
+      standing unit that does not move, in whichever of the two states the order finds it (S-0107
+      scenario M8 part d). That it is made both in and out of the attack state, for a moving unit,
+      and at a change of target that is not an order's, is `unmeasured`: that part does not record
+      the attack state at the order, gives no moving unit and gives only orders. For a deploying or
+      prone unit it is `unmeasured`: no scenario changes the target of a firing unit that is
+      deploying or prone. A sequence that is not interruptible is `measurable` by run c4. In each
+      run, scripted input places an order at a recorded point of the firing cycle, and a read-only
+      recorder records when the queued behaviour becomes current and whether the update that makes
+      it current processes it. The other endings of being in the middle of firing (the not-ready
+      fire frame, no target at the firing turn, a sequence with stage delay 0 other than after a
+      completed kind, the airstrike repeat, a change of target by the unit's own processing, a
+      target leaving play, and the attack-move rule) are `unmeasured` here: B45 c isolates none of
+      them from the order route. They keep S-0107 claim 11's backing where it gives one. The begin
+      with the airstrike reset in place of a request is `unmeasured` here as well: no run of B45 c
+      designates an airstrike.
+    - Confidence: high (the engine warp-start design contract, the infantry conditions other than
+      being in the middle of firing, and the vehicle conditions on *sticky* or *rescue* and on
+      moving); medium (being in the middle of firing: that it is the attack state, its begin, its
+      end at the shot, its end at an order's change of target until run c3 runs, its other endings
+      and their places in the update, its second begin while the kind still plays and what follows
+      it, the request that a change of target makes, and the attack-move rule); low (matching the
+      original's unresolved warp-start continuation); medium (the list of three vehicle transitions,
+      the unload or deploy cycle, the vehicle-factory conditions and buildings); low (the two
+      *unload* rules, the vehicle below the surface); aircraft readiness and start timing have
+      S-0501 claim 31's confidence
 
 11a. **Failed departure while harvesting.** A non-teleporting harvester leaving a
     refinery's docking cell has no special behaviour-start or retry rule. The failure
@@ -5753,26 +5836,77 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     for retention. Three cloak transitions per coverage condition. This fixture does
     not test underground entry or the own-house exception.
 
-  - **(c) Infantry readiness inside firing and a noninterruptible sequence.** Name
-    test-map art giving an ordinary non-deployer infantry unit a long *fire-standing*
-    sequence. Keep it stationary in *attack* against a durable stationary enemy.
-    Script a move order during that sequence, recording order application, firing
-    state, sequence kind, motion and queued/current behaviours on each turn.
-    *Fire-standing* is interruptible by S-0107's engine table T1, so its sequence
-    alone does not block readiness. Expected: an accepted *move* remains queued while
-    the unit is in the middle of firing and starts at the first otherwise-ready
-    per-tick start. Test sequence noninterruptibility separately with an infantry
-    deployer whose named art gives *deploy* a long frame count: order deployment,
-    then a move while that sequence plays and no firing or motion is in progress.
-    *Deploy* is noninterruptible by the same engine table; the test art changes only
-    its duration, not that attribute. Expected: *move* stays queued until sequence
-    readiness permits its start, without waiting for the old processing timer.
-    Starting during a verified blocker, or not starting at the first otherwise-ready
-    start, falsifies the respective rule. Readiness here concerns when *move* starts,
-    not its later deployed-infantry destination outcome. A refused input does not
-    test queue readiness. Collect three accepted orders inside each isolated blocker.
-    If no accepted order overlaps firing, that firing sub-test remains inconclusive
-    rather than being inferred from the deployment comparison.
+  - **(c) Infantry readiness inside firing and a noninterruptible sequence.** Name test-map art
+    giving an ordinary non-deployer, non-jumpjet infantry unit a long *fire-standing* sequence and a
+    standing fire-frame field (S-0107 Import mapping) of a value *F* such that the stage reaches *F*
+    at least 3 updates after the sequence starts and the sequence completes at least 6 updates after
+    that. Its weapon is a named test weapon with a rearm delay of *R* ticks. Keep the unit
+    stationary in *guard*, human-owned, with a single enemy inside its weapon's range and no other
+    enemy in its search range. The enemy is a durable vehicle of a named test type with a speed of
+    0, armed with a named test weapon whose range is shorter than its distance to the unit, so that
+    it does not fire at the unit and the unit's own search can make it its target (S-0309 table C
+    rejects an unarmed building for a human-owned searcher). The unit fires by the firing rules
+    (claim 24). A run in which the unit's search takes no target is void. *Fire-standing* is
+    interruptible by S-0107's engine table T1, so its sequence alone does not block readiness. Each
+    order is scripted input; record which update it precedes. In c1 to c3 each judged order is a run
+    of its own, from a fresh start of the scenario with the unit in *guard* holding its target,
+    because a second *attack* order on the same target queues nothing once the first has made
+    *attack* current (claim 7). Record, read-only, after the last update of each tick: the unit's
+    current and queued behaviour, its target, its sequence kind and stage, and its motion. Record
+    per update whether the unit's current behaviour was processed in it, and per tick the shots it
+    fires. From these records only, the run finds for each firing cycle the update *k* in which a
+    *fire-standing* starts, the update *u* of its shot, the update *v* at whose end *stand* is
+    current after it completes, and the update of the next *fire-standing* start. An order is judged
+    only if, from the order to the judged update, the target is unchanged, the unit does not move
+    and nothing but the order's behaviour is queued. Any other order is void, not a pass.
+    - (c1) Long rearm: *R* is longer than the whole *fire-standing* sequence by at least 10
+      ticks. The order is *attack* on the enemy that the unit already holds, so it is queued
+      (S-0213 claim 5) and the target does not change. Windows by the update that the order
+      precedes: W1, after *k* and not after *u*; W2, after *u* and not after *v*; W3, after *v*
+      and not after the next *fire-standing* start. Expected (claim 11, *In the middle of
+      firing*): in W1, *attack* is still queued after update *u* and current after update
+      *u* + 1, which processes it. In W2 and W3, *attack* is current after the unit's first
+      update after the order, which processes it. Falsified in W1 by *attack* current after an
+      update before *u* + 1 (the state begins only at the shot, or the late start of *u* sees
+      it ended), or still queued after *u* + 1 (the state lasts to the end of the kind or of
+      the countdown). Falsified in W2 by *attack* still queued after the first update after the
+      order (the state lasts to the end of the kind), and in W3 likewise (the state lasts to
+      the end of the countdown).
+    - (c2) Short rearm: *R* is longer than the stage delay of *fire-standing* (S-0107 claim 5), so
+      the countdown ends after the stage has left *F*, and the time from the shot to the update *v*
+      is longer than *R* by at least 6 ticks, so the weapon is ready again while *fire-standing*
+      still plays. The order is as in c1, preceding an update after the tick of the shot plus *R* +
+      2 and not after *v*. Expected: no new *fire-standing* starts before *v* (the stage keeps
+      rising), *attack* is still queued after update *v*, and it is current after update *v* + 1,
+      which does not process it (the late start). Its first *attack* processing comes in update *v*
+      + 2, and a new *fire-standing* starts in update *v* + 1. Falsified by *attack* current after
+      an update before *v* + 1 (no second begin), by an *attack* processing in update *v* + 1 (a
+      first start), or by *attack* still queued after update *v* + 1. Orders in this set-up that
+      precede an update after *u* and before the tick of the shot plus *R* − 2 are judged as c1's
+      W2.
+    - (c3) Change of target at the order: c1's set-up, with the order a *move* to a nearby clear
+      cell, preceding update *k* + 1. The set-up puts the shot at least 3 updates after *k*, so the
+      order comes before the update of the shot. Here the target change and the walk that follows
+      are the point, so the unchanged-target and no-motion conditions do not apply: the order is
+      judged if nothing but *move* is queued from the order until *move* is current. Expected: at
+      the read after the order's tick the current sequence is not *fire-standing*. Whether it is
+      *stand* or already a walking sequence is not judged, since the *move* processing in that tick
+      may already have asked for a walking sequence (S-0107 claim 10). *Move* is current after the
+      unit's first update after the order, which processes it, and the unit fires no shot from that
+      *fire-standing*. Falsified by *fire-standing* still current at that read, by *move* still
+      queued after that update, or by a shot after the order and before *move* is current.
+    - (c4) Sequence noninterruptibility: an infantry deployer whose named art gives *deploy* a
+      long frame count. Order deployment, then a move while that sequence plays and no firing
+      or motion is in progress. *Deploy* is noninterruptible by the same engine table; the
+      test art changes only its duration, not that attribute. Expected: *move* stays queued
+      until sequence readiness permits its start, without waiting for the old processing
+      timer. Starting during the sequence, or not starting at the first otherwise-ready start,
+      falsifies the rule. Readiness here concerns when *move* starts, not its later
+      deployed-infantry destination outcome.
+
+    A refused input does not test queue readiness. Collect three judged runs in each of W1,
+    W2 and W3 of c1, three for c2, three for c3 and three orders for c4. A window with fewer stays
+    inconclusive; it is not inferred from another window.
 
   - **(d) SAM secondary range bypass.** Extend B16 l with a named secondary weapon
     whose maximum range is shorter than the primary's, retaining its ability to hit
@@ -6121,6 +6255,72 @@ checks, not additional rules of this spec.
   erased (its Open questions) and claim 2 here rates the landed-aircraft tick. Backing:
   `unmeasured`, since no scenario makes a berserk warp member phase in with a beam attached; the off
   setting of the switch is design.
+
+- **S-0107 (approved, revision 31), claim 11, the switch `quirks.prone_attack_state_persists`
+  and scenario M8 parts (a) and (d).**
+  - *End of the attack state* should list the shot first: when the weapon fires at the fire
+    frame, the attack state ends with that shot (claim 11 here, *In the middle of firing*). It
+    begins again only on a later tick that meets claim 11's entry, so at or after the end of
+    the rearm countdown.
+  - The sentences "When a firing kind completes and its follow-up (State and ordering) is *stand* …
+    once its weapon is ready" and "A prone unit's follow-up, *prone*, has a non-zero delay, so it
+    stays in the attack state" hold only for a unit that is in the attack state when its firing kind
+    completes. That is a unit whose firing check answered *can fire* again while the kind still
+    played, so that the attack state began again with the request turned down, or one whose kind
+    completed before its stage reached *F*. They should say so. A unit whose rearm countdown
+    outlasts its firing kind is not in the attack state when the kind completes, and its next shot
+    comes from a new firing kind. The repeat shot during *prone* and the switch keep their content
+    within that scope. The switch's description should begin "A prone unit that is in the attack
+    state when *fire-prone*, or *secondary-fire-prone* that is not repeated for an airstrike (State
+    and ordering), completes stays in it", since the follow-up of such a kind is *prone*, and its
+    off setting should end a prone unit's attack state when such a kind completes, leaving a
+    standing unit's ending as it is.
+  - *When its target changes* should add that the change, to another target or to none, also asks
+    (not forced) for *deployed* when deploying, for *prone* when prone and for *stand* otherwise, as
+    the not-ready fire frame does, whether or not the unit is in the attack state at that change, so
+    a firing kind still playing gives way to it.
+  - M8 (a) should judge the prone repeat shot only in runs whose rearm countdown ends before
+    *fire-prone* completes, and add a run whose countdown outlasts it. Expected there: every
+    shot comes from a new *fire-prone*, falsified by a shot during *prone*. M8 (d) expects the
+    running sequence to go on with its stage not restarted after the order to attack another
+    target. With the request above, the order replaces a *fire-standing* still playing by
+    *stand*, so M8 (d)'s Expected should say so, and its facing judgement should be checked
+    against claim 11's entry rule.
+  - The repeat shot's "at most once per start of *prone*" then follows from the end at the shot: the
+    shot ends the attack state, and a later begin asks for a new firing kind. The repeat-shot
+    paragraph and the switch's description should say so in place of their reasoning from the later
+    ticks of the stage value. M8 (a)'s run whose countdown outlasts *fire-prone* should end the
+    countdown after *fire-prone* completes and before the stage of *prone* could reach the prone
+    fire frame, since only then would a unit still in the attack state fire during *prone* (S-0107
+    revision 40 gives that window in ticks). *When its target changes* should name the unit's
+    per-tick search (claim 33) beside its own processing.
+  - Level and backing: those that S-0107 revision 40 gives in claim 11's Backing and Confidence
+    lines, which carry these changes.
+- **S-0513 (approved, revision 115), claim 39a (*The firer*) and scenario SW12 parts (l9a) and
+  (l9b).**
+  - The deploy order clears the unit's target, and that change of target ends the attack state
+    as the order takes effect (claim 11 here, *In the middle of firing*). A shot has already
+    ended it as well, so no attack state "that a shot left" remains. The unit is therefore not
+    in the middle of firing at either per-tick start of its first update after the order.
+  - Replace the sentences from "A unit with no target is no longer in the middle of firing" to
+    "comes before it" with: "The deploy order's change of target ends the attack state as the
+    order takes effect (S-0215 claim 11), so the unit is not in the middle of firing at its
+    first update after the order. Unless another readiness condition of S-0215 claim 11 holds
+    then, *unload* becomes current at that update's first per-tick start and is processed in
+    it, before any *attack* processing."
+  - The timing that claim 39a gave, an end after both per-tick starts, is the no-target ending
+    in the firing turn (claim 11 here). The deploy order does not reach it. Of the routes this
+    spec traces, only S-0309 claim 23's attack-move discard does.
+  - In SW12, (l9a)'s Expected can be sharpened to *unload* processed in *T*'s first update after
+    the deploy order: just after that update its deploy has started and *guard* is current, since
+    that processing forces *guard* (claim 30). Its exception for a run in which *T* is in the middle
+    of firing just before that update counts no run and can go. (l9b) as written counts no run,
+    because neither the lock shot nor the deploy order leaves *T* in the middle of firing. It should
+    be dropped, or rebuilt on another readiness condition of S-0215 claim 11 that the deploy order
+    leaves in place (a sequence that is not interruptible, or falling).
+  - Level: medium for the end at the order, as S-0107 claim 11 rates its end conditions, until B45
+    run c3 runs. Backing: scenario B45 run c3 here for an order's change of target. SW12 (l9a) as
+    sharpened tests the start of *unload* that follows, not the end itself.
 
 ## Questions for the project lead
 
