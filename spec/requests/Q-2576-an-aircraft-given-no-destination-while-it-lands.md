@@ -1,9 +1,9 @@
 ---
 id: Q-2576
 title: What being given no destination does to an aircraft whose landing is under way
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
