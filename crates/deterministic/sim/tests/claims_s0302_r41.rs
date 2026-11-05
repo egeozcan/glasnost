@@ -121,7 +121,11 @@ fn claim_10_no_fall_back_without_a_known_attacker() {
     assert_eq!(damage::apply(&mut w, s, h), HitResult::Unchanged);
     assert!(w.obj(s).unwrap().combat.berserk.is_some());
     assert!(!fell_back(&w, s), "no attacker, no fall-back");
-    assert_eq!(slots(&w, s).1, Some(Behaviour::Hunt), "the berserk entry's hunt stays");
+    assert_eq!(
+        slots(&w, s).1,
+        Some(Behaviour::Hunt),
+        "the berserk entry's hunt stays"
+    );
 }
 
 // spec: S-0215 claim 16 (only a no-threat behaviour falls back)
@@ -180,7 +184,11 @@ fn claim_10_a_zero_duration_berserk_hit_follows_the_switch() {
         h.amount = 0;
         assert_eq!(damage::apply(&mut w, s, h), HitResult::Unchanged);
         assert_eq!(w.obj(s).unwrap().combat.berserk.is_some(), on);
-        assert_eq!(fell_back(&w, s), on, "reactions only when the hit took effect");
+        assert_eq!(
+            fell_back(&w, s),
+            on,
+            "reactions only when the hit took effect"
+        );
         assert_eq!(w.obj(s).unwrap().infantry.as_ref().unwrap().fear == 100, on);
     }
 }
@@ -229,9 +237,11 @@ fn claim_10_a_berserk_hit_gives_the_harvester_announcement_event() {
     w2.effects.clear();
     let h2 = berserk_hit(&w2, Some(a2), Some(HouseId(1)));
     assert_eq!(damage::apply(&mut w2, s2, h2), HitResult::Unaffected);
-    assert!(
-        !w2.effects
-            .iter()
-            .any(|e| matches!(e, Effect::Sound { sound: Sound::HarvesterAttacked, .. }))
-    );
+    assert!(!w2.effects.iter().any(|e| matches!(
+        e,
+        Effect::Sound {
+            sound: Sound::HarvesterAttacked,
+            ..
+        }
+    )));
 }

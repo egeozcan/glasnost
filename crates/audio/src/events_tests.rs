@@ -1519,7 +1519,10 @@ fn a_berserk_hit_on_a_local_harvester_is_announced() {
     a.tick(&w, &[berserk_hit(cart, 0)], &mut u);
     assert!(announced(&mut a, 3000), "the local player's harvester");
     a.tick(&w, &[berserk_hit(cart, 0)], &mut u);
-    assert!(!announced(&mut a, 3500), "the F7 event suppresses a second one at once");
+    assert!(
+        !announced(&mut a, 3500),
+        "the F7 event suppresses a second one at once"
+    );
 }
 
 // spec: S-0701 claim 28 (low funds: below 100 credits with a factory; the countdown N(⌊k × 900⌋))
