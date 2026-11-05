@@ -1116,6 +1116,7 @@ fn stop_start(w: &World, id: ObjectId, a: &AirState, here: CellXY) -> CellXY {
     // spec: S-0501 claim 6 (r132: (a, b) the local point whose cell by S-0522 F2 is that cell, F2 being one-to-one) and S-0522 F2 (x + y = W + Y and x − y = 2X − W + (Y mod 2), so X = ⌊(x − y + W) / 2⌋ and Y = x + y − W, with X = a + Lx and Y = b + Ly)
     let mut la = (here.x - here.y + fp.width).div_euclid(2) - lx;
     let mut lb = here.x + here.y - fp.width - ly;
+    // spec: S-0501 claim 6 (r132: a is compared with ⌊Lw / 2⌋ and b with ⌊Lh / 2⌋)
     let (ca, cb) = (lw.div_euclid(2), lh.div_euclid(2));
     if (la - ca).abs() < (lb - cb).abs() {
         // spec: S-0501 claim 6 (r132: when |a − ⌊Lw / 2⌋| < |b − ⌊Lh / 2⌋|, a becomes 1 if a < ⌊Lw / 2⌋ and Lw − 1 otherwise)
