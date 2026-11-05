@@ -1,9 +1,9 @@
 ---
 id: Q-2579
 title: When an entry restarted by the pad's answer in the docking stage is next processed
-status: open
+status: answered
 related: [S-0501, S-0215]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
