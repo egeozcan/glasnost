@@ -1,9 +1,9 @@
 ---
 id: Q-2577
 title: Where landing where it is starts its selection over a cell outside the usable area
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
