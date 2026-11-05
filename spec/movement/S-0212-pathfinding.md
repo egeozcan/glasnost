@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 96
+revision: 97
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1667,16 +1667,16 @@ locomotors:
       after a walker's fresh search whose gate fails, which clears its destination, is `measurable`
       by P25(a), whose failed-gate control reads the timer at the end of that tick. After a walker's
       re-path whose gate fails it is `unmeasured`, as claim 23 rates that re-path. S-0417 scenario
-      U10 part g, whose walker would then walk to a new destination without a wait, runs only with a
-      harness that can give an order at the walker's release, which is not established. That
-      clearing or changing the destination ends a delay still running from an earlier tick, a
-      driving follower car's included (claim 26), is `unmeasured` for both locomotors: in U10 g no
-      delay runs when the new destination is given, and no scenario here clears or changes a unit's
-      destination while such a delay runs. P25(a, b) additionally reads the retry timer immediately
-      after a walker's failed search/gate and a follower car's computation. It does not infer that
-      timer from a later search decided by another reaction. S-0504 N11 tests the ship's successful
-      fresh-search clearing, failed-search delay, moving-blocker restart and first-check timer
-      exceptions
+      U10 part g gives its walker an order at its release that fails the gate, but its run does not
+      compare the walk to the walker's next destination with the stock retry delay, so the walk
+      without a wait is `unmeasured` there (S-0417 claim 17). That clearing or changing the
+      destination ends a delay still running from an earlier tick, a driving follower car's included
+      (claim 26), is `unmeasured` for both locomotors: in U10 g no delay runs when the new
+      destination is given, and no scenario here clears or changes a unit's destination while such a
+      delay runs. P25(a, b) additionally reads the retry timer immediately after a walker's failed
+      search/gate and a follower car's computation. It does not infer that timer from a later search
+      decided by another reaction. S-0504 N11 tests the ship's successful fresh-search clearing,
+      failed-search delay, moving-blocker restart and first-check timer exceptions.
     - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated, low
       for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4). No delay
       after a walker's failed gate: medium, until P25(a) is run (`unmeasured` after a re-path). The
