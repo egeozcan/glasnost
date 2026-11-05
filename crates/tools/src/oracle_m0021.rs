@@ -157,6 +157,10 @@ pub const F_FIRST: bool = true;
 /// ends at tick 608, the limit being 600).
 pub const END_EXTRA: i32 = 8;
 
+/// Leptons in a cell (measure: M-0021, Result, First shots: F's range of 6
+/// cells is 1536 leptons, G's of 5 cells 1280).
+pub const LEPTONS_PER_CELL: i64 = 256;
+
 /// The type of the observer's one building: `GLASNOST_M0021_OBSERVER`, else
 /// the first unarmed building type of the rules with a 2 by 2 foundation
 /// that is no factory or gate (a 1 by 1 type may be a wall), else the first
@@ -601,6 +605,15 @@ pub struct ShotRec {
     pub target: Target,
     /// The weapon.
     pub weapon: WeaponId,
+    /// The firer's position as the shot's own row gives it (measure:
+    /// M-0021, Procedure: the positions in leptons as the shot's own row
+    /// gives them). Our shot event holds no positions, so the recorder
+    /// derives them ([`shot_positions`]); `None` when an object had left
+    /// the world.
+    pub firer_pos: Option<Pos>,
+    /// The target's position as the shot's own row gives it (derived like
+    /// the firer's); `None` for a cell target.
+    pub target_pos: Option<Pos>,
 }
 
 /// One hit.
@@ -634,6 +647,12 @@ pub struct Recording {
     pub positions: BTreeMap<i32, BTreeMap<ObjectId, Pos>>,
     /// Each tick's spin value and stage of every G vehicle in play.
     pub spins: BTreeMap<i32, BTreeMap<ObjectId, (i32, i32)>>,
+    /// Each tick's row of every vehicle that is still an object of the
+    /// world, dead or alive: its position and health (measure: M-0021,
+    /// Procedure: every vehicle's position and health each tick, stamped
+    /// *t* = read after tick *t* has run). The record's reading-point rows
+    /// are read from these.
+    pub rows: BTreeMap<i32, BTreeMap<ObjectId, (Pos, i32)>>,
     /// The last tick played. Its per-tick rows are not kept in
     /// `positions` and `spins` (measure: M-0021, Parts and seeds: the
     /// per-tick rows end one tick before the recording's last tick).
@@ -655,6 +674,55 @@ fn in_play(w: &World, id: ObjectId) -> Option<Pos> {
     w.obj(id)
         .filter(|o| o.on_map && o.health > 0)
         .map(|o| o.pos)
+}
+
+/// The positions of a shot's firer and target as the shot's own row gives
+/// them (measure: M-0021, Procedure: the firer's and the target's positions
+/// as the shot's own row gives them), derived from our state, since our shot
+/// event holds none and the tool cannot stop inside a tick.
+///
+/// - The firer: its position after the tick. A vehicle's firing step comes
+///   after its movement in its own turn and nothing moves it afterwards
+///   (`tick::object_turn`; spec: S-0310 claim 9, the vehicle's own firing
+///   step each tick it has a target, and S-0215 claim 11, the late start
+///   "after this update's movement, before its separate firing").
+/// - The target: it moves only in its own turn. When that turn comes before
+///   the firer's in the update order read at the start of the tick
+///   (`order`; spec: S-0203 claim 3), it has moved when the firer fires, so
+///   its position after the tick; otherwise its position before the tick
+///   (`before`).
+///
+/// The lookup is by the order's own indices for every shot, never by group.
+/// So the reading-point rows of the shots test our update order and the
+/// movement-before-firing rule, not an independent capture; the check that
+/// every derived distance is within the weapon's range tests the
+/// derivation against the engine's own firing test ([`Findings::reach`]).
+///
+/// A vehicle destroyed in the tick has left the world (S-0203 claim 6 (a)),
+/// so its position after its move is the one its last hit of the tick
+/// records (`gone`: `Effect::Hit`'s position, the hit object's own position
+/// at the hit, read in `combat::damage` before the hit's effects).
+fn shot_positions(
+    w: &World,
+    order: &[ObjectId],
+    before: &BTreeMap<ObjectId, Pos>,
+    gone: &BTreeMap<ObjectId, Pos>,
+    firer: ObjectId,
+    target: Target,
+) -> (Option<Pos>, Option<Pos>) {
+    let after = |id: ObjectId| w.obj(id).map(|o| o.pos).or_else(|| gone.get(&id).copied());
+    let firer_pos = after(firer);
+    let Target::Object(x) = target else {
+        return (firer_pos, None);
+    };
+    let turn = |id: ObjectId| order.iter().position(|&o| o == id);
+    let moved = matches!((turn(x), turn(firer)), (Some(tx), Some(tf)) if tx < tf);
+    let target_pos = if moved {
+        after(x)
+    } else {
+        before.get(&x).copied()
+    };
+    (firer_pos, target_pos)
 }
 
 /// Sets up and plays one run of `part` with F's group on `f_side` and seed
@@ -756,6 +824,11 @@ pub fn play_to(
             })
             .collect();
         rec.spins.insert(t, spins);
+        let rows = all
+            .iter()
+            .filter_map(|&id| w.obj(id).map(|o| (id, (o.pos, o.health))))
+            .collect();
+        rec.rows.insert(t, rows);
     };
     snap(&w, &mut rec);
     let alive = |w: &World, ids: &[ObjectId]| ids.iter().any(|&id| in_play(w, id).is_some());
@@ -766,21 +839,42 @@ pub fn play_to(
         limit + END_EXTRA
     };
     while w.tick < stop {
+        // The update order and the positions at the start of the tick, for the shots' derived positions ([`shot_positions`]).
+        let order = w.update.order.clone();
+        let before: BTreeMap<ObjectId, Pos> = all
+            .iter()
+            .filter_map(|&id| w.obj(id).map(|o| (id, o.pos)))
+            .collect();
         glasnost_sim::tick::step(&mut w);
         let t = w.tick;
-        for e in std::mem::take(&mut w.effects) {
+        let effects = std::mem::take(&mut w.effects);
+        // Where a vehicle was when it was last hit in the tick, for one that left the world in it.
+        let gone: BTreeMap<ObjectId, Pos> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Hit { id, pos, .. } if all.contains(id) => Some((*id, *pos)),
+                _ => None,
+            })
+            .collect();
+        for e in effects {
             match e {
                 Effect::Shot {
                     firer,
                     weapon,
                     target,
                     ..
-                } if all.contains(&firer) => rec.shots.push(ShotRec {
-                    tick: t,
-                    firer,
-                    target,
-                    weapon,
-                }),
+                } if all.contains(&firer) => {
+                    let (firer_pos, target_pos) =
+                        shot_positions(&w, &order, &before, &gone, firer, target);
+                    rec.shots.push(ShotRec {
+                        tick: t,
+                        firer,
+                        target,
+                        weapon,
+                        firer_pos,
+                        target_pos,
+                    });
+                }
                 Effect::Hit {
                     id,
                     attacker,
@@ -808,6 +902,7 @@ pub fn play_to(
     if rec.end > 0 {
         let last = rec.positions.remove(&rec.end).unwrap_or_default();
         rec.spins.remove(&rec.end);
+        rec.rows.remove(&rec.end);
         rec.last_in_play = Some(last.into_keys().collect());
     }
     Ok(rec)
@@ -889,6 +984,121 @@ pub struct Judged {
     pub first_three: (bool, bool),
 }
 
+/// One firer of a side's first-shot tick (Procedure step 6). Distances are
+/// squared leptons.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Shooter {
+    /// The firer.
+    pub firer: ObjectId,
+    /// The centre distance to its target from the shot row's positions.
+    pub shot: Option<i64>,
+    /// The same from the per-tick rows stamped *t* − 1 and *t*.
+    pub rows: (Option<i64>, Option<i64>),
+    /// The weapon's range in leptons, squared.
+    pub range2: i64,
+}
+
+/// A side's first shot: its tick and every firer of that tick.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FirstShot {
+    /// The tick.
+    pub tick: i32,
+    /// Each firer of that tick with a target object.
+    pub shooters: Vec<Shooter>,
+}
+
+/// A vehicle's own first shot: the distance at the reading points (an F
+/// shot: the firer's position stamped *t* to the target's stamped *t* − 1; a
+/// G shot: both stamped *t*) against the weapon's range.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OwnFirst {
+    /// A vehicle of F's group.
+    pub f: bool,
+    /// The tick.
+    pub tick: i32,
+    /// The squared distance, if both rows exist.
+    pub d2: Option<i64>,
+    /// The weapon's range in leptons, squared.
+    pub range2: i64,
+}
+
+/// For one object of a shot, which per-tick row holds the position the shot's
+/// row gives (Procedure step 11).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PointCounts {
+    /// The row stamped *t*, where the rows stamped *t* − 1 and *t* differ.
+    pub at_t: usize,
+    /// The row stamped *t* − 1, where they differ.
+    pub at_before: usize,
+    /// Neither row.
+    pub neither: usize,
+    /// The two rows are equal (the object did not move during *t*).
+    pub unchanged: usize,
+    /// A row or a position is missing.
+    pub unread: usize,
+}
+
+/// The reading points (Procedure step 11).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reading {
+    /// Hits that took health and have a per-tick row at their tick, per
+    /// (tick, object) the last of them (the only one whose health after a
+    /// row can show): the row that first shows its health after is the
+    /// row stamped *t*, or the one stamped *t* − 1.
+    pub hit_at_t: usize,
+    /// See `hit_at_t`: the row stamped *t* − 1 already shows it.
+    pub hit_at_before: usize,
+    /// No row of *t* − 1 or *t* shows it.
+    pub hit_unseen: usize,
+    /// Hits followed by another hit on the same object in the same tick.
+    pub hit_superseded: usize,
+    /// Hits for which the row stamped *t* − 1 does not show the first hit's
+    /// health before.
+    pub hit_before_mismatch: usize,
+    /// Hits that took health but have no per-tick row of their object at
+    /// their tick (not covered by the record's row).
+    pub hit_no_row: usize,
+    /// Vehicles destroyed by a hit at a tick with per-tick rows.
+    pub deaths: usize,
+    /// Of those, the last row of the vehicle is the row stamped *t*, with no
+    /// health left.
+    pub deaths_last_at_t: usize,
+    /// The others: what their last row is.
+    pub deaths_other: Vec<String>,
+    /// Destroyed by a hit at a tick without per-tick rows (the last tick).
+    pub deaths_unread: usize,
+    /// An F shot's firer, an F shot's target, a G shot's firer, a G shot's
+    /// target.
+    pub shot_rows: [PointCounts; 4],
+}
+
+/// The check of the derived shot positions against the engine's own firing
+/// test (our check, not a row of the record).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reach {
+    /// Shots with an object target and both positions derived.
+    pub shots: usize,
+    /// Of those, shots whose derived centre distance is beyond the weapon's
+    /// range *R* (the engine fired, so its range test passed). That test is
+    /// "at most *R* + *E*₁ + β" with the spatial distance of S-0307's table
+    /// square root (spec: S-0307 range table), not the exact distance, so a
+    /// distance a fraction of a lepton beyond *R* is no evidence against the
+    /// derivation.
+    pub beyond: usize,
+    /// Local report only: the first of them: its tick, whether F fired it,
+    /// the squared distance and the squared range.
+    pub beyond_first: Option<(i32, bool, i64, i64)>,
+    /// Of the shots with a row of the firer and of the target at *t* − 1 and
+    /// at *t*, their number.
+    pub combo_shots: usize,
+    /// Of those, the shots within range if the firer is read at *t* − 1 or
+    /// *t* and the target at *t* − 1 or *t* (index 2 × firer + target, 0 for
+    /// the row stamped *t* − 1).
+    pub combos: [usize; 4],
+    /// Shots with a missing derived position.
+    pub unread: usize,
+}
+
 /// What one run shows (Procedure steps 1 to 9).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Findings {
@@ -901,9 +1111,17 @@ pub struct Findings {
     /// Every fragment-warhead hit in the run, and those whose attacker is
     /// not an F vehicle or that name none.
     pub fragment_hits: (usize, usize),
-    /// The first shot of each group (F, G): its tick and the centre
-    /// distances, squared, from each firer of that tick to its target.
-    pub first: [Option<(i32, Vec<i64>)>; 2],
+    /// The first shot of each group (F, G): its tick and each firer of that
+    /// tick (Procedure step 6).
+    pub first: [Option<FirstShot>; 2],
+    /// Every vehicle's own first shot (measure: M-0021, Result, First shots:
+    /// the distance at the reading points is within the weapon's range).
+    pub own_first: Vec<OwnFirst>,
+    /// The reading points (Procedure step 11).
+    pub reading: Reading,
+    /// Our own check of the derived shot positions against the engine's
+    /// firing test ([`shot_positions`]).
+    pub reach: Reach,
     /// The shortest gap in ticks 0 to 299 between two shots of one vehicle
     /// with one weapon: F's shot weapon, G's stage 0 and stage 1 weapons.
     pub gaps: [Option<i32>; 3],
@@ -975,20 +1193,10 @@ pub fn candidates(rec: &Recording, t: i32, x: ObjectId) -> Option<(Vec<CellXY>, 
     Some((out, mixed))
 }
 
-/// Judges one run (Procedure steps 1 to 9).
-pub fn judge(rec: &Recording, part: Part) -> Findings {
-    let [f_shot, _, g0, g1] = rec.weapons;
-    let [f_wh, s_wh] = rec.warheads;
-    let mut out = Findings {
-        expected_gap: rec.expected_gap,
-        ..Default::default()
-    };
-    // Step 1: a run in which F fires any weapon other than its primary is void.
-    out.void = rec
-        .shots
-        .iter()
-        .any(|s| rec.f.contains(&s.firer) && s.weapon != f_shot);
-    // Deaths: a vehicle in play at tick t − 1 and not at t died at t.
+/// Every vehicle's death: the first tick at which it is no longer in play
+/// (a vehicle in play at tick t − 1 and not at t died at t), over the
+/// per-tick rows and the last tick's vehicles.
+pub fn deaths(rec: &Recording) -> BTreeMap<ObjectId, i32> {
     let mut died: BTreeMap<ObjectId, i32> = BTreeMap::new();
     let mut prev: Option<BTreeSet<ObjectId>> = None;
     let rows = rec
@@ -1006,6 +1214,188 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
         }
         prev = Some(ps);
     }
+    died
+}
+
+/// The squared centre distance in leptons.
+fn dist2(a: Pos, b: Pos) -> i64 {
+    let (dx, dy, dz) = (
+        i64::from(a.x - b.x),
+        i64::from(a.y - b.y),
+        i64::from(a.z - b.z),
+    );
+    dx * dx + dy * dy + dz * dz
+}
+
+/// The range in leptons of one of the shot weapons (measure: M-0021, Setup,
+/// Test types: F's primary 6 cells, G's stage weapons 5 cells; spec: S-0307
+/// claim 1, the range in leptons), or `None` for any other weapon.
+fn range_leptons(rec: &Recording, weapon: WeaponId) -> Option<i64> {
+    let cells = if weapon == rec.weapons[0] {
+        F_WEAPON.2
+    } else if weapon == rec.weapons[2] {
+        G_WEAPONS[0].2
+    } else if weapon == rec.weapons[3] {
+        G_WEAPONS[1].2
+    } else {
+        return None;
+    };
+    Some(i64::from(cells) * LEPTONS_PER_CELL)
+}
+
+/// The reading points of every shot and hit (Procedure step 11) and the
+/// check of the derived shot positions.
+fn reading_points(rec: &Recording) -> (Reading, Reach) {
+    let mut out = Reading::default();
+    let mut reach = Reach::default();
+    let row = |t: i32, id: ObjectId| rec.rows.get(&t).and_then(|r| r.get(&id)).copied();
+    // Hits: group by (tick, object); the last of a group is the one whose health after a row can show.
+    let mut groups: BTreeMap<(i32, ObjectId), Vec<&HitRec>> = BTreeMap::new();
+    for h in &rec.hits {
+        // A hit on a vehicle that already has no health left (still a row) is no new hit that took health.
+        if h.health.0 > 0 && h.health.1 < h.health.0 {
+            groups.entry((h.tick, h.id)).or_default().push(h);
+        }
+    }
+    let mut last_row: BTreeMap<ObjectId, i32> = BTreeMap::new();
+    for (&t, r) in &rec.rows {
+        for &id in r.keys() {
+            last_row.insert(id, t);
+        }
+    }
+    for (&(t, id), hs) in &groups {
+        out.hit_superseded += hs.len() - 1;
+        let (first, last) = (hs[0], hs[hs.len() - 1]);
+        let destroyed = last.health.1 <= 0;
+        if destroyed {
+            // measure: M-0021 (Result, Reading points: a vehicle destroyed by a hit at t, its last per-tick row is the row stamped t with no health left)
+            if !rec.rows.contains_key(&t) {
+                out.deaths_unread += 1;
+            } else {
+                out.deaths += 1;
+                match (last_row.get(&id), row(t, id)) {
+                    (Some(&r), Some((_, h))) if r == t && h <= 0 => out.deaths_last_at_t += 1,
+                    (r, at) => out.deaths_other.push(format!(
+                        "object {}: last row at t plus {:?}, health at row stamped t {:?}",
+                        id.0,
+                        r.map(|r| r - t),
+                        at.map(|(_, h)| h)
+                    )),
+                }
+            }
+        }
+        // measure: M-0021 (Result, Reading points: the row that first shows a hit's health after is the row stamped t, never t − 1; every hit with a per-tick row at its tick)
+        let Some((_, at)) = row(t, id) else {
+            out.hit_no_row += 1;
+            continue;
+        };
+        // A row shows the health after when it holds it (a destroyed vehicle: no health left).
+        let shows = |h: i32| h == last.health.1 || (destroyed && h <= 0);
+        if let Some((_, b)) = row(t - 1, id) {
+            if b != first.health.0 {
+                out.hit_before_mismatch += 1;
+            }
+            if shows(b) {
+                out.hit_at_before += 1;
+                continue;
+            }
+        }
+        if shows(at) {
+            out.hit_at_t += 1;
+        } else {
+            out.hit_unseen += 1;
+        }
+    }
+    // Shots: which row holds the position the shot's row gives.
+    for s in &rec.shots {
+        let Target::Object(x) = s.target else {
+            continue;
+        };
+        let by_f = rec.f.contains(&s.firer);
+        let by_g = rec.g.contains(&s.firer);
+        if !(by_f || by_g) {
+            continue;
+        }
+        let k = if by_f { 0 } else { 2 };
+        let t = s.tick;
+        if !rec.rows.contains_key(&t) {
+            // The run's last tick has no per-tick rows (Parts and seeds): nothing to read there.
+            continue;
+        }
+        let mut point = |slot: usize, id: ObjectId, p: Option<Pos>| {
+            let c = &mut out.shot_rows[slot];
+            let (Some((a, _)), Some((b, _)), Some(p)) = (row(t - 1, id), row(t, id), p) else {
+                c.unread += 1;
+                return;
+            };
+            if a == b {
+                if p == a {
+                    c.unchanged += 1;
+                } else {
+                    c.neither += 1;
+                }
+            } else if p == b {
+                c.at_t += 1;
+            } else if p == a {
+                c.at_before += 1;
+            } else {
+                c.neither += 1;
+            }
+        };
+        point(k, s.firer, s.firer_pos);
+        point(k + 1, x, s.target_pos);
+        // Our check: the derived distance is within the weapon's range; and the four readings.
+        let Some(range) = range_leptons(rec, s.weapon) else {
+            continue;
+        };
+        let (Some(fp), Some(tp)) = (s.firer_pos, s.target_pos) else {
+            reach.unread += 1;
+            continue;
+        };
+        reach.shots += 1;
+        if dist2(fp, tp) > range * range {
+            reach.beyond += 1;
+            reach
+                .beyond_first
+                .get_or_insert((t, by_f, dist2(fp, tp), range * range));
+        }
+        let rows4 = (
+            row(t - 1, s.firer),
+            row(t, s.firer),
+            row(t - 1, x),
+            row(t, x),
+        );
+        // A vehicle that left the world in the tick has no row stamped t: the four readings need all four rows.
+        let (Some(f0), Some(f1), Some(x0), Some(x1)) = rows4 else {
+            continue;
+        };
+        reach.combo_shots += 1;
+        for (i, (a, b)) in [(f0, x0), (f0, x1), (f1, x0), (f1, x1)]
+            .into_iter()
+            .enumerate()
+        {
+            if dist2(a.0, b.0) <= range * range {
+                reach.combos[i] += 1;
+            }
+        }
+    }
+    (out, reach)
+}
+
+/// Judges one run (Procedure steps 1 to 9).
+pub fn judge(rec: &Recording, part: Part) -> Findings {
+    let [f_shot, _, g0, g1] = rec.weapons;
+    let [f_wh, s_wh] = rec.warheads;
+    let mut out = Findings {
+        expected_gap: rec.expected_gap,
+        ..Default::default()
+    };
+    // Step 1: a run in which F fires any weapon other than its primary is void.
+    out.void = rec
+        .shots
+        .iter()
+        .any(|s| rec.f.contains(&s.firer) && s.weapon != f_shot);
+    let died = deaths(rec);
     out.dead = (
         rec.f.iter().filter(|id| died.contains_key(id)).count(),
         rec.g.iter().filter(|id| died.contains_key(id)).count(),
@@ -1113,8 +1503,7 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
             .map(|s| s.tick)
             .min();
         out.first[k] = first.map(|t| {
-            let ps = rec.positions.get(&t);
-            let ds = rec
+            let shooters = rec
                 .shots
                 .iter()
                 .filter(|s| s.tick == t && group.contains(&s.firer))
@@ -1122,18 +1511,47 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
                     let Target::Object(x) = s.target else {
                         return None;
                     };
-                    let (a, b) = (ps?.get(&s.firer)?, ps?.get(&x)?);
-                    let (dx, dy, dz) = (
-                        i64::from(a.x - b.x),
-                        i64::from(a.y - b.y),
-                        i64::from(a.z - b.z),
-                    );
-                    Some(dx * dx + dy * dy + dz * dz)
+                    let range = range_leptons(rec, s.weapon)?;
+                    // measure: M-0021 (Procedure step 6: the distance from the positions in the shot's own row, and whether the target is within range by the per-tick rows stamped t − 1 and t)
+                    let rows = |tt: i32| {
+                        let ps = rec.positions.get(&tt)?;
+                        Some(dist2(*ps.get(&s.firer)?, *ps.get(&x)?))
+                    };
+                    Some(Shooter {
+                        firer: s.firer,
+                        shot: s.firer_pos.zip(s.target_pos).map(|(a, b)| dist2(a, b)),
+                        rows: (rows(t - 1), rows(t)),
+                        range2: range * range,
+                    })
                 })
                 .collect();
-            (t, ds)
+            FirstShot { tick: t, shooters }
         });
     }
+    // Every vehicle's own first shot, at the reading points (measure: M-0021, Result, First shots: an F shot from the firer's position stamped t to the target's stamped t − 1, a G shot both stamped t).
+    for &v in rec.f.iter().chain(&rec.g) {
+        let Some(s) = rec.shots.iter().find(|s| s.firer == v) else {
+            continue;
+        };
+        let (Target::Object(x), Some(range)) = (s.target, range_leptons(rec, s.weapon)) else {
+            continue;
+        };
+        let is_f = rec.f.contains(&v);
+        let target_tick = if is_f { s.tick - 1 } else { s.tick };
+        let d2 = rec
+            .positions
+            .get(&s.tick)
+            .and_then(|p| p.get(&v))
+            .zip(rec.positions.get(&target_tick).and_then(|p| p.get(&x)))
+            .map(|(a, b)| dist2(*a, *b));
+        out.own_first.push(OwnFirst {
+            f: is_f,
+            tick: s.tick,
+            d2,
+            range2: range * range,
+        });
+    }
+    (out.reading, out.reach) = reading_points(rec);
     // Local report only: F's first shooter's centre distance to its target at the 4 ticks up to its first shot, and F's longest gap.
     if let Some(s) = rec.shots.iter().find(|s| rec.f.contains(&s.firer))
         && let Target::Object(x) = s.target
@@ -1203,6 +1621,465 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
 }
 
 // ---------------------------------------------------------------------------
+// The seeds (measure: M-0021, Procedure step 12)
+
+/// A shot as the runs are compared: the firer's place in the creation order
+/// (F's vehicles, then G's), the target (a vehicle by place, a cell, or any
+/// other object by number) and the weapon.
+type ShotKey = (usize, (u8, i64, i64), WeaponId);
+/// A hit as the runs are compared: the object hit by place, the warhead, the
+/// attacker by place, the health before and after.
+type HitKey = (usize, Option<WarheadId>, Option<usize>, (i32, i32));
+/// A vehicle's per-tick row as the runs are compared: place, position,
+/// health.
+type RowKey = (usize, (i32, i32, i32), i32);
+/// A vehicle's per-tick spin row as the runs are compared: place, spin value
+/// and stage.
+type SpinKey = (usize, i32, i32);
+/// A vehicle's first shot in a run: tick, target and weapon.
+type OwnFirstShot = (i32, (u8, i64, i64), WeaponId);
+
+/// A shot fired at the first differing tick in some of the runs and not in
+/// all.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeedShot {
+    /// The firer's place in the creation order.
+    pub firer: usize,
+    /// A G vehicle.
+    pub g: bool,
+    /// Which shot of that vehicle it is in a run that fires it (1 = first).
+    pub ordinal: usize,
+    /// For each run that does not fire it then: the ticks to that vehicle's
+    /// next shot in that run, and whether that shot has the same target and
+    /// weapon; `None` when the vehicle never fires again.
+    pub later: Vec<Option<(i32, bool)>>,
+}
+
+/// What the runs of one part and side with different seeds show
+/// (Procedure step 12).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SeedDiff {
+    /// The first tick at which the runs differ in a shot, a hit or a
+    /// per-tick row (vehicles matched by their place in the creation
+    /// order); `None` when they agree in every tick.
+    pub first: Option<i32>,
+    /// At that tick: whether the shots, the hits and the per-tick rows
+    /// differ.
+    pub differs: (bool, bool, bool),
+    /// The shots fired then in some runs only.
+    pub extras: Vec<SeedShot>,
+    /// The latest tick at which any vehicle of any run fires its first shot.
+    pub latest_first_shot: Option<i32>,
+    /// Each side's first shot (F, G), the latest over the runs.
+    pub side_first: [Option<i32>; 2],
+    /// The first death of any vehicle in any run.
+    pub first_death: Option<i32>,
+    /// The runs' deaths (which vehicle, at which tick) are not all the same.
+    pub deaths_differ: bool,
+    /// Every vehicle's first shot (tick, target, weapon) is the same in all
+    /// the runs.
+    pub first_shots_same: bool,
+    /// Local report only: how many F and how many G vehicles had fired their
+    /// first shot (in the first run) before the first difference.
+    pub fired_before: (usize, usize),
+    /// Local report only: when the per-tick rows differ at the first
+    /// difference, the place of the first vehicle whose row differs (or
+    /// `usize::MAX`) and the field.
+    pub first_row_diff: Option<(usize, &'static str)>,
+    /// Local report only: the first tick at which a hit differs between the
+    /// runs.
+    pub first_hit_diff: Option<i32>,
+    /// Local report only: the first tick of a death that is not the same in
+    /// every run.
+    pub first_death_diff: Option<i32>,
+}
+
+/// One part and side with its seeds compared.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeedGroup {
+    /// The part.
+    pub part: Part,
+    /// F's side.
+    pub side: Side,
+    /// What the seeds show.
+    pub diff: SeedDiff,
+}
+
+fn all_equal<T: PartialEq>(v: &[T]) -> bool {
+    v.windows(2).all(|w| w[0] == w[1])
+}
+
+/// Compares runs of one part and side that differ only in their seed
+/// (measure: M-0021, Procedure step 12): the first tick at which they differ
+/// in a shot (tick, firer, target, weapon), a hit (tick, object hit,
+/// warhead, attacker, health before and after) or a per-tick row (position,
+/// health, spin value and stage), the vehicles matched by their place in the
+/// creation order.
+pub fn compare_seeds(recs: &[&Recording]) -> SeedDiff {
+    let n = recs.len();
+    let ids: Vec<Vec<ObjectId>> = recs
+        .iter()
+        .map(|r| r.f.iter().chain(&r.g).copied().collect())
+        .collect();
+    let places: Vec<BTreeMap<ObjectId, usize>> = ids
+        .iter()
+        .map(|v| v.iter().enumerate().map(|(i, &id)| (id, i)).collect())
+        .collect();
+    let target_key = |i: usize, t: Target| -> (u8, i64, i64) {
+        match t {
+            Target::Object(x) => match places[i].get(&x) {
+                Some(&p) => (0, p as i64, 0),
+                None => (2, i64::from(x.0), 0),
+            },
+            Target::Cell(c) => (1, i64::from(c.x), i64::from(c.y)),
+        }
+    };
+    let mut shots: Vec<BTreeMap<i32, Vec<ShotKey>>> = vec![BTreeMap::new(); n];
+    let mut hits: Vec<BTreeMap<i32, Vec<HitKey>>> = vec![BTreeMap::new(); n];
+    for (i, r) in recs.iter().enumerate() {
+        for s in &r.shots {
+            if let Some(&p) = places[i].get(&s.firer) {
+                shots[i]
+                    .entry(s.tick)
+                    .or_default()
+                    .push((p, target_key(i, s.target), s.weapon));
+            }
+        }
+        for h in &r.hits {
+            if let Some(&p) = places[i].get(&h.id) {
+                let attacker = h.attacker.and_then(|a| places[i].get(&a).copied());
+                hits[i]
+                    .entry(h.tick)
+                    .or_default()
+                    .push((p, h.warhead, attacker, h.health));
+            }
+        }
+        for v in shots[i].values_mut() {
+            v.sort();
+        }
+        for v in hits[i].values_mut() {
+            v.sort();
+        }
+    }
+    let rows_at = |i: usize, t: i32| -> Option<(Vec<RowKey>, Vec<SpinKey>)> {
+        let rows = recs[i].rows.get(&t)?;
+        let mut a: Vec<RowKey> = rows
+            .iter()
+            .filter_map(|(id, &(p, h))| Some((*places[i].get(id)?, (p.x, p.y, p.z), h)))
+            .collect();
+        a.sort();
+        let mut s: Vec<SpinKey> = recs[i]
+            .spins
+            .get(&t)
+            .map(|m| {
+                m.iter()
+                    .filter_map(|(id, &(v, st))| Some((*places[i].get(id)?, v, st)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        s.sort();
+        Some((a, s))
+    };
+    let mut out = SeedDiff::default();
+    let end = recs.iter().map(|r| r.end).max().unwrap_or(0);
+    let none_s: Vec<ShotKey> = Vec::new();
+    let none_h: Vec<HitKey> = Vec::new();
+    for t in 0..=end {
+        let s: Vec<&Vec<ShotKey>> = (0..n)
+            .map(|i| shots[i].get(&t).unwrap_or(&none_s))
+            .collect();
+        let h: Vec<&Vec<HitKey>> = (0..n).map(|i| hits[i].get(&t).unwrap_or(&none_h)).collect();
+        let r: Vec<_> = (0..n).map(|i| rows_at(i, t)).collect();
+        let d = (!all_equal(&s), !all_equal(&h), !all_equal(&r));
+        if !(d.0 || d.1 || d.2) {
+            continue;
+        }
+        out.first = Some(t);
+        out.differs = d;
+        if d.2 {
+            // Local report only: which vehicle's row differs first, and in which field.
+            out.first_row_diff = 'rows: {
+                for other in r.iter().skip(1) {
+                    let (Some(a), Some(b)) = (&r[0], other) else {
+                        break 'rows Some((usize::MAX, "a run has no row"));
+                    };
+                    if a.0.len() != b.0.len() {
+                        break 'rows Some((usize::MAX, "vehicles in play"));
+                    }
+                    for (x, y) in a.0.iter().zip(&b.0) {
+                        if x != y {
+                            let field = if x.1 != y.1 { "position" } else { "health" };
+                            break 'rows Some((x.0, field));
+                        }
+                    }
+                    for (x, y) in a.1.iter().zip(&b.1) {
+                        if x != y {
+                            break 'rows Some((x.0, "spin"));
+                        }
+                    }
+                }
+                None
+            };
+        }
+        let keys: BTreeSet<ShotKey> = s.iter().flat_map(|v| v.iter().copied()).collect();
+        for k in keys {
+            let have: Vec<bool> = s.iter().map(|v| v.contains(&k)).collect();
+            let Some(i) = have.iter().position(|&x| x) else {
+                continue;
+            };
+            if have.iter().all(|&x| x) {
+                continue;
+            }
+            let ordinal = recs[i]
+                .shots
+                .iter()
+                .filter(|x| ids[i].get(k.0) == Some(&x.firer) && x.tick <= t)
+                .count();
+            let later = (0..n)
+                .filter(|&j| !have[j])
+                .map(|j| {
+                    recs[j]
+                        .shots
+                        .iter()
+                        .filter(|x| ids[j].get(k.0) == Some(&x.firer) && x.tick > t)
+                        .min_by_key(|x| x.tick)
+                        .map(|x| {
+                            (
+                                x.tick - t,
+                                (target_key(j, x.target), x.weapon) == (k.1, k.2),
+                            )
+                        })
+                })
+                .collect();
+            out.extras.push(SeedShot {
+                firer: k.0,
+                g: k.0 >= recs[i].f.len(),
+                ordinal,
+                later,
+            });
+        }
+        break;
+    }
+    // The first shots: each vehicle's and each side's, the latest over the runs.
+    for r in recs {
+        for (k, group) in [&r.f, &r.g].into_iter().enumerate() {
+            let first_of = |v: Option<ObjectId>| {
+                r.shots
+                    .iter()
+                    .filter(|s| v.is_none_or(|v| s.firer == v) && group.contains(&s.firer))
+                    .map(|s| s.tick)
+                    .min()
+            };
+            if let Some(m) = first_of(None) {
+                out.side_first[k] = Some(out.side_first[k].map_or(m, |o| o.max(m)));
+            }
+            for &v in group {
+                if let Some(f) = first_of(Some(v)) {
+                    out.latest_first_shot = Some(out.latest_first_shot.map_or(f, |o| o.max(f)));
+                }
+            }
+        }
+    }
+    // Each vehicle's first shot in each run (tick, target, weapon), by place.
+    let firsts: Vec<BTreeMap<usize, OwnFirstShot>> = recs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut m = BTreeMap::new();
+            for s in &r.shots {
+                if let Some(&p) = places[i].get(&s.firer) {
+                    m.entry(p)
+                        .or_insert((s.tick, target_key(i, s.target), s.weapon));
+                }
+            }
+            m
+        })
+        .collect();
+    out.first_shots_same = all_equal(&firsts);
+    if let (Some(f), Some(first_run)) = (out.first, firsts.first()) {
+        let f_len = recs[0].f.len();
+        let before = |in_f: bool| {
+            first_run
+                .iter()
+                .filter(|&(&p, &(t, _, _))| (p < f_len) == in_f && t < f)
+                .count()
+        };
+        out.fired_before = (before(true), before(false));
+    }
+    // The deaths.
+    let dmaps: Vec<BTreeMap<usize, i32>> = recs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            deaths(r)
+                .into_iter()
+                .filter_map(|(id, t)| places[i].get(&id).map(|&p| (p, t)))
+                .collect()
+        })
+        .collect();
+    out.first_death = dmaps.iter().flat_map(|m| m.values().copied()).min();
+    out.deaths_differ = !all_equal(&dmaps);
+    // Local report only: the first tick at which a hit differs, and the first tick of a death that is not in every run at that tick.
+    out.first_hit_diff = (0..=end).find(|t| {
+        let h: Vec<&Vec<HitKey>> = (0..n).map(|i| hits[i].get(t).unwrap_or(&none_h)).collect();
+        !all_equal(&h)
+    });
+    let places_dead: BTreeSet<usize> = dmaps.iter().flat_map(|m| m.keys().copied()).collect();
+    out.first_death_diff = places_dead
+        .iter()
+        .filter_map(|p| {
+            let ticks: Vec<Option<i32>> = dmaps.iter().map(|m| m.get(p).copied()).collect();
+            if all_equal(&ticks) {
+                None
+            } else {
+                ticks.iter().flatten().min().copied()
+            }
+        })
+        .min();
+    out
+}
+
+/// The seed rows of the record's Result, over the parts and sides played.
+pub fn seed_verdicts(groups: &[SeedGroup]) -> Vec<(String, Verdict)> {
+    let mut out = Vec::new();
+    if groups.is_empty() {
+        out.push((
+            "seeds".into(),
+            Verdict::NotCheckable("fewer than two seeds of a part and side were played".into()),
+        ));
+        return out;
+    }
+    let check = |ok: bool, why: String| {
+        if ok {
+            Verdict::Pass
+        } else {
+            Verdict::Fail(why)
+        }
+    };
+    let label = |g: &SeedGroup| format!("part {} F on {}", g.part.text(), g.side.text());
+    let bad = |f: &dyn Fn(&SeedGroup) -> bool| -> Vec<String> {
+        groups.iter().filter(|g| f(g)).map(label).collect()
+    };
+    // measure: M-0021 (Result, Seeds: no run of one part and side agrees with the others in every tick; the three seeds differ, exact)
+    let same = bad(&|g| g.diff.first.is_none());
+    out.push((
+        "seeds: the three seeds of a part and side differ".into(),
+        check(
+            same.is_empty(),
+            format!("the seeds agree in every tick in: {}", same.join(", ")),
+        ),
+    ));
+    // measure: M-0021 (Result, Seeds: before the first difference everything agrees, including every vehicle's first shot, exact)
+    let late = bad(&|g| {
+        g.diff
+            .first
+            .zip(g.diff.latest_first_shot)
+            .is_some_and(|(f, l)| l >= f)
+    });
+    out.push((
+        "seeds: every vehicle's first shot falls before the first difference".into(),
+        check(
+            late.is_empty(),
+            format!(
+                "a first shot at or after the first difference in: {}",
+                late.join(", ")
+            ),
+        ),
+    ));
+    // measure: M-0021 (Result, Seeds: what agrees in the three seeds includes every vehicle's first shot: the other reading of that row, the first shot of each vehicle is the same in the seeds wherever it falls)
+    // Our own supplementary reading, not a row of the record: shown, not counted in the rows failing.
+    let moved = bad(&|g| !g.diff.first_shots_same);
+    out.push((
+        "seeds (our reading): every vehicle's first shot (tick, target, weapon) is the same in the three seeds"
+            .into(),
+        Verdict::Shown(if moved.is_empty() {
+            "holds in every part and side".into()
+        } else {
+            format!("does not hold in: {}", moved.join(", "))
+        }),
+    ));
+    // measure: M-0021 (Result, Seeds: the first difference is the tick of some G vehicles' second shots, exact)
+    let kind = bad(&|g| {
+        !g.diff.differs.0
+            || g.diff.extras.is_empty()
+            || g.diff.extras.iter().any(|e| !e.g || e.ordinal != 2)
+    });
+    out.push((
+        "seeds: the first difference is the tick of some G vehicles' second shots".into(),
+        check(
+            kind.is_empty(),
+            format!("otherwise in: {}", kind.join(", ")),
+        ),
+    ));
+    // measure: M-0021 (Result, Seeds: each shot fired then in one seed only is fired by the same vehicle at the same target a few ticks later in the others)
+    let later = bad(&|g| {
+        g.diff.extras.iter().any(|e| {
+            e.later
+                .iter()
+                .any(|l| !matches!(l, Some((dt, true)) if *dt > 0))
+        })
+    });
+    out.push((
+        "seeds: a shot fired in one seed only is fired by the same vehicle at the same target later in the others".into(),
+        check(
+            later.is_empty(),
+            format!("otherwise in: {}", later.join(", ")),
+        ),
+    ));
+    // measure: M-0021 (Result, Seeds: the first difference falls in the same tick in parts A and B and on both sides; the tick is local, so the report file holds ours)
+    let firsts: BTreeSet<i32> = groups.iter().filter_map(|g| g.diff.first).collect();
+    out.push((
+        "seeds: the first difference falls in the same tick in every part and side".into(),
+        check(
+            firsts.len() <= 1,
+            format!(
+                "ours: {} different ticks over the parts and sides (the ticks are in the local report)",
+                firsts.len()
+            ),
+        ),
+    ));
+    // measure: M-0021 (Result, Seeds: the first difference falls after each side's first shots and before any vehicle's death)
+    let order = bad(&|g| {
+        let Some(f) = g.diff.first else { return true };
+        g.diff.side_first.iter().any(|s| s.is_none_or(|s| s >= f))
+            || g.diff.first_death.is_some_and(|d| d <= f)
+    });
+    out.push((
+        "seeds: the first difference falls after each side's first shots and before any death"
+            .into(),
+        check(
+            order.is_empty(),
+            format!("otherwise in: {}", order.join(", ")),
+        ),
+    ));
+    // measure: M-0021 (Result, Seeds: part B's deaths differ between the seeds later, after further shots have moved apart)
+    let part_b: Vec<&SeedGroup> = groups.iter().filter(|g| g.part == Part::B).collect();
+    out.push((
+        "seeds: part B's deaths differ between the seeds, after the first difference".into(),
+        if part_b.is_empty() {
+            Verdict::NotCheckable("no part B runs were played".into())
+        } else {
+            let wrong: Vec<String> = part_b
+                .iter()
+                .filter(|g| {
+                    !(g.diff.deaths_differ
+                        && g.diff
+                            .first
+                            .zip(g.diff.first_death)
+                            .is_some_and(|(f, d)| d > f))
+                })
+                .map(|g| label(g))
+                .collect();
+            check(
+                wrong.is_empty(),
+                format!("otherwise in: {}", wrong.join(", ")),
+            )
+        },
+    ));
+    out
+}
+
+// ---------------------------------------------------------------------------
 // The report: one verdict per row of the record's Result
 
 /// A row's verdict.
@@ -1231,7 +2108,10 @@ impl Verdict {
 }
 
 /// The verdicts of every row, in the record's order: (row, verdict).
-pub fn verdicts(runs: &[((Part, Side, u32), Findings)]) -> Vec<(String, Verdict)> {
+pub fn verdicts(
+    runs: &[((Part, Side, u32), Findings)],
+    seeds: &[SeedGroup],
+) -> Vec<(String, Verdict)> {
     let mut out = Vec::new();
     let of = |p: Part| runs.iter().filter(move |((q, _, _), _)| *q == p);
     let check = |ok: bool, why: String| {
@@ -1405,7 +2285,7 @@ pub fn verdicts(runs: &[((Part, Side, u32), Findings)]) -> Vec<(String, Verdict)
     let f_first: Vec<String> = all_runs
         .clone()
         .filter(|(_, f)| match (&f.first[0], &f.first[1]) {
-            (Some((a, _)), Some((b, _))) => a >= b,
+            (Some(a), Some(b)) => a.tick >= b.tick,
             (None, _) => true,
             _ => false,
         })
@@ -1413,8 +2293,8 @@ pub fn verdicts(runs: &[((Part, Side, u32), Findings)]) -> Vec<(String, Verdict)
             format!(
                 "{}: F {:?}, G {:?}",
                 name(k),
-                f.first[0].as_ref().map(|x| x.0),
-                f.first[1].as_ref().map(|x| x.0)
+                f.first[0].as_ref().map(|x| x.tick),
+                f.first[1].as_ref().map(|x| x.tick)
             )
         })
         .collect();
@@ -1426,24 +2306,238 @@ pub fn verdicts(runs: &[((Part, Side, u32), Findings)]) -> Vec<(String, Verdict)
     for (k, label) in [(0usize, "F"), (1, "G")] {
         let want = FIRST_SHOT_DISTANCE[k];
         let mut seen: BTreeSet<i64> = BTreeSet::new();
+        let mut unread = 0;
         for (_, f) in runs {
-            if let Some((_, ds)) = &f.first[k] {
-                for &d2 in ds {
-                    seen.insert(d2);
+            if let Some(first) = &f.first[k] {
+                for sh in &first.shooters {
+                    match sh.shot {
+                        Some(d2) => {
+                            seen.insert(d2);
+                        }
+                        None => unread += 1,
+                    }
                 }
             }
         }
         let shown: Vec<String> = seen.iter().map(|&d2| lepton_text(d2)).collect();
-        // measure: M-0021 (centre distance at F's first shot 1527 leptons, at G's 1280, at equal heights, exact)
-        let ok = !seen.is_empty() && seen.iter().all(|&d2| rounds_to(d2, want));
+        // measure: M-0021 (centre distance at F's first shot 1527 leptons, at G's 1280, at equal heights, from the shot row's positions, exact)
+        let ok = !seen.is_empty() && unread == 0 && seen.iter().all(|&d2| rounds_to(d2, want));
         out.push((
-            format!("first shots: centre distance at {label}'s first shot {want} leptons"),
+            format!(
+                "first shots: centre distance at {label}'s first shot, from the shot row's positions, {want} leptons"
+            ),
             check(
                 ok,
-                format!("ours (leptons, over the runs): {}", shown.join(", ")),
+                format!(
+                    "ours (leptons, over the runs): {}{}",
+                    shown.join(", "),
+                    if unread > 0 {
+                        format!("; {unread} shooters without a derived position")
+                    } else {
+                        String::new()
+                    }
+                ),
             ),
         ));
     }
+    // The first shot's target within range by the per-tick rows stamped t − 1 and t.
+    // measure: M-0021 (F's first shot: the target within F's range by the per-tick rows stamped t − 1 and t: yes, yes; G's: no, yes, exact)
+    for (k, label, want) in [(0usize, "F", (true, true)), (1, "G", (false, true))] {
+        let mut seen: BTreeSet<(Option<bool>, Option<bool>)> = BTreeSet::new();
+        for (_, f) in runs {
+            if let Some(first) = &f.first[k] {
+                for sh in &first.shooters {
+                    let within = |d: Option<i64>| d.map(|d2| d2 <= sh.range2);
+                    seen.insert((within(sh.rows.0), within(sh.rows.1)));
+                }
+            }
+        }
+        let wanted = (Some(want.0), Some(want.1));
+        out.push((
+            format!(
+                "first shots: {label}'s target within {label}'s range by the per-tick rows stamped t − 1, t: {}, {}",
+                if want.0 { "yes" } else { "no" },
+                if want.1 { "yes" } else { "no" }
+            ),
+            check(
+                !seen.is_empty() && seen.iter().all(|&s| s == wanted),
+                format!("ours (t − 1, t): {seen:?}"),
+            ),
+        ));
+    }
+    // measure: M-0021 (G's first shot: the per-tick distance stamped t is 1280, equal to the shot row's, exact)
+    let mut g_rows: BTreeSet<(Option<i64>, Option<i64>)> = BTreeSet::new();
+    for (_, f) in runs {
+        if let Some(first) = &f.first[1] {
+            for sh in &first.shooters {
+                g_rows.insert((sh.rows.1, sh.shot));
+            }
+        }
+    }
+    out.push((
+        "first shots: G's per-tick distance stamped t is 1280, equal to the shot row's".into(),
+        check(
+            !g_rows.is_empty()
+                && g_rows.iter().all(|&(row, shot)| {
+                    row.is_some_and(|d2| rounds_to(d2, FIRST_SHOT_DISTANCE[1]) && Some(d2) == shot)
+                }),
+            format!(
+                "ours (per-tick, shot row; leptons): {:?}",
+                g_rows
+                    .iter()
+                    .map(|&(a, b)| (a.map(lepton_text), b.map(lepton_text)))
+                    .collect::<Vec<_>>()
+            ),
+        ),
+    ));
+    // measure: M-0021 (every vehicle's own first shot falls in a tick in which the distance from the firer's position stamped t to its target's stamped t − 1 (an F shot) or t (a G shot) is within the weapon's range)
+    let far: Vec<String> = runs
+        .iter()
+        .flat_map(|(key, f)| {
+            f.own_first
+                .iter()
+                .filter(|o| !o.d2.is_some_and(|d2| d2 <= o.range2))
+                .map(move |o| format!("{}: {:?}", name(key), o.d2.map(lepton_text)))
+        })
+        .collect();
+    let first_count: usize = runs.iter().map(|(_, f)| f.own_first.len()).sum();
+    out.push((
+        "first shots: every vehicle's own first shot is within range at the reading points".into(),
+        if first_count == 0 {
+            Verdict::NotCheckable("no vehicle fired".into())
+        } else {
+            check(
+                far.is_empty(),
+                format!(
+                    "{} first shots: {}",
+                    far.len(),
+                    far.iter().take(6).cloned().collect::<Vec<_>>().join("; ")
+                ),
+            )
+        },
+    ));
+    // Reading points (measure: M-0021, Result, Reading points).
+    let sum =
+        |f: &dyn Fn(&Reading) -> usize| -> usize { runs.iter().map(|(_, r)| f(&r.reading)).sum() };
+    let (at_t, at_before, unseen, mism) = (
+        sum(&|r| r.hit_at_t),
+        sum(&|r| r.hit_at_before),
+        sum(&|r| r.hit_unseen),
+        sum(&|r| r.hit_before_mismatch),
+    );
+    out.push((
+        "reading points: the row that first shows a hit's health after is the row stamped t, never t − 1".into(),
+        if at_t + at_before + unseen == 0 {
+            Verdict::NotCheckable("no hit had a per-tick row at its tick".into())
+        } else {
+            check(
+                at_before == 0 && unseen == 0,
+                format!(
+                    "{at_t} hits first shown at t, {at_before} at t − 1, {unseen} in neither; {mism} hits whose t − 1 row does not show the health before; {} not covered (no row of the object at its tick, so the object was gone from the world), {} followed by another hit on the object in the same tick",
+                    sum(&|r| r.hit_no_row),
+                    sum(&|r| r.hit_superseded),
+                ),
+            )
+        },
+    ));
+    let (deaths, last_t) = (sum(&|r| r.deaths), sum(&|r| r.deaths_last_at_t));
+    let other: Vec<String> = runs
+        .iter()
+        .flat_map(|(key, r)| {
+            r.reading
+                .deaths_other
+                .iter()
+                .map(move |s| format!("{}: {s}", name(key)))
+        })
+        .collect();
+    out.push((
+        "reading points: a vehicle destroyed by a hit at t has its last per-tick row stamped t, with no health left".into(),
+        if deaths == 0 {
+            Verdict::NotCheckable("no vehicle was destroyed at a tick with per-tick rows".into())
+        } else {
+            check(
+                last_t == deaths,
+                format!(
+                    "{last_t} of {deaths} destroyed vehicles have it; ours removes a destroyed vehicle at the hit (S-0203 claim 6 (a), S-0312 claim 15; Q-2596); the others: {} (first: {})",
+                    deaths - last_t,
+                    other.first().cloned().unwrap_or_default()
+                ),
+            )
+        },
+    ));
+    for (slot, label, want) in [
+        (0usize, "F shot: the firer", "t"),
+        (1, "F shot: the target, a G vehicle", "t − 1"),
+        (2, "G shot: the firer", "t"),
+        (3, "G shot: the target, an F vehicle", "t"),
+    ] {
+        let mut c = PointCounts::default();
+        for (_, f) in runs {
+            let p = f.reading.shot_rows[slot];
+            c.at_t += p.at_t;
+            c.at_before += p.at_before;
+            c.neither += p.neither;
+            c.unchanged += p.unchanged;
+            c.unread += p.unread;
+        }
+        let (right, wrong) = if want == "t" {
+            (c.at_t, c.at_before)
+        } else {
+            (c.at_before, c.at_t)
+        };
+        // measure: M-0021 (Result, Reading points: an F shot's firer is read from the row stamped t and its target from t − 1; a G shot's firer and target from t; where the two rows differ, exact)
+        out.push((
+            format!("reading points: {label}: the per-tick row whose position equals the shot row's is {want}"),
+            if right + wrong + c.neither == 0 {
+                Verdict::NotCheckable("no such shot".into())
+            } else {
+                check(
+                    wrong == 0 && c.neither == 0 && right > 0,
+                    format!(
+                        "ours: {} at t, {} at t − 1, {} neither ({} did not move, {} unread)",
+                        c.at_t, c.at_before, c.neither, c.unchanged, c.unread
+                    ),
+                )
+            },
+        ));
+    }
+    // Our check of the derivation (not a row of the record).
+    let (shots, beyond, unread, combo_shots) = (
+        runs.iter().map(|(_, f)| f.reach.shots).sum::<usize>(),
+        runs.iter().map(|(_, f)| f.reach.beyond).sum::<usize>(),
+        runs.iter().map(|(_, f)| f.reach.unread).sum::<usize>(),
+        runs.iter().map(|(_, f)| f.reach.combo_shots).sum::<usize>(),
+    );
+    let mut combos = [0usize; 4];
+    for (_, f) in runs {
+        for (c, n) in combos.iter_mut().zip(f.reach.combos) {
+            *c += n;
+        }
+    }
+    // Our own check, not a row of the record: shown, not counted in the rows failing. The counts of shots are local (the report file holds them).
+    let how = |n: usize, of: usize| match n {
+        0 => "none",
+        n if n == of => "all",
+        _ => "some",
+    };
+    out.push((
+        "our check: every shot's derived centre distance is within its weapon's range".into(),
+        Verdict::Shown(format!(
+            "ours: shots beyond range: {}; shots without a derived position: {}",
+            how(beyond, shots),
+            how(unread, shots + unread)
+        )),
+    ));
+    out.push((
+        "our check: shots within range if the firer and the target are read at (t − 1, t − 1), (t − 1, t), (t, t − 1), (t, t)".into(),
+        Verdict::Shown(format!(
+            "ours: {}, {}, {}, {}",
+            how(combos[0], combo_shots),
+            how(combos[1], combo_shots),
+            how(combos[2], combo_shots),
+            how(combos[3], combo_shots)
+        )),
+    ));
     // Shot gaps.
     for (k, label) in [
         "F's shot weapon",
@@ -1583,6 +2677,7 @@ pub fn verdicts(runs: &[((Part, Side, u32), Findings)]) -> Vec<(String, Verdict)
             STAGE_LEAD.0, STAGE_LEAD.1
         )),
     ));
+    out.extend(seed_verdicts(seeds));
     out
 }
 
@@ -1601,7 +2696,11 @@ fn lepton_text(d2: i64) -> String {
 
 /// The whole report: per-run lines (local values: counts of shots and
 /// judged shots) and the verdicts.
-pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Findings)]) -> String {
+pub fn report(
+    built: &BTreeMap<Part, Built>,
+    runs: &[((Part, Side, u32), Findings)],
+    seeds: &[SeedGroup],
+) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -1633,9 +2732,19 @@ pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Finding
             f.fragment_hits.1,
             f.first
                 .iter()
-                .map(|x| x
-                    .as_ref()
-                    .map(|(t, ds)| (t, ds.iter().map(|&d| lepton_text(d)).collect::<Vec<_>>())))
+                .map(|x| x.as_ref().map(|first| (
+                    first.tick,
+                    first
+                        .shooters
+                        .iter()
+                        .map(|sh| (
+                            sh.shot.map(lepton_text),
+                            sh.rows.0.map(lepton_text),
+                            sh.rows.1.map(lepton_text),
+                            lepton_text(sh.range2)
+                        ))
+                        .collect::<Vec<_>>()
+                )))
                 .collect::<Vec<_>>(),
             f.gaps,
             f.expected_gap,
@@ -1651,15 +2760,50 @@ pub fn report(built: &BTreeMap<Part, Built>, runs: &[((Part, Side, u32), Finding
             f.f_longest_gap
         );
     }
-    out.push_str(&verdicts_text(runs));
+    for ((p, s, seed), f) in runs {
+        let _ = writeln!(
+            out,
+            "  part {} F on {} seed {seed}: derived shot positions {:?}, reading points {:?}",
+            p.text(),
+            s.text(),
+            f.reach,
+            f.reading
+        );
+    }
+    for g in seeds {
+        let d = &g.diff;
+        let _ = writeln!(
+            out,
+            "  seeds, part {} F on {}: first difference at {:?} (shots, hits, rows differ: {:?}), shots fired then in some runs only {}: {:?}, latest first shot {:?}, each side's first shot {:?}, first death {:?}, deaths differ {}, first hit difference {:?}, first death difference {:?}, first row difference {:?}, vehicles that had fired before the first difference (F, G) {:?}, every vehicle's first shot the same in the seeds {}",
+            g.part.text(),
+            g.side.text(),
+            d.first,
+            d.differs,
+            d.extras.len(),
+            d.extras
+                .iter()
+                .map(|e| (e.firer, e.g, e.ordinal, e.later.clone()))
+                .collect::<Vec<_>>(),
+            d.latest_first_shot,
+            d.side_first,
+            d.first_death,
+            d.deaths_differ,
+            d.first_hit_diff,
+            d.first_death_diff,
+            d.first_row_diff,
+            d.fired_before,
+            d.first_shots_same,
+        );
+    }
+    out.push_str(&verdicts_text(runs, seeds));
     out
 }
 
 /// The verdicts, one line per row, and the count of rows failing (the line
 /// `M-0021: rows failing: N of M`).
-pub fn verdicts_text(runs: &[((Part, Side, u32), Findings)]) -> String {
+pub fn verdicts_text(runs: &[((Part, Side, u32), Findings)], seeds: &[SeedGroup]) -> String {
     let mut out = String::new();
-    let v = verdicts(runs);
+    let v = verdicts(runs, seeds);
     let failing = v
         .iter()
         .filter(|(_, v)| matches!(v, Verdict::Fail(_)))
@@ -1705,10 +2849,14 @@ pub fn run(
     let jobs = runs();
     let results = play_all(&grounds, &jobs, threads);
     let mut judged = Vec::new();
+    let mut recs: Vec<((Part, Side, u32), Recording)> = Vec::new();
     let mut errors = String::new();
     for (&(p, s, seed), r) in jobs.iter().zip(results) {
         match r {
-            Ok(rec) => judged.push(((p, s, seed), judge(&rec, p))),
+            Ok(rec) => {
+                judged.push(((p, s, seed), judge(&rec, p)));
+                recs.push(((p, s, seed), rec));
+            }
             Err(e) => {
                 let _ = writeln!(
                     errors,
@@ -1719,11 +2867,29 @@ pub fn run(
             }
         }
     }
-    let summary = format!("{errors}{}", verdicts_text(&judged));
+    // measure: M-0021 (Procedure step 12: parts A and B, each side, the three seeds compared)
+    let mut seeds = Vec::new();
+    for part in [Part::A, Part::B] {
+        for side in [Side::A, Side::B] {
+            let group: Vec<&Recording> = recs
+                .iter()
+                .filter(|((p, s, _), _)| *p == part && *s == side)
+                .map(|(_, r)| r)
+                .collect();
+            if group.len() >= 2 {
+                seeds.push(SeedGroup {
+                    part,
+                    side,
+                    diff: compare_seeds(&group),
+                });
+            }
+        }
+    }
+    let summary = format!("{errors}{}", verdicts_text(&judged, &seeds));
     let observer = grounds.values().next().map(|g| observer_building(&g.rules));
     let full = format!(
         "{errors}observer's building type (local): {observer:?}\n{}",
-        report(&built, &judged)
+        report(&built, &judged, &seeds)
     );
     Ok((summary, full))
 }
@@ -1944,6 +3110,8 @@ mod tests {
             firer: f,
             target,
             weapon: 0,
+            firer_pos: None,
+            target_pos: None,
         };
         rec.shots = vec![
             shot(10, Target::Object(x)),
@@ -1984,7 +3152,7 @@ mod tests {
         assert_eq!(j.first_three, (true, true));
         // The last shot's window runs to the run's end: one fragment hit.
         assert_eq!(f.judged[1].fragment_hits.len(), 1);
-        let v = verdicts(&[((Part::A, Side::A, 0), f.clone())]);
+        let v = verdicts(&[((Part::A, Side::A, 0), f.clone())], &[]);
         let row = |s: &str| {
             v.iter()
                 .find(|(r, _)| r.starts_with(s))
@@ -2120,5 +3288,287 @@ mod tests {
         for k in 0..3 {
             assert_eq!(f.gaps[k], Some(f.expected_gap[k]), "weapon {k}");
         }
+    }
+
+    fn pos(x: i32) -> Pos {
+        Pos { x, y: 0, z: 0 }
+    }
+
+    // spec: S-0203 claim 3 and S-0310 claim 9 (measure: M-0021, Procedure and Notes, Reading points: the shot rows' positions are those at the shot, the firer after its own movement, a target that has not had its turn before the tick's move)
+    #[test]
+    fn the_shot_rows_positions_follow_the_update_order() {
+        let rec = play_to(&ground(Part::A), Part::A, Side::A, 0, 200).expect("plays");
+        assert!(!rec.shots.is_empty());
+        for s in &rec.shots {
+            let t = s.tick;
+            if !rec.rows.contains_key(&t) {
+                continue; // the run's last tick has no per-tick rows
+            }
+            assert_eq!(s.firer_pos, Some(rec.rows[&t][&s.firer].0), "the firer");
+            if let Target::Object(x) = s.target
+                && (rec.f.contains(&x) || rec.g.contains(&x))
+            {
+                let tp = s.target_pos.expect("an object target has a position");
+                assert!(
+                    tp == rec.rows[&(t - 1)][&x].0 || tp == rec.rows[&t][&x].0,
+                    "the target's position is a per-tick row's"
+                );
+            }
+        }
+        let f = judge(&rec, Part::A);
+        // The derived distances pass the engine's own firing test.
+        assert!(f.reach.shots > 0);
+        assert_eq!((f.reach.beyond, f.reach.unread), (0, 0));
+        // F's group is created first, so it takes its turns first: nobody reads a firer at t − 1, and a G
+        // shot reads its F target at t.
+        let r = f.reading.shot_rows;
+        assert_eq!((r[0].at_before, r[0].neither), (0, 0));
+        assert_eq!((r[1].at_t, r[1].neither), (0, 0));
+        assert_eq!((r[2].at_before, r[2].neither), (0, 0));
+        assert_eq!((r[3].at_before, r[3].neither), (0, 0));
+    }
+
+    // spec: S-0203 claim 6 (a) (a destroyed vehicle leaves play at the hit; measure: M-0021, Procedure: the positions as the shot's own row gives them): part B's shots at a vehicle that the shot or a later hit of the tick destroys still have both positions
+    #[test]
+    fn a_destroyed_vehicles_shot_still_has_its_positions() {
+        let rec = play_to(&ground(Part::B), Part::B, Side::A, 0, 900).expect("plays");
+        let f = judge(&rec, Part::B);
+        assert!(f.dead.0 + f.dead.1 > 0, "some vehicle died in the run");
+        assert!(!rec.shots.is_empty());
+        for s in &rec.shots {
+            assert!(s.firer_pos.is_some(), "tick {}", s.tick);
+            if let Target::Object(x) = s.target
+                && (rec.f.contains(&x) || rec.g.contains(&x))
+            {
+                assert!(s.target_pos.is_some(), "tick {}", s.tick);
+            }
+        }
+        // The destroyed vehicle has no row at the tick of its death (S-0203 claim 6 (a)): its last row is the one before.
+        assert_eq!(f.reading.deaths_last_at_t, 0);
+        assert_eq!(f.reading.deaths, f.reading.deaths_other.len());
+    }
+
+    // measure: M-0021 (Procedure step 11 and Result, Reading points: the row that first shows a hit's health after, a destroyed vehicle's last row, the row that holds a shot row's position)
+    #[test]
+    fn the_reading_points_are_read_from_the_rows() {
+        let (f, x, dead, gone) = (ObjectId(1), ObjectId(2), ObjectId(3), ObjectId(4));
+        let mut rec = Recording {
+            f: vec![f],
+            g: vec![x, dead, gone],
+            weapons: [0, 1, 2, 3],
+            warheads: [0, 1],
+            end: 5,
+            ..Default::default()
+        };
+        // The target moves during tick 2 (1500 to 1450), the firer during tick 2 as well (0 to 40).
+        for t in 0..5 {
+            let mut r = BTreeMap::new();
+            let moved = t >= 2;
+            r.insert(f, (pos(if moved { 40 } else { 0 }), 100));
+            r.insert(
+                x,
+                (
+                    pos(if moved { 1450 } else { 1500 }),
+                    if t >= 2 { 86 } else { 100 },
+                ),
+            );
+            // `dead` is destroyed at tick 2 and still a row at 2 with no health; `gone` is destroyed at 2 and has no row at 2.
+            if t <= 2 {
+                r.insert(dead, (pos(900), if t == 2 { 0 } else { 50 }));
+            }
+            if t <= 1 {
+                r.insert(gone, (pos(800), 50));
+            }
+            rec.positions
+                .insert(t, BTreeMap::from([(f, r[&f].0), (x, r[&x].0)]));
+            rec.rows.insert(t, r);
+        }
+        let hit = |id, health| HitRec {
+            tick: 2,
+            id,
+            warhead: Some(0),
+            attacker: Some(f),
+            health,
+        };
+        // Two hits on x in the tick: only the last one's health after can show in a row.
+        rec.hits = vec![
+            hit(x, (100, 93)),
+            hit(x, (93, 86)),
+            hit(dead, (50, 0)),
+            hit(gone, (50, 0)),
+        ];
+        // An F shot at tick 2: the firer as the row stamped 2 has it, the target as the row stamped 1.
+        rec.shots = vec![ShotRec {
+            tick: 2,
+            firer: f,
+            target: Target::Object(x),
+            weapon: 0,
+            firer_pos: Some(pos(40)),
+            target_pos: Some(pos(1500)),
+        }];
+        let j = judge(&rec, Part::B);
+        let r = &j.reading;
+        assert_eq!((r.hit_at_t, r.hit_at_before, r.hit_unseen), (2, 0, 0));
+        assert_eq!(
+            (r.hit_superseded, r.hit_before_mismatch, r.hit_no_row),
+            (1, 0, 1)
+        );
+        assert_eq!((r.deaths, r.deaths_last_at_t), (2, 1));
+        assert_eq!(r.deaths_other.len(), 1);
+        assert_eq!(r.shot_rows[0].at_t, 1);
+        assert_eq!(r.shot_rows[1].at_before, 1);
+        // The distance 1460 from the shot row's positions is within F's range of 1536; the per-tick distances 1500 and 1410 are too.
+        let first = j.first[0].as_ref().expect("F fired");
+        assert_eq!(first.shooters.len(), 1);
+        let s = &first.shooters[0];
+        assert_eq!(s.shot, Some(1460 * 1460));
+        assert_eq!(s.rows, (Some(1500 * 1500), Some(1410 * 1410)));
+        assert_eq!(s.range2, 1536 * 1536);
+    }
+
+    // measure: M-0021 (Result, First shots: the first-shot rows read the shot row's positions and the per-tick rows stamped t − 1 and t)
+    #[test]
+    fn the_first_shot_rows_read_the_shot_rows_positions() {
+        let (f, x) = (ObjectId(1), ObjectId(2));
+        let mut rec = Recording {
+            f: vec![f],
+            g: vec![x],
+            weapons: [0, 1, 2, 3],
+            warheads: [0, 1],
+            end: 9,
+            ..Default::default()
+        };
+        // The per-tick distance stamped 4 is 1530 and stamped 5 is 1520: the shot row's (1527) is neither.
+        for (t, d) in [(4, 1530), (5, 1520)] {
+            rec.positions
+                .insert(t, BTreeMap::from([(f, pos(0)), (x, pos(d))]));
+        }
+        rec.shots = vec![ShotRec {
+            tick: 5,
+            firer: f,
+            target: Target::Object(x),
+            weapon: 0,
+            firer_pos: Some(pos(0)),
+            target_pos: Some(pos(1527)),
+        }];
+        let j = judge(&rec, Part::A);
+        let v = verdicts(&[((Part::A, Side::A, 0), j)], &[]);
+        let row = |s: &str| {
+            v.iter()
+                .find(|(r, _)| r.starts_with(s))
+                .map(|(_, v)| v.clone())
+        };
+        assert_eq!(
+            row("first shots: centre distance at F's first shot"),
+            Some(Verdict::Pass)
+        );
+        assert_eq!(
+            row("first shots: F's target within F's range"),
+            Some(Verdict::Pass)
+        );
+        // A distance from the per-tick rows stamped t alone (1520) would not be the record's 1527.
+        assert!(!rounds_to(1520 * 1520, FIRST_SHOT_DISTANCE[0]));
+    }
+
+    // measure: M-0021 (Procedure step 12 and Result, Seeds: the first tick at which the seeds' runs differ, the vehicles matched by creation order)
+    #[test]
+    fn the_seeds_first_difference_is_found_by_creation_order() {
+        let (f, g0, g1) = (ObjectId(1), ObjectId(2), ObjectId(3));
+        // Three runs whose vehicles carry other numbers in each (matching is by place).
+        let run = |shift: u32, second: i32| {
+            let (f, g0, g1) = (
+                ObjectId(f.0 + shift),
+                ObjectId(g0.0 + shift),
+                ObjectId(g1.0 + shift),
+            );
+            let shot = |tick, firer, target| ShotRec {
+                tick,
+                firer,
+                target: Target::Object(target),
+                weapon: 2,
+                firer_pos: None,
+                target_pos: None,
+            };
+            Recording {
+                f: vec![f],
+                g: vec![g0, g1],
+                shots: vec![
+                    shot(3, f, g0),
+                    shot(4, g0, f),
+                    shot(5, g1, f),
+                    shot(second, g0, f),
+                ],
+                end: 12,
+                ..Default::default()
+            }
+        };
+        let (a, b, c) = (run(0, 9), run(10, 9), run(20, 11));
+        let same = compare_seeds(&[&a, &b]);
+        assert_eq!(same.first, None);
+        let d = compare_seeds(&[&a, &b, &c]);
+        assert_eq!(d.first, Some(9));
+        assert_eq!(d.differs, (true, false, false));
+        assert_eq!(d.extras.len(), 1);
+        let e = &d.extras[0];
+        assert_eq!((e.firer, e.g, e.ordinal), (1, true, 2));
+        assert_eq!(e.later, vec![Some((2, true))]);
+        assert_eq!(d.latest_first_shot, Some(5));
+        assert_eq!(d.side_first, [Some(3), Some(4)]);
+        assert_eq!((d.first_death, d.deaths_differ), (None, false));
+        assert!(d.first_shots_same);
+        assert_eq!(d.fired_before, (1, 2));
+        // The seed rows pass for such a difference, and fail for runs that agree.
+        let group = |diff| SeedGroup {
+            part: Part::A,
+            side: Side::A,
+            diff,
+        };
+        let rows = seed_verdicts(&[group(d)]);
+        for (name, v) in &rows {
+            if name.starts_with("seeds: part B") {
+                continue;
+            }
+            assert!(!matches!(v, Verdict::Fail(_)), "{name}: {v:?}");
+        }
+        let rows = seed_verdicts(&[group(same)]);
+        assert!(matches!(&rows[0].1, Verdict::Fail(_)));
+    }
+
+    // measure: M-0021 (Procedure step 12: a difference in a hit's health or in a per-tick row counts as well as one in a shot)
+    #[test]
+    fn the_seeds_first_difference_can_be_a_hit_or_a_row() {
+        let (f, g) = (ObjectId(1), ObjectId(2));
+        let base = |shift: u32| Recording {
+            f: vec![ObjectId(f.0 + shift)],
+            g: vec![ObjectId(g.0 + shift)],
+            end: 8,
+            ..Default::default()
+        };
+        let with_hit = |shift: u32, health: (i32, i32)| {
+            let mut r = base(shift);
+            r.hits.push(HitRec {
+                tick: 6,
+                id: ObjectId(g.0 + shift),
+                warhead: Some(0),
+                attacker: Some(ObjectId(f.0 + shift)),
+                health,
+            });
+            r
+        };
+        let d = compare_seeds(&[&with_hit(0, (100, 93)), &with_hit(10, (100, 90))]);
+        assert_eq!((d.first, d.differs), (Some(6), (false, true, false)));
+        // A per-tick row that differs from tick 4 on.
+        let with_row = |shift: u32, x: i32| {
+            let mut r = base(shift);
+            for t in 0..8 {
+                let at = if t >= 4 { x } else { 0 };
+                r.rows
+                    .insert(t, BTreeMap::from([(ObjectId(g.0 + shift), (pos(at), 100))]));
+            }
+            r
+        };
+        let d = compare_seeds(&[&with_row(0, 5), &with_row(10, 6)]);
+        assert_eq!((d.first, d.differs), (Some(4), (false, false, true)));
+        assert!(d.extras.is_empty());
     }
 }
