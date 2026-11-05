@@ -518,3 +518,25 @@ entry judged this switch.
 | `aircraft_half_reload_with_target` | S-0501 claim 28, Edge cases (*Half reload with a target*) | rejected (not in the layer) | Condition 1 holds: the Edge case states the off position (the aircraft is reloaded to full whatever its target, and takes off at full ammunition), built in the pad's service step in `air.rs`. Condition 2 is met in part. For a type with one round, ⌊*A* / 2⌋ is 0. On, an order given on the pad then sends the aircraft out at once with no round, it turns back at once (claim 17), and it lands again. That is note 50, and in the lane it put the full reload off by 270 ticks. Condition 3 fails. The off position changes every aircraft with two rounds or more as well: with a target it now waits on its pad for full ammunition, where the original sends it out at half. That changes how soon air attacks go and how much they carry, which is a balance change (D14), the reason `aircraft_unit_step_stall` was rejected. A switch that held only an aircraft with no round would be a new rule, and no spec states one; the lead may rule on it as our own design. Tests: the two positions, `claims_s0501::claim_28_half_reload_both_ways`. |
 
 The layer file is unchanged.
+
+## Intake 103 (S-0212 r97, S-0417 r79, M-0023): no new switch; the own pathing improvements re-read
+
+Ledger: [intake103.md](intake103.md). Neither revision adds, renames or rewrites a quirk, so no
+switch is added and no default changes. S-0212 r96 only rewraps the lines that name
+`quirks.detour_mirrored_reference` and `quirks.path_refresh_keeps_old_step` (P9's falsifiers; the
+follower run 3 falsifier is dropped, which is claim 26's and unbuilt); both keep their defaults.
+
+r97's claim 21 ends a driving or walking unit's running retry delay when its destination is changed
+to a different one or cleared. Whether that changes what each of our own pathing improvements
+fixes:
+
+| Switch (off) | Changed by r97? | Reason |
+|---|---|---|
+| `path_through_stalled_blockers` | no | It acts on stalled units, which hold their destinations through the deadlock; a delay that runs with a kept destination runs as before. |
+| `unreachable_move_dropped` | no | Its try towards the nearest reachable cell runs inside the failed computation itself (`path::compute_untraced`), before the failure starts or clears any delay. What it fixes, a move to a cell the unit cannot reach doing nothing, is the same: on, r97 only means the cleared destination leaves no delay, and the unit still stands where it was. |
+| `group_spread_no_detour` | no | It chooses each member's cell at the order; the members crowd the fallback cell in the same way. A member whose delay ran now searches for its new cell at once in both positions. |
+| `rally_point_shared` | no | Released units get their rally move at the release, with no delay running. |
+| `deadlock_no_yield` | no | The yield already ended the yielding unit's delay (`retry_at = t`) as it gave it the refuge cell; r97's rule now ends it too, so the explicit reset has no further effect. |
+| `harvest_cell_shared` | no | It chooses which field cell a harvester heads for. A different field cell now ends a running delay in both positions; the docking offer keeps its delay (S-0402 claim 10a). |
+
+Intake 103 leaves the layer file unchanged.
