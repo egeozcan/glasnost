@@ -148,7 +148,8 @@ pub enum Effect {
     /// A hit's damage-state result (S-0302 claim 12), for the sound
     /// reactions of S-0701 claims 20 and 28. Not reported for a hit that
     /// claim 8 stops before its health stage, nor for a berserk hit (S-0302
-    /// claim 10: it has no reactions).
+    /// r41 claim 10: its harvester announcement is `Sound::HarvesterAttacked`;
+    /// the damage sound is Q-2626).
     Hit {
         /// The object hit.
         id: ObjectId,

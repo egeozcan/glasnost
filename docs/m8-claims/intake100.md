@@ -23,4 +23,5 @@ Before r41 our berserk branch of `damage::apply_hit` returned `Unchanged` with n
 | Claim 12: "a berserk hit has none of the reactions below" | partly | as above (no damage effect, no disguise loss: the branch returns first; no test lands a berserk hit on a disguised spy, scenario D23 f is `unmeasured` here and has no test) | the health, retaliation and fall-back tests of claim 10 |
 | Sound reactions to a berserk hit other than the harvester announcement (the damage sound of S-0701 claim 20, the ally-under-attack announcement) | request | **Q-2626**; interim rule: none (the behaviour before r41) | none |
 | Changes entries for S-0215 claims 16 and 39, S-0208 claim 15, S-0107 claim 16, S-0701 claim 28 | pointers | owners build their claim; the berserk trigger is built here as above | |
+| Older ledgers (`intake38-M-0011.md` lines 27 and 46: "a berserk hit sets off no reactions") | describe behaviour before r41; the M-0011 tests still pass | | |
 | Quirks | none added | | `every_spec_quirk_has_a_switch` unaffected |
