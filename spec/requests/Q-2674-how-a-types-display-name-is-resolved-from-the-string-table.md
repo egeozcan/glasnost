@@ -1,9 +1,9 @@
 ---
 id: Q-2674
 title: How a unit or building type's display name is found in the string table
-status: open
+status: answered
 related: [S-0004, S-0005, S-0006, S-0411, S-0512]
-answered-by: []
+answered-by: [S-0004]
 ---
 
 ## Need
