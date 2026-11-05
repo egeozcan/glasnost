@@ -132,6 +132,9 @@ pub struct Session {
     /// The button images the sidebar draws and lays out (S-0411 claim 19).
     buttons: hud::ButtonArt,
     pointer: Option<Point>,
+    /// The object under the pointer and the interface time it came under
+    /// it, for its name tag (our design, M8 A4 round 8 note 54).
+    hover_tip: Option<(ObjectId, i64)>,
     /// Edge momentum and its retained direction (S-0101 F9).
     edge: EdgeScroll,
     /// Whether the last scroll cycle allowed edge scrolling (focus, no
@@ -508,6 +511,7 @@ impl Session {
             sidebar_art: None,
             buttons: hud::ButtonArt::default(),
             pointer: None,
+            hover_tip: None,
             edge: EdgeScroll::default(),
             edge_live: true,
             press: None,
@@ -2347,6 +2351,7 @@ impl Session {
             .pointer
             .filter(|&p| self.map_rect().contains(p))
             .and_then(|p| self.under(p).1);
+        self.hover_tip = next_hover_tip(hovered, self.hover_tip, self.clock_ms);
         let selection = self.play.selection.clone();
         let digits = self.play.group_digits();
         self.with_live(|live, inputs, scene| {
@@ -2357,6 +2362,45 @@ impl Session {
                 live.redraw_status(inputs, scene);
             }
         });
+    }
+
+    /// The name tag of the object resting under the pointer, once it has
+    /// rested there [`HOVER_TAG_MS`] of interface time.
+    ///
+    /// design: M8 A4 round 8 note 54. No spec gives hover tips (S-0105 Open
+    /// questions, Q-2673). Ours: a unit or building the pointer has rested
+    /// on for the wait shows its type's name, the name the sidebar's icons
+    /// show (display names wait on the string table, Q-2674). None while the
+    /// options menu is open, the keyboard aims, a box is dragged or the
+    /// right button is held, for a terrain object, and for a unit that
+    /// appears disguised to the local player's house (S-0516 claim 35), so
+    /// the tag never tells what the drawing must not.
+    pub fn hover_tag(&self) -> Option<String> {
+        let (id, since) = self.hover_tip?;
+        let dragging = self.drag.is_some_and(|d| d.active) || self.right.is_some();
+        if !hover_tag_due(since, self.clock_ms)
+            || self.paused
+            || self.aim_cell().is_some()
+            || dragging
+        {
+            return None;
+        }
+        let w = &self.play.game.world;
+        let o = w.obj(id)?;
+        if !o.on_map || o.kind == SimKind::Terrain {
+            return None;
+        }
+        // design: M8 A4 round 8 note 54 (no tag for an object at a point shrouded for the local player: S-0110 claim 8's point test)
+        if let Some(h) = self.play.local
+            && glasnost_sim::econ::shroud::point_shrouded(w, h, o.pos)
+        {
+            return None;
+        }
+        // spec: S-0516 claim 35 (appears disguised to the local player's house)
+        if glasnost_sim::cloak::disguise::appears_disguised(w, id, self.play.local) {
+            return None;
+        }
+        Some(live::type_name(w.rules(), o.kind, o.type_index))
     }
 
     /// The interface over the battlefield image: the image, the
@@ -2707,6 +2751,10 @@ impl Session {
             hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover)
         };
         ui.extend(hud_list);
+        // design: M8 A4 round 8 note 54 (the name tag beside the pointer, over the battlefield and kept inside it)
+        if let (Some(name), Some(p)) = (self.hover_tag(), pointer) {
+            hud::name_tag(&mut ui, self.ui.to_ui(p), &name, lm);
+        }
         self.targets = targets;
         if self.paused {
             let speed = self.speed_offered().then_some(self.menu_speed);
@@ -2798,6 +2846,33 @@ const AIM_INK: [u8; 4] = [96, 208, 255, 90];
 /// The type-select tap limit: the longest hold that is a tap, whole
 /// milliseconds.
 pub const TYPE_SELECT_TAP_MS: i64 = 500; // spec: S-0214 Constants (type-select tap limit: 500 milliseconds; a release at most 500 after the press is a tap)
+/// How long the pointer rests on an object, in milliseconds of interface
+/// time, before its name tag shows.
+pub const HOVER_TAG_MS: i64 = 700; // design: M8 A4 round 8 note 54 (no spec gives hover tips, Q-2673)
+
+/// The object under the pointer and the interface time it came there,
+/// after a frame whose hovered object is `hovered`: the time is kept while
+/// the same object stays under the pointer and starts again at `now` when
+/// another comes there.
+pub fn next_hover_tip(
+    hovered: Option<ObjectId>,
+    was: Option<(ObjectId, i64)>,
+    now: i64,
+) -> Option<(ObjectId, i64)> {
+    // design: M8 A4 round 8 note 54 (the name tag's wait starts when an object comes under the pointer, on the interface clock)
+    match (hovered, was) {
+        (Some(id), Some((w, since))) if w == id => Some((id, since)),
+        (Some(id), _) => Some((id, now)),
+        (None, _) => None,
+    }
+}
+
+/// Whether a pointer resting on an object since `since` has waited long
+/// enough for its name tag at `now`.
+pub fn hover_tag_due(since: i64, now: i64) -> bool {
+    // design: M8 A4 round 8 note 54 (the tag shows once the wait has passed; Q-2673)
+    now - since >= HOVER_TAG_MS
+}
 /// The group repeat interval: a *select group* press less than this after
 /// the last one that selected the group can be a repeat, milliseconds.
 pub const GROUP_REPEAT_MS: i64 = 800; // spec: S-0214 Constants (group repeat interval: 800 milliseconds of real time, less than counts)
@@ -3351,6 +3426,28 @@ mod cursor_palette_tests {
             pollster::block_on(CursorPaletteKeep::EachGame.for_game(&later)),
             Some(vec![7u8; 768])
         );
+    }
+}
+
+#[cfg(test)]
+mod hover_tag_tests {
+    use super::*;
+
+    /// design: M8 A4 round 8 note 54 (Q-2673): the name tag waits
+    /// [`HOVER_TAG_MS`] of interface time on one object; another object
+    /// under the pointer starts the wait again, and none ends it.
+    #[test]
+    fn the_name_tag_waits_on_one_object() {
+        let (a, b) = (ObjectId(1), ObjectId(2));
+        let t = next_hover_tip(Some(a), None, 1000);
+        assert_eq!(t, Some((a, 1000)));
+        let t = next_hover_tip(Some(a), t, 1600);
+        assert_eq!(t, Some((a, 1000)), "the same object keeps its time");
+        assert!(!hover_tag_due(1000, 1000 + HOVER_TAG_MS - 1));
+        assert!(hover_tag_due(1000, 1000 + HOVER_TAG_MS));
+        let t = next_hover_tip(Some(b), t, 1800);
+        assert_eq!(t, Some((b, 1800)), "another object starts again");
+        assert_eq!(next_hover_tip(None, t, 1900), None);
     }
 }
 
