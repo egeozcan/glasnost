@@ -1,9 +1,9 @@
 ---
 id: Q-2598
 title: In which order M-0021's part B vehicles die, and where the seeds first split in a hit or a death
-status: open
+status: answered
 related: [S-0301, S-0302, S-0309, S-0312]
-answered-by: []
+answered-by: [M-0021]
 ---
 
 ## Need
