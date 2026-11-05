@@ -1,9 +1,9 @@
 ---
 id: Q-2626
 title: Which sounds and attack announcements a berserk hit makes besides the harvester announcement
-status: open
+status: answered
 related: [S-0302, S-0701]
-answered-by: []
+answered-by: [Q-2626]
 ---
 
 ## Need
