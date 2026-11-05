@@ -1,18 +1,18 @@
 ---
 id: S-0111
-title: In-game overlays (health bars, pips, selection marks, insignia)
+title: In-game overlays (health bars, pips, selection marks, insignia, name tip)
 topic: rendering
-revision: 25
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-29
+approved-on: 2026-11-05
 measurements: []
-requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072]
+requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673]
 supersedes: []
 ---
 
-# S-0111: In-game overlays (health bars, pips, selection marks, insignia)
+# S-0111: In-game overlays (health bars, pips, selection marks, insignia, name tip)
 
 ## Summary
 
@@ -24,6 +24,11 @@ the veterancy insignia and the repair wrench, with the cursor palette that the w
 bomb icon are drawn through and what happens without it (claim 19a). Which objects have status extras and the painting order
 belong to S-0102. Skirmish only; campaigns and network games are out of scope. Conditional fog
 behaviour is deferred context only, since S-0409 claim 19 forces fog off in skirmish.
+
+It also gives the name tip (claims 20 to 26): the small text box that the interface shows over the
+battlefield view when the pointer rests on an object, with its timing, the option that turns it
+off, the objects that get one, its text, its placement, its look and when it goes. The display
+names it shows are found as S-0004 claim 17 gives. The sidebar's own tips are not covered here.
 
 ## Terms
 
@@ -45,6 +50,11 @@ S-0108 (Formulas F3).
 | health colour | green, yellow or red (claim 5). |
 | selected | Chosen by the local player as part of the current selection. |
 | hovered | Under the local player's mouse pointer while not selected. |
+| pointer object | The object that the local player's pointer is on, found as for *hovered* and for clicks, whether selected or not; none when the pointer is on no object. The pointer cell is the cell under the pointer found the same way. |
+| name tip | The interface's text box for the pointer object (claims 20 to 26). Presentation only: it changes no game state. |
+| rest, wait | The pointer *rests* while it does not move. The *wait* is the real time a rest must last before the name tip shows (claim 20). |
+| display name | A type's text for the player, resolved from its display-name label as S-0004 claim 17 gives. Never missing: a type with no label has empty text. |
+| turret-tip vehicle | A vehicle whose type has a turret count above 0 and the turret-tip flag (Import mapping). |
 | pip sprite, second pip sprite, bracket sprite, wrench sprite | The overlay sprites of Import mapping. Image-frame numbers below refer to them. |
 | pip scale | The row of small pips drawn with the health bar for an owner the local player may inspect (claim 9). |
 | pip-scale kind | The type's imported pip-scale field: none, ammunition, resource, passengers, power or mind control. |
@@ -602,6 +612,201 @@ S-0108 (Formulas F3).
       palette part d, which tells the two apart only as far as S-0005 claim 1's test for a loose
       file at every open holds (itself medium); medium for the importer warning.
 
+20. **Name tip: when it shows (Q-2673).** The name tip shows only while the player's tooltip
+    option is on (Import mapping). It is on unless the player's settings turn it off, and both
+    options menus change it. With the option off, no name tip ever shows.
+    - **Wait.** The tip shows once the pointer has rested on the battlefield view for 1000 ms of
+      real time. Every pointer movement, of any distance and whether or not the pointer object
+      changes, hides a tip that is showing and starts the wait again. Pressing or releasing the
+      left, right or middle mouse button hides the tip and stops the wait. No tip then shows until
+      the pointer has moved and rested again. The mouse wheel affects neither.
+    - **Real time, not ticks.** The wait and the lifetime below are real time. Game speed does not
+      change them, and a paused game does not stop them. Our engine keeps this real-time timing:
+      the tip feeds no game state.
+    - **One choice per rest.** When the wait ends, the text is chosen once, from the state at that
+      moment (claims 21 to 23). If there is no text, or it is empty, nothing shows. Nothing then
+      shows until the pointer moves and rests again, even if an object later comes under the
+      resting pointer.
+    - **Lifetime.** A tip stays for 10000 ms of real time after it shows, and then hides. It does
+      not show again until the pointer moves and rests again.
+    - **Blocked.** No tip shows when the wait ends while the mouse cursor is hidden, while the
+      player's input is locked, or while the battlefield view is moving, as during a scroll. One
+      further internal state of the view also blocks it (Open questions).
+    - Backing: `measurable` (scenario NT1 for the wait, its restart, the buttons, the wheel, the
+      lifetime, game speed and the one choice per rest; NT2 for the option, its settings key and
+      both options menus; NT8 for a scroll). `unmeasured` for a locked input and a hidden cursor: no
+      ordinary skirmish action is known to cause them while the pointer rests on the battlefield
+      view. `unmeasured` for a paused game: no way is known to the measurement setup to pause a
+      skirmish while the pointer rests on the battlefield view and the tip's timing is observed.
+    - Confidence: high for the 1000 ms wait, the 10000 ms lifetime, the restart on any movement, the
+      three buttons, the option and game speed not changing the wait or the lifetime; medium for the
+      wheel, for a paused game, for the hidden cursor, the locked input and the moving view, and for
+      the one choice per rest; low for the further internal state of the view that also blocks it,
+      which is not identified (Open questions)
+
+21. **Name tip: which pointer objects get one.** When the wait ends, the tip's text is:
+    - the shroud label (Import mapping) when the pointer cell is not explored by the local
+      player's house (S-0409), whatever the cell holds
+    - otherwise nothing when there is no pointer object. A resource overlay, a wall or other
+      overlay, or bare ground under the pointer gives no tip
+    - the name of claim 22 for a vehicle, infantry unit, aircraft or building that the local
+      player owns. This includes an own cloaked object
+    - the name of claim 22 for a vehicle, infantry unit, aircraft or building of any other house
+      (allied, enemy, civilian or neutral), with two exceptions:
+      - nothing when it is fully cloaked (S-0516 Terms) and not sensed by the local player's
+        house (S-0516 Terms), also when its owner is allied. A cloaking or uncloaking object
+        gets its name
+      - nothing when its type has the invisible flag (Import mapping)
+    - for any other pointer object, such as a terrain object: the display name of the resource
+      kind of the pointer cell's resource overlay (the kind S-0401 gives that overlay), and
+      nothing when the pointer cell has no resource overlay.
+
+    An occupied building shows its own name, never an occupant's. An object's health, owner and
+    veterancy never appear in the tip.
+    - Backing: `measurable` (scenario NT3). `unmeasured` for a cloaking or uncloaking object getting
+      its name: the real-time wait would have to end inside the cloak's transition, which no NT3
+      part can time
+    - Confidence: high for own and other houses' vehicles, infantry, aircraft and buildings, for the
+      fully cloaked rule on a fully cloaked unit, and for the invisible flag on an enemy vehicle and
+      an enemy building, a building type's invisible-in-game key included; medium for the invisible
+      flag on infantry and aircraft of other houses and for own objects of a type with the flag
+      getting their name, which NT3 does not run, for a cloaking or uncloaking object getting its
+      name, which no NT3 part times, for the shroud label and for the other pointer objects, since
+      which of them can be the pointer object is S-0214's matter
+
+22. **Name tip: the name by kind.** The name of claim 21 is:
+    - for a building or an aircraft: its type's display name. A disguise does not change it
+    - for an infantry unit:
+      - the technician label (Import mapping) when the unit carries the technician mark (below)
+      - otherwise the display name of its disguise, when it is disguised and its owner does not
+        ally the local player's house
+      - otherwise its type's display name.
+
+      This disguise test is not S-0516 claim 35's: the local player's detector coverage and the
+      disguise's house do not enter it. So enemy infantry inside the local player's detector
+      coverage still shows its disguise's name, and an own or allied one shows its own.
+    - for a vehicle that appears disguised to the local player's house (S-0516 claim 35) and has
+      a disguise: nothing when the disguise has no house, as for the hover health bar (claim 3),
+      and the display name of its disguise otherwise. A disguise's display name is that of the
+      type it copies, which can be a terrain object's
+    - for any other turret-tip vehicle: the text of claim 23
+    - for any other vehicle: its type's display name.
+
+    **Technician mark.** An infantry unit can carry a mark that makes its name the technician
+    label. Only a unit whose type has the nominal flag (Import mapping) gets it, and only when a
+    building releases the unit, for example as a survivor. Which releases set it is not settled
+    (Open questions). A unit without the mark never shows the technician label.
+    - Backing: `measurable` (scenario NT4 for the disguise rules, a disguised building and aircraft
+      included; NT3 for the type names; NT9 for the technician mark). `unmeasured` for the mark's
+      effect on the name if NT9 gives no survivor the label: no other release with the mark set is
+      known
+    - Confidence: high for the type names of buildings, aircraft and vehicles; medium for a disguise
+      not changing the name of a building or an aircraft, for both disguise rules and for a vehicle
+      disguise without a house; low for when the technician mark is set, medium for its effect on
+      the name
+
+23. **Name tip of a turret-tip vehicle.** The text is the modifier, one space, and the vehicle's own
+    type's display name, never its disguise's. The modifier depends on the vehicle's selected turret
+    index *t* (S-0105 claim 43) and on *P*, the passenger at position 1 of its passenger order
+    (S-0507 claim 3): the one that boarded most recently among those aboard. *P* need not be the
+    passenger whose entry set the weapon number (S-0308 claim 6), and it changes whenever the
+    passenger at position 1 changes. S-0105 claim 43 gives *t* for a multi-turret type. A turret-tip
+    vehicle whose type has rotating-barrel weapon stages (S-0105 Import mapping) gets *t* by the
+    same rules for a gunner type: it is set from the turret table entry for the weapon number when
+    the vehicle is created and at every gunner hand-over (S-0308 claim 6), and is *none* for a type
+    that is not a gunner type. A change of weapon stage never changes *t*, and such a
+    rotating-barrel vehicle whose type also has the charge-turret flag keeps *t* at *none* for its
+    whole life.
+    - With no passenger, or a *P* that is not infantry, the modifier is label A.
+    - Otherwise, with *u* standing for *P*'s type having the own-name flag (Import mapping):
+
+      | *t* | Modifier |
+      |---|---|
+      | 0 | label A |
+      | 1 | *P*'s type's display name if *u*, label B otherwise |
+      | 2 | label C |
+      | 3 | *P*'s type's display name |
+      | any other value, *none* included | *P*'s type's display name if *u*, label A otherwise |
+
+    Labels A, B and C are three fixed string-table entries (Import mapping), resolved as S-0004
+    claim 17 gives. The modifier follows the index, not the weapon number: a vehicle whose index
+    differs from its weapon number shows the index's row. An empty modifier still leaves the
+    space, and so does an empty type name. The text then starts or ends with a space and still
+    shows.
+    - Backing: `measurable` (scenario NT5, every row and flag variant, (f) for a rotating-barrel
+      type, gunner or not, with or without the charge-turret flag, (g) for *P* with two passengers
+      aboard, (h) for a disguised subject)
+    - Confidence: high for the table, for label A with no passenger and for the format; medium for
+      the type name never being the disguise's in the format, which only NT5 (h) runs, *P* being the
+      passenger at position 1 when more than one is aboard, label A with a *P* that is not infantry,
+      which NT5 (e) reaches only if its variant lets such a unit board, for *t* of a rotating-barrel
+      type, and for the empty-name cases
+
+24. **Name tip: size and placement.** The tip's text is laid out in the game font (S-0014). A line's
+    width in pixels is the sum, over its text units (S-0014 Terms), of each text unit's glyph width
+    (S-0014 claims 3 and 4) plus 1, except that a tab moves the line's width up to the next multiple
+    of 64. A line break (a carriage return or a line feed, a carriage return followed by a line feed
+    counting as one) starts a new line, and lines are also wrapped to the width of the battlefield
+    view. How a wrapped line is broken is not specified here (Open questions). *w*<sub>t</sub> is
+    the width of the widest line and *h*<sub>t</sub> is the number of lines times the font's line
+    pitch *P*<sub>f</sub> (S-0014 claim 1). The box is *w* = *w*<sub>t</sub> + 4 pixels wide and *h*
+    = *h*<sub>t</sub> + 3 pixels high. Let (*x*, *y*) be the pointer's screen position when the tip
+    shows, and let the battlefield view span *X*<sub>0</sub> to *X*<sub>1</sub> horizontally and
+    *Y*<sub>0</sub> to *Y*<sub>1</sub> vertically (its right and bottom edges exclusive). The box's
+    top-left corner is (*l*, *m*):
+    - *l* = *x*, or *X*<sub>1</sub> − *w* when *x* + *w* > *X*<sub>1</sub>, so the box keeps its
+      right edge inside the view
+    - *m* = *y* + 16, or *y* − *h* when *y* + 16 + *h* > *Y*<sub>1</sub>, so a tip near the bottom
+      edge flips above the pointer, its last row on row *y* − 1, just above the pointer's row.
+
+    There is no correction at the left or top edge. The box is placed once and does not move while
+    it shows. The box is drawn with the size it is placed with. A box as wide as the view or wider
+    is not specified here (Open questions).
+    - Backing: `measurable` (scenario NT6, which measures the drawn box against the probe texts'
+      layout, and for the absence of a top correction through its many-line probe). `unmeasured` for
+      the absence of a left correction: the left edge is reached only by a box as wide as the view
+      or wider, which this claim leaves unspecified (Open questions).
+    - Confidence: high for the distance of 16 pixels below the pointer, and the left edge at the
+      pointer's column when the box is not shifted, and medium for the absence of a left or top
+      correction, which NT6 reaches only at the top, the drawn box having its placement size, the
+      text layout (*w*<sub>t</sub> and *h*<sub>t</sub>), the margins of 4 and 3 pixels, the flip and
+      the right-edge shift, which rest on the box's size, and for the line breaks
+
+25. **Name tip: look and layer.** The box is filled with opaque black and framed by a line one pixel
+    wide along its four edges. The frame and the text have one colour, the tip colour: RGB (164,
+    210, 255) when the local player's side index (S-0005 claim 13a) is 0, and RGB (255, 255, 0) for
+    any other side index. It takes S-0103 claim 9's output step like any other drawn colour. The tip
+    is drawn on top of everything else on the battlefield view, status extras included, and never
+    over the sidebar (claim 24 keeps it inside the view). A building's name tip is not S-0102's
+    information tip of a building, which is drawn right after the ground layer (S-0102 claim 2): the
+    name tip is drawn after the whole battlefield view, the information tips included. The text sits
+    inside the frame. Its exact inset is not established (Open questions). The tip colour and the
+    black fill are drawn as they are: the cell's light, a lighting tint and shroud (S-0104, S-0409)
+    change neither, since the tip is drawn over the battlefield with no shade table.
+    - Backing: `measurable` (scenario NT7)
+    - Confidence: high for the black fill, the frame, the one colour of frame and text, and the two
+      RGB values; medium for the side mapping, the layer, the colours under a lighting tint and over
+      shroud, and the text's place inside the frame
+
+26. **Name tip: when it goes.** A tip hides when the pointer moves, when a left, right or middle
+    mouse button is pressed or released, when its lifetime ends (claim 20), and when the tooltip
+    option is turned off. Nothing else hides it or changes it while it shows. Its text and its
+    place stay as they were chosen, also when its object dies, moves, leaves the map, changes
+    owner, cloaks or changes disguise, when the selection changes, and when the view scrolls
+    under the resting pointer. Nothing outside claim 20's blocking conditions stops it from
+    showing: a mouse button held through the wait (as while a selection box is dragged), a
+    building placement, a superweapon aim and any order cursor all leave it able to show.
+    - Backing: `measurable` (scenario NT1 (c) for the pointer and (g) for a press or release while
+      the tip shows; NT8: parts a and b for death, departure and a selection change, f for a cloak,
+      g for a scroll while it shows, c and d for the held button, the placement, the aim and an
+      order cursor). `unmeasured` for an owner change and a disguise change while the tip shows:
+      neither can be timed into the tip's lifetime without a press, which hides the tip, or another
+      house's action. `unmeasured` for the option turned off while it shows: turning it off takes a
+      press in the options menu, which itself hides the tip.
+    - Confidence: high for the pointer, the buttons and the lifetime; medium for everything that
+      leaves the tip unchanged, the option turned off while it shows and for the held button, the
+      placement, the aim and the order cursors
+
 ## Formulas
 
 **F1. Filled health segments.** *H* and *S* are the integer health and full strength, *S* > 0 (claim
@@ -700,6 +905,13 @@ rounded.
 | Group-number box corner | (−3, +2) from the placement point | pixels | claim 17, F6 |
 | Group-number box size | (*G* + 6) × (*P*<sub>f</sub> − 4) | pixels | claim 17, F6 |
 | Group-number box fill | black, opaque | colour | claim 17 |
+| Name-tip wait | 1000 | ms of real time | claim 20 |
+| Name-tip lifetime | 10000 | ms of real time | claim 20 |
+| Name-tip distance below the pointer | 16 | pixels | claim 24 |
+| Name-tip margins | 4 (width), 3 (height) | pixels added to the laid-out text | claim 24 |
+| Name-tip colour, side index 0 | (164, 210, 255) | RGB | claim 25 |
+| Name-tip colour, other side indices | (255, 255, 0) | RGB | claim 25 |
+| Name-tip text limit | 256 | text units (S-0014) | Edge cases |
 
 **T1. Image frames of the pip sprite used here.**
 
@@ -745,6 +957,28 @@ S-0102's object order (claim 17).
 
 The overload pip (claim 13) and the self-heal blink (claim 16) change with ticks: every drawn frame
 between two ticks shows the same state.
+
+**Name tip (claims 20 to 26).** The tip has four states: off, idle, waiting and showing. All
+timing is real time.
+
+| State | Event | Next state | Effect |
+|---|---|---|---|
+| any | tooltip option turned off | off | tip hidden, none shows while off |
+| off | tooltip option turned on | idle | none |
+| idle, waiting or showing | pointer moves | waiting | tip hidden; the 1000 ms wait starts again |
+| waiting or showing | left, right or middle button pressed or released | idle | tip hidden; no wait runs |
+| waiting | wait ends, claim 20 does not block, text not empty | showing | text chosen and box placed (claims 21 to 24); 10000 ms lifetime starts |
+| waiting | wait ends otherwise | idle | nothing shows |
+| showing | lifetime ends | idle | tip hidden |
+
+The state table restates claims 20 and 26. Backing: `measurable` (scenarios NT1, NT2 and NT8), and
+`unmeasured` for the option turned off while a tip shows (claim 26 gives the reason). Confidence:
+high for the pointer, button and lifetime rows, turning the option on, and the 1000 ms wait of the
+two wait-end rows; medium for the blocking conditions and the one choice per rest that those two
+rows restate from claim 20, for the text and box that the showing row chooses by claims 21 to 24,
+and for turning the option off while a tip shows; low for the further internal state of the view
+that claim 20 also checks, on which the rows "claim 20 does not block" and "wait ends otherwise"
+depend (Open questions).
 
 The overlap order between insignia, health bar and pip scale is `unmeasured`, confidence medium:
 no scenario below isolates their overlapping nontransparent pixels. The visibility table restates
@@ -798,6 +1032,14 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
   results it covers.
 - **`quirks.speed_normalised_delays`** (default: on, shared with S-0107, S-0108
   and S-0109 (animation playback)). Claim 19.
+- **Name-tip text of 256 text units or more** (departure, no switch; claims 20 and 24). The limit
+  counts text units (S-0014 Terms), not characters. In the original, what such a text shows is
+  undefined: it can show text units that are not in the name. Our engine shows the first 256 text
+  units. A text of up to 255 text units shows whole in both. Backing: `unmeasured`, since the
+  original's result is undefined. Confidence: medium.
+- **Two disguise tests** (no switch; claim 22). The tip uses S-0516 claim 35's test for vehicles
+  only. Infantry uses the simpler test of claim 22, as the original does. An enemy spy inside the
+  local player's detector coverage therefore still shows its disguise's name.
 
 ## Import mapping
 
@@ -829,6 +1071,17 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
 | building section, `UnitAbsorb` | boolean | absorbing building (claim 12) | no |
 | building's art section, `Height` | integer, height levels | *V* of the building box (claims 7, 8) | 2 |
 | game font file `GAME.FNT`, resolved as in S-0213's Import mapping | binary layout of S-0014 claims 1 to 3 | digit glyph masks, widths *G*, bitmap height *H*<sub>f</sub> and line pitch *P*<sub>f</sub> (claim 17, F6) | a missing or rejected font (S-0014 claim 6): no group number in our engine, with S-0213 claim 25's diagnostic; no original result is predicted |
+| settings file `[Options]`, `ToolTips` | boolean (S-0003) | tooltip option (claims 20 and 26) | yes |
+| type section, `Invisible` | boolean | invisible flag (claim 21) | no; a building type whose `InvisibleInGame` is yes also gets the flag |
+| vehicle section, `HasTurretTooltips` | boolean | turret-tip flag (Terms, claim 23) | no |
+| infantry section, `UseOwnName` | boolean | own-name flag (claim 23) | no |
+| infantry section, `Nominal` | boolean | nominal flag, needed for the technician mark (claim 22) | no |
+| type section, `UIName` | display-name label (S-0004 claim 17) | display name (claims 21 to 23) | S-0004 claim 17 |
+| string table, `TXT_SHADOW` | fixed entry identifier, not literal game text | shroud label (claim 21) | S-0004 claim 17: a missing entry shows its placeholder |
+| string table, `TXT_TECHNICIAN` | fixed entry identifier, not literal game text | technician label (claim 22) | as above |
+| string table, `Tip:Rocket` | fixed entry identifier, not literal game text | label A (claim 23) | as above |
+| string table, `Tip:MachineGun` | fixed entry identifier, not literal game text | label B (claim 23) | as above |
+| string table, `Tip:Repair` | fixed entry identifier, not literal game text | label C (claim 23) | as above |
 
 Vocabulary of `PipScale`, compared ignoring case (Q-2071): `ammo`, `tiberium`, `passengers`,
 `power` and `mindcontrol` select their kinds. Any other word, `none` included, gives the kind
@@ -1262,6 +1515,153 @@ involved.
   period 3 ticks and image frames 0, 3, 6 at tick residues 0, 1, 2, respectively, at every speed.
   Falsified by any different image frame or period.
 
+**Name-tip scenarios (claims 20 to 26, Q-2673).** Common setup as above, with the tooltip option
+on unless stated. A presentation-only probe string table is a loose copy of the stock string
+table (resolved by S-0005) that keeps every entry and replaces only the texts of the entries a
+scenario names, each by a distinct short probe text. The pointer is moved by the glossary's
+scripted-input allowance. The screen is captured at 60 frames a second with the capture time of
+each frame. A wait is measured from the last pointer movement to the first frame that shows the
+tip. Expected waits allow up to two frame times (34 ms) of capture and timer granularity.
+
+- **NT1 (claim 20).** One own vehicle on open ground. (a) Move the pointer onto it and rest for 15
+  s. Expected: the tip shows after 1000 ms and hides 10000 ms after it showed, and does not show
+  again during the rest. (b) As (a), with a 1-pixel pointer movement 600 ms into the rest that stays
+  on the vehicle. Expected: the tip shows 1000 ms after the second movement, not after the first.
+  (c) As (b), with a movement while the tip shows. Expected: the tip hides in that frame and shows
+  again 1000 ms later. (d) As (a), with a press and release of the left, then in further runs the
+  right and the middle button 600 ms into the rest, and in a fourth run a wheel turn. Expected: no
+  tip during the rest after a button, and in the wheel run the tip 1000 ms after the rest began. (e)
+  As (a) at game-speed indices 1 and 6. Expected: the same 1000 ms and 10000 ms each time. (f) Rest
+  the pointer for 1500 ms on open ground with no object, then drive an own vehicle under the still
+  resting pointer and keep it there for 3 s. Expected: no tip until the pointer moves. (g) As (a),
+  with a press of the left button 3 s into the rest, while the tip shows, and its release 1 s later,
+  then in further runs the right and the middle button. In three more runs, press the button with
+  the pointer on open ground beside the vehicle, move the pointer onto the vehicle with the button
+  held, by less than S-0214 claim 27's drag threshold so that a held right button starts no scroll
+  drag (S-0101 claim 16), and rest; once the tip shows (NT8 (c)), release the button. Expected: the
+  tip hides in the frame of the press in the first three runs and in the frame of the release in the
+  other three, and does not show again during the rest. Falsified by a wait or lifetime outside the
+  margin, a tip in (f), a wait that follows the first movement in (b), a tip after a button in (d),
+  a tip 1000 ms after the wheel turn in (d), a time that changes with game speed in (e), or a tip
+  that stays after the press or the release in (g).
+- **NT2 (claim 20, option).** As NT1 (a) with the tooltip option turned off in the in-game options
+  menu, then turned on again. Expected: no tip during a 15 s rest while off, and the tip of NT1 (a)
+  after it is on again. Repeat with the option turned off in the main menu's options menu before the
+  game starts, and once with the settings file's tooltip key set to no before the program starts,
+  each followed by a 15 s rest. Expected: no tip in either. Falsified by any tip while off.
+- **NT3 (claim 21).** A probe string table gives each display-name label used here a distinct probe
+  text, and the shroud label one too. Rest the pointer for 3 s on each of: an own, an allied and an
+  enemy vehicle, infantry unit, aircraft (landed, then flying) and building; a civilian building; an
+  own building occupied by own infantry; a tree on clear ground and a tree on an ore cell; an ore
+  cell with no object; a wall; an unexplored cell with nothing in it and one holding an enemy
+  building. Then with a test map that gives one enemy vehicle type the invisible flag, rest on such
+  a vehicle, and with a test map that gives one enemy building type the invisible-in-game key and
+  not the invisible key, rest on such a building. With S-0516's cloak fixtures, rest on an own fully
+  cloaked unit, and on an enemy and an allied fully cloaked unit without and then with the local
+  player's sensor coverage on its cell. Observable: the tip's text, or no tip. Expected: the type's
+  probe text for every unit and building except: none for the invisible-flag vehicle, the
+  invisible-in-game building and for the fully cloaked units of other houses without sensor
+  coverage; the building's own text for the occupied building; the ore type's probe text for the
+  tree on ore; none for the tree on clear ground, the ore cell without object and the wall; the
+  shroud label's probe text on both unexplored cells. Falsified by any other text, a tip where none
+  is expected, or none where one is expected. Health, owner or rank in any text also falsifies claim
+  21.
+- **NT4 (claim 22, disguise).** With the disguise fixtures of S-0516's scenarios (CS15), and a probe
+  string table as in NT3: (a) an enemy infantry unit disguised as an infantry type of the local
+  player, outside and then inside the local player's powered detector coverage; (b) an own disguised
+  infantry unit; (c) an enemy vehicle disguised as a terrain object, with no disguise house; (d) an
+  enemy vehicle with a disguise that has a house, if the fixture can make one; (e) with S-0516
+  scenario H's fixtures, a disguised enemy building and a disguised enemy aircraft. Observable: the
+  tip's text. Expected: (a) the disguise type's probe text both times; (b) its own type's probe
+  text; (c) no tip; (d) the disguise's probe text; (e) each one's own type's probe text. Falsified
+  by the own type's text in (a), especially inside detector coverage, by a tip in (c), or by a
+  disguise's text in (e). (d) is inconclusive if the fixture cannot give a vehicle a disguise with a
+  house.
+- **NT5 (claim 23).** A probe string table gives labels A, B and C and the display-name labels of
+  the vehicle and passenger types used distinct probe texts. Use S-0105 scenario MS-33's subject
+  with a test map that gives it the turret-tip flag. Its selected turret index follows the passenger
+  that enters it empty (S-0308 claim 6, S-0105 claim 43), so each index is reached through the MS-33
+  passenger type that gives it: index 2 with the mode-0 passenger, 0 with mode 1, 1 with mode 2, 5
+  (outside the table's numbered rows) with mode 3, and *none* with mode 17, whose weapon number has
+  no turret table entry. A named rules variant of the subject maps weapon number 4 to turret index
+  3, with a further passenger type of mode index 4, so that index 3 is reached as well. (a) Rest on
+  the subject empty. (b) to (d) For each of these passenger types, in three named test map variants,
+  (b) the type has the own-name flag, (c) in its place, a test copy of it added to the infantry list
+  of the base rules copy (S-0004), with the same mode index, the own-name flag and no display-name
+  field, so that it never has a label and its display name is empty (S-0004 claim 17), (d) the type
+  has neither: load it as the only passenger and rest on the subject. (e) A named rules variant that
+  lets the subject carry a small vehicle: load that vehicle as its first passenger and rest.
+  Observable: the tip's text. Expected: label A in (a); the row of claim 23's table for the index in
+  (b) to (d), with one space before the vehicle's probe text, and a leading space in (c) at indices
+  1, 3, 5 and *none*; label A in (e). Falsified by a modifier that follows the weapon number where
+  it differs from the index, or by any other row. (e) is inconclusive if the vehicle cannot board.
+  (f) A named rules variant gives the subject rotating-barrel weapon stages: with the mode-2
+  passenger of (d) aboard, rest on it, then let it fire at the enemy target until its weapon stage
+  rises, and rest again. Expected: label B both times, with index 1 from the hand-over. Repeat (f)
+  in two further named variants of it: one that clears the subject's gunner flag, and one that keeps
+  the gunner flag and adds the charge-turret flag. Expected: label A in both, before and after the
+  stage rises, *t* being *none*. Falsified by another modifier, or by a modifier that changes with
+  the stage. (g) In a fourth named test map variant, the mode-1 passenger type has the own-name flag
+  and the mode-2 type has neither. Load the mode-2 passenger into the empty subject, so that the
+  index is 1, then the mode-1 passenger, and rest on the subject. Expected: the mode-1 type's probe
+  text as the modifier (row 1 with the flag, *P* being the later passenger). Falsified by label B,
+  which would follow the passenger that entered it empty. (h) A named rules variant gives the
+  subject the ability of S-0516 to take a disguise. With the mode-2 passenger of (d) aboard, let an
+  own subject take its disguise, then rest on it, first with the local player owning it and then, in
+  another run, with an enemy of the local player owning it and no detector of the local player near.
+  Expected: label B, one space and the subject's own probe text for the own subject; for the enemy
+  one, the text claim 22 gives for a vehicle that appears disguised. Falsified by the disguise's
+  name in the own subject's tip.
+- **NT6 (claim 24).** One own vehicle with a probe display name, at the view's centre, then within
+  20 pixels of its right edge, then of its bottom edge, then of the bottom-right corner. Rest on it
+  and measure the box's corners and the pointer position in screen pixels. Expected: the box at
+  (*x*, *y* + 16) in the centre; right edge on the view's last column near the right edge; last row
+  on row *y* − 1, just above the pointer's row, near the bottom edge; both near the corner. Repeat
+  with a probe text holding a line break and one holding a tab, at the centre. Expected: for the
+  line-break probe two lines and the box 2 *P*<sub>f</sub> + 3 high, and for the tab probe one line
+  and the box *P*<sub>f</sub> + 3 high; each box *w*<sub>t</sub> + 4 wide by claim 24's line width,
+  with the glyph widths of the stock font. Then give the vehicle a probe text of enough lines that
+  its box is more than 24 pixels taller than half the view's height, put the vehicle at the view's
+  centre and rest on it with the pointer within 8 pixels of the view's centre row, so that the box
+  both flips and reaches above the view's top edge. Expected: the box flipped, its last row on row
+  *y* − 1 and its top above the view's top edge, so that only its lower part shows. Falsified by
+  another distance below the pointer, a many-line box moved down to the view's top edge, flip or
+  shift, another box size than claim 24's layout gives, or a box that leaves the view on the right
+  or the bottom.
+- **NT7 (claim 25).** As NT6 at the centre, playing a country of side index 0, then 1, then 2.
+  Observable: the box's pixels. Expected: black inside, a one-pixel frame and the text in RGB (164,
+  210, 255) for side index 0 and RGB (255, 255, 0) for 1 and 2, after S-0103 claim 9's output step,
+  and the tip over every other battlefield drawing. Repeat at the centre with a named map lighting
+  variant whose ambient light is tinted, and with the tip's box partly over shroud. Also record the
+  text's inset in the frame. Then rest on an own building, with an own selected ground vehicle just
+  below the pointer so that the tip's box covers its health bar and with an own aircraft flying
+  across the box. Expected: the name tip over the health bar, the aircraft and any information tip
+  of the building (S-0102 Terms), since it is not an information tip. Falsified by another fill,
+  frame width or colour, a colour that changes with the tint or over shroud, or a battlefield
+  drawing over the tip.
+- **NT8 (claim 26).** (a) While the tip of an enemy vehicle shows, destroy the vehicle; in another
+  run let it drive away. Expected: the tip keeps its text and place until its lifetime ends. (b)
+  Select and deselect another unit with the keyboard while a tip shows. Expected: no change. (c)
+  Hold the left button, drag a selection box and rest, still holding, for 3 s with an own vehicle
+  under the pointer. Expected: the tip after 1000 ms. (d) Rest with a building placement and then a
+  superweapon aim active over an own vehicle, and then with an own unit selected and the pointer,
+  showing the attack cursor, on an enemy vehicle. Expected: the tip after 1000 ms in each. (e) Fill
+  a strip of the map with own vehicles packed side by side, start a keyboard scroll along it and
+  rest the pointer on the view during it, so that an own vehicle is under the pointer when each wait
+  inside the scroll ends. Expected: no tip at the end of a wait that falls inside the scroll. (f)
+  With S-0516's cloak fixtures, let an own unit that can cloak cloak while its tip shows. Expected:
+  no change. (g) While the tip of an own building shows, scroll the view with the keyboard.
+  Expected: the tip keeps its text and screen place until its lifetime ends. Falsified by a tip that
+  hides or changes in (a), (b), (f) or (g), no tip in (c) or (d), or a tip in (e).
+- **NT9 (claim 22, technician mark).** With a probe string table for the technician label, destroy
+  and, in another run, sell an own and then a captured building whose survivors include a type with
+  the nominal flag (set by test map if needed). Rest on each survivor. Observable: each survivor's
+  tip text. Expected: every survivor that shows the technician label's probe text has the nominal
+  flag, and a survivor type without the flag shows its own text in every run. Falsified by the
+  technician label on a survivor without the flag. NT9 is inconclusive for the mark's effect on the
+  name when no survivor shows the technician label's probe text. Which releases give the label is
+  recorded for the Open question and confirms no claim.
+
 ## Open questions
 
 - The level height of 104 leptons used for the building box (claim 7) is believed, not confirmed
@@ -1272,6 +1672,16 @@ involved.
 - The extra-information overlay that some units draw beside the pip scale is not covered, nor is the
   talk bubble that can be shown over one object at a time (it uses its own sprite, drawn at the
   status anchor without shading; what shows it is not traced).
+- Name tip (claim 20): besides a hidden cursor, a locked input and a moving view, one further
+  internal view state blocks the tip. What sets it is not identified. Confidence: low.
+- Name tip (claim 22): which releases from a building set the technician mark. It is set for a
+  survivor of a building in some building state, and when a building puts a unit of the nominal
+  type on the map in some other way. Neither condition is identified. Scenario NT9 explores it.
+  Confidence: low.
+- Name tip (claim 24): how a text wider than the view is broken into lines, and the box of a text
+  whose box would be as wide as the view or wider. Neither occurs with ordinary display names.
+- Name tip (claim 25): the exact inset of the text inside the frame, a few pixels from its top
+  and left edges. Scenario NT7 records it.
 
 ## Cross-spec consistency
 
@@ -1322,3 +1732,25 @@ involved.
   is needed. Confidence: medium for the switch-on row across games (the original's behaviour),
   medium and `unmeasured` across a change of theater or side, high for the switch-off row (a design
   rule); scenario S-0111 OV14 palette parts c and d.
+- Hand off with S-0105's Open questions entry on the hover tip name: claim 23 here answers it. A
+  turret-tip vehicle's tip follows its selected turret index (S-0105 claim 43), not its weapon
+  number. S-0105's rules do not change.
+- Hand off with S-0516 claim 36's bullet for the hover name: claim 22 here uses claim 35's test for
+  vehicles only. Infantry uses a simpler test, with no detector coverage and no disguise house, so
+  that bullet should name vehicles only and point to claim 22 for infantry. It should also say that
+  claim 35's rule for a disguised building or aircraft does not reach the hover name: claim 22 here
+  shows a building's or aircraft's own type name whatever its disguise. S-0516's rules do not
+  change.
+- Claims 21 to 23 rely on S-0004 claim 17 for every display name and fixed label they show,
+  including the placeholder for a missing entry. This spec states no lookup rule of its own.
+- Hand off with S-0006 claim 13 and S-0411's Import mapping: S-0006's placeholder for a missing
+  label and the missing-entry diagnostic of S-0411's fixed labels are S-0004 claim 17's placeholder,
+  and both should cite it. S-0411 gives no sidebar tip of its own. A spec that takes the sidebar's
+  tips should cite claim 25 here for their look. Neither spec's rules change.
+- Hand off with S-0102's Terms entry *information tip* and its claim 2: a building's name tip
+  (claims 20 to 25 here) is not an information tip. It is drawn after the whole battlefield view,
+  over the air and top layers, every status extra and any information tip, while the information
+  tips keep S-0102 claim 2's place right after the ground layer. S-0102's Terms entry can say that
+  the text a building shows while the pointer rests on it in its name tip is this spec's name tip,
+  not an information tip. S-0102's rules do not change. Confidence: medium. Backing: `measurable`
+  (NT7's building run).
