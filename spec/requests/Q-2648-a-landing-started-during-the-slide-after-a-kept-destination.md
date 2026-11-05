@@ -1,9 +1,9 @@
 ---
 id: Q-2648
 title: Whether claim 6's exact-cell trigger starts a landing while the aircraft slides on the ground
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
