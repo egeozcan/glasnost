@@ -317,7 +317,7 @@ mod notes {
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
-    pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point: the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
+    pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point, or on its surface below a vehicle above it (our design, Q-2672): the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
     pub const SLOT_ANIMS_STILL: &str = "the static scene's building slot animations (S-0108 claim 11) are drawn at their first image frame: they do not advance and power (S-0108 claim 13) does not change them";
     /// See [`SLOT_ANIMS_STILL`].
     pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 13 (power, disabling and re-enabling), 15 (empty storage), 17, 20 and 26 to 28 and S-0606's walls; the special outage and low-power slot (S-0108 claim 14), silo fill, the superweapon slots and super-low-power, and the turret and upgrade slots are not modelled; a repair depot's production and special slots are the simulation's (S-0108 claim 20)";
@@ -1188,9 +1188,11 @@ pub struct Painter {
     /// scene's images (as for a rocket's fresh pitches).
     rocked: BTreeMap<(Kind, usize, u32, u32), voxel::ImageCache<Option<PlacedPart>>>,
     /// Vehicle shadows with the current part image excluded, by unmasked
-    /// shadow image and part images (S-0105 claim 39): a memo of the
-    /// per-appearance exclusion, bounded by the cached images it combines.
-    cutouts: BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
+    /// shadow image, part images and the parts' screen shift from the
+    /// shadow's draw point (S-0105 claim 39): a memo of the per-appearance
+    /// exclusion, bounded by the cached images it combines and the heights
+    /// a vehicle stands above its surface.
+    cutouts: Cutouts,
     /// The composed images of sprite-body vehicles with the turret flag
     /// (S-0105 claim 12, *One image*), by their parts (scene image and
     /// offset from the draw point, in painting order): bounded by the
@@ -1276,6 +1278,9 @@ type TileImages = (
 /// A sprite frame: image index, the frame's offset on the canvas, and the
 /// canvas size.
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
+/// The vehicle-shadow cutout memo of [`Painter`]: by unmasked shadow image,
+/// part images and the parts' shift from the shadow's draw point.
+type Cutouts = BTreeMap<(u32, Vec<u32>, (i32, i32)), Option<PlacedPart>>;
 
 /// One animation's draw: its layer, ground-layer sort key and items.
 type SlotItems = (slots::Layer, i64, Vec<Item>);
@@ -5073,8 +5078,7 @@ impl<'a> Builder<'a> {
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
-        // bridge, whatever its flight height; it is not the body's lifted point). A vehicle keeps
-        // the body's point (vehicle anchors remain open, S-0105 Open questions).
+        // bridge, whatever its flight height; it is not the body's lifted point).
         let shadow_point = if kind == Kind::Aircraft {
             let anchor = m.shadow.unwrap_or_else(|| ShadowAnchor {
                 ground: self.terrain_height(m.pos.0, m.pos.1),
@@ -5083,7 +5087,7 @@ impl<'a> Builder<'a> {
             let (sx, sy) = project_lifted(m.pos.0, m.pos.1, anchor.ground);
             (sx, sy - if anchor.deck { SHADOW_DECK_RAISE } else { 0 })
         } else {
-            point
+            vehicle_shadow_point(m.pos, m.above, point)
         };
         let mut items = Vec::new();
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
@@ -5295,6 +5299,7 @@ impl<'a> Builder<'a> {
                 &mut self.p.cutouts,
                 shadow_key,
                 &placed,
+                (point.0 - shadow_point.0, point.1 - shadow_point.1),
                 fresh,
             );
             if let Some(part) = part {
@@ -5400,19 +5405,41 @@ fn placed_image(scene: &Scene, (id, offset): PlacedPart) -> voxel::PartImage {
     }
 }
 
+/// A voxel vehicle's shadow draw point, for a vehicle whose body is drawn
+/// at `point` from position `pos`, `above` leptons above its surface (the
+/// glossary's height above the surface, 0 on a bridge deck).
+///
+/// The vehicle shadow point has no spec (S-0105 and S-0102 Open questions,
+/// Q-2672). Our design (M8 A4 round 8 note 47): a vehicle above its surface,
+/// a hovering one above all, casts its shadow on that surface, at the
+/// projection of its horizontal position at the surface's height, as claim
+/// 40 places an aircraft's on terrain; a vehicle at or below its surface
+/// keeps the body's point, as before.
+pub fn vehicle_shadow_point(pos: (i32, i32, i32), above: i32, point: (i32, i32)) -> (i32, i32) {
+    // design: Q-2672 interim (the surface under a vehicle above it; S-0101 claims 1 and 3 project it)
+    if above > 0 {
+        project_lifted(pos.0, pos.1, pos.2 - above)
+    } else {
+        point
+    }
+}
+
 /// A vehicle shadow's appearance (S-0105 claims 31, 39). `fresh` is the
 /// newly drawn unmasked footprint on a cache miss (`None` when the type's
 /// cache holds `key`); `parts` are this draw's completed body, turret and
 /// barrel images.
 ///
 /// The cache keeps the unmasked footprint, and every appearance, fresh or
-/// reused, excludes the current parts (claim 39).
+/// reused, excludes the current parts (claim 39). `shift` is the parts'
+/// draw point less the shadow's, in screen pixels: (0, 0) unless the
+/// vehicle stands above its surface (design, Q-2672).
 fn vehicle_shadow(
     scene: &mut Scene,
     cache: &mut voxel::ImageCache<Option<PlacedPart>>,
-    cutouts: &mut BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
+    cutouts: &mut Cutouts,
     key: voxel::ImageKey,
     parts: &[PlacedPart],
+    shift: (i32, i32),
     fresh: Option<Option<voxel::PartImage>>,
 ) -> Option<PlacedPart> {
     let unmasked = match fresh {
@@ -5427,12 +5454,23 @@ fn vehicle_shadow(
     }?;
     // spec: S-0105 claim 39 (exclude this object's current completed part image on every
     // appearance, fresh or reused; no old-pose cutouts persist)
-    let ids = (unmasked.0, parts.iter().map(|p| p.0).collect());
+    let ids = (unmasked.0, parts.iter().map(|p| p.0).collect(), shift);
     if let Some(p) = cutouts.get(&ids) {
         return *p;
     }
     let mut img = placed_image(scene, unmasked);
-    let images: Vec<voxel::PartImage> = parts.iter().map(|&p| placed_image(scene, p)).collect();
+    // spec: S-0105 claim 39 (at the same screen position: the parts placed relative to the shadow's draw point)
+    let images: Vec<voxel::PartImage> = parts
+        .iter()
+        .map(|&p| {
+            let mut i = placed_image(scene, p);
+            i.offset = [
+                i.offset[0] + i64::from(shift.0),
+                i.offset[1] + i64::from(shift.1),
+            ];
+            i
+        })
+        .collect();
     let refs: Vec<&voxel::PartImage> = images.iter().collect();
     voxel::exclude_own_image(&mut img, &refs);
     let part = add_part_image(scene, &img);
@@ -6532,21 +6570,107 @@ mod shadow_tests {
             &mut cutouts,
             key,
             &[a],
+            (0, 0),
             Some(Some(footprint())),
         );
         assert_eq!(pixels(&scene, first), [m, 0, m, m]);
         // The cache holds the unmasked footprint.
         assert_eq!(pixels(&scene, *cache.get(&key).unwrap()), [m; 4]);
-        let second = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], None);
+        let second = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[b],
+            (0, 0),
+            None,
+        );
         // B's transparent pixel at x = 2 excludes nothing; its pixel at x = 3 does.
         assert_eq!(pixels(&scene, second), [m, m, m, 0]);
         // The same parts again reuse the masked image: the scene does not grow.
         let n = scene.images.len();
-        let third = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], None);
+        let third = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[b],
+            (0, 0),
+            None,
+        );
         // Back to A's pose: A's cutout again, not B's.
-        let fourth = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[a], None);
+        let fourth = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[a],
+            (0, 0),
+            None,
+        );
         assert_eq!(fourth, first);
         assert_eq!((third, scene.images.len()), (second, n));
+    }
+
+    /// spec: S-0105 claim 39 (a part pixel at the same screen position excludes the shadow
+    /// pixel); design: Q-2672 interim (a vehicle above its surface: the shadow drawn below
+    /// the body, so the parts are shifted by their draw point less the shadow's)
+    #[test]
+    fn a_lowered_shadow_excludes_the_parts_where_they_land() {
+        let mut scene = Scene::default();
+        let mut cache = voxel::ImageCache::default();
+        let mut cutouts = BTreeMap::new();
+        let key = voxel::shadow_key(voxel::RAMP_FLAT, 0);
+        let m = voxel::SHADOW_MARK;
+        // A part pixel at x = 1, drawn one pixel to the right of the shadow's point.
+        let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
+        let shifted = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[a],
+            (1, 0),
+            Some(Some(footprint())),
+        );
+        assert_eq!(pixels(&scene, shifted), [m, m, 0, m]);
+        // Drawn a row above the shadow's: it covers none of the footprint's row.
+        let above = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[a],
+            (0, -1),
+            None,
+        );
+        assert_eq!(pixels(&scene, above), [m; 4]);
+        // The same parts with no shift keep their own memo.
+        let level = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[a],
+            (0, 0),
+            None,
+        );
+        assert_eq!(pixels(&scene, level), [m, 0, m, m]);
+    }
+
+    /// design: Q-2672 interim (a vehicle above its surface casts its shadow at the projection of
+    /// its position at the surface's height; at or below its surface, at the body's point);
+    /// S-0101 claims 1 and 3 (the projection and its height lift)
+    #[test]
+    fn a_vehicle_above_its_surface_casts_its_shadow_on_it() {
+        let pos = (3000, 2000, 400);
+        let point = project_lifted(pos.0, pos.1, pos.2);
+        assert_eq!(vehicle_shadow_point(pos, 0, point), point);
+        assert_eq!(vehicle_shadow_point(pos, -50, point), point);
+        let lowered = vehicle_shadow_point(pos, 104, point);
+        assert_eq!(lowered, project_lifted(pos.0, pos.1, 296));
+        assert_eq!(lowered.0, point.0);
+        assert!(lowered.1 > point.1, "{lowered:?} below {point:?}");
     }
 }
 
