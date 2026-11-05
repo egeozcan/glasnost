@@ -1434,6 +1434,15 @@ impl Audio {
                     self.announce(Announcement::RepairComplete);
                 }
             }
+            // spec: S-0302 r41 claim 10 and S-0701 claim 28 (a berserk hit on the local player's harvester: the announcement and its F7 event; no damage sound, Q-2626)
+            Sound::HarvesterAttacked => {
+                if house.is_some()
+                    && house == self.local
+                    && let (Some(t), Some(p)) = (of, pos)
+                {
+                    self.harvester_attacked(w, t, cell_of(p));
+                }
+            }
             // spec: S-0210 claim 4 (the crushed type's crush sound at the crusher's position, any owner)
             Sound::Crush => {
                 self.play_in(w, ts.crush.as_deref(), at);
@@ -1635,6 +1644,19 @@ impl Audio {
         self.request(Some(w), e, Where::Follow(centre), FULL);
     }
 
+    /// Claim 28's harvester-under-attack announcement, for a hit on a
+    /// harvester of the local player (the caller has checked that the owner
+    /// is the local player and that the object did not die).
+    fn harvester_attacked(&mut self, w: &World, of: TypeRef, cell: (i32, i32)) {
+        let harvester = w
+            .rules()
+            .unit(of.kind, of.index)
+            .is_some_and(|u| u.harvester);
+        if harvester && self.radar_event(RadarKind::HarvesterAttacked, cell, w.tick) {
+            self.announce(Announcement::HarvesterUnderAttack);
+        }
+    }
+
     /// Claim 28's attack and loss announcements of one hit.
     fn attack_announcements(
         &mut self,
@@ -1683,13 +1705,9 @@ impl Audio {
         if owner != local {
             return;
         }
-        let harvester = r.unit(of.kind, of.index).is_some_and(|u| u.harvester);
         // spec: S-0701 claim 28 (harvester under attack: damage without dying; F7 kind harvester attacked)
-        if harvester
-            && result != HitResult::NowDead
-            && self.radar_event(RadarKind::HarvesterAttacked, cell, tick)
-        {
-            self.announce(Announcement::HarvesterUnderAttack);
+        if result != HitResult::NowDead {
+            self.harvester_attacked(w, of, cell);
         }
         // spec: S-0701 claim 28 (unit lost: an infantry unit, vehicle or aircraft of the local player dies; F7 kind unit lost)
         if result == HitResult::NowDead

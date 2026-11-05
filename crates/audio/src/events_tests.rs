@@ -1495,6 +1495,33 @@ fn unit_lost_and_harvester() {
     assert!(announced(&mut a, 3000));
 }
 
+fn berserk_hit(of: TypeRef, owner: u8) -> Effect {
+    Effect::Sound {
+        sound: glasnost_sim::combat::effects::Sound::HarvesterAttacked,
+        of: Some(of),
+        house: Some(HouseId(owner)),
+        pos: Some(Pos::centre(testkit::mid(SIZE, 0, 0), 0)),
+    }
+}
+
+// spec: S-0302 r41 claim 10 and S-0701 claim 28 (a berserk hit on the local player's harvester makes the harvester-under-attack announcement and its F7 event, which suppresses a second one nearby; another type, or another owner's harvester, makes none; Q-2626: no damage sound for the hit)
+#[test]
+fn a_berserk_hit_on_a_local_harvester_is_announced() {
+    let w = world();
+    let mut a = base_audio(&w);
+    let mut u = Rng::new(1);
+    let tank = tref(&w, Kind::Vehicle, "CRUSHER");
+    let cart = tref(&w, Kind::Vehicle, "CART");
+    a.tick(&w, &[berserk_hit(tank, 0)], &mut u);
+    assert!(!announced(&mut a, 1000), "not a harvester");
+    a.tick(&w, &[berserk_hit(cart, 1)], &mut u);
+    assert!(!announced(&mut a, 2000), "not the local player's");
+    a.tick(&w, &[berserk_hit(cart, 0)], &mut u);
+    assert!(announced(&mut a, 3000), "the local player's harvester");
+    a.tick(&w, &[berserk_hit(cart, 0)], &mut u);
+    assert!(!announced(&mut a, 3500), "the F7 event suppresses a second one at once");
+}
+
 // spec: S-0701 claim 28 (low funds: below 100 credits with a factory; the countdown N(⌊k × 900⌋))
 #[test]
 fn low_funds() {

@@ -751,6 +751,11 @@ pub enum Sound {
     /// rules-wide walls-down sound at the bunker's position; `of` is the
     /// bunker's type.
     BunkerWallsDown,
+    /// A berserk hit on a unit (S-0302 r41 claim 10): the announcement that a
+    /// harvester is under attack (S-0701 claim 28), made when `of` is a
+    /// harvester type of the local player (`house`), at `pos`. No other
+    /// sound (Q-2626).
+    HarvesterAttacked,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its
