@@ -13,7 +13,7 @@ The change is in the arena tool only:
 - `crates/tools/tests/arena.rs`;
 - `docs/development.md`, *Arena mode*.
 
-No simulation rule, hashed state, format or golden moved: save 100, AI game 63 and wire 12, as on
+No simulation rule, hashed state, format or golden moved: save 102, AI game 65 and wire 12, as on
 main. The simulation crates are untouched, so the seed sweeps, the AI lanes and the quick lane are
 skipped. The arena `--record all` was run before and after, with `--threads 2`.
 
