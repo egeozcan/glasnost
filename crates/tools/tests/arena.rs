@@ -680,7 +680,8 @@ fn m0019_the_first_creation_draw_takes_the_raw_value_at_n0() {
 /// on the row's wins at p < [`oracle::ALPHA`], and the same winner on every
 /// side where the stock seeds all gave it (each record's *Tolerance for
 /// tests*), the SREF and V3 pairings through M-0016's stock rows. The
-/// tables go to `local-lane/m7b/arena/oracle-<ID>.txt` (git-ignored). Fails
+/// tables go to `local-lane/m7b/arena/oracle-<ID>.txt` (git-ignored);
+/// `GLASNOST_ARENA_THREADS` sets the worker threads (default: all cores). Fails
 /// while any scored pairing is outside the tolerance; see
 /// docs/development.md, *Arena mode*, for the open discrepancies.
 #[test]
@@ -700,7 +701,12 @@ fn arena_matches_the_oracle() {
     let cli = oracle::Cli {
         record: std::env::var("GLASNOST_ARENA_RECORD").unwrap_or_else(|_| "all".into()),
         pairings: Vec::new(),
-        threads: std::thread::available_parallelism().map_or(4, |n| n.get()),
+        // `GLASNOST_ARENA_THREADS` caps the worker threads (a machine's game limit); default: all cores.
+        threads: std::env::var("GLASNOST_ARENA_THREADS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|&n: &usize| n > 0)
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get())),
         out: root.join("local-lane/m7b/arena"),
         measurements: measurements(),
         compare_only: false,
@@ -742,7 +748,7 @@ fn m0021_rows_hold_in_our_engine() {
     let cli = oracle::Cli {
         record: glasnost_tools::oracle_m0021::ID.into(),
         pairings: Vec::new(),
-        threads: 4,
+        threads: 2,
         out: root.join("local-lane/m7b/arena"),
         measurements: measurements(),
         compare_only: false,
@@ -762,6 +768,45 @@ fn m0021_rows_hold_in_our_engine() {
     assert!(
         report.contains("M-0021: rows failing: 0 of"),
         "a row of M-0021 fails in our engine"
+    );
+}
+
+/// M-0020 (local-only lane): the record's part 1 replays and part 2's
+/// moved arms in our engine ([`glasnost_tools::oracle_m0020`]). The verdicts
+/// go to the output; the whole report with ours beside the record's local
+/// values goes to the git-ignored `local-lane/m7b/arena/oracle-M-0020.txt`.
+/// Fails while a checked row fails; see docs/development.md, *Arena mode*.
+#[test]
+fn m0020_rows_hold_in_our_engine() {
+    let records = oracle::load_records(&measurements()).unwrap();
+    let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+        println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
+        return;
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let cli = oracle::Cli {
+        record: glasnost_tools::oracle_m0020::ID.into(),
+        pairings: Vec::new(),
+        threads: 2,
+        out: root.join("local-lane/m7b/arena"),
+        measurements: measurements(),
+        compare_only: false,
+        watch: None,
+        trace: None,
+        groups: false,
+        spread: None,
+        ai_houses: false,
+        seed_range: None,
+    };
+    let report = oracle::run_m0020(&cli, Some(Path::new(&dir)), &records).unwrap();
+    println!("{report}");
+    if report.starts_with("skipped") {
+        return;
+    }
+    // measure: M-0020 (every checked row holds)
+    assert!(
+        report.contains("M-0020: rows failing: 0 of"),
+        "a row of M-0020 fails in our engine"
     );
 }
 

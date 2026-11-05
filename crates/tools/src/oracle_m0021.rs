@@ -653,6 +653,13 @@ pub struct Recording {
     /// *t* = read after tick *t* has run). The record's reading-point rows
     /// are read from these.
     pub rows: BTreeMap<i32, BTreeMap<ObjectId, (Pos, i32)>>,
+    /// Each tick's vehicles among `rows` that are off the map (measure:
+    /// M-0021, Procedure: each vehicle's row gives whether it is on the map).
+    pub off_map: BTreeMap<i32, BTreeSet<ObjectId>>,
+    /// The warhead of each of the four test weapons (to tie a hit to a shot
+    /// of that weapon, Result, *Reading points*: a destroyed vehicle's shot
+    /// at its death tick).
+    pub weapon_warheads: BTreeMap<WeaponId, WarheadId>,
     /// The last tick played. Its per-tick rows are not kept in
     /// `positions` and `spins` (measure: M-0021, Parts and seeds: the
     /// per-tick rows end one tick before the recording's last tick).
@@ -763,6 +770,10 @@ pub fn play_to(
             .ok_or_else(|| "a test weapon without a warhead".to_owned())
     };
     let warheads = [warhead_of(weapons[0])?, warhead_of(weapons[1])?];
+    let mut weapon_warheads = BTreeMap::new();
+    for w in weapons {
+        weapon_warheads.insert(w, warhead_of(w)?);
+    }
     // F is the Americans' house and G the Russians', whichever side F's group stands on.
     // measure: M-0021 (Setup, Houses: the houses do not change with the side)
     let g_side = match f_side {
@@ -805,6 +816,7 @@ pub fn play_to(
         g: g.clone(),
         weapons,
         warheads,
+        weapon_warheads,
         expected_gap,
         ..Default::default()
     };
@@ -829,6 +841,13 @@ pub fn play_to(
             .filter_map(|&id| w.obj(id).map(|o| (id, (o.pos, o.health))))
             .collect();
         rec.rows.insert(t, rows);
+        // measure: M-0021 (Procedure, revised for Q-2596: each vehicle's row gives whether it is on the map)
+        let off = all
+            .iter()
+            .filter(|&&id| w.obj(id).is_some_and(|o| !o.on_map))
+            .copied()
+            .collect();
+        rec.off_map.insert(t, off);
     };
     snap(&w, &mut rec);
     let alive = |w: &World, ids: &[ObjectId]| ids.iter().any(|&id| in_play(w, id).is_some());
@@ -903,6 +922,7 @@ pub fn play_to(
         let last = rec.positions.remove(&rec.end).unwrap_or_default();
         rec.spins.remove(&rec.end);
         rec.rows.remove(&rec.end);
+        rec.off_map.remove(&rec.end);
         rec.last_in_play = Some(last.into_keys().collect());
     }
     Ok(rec)
@@ -1060,10 +1080,17 @@ pub struct Reading {
     pub hit_no_row: usize,
     /// Vehicles destroyed by a hit at a tick with per-tick rows.
     pub deaths: usize,
-    /// Of those, the last row of the vehicle is the row stamped *t*, with no
-    /// health left.
-    pub deaths_last_at_t: usize,
-    /// The others: what their last row is.
+    /// Of those, the vehicle has a row stamped *t*, off the map, with no
+    /// health left (measure: M-0021, Result, Reading points, revised for
+    /// Q-2596).
+    pub deaths_row_at_t: usize,
+    /// Of those, the vehicle has no row stamped *t* + 1 or later.
+    pub deaths_none_after: usize,
+    /// Of those, the vehicle's last row on the map is the one stamped
+    /// *t* − 1, with health left.
+    pub deaths_on_map_before: usize,
+    /// The deaths without a row stamped *t* off the map with no health
+    /// left: what their rows are.
     pub deaths_other: Vec<String>,
     /// Destroyed by a hit at a tick without per-tick rows (the last tick).
     pub deaths_unread: usize,
@@ -1142,6 +1169,165 @@ pub struct Findings {
     pub first_death: Option<i32>,
     /// Each G vehicle's first tick at stage 1.
     pub first_stage_one: Vec<Option<i32>>,
+    /// The order of deaths ([`death_order`]).
+    pub death_order: Vec<(i32, usize)>,
+    /// The hits on the last F vehicle destroyed that come after its
+    /// destroying hit in the tick of its destruction (measure: M-0021,
+    /// Result, Reading points, revised for Q-2596): (attacker named, warhead
+    /// one of the test weapons', health taken).
+    pub last_f_after: Option<Vec<(bool, bool, i32)>>,
+    /// The destroyed vehicles' shots at the tick of their destruction
+    /// ([`death_shots`]).
+    pub death_shots: DeathShots,
+}
+
+/// The shots a destroyed vehicle has recorded at the tick of its
+/// destruction (measure: M-0021, Result, Reading points, revised for
+/// Q-2596: each such shot's hit came in a later tick and named no attacker).
+/// A shot's hit is tied to it by our reading: a later hit on the shot's
+/// target with the shot weapon's warhead (the recording holds no
+/// projectile).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeathShots {
+    /// Deaths with such a shot.
+    pub deaths: usize,
+    /// The shots.
+    pub shots: usize,
+    /// Of those, the shots with a later hit of theirs naming no attacker.
+    pub later_no_attacker: usize,
+    /// Of those, the shots whose later hits all name an attacker.
+    pub later_named: usize,
+    /// Of those, the shots with no later hit of theirs.
+    pub no_later_hit: usize,
+}
+
+/// A vehicle's name in the record's tables: F*i* or G*i* by its unit index
+/// in its group (measure: M-0021, Result, Part B: order of deaths).
+pub fn vehicle_name(place: usize, f_len: usize) -> String {
+    if place < f_len {
+        format!("F{place}")
+    } else {
+        format!("G{}", place - f_len)
+    }
+}
+
+/// The order of deaths (measure: M-0021, Procedure step 13): each vehicle's
+/// destroying hit, the first hit on it that leaves it no health, in the
+/// recording's order (by tick, and within a tick in the order our engine
+/// gives the hits), as (tick, place in the creation order: F's vehicles,
+/// then G's).
+pub fn death_order(rec: &Recording) -> Vec<(i32, usize)> {
+    let places: BTreeMap<ObjectId, usize> = rec
+        .f
+        .iter()
+        .chain(&rec.g)
+        .enumerate()
+        .map(|(i, &id)| (id, i))
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for h in &rec.hits {
+        if h.health.0 > 0
+            && h.health.1 <= 0
+            && let Some(&p) = places.get(&h.id)
+            && seen.insert(h.id)
+        {
+            out.push((h.tick, p));
+        }
+    }
+    out
+}
+
+/// The order of deaths as the record's table writes it: names joined by
+/// commas, the deaths of one tick in parentheses.
+pub fn death_order_text(order: &[(i32, usize)], f_len: usize) -> String {
+    let mut parts = Vec::new();
+    let mut i = 0;
+    while i < order.len() {
+        let t = order[i].0;
+        let j = order[i..].iter().take_while(|d| d.0 == t).count() + i;
+        let names: Vec<String> = order[i..j]
+            .iter()
+            .map(|&(_, p)| vehicle_name(p, f_len))
+            .collect();
+        if names.len() > 1 {
+            parts.push(format!("({})", names.join(", ")));
+        } else {
+            parts.extend(names);
+        }
+        i = j;
+    }
+    parts.join(", ")
+}
+
+/// The destroyed vehicles' shots at the tick of their destruction
+/// ([`DeathShots`]).
+pub fn death_shots(rec: &Recording, order: &[(i32, usize)]) -> DeathShots {
+    let ids: Vec<ObjectId> = rec.f.iter().chain(&rec.g).copied().collect();
+    let mut out = DeathShots::default();
+    for &(t, p) in order {
+        let v = ids[p];
+        let shots: Vec<&ShotRec> = rec
+            .shots
+            .iter()
+            .filter(|s| s.firer == v && s.tick == t)
+            .collect();
+        if shots.is_empty() {
+            continue;
+        }
+        out.deaths += 1;
+        for s in shots {
+            out.shots += 1;
+            let Target::Object(x) = s.target else {
+                out.no_later_hit += 1;
+                continue;
+            };
+            let wh = rec.weapon_warheads.get(&s.weapon).copied();
+            let later: Vec<&HitRec> = rec
+                .hits
+                .iter()
+                .filter(|h| h.tick > t && h.id == x && wh.is_some() && h.warhead == wh)
+                .collect();
+            if later.is_empty() {
+                out.no_later_hit += 1;
+            } else if later.iter().any(|h| h.attacker.is_none()) {
+                out.later_no_attacker += 1;
+            } else {
+                out.later_named += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The hits on the last F vehicle destroyed after its destroying hit in the
+/// tick of its destruction ([`Findings::last_f_after`]); `None` when no F
+/// vehicle was destroyed.
+fn last_f_after(rec: &Recording, order: &[(i32, usize)]) -> Option<Vec<(bool, bool, i32)>> {
+    let f_len = rec.f.len();
+    let &(t, p) = order.iter().rev().find(|&&(_, p)| p < f_len)?;
+    let v = rec.f[p];
+    let test: BTreeSet<WarheadId> = rec.weapon_warheads.values().copied().collect();
+    let on_v: Vec<&HitRec> = rec
+        .hits
+        .iter()
+        .filter(|h| h.tick == t && h.id == v)
+        .collect();
+    let k = on_v
+        .iter()
+        .position(|h| h.health.0 > 0 && h.health.1 <= 0)?;
+    Some(
+        on_v[k + 1..]
+            .iter()
+            .map(|h| {
+                (
+                    h.attacker.is_some(),
+                    h.warhead.is_some_and(|w| test.contains(&w)),
+                    h.health.0 - h.health.1,
+                )
+            })
+            .collect(),
+    )
 }
 
 fn cell_of(p: Pos) -> CellXY {
@@ -1258,29 +1444,51 @@ fn reading_points(rec: &Recording) -> (Reading, Reach) {
         }
     }
     let mut last_row: BTreeMap<ObjectId, i32> = BTreeMap::new();
+    let mut last_on_map: BTreeMap<ObjectId, i32> = BTreeMap::new();
     for (&t, r) in &rec.rows {
+        let off = rec.off_map.get(&t);
         for &id in r.keys() {
             last_row.insert(id, t);
+            if !off.is_some_and(|o| o.contains(&id)) {
+                last_on_map.insert(id, t);
+            }
         }
     }
+    let off_at = |t: i32, id: ObjectId| rec.off_map.get(&t).is_some_and(|o| o.contains(&id));
     for (&(t, id), hs) in &groups {
         out.hit_superseded += hs.len() - 1;
         let (first, last) = (hs[0], hs[hs.len() - 1]);
         let destroyed = last.health.1 <= 0;
         if destroyed {
-            // measure: M-0021 (Result, Reading points: a vehicle destroyed by a hit at t, its last per-tick row is the row stamped t with no health left)
+            // measure: M-0021 (Result, Reading points, revised for Q-2596: a vehicle destroyed by a hit at t has the row stamped t, off the map with no health left, and none from t + 1 on; its last row on the map is the one stamped t − 1, with health left)
             if !rec.rows.contains_key(&t) {
                 out.deaths_unread += 1;
             } else {
                 out.deaths += 1;
-                match (last_row.get(&id), row(t, id)) {
-                    (Some(&r), Some((_, h))) if r == t && h <= 0 => out.deaths_last_at_t += 1,
-                    (r, at) => out.deaths_other.push(format!(
-                        "object {}: last row at t plus {:?}, health at row stamped t {:?}",
+                let at = row(t, id);
+                if at.is_some_and(|(_, h)| h <= 0) && off_at(t, id) {
+                    out.deaths_row_at_t += 1;
+                } else {
+                    out.deaths_other.push(format!(
+                        "object {}: row stamped t {}, last row at t plus {:?}",
                         id.0,
-                        r.map(|r| r - t),
-                        at.map(|(_, h)| h)
-                    )),
+                        match at {
+                            None => "none".to_owned(),
+                            Some((_, h)) => format!(
+                                "health {h}, {} the map",
+                                if off_at(t, id) { "off" } else { "on" }
+                            ),
+                        },
+                        last_row.get(&id).map(|r| r - t),
+                    ));
+                }
+                if last_row.get(&id).is_none_or(|&r| r <= t) {
+                    out.deaths_none_after += 1;
+                }
+                if last_on_map.get(&id) == Some(&(t - 1))
+                    && row(t - 1, id).is_some_and(|(_, h)| h > 0)
+                {
+                    out.deaths_on_map_before += 1;
                 }
             }
         }
@@ -1617,6 +1825,10 @@ pub fn judge(rec: &Recording, part: Part) -> Findings {
         }
     }
     out.first_stage_one = rec.g.iter().map(|id| first_one.get(id).copied()).collect();
+    // Step 13 and the reading points' deaths (revised for Q-2596 and Q-2598).
+    out.death_order = death_order(rec);
+    out.last_f_after = last_f_after(rec, &out.death_order);
+    out.death_shots = death_shots(rec, &out.death_order);
     out
 }
 
@@ -1692,6 +1904,18 @@ pub struct SeedDiff {
     /// Local report only: the first tick of a death that is not the same in
     /// every run.
     pub first_death_diff: Option<i32>,
+    /// Each run's order of deaths ([`death_order`]), in the runs' order
+    /// (measure: M-0021, Procedure step 13).
+    pub death_orders: Vec<Vec<(i32, usize)>>,
+    /// The first place in the orders of deaths at which the runs differ
+    /// (by the vehicle's place in the creation order); `None` when they
+    /// agree.
+    pub order_split: Option<usize>,
+    /// Per run: its first shot, in shot order, whose target differs from
+    /// that of the same vehicle's shot of the same number in another run
+    /// (tick, the firer's place); `None` when there is none. A shot whose
+    /// number the other run's vehicle never reaches is not compared.
+    pub first_target_diff: Vec<Option<(i32, usize)>>,
 }
 
 /// One part and side with its seeds compared.
@@ -1936,8 +2160,107 @@ pub fn compare_seeds(recs: &[&Recording]) -> SeedDiff {
             }
         })
         .min();
+    // measure: M-0021 (Procedure step 13: the order of deaths; for each side the first place at which the seeds differ; each vehicle's shots in order, compared across the seeds by their number, the first shot whose target differs)
+    out.death_orders = recs.iter().map(|r| death_order(r)).collect();
+    let longest = out.death_orders.iter().map(Vec::len).max().unwrap_or(0);
+    out.order_split = (0..longest).find(|&k| {
+        let at: Vec<Option<usize>> = out
+            .death_orders
+            .iter()
+            .map(|o| o.get(k).map(|d| d.1))
+            .collect();
+        !all_equal(&at)
+    });
+    // Each run's shots per vehicle place, in order: (tick, target).
+    type Shots = BTreeMap<usize, Vec<(i32, (u8, i64, i64))>>;
+    let by_vehicle: Vec<Shots> = recs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut m: Shots = BTreeMap::new();
+            for s in &r.shots {
+                if let Some(&p) = places[i].get(&s.firer) {
+                    m.entry(p)
+                        .or_default()
+                        .push((s.tick, target_key(i, s.target)));
+                }
+            }
+            m
+        })
+        .collect();
+    out.first_target_diff = (0..n)
+        .map(|i| {
+            let mut number: BTreeMap<usize, usize> = BTreeMap::new();
+            for s in &recs[i].shots {
+                let Some(&p) = places[i].get(&s.firer) else {
+                    continue;
+                };
+                let k = number.entry(p).or_insert(0);
+                let this = target_key(i, s.target);
+                let differs = (0..n).filter(|&j| j != i).any(|j| {
+                    by_vehicle[j]
+                        .get(&p)
+                        .and_then(|v| v.get(*k))
+                        .is_some_and(|&(_, other)| other != this)
+                });
+                *k += 1;
+                if differs {
+                    return Some((s.tick, p));
+                }
+            }
+            None
+        })
+        .collect();
     out
 }
+
+/// The record's order of deaths in part B, by F's side and seed number
+/// (measure: M-0021, Result, Part B: order of deaths, revised for Q-2598).
+pub const PART_B_DEATHS: [(Side, u32, &str); 6] = [
+    (
+        Side::A,
+        0,
+        "F6, F2, F0, F7, F1, F5, F3, F4, F12, F13, G5, G1, G6, G2, F11, F9, F15, F8, F10, F14",
+    ),
+    (
+        Side::A,
+        1,
+        "F6, F1, F0, F2, F7, F5, F3, F4, G5, F12, G1, F13, G2, F11, G6, F14, F9, F8, F15, F10",
+    ),
+    (
+        Side::A,
+        2,
+        "F2, F6, F0, F1, F5, F7, F3, F4, G5, F12, G1, F13, G2, G6, F11, F15, G3, F9, F10, F14, G0, G4, F8",
+    ),
+    (
+        Side::B,
+        0,
+        "F7, F0, F6, F1, F2, F5, F4, F3, G1, G3, F11, G2, F14, G5, G4, G0, F12, F13, G6, F15, F10, F9, F8",
+    ),
+    (
+        Side::B,
+        1,
+        "F0, F7, F1, F6, F5, F2, F4, F3, G3, (G1, G2), F11, F14, G5, F13, G6, F12, G0, F15, F10, F9, F8",
+    ),
+    (
+        Side::B,
+        2,
+        "F7, F0, F1, F6, F2, F5, G1, (F3, F4), (G3, G2), F11, F14, G5, G4, F12, (G6, F13), G0, F10, F15, F8, F9",
+    ),
+];
+
+/// The first death of each seed, in the order of the seeds, by F's side
+/// (measure: M-0021, Result, Part B: order of deaths: the three seeds'
+/// orders differ at the first death, an F vehicle's).
+pub const PART_B_FIRST_DEATHS: [(Side, [&str; 3]); 2] =
+    [(Side::A, ["F6", "F6", "F2"]), (Side::B, ["F7", "F0", "F7"])];
+
+/// Each seed's first shot whose target differs from that of the same
+/// vehicle's shot of the same number in another seed: its firer, by F's
+/// side (measure: M-0021, Result, Part B: order of deaths: a G vehicle's,
+/// after that seed's first death).
+pub const PART_B_FIRST_TARGET_DIFFS: [(Side, [&str; 3]); 2] =
+    [(Side::A, ["G0", "G8", "G8"]), (Side::B, ["G1", "G1", "G1"])];
 
 /// The seed rows of the record's Result, over the parts and sides played.
 pub fn seed_verdicts(groups: &[SeedGroup]) -> Vec<(String, Verdict)> {
@@ -1969,7 +2292,7 @@ pub fn seed_verdicts(groups: &[SeedGroup]) -> Vec<(String, Verdict)> {
             format!("the seeds agree in every tick in: {}", same.join(", ")),
         ),
     ));
-    // measure: M-0021 (Result, Seeds: before the first difference everything agrees, including every vehicle's first shot, exact)
+    // measure: M-0021 (Result, Seeds: before the first difference everything agrees, including every vehicle's first shot, exact). The revision of 2026-11-05 dropped "including every vehicle's first shot" from the row; Q-2597 is still open, so this row stays as intake 97 left it.
     let late = bad(&|g| {
         g.diff
             .first
@@ -2052,31 +2375,146 @@ pub fn seed_verdicts(groups: &[SeedGroup]) -> Vec<(String, Verdict)> {
             format!("otherwise in: {}", order.join(", ")),
         ),
     ));
-    // measure: M-0021 (Result, Seeds: part B's deaths differ between the seeds later, after further shots have moved apart)
-    let part_b: Vec<&SeedGroup> = groups.iter().filter(|g| g.part == Part::B).collect();
-    out.push((
-        "seeds: part B's deaths differ between the seeds, after the first difference".into(),
-        if part_b.is_empty() {
-            Verdict::NotCheckable("no part B runs were played".into())
-        } else {
-            let wrong: Vec<String> = part_b
-                .iter()
-                .filter(|g| {
-                    !(g.diff.deaths_differ
-                        && g.diff
-                            .first
-                            .zip(g.diff.first_death)
-                            .is_some_and(|(f, d)| d > f))
-                })
-                .map(|g| label(g))
-                .collect();
-            check(
-                wrong.is_empty(),
-                format!("otherwise in: {}", wrong.join(", ")),
-            )
-        },
-    ));
+    out.extend(order_verdicts(groups));
     out
+}
+
+/// The rows of the record's paragraph under *Part B: order of deaths*
+/// (measure: M-0021, Result, revised for Q-2598), over the part B groups
+/// with all three seeds played. They replace intake 97's row "part B's
+/// deaths differ between the seeds, after the first difference", whose
+/// sentence the revision dropped.
+fn order_verdicts(groups: &[SeedGroup]) -> Vec<(String, Verdict)> {
+    let f_len = GROUP as usize;
+    let part_b: Vec<&SeedGroup> = groups
+        .iter()
+        .filter(|g| g.part == Part::B && g.diff.death_orders.len() == SEEDS.len())
+        .collect();
+    let rows = [
+        "part B order of deaths: the three seeds' orders differ at the first death, an F vehicle's",
+        "part B order of deaths: each seed's first death is the record's (F6, F6, F2 with F on A; F7, F0, F7 with F on B)",
+        "part B order of deaths: up to each seed's first death, every vehicle's shots in order have the targets of the same-numbered shots in the other seeds",
+        "part B order of deaths: each seed's first shot whose target differs comes after that seed's first death, and is a G vehicle's",
+        "part B order of deaths: those shots' firers are the record's (G0, G8, G8 with F on A; G1 in all three with F on B)",
+    ];
+    if part_b.is_empty() {
+        return rows
+            .iter()
+            .map(|r| {
+                (
+                    (*r).to_owned(),
+                    Verdict::NotCheckable("no part B side with its three seeds played".into()),
+                )
+            })
+            .collect();
+    }
+    let label = |g: &SeedGroup| format!("F on {}", g.side.text());
+    let names = |v: &[Option<String>]| {
+        v.iter()
+            .map(|n| n.clone().unwrap_or_else(|| "none".into()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut bad: [Vec<String>; 5] = Default::default();
+    for g in &part_b {
+        let d = &g.diff;
+        let first: Vec<Option<(i32, usize)>> =
+            d.death_orders.iter().map(|o| o.first().copied()).collect();
+        let first_names: Vec<Option<String>> = first
+            .iter()
+            .map(|x| x.map(|(_, p)| vehicle_name(p, f_len)))
+            .collect();
+        // measure: M-0021 (Result, Part B: order of deaths: on both sides the three seeds' orders differ at the first death, which is an F vehicle's)
+        if !(d.order_split == Some(0) && first.iter().all(|x| x.is_some_and(|(_, p)| p < f_len))) {
+            bad[0].push(format!(
+                "{}: ours first differ at place {:?}, first deaths {}",
+                label(g),
+                d.order_split,
+                names(&first_names)
+            ));
+        }
+        // measure: M-0021 (Result, Part B: order of deaths: F6, F6 and F2 in seeds 1000 to 1002 with F on side A, and F7, F0 and F7 with F on side B)
+        let want = PART_B_FIRST_DEATHS
+            .iter()
+            .find(|(s, _)| *s == g.side)
+            .map(|(_, w)| w.map(|n| Some(n.to_owned())));
+        if want.as_ref().map(|w| w.as_slice()) != Some(first_names.as_slice()) {
+            bad[1].push(format!(
+                "{}: ours {}, the record's {}",
+                label(g),
+                names(&first_names),
+                want.map(|w| names(&w)).unwrap_or_default()
+            ));
+        }
+        let diffs: Vec<Option<String>> = d
+            .first_target_diff
+            .iter()
+            .map(|x| x.map(|(_, p)| vehicle_name(p, f_len)))
+            .collect();
+        for (i, (x, death)) in d.first_target_diff.iter().zip(&first).enumerate() {
+            let seed = SEEDS.get(i).copied().unwrap_or_default();
+            // measure: M-0021 (Result, Part B: order of deaths: in each seed, up to that seed's first death, every vehicle's shots, taken in order, have the same targets as the shots of the same number in the other two seeds)
+            let before = match (x, death) {
+                (Some((t, _)), Some((dt, _))) => t > dt,
+                (None, _) => true,
+                (Some(_), None) => false,
+            };
+            if !before {
+                bad[2].push(format!(
+                    "{} seed {seed}: a shot with a differing target by {} at or before the first death",
+                    label(g),
+                    x.map(|(_, p)| vehicle_name(p, f_len)).unwrap_or_default()
+                ));
+            }
+            // measure: M-0021 (Result, Part B: order of deaths: the first shot whose target differs comes after that seed's first death, and it is a G vehicle's)
+            let after_g =
+                matches!((x, death), (Some((t, p)), Some((dt, _))) if t > dt && *p >= f_len);
+            if !after_g {
+                bad[3].push(format!(
+                    "{} seed {seed}: ours {}",
+                    label(g),
+                    match x {
+                        None => "no shot with a differing target".to_owned(),
+                        Some((t, p)) => format!(
+                            "{}'s, {} the first death",
+                            vehicle_name(*p, f_len),
+                            if death.is_some_and(|(dt, _)| *t > dt) {
+                                "after"
+                            } else {
+                                "at or before"
+                            }
+                        ),
+                    }
+                ));
+            }
+        }
+        // measure: M-0021 (Result, Part B: order of deaths: G0, G8 and G8 in seeds 1000 to 1002 with F on side A, and G1 in all three with F on side B)
+        let want = PART_B_FIRST_TARGET_DIFFS
+            .iter()
+            .find(|(s, _)| *s == g.side)
+            .map(|(_, w)| w.map(|n| Some(n.to_owned())));
+        if want.as_ref().map(|w| w.as_slice()) != Some(diffs.as_slice()) {
+            bad[4].push(format!(
+                "{}: ours {}, the record's {}",
+                label(g),
+                names(&diffs),
+                want.map(|w| names(&w)).unwrap_or_default()
+            ));
+        }
+    }
+    rows.iter()
+        .zip(bad)
+        .map(|(r, b)| {
+            (
+                (*r).to_owned(),
+                if b.is_empty() {
+                    Verdict::Pass
+                } else {
+                    Verdict::Fail(b.join("; "))
+                },
+            )
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -2097,7 +2535,8 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    fn text(&self) -> String {
+    /// The verdict as the reports write it.
+    pub fn text(&self) -> String {
         match self {
             Verdict::Pass => "pass".into(),
             Verdict::Fail(s) => format!("FAIL: {s}"),
@@ -2440,7 +2879,12 @@ pub fn verdicts(
             )
         },
     ));
-    let (deaths, last_t) = (sum(&|r| r.deaths), sum(&|r| r.deaths_last_at_t));
+    let deaths = sum(&|r| r.deaths);
+    let (at_t, none_after, before) = (
+        sum(&|r| r.deaths_row_at_t),
+        sum(&|r| r.deaths_none_after),
+        sum(&|r| r.deaths_on_map_before),
+    );
     let other: Vec<String> = runs
         .iter()
         .flat_map(|(key, r)| {
@@ -2450,20 +2894,97 @@ pub fn verdicts(
                 .map(move |s| format!("{}: {s}", name(key)))
         })
         .collect();
+    // measure: M-0021 (Result, Reading points, revised for Q-2596: the per-tick rows of a vehicle destroyed by a hit at t: the row stamped t, off the map with no health left, and none from t + 1 on; its last row on the map is the one stamped t − 1, with health left; every death of part B, exact)
+    let death_row = |label: &str, n: usize, why: String| {
+        (
+            format!("reading points: a vehicle destroyed by a hit at t {label}"),
+            if deaths == 0 {
+                Verdict::NotCheckable(
+                    "no vehicle was destroyed at a tick with per-tick rows".into(),
+                )
+            } else {
+                check(
+                    n == deaths,
+                    format!("{n} of {deaths} destroyed vehicles: {why}"),
+                )
+            },
+        )
+    };
+    out.push(death_row(
+        "has a per-tick row stamped t, off the map, with no health left",
+        at_t,
+        format!(
+            "ours removes a destroyed vehicle from the world at its destroying hit (S-0203 claim 6 (a), S-0312 claim 15), so it has no row stamped t; seam, Q-2636; the others: {} (first: {})",
+            deaths - at_t,
+            other.first().cloned().unwrap_or_default()
+        ),
+    ));
+    out.push(death_row(
+        "has no per-tick row from the one stamped t + 1 on",
+        none_after,
+        "some have a row after t".into(),
+    ));
+    out.push(death_row(
+        "has its last row on the map stamped t − 1, with health left",
+        before,
+        "some have their last row on the map elsewhere, or no health left in it".into(),
+    ));
+    // measure: M-0021 (Result, Reading points, revised for Q-2596: in every part B run the last F vehicle destroyed also takes one more hit in the tick of its destruction, after its destroying hit: a hit that names no attacker, with a warhead from none of the test files, that takes no health)
+    let extra: Vec<String> = of(Part::B)
+        .filter_map(|(k, f)| {
+            let after = f.last_f_after.as_ref();
+            let ok = after.is_some_and(|a| a.len() == 1 && a[0] == (false, false, 0));
+            (!ok).then(|| match after {
+                None => format!("{}: no F vehicle destroyed", name(k)),
+                Some(a) => format!(
+                    "{}: {} hits after the destroying hit (attacker named, a test warhead, health taken): {a:?}",
+                    name(k),
+                    a.len()
+                ),
+            })
+        })
+        .collect();
     out.push((
-        "reading points: a vehicle destroyed by a hit at t has its last per-tick row stamped t, with no health left".into(),
-        if deaths == 0 {
-            Verdict::NotCheckable("no vehicle was destroyed at a tick with per-tick rows".into())
-        } else {
+        "reading points: in every part B run the last F vehicle destroyed takes one more hit in its death tick, after its destroying hit, naming no attacker, with no test warhead, taking no health".into(),
+        missing(Part::B).unwrap_or_else(|| {
             check(
-                last_t == deaths,
+                extra.is_empty(),
                 format!(
-                    "{last_t} of {deaths} destroyed vehicles have it; ours removes a destroyed vehicle at the hit (S-0203 claim 6 (a), S-0312 claim 15; Q-2596); the others: {} (first: {})",
-                    deaths - last_t,
-                    other.first().cloned().unwrap_or_default()
+                    "{}; ours removes the vehicle at its destroying hit (S-0203 claim 6 (a)), so no later hit can reach it in that tick; the record does not say where the hit comes from (Q-2636)",
+                    extra.join("; ")
                 ),
             )
-        },
+        }),
+    ));
+    // measure: M-0021 (Result, Reading points, revised for Q-2596: in some of part B's deaths the destroyed vehicle also has a shot recorded at t; each such shot's hit came in a later tick and named no attacker)
+    let mut ds = DeathShots::default();
+    for (_, f) in of(Part::B) {
+        let d = &f.death_shots;
+        ds.deaths += d.deaths;
+        ds.shots += d.shots;
+        ds.later_no_attacker += d.later_no_attacker;
+        ds.later_named += d.later_named;
+        ds.no_later_hit += d.no_later_hit;
+    }
+    out.push((
+        "reading points: some part B deaths have a shot of the destroyed vehicle at t, each one's hit in a later tick naming no attacker".into(),
+        missing(Part::B).unwrap_or_else(|| {
+            let how = |n: usize| match n {
+                0 => "none",
+                n if n == ds.shots => "all",
+                _ => "some",
+            };
+            check(
+                ds.deaths > 0 && ds.later_no_attacker == ds.shots,
+                format!(
+                    "ours: deaths with such a shot: {}; of their shots, with a later hit naming no attacker {}, with later hits all naming one {}, with no later hit {} (a shot's hit is its target's later hit with the weapon's warhead, our reading)",
+                    if ds.deaths == 0 { "none" } else { "some" },
+                    how(ds.later_no_attacker),
+                    how(ds.later_named),
+                    how(ds.no_later_hit)
+                ),
+            )
+        }),
     ));
     for (slot, label, want) in [
         (0usize, "F shot: the firer", "t"),
@@ -2677,6 +3198,38 @@ pub fn verdicts(
             STAGE_LEAD.0, STAGE_LEAD.1
         )),
     ));
+    // measure: M-0021 (Result, Part B: order of deaths, revised for Q-2598: the vehicles destroyed, in order, per run; deaths in one tick in the order of their destroying hits)
+    let mut wrong = Vec::new();
+    let mut ok = missing(Part::B).is_none();
+    for &(side, seed, want) in &PART_B_DEATHS {
+        let Some((_, f)) = runs.iter().find(|(k, _)| *k == (Part::B, side, seed)) else {
+            ok = false;
+            wrong.push(format!("F on {} seed {seed}: not played", side.text()));
+            continue;
+        };
+        let ours = death_order_text(&f.death_order, GROUP as usize);
+        if ours != want {
+            ok = false;
+            let same = ours
+                .split(", ")
+                .zip(want.split(", "))
+                .take_while(|(a, b)| a == b)
+                .count();
+            wrong.push(format!(
+                "F on {} seed {seed}: ours {ours} (agrees with the record's for its first {same} entries)",
+                side.text()
+            ));
+        }
+    }
+    out.push((
+        "part B order of deaths: each run's vehicles destroyed, in order, are the record's table's"
+            .into(),
+        if ok {
+            Verdict::Pass
+        } else {
+            Verdict::Fail(wrong.join("; "))
+        },
+    ));
     out.extend(seed_verdicts(seeds));
     out
 }
@@ -2760,6 +3313,21 @@ pub fn report(
             f.f_longest_gap
         );
     }
+    for ((p, s, seed), f) in runs.iter().filter(|((p, _, _), _)| *p == Part::B) {
+        let _ = writeln!(
+            out,
+            "  part {} F on {} seed {seed}: order of deaths (tick, vehicle) {:?}; as the record writes it: {}; hits on the last F destroyed after its destroying hit (attacker named, test warhead, health taken) {:?}; destroyed vehicles' shots at their death tick {:?}",
+            p.text(),
+            s.text(),
+            f.death_order
+                .iter()
+                .map(|&(t, v)| (t, vehicle_name(v, GROUP as usize)))
+                .collect::<Vec<_>>(),
+            death_order_text(&f.death_order, GROUP as usize),
+            f.last_f_after,
+            f.death_shots
+        );
+    }
     for ((p, s, seed), f) in runs {
         let _ = writeln!(
             out,
@@ -2793,6 +3361,17 @@ pub fn report(
             d.first_row_diff,
             d.fired_before,
             d.first_shots_same,
+        );
+        let _ = writeln!(
+            out,
+            "  seeds, part {} F on {}: orders of deaths first differ at place {:?}; per seed, the first shot whose target differs (tick, firer) {:?}",
+            g.part.text(),
+            g.side.text(),
+            d.order_split,
+            d.first_target_diff
+                .iter()
+                .map(|x| x.map(|(t, p)| (t, vehicle_name(p, GROUP as usize))))
+                .collect::<Vec<_>>()
         );
     }
     out.push_str(&verdicts_text(runs, seeds));
@@ -3343,9 +3922,16 @@ mod tests {
                 assert!(s.target_pos.is_some(), "tick {}", s.tick);
             }
         }
-        // The destroyed vehicle has no row at the tick of its death (S-0203 claim 6 (a)): its last row is the one before.
-        assert_eq!(f.reading.deaths_last_at_t, 0);
-        assert_eq!(f.reading.deaths, f.reading.deaths_other.len());
+        // The destroyed vehicle has no row at the tick of its death (S-0203 claim 6 (a)): its last row is the one before, on the map with health left, and none follows.
+        let r = &f.reading;
+        assert_eq!(r.deaths_row_at_t, 0);
+        assert_eq!(r.deaths, r.deaths_other.len());
+        assert_eq!(
+            (r.deaths_none_after, r.deaths_on_map_before),
+            (r.deaths, r.deaths)
+        );
+        // Every destroyed vehicle is in the order of deaths once.
+        assert_eq!(f.death_order.len(), f.dead.0 + f.dead.1);
     }
 
     // measure: M-0021 (Procedure step 11 and Result, Reading points: the row that first shows a hit's health after, a destroyed vehicle's last row, the row that holds a shot row's position)
@@ -3382,6 +3968,10 @@ mod tests {
             rec.positions
                 .insert(t, BTreeMap::from([(f, r[&f].0), (x, r[&x].0)]));
             rec.rows.insert(t, r);
+            // `dead`'s row stamped 2 is off the map (measure: M-0021, revised for Q-2596).
+            if t == 2 {
+                rec.off_map.insert(t, BTreeSet::from([dead]));
+            }
         }
         let hit = |id, health| HitRec {
             tick: 2,
@@ -3413,8 +4003,22 @@ mod tests {
             (r.hit_superseded, r.hit_before_mismatch, r.hit_no_row),
             (1, 0, 1)
         );
-        assert_eq!((r.deaths, r.deaths_last_at_t), (2, 1));
+        // measure: M-0021 (Result, Reading points, revised for Q-2596): `dead` has the row stamped t off the map with no health, `gone` none; both have no row after t and their last row on the map at t − 1 with health left.
+        assert_eq!(
+            (
+                r.deaths,
+                r.deaths_row_at_t,
+                r.deaths_none_after,
+                r.deaths_on_map_before
+            ),
+            (2, 1, 2, 2)
+        );
         assert_eq!(r.deaths_other.len(), 1);
+        // A row stamped t on the map does not count as the record's row.
+        let mut on = rec.clone();
+        on.off_map.clear();
+        let r2 = judge(&on, Part::B).reading;
+        assert_eq!((r2.deaths_row_at_t, r2.deaths_on_map_before), (0, 1));
         assert_eq!(r.shot_rows[0].at_t, 1);
         assert_eq!(r.shot_rows[1].at_before, 1);
         // The distance 1460 from the shot row's positions is within F's range of 1536; the per-tick distances 1500 and 1410 are too.
@@ -3525,7 +4129,7 @@ mod tests {
         };
         let rows = seed_verdicts(&[group(d)]);
         for (name, v) in &rows {
-            if name.starts_with("seeds: part B") {
+            if name.starts_with("part B order") {
                 continue;
             }
             assert!(!matches!(v, Verdict::Fail(_)), "{name}: {v:?}");
@@ -3570,5 +4174,113 @@ mod tests {
         let d = compare_seeds(&[&with_row(0, 5), &with_row(10, 6)]);
         assert_eq!((d.first, d.differs), (Some(4), (false, false, true)));
         assert!(d.extras.is_empty());
+    }
+
+    // measure: M-0021 (Procedure step 13 and Result, Part B: order of deaths: the vehicles destroyed in order, deaths in one tick in parentheses in the order of their destroying hits; the first place at which the seeds differ; the first shot whose target differs)
+    #[test]
+    fn the_order_of_deaths_follows_the_destroying_hits() {
+        // Two F vehicles and two G vehicles; the run's numbers are shifted per seed (matching is by place).
+        let run = |shift: u32, first: u32, retarget: i32| {
+            let id = |k: u32| ObjectId(1 + k + shift);
+            let hit = |tick, k: u32, health| HitRec {
+                tick,
+                id: id(k),
+                warhead: Some(0),
+                attacker: Some(id(2)),
+                health,
+            };
+            let shot = |tick, firer: u32, target: u32| ShotRec {
+                tick,
+                firer: id(firer),
+                target: Target::Object(id(target)),
+                weapon: 2,
+                firer_pos: None,
+                target_pos: None,
+            };
+            Recording {
+                f: vec![id(0), id(1)],
+                g: vec![id(2), id(3)],
+                // F `first` dies alone at 5; the other F and G1 in tick 8, G1's destroying hit first; a hit on a dead vehicle does not count again.
+                hits: vec![
+                    hit(5, first, (10, 0)),
+                    hit(8, 3, (10, 0)),
+                    hit(8, 1 - first, (10, 4)),
+                    hit(8, 1 - first, (4, 0)),
+                    hit(8, 3, (0, 0)),
+                ],
+                // G0's three shots, the second at tick `retarget`.
+                shots: vec![shot(3, 2, 0), shot(retarget, 2, 1), shot(9, 2, 0)],
+                end: 10,
+                ..Default::default()
+            }
+        };
+        let a = run(0, 0, 6);
+        let order = death_order(&a);
+        assert_eq!(order, vec![(5, 0), (8, 3), (8, 1)]);
+        assert_eq!(death_order_text(&order, 2), "F0, (G1, F1)");
+        // Three seeds: the first death differs in the third (F1 in place of F0).
+        let (b, c) = (run(10, 0, 6), run(20, 1, 6));
+        let d = compare_seeds(&[&a, &b, &c]);
+        assert_eq!(d.order_split, Some(0));
+        // G0's shots have the same targets, number by number, in the three runs: no shot differs.
+        assert_eq!(d.first_target_diff, vec![None, None, None]);
+        // A run whose G0 second shot comes earlier still has the same target: shot numbers, not ticks, are compared.
+        let e = run(30, 0, 4);
+        let d2 = compare_seeds(&[&a, &e]);
+        assert_eq!(d2.first_target_diff, vec![None, None]);
+        // A third shot at a different target in one run: the first differing shot is that run's and the other's third.
+        let mut f = run(40, 0, 6);
+        f.shots[2].target = Target::Object(ObjectId(1 + 1 + 40));
+        let d3 = compare_seeds(&[&a, &f]);
+        assert_eq!(d3.first_target_diff, vec![Some((9, 2)), Some((9, 2))]);
+        assert_eq!(vehicle_name(2, 2), "G0");
+    }
+
+    // measure: M-0021 (Result, Reading points, revised for Q-2596: the last F vehicle destroyed takes one more hit after its destroying hit; a destroyed vehicle's shot at t whose hit comes later naming no attacker)
+    #[test]
+    fn the_hits_after_a_death_and_a_dead_vehicles_shot_are_read() {
+        let (f0, f1, g0) = (ObjectId(1), ObjectId(2), ObjectId(3));
+        let hit = |tick, id, attacker, warhead, health| HitRec {
+            tick,
+            id,
+            warhead: Some(warhead),
+            attacker,
+            health,
+        };
+        let rec = Recording {
+            f: vec![f0, f1],
+            g: vec![g0],
+            weapon_warheads: BTreeMap::from([(0, 0), (2, 2)]),
+            hits: vec![
+                hit(4, f0, Some(g0), 2, (10, 0)),
+                hit(6, f1, Some(g0), 2, (10, 0)),
+                hit(6, f1, None, 9, (0, 0)),
+                hit(7, g0, None, 0, (10, 6)),
+            ],
+            shots: vec![ShotRec {
+                tick: 6,
+                firer: f1,
+                target: Target::Object(g0),
+                weapon: 0,
+                firer_pos: None,
+                target_pos: None,
+            }],
+            end: 9,
+            ..Default::default()
+        };
+        let order = death_order(&rec);
+        assert_eq!(order, vec![(4, 0), (6, 1)]);
+        assert_eq!(last_f_after(&rec, &order), Some(vec![(false, false, 0)]));
+        let ds = death_shots(&rec, &order);
+        assert_eq!(
+            (
+                ds.deaths,
+                ds.shots,
+                ds.later_no_attacker,
+                ds.later_named,
+                ds.no_later_hit
+            ),
+            (1, 1, 1, 0, 0)
+        );
     }
 }
