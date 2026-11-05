@@ -515,10 +515,12 @@ fn claim_24_after_an_accepted_touchdown_the_docking_stage_without_a_contact_fall
     );
 }
 
-// spec: S-0501 claim 24 (r103: in the docking stage without a contact, each processing, 1 tick apart, makes no test of contact or of a queued behaviour; while it is landing it is moved as one in contact, toward the docking position without a contact; the first processing that finds it no longer landing makes it fall back to rest: after a refused touchdown, since F7 refuses every cell of the pad's foundation to an aircraft with no contact, so it rose by 10 leptons and started to take off again, claim 7) and claim 47 (r103: a refused touchdown makes no overlap: the aircraft rises by 10 leptons before it would be listed again, so it is not listed in its cell layer at its positive height while it stays tracked)
+// spec: S-0501 claim 24 (r103: in the docking stage without a contact, each processing, 1 tick apart, makes no test of contact or of a queued behaviour; while it is landing it is moved as one in contact, toward the docking position without a contact; the first processing that finds it no longer landing makes it fall back to rest: after a refused touchdown, since F7 refuses every cell of the pad's foundation to an aircraft with no contact, so it rose by 10 leptons and started to take off again, claim 7) and claim 47 (r103: a refused touchdown makes no overlap: the aircraft rises by 10 leptons before it would be listed again, so it is not listed in its cell layer at its positive height while it stays tracked) and Edge cases (r132: a refused touchdown comes only with quirks.aircraft_descent_touchdown_untested off; on, the touchdown is untested and the case is claim_24_after_an_accepted_touchdown_the_docking_stage_without_a_contact_falls_back's)
 #[test]
 fn claim_24_after_a_refused_touchdown_the_docking_stage_without_a_contact_falls_back() {
-    let (mut w, k, a) = approaching(&rules());
+    let mut r = rules();
+    r.globals.quirks.aircraft_descent_touchdown_untested = false;
+    let (mut w, k, a) = approaching(&r);
     to_docking_stage(&mut w, a);
     // Before the next processing, in the docking stage, the contact ends
     // (set by the test, r110 asking no request there while a destination is

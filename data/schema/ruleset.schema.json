@@ -8620,6 +8620,11 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_descent_touchdown_untested": {
+          "description": "Claim 3's descent brings every landing to height 0 before its landing step, so no touchdown is tested: no cell test, no refusal and none of an accepted touchdown's effects, the forget of the destination in any case included; only the touchdown's own forget test applies, so an aircraft can touch down in a cell that F7 refuses, and one whose forget test keeps its destination goes on as after a refusal that kept the destination; off: every touchdown is tested, and when accepted has the accepted touchdown's effects.",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_edge_hold": {
           "description": "An aircraft that may leave the map now and lacks the fly-by flag is pushed back at the legal map's boundary, with the side rule and the fallback draw, so with the fly-back flag (or where the usable area's boundary lies on or beyond the legal map's) it is never removed there; off: it is not pushed back, takes no candidate and no draw, and is removed in the update tick in which its position leaves the legal map.",
           "type": "boolean",
@@ -8640,8 +8645,18 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_offmap_stop_start": {
+          "description": "An aircraft that is not visiting and may not leave the map now, given no destination over a cell outside the usable area, starts claim 40's selection from the cell of a local point with one coordinate moved to 1 or to one less than the local area's size along it (the coordinate nearer the centre, rows counted by the local area's height); off: from the cell it is over.",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_ready_mark_outlives_enter": {
           "description": "An aircraft whose ready mark enter cleared and that is then forced into another behaviour stays not ready in it until a processing sets the mark again, so a queued behaviour or an order waits, under a forced guard below cruise height for as long as it keeps that height; off: the cleared mark holds it not ready only while enter is current.",
+          "type": "boolean",
+          "default": true
+        },
+        "aircraft_refused_kept_drop": {
+          "description": "After a refused touchdown that kept its destination, or an untested touchdown that kept it, the aircraft is on the ground by its height with held height 0 and slides on along its heading with no climb and no steering until the movement update after the first one that leaves its target speed fraction at 1, which climbs; off: it takes the held height of ordinary flight at once and climbs from its next movement update on.",
           "type": "boolean",
           "default": true
         },

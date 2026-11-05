@@ -712,10 +712,17 @@ fn claim_2_climb_rate() {
     assert_eq!(st(&w, a).mark, None);
 }
 
-// spec: S-0501 claim 7 and F7 (a touchdown cell holding another object is refused: the aircraft rises by 10 leptons and takes off again; it never lands there). The blocker arrives after the movement point is accepted, so claim 40's substitution saw a free cell.
+/// `r` with claim 7's tested touchdown, for the tests of a refusal.
+// spec: S-0501 Edge cases (r132: quirks.aircraft_descent_touchdown_untested off: every touchdown is tested, so claim 7's refusal arises wherever F7 refuses the cell)
+fn tested_touchdowns(mut r: Ruleset) -> Ruleset {
+    r.globals.quirks.aircraft_descent_touchdown_untested = false;
+    r
+}
+
+// spec: S-0501 claim 7 and F7 (a touchdown cell holding another object is refused: the aircraft rises by 10 leptons and takes off again; it never lands there) and Edge cases (r132: a tested touchdown comes only with quirks.aircraft_descent_touchdown_untested off; on, the untested touchdown is claims_s0501_r132::claim_7_an_untested_touchdown_in_an_occupied_cell_rests_there). The blocker arrives after the movement point is accepted, so claim 40's substitution saw a free cell.
 #[test]
 fn claim_7_refused_touchdown() {
-    let mut w = game(&rules());
+    let mut w = game(&tested_touchdowns(rules()));
     ready(&mut w);
     let goal = testkit::mid(SIZE, 6, 0);
     let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -2, 0);
@@ -2558,10 +2565,10 @@ fn ac27_taking_off_from_the_deck_clears_the_mark_in_the_first_climbing_tick() {
     );
 }
 
-// spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts) and claim 7 (a refused cell: it rises by 10 leptons and starts to take off again)
+// spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts) and claim 7 (a refused cell: it rises by 10 leptons and starts to take off again) and Edge cases (r132: a refused touchdown comes only with quirks.aircraft_descent_touchdown_untested off)
 #[test]
 fn ac27_a_refused_touchdown_clears_the_mark() {
-    let mut w = game(&rules());
+    let mut w = game(&tested_touchdowns(rules()));
     let goal = bridge(&mut w, 5, 0);
     let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -3, 0);
     click(&mut w, a, ClickOn::Cell(goal));
@@ -3786,9 +3793,17 @@ fn claim_34_retreat_ignores_a_move_order() {
 }
 
 // spec: S-0501 claims 18 and 45 and T2 (a computer-controlled house's armed aircraft with no dock types, outside a team, keeps the edge destination in area guard; at exactly its flight height each area-guard processing is the fall-back to rest with a delay of 1 tick, and it queues no move). The house is made computer-controlled by S-0309's test-only mark.
+// spec: S-0501 claim 45 (r132: that touchdown is untested, claim 7, so the aircraft rests on the ground in the edge cell, outside the usable area; with quirks.aircraft_descent_touchdown_untested off claim 7's cell test refuses it instead) and claim 7, Edge cases (quirks.aircraft_descent_touchdown_untested)
 #[test]
 fn claim_45_computer_area_guard_at_flight_height() {
-    let r = one_dock(|u| u.econ.dock = None);
+    for untested in [true, false] {
+        computer_area_guard_at_flight_height(untested);
+    }
+}
+
+fn computer_area_guard_at_flight_height(untested: bool) {
+    let mut r = one_dock(|u| u.econ.dock = None);
+    r.globals.quirks.aircraft_descent_touchdown_untested = untested;
     let mut w = game(&r);
     ready(&mut w);
     w.houses[0].human = false;
@@ -3808,6 +3823,18 @@ fn claim_45_computer_area_guard_at_flight_height() {
         step(&mut w);
         let o = w.obj(a).unwrap();
         let s = o.air.clone().unwrap();
+        // spec: S-0501 claim 45 (r132: untested, the touchdown in its flight point's cell forgets the edge cell and its flight point, and it rests on the ground in the edge cell; whether area guard then gives it a destination is Open question 18)
+        if untested && was.landing && !s.landing {
+            assert!(s.ground, "at rest: {}", describe(&w, a));
+            assert_eq!(o.pos.cell(), e, "in the edge cell: {}", describe(&w, a));
+            assert!(!w.cells.usable(e), "outside the usable area");
+            assert_eq!(o.dest, None, "the edge cell forgotten: {}", describe(&w, a));
+            assert_eq!(s.flying_to, None, "the flight point forgotten");
+            assert_eq!(air::height(&w, a), 0, "on the ground");
+            assert_eq!(o.beh.current, Some(Behaviour::AreaGuard));
+            held = true;
+            break;
+        }
         // spec: S-0501 claim 45 (r120: until its first touchdown there it keeps the edge cell as destination; that touchdown, in its flight point's cell, forgets the edge cell and its flight point before the cell test, claim 7; F7 refuses it outside the usable area, so it rises 10 leptons and holds above the edge cell, not landing, with no destination; whether area guard then gives it one is Open question 18)
         if was.landing && !s.landing && !s.ground {
             assert_eq!(o.pos.cell(), e, "in the edge cell: {}", describe(&w, a));

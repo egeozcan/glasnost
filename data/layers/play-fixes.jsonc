@@ -152,6 +152,14 @@
       // behaviour or an order waits, and under a forced guard below cruise height for as long as
       // it keeps that height (r110, Q-2438). Acts only on an aircraft whose mark enter cleared.
       "aircraft_ready_mark_outlives_enter": false,
+      // S-0501 claim 6 and Edge cases (quirks.aircraft_offmap_stop_start off): an aircraft given
+      // no destination over a cell outside the usable area starts claim 40's selection from the
+      // cell it is over, as anywhere else. On (the original), it starts from a cell on the local
+      // area's edge, with rows counted by the local area's height, a start that "can lie far
+      // from the aircraft and can still be outside the usable area", so a stop sends it flying
+      // there (r132, Q-2577). Acts only on an aircraft that is not visiting and may not leave the
+      // map now, stopped outside the usable area.
+      "aircraft_offmap_stop_start": false,
       // S-0209 claims 4 and 9 and Edge cases (quirks.walker_attacks_unhittable_obstacle off): rows
       // WP13, WP24 and WP28 give blocked instead of enemy obstacle when the firing check without
       // the range test, for the weapon the walker would use against the occupant, answers
