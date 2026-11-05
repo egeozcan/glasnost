@@ -2,13 +2,13 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 20
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-05
 measurements: []
-requests: [Q-0005, Q-0083]
+requests: [Q-0005, Q-0083, Q-2674]
 supersedes: []
 ---
 
@@ -17,6 +17,9 @@ supersedes: []
 ## Summary
 
 How the game builds its registries of object types from the rules data: which types exist, the index each one gets, what happens to types that are referenced but never listed, which fields create types by reference and in which order, and how the order of the type lists does (and does not) affect what the player sees, including the order of the build sidebar. How several rules files are stacked on top of each other is in S-0006.
+
+It also gives how a type's display name is found from its label in the string table, and the
+rules that every label lookup in the string table follows (claim 17).
 
 **Paired sign-off.** Confirm claim 13 and scenario I1 against the S-0407 claim 8 (d) revision handed off with this spec: failed prerequisite-name lookup creates no type in either setting, but an invalid entry remains unmet with `quirks.prerequisite_names_dropped` off.
 
@@ -33,7 +36,12 @@ The glossary defines *type kind*, *registry*, *registration index*, *type name*,
 - **Early and late game-wide sections.** The two groups of game-wide sections that a layer reads before and after its reading passes (claim 4). Import mapping names them.
 - **Sidebar tab.** One of the four columns of build icons (cameos) on the sidebar.
 - **Engine defaults.** The values a type's fields have when the type is created, before it reads any section.
-- **Display name.** The text a type shows the player, for example in its sidebar tooltip. It is resolved from the type's display-name field.
+- **Display name.** The text a type shows the player, for example in its sidebar tooltip. It is
+  resolved from the type's display-name label (claim 17).
+- **Display-name label.** The value of a type's display-name field: the label of a string-table
+  entry, not the text itself (claim 17).
+- **String-table entry, entry label.** One text of the string table (S-0005, Terms), found by
+  its *entry label*. A lookup asks for a label and gets the matching entry's text (claim 17).
 - **Theater control file.** The data file of the map's theater that declares its tilesets and the animations of its tiles. Its semantics belong to S-0010.
 
 ## Behaviour
@@ -328,6 +336,62 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
     - Backing: `measurable` (K6, with an inconclusive result if the unsafe original fails to load). The split between safe slots and retained registrations is a design rule.
     - Confidence: high for count 19 and absence of a registration cap; medium for an observable surviving the original's unsafe input
 
+17. **Display name from its label (Q-2674).** A type's display-name field holds a display-name
+    label, never literal text.
+    - **Reading the label.** The label is read as a text value with a 31-byte limit (S-0003
+      claim 1). An absent key or an empty value keeps the label in force, so a later layer's value
+      replaces it as for any other field (S-0006), and a layer without one keeps the earlier
+      label. Only a layer that has the type's section reads it (claim 7). A type starts with no
+      label. The reserved no-type names of claim 2 mean nothing here: a label spelled `none` is
+      looked up like any other.
+    - **Resolving it.** The display name is the text of the entry that the label in force matches,
+      the label in force being the one that the last layer giving it left (above), and empty text
+      when the type has no label. A type that never had a label therefore has an empty display name,
+      never its type name or its section name. Where a display name is shown, an empty one shows no
+      characters. What the name tip shows then is S-0111's matter (claims 20 to 23).
+    - **Matching.** A label matches an entry label when both have the same length and the same
+      bytes, the label's bytes as the rules file gives them and the entry label's bytes as the
+      string table file stores them (entry labels are stored as plain single-byte text, unlike the
+      entry texts), the letters A to Z counting as equal to a to z. Every other byte must be equal,
+      spaces included, so leading and trailing spaces of an entry label are significant. A
+      display-name label never ends in a space (S-0003 claim 1), so it never matches an entry label
+      that does. Which entry matches when two entry labels differ only in letter case is unspecified
+      in the original (Edge cases).
+    - **Missing entry.** When no entry matches, the text is the string table's placeholder text
+      for a missing label: a fixed marker word, a colon, and the requested label between single
+      quotes. The requested label is therefore part of what shows.
+    - **The entry's text.** The text is the entry's, with its spaces normalised. Spaces at the start
+      of the text and right after a line feed or a tab are dropped. A run of spaces becomes one. A
+      space right before a line feed or a tab, or at the end of the text, is dropped. Every
+      character other than a space is kept as it is, line feeds, tabs, carriage returns and other
+      control characters included. A carriage return is an ordinary character for these space rules,
+      so a space next to it is kept (one of a run). How a shown text lays out these characters
+      belongs to the spec that shows it. For the name tip, S-0111 claim 24 starts a new line at a
+      carriage return or a line feed, so a display name can show as several lines there. The lookup
+      cuts nothing; a spec that shows a text may limit its length (S-0111 Edge cases for the name
+      tip).
+    - **Every lookup.** The matching, the placeholder and the normalisation hold for every lookup of
+      a label in the string table: the fixed entry identifiers that other specs list in their Import
+      mapping (S-0111, S-0411, S-0512) and the mode list's labels (S-0006 claim 13) included, and so
+      the message texts that S-0213 claim 25 lays out (Changes for other specs).
+    - Backing: `measurable` (scenario L1 (a) to (j), (l) and (m) for reading, matching, case, no
+      other byte pair counting as equal, spaces, the missing entry, an absent or empty value and the
+      layers, (l) for a later layer replacing a label with another; L2 for the normalisation, the
+      line feeds and carriage returns and the uncut text up to 255 text units, which it observes
+      through name tips that are neither shifted nor wrapped, L1 (k) for another fixed lookup
+      following the same matching and placeholder). `unmeasured` for which of two entries differing
+      only in case matches: the original leaves it to the order of its table. `unmeasured` for other
+      control characters being kept: whether one shows anything depends on the font (S-0014, S-0111
+      claim 24), so a run could not tell a kept one from a dropped one. `unmeasured` for no cut at
+      256 text units or more: L2 observes the text through the name tip, which shows no more than
+      255 of them whole (S-0111 Edge cases).
+    - Confidence: high for the label being looked up, a label spelled `none` included, the letters A
+      to Z matching a to z, the placeholder's form, empty text without a label and the layer rule.
+      Medium for no other byte pair counting as equal, which rests on the byte form of the entry
+      labels, for the 31-byte limit, the spaces of entry labels, the normalisation, the lookup
+      cutting nothing, the line feeds, carriage returns and other control characters, every other
+      lookup following the same rules, and which of two entries differing only in case matches.
+
 ## Formulas
 
 **Key of a tiberium-list entry (claim 10).** The key *s* gives the integer *k*. The key is trimmed (S-0001, claim 10), and the trim always removes its leading whitespace, so *s* starts with its first non-whitespace byte. Split *s* as *s* = *p* *D* *r*, where *p* is one sign byte `+` or `-` or nothing, *D* = *d*₁ *d*₂ … *d*<sub>ℓ</sub> is the longest run of decimal digit bytes `0` to `9` that follows *p* (ℓ ≥ 0), and *r* is the rest of *s*, which plays no part.
@@ -372,6 +436,7 @@ Two superweapons are compared by *t*, an integer, so two fields that truncate to
 | sidebar tabs | 4 | tabs | claim 11 |
 | items per sidebar tab | 76 | items | further items are not shown |
 | recharge-time factor | 900 | ticks per game minute | claim 11, Formulas |
+| display-name label length | 31 | bytes | claim 17 |
 
 ## State and ordering
 
@@ -406,6 +471,10 @@ Observable ordering:
 - Same-layer repeated long-name creation: the safety departure of claim 15 suppresses the repeated creation with a warning; no quirk switch.
 - Excessive numbered weapon count: claim 16 preserves registrations while S-0308 caps usable slots and requires a warning; no new quirk switch.
 - In one particular game-wide mode, the original adds no items to the sidebar at all. Which game option selects that mode, and whether it is reachable in normal play, is not established (open question 3). Backing: `unmeasured`, because no setup that activates it is known. Confidence: low.
+- Two string-table entries whose labels differ only in letter case (departure, no switch, claim 17).
+  Which one a lookup finds is unspecified in the original. Our engine uses the one that comes first
+  in the string table file, and the importer warns, naming both labels. Backing: `unmeasured`.
+  Confidence: medium.
 
 ## Import mapping
 
@@ -509,7 +578,7 @@ Game-wide sections that name types, in the order claim 4 gives them (within one 
 | Rules, actor type section, `WeaponCount` | highest numbered weapon reference that takes effect with positive `TurretCount` | signed integer; claim 16 includes numbers above 18 for registration only | held value, initially 0 |
 | Rules, actor type section, `Weapon`*n*, `EliteWeapon`*n* | normal and elite weapon registration for positive integer *n* ≤ weapon count | weapon names, creating, 127-byte limit | held references; no new creation |
 
-Sidebar keys (claim 11): build category = `BuildCat` (combat = `Combat`; accepted words and parsing as S-0302 claim 5 and Import mapping give: 31-byte cut, then trim, whole ASCII-case-insensitive comparison; unknown words give unspecified, absent or empty keeps held, initially unspecified); base-planning side = `AIBasePlanningSide`; counts as aircraft = `ConsideredAircraft`; naval = `Naval`; tech level = `TechLevel`; display name = `UIName` (resolved to text); superweapon recharge time = `RechargeTime` (game minutes).
+Sidebar keys (claim 11): build category = `BuildCat` (combat = `Combat`; accepted words and parsing as S-0302 claim 5 and Import mapping give: 31-byte cut, then trim, whole ASCII-case-insensitive comparison; unknown words give unspecified, absent or empty keeps held, initially unspecified); base-planning side = `AIBasePlanningSide`; counts as aircraft = `ConsideredAircraft`; naval = `Naval`; tech level = `TechLevel`; display name = `UIName` (display-name label, resolved by claim 17); superweapon recharge time = `RechargeTime` (game minutes).
 
 The absent default of the counts-as-aircraft key is *yes* for an aircraft type and *no* for a
 vehicle type (S-0501 Import mapping).
@@ -719,6 +788,65 @@ Every scenario runs under the measurement setup (glossary): an unmodified instal
 - **K5, unbounded long-name self-reference.** Named test file: a loose art copy with a new animation section whose name is exactly 24 ASCII bytes. Its next-animation reference names those same bytes followed by one additional letter. The map lists the 24-byte animation name. Control: the same file with the reference limited to the 24-byte name. Record whether loading reaches play and the elapsed loading time, once each in fresh sessions. Expected: the short-name control loads, whereas the long-name variant does not complete normally while creation continues. Stop the unsafe run externally after 60 seconds if needed; do not wait for resource exhaustion. Normal completion of the long-name variant without resource failure falsifies the unbounded-creation claim. A crash or allocation failure gives no guaranteed copy count. On our engine, both load; each independent same-layer chain in the long-name case creates one new copy and warns when its repeated reference is suppressed.
 - **K6, nineteenth weapon registration.** Named test files: a loose base-rules copy and art copy. Take a vehicle with positive turret count, set its weapon count to 19, and make only its nineteenth normal weapon reference name a new weapon *W*, carried nowhere else. *W*'s section names a new animation *A* as its firing animation. *A*'s art section copies a stock animation's art, sets its image explicitly, and creates a new decorative overlay through its spawned-overlay reference. Leave *A* out of every animation list, and give the map that overlay's rules section and index placement as in G3. Choose a game mode with no extra overlay registrations. The observable is artwork at the first new overlay index: *A*, first created while *W* reads the base rules, reads art in a later layer and creates the overlay before the map's overlay reading. Control: weapon count 18, with the same nineteenth field present, must create no such overlay. Repeat with only the nineteenth elite field naming *W*. Expected: overlay in both count-19 runs and not in the count-18 control. A successful count-19 load without the overlay while a control naming *W* in the first slot shows it falsifies registration above 18. A failed original load is inconclusive, because excessive counts are unsafe. On our engine the overlay appears, but neither nineteenth reference supplies a usable firing slot, and the excessive count warns.
 
+**L. Display-name lookup (claim 17; Q-2674).** Presentation only. Common setup of K, plus a
+presentation-only probe string table: a loose copy of the stock string table (S-0005) that keeps
+every entry and adds the entries named below, each with a distinct short probe text. A test map
+adds buildable copies of one stock vehicle (as in A1), which differ only in their display-name
+field. Observable: each copy's display name in its sidebar tooltip, and its name tip (S-0111
+claim 20) when one is built.
+- **L1, matching and absent values.** Entries: labels *P1*, *P2*, *P3* with a leading space, *P4*
+  with a trailing space, *P5* of 31 bytes, *P6* holding a lower-case accented letter of the
+  single-byte Latin-1 set, and the label `none`. The copies have: (a) exactly the label *P1*; (b)
+  *P1* in another letter case; (c) *P2* followed by a space in the map; (d) *P3* without the
+  space; (e) *P4* without the space; (f) no display-name field; (g) an empty value, in a map whose
+  rules section for a stock vehicle with a known label sets the field empty; (h) a label that no
+  entry has; (i) the label `none`; (j) a 40-byte label whose first 31 bytes are *P5*. (m) *P6*
+  with that letter in upper case. (l) The same map's rules section also gives a second stock
+  vehicle with a known label the label *P1*. (k) In two further runs, the probe table gives the
+  entry of S-0411's fixed ready label (S-0411 Import mapping) its label in another letter case,
+  and then leaves that entry out, and a building is built to its ready state. Expected: (a) and
+  (b) show *P1*'s probe text, (c) *P2*'s and (j) *P5*'s; (d), (e), (h) and (m) show the
+  placeholder with the requested label in single quotes; (f) shows no name; (g) keeps the stock
+  vehicle's earlier name; (i) shows the `none` entry's probe text; (l) the second stock vehicle
+  shows *P1*'s probe text; (k) the ready label shows its probe text in the first run and the
+  placeholder with the ready label's identifier in single quotes in the second. Falsified by a
+  case-sensitive match of A to Z, a match in (m), a match through a space, the section name or the
+  label shown on its own, an empty value that clears the name, or a second stock vehicle in (l)
+  that keeps its earlier name.
+- **L2, entry text.** Entries whose texts are: (i) two leading spaces then a word; (ii) two words
+  separated by three spaces, and (iii) the same two words separated by one space; (iv) a word, a
+  space, a line feed and the same word; (v) a word, a line feed, a space and the same word; (vi) a
+  word, a tab and a word, (vii) the same with a space after the tab, and (viii) the same with a
+  space before the tab; (ix) a word and two trailing spaces, and (x) the same word alone; (xi) a
+  word, a space, a carriage return, a space and the same word; and (xii) a text of exactly 255
+  characters: 23 words, each but the last followed by one line feed, the first 22 of ten letters
+  and the last of thirteen. One copy names each. Rest on each copy at a screen resolution whose
+  battlefield view is more than 2 × (23 × *P*<sub>f</sub> + 3) pixels tall, *P*<sub>f</sub> being
+  the game font's line pitch (S-0014 claim 1), so that the view is more than twice as tall as
+  (xii)'s box (S-0111 claim 24), with the pointer in the upper quarter of the view and away from
+  its right edge (so that, (xii)'s box being under half the view's height, every box ends more than
+  16 pixels above the view's bottom edge), so that no box is shifted or flipped and no line is
+  wrapped (S-0111 claim 24). Observable: each tip's lines and its box width. Expected: the boxes of
+  (i), (ix) and (x) equally wide; (ii) as wide as (iii); (iv) and (v) two lines each, each box as
+  wide as (x)'s; (vi) one line, its box as wide as S-0111 claim 24 gives for a tab between the two
+  words, and (vii) and (viii) as wide as (vi); (xi) two lines, its box wider than (x)'s, since the
+  space is kept at the end of the first line and at the start of the second; (xii) 23 lines, each
+  holding one whole word. Falsified by any other width, a single line in (iv), (v) or (xi), or a
+  missing or cut word in (xii).
+
+## Changes for other specs
+
+- **For S-0213 claim 25 (the imported message texts and their lines) and its scenario O21.** The
+  message texts come from string-table lookups, so they reach S-0213's line layout with claim 17's
+  space normalisation already applied. S-0213's layout rules are unchanged and hold for the text as
+  it is after that normalisation. Beside "ordinary spaces are kept", claim 25 can add that a run of
+  spaces in an entry reaches the layout as one space, and that a space at the start of the text or
+  right after a line feed or a tab is already gone. O21's text with several spaces at the break can
+  expect that run reduced to one space before the break rules apply, and its "Continuation spaces
+  remain" then concerns that one space. Confidence: medium, as claim 17 rates the normalisation.
+  Backing: `measurable` (L2 for the normalisation; S-0213 scenario O21 with its several-spaces text
+  for the message lines).
+
 ## Open questions
 
 1. Where a side's member list (as opposed to each country's own side) is used in play is not covered here. It decides whether the quirk of claim 9 is observable.
@@ -730,3 +858,5 @@ Every scenario runs under the measurement setup (glossary): an unmodified instal
 5. The order among types created after all rules layers (claim 3: map terrain-object placements, theater tile animations, the fixed particle system) is not established, nor whether the theater's tile animations are created again in every game.
 6. **Resolved by S-0401 and S-0112, Terms.** Resource overlays select the first registered tiberium whose image run contains their overlay index, with a first-tiberium fallback. D4 now isolates that selection with a payout control; D5 measures the 23-byte cut through the selected tiberium's section.
 7. Resolved by S-0411 claim 15: a suppressed type is absent from the offer, retries admission only at a later qualifying recheck, and gives no suppression-removal orders. F4 tests the capacity limit; S-0411 scenario S10 tests these consequences.
+8. No formats spec yet gives the string table file's layout and the decoding of its texts. Claim 17
+   compares the entry labels as the file stores them and starts from the decoded entry texts.
