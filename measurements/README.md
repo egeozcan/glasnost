@@ -39,3 +39,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0012](rules-import/M-0012-rules-final-line-feed.md) | A rules file's final line feed and a tank's burst firing | rules-import | confirms | local |
 | [M-0019](simulation/M-0019-unit-arena-placements-at-tick-0.md) | Unit arena, the records' placements at tick 0 (standing positions, raw values, refused cells) | simulation | new finding | committed |
 | [M-0021](combat/M-0021-arena-fragment-gattling-test-pairing.md) | Unit arena, a test pairing after Q-1714's (fragments per shot, first shots, gaps, stages) | combat | confirms | local |
+| [M-0020](simulation/M-0020-unit-arena-standing-positions-yuri-caos.md) | Unit arena, YURI against GGI and SHK and CAOS against E1 (placement at tick 0, standing positions and the winner, first targets, captures, the drones' end) | simulation | new finding | local |
