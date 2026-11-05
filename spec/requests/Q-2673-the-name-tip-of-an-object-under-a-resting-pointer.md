@@ -1,9 +1,9 @@
 ---
 id: Q-2673
 title: The name tip shown when the pointer rests on a unit or building
-status: open
+status: answered
 related: [S-0105, S-0411, S-0111, S-0516]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
