@@ -2,13 +2,13 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 50
+revision: 53
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-06
 measurements: [M-0021]
-requests: [Q-0018, Q-0412, Q-0430, Q-2636]
+requests: [Q-0018, Q-0412, Q-0430, Q-2636, Q-2691, Q-2692, Q-2693]
 supersedes: []
 ---
 
@@ -67,7 +67,8 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
   passenger of an open-topped transport, which is in play while it is off the map (claim 3).
 - **Leftover.** An object that has been removed (glossary) in the current tick and is still kept by
   the game until the tick ends (claim 13). It is removed in every respect that play can see, except
-  that the defeat sweep of S-0414 claim 5 can still reach it.
+  that the defeat sweep of S-0414 claim 5 can still reach it. One that this sweep's hit sets sinking
+  again and whose type cannot crash is kept to the end of the game (claim 13 (g)).
 - **Order.** An instruction from a human player (move, attack, deploy, sell, build, hold
   production and so on), as in S-0213. Computer-controlled houses decide during their own updates
   and give no orders in this sense.
@@ -841,16 +842,18 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
         before repair; O14 D for the removal consequence)
       - Confidence: high for within-group order and delivery placement
 
-13. **A removed object is kept to the end of its tick (Q-2636).** This claim says how long the
-    original keeps an object after its removal and what can still reach it.
+13. **A removed object is kept to the end of its tick (Q-2636, Q-2691 to Q-2693).** This claim says
+    how long the original keeps an object after its removal and what can still reach it.
     - **(a) Lifetime.** An object that is removed in tick *t*, in any part of the tick and by any
       cause, is a leftover (Terms) for the rest of tick *t*. Every leftover stops existing at the
-      end of tick *t*, after its last part, and none exists in any part of tick *t* + 1. This covers
-      every kind of object: a vehicle destroyed by damage (claim 6 (a)), an infantry unit or
-      aircraft when it leaves play after its death sequence or crash, a building when it leaves
-      play, a passenger that dies with its transport, a projectile after its detonation and an
-      animation that ends. An immediate deletion, as S-0414 claim 15 defines it (a production item
-      cancelled with its factory), leaves no leftover. So a vehicle that leaves play at its
+      end of tick *t*, after its last part, and none exists in any part of tick *t* + 1, except a
+      leftover vehicle that a defeat sweep's hit sets sinking again and whose type cannot crash,
+      which is kept to the end of the game (point (g)). The exception takes point (g)'s backing.
+      This covers every kind of object: a vehicle destroyed by damage (claim 6 (a)), an infantry
+      unit or aircraft when it leaves play after its death sequence or crash, a building when it
+      leaves play, a passenger that dies with its transport, a projectile after its detonation and
+      an animation that ends. An immediate deletion, as S-0414 claim 15 defines it (a production
+      item cancelled with its factory), leaves no leftover. So a vehicle that leaves play at its
       destroying hit in tick *t* with no health (not one that claim 6 (a) keeps in play while it
       sinks, nor one restored to 1 health point before its removal, point (b)) is still among the
       game's objects after the last part of tick *t*, off the map and with no health, and is gone
@@ -868,27 +871,35 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
         no health, being kept for a later hit in the same tick; medium for the other vehicles that
         leave play with no health, for its being kept after the last part of its tick, for the end
         coming before any part of tick *t* + 1, for the other kinds, the other causes and the other
-        parts of the tick, and for the immediate deletion leaving no leftover
+        parts of the tick, and for the immediate deletion leaving no leftover, and medium for the
+        exception (point (g))
     - **(b) What a leftover is.** A leftover is out of play and off the map. It occupies no cell,
       takes no turn and is in no update order, so it is no object of claims 3, 4 and 10, and its end
-      at the end of the tick is no removal for claim 10. It keeps its owner and the health it had
-      when it left play: none, if damage destroyed it and nothing restored health before its removal
-      (S-0312 claims 10 and 15: a crashable surface vessel is restored to 1 health point and still
-      leaves play). It is no target that an object holds or can pick, since S-0309 drops every hold
-      on an object at its removal, and its house's counts treat it as S-0414 claim 4 treats an
-      object that has left play (a vehicle of a not-scored type, for one, stays counted). So when
-      the destruction of a vehicle in the turn pass of tick *t* leaves the counts of its house's
-      defeat test at zero, the house fails that test in its house update of the same tick *t* (row
-      7).
+      at the end of the tick is no removal for claim 10. It keeps its owner, its position and the
+      health it had when it left play: none, if damage destroyed it and nothing restored health
+      before its removal. Some leave play with health left: a crashable surface vessel is restored
+      to 1 health point and still leaves play (S-0312 claims 10 and 15), a vessel whose sinking
+      descent ends keeps the 1 health point that its sinking start restored, or the health that a
+      cull left unchanged (S-0504 claim 4, S-0614 claim 11), and a passenger killed with its
+      transport keeps its health (S-0312 claims 5 and 12). It is no target that an object holds or
+      can pick, since S-0309 drops every hold on an object at its removal, and its house's counts
+      treat it as S-0414 claim 4 treats an object that has left play (a vehicle of a not-scored
+      type, for one, stays counted). So when the destruction of a vehicle in the turn pass of tick
+      *t* leaves the counts of its house's defeat test at zero, the house fails that test in its
+      house update of the same tick *t* (row 7).
       - Backing: `measurable` (scenario O18 part a, which records the tick of the house's defeat)
         for the defeat in the same tick. M-0021's hit of point (c) on the last vehicle, in the tick
         of its destruction, agrees with it. The health of none is `measured` (M-0021's rows of a
         vehicle destroyed by a hit). No turn after the removal takes claim 6's backing, the dropped
-        holds S-0309's and the counts S-0414 claim 4's
+        holds S-0309's and the counts S-0414 claim 4's. The health left of a vessel whose descent
+        ends is `measurable` (scenario O18 part h: the sweep's hit takes 1 health point from it).
+        That of a passenger killed with its transport is `unmeasured`: no scenario here loads one,
+        and it shows only through the sweep's hit
       - Confidence: high for no further turn and for the health of none of a vehicle destroyed by a
         hit that restores no health; medium for the owner and the health kept in other cases, for
         the defeat in the same tick, for no cell, no hold and no pick, which rest on S-0309 and on
-        the leftover being off the map
+        the leftover being off the map, and for the health left of a vessel whose descent ends and
+        of a passenger killed with its transport
     - **(c) The defeat sweep reaches leftovers.** The only rule known to reach a leftover is the
       destruction of a defeated or surrendering house's objects (S-0414 claim 5). Its sweep offers
       its single hit to each leftover infantry unit, vehicle, aircraft or building that the
@@ -901,14 +912,13 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
       no tag. For a vehicle, the original still sets off once more the death effects of S-0312 that
       the vehicle's state allows, without the credit (**Changes for other specs**, S-0302 and S-0312
       entries). What it does to the other kinds is not traced (Open questions). Our engine offers
-      the sweep's hit only to leftover vehicles with no health. A leftover with health left gets
-      none until S-0414 settles that case, and a leftover of another kind gets none until its
-      effects are traced (Open questions). In M-0021's part B runs this is believed to be the one
-      more hit that the last vehicle of one house takes after its destroying hit: that house has
-      nothing left, so it fails its defeat test in the tick of that vehicle's destruction (point
-      (b)), while the house's vehicles destroyed in earlier ticks no longer exist and take no hit.
-      The switch `quirks.defeat_sweep_leftovers` (Edge cases) turns the sweep's reach to leftover
-      vehicles off.
+      the sweep's hit to every leftover vehicle of the house, with or without health left (point
+      (g)), and to no leftover of another kind until its effects are traced (Open questions). In
+      M-0021's part B runs this is believed to be the one more hit that the last vehicle of one
+      house takes after its destroying hit: that house has nothing left, so it fails its defeat test
+      in the tick of that vehicle's destruction (point (b)), while the house's vehicles destroyed in
+      earlier ticks no longer exist and take no hit. The switch `quirks.defeat_sweep_leftovers`
+      (Edge cases) turns the sweep's reach to leftover vehicles off.
       - Backing: `measured` (M-0021: one more hit in the tick of the last vehicle's destruction,
         after its destroying hit, naming no attacker, with a warhead from none of the test files and
         taking no health) for a vehicle destroyed by a hit in the defeat tick. `measurable`
@@ -923,8 +933,8 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
         Medium for that hit being the defeat sweep's, for the demolition warhead, for no credit and
         no tag raise, for the repeated death effects and for no other rule reaching a leftover. Low,
         as in S-0414 claims 5 and 15, for no attacking house, the ignored defences, the no-escape
-        marker and the sweep's place in creation order, and low for leftovers of other kinds. A
-        leftover with health left and the other kinds' own death effects are Open questions
+        marker and the sweep's place in creation order, and low for leftovers of other kinds. The
+        other kinds' own death effects are an Open question
     - **(d) Shots of a vehicle in the tick it is destroyed.** A vehicle fires its weapons only in
       its own turn, and a vehicle that has left play takes no further turn (claim 6 (a)). So a
       vehicle that leaves play at its destroying hit in tick *t* fires any shot of tick *t* before
@@ -943,12 +953,113 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
         later tick naming no attacker; medium for that hit naming no attacking house, for a hit
         later in tick *t* naming neither and for an earlier hit being unchanged
     - **(e) Our engine.** An implementation need not keep a leftover as an object. Any form
-      satisfies this claim that gives the defeat sweep of the same tick the house's leftover
-      vehicles with no health (our engine's reach in point (c)), each with its health and its place
-      in creation order, and that a recording of the game's objects taken after the tick's last part
-      lists, off the map. Nothing else in the simulation may find a leftover.
+      satisfies this claim that gives each defeat sweep of the same tick every leftover infantry
+      unit, vehicle, aircraft and building of every house, each with its owner, its health, its
+      position and its place in creation order, so that the sweep offers its hit to the house's
+      leftover vehicles (point (c)) and every leftover holds its place (point (h)), that keeps to
+      the end of the game, with its place, a leftover vehicle that the sweep's hit sets sinking
+      again and whose type cannot crash (point (g)), and that a recording of the game's objects
+      taken after the tick's last part lists, off the map. Nothing else in the simulation may find a
+      leftover.
       - Backing: `unmeasured`: a freedom of our engine, not a behaviour of the original
       - Confidence: high
+    - **(f) Leftovers that a sweep makes (Q-2691).** A sweep reaches every leftover at its place,
+      whatever removed it, a sweep included. So in the original two cases repeat death effects.
+      Within one sweep: when the death effects of an object that the sweep hits at its place destroy
+      a vehicle of the house whose place comes later, for one by an exploding vehicle's death
+      weapon, that vehicle is a leftover when the sweep comes to its place, so it takes the hit
+      there and its death effects come once more (point (c)). Two sweeps in one house update: a
+      house that carries out a surrender (S-0414 claim 11) is swept, and when nothing counts for it
+      afterwards, the defeat test of the same house update fails and the defeat sweeps it again
+      (S-0414 claims 1 and 5). Nothing that the first sweep removed has ended by then (point (a)),
+      so the second sweep reaches each leftover that the first one made. Each vehicle that the first
+      sweep destroyed and removed has its death effects once more, so a crate-carrying vehicle
+      leaves two crates when crates are allowed and an exploding one sets off its death weapon
+      twice. A vehicle of the house removed earlier in the same tick is reached by both sweeps, so
+      its death effects come three times in all. When an object that the first sweep destroys stays
+      in play and still counts (S-0414 claim 4), such as a sinking vessel, the house passes its test
+      and no second sweep comes in that update (S-0414 claim 11). Our engine does the same under
+      `quirks.defeat_sweep_leftovers` (Edge cases).
+      - Backing: `measurable` (scenario O18 part f) for the sweep's hit on a vehicle that the death
+        weapon of an earlier place destroyed, and (O18 part g, in the network-game form of S-0414
+        scenario V8) for the second sweep in the house update of a surrender. The three sets of
+        death effects of a vehicle removed earlier in that tick are `unmeasured`: they follow from
+        parts a and g together, and no part here sets up both at once
+      - Confidence: low for the case within one sweep in the original, which rests on the sweep
+        reaching the earlier place first and so on S-0414 claim 15's creation order, low there.
+        Medium for the two sweeps of a surrender in the original, which follow from point (c) and
+        from the order of the house update (S-0414 claims 1 and 11), and medium for the three sets
+        of death effects. Low for the surrender case as a rule of a skirmish, as S-0414 claim 11
+        rates its destruction there
+    - **(g) Health left, sinking and crashing (Q-2692).** The hit's amount is the leftover's health
+      (point (c)), so a leftover vehicle with health left (point (b)) takes a killing hit. In the
+      original its destruction is registered once more, with no attacker, so it gives no kill and
+      counts as S-0414 claim 21 counts a destruction with no attacker, and the raises that S-0312
+      claim 29 gives for a killing hit with no attacker and no attacking house (point (c)) come
+      again for a tag that it still carries. Its death effects of S-0312 come again as at any
+      killing hit, with the sweep's markers. So when a house's last vessel ends its sinking descent
+      in the tick in which the house is defeated, the sweep destroys that vessel once more. At the
+      hit, the vehicle's state where it left play decides, as at any killing hit, whether it sinks
+      instead of showing claim 9's animations (S-0312 claim 10) and whether it starts a crash
+      (S-0312 claim 15).
+      - *Sinking.* A vehicle that leaves play with no health failed claim 10's sinking conditions at
+        its destroying hit, since meeting them restores 1 health point. Those conditions are facts
+        of its type, of its cell's land type and of its bomb mark, none of which changes while it is
+        out of play, so the hit of no amount on it starts no sinking and shows the animations of its
+        destroying hit: claim 9's, or, for a vehicle that carries the bomb mark and left play within
+        10 leptons above a water cell, S-0312 claim 11's wake and splash, in place of claims 4 to 6
+        and 9. A leftover with health left that meets them, such as a vessel whose descent has
+        ended, takes claim 10's branch: neither of claim 9's animations nor their picks, and its
+        health back to 1 health point. It is then marked as sinking, but it stays out of play and
+        off the map and takes no turn, so it never descends and its descent never ends. Unless its
+        type can crash it is never removed: it stays among the game's objects, out of play, for the
+        rest of the game. One whose type can crash fails its crash start, is removed again and ends
+        with its tick.
+      - *Crashing.* A vehicle whose crash has ended leaves play on the ground with no health (S-0312
+        claims 15 and 16), so at the hit it is not above the terrain: the hit shows claim 9's
+        animations and starts no crash. A leftover of a type that can crash that is above the
+        terrain at the hit would start a crash after its other death effects: it loses any
+        passengers still held and takes the three tumbling draws of S-0312 claim 16, and, taking no
+        turn, it does not fall. It still ends with its tick. A vehicle destroyed above the terrain
+        starts its crash while still in play, so no such leftover is known to arise.
+      - *Our engine* does the same under `quirks.defeat_sweep_leftovers`, and so keeps to the end of
+        the game a leftover that the hit sets sinking again and whose type cannot crash. With the
+        switch off no leftover takes the hit, so none is set sinking again (Edge cases).
+      - Backing: `measurable` (scenario O18 part h) for the killing hit on a vessel whose descent
+        ends in the tick of its house's defeat, for claim 10's branch at that hit and for the vessel
+        being kept to the end of the run, and (O18 part i) for the hit of no amount on a vehicle
+        whose crash ended, with claim 9's animations. Claim 29's raises at that hit are
+        `unmeasured`: how often a trigger fires at them depends on the state that the object's first
+        destruction left in its tag's latches (S-0011), which no scenario here sets apart, so no
+        count of firings can be expected. That the conditions fail again for a leftover with no
+        health, and that one with the bomb mark that left play that low over water shows S-0312
+        claim 11's wake and splash again, are `unmeasured`: they rest on those facts not changing
+        out of play, no situation is known in which they could, and no scenario here destroys a
+        vehicle with the bomb mark over water in the tick of its house's defeat. The crash start of
+        a leftover above the terrain is `unmeasured`: no situation is known that gives one.
+      - Confidence: medium for the killing hit on a leftover vehicle with health left and its
+        repeated effects, for claim 29's raises coming again at that hit, for claim 10's branch at
+        that hit and for such a vessel, of a type that cannot crash, being kept to the end of the
+        game, which were traced, not measured. Low for which of claim 29's raises come, which rests
+        on the hit naming no attacking house, as point (c) rates it. Medium for a leftover with no
+        health failing the sinking conditions again and for a vehicle whose crash ended not being
+        above the terrain, except on a bridge deck (Open questions). Medium for the wake and splash
+        of a leftover with the bomb mark. Low for the crash start of a leftover above the terrain
+    - **(h) Places of leftovers (Q-2693).** Every leftover infantry unit, vehicle, aircraft and
+      building holds its place in S-0414 claim 15's creation order until it ends, whichever house
+      owns it and whether or not the sweep offers it the hit. So under
+      `quirks.defeat_cancellation_skip` a place that a hit deleting production objects at once makes
+      the sweep skip can be a leftover's, and the skip then costs no object in play its hit. In our
+      engine every leftover of the four kinds holds its place in both positions of
+      `quirks.defeat_sweep_leftovers`: the switch withholds only the hit, so the skip of S-0414
+      claim 15 counts the same places in both positions.
+      - Backing: `unmeasured` for the original: its cancellation skip can be set up only in the
+        network-game form of S-0414 scenario V11 part d, in which no object of machine 2's house may
+        attack or be attacked, and no set-up here removes another object, at a known place in
+        creation order, in the tick of the surrender's destruction. That our engine keeps the places
+        with the switch off is a rule of our engine, `unmeasured`: the original has no such switch
+      - Confidence: low for the original, as S-0414 claim 15 rates its cancellation skip, which V11
+        measures only in the network-game form; medium for our engine's rule with the switch off
 
 ## Formulas
 
@@ -1018,7 +1129,7 @@ scenario random stream has no place here (claim 1).
 | In play, inside an open-topped transport | The transport is destroyed and S-0312 has the passenger die | Leaves play when it dies, one more removal for claim 10 (claim 6) |
 | In play, inside an open-topped transport | The transport is destroyed and S-0312 has the passenger get out | Back on the map, keeps its place in the update order, no removal (claim 6) |
 | In play, vehicle, aircraft or building | Destroyed | Leaves play at the moment of the damage, a removal for claim 10, except in S-0312's cases (sinking, crashing, exploding or sold buildings), where it stays in play and leaves later (claim 6) |
-| Removed in this tick (a leftover) | The tick ends | Stops existing; it never exists in the next tick (claim 13) |
+| Removed in this tick (a leftover) | The tick ends | Stops existing; it never exists in the next tick (claim 13), except one that a defeat sweep's hit set sinking again and whose type cannot crash, which is kept to the end of the game (claim 13 (g)) |
 | In play | Nothing | Keeps its place |
 
 ## Edge cases and quirks
@@ -1033,13 +1144,20 @@ scenario random stream has no place here (claim 1).
 - **Second turn** (claim 11), same switch. Off: at most one turn per object per tick. This also
   covers a unit that boards an open-topped transport after its own turn.
 - **Defeat sweep on leftovers** (claim 13), `quirks.defeat_sweep_leftovers`, default: on. On, as in
-  the original for this case: the sweep of S-0414 claim 5 offers its hit to the house's leftover
-  vehicles with no health too, and each has the death effects of the S-0312 entry in **Changes for
-  other specs** once more, with their draws. Leftovers with health left and leftovers of other kinds
-  are offered no hit (claim 13 (c)). For leftovers with health left this departs from the original
-  (the S-0414 entry in **Changes for other specs**). For leftovers of other kinds what the original
-  does is left open (Open questions). Off: the sweep offers no hit to any leftover. A recording then
-  shows no hit on the leftover after its destroying hit.
+  the original: the sweep of S-0414 claim 5 offers its hit to the house's leftover vehicles too,
+  whatever removed them, an earlier sweep of the same house update or a death effect earlier in the
+  same sweep included (claim 13 (f)). A leftover vehicle with no health has the death effects of the
+  S-0312 entry in **Changes for other specs** once more, with their draws, and one with health left
+  is destroyed once more (claim 13 (g)). So a surrendering house's crate-carrying vehicle can leave
+  two crates. Leftovers of other kinds are offered no hit (claim 13 (c)): what the original does
+  with them is left open (Open questions). Off: the sweep offers no hit to any leftover. A recording
+  then shows no hit on a leftover after its destroying hit, and a surrender's second sweep has no
+  effect on the leftovers of the first (an object still in play at the second sweep is an Open
+  question). On, a leftover vehicle that the hit sets sinking again and whose type cannot crash is
+  kept, out of play, to the end of the game, as in the original, with its place in the creation
+  order of later sweeps, and one whose type can crash ends with its tick (claim 13 (g)). Off, none
+  is set sinking again. In both positions every leftover holds its place in creation order until it
+  ends (claim 13 (h)).
 - No departure: nothing in a tick's order depends on the host or on real time.
 
 ## Import mapping
@@ -1874,69 +1992,139 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   missed first turn; this scenario tests removal at animation completion.
 
 - **O18 (claim 13; leftovers and the defeat sweep).** A tiny skirmish map, game speed index 4, no
-  engine add-on and no mods (the named test files excepted), short game off, crates off except in
-  part (c). A loose test copy of the base rules, placed before the program starts, sets the bases
-  key of its multiplayer dialog section to no and its minimum unit count to 0, and the unit-count
-  setting is 0, so that no house has a base unit or starting units (S-0412 scenario K1, run 2 and
-  part b). A test map pre-places every object named below. House D, a computer house, owns only two
-  vehicles V1 and V2 of a named test vehicle type, a land vehicle that cannot crash, standing on
-  land, with the explodes flag, a death weapon, minimum and maximum debris counts above 0 and
-  non-empty explosion and destruction-animation lists, and no other object. House K, the local
-  player's house, owns only a group of vehicles whose weapon destroys a test vehicle with one hit. D
-  and K are the only houses and are enemies, so the game ends with D's defeat in every part (S-0414
-  claim 6). Each run is recorded until play stops. Scripted input gives K's attack orders and their
-  timing. Use the read-only recorder with end-of-tick captures of the game's objects, every hit with
-  its warhead, attacker and health before and after, every death-weapon detonation and every
-  animation and debris object created, the tick in which each house is marked defeated, and the
-  score screen's kills and losses, read after play stops (S-0414 claim 19). (a) Let K destroy V1,
-  and V2 at least 10 ticks later, so that D is defeated in the tick *t* of V2's destruction.
-  Expected: D marked defeated in tick *t*. At *t*, after V2's destroying hit, one more hit on V2 of
-  no amount, with the demolition warhead, ignoring defences, naming no attacker and taking no
-  health. Then a second death-weapon detonation at V2's last position, a second explosion and
-  destruction animation there and a second throw of debris, all in tick *t*. V2 is listed off the
-  map after tick *t* and not after tick *t* + 1. D's losses count V1 and V2 once each, and K's kills
-  are 2. Falsified by D's defeat in another tick, by no hit after the destroying hit, by single
-  death effects of V2 in tick *t*, by a third loss of D or kill of K, or by a row of V2 after tick
-  *t* + 1. (b) Place V1 and V2 side by side and order K's group to attack V1 and then V2, so that
-  V1's destroying hit comes in tick *t* − 1 and V2's in tick *t*. A run whose two destroying hits
-  are not in consecutive ticks is set aside and repeated with another seed, until one run has them
-  so. Expected: no hit on V1 in tick *t*, and V1 not listed after tick *t*. Falsified by a hit on V1
-  in tick *t*. (c) As (a), with crates on, the test type marked to carry a crate and V2 standing on
-  open, clear ground, so that free cells are near it. Count the crates on the whole map in each
-  end-of-tick capture. Expected: two more crates after tick *t* than before it. Falsified by one
-  more. A run with three or more, which a crate of the game's own crate setting can cause, is
-  repeated. (d) Engine only, `quirks.defeat_sweep_leftovers` off: as (a). Expected: no hit on V2
-  after its destroying hit and single death effects. (e) Two runs as (a), V2 carrying a tag whose
-  repeating trigger fires when V2 is destroyed by anything and shows a text, and each firing
-  recorded. In the second run D also owns a third vehicle V3, far from K, so D is not defeated in
-  tick *t*. K's group destroys V3 at least 10 ticks after V2, which defeats D and ends the game.
-  Count V2's firings from V2's destroying hit to the end of the run. Expected: the same count in
-  both runs. Falsified by more firings in the first run.
+  engine add-on and no mods (the named test files excepted), short game off except in part (f),
+  crates off except in parts (c), (f) and (g). A loose test copy of the base rules, placed before
+  the program starts, sets the bases key of its multiplayer dialog section to no and its minimum
+  unit count to 0, and the unit-count setting is 0, so that no house has a base unit or starting
+  units (S-0412 scenario K1, run 2 and part b). A test map pre-places every object named below.
+  House D, a computer house, owns only two vehicles V1 and V2 of a named test vehicle type, a land
+  vehicle that cannot crash, standing on land, with the explodes flag, a death weapon, minimum and
+  maximum debris counts above 0 and non-empty explosion and destruction-animation lists, and no
+  other object, unless a part says otherwise. House K, the local player's house, owns only a group
+  of vehicles whose weapon destroys a test vehicle with one hit. D and K are the only houses and are
+  enemies, so the game ends with D's defeat in every part (S-0414 claim 6), except part (g), which
+  uses the houses of S-0414's network-game form. Each run is recorded until play stops. Scripted
+  input gives K's attack orders and their timing. Use the read-only recorder with end-of-tick
+  captures of the game's objects, every hit with its warhead, attacker and health before and after,
+  every death-weapon detonation and every animation and debris object created, the tick in which
+  each house is marked defeated, and the score screen's kills and losses, read after play stops
+  (S-0414 claim 19). (a) Let K destroy V1, and V2 at least 10 ticks later, so that D is defeated in
+  the tick *t* of V2's destruction. Expected: D marked defeated in tick *t*. At *t*, after V2's
+  destroying hit, one more hit on V2 of no amount, with the demolition warhead, ignoring defences,
+  naming no attacker and taking no health. Then a second death-weapon detonation at V2's last
+  position, a second explosion and destruction animation there and a second throw of debris, all in
+  tick *t*. V2 is listed off the map after tick *t* and not after tick *t* + 1. D's losses count V1
+  and V2 once each, and K's kills are 2. Falsified by D's defeat in another tick, by no hit after
+  the destroying hit, by single death effects of V2 in tick *t*, by a third loss of D or kill of K,
+  or by a row of V2 after tick *t* + 1. (b) Place V1 and V2 side by side and order K's group to
+  attack V1 and then V2, so that V1's destroying hit comes in tick *t* − 1 and V2's in tick *t*. A
+  run whose two destroying hits are not in consecutive ticks is set aside and repeated with another
+  seed, until one run has them so. Expected: no hit on V1 in tick *t*, and V1 not listed after tick
+  *t*. Falsified by a hit on V1 in tick *t*. (c) As (a), with crates on, the test type marked to
+  carry a crate and V2 standing on open, clear ground, so that free cells are near it. Count the
+  crates on the whole map in each end-of-tick capture. Expected: two more crates after tick *t* than
+  before it. Falsified by one more. A run with three or more, which a crate of the game's own crate
+  setting can cause, is repeated. (d) Engine only, `quirks.defeat_sweep_leftovers` off: as (a).
+  Expected: no hit on V2 after its destroying hit and single death effects. (e) Two runs as (a), V2
+  carrying a tag whose repeating trigger fires when V2 is destroyed by anything and shows a text,
+  and each firing recorded. In the second run D also owns a third vehicle V3, far from K, so D is
+  not defeated in tick *t*. K's group destroys V3 at least 10 ticks after V2, which defeats D and
+  ends the game. Count V2's firings from V2's destroying hit to the end of the run. Expected: the
+  same count in both runs. Falsified by more firings in the first run. (f) Within one sweep, with
+  the short-game setting on. D owns a counted building B and two vehicles, created in the order V1,
+  V2 by the map's order of entries: V1 of the test type of part (a), and V2 of a second named test
+  vehicle type that carries a crate, without the explodes flag, without debris and with empty
+  explosion and destruction-animation lists, standing next to V1 so that V1's death weapon destroys
+  it with one hit. Neither vehicle type is in the base-unit list, so only B keeps D alive (S-0414
+  claim 2). B stands far from V1 and V2. In this part the loose test copy of the base rules also
+  puts the type of K's group, marked neither insignificant nor not scored, at the first position of
+  the base-unit list, so that K's pre-placed group keeps K alive under the short-game test (S-0414
+  claim 2, S-0412 claim 11: a human-controlled house keeps a pre-placed vehicle, but not a
+  pre-placed building). Crates on, with V2 on open, clear ground. K's group destroys B, and *t* is
+  the tick of D's defeat. Expected: in tick *t* V2 takes V1's death-weapon hit, which destroys it,
+  and then one hit of no amount, as in (a), and there are two more crates after tick *t* than before
+  it. In a control the map lists V2 before V1. Expected there: one more crate. Falsified by as many
+  crates in the first run as in the control. A run with an extra crate of the game's own crate
+  setting is repeated. (g) Two sweeps in a surrender, in the network-game form of S-0414 scenario
+  V8. The surrendering house owns only two vehicles of the test type of part (c), far apart, each on
+  open, clear ground, and nothing else, with crates on. Machine 2's house owns one pre-placed
+  vehicle, far from both, of a named test vehicle type marked neither insignificant nor not scored,
+  with no crate, no death weapon, no debris and empty explosion and destruction-animation lists,
+  which keeps that house undefeated (S-0414 claim 3) and takes the form's move order. Record as in
+  (a) and (c). Expected: in the tick of the destruction each vehicle takes the surrender's hit,
+  which destroys it, and later in that tick one hit of no amount, both destroying hits coming before
+  either hit of no amount. Two death-weapon detonations, two explosion and destruction animations
+  and two throws of debris at each vehicle's position, and four more crates after that tick than
+  before it. Falsified by one hit or one set of death effects per vehicle, or by two more crates. A
+  run with an extra crate of the game's own crate setting is repeated. (h) A vessel whose descent
+  ends. D owns only a vessel W of a named test naval type that is not underwater, not organic and
+  cannot crash, whose weight is at least the game-wide sinking weight, with the explodes flag, a
+  death weapon and minimum and maximum debris counts above 0, standing on open water next to the
+  shore. K's group destroys W from beyond the reach of W's death weapon, and W sinks. A control adds
+  to D a vehicle V3 of a third named test vehicle type with no crate, no death weapon, no debris and
+  empty explosion and destruction-animation lists, far from K, and K's group destroys V3 at least 10
+  ticks after W leaves play. Expected: D defeated in the tick *t* in which W leaves play (S-0504
+  claim 4). At *t* one hit on W with the demolition warhead, naming no attacker, whose amount is 1
+  health point, with W's health 1 before it and 1 after it, then a death-weapon detonation and a
+  throw of debris at W's last position and no explosion or destruction animation there. W listed off
+  the map with 1 health point in every end-of-tick capture from *t* to the end of the run. D's
+  losses the same in both runs. In the control no hit on W at *t*, and W not listed after tick *t* +
+  1. Falsified by no hit on W at *t* in the first run, by W not listed after tick *t* + 1 there, by
+  an explosion or destruction animation at W's position at *t*, or by fewer losses of D than in the
+  control. Our engine: the same. (i) A vehicle whose crash ends. D owns only J, a vehicle of a named
+  test type that can crash and uses jumpjet movement, with the explodes flag, a death weapon, debris
+  counts above 0 and non-empty explosion and destruction-animation lists, hovering over open, clear
+  land. K's group, of a type whose weapon hits J in flight and destroys it with one hit, destroys J,
+  which crashes. A control adds V3 as in (h), destroyed at least 10 ticks after J's impact.
+  Expected: D defeated in the tick *t* of J's impact, and at *t* one more hit of no amount on J and
+  one more death-weapon detonation, explosion and destruction animation and throw of debris at J's
+  last position than in the control's tick of J's impact. Falsified by the same counts in both runs.
+  (j) Engine only, `quirks.defeat_sweep_leftovers` off: as (f), (g), (h) and (i). Expected: no hit
+  after each destroying hit, single death effects, and in (h) no row of W after tick *t* + 1.
 
 ## Changes for other specs
 
 - **Glossary, *destroyed, removed*.** Its sentence that a removed object "no longer exists" can add:
   a removed object is kept as a leftover to the end of the tick in which it is removed, and only the
-  defeat sweep can reach it (S-0203 claim 13, Terms *leftover*). Confidence: high for the last
-  vehicle of a house, destroyed by a hit, still taking a hit later in the same tick (M-0021), medium
-  for the end of the tick and otherwise. Backing: `measured` (M-0021) for that later hit,
-  `measurable` (S-0203 O18 part b) for the end from the house update of the next tick on,
-  `unmeasured` for the parts of the next tick before it (S-0203 claim 13 (a)).
+  defeat sweep can reach it (S-0203 claim 13, Terms *leftover*), except one that the sweep's hit
+  sets sinking again and whose type cannot crash, which is kept to the end of the game (S-0203 claim
+  13 (g)). Confidence: high for the last vehicle of a house, destroyed by a hit, still taking a hit
+  later in the same tick (M-0021), medium for the end of the tick and otherwise. Backing: `measured`
+  (M-0021) for that later hit, `measurable` (S-0203 O18 part b) for the end from the house update of
+  the next tick on, `unmeasured` for the parts of the next tick before it (S-0203 claim 13 (a)), and
+  medium and `measurable` (S-0203 O18 part h) for the exception.
 - **For S-0414 claims 5 and 15.** Claim 5's sweep also offers its hit to the house's leftovers in
-  the original (S-0203 claim 13 (c)). Our engine offers it to leftover vehicles with no health only,
-  under `quirks.defeat_sweep_leftovers`. Two sentences of claim 15 do not hold for leftovers in the
-  original. "The offered hit uses the object's health at that time; an already-dead object does not
-  undergo a second death from a zero hit." A leftover destroyed by damage takes a hit of no amount
-  that registers no destruction but sets off its death effects once more (the S-0312 entry below).
-  "A passenger already killed with its carrier receives no second death and contributes no second
-  set of death draws." Such a passenger is believed to keep its health, so the sweep's hit on it is
-  a killing hit (S-0203 Open questions). The control of scenario V11 part b, whose passenger dies
-  with its transport before its own place "without a second death", would then not hold in the
-  original. S-0414 owns both rules. Confidence: high for the last vehicle's further hit in the tick
-  of its destruction taking no health (M-0021), medium for that hit being the sweep's and for the
-  repeated death effects, low for the passenger. Backing: `measured` (M-0021) for the hit,
-  `measurable` (S-0203 O18 part a) for the effects, `unmeasured` for the passenger, which no
-  scenario here sets up.
+  the original (S-0203 claim 13 (c)). Our engine offers it to the house's leftover vehicles, with or
+  without health left, under `quirks.defeat_sweep_leftovers`. Claim 15's combined creation order
+  includes every leftover of the four kinds, of any house, whether or not it is offered the hit, so
+  a cancellation skip can fall on a leftover's place (S-0203 claim 13 (h)). Two sentences of claim
+  15 do not hold for leftovers in the original, nor for leftover vehicles in our engine when
+  `quirks.defeat_sweep_leftovers` is on. With it off they hold. "The offered hit uses the object's
+  health at that time; an already-dead object does not undergo a second death from a zero hit." A
+  leftover destroyed by damage takes a hit of no amount that registers no destruction but sets off
+  its death effects once more (the S-0312 entry below). "A passenger already killed with its carrier
+  receives no second death and contributes no second set of death draws." Such a passenger keeps its
+  health, so the sweep's hit on it is a killing hit (S-0203 claim 13 (g)), which our engine gives a
+  vehicle passenger and not yet an infantry one (S-0203 Open questions). The control of scenario V11
+  part b, whose passenger dies with its transport before its own place "without a second death",
+  would then not hold in the original. Its passenger is an infantry unit, which our engine offers no
+  hit, so the control holds for our engine. S-0414 owns both rules. Confidence: high for the last
+  vehicle's further hit in the tick of its destruction taking no health (M-0021), medium for that
+  hit being the sweep's and for the repeated death effects, medium for the passenger's killing hit,
+  which was traced, not measured, low for the places in claim 15's order, as claim 15 rates its
+  skip. Backing: `measured` (M-0021) for the hit, `measurable` (S-0203 O18 part a) for the effects,
+  `unmeasured` for the passenger, which no scenario here sets up, and `unmeasured` for the places
+  (S-0203 claim 13 (h)).
+- **For S-0414 claims 11 and 21.** Claim 11: in a house update in which the house carries out a
+  surrender and is then defeated, its objects are swept twice, by the surrender and by the defeat of
+  claim 5, and the second sweep reaches the leftovers of the first. In the original each vehicle
+  that the first sweep destroyed has its death effects once more, so a crate-carrying vehicle leaves
+  a second crate (S-0203 claim 13 (f)). A sinking vessel that keeps the house alive (claim 11) is a
+  leftover with health left when its descent ends, so a sweep in that tick destroys it once more
+  (S-0203 claim 13 (g)). Claim 21: that destruction has no attacker, so it is counted as such a
+  destruction is, once more for the same vessel. Confidence: medium for the original, low for the
+  surrender as a rule of a skirmish, as claim 11 rates it. Backing: `measurable` (S-0203 O18 parts g
+  and h).
 - **For S-0312 claims 1 and 32.** When the defeat sweep's hit of no amount reaches a leftover
   vehicle that damage destroyed (S-0203 claim 13 (c)), the original repeats, at the sweep's place in
   the tick, the death effects that the vehicle's state still allows, in claim 1's order and with
@@ -1945,9 +2133,26 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   9) and a crate that it carries (claim 14). Effects whose subject is gone do nothing again:
   passengers already handled (claims 5 and 12) and a bomb already detonated (claim 7). Claim 13's
   crew rule applies with the hit's no-escape marker. No destruction is registered, so there is no
-  credit (S-0311 claim 9, S-0414 claim 21) and no raise of claim 29. What happens to a leftover that
-  meets claim 10's sinking conditions or claim 15's crash conditions at this hit is not established.
-  Confidence: medium. Backing: `measurable` (S-0203 O18 parts a and c).
+  credit (S-0311 claim 9, S-0414 claim 21) and no raise of claim 29. Claim 10's sinking conditions
+  fail again at this hit, since they failed at the vehicle's destroying hit and do not change out of
+  play, so no sinking starts and the animations of the destroying hit come again: claim 9's, or, for
+  a vehicle that claim 11 covers, claim 11's wake and splash in place of claims 4 to 6 and 9. A
+  vehicle whose crash has ended is on the ground, so no crash starts (S-0203 claim 13 (g)). A
+  leftover vehicle with health left, such as a vessel whose descent has ended with claim 10's 1
+  health point, takes a killing hit instead: its destruction is registered again with no attacker,
+  with claim 29's raises for a killing hit with no attacker, and its death effects come again as at
+  any killing hit, so such a vessel takes claim 10's branch. It is then kept, out of play, to the
+  end of the game unless its type can crash, in the original and in our engine under
+  `quirks.defeat_sweep_leftovers` (S-0203 claim 13 (g)). Confidence: medium. Backing: `measurable`
+  (S-0203 O18 parts a, c, h and i), `unmeasured` for a vehicle that claim 11 covers and for claim
+  29's raises at that hit (S-0203 claim 13 (g)).
+- **For S-0504 claim 4.** Its "Its destruction, when sinking followed a killing hit, was already
+  counted at that hit" does not hold for a vessel whose house is swept (S-0414 claims 5 and 11) in
+  the tick in which its descent ends. The sweep reaches it as a leftover with the 1 health point of
+  S-0312 claim 10, or the health that a cull left, and destroys it once more (S-0203 claim 13 (g)).
+  That hit then keeps it, out of play, to the end of the game, unless its type can crash, in the
+  original and in our engine under `quirks.defeat_sweep_leftovers`. Claim 4 can point to S-0203
+  claim 13 (g) for that case. Confidence: medium. Backing: `measurable` (S-0203 O18 part h).
 - **For S-0302 claim 8 (*No-health targets*).** The elimination of a house's objects, one of the
   sources that the claim leaves to their specs, does not skip an object with no health: S-0414 claim
   5's sweep offers its hit to the house's leftovers (S-0203 claim 13 (c)), and a leftover vehicle
@@ -2005,17 +2210,29 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   Work listed in claim 1's last point that turns out to draw needs a row.
 - The open-topped rule of claim 3 is traced for boarding and getting out. That nothing else takes
   such a passenger out of the update order while it is inside is not traced in full.
-- A leftover with health left, such as a passenger killed with its transport (S-0312 claims 5 and
-  12), which is believed to keep its health, or a crashable surface vessel that leaves play with 1
-  health point (S-0312 claims 10 and 15), whose house is defeated in the same tick: the sweep's hit
-  then has an amount above zero. In the original it is believed to destroy the leftover again,
-  credit included (low). Our engine offers it no hit, in line with S-0414 claim 15's no second
-  death, until S-0414 settles it (**Changes for other specs**). Confidence: low.
+- A leftover infantry unit, aircraft or building with health left, such as an infantry passenger
+  killed with its transport, which keeps its health (claim 13 (b)): the sweep's hit then has an
+  amount above zero. In the original it is believed to destroy the leftover again, with its
+  registration (low). Our engine offers it no hit, as for the other leftovers of those kinds (next
+  question). Confidence: low.
 - Leftovers of infantry, aircraft and buildings taking the sweep's hit of no amount: the shared
   death effects of S-0312 claims 4 to 7 are believed to come again, as for a vehicle (low). The
   kind's own death effects (S-0312 claims 8, 16 and 17 to 24) are not traced. S-0302 claim 8's
   no-health rows may not hold for them in the original either. Our engine offers these leftovers no
   hit until this is traced. Confidence: low.
+- A vehicle of a type with death image frames (S-0312 Open questions): at a hit that destroys it, it
+  is restored to 1 health point and kept in play by a path that is not traced. A leftover of such a
+  type that the sweep's hit reaches is believed to take that path again and then, like a leftover
+  set sinking whose type cannot crash (claim 13 (g)), to be kept in the original to the end of the
+  game (low). Until this is traced, our engine ends such a leftover at the end of its tick.
+  Confidence: low.
+- A vehicle whose crash ends on a bridge deck (S-0502 claim 18): whether it is then above the
+  terrain, as the sweep's hit sees it, was not traced. If it is, the hit starts a crash that takes
+  the tumbling draws (claim 13 (g)). Confidence: low.
+- An object that stays in play after the first of a surrender's two sweeps but that the counts of
+  S-0414 claim 4 leave out, so that the second sweep still comes in that house update (claim 13
+  (f)): its second hit is that of an object in play, which S-0414 claim 15 owns, not a leftover's.
+  What it does in the original was not traced. Confidence: low.
 - An order carried out in row 8 of tick *t* whose actor or target was removed earlier in tick *t*
   names a leftover. What the original does with it is not traced. Our engine treats it as naming an
   object that no longer exists. Confidence: low.
