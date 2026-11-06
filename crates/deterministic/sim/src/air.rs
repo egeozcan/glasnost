@@ -301,6 +301,17 @@ pub struct AirState {
     /// claim 4's forward step until the movement update after the first one
     /// that leaves its target fraction at 1, which climbs.
     pub sliding: bool,
+    /// The flight point is the map's origin point, the point whose three
+    /// coordinates are 0 (claim 7, r146, Q-2676): the survivor of the hit a
+    /// landing check's refusal gives where no free cell is found. Its
+    /// flight is unfinished, so it is moving, and [`AirState::flying_to`]
+    /// holds no destination; while its destination is
+    /// [`AirState::ignored`], the one it had at the hit, no movement update
+    /// hands that destination to its flight. Claim 5's calculation of the
+    /// target fraction, guidance and the close-approach trigger do not act
+    /// on it. It ends when the aircraft is given a destination (claim 8)
+    /// or a flight point of its own (claim 6).
+    pub origin: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -969,6 +980,13 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
         return;
     }
     pad_accepted(w, id, dest);
+    if dest.is_some()
+        && let Some(a) = st_mut(w, id)
+        && a.origin
+    {
+        // spec: S-0501 claim 7 (r146, Q-2676: the survivor's origin point lasts until it is given a destination, by an order or by a processing of its behaviour, which is handed to its flight as any destination is, claim 8: the next movement update hands it over, the destination it kept included)
+        a.ignored = None;
+    }
     if dest.is_none() {
         given_no_destination(w, id);
     }
@@ -1039,7 +1057,8 @@ pub(crate) fn given_no_destination(w: &mut World, id: ObjectId) {
         return;
     }
     // spec: S-0501 claim 6 (r120, Q-2507: moving means that it holds a flight point or that its pitch is above zero; pitch is not modelled, claim 38, so it counts as 0; an aircraft claim 7 leaves with nothing to move it, which comes only with claim 7's quirks.aircraft_descent_touchdown_untested off, claim 45's above its edge cell included, holds none: being given no destination changes nothing for it; r132, Q-2576: a landing aircraft always holds one)
-    if a.flying_to.is_none() {
+    // spec: S-0501 claim 7 (r146, Q-2676: the survivor of a refused check's hit holds the origin point as flight point and its flight stays unfinished, so it is still moving, claim 6)
+    if a.flying_to.is_none() && !a.origin {
         return;
     }
     // spec: S-0501 claim 6 (r120: an aircraft in flight, Terms: not on the ground by its height; r134, Q-2647: one on the ground by its height that is moving, as one sliding on after an untested touchdown that kept its flight point, gets the new flight point like one in flight; an aircraft at rest holds none)
@@ -1086,6 +1105,8 @@ pub(crate) fn given_no_destination(w: &mut World, id: ObjectId) {
         s.flying_to = Some(Target::Cell(cell));
         s.own_point = true;
         s.ignored = None;
+        // spec: S-0501 claim 7 (r146, Q-2676: the new flight point replaces the origin point)
+        s.origin = false;
         // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
         s.raised = raised;
         // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
@@ -1387,10 +1408,14 @@ fn request(w: &mut World, id: ObjectId, which: Facet, f: Facing) {
 /// destination gave it (claim 6, [`AirState::own_point`]).
 fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
     let o = w.obj(id)?;
+    let a = st(w, id);
+    if a.origin && o.dest == a.ignored {
+        // spec: S-0501 claim 7 (r146, Q-2676: the survivor's movement updates treat a flight point at the origin point as no flight point for claim 5's calculation of the target fraction and for guidance, claim 42; no movement update hands its destination to its flight again, with a destination kept or with none, until it is given a destination, claim 8)
+        return None;
+    }
     if o.dest.is_some() {
         return o.dest;
     }
-    let a = st(w, id);
     if a.own_point {
         // spec: S-0501 claim 6 (r120, Q-2507: landing where it is, the flight flies to the new flight point with no destination object)
         return a.flying_to;
@@ -2221,8 +2246,9 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
         a.flying_to = dest;
         a.own_point = false;
         a.ignored = None;
-        // spec: S-0501 claim 7 (r120: the hold after a refused touchdown that forgot the destination lasts until it gets a destination)
+        // spec: S-0501 claim 7 (r120: the hold after a refused touchdown that forgot the destination lasts until it gets a destination; r146, Q-2676: so does the survivor's origin point, the destination handed to its flight as any destination is, claim 8)
         a.stranded = false;
+        a.origin = false;
         // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
         a.raised = raised;
         // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
@@ -2312,15 +2338,15 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
     if alive && !a.landing && !a.taking_off {
         start_if_ready(w, id);
     }
+    if alive {
+        guard_move(w, id, &t);
+    }
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
-    if alive
-        && o.dest.is_none()
-        && a.flying_to.is_some()
-        && !a.own_point
-        && flight_target(w, id).is_none()
-    {
+    // spec: S-0501 claim 7 (r146, Q-2676: the survivor holding the origin point as flight point is moving, claim 6, so a clear of the destination it kept is being given no destination)
+    let holds_point = a.flying_to.is_some() || (a.origin && a.ignored.is_some());
+    if alive && o.dest.is_none() && holds_point && !a.own_point && flight_target(w, id).is_none() {
         // spec: S-0501 claim 6 (r120, Q-2507: an aircraft in flight, moving and not landing that is given no destination lands where it is; a clear that did not go through the destination assignment is met at this movement update, with the aircraft where the clear left it)
         let was_landing = a.landing;
         given_no_destination(w, id);
@@ -2329,8 +2355,21 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
             // spec: S-0501 claim 6 (r132, Q-2576: a landing aircraft given no destination over another cell than its flight point's takes off toward the new point, in this movement update; r134, Q-2647: so does one on the ground by its height that is moving)
             a = s;
         } else {
-            (a.flying_to, a.own_point, a.ignored, a.raised, a.unfinished) =
-                (s.flying_to, s.own_point, s.ignored, s.raised, s.unfinished);
+            (
+                a.flying_to,
+                a.own_point,
+                a.ignored,
+                a.raised,
+                a.unfinished,
+                a.origin,
+            ) = (
+                s.flying_to,
+                s.own_point,
+                s.ignored,
+                s.raised,
+                s.unfinished,
+                s.origin,
+            );
         }
     }
     // spec: S-0501 claim 42 (a destination cleared in attack with a target keeps the flight point: guidance and claim 5's slowing go on toward it)
@@ -2556,7 +2595,8 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
     let mut a = st(w, id);
     // Speed fraction (claim 5, F4), at the end of a living movement tick.
     if alive && !a.ground {
-        let fixed = full_speed(w, id, &t, &a);
+        // spec: S-0501 claim 7 (r146, Q-2676: for the survivor holding the origin point, claim 5's calculation of the target fraction does not act, so it no longer changes the target fraction it was left with; only the step of the current fraction toward it goes on) and claim 5 (the fixed-full-speed case is that calculation's, which applies while the aircraft has a flight point)
+        let fixed = !a.origin && full_speed(w, id, &t, &a);
         // The target of this tick's ordinary calculation, before any approach target replacement.
         let mut ordinary = None;
         let early_take_off = a.taking_off && height(w, id) < cruise / 2; // spec: S-0501 claim 5 (taking off: the target is kept until half the cruise height)
@@ -2736,6 +2776,7 @@ fn forget_point(w: &mut World, id: ObjectId) {
         s.unfinished = false;
         s.own_point = false;
         s.ignored = None;
+        s.origin = false;
     }
     set_dest(w, id, None);
 }
@@ -2779,19 +2820,21 @@ fn check_refused(w: &mut World, id: ObjectId, t: &Ty) -> bool {
                 no_escape: true,
             },
         );
-        // spec: S-0501 claim 7 (r134: its flight point is cleared, and no touchdown follows in that update; what follows when it survives that hit was not traced, Open question 28: Q-2676)
+        // spec: S-0501 claim 7 (r146, Q-2676: its flight point becomes the map's origin point, the point whose three coordinates are 0, and no touchdown follows in that update; its flight stays unfinished, so it is still moving, claim 6, and its locomotor does not report stopped, claim 40; its destination is kept, and no movement update hands it to its flight again)
+        let kept = w.obj(id).and_then(|o| o.dest);
         if let Some(s) = st_mut(w, id) {
             s.flying_to = None;
             s.own_point = false;
-            s.ignored = None;
+            s.ignored = kept;
             s.raised = false;
+            s.unfinished = true;
+            s.origin = true;
         }
         if w.obj(id).is_none_or(crate::combat::damage::dead) {
             return true;
         }
-        // spec: S-0501 claim 7 (r134: the refusal's take-off ends at the update's take-off step, with claim 8's requests for the height it has, when no touchdown follows)
-        // design: S-0501 Open question 28 and Q-2676 (with its flight point cleared, there is no point for the body to face: no body request)
-        end_refusal_take_off(w, id, t, None);
+        // spec: S-0501 claim 7 (r134: the refusal's take-off ends at the update's take-off step, with claim 8's requests for the height it has, when no touchdown follows; r146, Q-2676: those requests are made toward the origin point: above the upper threshold the aiming request, in the middle band the body facing the origin point from where the aircraft is and full speed, lower none)
+        end_refusal_take_off(w, id, t, Some(ORIGIN));
         return false;
     };
     let raised = raise_now(w, id);
@@ -2964,6 +3007,7 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool, ordinary: O
     // spec: S-0501 claim 6 (r93, Q-2252: the cell tested is that of the flight point the flight holds, claim 40, not that of the destination object; with no flight point the test does not apply)
     let trigger = match flight_target(w, id) {
         // spec: S-0501 claim 6 (with no flight point the test does not apply) and r120 (Q-2507: an aircraft given no destination in flight, moving and not landing lands where it is through the flight point that gives it, [`given_no_destination`]; one that is not moving holds no flight point and starts no landing)
+        // spec: S-0501 claim 7 (r146, Q-2676: the survivor holding the origin point: claim 6's exact-cell trigger tests the origin point's cell and never finds it there with a target fraction of 0, as it stops where it was hit or flies on at fraction 1; this test reads the target of the update's claim 5 calculation, which does not run for it, with the same outcome; the close-approach trigger belongs to guidance, which does not act; so no movement update starts a landing or repeats the check or the hit)
         None => false,
         Some(dd) => {
             let p = flight_point(w, id, dd);
@@ -3959,6 +4003,8 @@ const STRAFER_TURN: i32 = 8192;
 const PLACEHOLDER: CellXY = CellXY::new(0, 0);
 // spec: S-0501 T1 (approaching: below 16 leptons the destination is cleared)
 const STEER_NEAR: i32 = 16;
+// spec: S-0501 claim 7 (r146, Q-2676: the map's origin point, the point whose three coordinates are 0)
+const ORIGIN: Pos = Pos { x: 0, y: 0, z: 0 };
 // spec: S-0501 claim 13 and T1 (five strafing passes)
 const LAST_PASS: u8 = 5;
 
@@ -3992,6 +4038,26 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 claim 28 and table T1 (an aircraft's eaten: the same table with its eaten differences; S-0603 claim 3)
         Some(Behaviour::Eaten) => crate::structures::grinder::process_eaten(w, id),
         _ => NO_RULE_DELAY,
+    }
+}
+
+/// Claim 33's *move* for an aircraft in *guard* (r146, Q-2677), at a
+/// movement update after claim 31's first start opportunity, so a *guard*
+/// that becomes current there gets its *move* in the same update. It
+/// becomes current at claim 31's third point, when the aircraft is ready.
+fn guard_move(w: &mut World, id: ObjectId, t: &Ty) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0501 claim 33 (r146, Q-2677: a living aircraft that is not pad-bound and not crashing, claim 9, in guard with a destination and nothing queued at a movement update: that update queues move for it, at any height, on the ground included; the test comes after claim 31's first point in that update)
+    // design: S-0501 claim 33 and S-0215 claim 5 (Q-2726, interim: guard only, as the claim names it; S-0215 claim 5 processes sticky as guard, and a movement update is no processing, so sticky gets no such move)
+    let applies = o.health > 0
+        && !t.bound
+        && o.beh.current == Some(Behaviour::Guard)
+        && o.dest.is_some()
+        && o.beh.queued.is_none()
+        && !crashing(w, id);
+    if applies {
+        // spec: S-0501 claim 34 (a request that claim ignores is ignored entirely)
+        queue(w, id, Behaviour::Move);
     }
 }
 
@@ -4130,10 +4196,8 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
             set_dest(w, id, Some(Target::Cell(c)));
             queue(w, id, Behaviour::Move);
         }
-    } else if !ground && !t.bound && o.dest.is_some() && o.beh.queued.is_none() && o.health > 0 {
-        // spec: S-0501 claim 33 (a living, not pad-bound aircraft in flight in guard with a destination and nothing queued: move) and claim 29 (r110: apart from the processings at exactly cruise height)
-        queue(w, id, Behaviour::Move);
     }
+    // spec: S-0501 claim 29 (r146: apart from these processings, claim 33 queues move for an aircraft in guard that is not pad-bound, with a destination and nothing queued, at any height: at a movement update, [`guard_move`], not at this processing)
     // spec: S-0501 claim 29 (45 ticks for an unarmed aircraft and an aircraft on the ground with no contact; otherwise the standard delay)
     if !armed || (ground && o.contact.is_none()) {
         45
