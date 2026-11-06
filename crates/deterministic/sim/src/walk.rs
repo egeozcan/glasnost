@@ -12,7 +12,7 @@ use crate::cells::position;
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
 use crate::regions::STEPS;
-use crate::rules::{Behaviour, Kind};
+use crate::rules::{Behaviour, Kind, Locomotor};
 use crate::scatter;
 use crate::teleport::{DECK_HEIGHT, reservation_layer};
 use crate::trace;
@@ -286,13 +286,25 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         // spec: S-0208 claim 6 (it does not choose its next walking target on its arrival tick)
         return false;
     }
-    if o.dest.is_none() && o.path.steps.is_empty() {
+    standing(w, id);
+    false
+}
+
+/// The locomotion of a walker standing on a standing position with no
+/// walking target (S-0208 claim 6): with no destination and no stored path
+/// it stops; with no stored path it searches for its destination (S-0212
+/// claims 20 and 21); then it asks for its next cell and chooses its walking
+/// target without moving (claim 3, S-0209).
+fn standing(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let (dest, no_path, here) = (o.dest, o.path.steps.is_empty(), o.pos.cell());
+    if dest.is_none() && no_path {
         stopped(w, id);
-        return false;
+        return;
     }
-    if o.path.steps.is_empty() {
+    if no_path {
         let goal = path::goal_cell(w, id);
-        if goal == Some(o.pos.cell()) || goal.is_none() {
+        if goal == Some(here) || goal.is_none() {
             // A standing walker given a destination in its own cell (no
             // arrival tick ends that walk under claim 16): the move is
             // finished.
@@ -300,18 +312,18 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 ob.dest = None;
             }
             stopped(w, id);
-            return false;
+            return;
         }
         // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over; r97: for the walk locomotor a destination changed to a different one or cleared has ended it)
         if path::waits(w, id) {
-            return false;
+            return;
         }
         match path::compute(w, id, Mode::Fresh) {
             Search::Found => {}
             other => {
                 path::failed(w, id, other, false);
                 stopped(w, id);
-                return false;
+                return;
             }
         }
     }
@@ -322,7 +334,66 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     {
         stopped(w, id);
     }
-    false
+}
+
+/// Whether `id` stands with no walking target and no stored path: the
+/// walker that S-0208 claim 6 gives an extra locomotion at a scatter whose
+/// destination comes from the nearby-cell search. Read before the request,
+/// which drops the stored path (claim 12).
+pub(crate) fn standing_free(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        o.path.steps.is_empty() && o.walk.as_ref().is_some_and(|s| s.target.is_none())
+    })
+}
+
+/// Whether `id` moves under its own walk locomotor now: an infantry unit
+/// in play on the map whose type has the walk locomotor, not riding, not
+/// inside a building, not falling and not seized (S-0607 claims 5 and 23
+/// give a seized unit another locomotor).
+fn walks_now(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let walk = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.locomotor == Locomotor::Walk);
+    walk && o.on_map
+        && o.walk.is_some()
+        && o.structure.inside.is_none()
+        && crate::transport::riding(w, id).is_none()
+        && !crate::fall::falling(w, id)
+        && !crate::lift::seized(w, id)
+        && crate::lift::stand_in(w, id).is_none()
+}
+
+/// S-0208 claim 6 (r46), *Destinations given during a unit's update*: a
+/// walker standing with no walking target and no stored path that accepts a
+/// scatter whose destination comes from the nearby-cell search has one more
+/// locomotion at once, in which it searches for that destination and, when
+/// the search gives a path, chooses its walking target without moving. The
+/// caller has checked the scatter's side ([`standing_free`] before the
+/// request, the destination from the search).
+pub(crate) fn extra_locomotion(w: &mut World, id: ObjectId) {
+    // spec: S-0208 claim 6 (r46: a walker, moved by the walk locomotor; a teleporting unit has S-0417 claim 17's jump instead)
+    if !walks_now(w, id) {
+        return;
+    }
+    // design: Q-2702 interim (the extra locomotion is a full locomotion with S-0209's asks; a unit gets none while one of its own is already running further up the same call chain, so each unit is in the chain at most once and the chain ends)
+    if w.extra_locomotion.contains(&id) {
+        return;
+    }
+    w.extra_locomotion.push(id);
+    let before = w.rng.taken();
+    // spec: S-0208 claim 6 (r46: it searches for the destination and chooses its walking target without moving, claim 3's draw included; the arrival-tick rule of the walker's own locomotion is not part of it)
+    standing(w, id);
+    w.extra_locomotion.pop();
+    trace::record(w, id, || trace::What::ExtraLocomotion {
+        draws: w.rng.taken() - before,
+        target: w
+            .obj(id)
+            .and_then(|o| o.walk.as_ref())
+            .and_then(|s| s.target)
+            .map(|p| p.cell()),
+    });
 }
 
 /// The walker stands without a walking target on a tick it does not step

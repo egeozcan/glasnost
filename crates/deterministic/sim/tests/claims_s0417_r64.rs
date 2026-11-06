@@ -102,12 +102,29 @@ fn claim_17_one_draw_then_refusals() {
     let q = w.rules().quirks;
     // spec: S-0208 claims 12 and 13 (the one ranged draw over 0 … 4)
     one.ranged(0, 4, q.ranged_draw_half_span);
-    assert!(scatter::request_resting(&mut probe, g, req));
+    // The scatter's own draws, read with the extra locomotion of S-0208
+    // claim 6 (r46) held off by the Q-2702 guard.
+    let mut held = probe.clone();
+    held.extra_locomotion.push(g);
+    assert!(scatter::request_resting(&mut held, g, req));
     assert_eq!(
-        probe.rng.taken() - before,
+        held.rng.taken() - before,
         one.taken() - before,
         "one ranged draw when accepted"
     );
+    // spec: S-0208 claim 6 (r46: the search destination gives the standing walker its extra locomotion at once, whose position choice takes claim 3's draw, at most one, after the scatter's own draw)
+    assert!(scatter::request_resting(&mut probe, g, req));
+    let extra = probe.rng.taken() - held.rng.taken();
+    let o = probe.obj(g).unwrap();
+    assert!(
+        o.walk.as_ref().and_then(|s| s.target).is_some(),
+        "the walking target is chosen at once"
+    );
+    // spec: S-0208 claims 2 and 3 (the desired point is the position moved by a whole cell, so it has the class of the walker's own point; only the centre class draws)
+    let class =
+        glasnost_sim::walk::position_class(o.pos.x.rem_euclid(256), o.pos.y.rem_euclid(256), true);
+    let centre = class == glasnost_sim::cells::position::CENTRE;
+    assert_eq!(extra, u64::from(centre), "the position choice's draw only");
     // In the game: the first turn's request, then the walk.
     step(&mut w);
     let first = w.obj(g).unwrap().dest;

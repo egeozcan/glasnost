@@ -1204,6 +1204,35 @@ fn process_move(w: &mut World, id: ObjectId) -> i32 {
     standard_delay(w, id)
 }
 
+/// S-0215 claim 22's end-of-update check of an infantry unit, made at the
+/// end of each of its updates after its late start: a unit whose current
+/// behaviour is *move*, or that has none and *move* queued, that is not
+/// moving and has no destination falls back to rest (claims 13 and 14).
+/// What that queues is first started at a later per-tick start, since the
+/// late start has passed. The caller leaves out the updates that end before
+/// their late start, which have no check.
+pub fn end_of_update_check(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0215 claim 22 (r132, End-of-update check: infantry only; whether a vehicle in move has a like check is open, Open questions, and our engine makes it for infantry only)
+    if o.kind != Kind::Infantry || crate::combat::damage::dead(o) {
+        return;
+    }
+    // spec: S-0215 claim 22 (r132: the current behaviour is move, or there is none and move is queued, the behaviour seen by claim 1)
+    if o.beh.seen() != Some(Behaviour::Move) {
+        return;
+    }
+    // spec: S-0215 claim 22 (r132: no destination; a unit in move holding one, not moving, is left alone by our engine, Open questions)
+    if o.dest.is_some() {
+        return;
+    }
+    // spec: S-0215 claim 22 (r132: not moving, the same test as the general rule of the move processing)
+    if moving(w, id) {
+        return;
+    }
+    // spec: S-0215 claim 22 (r132: it falls back to rest by claims 13 and 14, whatever is queued and whether or not move was processed in that update)
+    fall_back(w, id, false);
+}
+
 /// The condition of S-0215 claim 23's first infantry row: the infantry
 /// unit `id` has explosive charges (by type or veterancy ability) and `b` is
 /// a building that accepts charges and is not invisible.

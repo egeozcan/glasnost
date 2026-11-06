@@ -524,8 +524,12 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::combat::behave::infantry_step(w, id);
         // spec: S-0107 State and ordering (the completion follow-up after the firing rules; the movement rule after the follow-up)
         infantry::sequence_turn(w, id, moved, in_progress);
-        // spec: S-0417 claim 17 (a resting unit on a cell that holds a building is sent a scatter request after the rest of its turn: after its late start, its behaviour processing with that processing's draw and its movement, design; turns that end early above make none: being erased, S-0514 claim 17, a warp's leaving stage and earlier update boundaries, S-0513 claim 51; no tunnel is built)
+        // spec: S-0417 claim 17 (a resting unit on a cell that holds a building is sent a scatter request after the rest of its turn; turns that end early above make none: being erased, S-0514 claim 17, a warp's leaving stage and earlier update boundaries, S-0513 claim 51; no tunnel is built) and S-0208 claim 6 (r46: the request is acted on in the released walker's own update after that update's behaviour processing, with its draw, and its locomotion)
+        // design: S-0417 claim 17 (its place after the late start, which the specs do not fix)
         crate::scatter::resting_turn(w, id);
+        // spec: S-0215 claim 22 (r132, End-of-update check: at the end of each update of an infantry unit, after its late start; the updates that end early above have none) and S-0208 claim 6 (r46: a destination given after the update's locomotion is searched for in the next tick)
+        // design: Q-2656 (its place among the end-of-turn items: after S-0417 claim 17's request, whose destination it then sees, and before S-0607 claim 20's restoration test; the spec places it only after the late start)
+        process::end_of_update_check(w, id);
     }
     // spec: S-0607 claim 20 (revision 14: the restoration test at the end of each of the unit's turns, after its movement and after the point at which it may process its behaviour, whether or not it did, whatever its behaviour and house; the turns that end early above have none: lost, dead, being erased, and the warp-only updates, design for the phase-in that the spec leaves open)
     crate::lift::end_of_turn(w, id);

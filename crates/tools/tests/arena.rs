@@ -816,8 +816,7 @@ fn m0020_rows_hold_in_our_engine() {
 /// read at run time from the git-ignored `measurements/local/M-0023.json`
 /// (`glasnost_tools::oracle_m0023`). Local lane only. Prints each Result
 /// row's verdict; the report with the local values goes to the git-ignored
-/// `local-lane/m7b/arena/oracle-M-0023.txt`. Fails while a row fails other
-/// than the four that Q-2656 and Q-2657 ask about.
+/// `local-lane/m7b/arena/oracle-M-0023.txt`. Fails while any row fails.
 #[test]
 fn m0023_rows_hold_in_our_engine() {
     let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
@@ -841,18 +840,8 @@ fn m0023_rows_hold_in_our_engine() {
     let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7b/arena");
     std::fs::create_dir_all(&out).unwrap();
     std::fs::write(out.join("oracle-M-0023.txt"), &full).unwrap();
-    // measure: M-0023 (every Result row holds, but for the end of F and G − F, which Q-2656 asks about, and the first step after G and the controls, which Q-2657 asks about)
-    let asked = [
-        "At the end of F:",
-        "| G − F |",
-        "| First step after G",
-        "| Controls:",
-    ];
-    let failing: Vec<&str> = summary
-        .lines()
-        .filter(|l| l.ends_with("| no |"))
-        .filter(|l| !asked.iter().any(|a| l.contains(a)))
-        .collect();
+    // measure: M-0023 (every Result row holds: S-0215 r132 claim 22 for the end of F and G − F, S-0208 r46 claim 6 for the first step after G and the controls)
+    let failing: Vec<&str> = summary.lines().filter(|l| l.ends_with("| no |")).collect();
     assert!(failing.is_empty(), "rows of M-0023 fail: {failing:?}");
 }
 

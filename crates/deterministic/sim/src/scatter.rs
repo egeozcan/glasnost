@@ -145,6 +145,8 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool
         return false;
     }
     let q = r.quirks;
+    // spec: S-0208 claim 6 (r46: the extra locomotion is for a walker standing with no walking target and no stored path at the scatter, read before the request drops the path)
+    let free = crate::walk::standing_free(w, id);
     // spec: S-0208 claims 12 and 13 (one ranged draw j over 0 … 4)
     let j = w.rng.ranged(0, 4, q.ranged_draw_half_span);
     // spec: S-0208 Terms (scatter centre cell: the cell of the scatter reference point, the walking target while there is one, else the unit's own position; never a farther destination)
@@ -214,6 +216,10 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool
     {
         // spec: S-0417 claim 17 (During the walk-off: a teleporting unit given a destination from the search gets one movement update at once and jumps, with no wait, to the landing point the destination fixed, S-0208 claim 19 and S-0207 claim 20 d; with no landing point fixed the destination was removed and it does not jump)
         crate::teleport::tick(w, id);
+    }
+    if free && searched.is_some() && w.obj(id).is_some_and(|o| o.dest.is_some()) {
+        // spec: S-0208 claim 6 (r46, Destinations given during a unit's update: a destination from the nearby-cell search gives such a walker one more locomotion at once, after the scatter's own draw; a destination chosen among the eight neighbours, claim 12 or claim 13's fall-back, gives none)
+        crate::walk::extra_locomotion(w, id);
     }
     true
 }

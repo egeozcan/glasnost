@@ -512,6 +512,11 @@ pub struct World {
     /// Working memory of the path search (not state).
     #[serde(skip)]
     pub scratch: std::cell::RefCell<crate::path::SearchScratch>,
+    /// The walkers whose extra locomotion at a scatter (S-0208 claim 6) is
+    /// running, innermost last (`walk::extra_locomotion`, Q-2702). Empty
+    /// between calls, so neither saved nor hashed.
+    #[serde(skip)]
+    pub extra_locomotion: Vec<ObjectId>,
     /// The movement trace of the pathing-report tool (M8 A4): off unless
     /// switched on, never saved, hashed, cloned or read by the simulation.
     #[serde(skip)]

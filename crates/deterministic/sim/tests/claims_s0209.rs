@@ -633,19 +633,33 @@ fn friends_ahead(dest_x: i32) -> (World, ObjectId, Vec<ObjectId>) {
 /// A friend's destination may be gone by the end of the tick: one whose
 /// cell lies on the corridor's raised side fails the reachability gate in
 /// the friend's own turn, which clears a walker's destination (S-0417
-/// claim 17, No path; S-0212 claim 23).
+/// claim 17, No path; S-0212 claim 23). Since S-0208 r46 claim 6 that
+/// failure can come already inside the request: a standing friend given a
+/// destination by the nearby-cell search has its extra locomotion at once,
+/// so the destination the trace reads after the request may be gone; the
+/// failed search is then traced for it before its answer.
 fn all_accepted(w: &World, ids: &[ObjectId]) -> bool {
     let ev = trace::take(w);
     ids.iter().all(|&f| {
-        ev.iter().any(|e| {
-            e.unit == f
-                && matches!(
-                    e.what,
-                    trace::What::Asked {
-                        accepted: true,
-                        dest: Some(_)
+        let mine: Vec<&trace::What> = ev.iter().filter(|e| e.unit == f).map(|e| &e.what).collect();
+        mine.iter().enumerate().any(|(i, what)| match what {
+            trace::What::Asked {
+                accepted: true,
+                dest: Some(_),
+            } => true,
+            trace::What::Asked {
+                accepted: true,
+                dest: None,
+            } => mine[..i].iter().any(|x| {
+                matches!(
+                    x,
+                    trace::What::Failed {
+                        dest_cleared: true,
+                        ..
                     }
                 )
+            }),
+            _ => false,
         })
     })
 }
