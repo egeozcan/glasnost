@@ -790,3 +790,49 @@ save 107 and AI game 71: no state is added.
 - Item 2: nothing to see in normal play; the case needs a rocket launched in the very tick its target enters a building.
 - Item 3: launch rockets at a unit that then dies or leaves: the rockets fly on to where they were aimed and burst there.
 - Item 4: put one infantry unit into a civilian building with a few of your own infantry standing next to it. In the first moments the building may fire on your own units and show an elite badge. That is what the specs give as far as they go; Q-2712 asks the lead about it.
+
+### Round 9b, AI end-games
+
+Implementer findings on main at 07d549c. Lane outputs are in `local-lane/m8/a4-r9b/`: `before/` is
+main, `c/` is this round's tree (variant C below), and `a/` and `b/` are the variants tried and
+dropped.
+
+| # | Finding | Class | Specs | Request | Status |
+|---|---|---|---|---|---|
+| 1 | `skirmish::plays_to_the_last_side` fails on main (not over at 40 000 ticks) | Our AI (D14). At tick 40 000 house 1 had a lab and a harvester left and nothing that builds. House 0 had three walkers resting at home, four jets, a helipad and no credits. With three ground units, the guard (`GUARD_MIN` 2) left one waiting, against a wave of six or more, or half of that for patience, so no wave went again. Fixing the guard alone was not enough: once the lab fell, the walkers rested at the cleared enemy base, and the last harvester stood on cells house 0 had not explored. A house that sees no enemy does not finish, so the game went on | S-0414 claim 5 (a defeat is announced, so the house knows how many enemies are left); S-0409 claim 19 (no fog in a skirmish: the explored cells are what the house sees); S-0214 Terms (armed) | none | Fixed (`Script::finishing`). A house *clearly winning* has looked at the enemy base: it has explored the enemy start nearest each enemy building it sees, or it sees no enemy building and every enemy start is cleared. What it sees fighting there (army units and armed buildings, by cost) is worth at most a third of its own army (`FINISH_SHARE` 3, design). Against an enemy it sees nothing build from, waves are of one unit, so whatever waits goes. A cleared base sends the army to the unexplored cell nearest it, through the existing fallback. With one enemy house left, the guard goes too. Against an enemy that still builds (a factory, a yard, or a vehicle that deploys into one), the guard stays and waves keep the plan's first size instead of growing. A clearly winning house's waves do not count towards the growth. The synthetic skirmish now ends at tick 37 944 with house 0 the winner (before: not over at 40 000) |
+| 2 | Starved games that no side wins | Our AI (D14). Intake 104's seed 8 map 0 and intake 105's seed 7 map 0 sides 1 and 2 both end on main (39 180 and 49 264). The starved game on main is seed 10 map 8 sides 1 and 2, not over at 120 000. At the end, house 0 had 12 army units, no credits and five harvesters. House 1 had one aircraft and four infantry, 20 buildings with factories, 88 credits and no harvesters. Neither house was selling, because house 0 still had income. House 0's waves went for patience every 3 000 ticks, grown to a size its army no longer reached, and died against a base that still builds | S-0408 claims 1, 3 (selling: the refund, and only sellable buildings) | none | Fixed by item 1's rule for an enemy that still builds: that game ends at tick 85 588, house 1 the winner. Two other variants were tried. In variant A (no wave change against an enemy that builds), the game is the same as on main. In variant B (waves of one with the guard kept), it ends at 30 878, but the synthetic skirmish then ends only at 53 518, because house 0 fed its army away one unit at a time, so B was dropped. Selling (`sell_when_broke`) also changes: one factory per kind is now kept while the house has anything else to sell, army or none. On main a house with no army sold its costliest building first, often its war factory, and lost the means to build the army its refunds paid for. It sells out only when nothing else is left |
+| 3 | Aircraft in the end-game | The specs give what was seen. In the synthetic skirmish's end-game, a jet with ammunition attacks the nearest seen enemy it can hurt, at any distance. Jet 636 had 3 attack orders from tick 36 150 to the end at 37 944; on main it had 7 from 36 150 to 39 555, at the lab and then the harvester. The other three jets stand at the single helipad's base with no ammunition. Only one can dock (S-0501 claims 22 to 24), so they never reload. The fixture has no pad-aircraft list, so S-0501 claim 30's limit never stopped the house from building more jets than it has docks. Real data has the list | S-0501 claims 22 to 24, 30 | none | Recorded; nothing changed. A seam for our AI: a person builds no pad aircraft beyond their docks |
+
+**Lanes (round 9b).** Before is main at 07d549c; after (`c/`) is this round's tree on 07d549c. It
+was rebased onto 0051f51, whose new commits touch no simulation or AI code, and the tests were run
+again there.
+
+- `glasnost-ai --include-ignored`: 255 passed and 1 failed before (`plays_to_the_last_side`), 263
+  passed after (the seven new tests).
+- AI quick lane (seeds 7 to 10, maps 0, 2 and 8; 36 games): 35 games end before and 36 after. House
+  0 wins 21 before and 23 after; house 1 wins 14 before and 13 after. The median end is 46 839
+  before and 45 707 after. The longest finished game is 90 369 before and 85 588 after; the one
+  unfinished game before is item 2's.
+- B-track exits:
+  - houses that held two construction yards at once: 39 of 72 before, 34 after;
+  - houses with a main superweapon ready: 28 before, 26 after;
+  - dominator launches: 45 in 14 games before, 40 in 16 games after.
+- Sweeps 1 to 16. The smallest minimum is kept: M6c 0 and 0, M7a 1 and 1, M7b drain 3 and 3.
+  - M6c seeds 3 and 4 end a little later (8 356 to 8 841, and 8 640 to 9 060). The jumpjet-orders
+    minimum goes from 3 to 1, and crates picked up from 8 to 3.
+  - M7a and M7b counters move by a few.
+- Four houses, free for all (`four_houses`, map 30, seeds 1 to 3, `GLASNOST_FH_DELAY=in`, 60 000
+  ticks):
+  - seed 2 is the same tick for tick;
+  - seed 3 ends at 52 706 with house 2 the winner (before: not over at 60 000);
+  - seed 1 takes another course from about tick 8 000. House 2's yard falls at 8 784 instead of
+    51 169, and house 0 is out at 19 798.
+- Goldens. These moved and are regenerated on the rebased tree: `skirmish`, `duel`,
+  `duel-diagonal`, `duel-naval` and `duel-m7b` (their AI houses now take other courses).
+- Formats. The AI game format goes from 72 to 73, since a saved AI game now plays on to another
+  course. The save format stays at 108 and the wire format at 12: no state is added.
+
+**Try it (round 9b, AI end-games).**
+- Item 1: play against the computer and lose most of your base, but keep one building that does not build, such as a power plant or a lab, plus a unit hidden in a far corner. The computer no longer leaves a few tanks at home: it sends everything, finishes the building, then spreads out to look for the hidden unit.
+- Item 2: play a long game where both sides run short of money and you keep a factory. Once the computer is well ahead, it keeps sending waves of the same size, guard at home, instead of waiting for bigger and bigger ones.
+- Item 3: nothing changes. A computer with more jets than helipad places still has idle jets on the ground.
