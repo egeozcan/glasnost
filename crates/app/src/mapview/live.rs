@@ -2562,6 +2562,7 @@ impl Live {
                 | Effect::Spin { .. }
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
+                | Effect::LeftoverHit { .. }
                 | Effect::Rock { .. }
                 | Effect::DroneRock { .. }
                 | Effect::GrapplePush { .. }

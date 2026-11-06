@@ -637,13 +637,42 @@ fn destroy_all(w: &mut World, h: HouseId) {
     let mut place: Option<ObjectId> = None;
     let mut skip: usize = 0;
     loop {
+        let from = place.map_or(ObjectId(0), |p| ObjectId(p.0 + 1));
         // spec: S-0414 claim 15 (creation order across all four kinds; object numbers are given in creation order)
         let next = w
             .objects
-            .range(place.map_or(ObjectId(0), |p| ObjectId(p.0 + 1))..)
+            .range(from..)
             .map(|(_, o)| o)
             .find(|o| swept_kind(o.kind))
             .map(|o| (o.id, o.owner, o.health));
+        // spec: S-0203 claim 13 (a) and (c) (the sweep finds the tick's leftovers of the four kinds at their places in creation order, those of objects removed earlier in the sweep itself included)
+        let left = crate::leftover::next(w, from);
+        if let Some(l) = left
+            && next.is_none_or(|(id, _, _)| l < id)
+        {
+            place = Some(l);
+            if skip > 0 {
+                // spec: S-0414 claim 15 (a skipped place, whoever owns the object) and S-0203 claim 13 (c) (a leftover has its place in creation order); Q-2693 (interim: every leftover of the four kinds holds its place, in both positions of quirks.defeat_sweep_leftovers)
+                skip -= 1;
+                continue;
+            }
+            w.econ.end.deleted = Some(Vec::new());
+            crate::leftover::sweep_hit(w, l, h);
+            let k = w
+                .econ
+                .end
+                .deleted
+                .take()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|&d| d <= l)
+                .count();
+            if skip_quirk {
+                // spec: S-0414 claim 15 (quirks.defeat_cancellation_skip: max(k − 1, 0) following places skipped)
+                skip = k.saturating_sub(1);
+            }
+            continue;
+        }
         let Some((id, owner, health)) = next else {
             break;
         };

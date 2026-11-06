@@ -499,6 +499,7 @@ pub fn new_game(
         flying: Default::default(),
         jump_slots: Default::default(),
         threat: Default::default(),
+        leftovers: Default::default(),
         cloak: Default::default(),
         sw: Default::default(),
         radiation: Default::default(),

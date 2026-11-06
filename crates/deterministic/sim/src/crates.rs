@@ -1138,9 +1138,18 @@ fn resource(w: &mut World, p: Pos, half: bool) {
 /// leaves a crate (S-0312 claims 14 and 20, S-0520 claim 5) when the game's
 /// crate setting allows crates.
 pub fn death_crate(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id) else { return };
+    if let Some((at, money)) = death_crate_plan(w, id) {
+        place_death(w, at, money);
+    }
+}
+
+/// The crate a killed object leaves (S-0312 claims 14 and 20): the cell
+/// it is placed near and whether it is a money crate, or `None`. Reads
+/// only.
+pub fn death_crate_plan(w: &World, id: ObjectId) -> Option<(CellXY, bool)> {
+    let o = w.obj(id)?;
     if !o.combat.killed {
-        return;
+        return None;
     }
     let r = w.rules();
     let (leaves, money) = match o.kind {
@@ -1161,9 +1170,8 @@ pub fn death_crate(w: &mut World, id: ObjectId) {
         _ => (false, false),
     };
     if !leaves || !crate::econ::setup::crates(w) {
-        return;
+        return None;
     }
     // spec: S-0312 claims 14 and 20 (a free cell near the vehicle's position; the building's top-left foundation cell)
-    let at = o.pos.cell();
-    place_death(w, at, money);
+    Some((o.pos.cell(), money))
 }

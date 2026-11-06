@@ -1070,6 +1070,8 @@ impl Audio {
             Effect::Cloak { .. } => {}
             // A gas hit's own sound is not in S-0613; the hit's damage effects make theirs.
             Effect::GasHit { .. } => {}
+            // The sweep's hit on a leftover makes no sound of its own; its repeated death effects make theirs (S-0203 claim 13 (c)).
+            Effect::LeftoverHit { .. } => {}
             // Rocking is drawn, not heard (S-0303 claim 20, S-0614 claims 9 and 10, S-0601 F4).
             Effect::Rock { .. }
             | Effect::DroneRock { .. }

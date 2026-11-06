@@ -731,7 +731,11 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
             ));
         }
     }
-    w.objects.remove(&id);
+    let gone = w.objects.remove(&id);
+    if recalc && let Some(left) = gone {
+        // spec: S-0203 claim 13 (a) and (b) (a removed object is kept to the end of the tick, out of play and off the map, with its owner and health; our arena's Removal before the groups, S-0216 claim 8, runs before play and keeps none)
+        crate::leftover::keep(w, left);
+    }
     if on_ground && recalc {
         crate::load::recalc_cells(w, &touched);
     }

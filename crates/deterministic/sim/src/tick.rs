@@ -34,6 +34,8 @@ pub fn step_with<P: Probe>(w: &mut World, p: &mut P) {
             p.mark(phase);
         }
     };
+    // spec: S-0203 claim 13 (a) (an object removed in the tick before is gone at the start of this one)
+    crate::leftover::clear(w);
     mark(p, Phase::Triggers);
     // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 14, then the turn pass, row 5; row 13, radiation maintenance, takes no draws)
     // spec: S-0203 row 1 and S-0011 claim 6 (the poll of every polled tag, at the start of the tick)
