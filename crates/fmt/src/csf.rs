@@ -389,8 +389,11 @@ mod tests {
         out
     }
 
-    /// An entry: its label bytes and texts as (id, stored units, extra).
-    fn entry(label: &[u8], texts: &[(&[u8; 4], Vec<u16>, Option<&[u8]>)]) -> Vec<u8> {
+    /// A text of an entry: (id, stored units, extra).
+    type Text<'a> = (&'a [u8; 4], Vec<u16>, Option<&'a [u8]>);
+
+    /// An entry: its label bytes and texts.
+    fn entry(label: &[u8], texts: &[Text<'_>]) -> Vec<u8> {
         let mut out = b" LBL".to_vec();
         out.extend_from_slice(&(texts.len() as i32).to_le_bytes());
         out.extend_from_slice(&(label.len() as i32).to_le_bytes());
@@ -524,7 +527,7 @@ mod tests {
             1
         );
         // Fewer than the header's counts: used, with a warning.
-        let few = StringFile::read(&raw(&[a.clone()], 2, 2)).unwrap();
+        let few = StringFile::read(&raw(std::slice::from_ref(&a), 2, 2)).unwrap();
         assert_eq!((few.entries.len(), few.warnings.len()), (1, 1));
         // More entries than the header's: not read.
         let more = StringFile::read(&raw(&[a.clone(), b.clone()], 1, 2)).unwrap();
