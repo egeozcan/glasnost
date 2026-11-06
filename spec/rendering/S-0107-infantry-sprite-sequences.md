@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 40
+revision: 46
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-06
 measurements: [M-0008]
-requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566]
+requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566, Q-2616]
 supersedes: []
 ---
 
@@ -365,15 +365,32 @@ used by this spec only:
     at or after the end of the rearm countdown (S-0301), and does not depend on the end of the
     firing kind. Besides the shot and the case above, it ends on a tick that begins with a current
     sequence whose stage delay is 0 (only *stand* and guard have one), in which case the unit also
-    asks (not forced) for *stand*; when the unit has no target; when its target changes, to another
-    target or to none, at once when the order takes effect, the target leaves play, or the unit's
-    own processing or per-tick search changes it; and when a completed *secondary-fire* or
+    asks (not forced) for *stand*; when the unit has no target; when its target changes, at once
+    when the change is made (*Changes of target*, below); and when a completed *secondary-fire* or
     *secondary-fire-prone* is repeated for an airstrike (State and ordering). A change of target
     also asks (not forced) for *deployed* when deploying, for *prone* when prone and for *stand*
     otherwise, as the not-ready fire frame does, whether or not the unit is in the attack state at
     that change (claim 6 decides whether the request is taken), so a firing kind still playing gives
-    way to it. The attack-move rule of S-0309 claim 23 discards a target, and puts a remembered
-    target back, without this change-of-target ending (S-0215 claim 11).
+    way to it.
+
+    **Changes of target.** Every change of an infantry unit's target is a change of target for the
+    ending and the request above, at the moment it is made, whatever rule makes it and in whichever
+    actor's turn it is made: a target that differs from the one held, the loss of the target, and
+    the gaining of a target by a unit that had none. Among them are an order (a move, deploy or stop
+    order, or an attack order on another target) when it takes effect, the target's leaving play,
+    the unit's own processing and per-tick search (S-0215 claim 11), a retaliation at a hit, made in
+    the turn of the projectile or actor that delivers the hit (S-0215 claim 18, S-0309 claim 18),
+    the drop of the target when a hit makes the unit berserk (S-0302 claim 10, S-0610 claim 4), the
+    earlier target put back when an override ends (S-0215 claim 10), and any change that mind
+    control (S-0601 claim 6), its release (S-0601 claim 9) or a psychic domination's takeover
+    (S-0612 claim 14) makes. So no per-tick start of the unit after the change sees that attack
+    state, until the entry above begins a new one. At a retaliation and at a berserk hit's drop of
+    the target, the request and the end are medium, `unmeasured` (Backing). The gaining of a target
+    asks for *deployed*, *prone* or *stand* as any change does, and it ends the attack state of a
+    unit that is still in it with no target, as after the attack-move discard of S-0309 claim 23.
+    The attack-move rule of S-0309 claim 23 is the only exception: its discard of a target and its
+    putting back of a remembered target are not changes of target here (S-0215 claim 11), while a
+    target that its search finds is one.
 
     A unit is in the attack state when its firing kind completes only if its firing check answered
     *can fire* again while the kind still played, so that the attack state began again with the
@@ -408,26 +425,41 @@ used by this spec only:
       it, and part (e) for the immediate own-cell exception), and by S-0215 scenario B45: runs c1
       and c2 for the end at the shot, the begin again while the kind still plays and the
       stage-delay-0 ending with the late start after it, and run c3 for the end at an order's change
-      of target. The attack-move exception is `unmeasured` here, as in S-0215 claim 11, since no
-      part here isolates it from the order route. The request at a change of target for a deploying
-      or prone unit is `unmeasured`, as in S-0215 claim 11: no part here changes the target of a
-      firing unit that is deploying or prone. That the request is made both in and out of the attack
-      state, and for a unit that is moving, is `unmeasured` as well: part (d) does not record the
-      attack state at the order and gives no moving unit. The end and the request at a change of
-      target made by the unit's own processing or search, or by the target leaving play, are
-      `unmeasured` too: no part here places that change within the unit's update. The attack state
-      at the completion of a kind that completed before its stage reached *F* is `unmeasured` as
-      well: no part here gives a firing kind that completes before its fire frame. So are the case
-      of a rearm countdown that ends on the tick on which the kind completes, which no part places,
-      and the prone repeat shot after *secondary-fire-prone*, which no part gives.
+      of target. The request at a retaliation's change of target and at a berserk hit's drop of the
+      target is `unmeasured`, as is the gaining of a target, for one reason: in each case another
+      request can replace the playing sequence in the same update, so a record cannot tell which
+      request did. A retaliation's *attack* on a target beyond the weapon's range moves the unit,
+      which can ask for *walk* (claim 10), a berserk unit's search can give it a new target in the
+      tick of the hit (S-0610 claim 4), whose entry asks for a new firing kind (claim 11), and at
+      the gaining of a target the entry or the movement asks for a kind in the same update (claims
+      10 and 11). The end of the attack state at those two changes, at once or later, is
+      `unmeasured` as well: no scenario here records the attack state itself, and with *stand*
+      current a state that carried on would give no shot for a fire frame above 0, since a stage
+      delay of 0 freezes the stage of *stand* at 0 (claim 4), and it would end at the start of the
+      unit's next update by the stage-delay-0 ending. That every other rule's change of target is
+      one is `unmeasured` as well: no set of scenarios can cover every rule that writes a target.
+      The attack-move exception is `unmeasured` here, as in S-0215 claim 11, since no part here
+      isolates it from the order route. The request at a change of target for a deploying or prone
+      unit is `unmeasured`, as in S-0215 claim 11: no part here changes the target of a firing unit
+      that is deploying or prone. That the request is made both in and out of the attack state, and
+      for a unit that is moving, is `unmeasured` as well: part (d) does not record the attack state
+      at the order and gives no moving unit. The end and the request at a change of target made by
+      the unit's own processing or search, or by the target leaving play, are `unmeasured` too: no
+      part here places that change within the unit's update. The attack state at the completion of a
+      kind that completed before its stage reached *F* is `unmeasured` as well: no part here gives a
+      firing kind that completes before its fire frame. So are the case of a rearm countdown that
+      ends on the tick on which the kind completes, which no part places, and the prone repeat shot
+      after *secondary-fire-prone*, which no part gives.
     - Confidence: high (the kind choice, the fire-frame rule, the facing snap where the request is
       taken, the immediate own-cell exception), medium, as S-0215 claim 11 rates being in the middle
       of firing (the facing snap where the request is turned down, the attack state's begin, its end
       at the shot, the begin again while the firing kind still plays, the request at a change of
-      target, the end at an order's change of target until S-0215 scenario B45 run c3 runs, the
-      other end conditions of the attack state, the attack-move exception, and the follow-up
-      sentences and the prone repeat shot for a unit that is in the attack state when its firing
-      kind completes)
+      target, the request and the end of the attack state at a retaliation's change of target and at
+      a berserk hit's drop (`unmeasured`, Backing), the end coming at once at a change and at the
+      gaining of a target, every other rule's change of target being one, the end at an order's
+      change of target until S-0215 scenario B45 run c3 runs, the other end conditions of the attack
+      state, the attack-move exception, and the follow-up sentences and the prone repeat shot for a
+      unit that is in the attack state when its firing kind completes)
 
 12. **Facing toward a target for jumpjets.** For a jumpjet that has a target, the facing used in
     claim 2 is the direction from the unit to its target rather than its body facing. This applies
@@ -1658,12 +1690,12 @@ whose …") means any stock type with that property; the property is a precondit
     not on the new target's direction on the tick the new *fire-standing* starts, by a new
     *fire-standing* whose first drawn image frame is not its first, or by no new *fire-standing*
     within three times the weapon's rearm delay after the order. Runs: three.
-  - (e) Immediate own-cell exception: use the setup, procedure and recording of S-0215
-    claim 31's measurement scenario B19(e). Expected: the secondary shot occurs on the
-    deciding behaviour-processing tick, its own-cell target is cleared on that tick before
-    *deployed-fire* starts, and changing the fire-frame fields does not delay the shot or
-    cause another shot from that sequence. A delayed shot, a retained target or an extra
-    sequence-driven shot falsifies the exception.
+  - (e) Immediate own-cell exception: use the setup, procedure and recording of S-0215 claim 31's
+    measurement scenario B19(e). Expected: the secondary shot occurs on the deciding
+    behaviour-processing tick, its own-cell target is cleared on that tick before *deployed-fire*
+    starts, and changing the fire-frame fields does not delay the shot or cause another shot from
+    that sequence. A delayed shot, a retained target or an extra sequence-driven shot falsifies the
+    exception.
 - **M9 (claim 14).**
   - (a) Timer bounds and outcome ratios. Over 50 games, leave one soldier idle for 18000 ticks per game, and log the
     ticks between visible idle outcomes and the outcomes. Only some attempts can be seen: *r* = 0
@@ -2092,6 +2124,19 @@ This draft resolves cases that the current companion specs still exclude or leav
   selected by the infantry type's art. Claim 19 and the Import mapping here own its selection.
   M20(e) supplies the short-file scenario. The drop-pod shadow of S-0102 claim 13 also needs
   an exception to that universal assertion.
+- **S-0215 claim 11, *In the middle of firing*, *Other endings*.** The two items for a change of its
+  target ("a change of its target, to another target or to none, by an order ... or because the
+  target leaves play" and "a change of its target made by its own processing ... or by claim 33's
+  per-tick search") place only those routes. They should say that every change of the unit's target,
+  including the gaining of a target by a unit that had none, ends the state and makes the request at
+  the moment it is made, whatever rule makes it and in whichever actor's turn, as S-0107 claim 11
+  (*Changes of target*) gives: so a retaliation at a hit or a berserk hit's drop of the target in
+  another actor's turn earlier in the tick is seen by neither start of the unit's update. The two
+  items keep their timing for the routes they name. The attack-move exception is unchanged.
+- **S-0215 claim 18, S-0309 claim 18, S-0302 claim 10 and S-0610 claim 4.** The retaliation's new
+  target and the berserk hit's drop of the target, for an infantry unit, are changes of target for
+  S-0107 claim 11 at the hit. Each may point to S-0107 claim 11, *Changes of target*, for the end of
+  the attack state and the request that follow.
 
 ## Open questions
 
