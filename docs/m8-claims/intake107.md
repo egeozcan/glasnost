@@ -124,15 +124,85 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
 
 ## Records
 
-LANES_RECORDS
+S-0203 r53 reaches M-0021's two leftover rows (intake 105 built them). S-0107 r46 reaches the
+M-0020 rows whose games put infantry under mind control (the takeover's guard reset and the
+release now end the attack state). Arena `--record all --threads 2`, main 07d549c (before)
+against this branch (after; bases under Lanes):
+
+| Record | Row | Before | After |
+|---|---|---|---|
+| M-0021 | Reading points: a vehicle destroyed by a hit at *t* has a per-tick row stamped *t*, off the map, with no health left | holds | **holds** |
+| M-0021 | Reading points: in every part B run the last F vehicle destroyed takes one more hit in its death tick, after its destroying hit, naming no attacker, with no test warhead, taking no health | holds | **holds** (a leftover with no health takes none, claim 13 (g)) |
+| M-0020 | Part 1: in all four YURI games every unit under mind control at the first such tick is of the opposing group and owned by the YURI's house | holds | **holds** |
+| M-0020 | Part 2: YURI against SHK, arm S (12 of 12 to side A) | fails (11 to 1) | fails (11 to 1), unchanged; one game ends at 304 in place of 608, same winner |
+
+M-0021 fails 8 of 50 rows before and after, the same rows word for word. Every other M-0020 row
+passes, as before, and the first-capture ticks are unchanged.
 
 ## Goldens
 
-GOLDENS
+Eight goldens change (commit `aa8ada9`): `combat`, `duel`, `duel-diagonal`, `duel-m6c`,
+`duel-m7a`, `duel-m7b`, `duel-naval` and `skirmish`, 110 lines changed in each direction, no
+line added or removed. Only state hashes change, and only in ticks that hold a leftover: a
+leftover now stores whether it is kept, so the hashed form changed. No event, count or end
+changes, and `scripted` is unchanged. Formats: save 108 to 109, AI game 72 to 73, wire 12
+unchanged.
 
 ## Lanes
 
-LANES
+Before: binaries built on main 07d549c. After: this branch's code on 0051f51 (origin/main then).
+The commits between those two bases are intake 109's, in the app and the string table only, with
+no simulation or AI code. The branch was then rebased onto origin/main 3b978f8, which adds only
+spec commits (S-0208 r52, S-0506 r34), so the lanes were not run again there; the checks were.
+Local `main` has since merged A4 round 9b (1ec07d1), which this branch does not include, so no
+lane here has seen it. Local lane; install values are not quoted.
+
+- **Sweeps, seeds 1 to 16.** All six runs are identical before and after, apart from timings.
+  - M6c reference: smallest minimum 0. M6c play fixes: 0.
+  - M7a reference: 1. M7a play fixes: 2.
+  - M7b reference and play fixes: drain minimum 3.
+- **Arena, `--record all --threads 2`.** Every table and verdict is unchanged: M-0001 11 of 96
+  failing, M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6, M-0020 1 of 25 (YURI against SHK, arm
+  S) and M-0021 8 of 50.
+  - Three of our 1152 M-0001 games changed, all MIND games. One changed winner: MIND against E2,
+    row on side A, seed 0, row to column. The other two changed only their end tick: MIND against
+    E1, side B, seed 4 (912 to 1216), and MIND against E2, side B, seed 2 (304 to 608).
+  - The changed winner, traced (`--trace MIND,E2,A,0`): the first difference is at tick 194. At
+    tick 193 an E2 of side B under the MIND's control takes a guard reset that clears its target
+    (behaviour *hunt* to *guard*). Under claim 11's *Changes of target* that loss of target ends
+    its attack state at once, so at tick 194 it takes its next target and fires. Before, it fired
+    at tick 197. This follows from S-0107 r46.
+  - M-0020 arm S: one game ends at 304 in place of 608, with the same winner.
+- **`cargo test --release -p glasnost-ai -- --include-ignored`** (after: `--no-fail-fast`).
+  - Before: 255 pass and one fails, `skirmish::plays_to_the_last_side` ("the game is over within
+    40000 ticks"). That is main's 228 pass and 1 fail up to that binary, plus `special`, `terror`
+    and `water` run from the before binaries, 27 pass.
+  - After: 33 binaries, 255 pass and the same test fails with the same message. A4 round 9b owns
+    it. This change does not move it.
+- **AI quick lane, seeds 7 to 10, maps 0, 2 and 8** (`GLASNOST_AI_QUICK=1`).
+  - 19 of 36 games change: 3 at seed 7, 7 at seed 8, 6 at seed 9 and 3 at seed 10.
+  - 5 change winner, and in each the house of side 2 (Yuri) is the one that loses or no longer
+    holds out:
+    - seed 7, map 2, sides 0 and 2: house 1 to house 0;
+    - seed 7, map 2, sides 1 and 2: house 1 to house 0;
+    - seed 8, map 2, sides 0 and 2: house 1 to house 0;
+    - seed 9, map 0, sides 1 and 2: house 1 to house 0;
+    - seed 10, map 8, sides 1 and 2: no end within 120000 ticks before, house 0 wins at 69836
+      after.
+  - Before, 35 of 36 games end and house 0 wins 21. After, all 36 end and house 0 wins 26. The
+    longest game after runs 95455 ticks.
+  - **Seed 7, map 2, sides 0 and 2, traced** (`GLASNOST_AI_TRACE`, `GLASNOST_AI_ECON`,
+    `GLASNOST_AI_DUMP`, `GLASNOST_AI_WATCH`). The first difference is at tick 19848. A Yuri slave
+    leaves its miner, and on emergence its target becomes the master (S-0402 claim 21), a target
+    gained from none. Before, it stays in *harvest* through that tick and takes *guard* at 19849.
+    After, it takes *guard* at 19848, one tick earlier.
+  - Under r46 a target gained from none is a change of target, which ends the attack state and
+    asks for *stand*. Infantry in the attack state is not ready to take a queued behaviour (S-0215
+    r118 claim 11). The earlier *guard* is consistent with that, but the watch line does not print
+    the attack state, so the trace does not single out the rule. From there on the game parts:
+    house 0's credits differ by tick 20210, and house 0 wins at 57013 where house 1 won at 72778.
+  - The other winner changes were not traced one by one: whole AI games part widely after any
+    change to unit behaviour.
 
 ## Seams and open points
 
