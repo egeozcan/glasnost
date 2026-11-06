@@ -853,11 +853,6 @@ fn i109_the_name_tip_shows_the_display_name() {
         "string table read: {}",
         lane.c.session.as_ref().unwrap().strings.is_some()
     );
-    if std::env::var_os("GLASNOST_I109_NO_TABLE").is_some() {
-        // The "before" frames: the session as it was without a table, every
-        // name our stand-in.
-        lane.c.session.as_mut().unwrap().strings = None;
-    }
     let home = lane.home();
     let local = lane.local();
     let r = lane.world().rules_arc();
