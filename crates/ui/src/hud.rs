@@ -1085,34 +1085,6 @@ fn tooltip(d: &mut DrawList, r: Rect, lines: Vec<String>, size: (i32, i32)) {
     }
 }
 
-/// The gap between the pointer and its name tag, logical pixels.
-const NAME_TAG_GAP: i32 = 12; // design: M8 A4 round 8 note 54 (clear of the pointer's image; Q-2673)
-
-/// The name tag of the object under a resting pointer: one line in the
-/// sidebar tooltip's look, below and right of `at`, kept inside `bounds`
-/// (moved left and up of the pointer where it would leave them).
-///
-/// design: M8 A4 round 8 note 54. No spec gives hover tips (S-0105 Open
-/// questions, Q-2673); the look is our sidebar tooltip's.
-pub fn name_tag(d: &mut DrawList, at: Point, text: &str, bounds: Rect) {
-    let w = font::text_width(text) + 8;
-    let h = font::LINE_HEIGHT + 6;
-    let mut x = at.x + NAME_TAG_GAP;
-    if x + w > bounds.right() {
-        x = at.x - NAME_TAG_GAP - w;
-    }
-    let mut y = at.y + NAME_TAG_GAP;
-    if y + h > bounds.bottom() {
-        y = at.y - NAME_TAG_GAP - h;
-    }
-    let x = x.min(bounds.right() - w).max(bounds.x);
-    let y = y.min(bounds.bottom() - h).max(bounds.y);
-    let b = Rect::new(x, y, w, h);
-    d.fill(b, [0, 0, 0, 210]);
-    d.frame(b, colour::EDGE);
-    d.text(x + 4, y + 3, text.to_string(), colour::TEXT, b);
-}
-
 fn cameo(d: &mut DrawList, r: Rect, c: &CameoView, hot: bool) {
     d.fill(r, colour::RAISED);
     match c.art {
@@ -1290,42 +1262,6 @@ mod tests {
             charge: None,
             state: None,
             seconds: None,
-        }
-    }
-
-    fn tag_box(d: &DrawList) -> Rect {
-        match d.prims.first() {
-            Some(Prim::Fill { rect, .. }) => *rect,
-            other => panic!("no tag box: {other:?}"),
-        }
-    }
-
-    // design: M8 A4 round 8 note 54 (Q-2673): the name tag sits below and
-    // right of the pointer and never leaves the battlefield.
-    #[test]
-    fn a_name_tag_sits_by_the_pointer_inside_the_battlefield() {
-        let map = Rect::new(0, 0, 400, 300);
-        let mut d = DrawList::new();
-        name_tag(&mut d, Point::new(100, 100), "Tank", map);
-        let b = tag_box(&d);
-        assert!(b.x > 100 && b.y > 100, "below and right: {b:?}");
-        assert!(
-            d.prims
-                .iter()
-                .any(|p| matches!(p, Prim::Text { text, .. } if text == "Tank"))
-        );
-        for at in [Point::new(399, 299), Point::new(399, 0), Point::new(0, 299)] {
-            let mut d = DrawList::new();
-            name_tag(&mut d, at, "A rather long name", map);
-            let b = tag_box(&d);
-            assert!(
-                b.x >= map.x
-                    && b.y >= map.y
-                    && b.right() <= map.right()
-                    && b.bottom() <= map.bottom(),
-                "inside at {at:?}: {b:?}"
-            );
-            assert!(!b.contains(at), "clear of the pointer at {at:?}: {b:?}");
         }
     }
 

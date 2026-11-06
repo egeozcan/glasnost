@@ -195,6 +195,9 @@ pub struct Settings {
     /// Whether house colours use our colour-blind palette (from the next
     /// game on).
     pub colour_blind: bool,
+    /// The player's tooltip option: whether name tips show over the
+    /// battlefield (S-0111 claims 20 and 26).
+    pub tool_tips: bool,
     /// The command keys.
     pub bindings: Bindings,
     /// The relay address last used on the multiplayer screen ("" none).
@@ -274,6 +277,8 @@ impl Default for Settings {
             captions: true,
             // nocite: our own client setting (the colour-blind palette is off by default)
             colour_blind: false,
+            // spec: S-0111 Import mapping (settings file [Options] ToolTips: the tooltip option, yes when the settings give none) and claim 20 (on unless the player's settings turn it off)
+            tool_tips: true,
             bindings: Bindings::default(),
             relay: String::new(),
             rejoin: None,
@@ -305,6 +310,7 @@ impl Settings {
             u8::from(self.captions),
             u8::from(self.colour_blind)
         );
+        s += &format!("tool_tips={}\n", u8::from(self.tool_tips));
         for a in ACTIONS {
             s += &format!("key.{}={}\n", a.name(), self.bindings.key(a));
         }
@@ -355,6 +361,7 @@ impl Settings {
                 }
                 "captions" => s.captions = flag().unwrap_or(s.captions),
                 "colour_blind" => s.colour_blind = flag().unwrap_or(s.colour_blind),
+                "tool_tips" => s.tool_tips = flag().unwrap_or(s.tool_tips),
                 "relay" => {
                     s.relay = v
                         .chars()

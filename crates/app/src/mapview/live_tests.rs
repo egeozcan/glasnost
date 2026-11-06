@@ -2096,6 +2096,124 @@ fn aircraft_shadow_anchor_bridge_qualification() {
     assert!(!anchor(&mut w, 1500, false).deck);
 }
 
+/// spec: S-0105 claim 44 and MS-34 part e: a voxel vehicle's shadow is drawn at its body's point
+/// moved down by the lift of its height above the surface (so on level-0 ground at the ground
+/// projection whatever its height), and a hunter-seeker type's at claim 40's P, the terrain point,
+/// 60 rows higher under claim 40's bridge qualification only.
+#[test]
+fn a_vehicle_shadow_lies_on_its_surface() {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    use glasnost_render::projection::height_lift;
+    // The shadow's and body's rows for a vehicle type whose section adds `extra`.
+    let rows = |extra: &str, z: i32, above: i32, anchor: Option<ShadowAnchor>| {
+        let (mut import, catalogue, mut assets) = context_with(&format!("{RULES}[CARX]\n{extra}"));
+        import.arts.insert(
+            (Kind::Vehicles, 0),
+            TypeArt {
+                voxels: [("body".to_string(), b"hull.vxl".to_vec())].into(),
+                ..Default::default()
+            },
+        );
+        assets.insert(
+            b"hull.vxl",
+            VxlWriter {
+                model: &synthetic_model(),
+            }
+            .write(),
+        );
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene: Scene = built.scene;
+        let m = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (3 * 256 + 128, 3 * 256 + 128, z),
+            body: 16384,
+            turret: 16384,
+            elevation: 0,
+            anim: 0,
+            infantry: None,
+            object: sim_code(ObjectId(5)),
+            harvesting: None,
+            shadow: anchor,
+            alternative: false,
+            attitude: Attitude::None,
+            disabled: false,
+            above,
+            protection: None,
+            generic_shadow: None,
+            berserk: None,
+            turret_index: None,
+            walk: Default::default(),
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        let items = &entries[0].items;
+        let shadow = items
+            .iter()
+            .find(|i| i.paint == Paint::Shadow)
+            .expect("a shadow");
+        let body = items
+            .iter()
+            .find(|i| i.paint != Paint::Shadow)
+            .expect("a body");
+        (shadow.y, body.y)
+    };
+    // At a = 0 on level-0 ground the anchor is B.
+    let (ground, body0) = rows("", 0, 0, None);
+    for a in [1, 52, 104, 416, 1500] {
+        let (shadow, body) = rows("", a, a, None);
+        // The body is lifted by L(z), the anchor lowered by L(a): the ground projection.
+        assert_eq!(body, body0 - height_lift(a), "a = {a}");
+        assert_eq!(shadow, ground, "a = {a}");
+    }
+    // Below its surface the signed lift raises the anchor above B.
+    let (shadow, body) = rows("", -50, -50, None);
+    assert_eq!(shadow - body, ground - body0 + height_lift(-50));
+    // A hunter-seeker type: claim 40's P, the terrain point, whatever its height.
+    let hunter = "HunterSeeker=yes\n";
+    let flat = ShadowAnchor {
+        ground: 0,
+        deck: false,
+    };
+    assert_eq!(rows(hunter, 0, 0, Some(flat)).0, ground);
+    assert_eq!(rows(hunter, 1500, 1500, Some(flat)).0, ground);
+    assert_eq!(
+        rows(hunter, 416, 0, Some(flat)).0,
+        ground,
+        "on a deck below the qualification"
+    );
+    assert_eq!(
+        rows(hunter, 416, 0, Some(ShadowAnchor { deck: true, ..flat })).0,
+        ground - 60,
+        "claim 40's bridge raise"
+    );
+    // An ordinary vehicle on a deck (a = 0) keeps B: the deck is its surface.
+    let (shadow, body) = rows("", 416, 0, Some(flat));
+    assert_eq!(shadow - body, ground - body0);
+}
+
 /// spec: S-0105 claim 12 (a vehicle type with the alternative-body option draws its alternative
 /// body, not its main body, while no spawned aircraft is docked; a type without the option never
 /// does, and a type without an alternative body file draws the main body; the shadow stays the

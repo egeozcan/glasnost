@@ -349,6 +349,7 @@ fn state_hash_is_the_same_under_any_settings() {
                 rejoin: None,
                 direct: false,
                 ice: "stun:elsewhere:3478".into(),
+                tool_tips: false,
             };
             c.settings_changed();
         }

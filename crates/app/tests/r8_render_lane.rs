@@ -793,23 +793,29 @@ fn note_54_the_pointer_rests_on_a_unit() {
         return;
     };
     lane.c.pointer_moved(p);
-    lane.ticks(1);
+    let _ = lane.c.frame();
     lane.zoom("n54-0-at-once", p, (240, 140, 3));
-    let tag = |l: &Lane| l.c.session.as_ref().and_then(|s| s.hover_tag()).is_some();
-    println!("at once: name tag {}", tag(&lane));
-    // Two seconds of the host clock, one tick per 100 ms.
+    // S-0111 claims 20 to 26: the name tip's box and lines, once it shows.
+    let tag = |l: &Lane| {
+        l.c.session
+            .as_ref()
+            .and_then(|s| s.name_tip_shown())
+            .map(|t| (t.rect, t.lines.len(), t.ink))
+    };
+    println!("at once: name tip {:?}", tag(&lane));
+    // Two seconds of the host clock in steps of 100 ms (the wait is 1000 ms, S-0111 claim 20).
     for k in 1..=20 {
         lane.clock += 100;
         lane.c.update(lane.clock);
         let _ = lane.c.frame();
-        if k % 4 == 0 {
-            println!("+{} ms: name tag {}", k * 100, tag(&lane));
+        if k % 2 == 0 || k == 9 {
+            println!("+{} ms: name tip {:?}", k * 100, tag(&lane));
         }
     }
     lane.zoom("n54-1-two-seconds", p, (240, 140, 3));
-    // The pointer leaves the unit: the tag goes.
+    // The pointer moves: the tip goes (S-0111 claim 20).
     lane.c.pointer_moved(Point::new(p.x + 200, p.y + 120));
     let _ = lane.c.frame();
-    println!("pointer moved off: name tag {}", tag(&lane));
+    println!("pointer moved off: name tip {:?}", tag(&lane));
     lane.save("n54-1-two-seconds");
 }

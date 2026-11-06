@@ -1,5 +1,6 @@
 //! The settings screen (our own layout): volumes, scroll speed, display
-//! scale, captions, the house colour choice and the key bindings. It only
+//! scale, captions, the house colour choice, the tooltip option and the
+//! key bindings. It only
 //! draws the values it is given and reports what was clicked; what they
 //! mean and where they are stored is the client's (`glasnost-app`,
 //! `settings`).
@@ -25,10 +26,12 @@ pub enum Row {
     Captions,
     /// House colours for colour-blind players, on or off.
     Colours,
+    /// The tooltip option: name tips over the battlefield, on or off.
+    ToolTips,
 }
 
 /// All rows in the order drawn.
-pub const ROWS: [Row; 7] = [
+pub const ROWS: [Row; 8] = [
     Row::Sound,
     Row::Voices,
     Row::Music,
@@ -36,6 +39,7 @@ pub const ROWS: [Row; 7] = [
     Row::Scale,
     Row::Captions,
     Row::Colours,
+    Row::ToolTips,
 ];
 
 /// A target of the screen.
@@ -54,7 +58,7 @@ pub enum SettingsHit {
 /// What the screen shows.
 pub struct Page<'a> {
     /// The value text of each row, in [`ROWS`] order.
-    pub values: [String; 7],
+    pub values: [String; 8],
     /// Each rebindable action and the key it has now.
     pub bindings: Vec<(String, String)>,
     /// The binding waiting for a key press.
@@ -74,6 +78,7 @@ fn label(r: Row) -> &'static str {
         Row::Scale => "Display scale",
         Row::Captions => "Captions",
         Row::Colours => "Colour-blind houses",
+        Row::ToolTips => "Name tips",
     }
 }
 
@@ -169,6 +174,7 @@ mod tests {
                 "100%".into(),
                 "On".into(),
                 "Off".into(),
+                "On".into(),
             ],
             bindings: vec![("Stop".into(), "S".into()), ("Guard".into(), "G".into())],
             rebinding: None,
@@ -188,6 +194,7 @@ mod tests {
             SettingsHit::Step(Row::Music, 1),
             SettingsHit::Step(Row::Scale, -1),
             SettingsHit::Step(Row::Colours, 1),
+            SettingsHit::Step(Row::ToolTips, -1),
             SettingsHit::Rebind(4),
             SettingsHit::Reset,
             SettingsHit::Back,

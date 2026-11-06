@@ -12,7 +12,9 @@
 //! - [`link`]: the connection to a relay (M9 N3), native or from the web shell.
 //! - [`pump`]: a network game's updates while its window draws no frames.
 //! - [`report`]: where a desync report goes (M9 N4), a file or a download.
+//! - [`name_tip`]: the name tip over the battlefield (S-0111 claims 20 to 26).
 //! - [`status_font`]: the game bitmap font for status text.
+//! - [`strings`]: display texts from the string table (S-0004 claim 17).
 //! - [`captions`]: captions for announcements (M8 step C3).
 //! - [`bot`]: a person played by our AI over the relay (M9 N6, the soak).
 //! - [`bench`]: the performance benchmark (M8 step C4).
@@ -28,6 +30,7 @@ pub mod direct;
 pub mod install;
 pub mod link;
 pub mod music_share;
+pub mod name_tip;
 pub mod paint;
 pub mod play;
 pub mod pump;
@@ -36,6 +39,7 @@ pub mod scroll;
 pub mod session;
 pub mod sidebar_art;
 pub mod status_font;
+pub mod strings;
 pub mod window;
 
 pub use glasnost_net::desync::Perturb;
