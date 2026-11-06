@@ -17,7 +17,7 @@
   berserk hit plays no damage sound and makes no announcement other than the harvester one (claim
   10). No behaviour changes; the cites name r43.
 
-Requests filed (commit abd582a): Q-2676 (an aircraft that survives the hit of a refused landing
+Requests filed (commit 17c3f58): Q-2676 (an aircraft that survives the hit of a refused landing
 check, Open question 28) and Q-2677 (Open question 30: *guard* with a target during the slide, and
 where the aircraft rests). Q-2678 to Q-2685 unused.
 
@@ -108,8 +108,45 @@ whose forget took the aircraft off, which the order of `air::forget_point` now p
 
 ## Goldens
 
-LANES-GOLDENS
+Save format 103 → 104, AI game format 67 → 68, past intake 103 (which took 103 and 67). On
+intake 103's base (main 7580c30) the regenerated goldens are `duel-m6c` (first differing line
+92, 1201 lines before and after), `skirmish` (line 1185, 2856 → 2593 lines), `duel-naval` (line
+1566, 4001 → 3161) and `duel-diagonal` (line 1955, 4001 lines before and after). The other five
+are unchanged. The goldens record aircraft-bearing games, and r134's aircraft changes (the landing
+check after the descent, the refused check's take-off to a free cell, the restarted approach)
+move them; no golden was judged line by line. `cargo xtask gate`'s wasm32 goldens match.
 
 ## Lanes
 
-LANES-RESULTS
+The sweeps, the AI quick lane and the first arena ran before the rebase onto intake 103:
+before is main 7a2ab68, after is this branch on 7a2ab68. No lane was tuned toward.
+
+- **Sweeps, seeds 1–16.** M6c reference diverges (it has aircraft): the smallest minimum goes
+  3 → 2 (seed 10's radiation exits; radiation exits minimum 6 → 2, median 29 → 38; garrison
+  orders median 17 → 19). M6c play-fixes, M7a (reference minimum 2, play-fixes 1) and M7b
+  (smallest drain minimum 3 in both) are identical.
+- **`glasnost-ai --include-ignored`** (release): 255 passed, 0 failed, before and after.
+- **AI quick lane** (seeds 7–10, maps 0, 2, 8; 36 games): lengths change in 5 of 9 games for
+  seed 7, 5 of 9 for seed 8, 5 of 9 for seed 9 and 6 of 9 for seed 10. Two winners change, both
+  in seed 8: map 0, sides 0 v 1, house 0 at 45800 → no winner at 120000, and map 8, sides
+  0 v 1, house 0 at 56752 → house 1 at 52500. The map-0 game was traced: the two runs part
+  before tick 10000 in house 0's aircraft (asleep in pad contact before, attacking after),
+  which is r134's order. At 120000 house 0 holds 40 buildings and an army of 22 against house
+  1's 10 buildings and 4 units, and does not finish. Its aircraft are in ordinary states. The
+  after run shows two of house 1's DMISL rockets (8800, 9604) placed near tick 35449 and never
+  moving: they stay in *move* toward objects that have gone, their target switching between
+  none and a cell, hp 50 and then 0 at 110000. A V3ROCKET does the same at 110000. Rockets
+  fly by S-0506 (`rocket.rs`), which this intake does not touch, so this is an earlier state
+  that the diverged game reached. It is left for the lead to look at.
+- **Arena** (`arena --record all --threads 2`): identical before and after apart from
+  timings. M-0001 still fails 10 of 96, M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6,
+  M-0021 10 of 50 and M-0020 1 of 25. The same pairings fail with the same counts.
+
+After the rebase onto intake 103 (main 7580c30), the arena on this branch is identical to the
+arena on main 7580c30 itself, apart from timings. Both have M-0001 failing 12 of 96: intake
+103 adds LTNK–E1 (side outcome) and CAOS–V3 (win test), and moves CAOS–E2 and INIT–E2's
+counts. M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6, M-0021 10 of 50 and M-0020 1 of 25 are
+as before. On the rebased tree: workspace 7644 passed, 0 failed; `glasnost-sim
+--include-ignored` 5377 passed, 1 failed (`pathing_c7p4::diag`, as on main); `glasnost-ai
+--include-ignored` 255 passed, 0 failed; clippy, fmt, `xtask check` (stock-guard's 128 only)
+and `xtask gate` pass.
