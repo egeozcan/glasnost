@@ -112,12 +112,62 @@ Run 1 against our engine (local lane, the stock install; run 2 does not count, b
 | Controls: positions as the baseline's; from *t* + 2 the pen's centre and *move* | **fails** | ours: the order at *t* + 2 comes before our unit has searched (the lag of Q-2657), so its search for the pen fails at the gate and it waits; in the record it walks the baseline's path with the pen's centre as its destination. Q-2657 |
 
 The check expects exactly these four rows to fail until Q-2656 and Q-2657 are answered; any other
-failing row fails it. The engine is unchanged for them.
+failing row fails it. The engine is unchanged for them. In a worktree the check skips and passes
+unless `GLASNOST_M0023_LOCAL` names the values file, since `measurements/local/` exists only in
+the main checkout.
 
-## Goldens
+## Formats and goldens
 
-(filled in at the rebase)
+Save format 103 (main 102) and AI game format 67 (main 66, A4 round 8): `PathState::retry_for` is
+new state, hashed and saved.
+
+Regenerated on the tree rebased onto main 02cbb7e. Every golden moves from its first tick, as the
+new field is hashed: `combat`, `duel`, `duel-diagonal`, `duel-naval`, `duel-m6c`, `duel-m7a`,
+`duel-m7b`, `scripted` and `skirmish`. Where a game ends, its end moves too:
+
+| Golden | Main | This branch |
+|---|---|---|
+| `duel` | over at about tick 21 360 | over at about tick 21 180 |
+| `duel-diagonal` | over at about tick 23 410 | not over within its 40 000 ticks |
+| `duel-naval` | over at about tick 25 440 | not over within its 40 000 ticks |
+| `skirmish` | not over within its 40 000 ticks | over at about tick 28 550 |
+
+(The duels' files hold a hash every 10th tick and stop when the game is over.) At tick 40 000 both
+the diagonal and the naval duel are economic stalemates: every house has 1 to 20 credits. In the
+diagonal duel, house 1's aircraft attack house 0's last harvester. In the naval duel, house 1's
+four harvesters stand in guard. The gate does not require these games to end, and nothing was
+tuned.
 
 ## Lanes
 
-(filled in after the runs)
+Main 02cbb7e against this branch rebased onto it. Nothing was tuned toward a lane.
+
+- **Sweeps** (seeds 1 to 16, every test passes on both). Smallest minimum of the counters:
+  M6c reference 3 to 0, play-fixes 3 to 3; M7a reference 2 to 1, play-fixes 1 to 1; M7b reference
+  and play-fixes 3 to 3 (the drain counter's minimum 3 to 3). The M6c reference 0 is seed 10's
+  "radiation exits (S-0525)", an AI order counter, whose minimum was 0 before A4 round 8 and 6 on
+  main. Other moves are small and both ways (M6c reference: jumpjet orders 25 to 15, chargers 11
+  to 6, support beams 75 to 44, crates 74 to 59, sabotage 7 to 14; M7a reference: takeovers 3 to 1;
+  M7b: mutator, berserk and grinder counters).
+- **Quick lane** (seeds 7 to 10, maps 0, 2 and 8): 35 of 36 games end; seed 7's game on map 0
+  between sides 1 and 2 is not over at 120 000 ticks (main: house 0 wins). Its trace shows a war of
+  attrition, not a stuck unit: both houses earn about 15 000 per 10 000 ticks and spend it on
+  units, house 1 is down to six buildings without power, 80 525 of resource is left. The winning
+  house changes in six games: seed 7 map 0 sides 1 and 2 (0 to none), seed 7 map 8 sides 1 and 2 (0 to 1), seed 8
+  map 2 sides 0 and 2 (0 to 1), seed 8 map 2 sides 1 and 2 (1 to 0), seed 8 map 8 sides 0 and 1 (0
+  to 1), seed 9 map 2 sides 1 and 2 (1 to 0, at tick 105 829). Seed 10 is unchanged. Three were
+  traced to the first difference, each claim 21: a slave whose destination changed in the update
+  that started its delay (seed 8 map 2, sides 0 and 2), a YTNK given a new destination two ticks
+  before its delay's end (seed 7 map 0), a slave whose destination changed one tick after (seed 8
+  map 2, sides 1 and 2); main waits out the delay, the branch searches at once. Drain: 108 links and
+  81 578 credits on main, 125 and 96 281 on the branch.
+- **AI** (`glasnost-ai --include-ignored`): 255 passed on both.
+- **Arena** (`--record all --threads 2`): M-0001 10 to 12 failing of 96, M-0002 2 to 2 of 24,
+  M-0003 1 to 1 of 35, M-0019 0 of 6, M-0020 1 of 25, M-0021 10 of 50 (its report identical but
+  for the path line). New failures: LTNK against E1 (side outcome; ours 0/12/0 to 1/11/0, side A
+  seed 1 now won by the row) and CAOS against V3 (win test, 3/0/9 to 1/0/11; side A seed 5 and
+  side B seed 1 now end with no winner). The 13 failing pairings all still fail; CAOS against E2
+  (0/11/1 to 0/10/2, side A seed 4 now no winner) and INIT against E2 (7/5/0 to 8/4/0, side A seed
+  3 now the row's) changed counts, the other 11 are unchanged. MGTK against TTNK still passes
+  (10/2/0 to 9/3/0). The rest of the changed games change only their end tick, or swap between
+  seeds (MIND against E1, side B seeds 1 and 5).
