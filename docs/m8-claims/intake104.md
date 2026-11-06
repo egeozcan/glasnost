@@ -17,7 +17,7 @@
   berserk hit plays no damage sound and makes no announcement other than the harvester one (claim
   10). No behaviour changes; the cites name r43.
 
-Requests filed (commit 17c3f58): Q-2676 (an aircraft that survives the hit of a refused landing
+Requests filed (commit 2eeb307): Q-2676 (an aircraft that survives the hit of a refused landing
 check, Open question 28) and Q-2677 (Open question 30: *guard* with a target during the slide, and
 where the aircraft rests). Q-2678 to Q-2685 unused.
 
@@ -142,8 +142,9 @@ before is main 7a2ab68, after is this branch on 7a2ab68. No lane was tuned towar
   timings. M-0001 still fails 10 of 96, M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6,
   M-0021 10 of 50 and M-0020 1 of 25. The same pairings fail with the same counts.
 
-After the rebase onto intake 103 (main 7580c30), the arena on this branch is identical to the
-arena on main 7580c30 itself, apart from timings. Both have M-0001 failing 12 of 96: intake
+After the rebase onto intake 103 (main 7580c30, whose code main a143ecc keeps; a143ecc changes
+only spec and docs), the arena on this branch is identical to the arena on main 7580c30 itself,
+apart from timings. Both have M-0001 failing 12 of 96: intake
 103 adds LTNK–E1 (side outcome) and CAOS–V3 (win test), and moves CAOS–E2 and INIT–E2's
 counts. M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6, M-0021 10 of 50 and M-0020 1 of 25 are
 as before. On the rebased tree: workspace 7644 passed, 0 failed; `glasnost-sim
