@@ -704,6 +704,64 @@ fn a_broke_house_sells_a_building() {
     assert!(!sold, "no sale while the economy runs");
 }
 
+// design (M8 step A4 round 9b): a broke house with no army keeps its factory and sells another building first, to fund an army (the refund, S-0408 claim 1; sellable buildings only, claim 3: here those with a build-up sprite).
+#[test]
+fn a_broke_house_with_no_army_keeps_its_factory() {
+    let mut r = fixture::ruleset();
+    for n in ["POWR", "FACT"] {
+        let b = r.sim.buildings.get_mut(n).expect("fixture building");
+        b.econ.buildup = Some(true);
+        b.econ.buildup_frames = Some(8);
+    }
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| ["YARD", "POWR", "PROC"]
+        .iter()
+        .all(|n| !of(w, 0, n).is_empty())));
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    // A war factory, costlier than the power plant, and no army, harvesters or credits.
+    let fact = testkit::spawn(
+        &mut g.world,
+        Kind::Building,
+        "FACT",
+        0,
+        glasnost_map::CellXY::new(yard.x + 8, yard.y + 8),
+        0,
+    );
+    let gone: Vec<ObjectId> = g
+        .world
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.kind != Kind::Building)
+        .map(|o| o.id)
+        .collect();
+    for id in gone {
+        objects::remove(&mut g.world, id);
+    }
+    g.world.houses[0].credits = 0;
+    let from = g.world.tick;
+    let selling = |w: &World| {
+        w.objects
+            .values()
+            .find(|o| o.owner == Some(HouseId(0)) && o.econ.sale.is_some())
+            .map(|o| o.id)
+    };
+    assert!(
+        step_until(&mut g, from + 4000, |w| selling(w).is_some()),
+        "house 0 sells a building"
+    );
+    let sold = selling(&g.world).unwrap();
+    assert_ne!(sold, fact, "the war factory is kept");
+    assert_eq!(name(&g.world, sold).as_deref(), Some("POWR"));
+}
+
 // A unit type refused for a reason other than a missing building (here
 // its build limit) does not send the tech climb to build more factories of
 // its kind: a factory the house already has clears nothing.
@@ -1873,6 +1931,183 @@ fn waves_wait_for_the_opening_and_leave_a_guard() {
         !near.iter().any(|&id| sent(&orders, id)),
         "the guard stays: {orders:?}"
     );
+}
+
+/// The end-game scene of M8 step A4 round 9b: house 1 is left with what
+/// `enemy` spawns (each a type and a cell offset from its yard's old cell,
+/// all revealed to house 0, 30 cells or so from house 0's base), house 0
+/// with three tanks beside its yard, past the opening. Returns the world
+/// and the tanks.
+fn end_game(enemy: &[(Kind, &str, i32)]) -> (World, Vec<ObjectId>) {
+    end_game_in(start(5), enemy, true, 3)
+}
+
+/// [`end_game`] in game `g` (its rules), with house 1's base looked at by
+/// house 0 or not (`looked`), and `n` tanks.
+fn end_game_in(
+    mut g: Game,
+    enemy: &[(Kind, &str, i32)],
+    looked: bool,
+    n: usize,
+) -> (World, Vec<ObjectId>) {
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()
+        && !of(w, 1, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let mut w = g.world.clone();
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    let theirs = w.obj(of(&w, 1, "YARD")[0]).unwrap().pos.cell();
+    let gone: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(1)))
+        .map(|o| o.id)
+        .collect();
+    for id in gone {
+        objects::remove(&mut w, id);
+    }
+    // House 0 has looked at house 1's base (its start cell, by its yard's cell).
+    if looked {
+        glasnost_sim::econ::shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(theirs, 0),
+            6,
+        );
+    }
+    for &(kind, n, dy) in enemy {
+        let c = glasnost_map::CellXY::new(theirs.x, theirs.y + dy);
+        testkit::spawn(&mut w, kind, n, 1, c, 0);
+        glasnost_sim::econ::shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(c, 0),
+            4,
+        );
+    }
+    let tanks: Vec<ObjectId> = free_cells(&w, yard, n)
+        .into_iter()
+        .map(|c| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, c, 0))
+        .collect();
+    assert_eq!(of(&w, 0, "GUNR").len(), n, "no other tank");
+    let opening = glasnost_ai::scripted::OPENING;
+    w.tick = (opening + period - 1) / period * period;
+    (w, tanks)
+}
+
+/// The tanks of `tanks` that the think of house 0 sends with a wave (an
+/// attack move to a cell; a scout's move is a plain one).
+fn sent_off(w: &World, tanks: &[ObjectId]) -> Vec<ObjectId> {
+    let orders = Brain::new(w, &fixture::map(), HouseId(0)).think(w);
+    tanks
+        .iter()
+        .copied()
+        .filter(|&id| {
+            orders.iter().any(|o| {
+                matches!(o, Order::Behaviour { actor, attack_move: true, dest: Some(Target::Cell(_)), .. } if *actor == id)
+            })
+        })
+        .collect()
+}
+
+// design (M8 step A4 round 9b): a house that sees an enemy building and nothing of the enemy that builds or hits back (here a power plant alone) sends what it has, its guard too, with one enemy house left (S-0414 claim 5: a defeat is announced).
+#[test]
+fn an_enemy_with_nothing_to_hit_back_with_gets_the_whole_army() {
+    let (w, tanks) = end_game(&[(Kind::Building, "POWR", 0)]);
+    let sent = sent_off(&w, &tanks);
+    assert_eq!(sent, tanks, "every tank goes, the guard too");
+}
+
+// design (M8 step A4 round 9b): a seen enemy army worth more than a third of the house's keeps the guard home and the wave waiting for its size; one worth a third (one tank against three) does not.
+#[test]
+fn an_enemy_with_an_army_left_keeps_the_guard_home() {
+    let (w, tanks) = end_game(&[
+        (Kind::Building, "POWR", 0),
+        (Kind::Vehicle, "GUNR", 4),
+        (Kind::Vehicle, "GUNR", 5),
+    ]);
+    assert!(sent_off(&w, &tanks).is_empty(), "no wave of three");
+    let (w, tanks) = end_game(&[(Kind::Building, "POWR", 0), (Kind::Vehicle, "GUNR", 4)]);
+    assert_eq!(sent_off(&w, &tanks), tanks, "three tanks against one");
+}
+
+// design (M8 step A4 round 9b): an enemy building that builds (a factory: it may yet raise a raid) keeps the guard home and the wave waiting for a wave's size; with nine tanks, a wave of the plan's six goes and the guard of three stays.
+#[test]
+fn an_enemy_with_a_factory_left_keeps_the_guard_home() {
+    let (w, tanks) = end_game(&[(Kind::Building, "FACT", 0)]);
+    assert!(sent_off(&w, &tanks).is_empty(), "no wave of three");
+    let (w, tanks) = end_game_in(start(5), &[(Kind::Building, "FACT", 0)], true, 9);
+    assert_eq!(
+        sent_off(&w, &tanks).len(),
+        6,
+        "a wave of six, the guard of three home"
+    );
+}
+
+// design (M8 step A4 round 9b): a building a scout came by, away from an enemy base the house has not looked at, finishes nothing (no rush at the start of the game).
+#[test]
+fn an_enemy_building_away_from_an_unseen_base_finishes_nothing() {
+    let (w, tanks) = end_game_in(start(5), &[(Kind::Building, "POWR", 10)], false, 3);
+    assert!(sent_off(&w, &tanks).is_empty(), "no wave of three");
+    let (w, tanks) = end_game_in(start(5), &[(Kind::Building, "POWR", 10)], true, 3);
+    assert_eq!(
+        sent_off(&w, &tanks),
+        tanks,
+        "with the base looked at, all go"
+    );
+}
+
+// design (M8 step A4 round 9b): with the enemy base looked at and gone, and the last enemy unit on a cell the house has not explored, every unit goes to search; with the base not looked at, the wave waits.
+#[test]
+fn a_cleared_enemy_base_sends_the_army_to_search() {
+    let hide = |w: &mut World| {
+        let c = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .find(|&c| w.cells.usable(c) && !glasnost_sim::econ::shroud::explored(w, HouseId(0), c))
+            .expect("an unexplored cell");
+        testkit::spawn(w, Kind::Vehicle, "MINR", 1, c, 0);
+    };
+    let (mut w, tanks) = end_game(&[]);
+    hide(&mut w);
+    assert_eq!(sent_off(&w, &tanks), tanks, "every tank goes to search");
+    let (mut w, tanks) = end_game_in(start(5), &[], false, 3);
+    hide(&mut w);
+    assert!(sent_off(&w, &tanks).is_empty(), "no wave of three");
+}
+
+// design (M8 step A4 round 9b): an armed enemy building (S-0214 Terms: a weapon in the slot it uses) counts with the enemy army: a defence worth more than a third of the house's army keeps the wave waiting; the same building unarmed does not.
+#[test]
+fn an_enemy_defence_counts_as_its_army() {
+    let mut r = fixture::ruleset();
+    r.sim
+        .buildings
+        .get_mut("RADR")
+        .expect("fixture building")
+        .primary = Some("Gun".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"));
+    let g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let (w, tanks) = end_game_in(g, &[(Kind::Building, "RADR", 0)], true, 3);
+    assert!(
+        glasnost_sim::combat::weapon::armed(&w, of(&w, 1, "RADR")[0]),
+        "the defence is armed"
+    );
+    assert!(
+        sent_off(&w, &tanks).is_empty(),
+        "no wave of three against it"
+    );
+    let (w, tanks) = end_game(&[(Kind::Building, "RADR", 0)]);
+    assert_eq!(sent_off(&w, &tanks), tanks, "an unarmed one: all go");
 }
 
 // design (M8 step A4 round 8, the lead's note 48): while no wave goes, the fastest waiting army unit scouts the unexplored cell of the house's own side nearest home; with that side explored, none does.

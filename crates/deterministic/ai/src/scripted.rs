@@ -169,6 +169,14 @@ const GUARD_MAX: usize = 10; // nocite: tuning of our own opponent
 const WAVE_GROWTH: usize = 2; // nocite: tuning of our own opponent
 const WAVE_MAX: usize = 14; // nocite: tuning of our own opponent
 
+/// How many times the worth of what the house sees of the enemy that fights
+/// (its army units and armed buildings) the house's own army is worth at
+/// least for the house to be clearly winning ([`Script::finishing`]).
+/// design: an enemy whose seen fighting worth is a third of the house's
+/// army cannot stop it; a person stops waiting for bigger waves, and sends
+/// what they have once nothing of the enemy builds (M8 step A4 round 9b).
+const FINISH_SHARE: i64 = 3; // nocite: tuning of our own opponent
+
 /// Resource cells around a refinery, slave miner or home that keep one
 /// harvester at work ([`Script::harvesters_wanted`]).
 const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
@@ -1140,8 +1148,10 @@ impl Script {
     /// no credits earned and no change in what its harvesters and its slaves
     /// on the map carry, for [`BROKE_PATIENCE`] ticks; and too few credits
     /// for its cheapest army unit), sells one building, as a person in its seat would, the
-    /// costliest first. It keeps one factory per kind while the house has
-    /// army units; a house with nothing left to fight with sells out, which
+    /// costliest first (S-0408 claims 1 and 3: the refund goes to its
+    /// credits; only a sellable building is chosen). It keeps one factory
+    /// per kind while it has anything else to sell; a house with nothing
+    /// left to fight with and nothing else to sell sells those too, which
     /// ends its part in the game.
     fn sell_when_broke(&mut self, w: &World, out: &mut Vec<Order>) {
         let t = w.tick;
@@ -1184,27 +1194,42 @@ impl Script {
         // its yard first, the costliest building, and its two miners stood
         // for the rest of the game).
         let rebuilding = self.refinery_lost(w).is_some();
+        // design: one factory per kind is kept while anything else is left
+        // to sell, army or none: a house with no army and no money sells
+        // its other buildings first to fund one, and sells out (which ends
+        // its part in the game) only once the kept buildings are all it
+        // has and it still cannot pay for a unit (M8 step A4 round 9b: a
+        // house with no army sold its costliest building first, often its
+        // war factory, and so the means to build the army its refunds paid
+        // for). With an army the kept buildings are never sold.
         let keep = |id: ObjectId| {
             let Some(o) = w.obj(id) else { return true };
             (rebuilding && is_yard(w, o))
-                || (army
-                    && FACTORIES.iter().any(|&k| {
-                        self.allowed(w, tech::type_of(o), Role::Factory(k))
-                            && self.of_role(w, Role::Factory(k)).first() == Some(&id)
-                    }))
+                || FACTORIES.iter().any(|&k| {
+                    self.allowed(w, tech::type_of(o), Role::Factory(k))
+                        && self.of_role(w, Role::Factory(k)).first() == Some(&id)
+                })
         };
-        let sale = self
+        let sellable: Vec<ObjectId> = self
             .own(w)
             .into_iter()
             .filter(|&id| w.obj(id).is_some_and(|o| o.econ.sale.is_none()) && sell::sellable(w, id))
-            .filter(|&id| !keep(id))
-            .max_by_key(|&id| {
+            .collect();
+        let costliest = |ids: &mut dyn Iterator<Item = ObjectId>| {
+            ids.max_by_key(|&id| {
                 let o = w.obj(id).expect("own object");
                 (
                     production::cost_field(w, tech::type_of(o)),
                     std::cmp::Reverse(id),
                 )
-            });
+            })
+        };
+        let yard_kept = |id: ObjectId| rebuilding && w.obj(id).is_some_and(|o| is_yard(w, o));
+        let sale = costliest(&mut sellable.iter().copied().filter(|&id| !keep(id))).or_else(|| {
+            (!army)
+                .then(|| costliest(&mut sellable.iter().copied().filter(|&id| !yard_kept(id))))
+                .flatten()
+        });
         if let Some(actor) = sale {
             out.push(Order::Sell { actor });
             self.watch.last_sale = Some(t);
@@ -1926,7 +1951,26 @@ impl Script {
         // alone is at least half the size asked for (M8 step A4 round 8,
         // the lead's note 52: every unit went as soon as six waited, from
         // the start of the game)
-        let guard_n = (army.len() / GUARD_SHARE).clamp(GUARD_MIN, GUARD_MAX);
+        // design: the end-game (M8 step A4 round 9b): a house clearly
+        // winning (`finishing`: it has looked at the enemy base and what it
+        // sees fight there is worth a third of its army or less) sends its
+        // waves at the plan's first size, not grown, while the enemy can
+        // still build, its guard kept; once nothing it sees of the enemy
+        // builds, a wave goes with whatever waits, and with one enemy house
+        // left the guard goes too (in the synthetic skirmish three tanks
+        // stood at home, two as the guard, before an enemy left with a lab
+        // and a harvester, for good)
+        let winning = if w.tick >= OPENING {
+            self.finishing(w, &enemies)
+        } else {
+            None
+        };
+        let finish = winning == Some(false);
+        let guard_n = if finish && self.enemy_houses_left(w) <= 1 {
+            0
+        } else {
+            (army.len() / GUARD_SHARE).clamp(GUARD_MIN, GUARD_MAX)
+        };
         if let Some(h) = home {
             let mut by_home: Vec<(i64, ObjectId)> = army
                 .iter()
@@ -1940,13 +1984,20 @@ impl Script {
                 .collect();
             waiting.retain(|id| !guard.contains(id));
         }
-        let size = (self.plan.wave + WAVE_GROWTH * self.waves)
-            .min(WAVE_MAX.max(self.plan.wave))
-            .max(1);
+        let size = match winning {
+            Some(false) => 1,
+            Some(true) => self.plan.wave.max(1),
+            None => (self.plan.wave + WAVE_GROWTH * self.waves)
+                .min(WAVE_MAX.max(self.plan.wave))
+                .max(1),
+        };
         let patient = waiting.len() >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE; // nocite: tuning of our own opponent (half a wave)
         if w.tick >= OPENING && (waiting.len() >= size || patient) {
             self.waiting_since = None;
-            self.waves += 1;
+            // design: the end-game's waves do not make the next battle's wave larger
+            if winning.is_none() {
+                self.waves += 1;
+            }
             // Each unit goes to the seen enemy nearest home that it can
             // reach and attack (a person does not send riflemen to stand at
             // the shore by a ship), else all go to the next enemy start cell.
@@ -2216,6 +2267,81 @@ impl Script {
                     && regions::reach_in(w, c, zone) == Reach::Region(r)
             })
             .min_by_key(|&c| (dist2(c, h), c.y, c.x))
+    }
+
+    /// Whether the house is clearly winning, as a person reads it off the
+    /// map, and if so whether the enemy can still build: `None` when it is
+    /// not; `Some(builds)` when it knows where the enemy is left (it sees an
+    /// enemy building and has explored the enemy start cell nearest each
+    /// one it sees: it has looked at the enemy base, not only at a building
+    /// a scout came by; or it sees no enemy building and every enemy start
+    /// is cleared, so what is left of the enemy is to be searched for) and
+    /// what it sees of the enemy that fights (army units, and armed
+    /// buildings: S-0214 Terms, a weapon in the slot it uses) is worth, by
+    /// cost, at most a [`FINISH_SHARE`]th of its own army. `builds` is
+    /// whether an enemy object it sees can build (a factory or yard
+    /// building, or a vehicle that deploys into a yard). design: such an
+    /// enemy cannot stop the house's army; one that can build may yet raise
+    /// a raid (M8 step A4 round 9b; in the synthetic skirmish the enemy's
+    /// last harvester stood on cells the house had not explored, and the
+    /// house's tanks stood at the cleared enemy base for good).
+    pub(crate) fn finishing(&self, w: &World, enemies: &[(ObjectId, CellXY)]) -> Option<bool> {
+        let worth = |o: &Object| i64::from(production::cost_field(w, tech::type_of(o)));
+        let starts = self.enemy_starts(w);
+        let mut building = false;
+        let mut builds = false;
+        let mut theirs: i64 = 0;
+        for (o, c) in enemies.iter().filter_map(|&(e, c)| Some((w.obj(e)?, c))) {
+            if o.kind == Kind::Building {
+                building = true;
+                let base = starts
+                    .iter()
+                    .copied()
+                    .min_by_key(|&s| (dist2(s, c), s.y, s.x));
+                if base.is_some_and(|s| !shroud::explored(w, self.house, s)) {
+                    return None;
+                }
+                builds |= w
+                    .rules()
+                    .buildings
+                    .get(o.type_index as usize)
+                    .is_some_and(|b| b.factory.is_some());
+                if glasnost_sim::combat::weapon::armed(w, o.id) {
+                    theirs += worth(o);
+                }
+            } else if deploys_into_yard(w, o.kind, o.type_index) {
+                builds = true;
+            } else if role_of(w, tech::type_of(o)) == Some(Role::Army) {
+                theirs += worth(o);
+            }
+        }
+        let ours: i64 = self
+            .of_role(w, Role::Army)
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .map(worth)
+            .sum();
+        let known =
+            building || (!starts.is_empty() && starts.iter().all(|&s| self.cleared(w, s, enemies)));
+        (known && theirs * FINISH_SHARE <= ours).then_some(builds)
+    }
+
+    /// The enemy player houses still in the game: those that are not
+    /// defeated, which a person is told of (S-0414 claim 5: a message names
+    /// the defeated house), in the house's view of the alliances.
+    pub(crate) fn enemy_houses_left(&self, w: &World) -> usize {
+        let me = &w.houses[usize::from(self.house.0)];
+        (0..w.houses.len())
+            .map(|i| HouseId(i as u8))
+            .filter(|&h| {
+                let x = &w.houses[usize::from(h.0)];
+                h != self.house
+                    && !me.allied_with(h)
+                    && x.role == glasnost_sim::world::HouseRole::Player
+                    && !x.removed
+                    && !glasnost_sim::econ::victory::defeated(w, h)
+            })
+            .count()
     }
 
     /// Enemy objects on cells the house has explored, with their cells: fog
