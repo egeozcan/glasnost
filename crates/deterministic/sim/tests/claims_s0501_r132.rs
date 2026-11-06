@@ -363,7 +363,9 @@ fn claim_7_an_untested_touchdown_that_keeps_the_destination_slides_then_climbs()
             describe(&w, a)
         );
         assert_eq!(air::height(&w, a), 0, "no rise of 10 leptons");
-        assert_eq!(s.mark, None, "no object-present flag while it moves");
+        // spec: S-0501 claim 47 (b) (r134, Q-2647: the listing the touchdown returns sets the object-present flag of the cell it is in) and claim 7 (r134: every touchdown sets both speed fractions to 0)
+        assert_eq!(s.mark, Some(o.pos.cell()), "the flag of its cell");
+        assert!(s.cur.eq_num(F64::ZERO) && s.tgt.eq_num(F64::ZERO));
         assert!(
             !glasnost_sim::combat::flying::tracked(&w, a),
             "the touchdown ends its tracking"
@@ -592,8 +594,7 @@ fn landing_over_the_foundation(name: &str) -> (World, ObjectId, ObjectId) {
     (w, k, a)
 }
 
-// spec: S-0501 claim 7 (r132: before touchdown each movement update of a landing checks its flight point's cell: for a pad-bound aircraft it refuses a cell that holds no building it is in contact with, and a refused cell ends the landing with a take-off; for one that is not pad-bound it refuses none here) and claim 24 (r132: pad-bound and armed, a landing that starts over the foundation is ended by that check, its flight point's cell, the docking position's, holding no pad)
-// design: S-0501 claim 7, Open question 28 and Q-2646 (the check at the start of the update, claim 8's take-off toward cruise height that climbs in that update, the destination and the flight point kept)
+// spec: S-0501 claim 7 (r132: before touchdown each movement update of a landing checks its flight point's cell: for a pad-bound aircraft it refuses a cell that holds no building it is in contact with, and a refused cell ends the landing with a take-off; for one that is not pad-bound it refuses none here) and claim 24 (r132: pad-bound and armed, a landing that starts over the foundation is ended by that check, its flight point's cell, the docking position's, holding no pad) and r134 (Q-2646: the check at the update's landing step, after its descent, so the climb comes from the next update; the take-off toward cruise height ends in that update; the destination kept and the flight point a free cell near the one it is over, never one that holds a building); claims_s0501_r134.rs has the rest
 #[test]
 fn claim_7_the_landing_check_refuses_a_pad_bound_flight_point_off_its_pad() {
     let (mut w, k, a) = landing_over_the_foundation("BOUND");
@@ -606,15 +607,21 @@ fn claim_7_the_landing_check_refuses_a_pad_bound_flight_point_off_its_pad() {
     step(&mut w);
     let s = st(&w, a);
     assert!(
-        !s.landing && s.taking_off && s.held > 0,
-        "the landing ended with a take-off: {}",
+        !s.landing && !s.taking_off && s.held > 0,
+        "the landing ended with a take-off that ended in the update: {}",
         describe(&w, a)
     );
-    assert!(air::height(&w, a) > h, "it climbs in that update");
+    let h1 = air::height(&w, a);
+    assert!(h1 < h, "the update's descent came first");
     let o = w.obj(a).unwrap();
     assert_eq!(o.dest, Some(Target::Object(k)), "{}", describe(&w, a));
     assert_eq!(o.contact, Some(k), "the contact kept");
-    assert_eq!(s.flying_to, Some(Target::Object(k)));
+    let Some(Target::Cell(c)) = s.flying_to else {
+        panic!("a free cell as flight point: {}", describe(&w, a));
+    };
+    assert!(!foundation(&w, k).contains(&c), "no building's cell");
+    step(&mut w);
+    assert!(air::height(&w, a) > h1, "it climbs from the next update");
     // Not pad-bound: the same landing goes on.
     let (mut w, _, a) = landing_over_the_foundation("JET");
     let h = air::height(&w, a);
@@ -930,7 +937,7 @@ fn approaching(r: &Ruleset) -> (World, ObjectId, ObjectId) {
     (w, k, a)
 }
 
-// spec: S-0501 claim 24 (r132, Q-2579: with a behaviour queued, the pad's answer to the second rule's request starts entry again within that processing: it makes entry's beginning with its 1-tick delay, puts the aircraft back in the approaching stage and leaves it ready to change, and it neither reports entry, nor makes a docking step, nor falls back; its next processing, 1 tick later, is the approaching stage's) and Edge cases (quirks.aircraft_descent_touchdown_untested off: the refused touchdown that forgot the destination in the docking position's cell)
+// spec: S-0501 claim 24 (r132, Q-2579: with a behaviour queued, the pad's answer to the second rule's request starts entry again within that processing: it makes entry's beginning with its 1-tick delay, puts the aircraft back in the approaching stage and leaves it ready to change, and it neither reports entry, nor makes a docking step, nor falls back; its next processing, 1 tick later, is the approaching stage's) and claim 7 (r134, Q-2646: the same tick's movement update lands again and is refused again) and Edge cases (quirks.aircraft_descent_touchdown_untested off: the refused touchdown that forgot the destination in the docking position's cell)
 #[test]
 fn claim_24_an_entry_restarted_in_the_docking_stage_makes_its_beginning_at_once() {
     let r = with(rules_with(1, Some(vec![OFF_PAD])), false, true);
@@ -967,8 +974,12 @@ fn claim_24_an_entry_restarted_in_the_docking_stage_makes_its_beginning_at_once(
     assert_eq!(o.beh.current, Some(Behaviour::Enter), "{}", describe(&w, a));
     assert_ne!(o.beh.start_tick, start0, "entry started again");
     assert_eq!(o.beh.queued, None, "the queued behaviour replaced");
-    assert_eq!(o.dest, Some(Target::Object(k)), "the pad given back");
+    // spec: S-0501 claim 7 (r134, Q-2646: the pad's answer gives the pad back as destination, so that tick's movement update, with a destination again, starts a landing in the docking position's cell by claim 6's triggers and, its descent reaching height 0 in that update, its landing step refuses the touchdown again, forgetting the destination: the end of the tick finds it 10 leptons above that cell with none)
+    assert_eq!(o.dest, None, "{}", describe(&w, a));
+    assert_eq!(o.pos.cell(), dc);
+    assert_eq!(air::height(&w, a), 10, "{}", describe(&w, a));
     let s = st(&w, a);
+    assert!(s.taking_off && s.stranded, "{}", describe(&w, a));
     assert!(!s.enter_docking, "back in the approaching stage");
     assert_eq!(s.enter_of, Some(o.beh.start_tick), "the beginning made");
     assert!(!s.mark_cleared, "left ready to change");
@@ -978,7 +989,7 @@ fn claim_24_an_entry_restarted_in_the_docking_stage_makes_its_beginning_at_once(
     assert_eq!(d2, 3, "the approaching stage's processing in contact");
 }
 
-// spec: S-0501 claim 24 (r132: a touchdown beside the docking position, untested, keeps the pad as destination, and a later processing in the docking stage that finds it on the ground and not at rest reports entry as in flight, Q-2649 interim) and claim 7 (r132: after it the aircraft goes on as after a refusal that kept the destination) and Edge cases (quirks.aircraft_descent_touchdown_untested on; quirks.aircraft_refused_kept_drop in both positions); AC31 part h (1): whether either position comes to rest
+// spec: S-0501 claim 24 (r132: a touchdown beside the docking position, untested, keeps the pad as destination, and a later processing in the docking stage that finds it on the ground and not at rest reports entry as in flight; r134, Q-2649: the report requests no facing) and claim 7 (r132: after it the aircraft goes on as after a refusal that kept the destination) and Edge cases (quirks.aircraft_descent_touchdown_untested on; quirks.aircraft_refused_kept_drop in both positions); AC31 part h (1): whether either position comes to rest
 #[test]
 fn ac31h1_after_an_untested_touchdown_beside_the_docking_position_it_comes_to_rest() {
     for drop in [true, false] {

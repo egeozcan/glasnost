@@ -871,13 +871,13 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Dec,
         "S-0302",
     ),
-    // spec: S-0109 Import mapping ([CombatDamage] C4Warhead: also the warhead of the built-in invisibility-animation type's damage over time, absent none)
+    // spec: S-0109 Import mapping ([CombatDamage] C4Warhead: also the warhead of the built-in invisibility-animation type's damage over time, absent none) and S-0501 Import mapping (r134: also the demolition warhead of claim 7's landing-check hit where no free cell is found)
     (
         "c4_warhead",
         COMBAT_DAMAGE,
         "C4Warhead",
         Ref(Kind::Warheads),
-        "S-0302, S-0303, S-0109",
+        "S-0302, S-0303, S-0109, S-0501",
     ),
     // spec: S-0109 Import mapping ([CombatDamage] FlameDamage2: the warhead of an animation's damage over time, absent none)
     (

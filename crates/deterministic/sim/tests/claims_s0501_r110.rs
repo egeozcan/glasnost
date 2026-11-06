@@ -528,9 +528,10 @@ fn claim_24_the_load_request_confirmed_and_refused() {
             assert_eq!(o.beh.queued, None, "the queued behaviour replaced and lost");
             assert_eq!(o.beh.start_tick, t, "entry starts again");
             assert_ne!(o.beh.last_common_effects, Some(t), "no fall-back");
-            // The next processing is entry's first: the 1-tick delay.
+            // spec: S-0501 claim 24 (r134, Q-2650: entry's beginning, with its 1-tick delay, is made within that processing, in the approaching stage as in the docking stage, so the next processing is the approaching stage's)
+            assert_eq!(d, 1, "entry's beginning in that processing");
             let (t2, d2) = next_processing(&mut w, a);
-            assert_eq!((t2, d2), (t + d, 1), "{}", describe(&w, a));
+            assert_eq!((t2, d2), (t + 1, 3), "{}", describe(&w, a));
         } else {
             assert_eq!(d, 1);
             assert_eq!(o.contact, None, "the refusal ends the contact");
