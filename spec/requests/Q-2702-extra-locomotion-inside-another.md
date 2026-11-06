@@ -1,9 +1,9 @@
 ---
 id: Q-2702
 title: A scatter's extra locomotion that sends a scatter request of its own
-status: open
+status: answered
 related: [S-0208, S-0209]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
