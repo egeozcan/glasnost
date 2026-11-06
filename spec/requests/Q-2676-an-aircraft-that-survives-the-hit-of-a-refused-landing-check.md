@@ -1,9 +1,9 @@
 ---
 id: Q-2676
 title: An aircraft that survives the hit it takes when a landing check finds no free cell
-status: open
+status: answered
 related: [S-0501, S-0302]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
