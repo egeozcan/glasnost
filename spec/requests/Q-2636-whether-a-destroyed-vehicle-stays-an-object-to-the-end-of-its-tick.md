@@ -1,9 +1,9 @@
 ---
 id: Q-2636
 title: Whether a destroyed vehicle stays an object, off the map with no health, to the end of the tick it is destroyed in
-status: open
+status: answered
 related: [S-0203, S-0312, S-0302]
-answered-by: []
+answered-by: [S-0203]
 ---
 
 ## Need
