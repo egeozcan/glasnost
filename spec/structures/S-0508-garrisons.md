@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 9
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-06
 measurements: []
-requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990]
+requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990, Q-2712]
 supersedes: []
 ---
 
@@ -149,15 +149,45 @@ Neighbouring specs own the rest:
 ### Ownership of civilian garrison buildings
 
 7. **Owner follows the first occupant.** At each of its own turns, a civilian garrison building that
-   has at least one occupant and belongs to the civilian house changes owner to the first
-   occupant's house. This is a building ownership change (S-0509 claim 12). It happens at the
-   building's turn, not at the entry: in the tick of the entry the building may still belong to
-   the civilian house (scenario G5). A garrisonable building of any other tech level never changes
-   owner through this spec.
-   - Backing: `measurable` (scenario G5) for a single-house garrison and owner-change timing.
-     Choosing between occupants of different houses is `unmeasured`: no validated data-only fixture
-     gives two houses' units the required arrivals between consecutive building turns.
-   - Confidence: high (who becomes owner); medium (which turn)
+   has at least one occupant and belongs to the civilian house changes owner to the first occupant's
+   house. This is a building ownership change (S-0509 claim 12). It happens at the building's turn,
+   not at the entry: in the tick of the entry the building may still belong to the civilian house
+   (scenario G5). A garrisonable building of any other tech level never changes owner through this
+   spec. Within the building's turn this change comes after the building's behaviour processing, its
+   per-tick search (S-0215 claim 33) and all of its firing in that turn, the animation-delayed shot
+   of S-0301 claim 14 included. The order is the same in every turn, the turn of the entry tick
+   included. The change drops the building's target, whoever owns the target (S-0309 claim 30). So
+   when the building's turn in the entry tick comes after the entry, its per-tick search there may
+   pick an object of the entrant's house, which is not allied with the civilian house. A building
+   with no animation-delayed shot pending in that turn does not fire at it: a target found by the
+   per-tick search is first acted on in a later tick (S-0215 claim 33, part c), and the change at
+   the end of that same turn drops it. The delayed shot of S-0301 claim 14 comes after the per-tick
+   search in the building's turn. So a building whose delayed shot was pending when it was emptied
+   keeps it pending across its return to the civilian house (claim 8, S-0309 claim 30), and if it is
+   entered again and its delay ends in the turn of the change, that shot's firing check uses the
+   target that search gave it, if any (S-0309 claim 30), and on *can fire* it fires that shot at
+   that object of the entrant's house before the change drops the target. Our engine follows this.
+   From its next turn on the building belongs to the entrant's house, and its searches no longer
+   take that house's objects or its allies', as far as S-0309 table C's row *friendly* rejects them
+   (with that row's conditions and its friendly-row exceptions). When the building's turn in the
+   entry tick comes before the entry, the building is still empty in that turn and makes no passive
+   search there (S-0309 claim 2). Its next turn, later in the same tick or in a later tick, is then
+   the turn of the change, with the same outcome.
+   - Backing: `measurable` (scenario G5) for a single-house garrison and owner-change timing, and
+     (scenario G20) for the dropped target and, by variant (c)'s runs with a search of the
+     building's own in the turn of the change, for the change after the per-tick search. The change
+     after the behaviour processing and after the firing, the animation-delayed shot included, is
+     `unmeasured`: in G20 the building has no shot and no pending shot in the turn of the change by
+     which that order would show, as G20's expected result gives, and no setup here gives a building
+     of this claim one in that turn. The delayed shot after the per-tick search, and so the shot at
+     the entrant's house's object, is `unmeasured`: no setup here empties a building with its
+     delayed shot pending and has it entered again before the delay ends. Choosing between occupants
+     of different houses is `unmeasured`: no validated data-only fixture gives two houses' units the
+     required arrivals between consecutive building turns.
+   - Confidence: high (who becomes owner, the change after the per-tick search in every turn, the
+     dropped target); medium (which turn, the change after the behaviour processing and after the
+     firing, the animation-delayed shot included, the delayed shot after the per-tick search and the
+     shot at the entrant's house's object that follows)
 
 8. **Abandoned buildings return to the civilian house.** At each of its own turns, a civilian
    garrison building that has no occupants and does not belong to the civilian house changes owner to
@@ -580,6 +610,13 @@ Ordering as observed:
   returns to civilian ownership in that same turn and gives abandonment feedback to the owner losing it. A building still occupied
   can instead follow its first occupant's owner. Claims 7 and 8 cannot both change its owner in
   one turn.
+- In a civilian garrison building's turn, claim 7's owner change comes after its behaviour
+  processing, its per-tick search and its firing, and drops its target (S-0309 claim 30), so a
+  building with no delayed shot pending never fires at a target that only its civilian ownership
+  made a candidate. A delayed shot that was pending when the building was emptied, and that ends in
+  the turn of the change after it is entered again, makes its firing check with the target, if any,
+  that that turn's per-tick search gave it, and so can be fired at an object of the entrant's house
+  (claim 7).
 - Within one eviction: the exit cell is chosen once; occupants are placed from the last to the
   first, and each gets its scatter request before the next one is placed. This can distinguish
   the order of identifiable occupants' placement and scatter draws. Placement itself draws no
@@ -1052,6 +1089,26 @@ a different selected point, dependence on configured-point count or firing index
 credit/removal order falsifies the relevant rule. These are engine-only checks; do not run
 positions 10 or later in the original as a purported safe control. G17 remains the supported-
 point original comparison.
+
+**G20. Owner change in the building's turn (claim 7, Q-2712).** Setup: a tiny skirmish map, a
+civilian garrisonable building *B* of a civilian tech level, with three infantry units of the human
+player's house *A* standing in range of an occupant's weapon, at game speed 6. No enemy object is in
+range. Procedure: order one more infantry unit of *A*, of an occupier type, into *B*, and repeat
+with its arrival falling at different points of *B*'s targeting timer. Record each tick, at the end
+of each object's turn where the recorder allows it and otherwise at the end of the tick: *B*'s
+owner, target and targeting timer, its fire events, the health of the three units and *B*'s
+experience. Variants: (a) as described. (b) the three units belong to a house allied with *A*. (c)
+as (a), with an enemy vehicle of raised health also in range. Runs: 10 per variant, and (c) repeats
+until at least 5 of its runs have a restart of *B*'s targeting timer (a search of its own) in the
+turn in which its owner becomes *A*. Expected: in (a) and (b) *B* never fires at the three units and
+its experience does not change. In every variant, at the end of the turn in which *B*'s owner
+becomes *A*, *B* holds no target, and in (c) its first fire event at the enemy vehicle comes after a
+later search of its own (a restart of its targeting timer) or after a fire event of the vehicle at
+*B* (retaliation, S-0309 claim 30). In each run of (c) with a search in the turn of the owner
+change, *B* holds no target at the end of that turn, while a change before that search would let the
+search, made for *A*, take the enemy vehicle and leave *B* holding it then. Falsified by a shot of
+*B* at any of the three units, or by *B* holding a target at the end of the turn of its owner
+change.
 
 ## Open questions
 
