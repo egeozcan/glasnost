@@ -10,7 +10,7 @@
   claims 5 and 15, S-0312 claims 1 and 32, S-0302 claim 8), Open questions on leftovers with
   health left and leftovers of other kinds, and `measurements: [M-0021]`.
 
-Requests filed (commit d07f0fe): Q-2691 (whether a sweep reaches the leftovers an earlier sweep
+Requests filed (commit ff533dc, rebased onto main bfe22ba): Q-2691 (whether a sweep reaches the leftovers an earlier sweep
 of the same house update, or its own death weapons, made), Q-2692 (a leftover vehicle that meets
 S-0312's sinking or crash conditions at the sweep's hit) and Q-2693 (whether leftovers that take no
 hit hold places in S-0414 claim 15's cancellation skip, in each position of the switch). Q-2694 to
@@ -66,7 +66,8 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   a hit with no attacker and the health before and after equal. The Q-2636 seam texts are gone.
 - **Presentation.** `Effect::LeftoverHit` draws and sounds nothing of its own (`mapview::live`,
   `glasnost-audio`); the repeated death effects make theirs through their own effects.
-- **Formats.** Save format 104 → 105, AI game format 68 → 69 (`World::leftovers`).
+- **Formats.** Save format 105 → 106, AI game format 69 → 70 (`World::leftovers`), one past
+  main bfe22ba (intake 99 took 105 and 69).
 
 ## Claims
 
@@ -95,33 +96,34 @@ Tests are in `crates/deterministic/sim/tests/claims_s0203_r50.rs`.
 ## Records
 
 Q-2636 touched two M-0021 rows (intake 101 named them) and no M-0020 row. Arena `--record all
---threads 2`, main d9ad36c against this branch on the same base:
+--threads 2`, main d9ad36c against this branch on the same base (the rebased run is under Lanes):
 
-| Record | Row | Main | Intake 105 |
+| Record | Row | Main d9ad36c | Intake 105 on d9ad36c |
 |---|---|---|---|
 | M-0021 | Reading points: a vehicle destroyed by a hit at *t* has a per-tick row stamped *t*, off the map, with no health left | fails (0 of 123 destroyed vehicles; seam, Q-2636) | **holds** (the leftover's row, claim 13 (a) and (e)) |
 | M-0021 | Reading points: in every part B run the last F vehicle destroyed takes one more hit in its death tick, after its destroying hit, naming no attacker, with no test warhead, taking no health | fails (no hit in any of the six runs; seam, Q-2636) | **holds** (the sweep's hit, claim 13 (c)) |
 
-M-0021 fails 10 of 50 on main and 8 of 50 here; the other eight failing rows are word for word
-main's. No other record row changes: M-0001 12 of 96, M-0002 2 of 24, M-0003 1 of 35, M-0019
+M-0021 fails 10 of 50 on main d9ad36c and 8 of 50 on this branch on d9ad36c; the other eight
+failing rows are word for word main's. No other record row changes: M-0001 12 of 96, M-0002 2 of 24, M-0003 1 of 35, M-0019
 0 of 6 and M-0020 1 of 25 (YURI against SHK, arm S), each as on main, and every other line of the
 arena's output is main's apart from timings and paths.
 
 ## Goldens
 
-All nine regenerated with `GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate --
---include-ignored`: `combat`, `duel`, `duel-diagonal`, `duel-naval`, `duel-m6c`, `duel-m7a`,
-`duel-m7b`, `scripted` and `skirmish`. Every hash line changes, because the state now holds
-`World::leftovers` (serialized even when empty). Every file keeps its line count, and the six seed sweeps match main's output line for line, so the
-change is the new state, not a changed course of play. `cargo xtask gate` matches them on
-wasm32.
+All nine regenerated on the tree rebased onto main bfe22ba with `GLASNOST_UPDATE_GOLDEN=1 cargo
+test --release -p glasnost-sim-gate -- --include-ignored`: `combat`, `duel`, `duel-diagonal`,
+`duel-naval`, `duel-m6c`, `duel-m7a`, `duel-m7b`, `scripted` and `skirmish`. Every hash line
+changes, because the state now holds `World::leftovers` (serialized even when empty). Every file
+keeps its line count against bfe22ba, and the six seed sweeps match main's output line for line
+(on d9ad36c, and the rebased branch's match the d9ad36c branch's), so the change is the new state,
+not a changed course of play. `cargo xtask gate` matches them on wasm32.
 
 ## Lanes
 
 Before: main d9ad36c, built from a `git archive` export of that commit. After: this branch on
-d9ad36c.
+d9ad36c. Both columns of this table are on d9ad36c; the rebased runs follow it.
 
-| Lane | Main | Intake 105 |
+| Lane | Main d9ad36c | Intake 105 on d9ad36c |
 |---|---|---|
 | M6c sweep, seeds 1 to 16, ref | smallest minimum 2 (seed 8, radiation exits 2) | same, output identical |
 | M6c sweep, play-fixes | 3 | same, output identical |
@@ -137,3 +139,19 @@ No winner changes in the quick lane, and the arena's printed results (each faili
 counts, M-0020's differing games) are main's. The per-game arena tables were not compared file by
 file. The sweep's hit comes in the tick of a defeat, so in a two-house game it lands after the game
 is decided.
+
+**Rebased onto main bfe22ba** (intake 99). No baseline was rebuilt on bfe22ba; main's figures there
+are intake 99's own ([intake99.md](intake99.md)).
+
+| Lane | Main bfe22ba (intake 99's figures) | Intake 105 on bfe22ba |
+|---|---|---|
+| Six sweeps, ref and play-fixes | identical to d9ad36c's | each identical to this branch's on d9ad36c, so to main's |
+| Arena `--record all --threads 2` | 15 failing pairings, M-0019 0/6, M-0020 1/25, M-0021 10/50 | M-0001 12/96, M-0002 2/24, M-0003 1/35 (15), M-0019 0/6, M-0020 1/25, M-0021 8/50; the two rows above hold, the other eight failing rows as before |
+| `glasnost-ai --include-ignored` | not in intake 99's ledger | 255 passed, 0 failed |
+| AI quick lane | intake 99 changed all 36 games | not run again |
+
+Against this branch on d9ad36c, the rebased arena differs in two infantry pairings' win counts,
+MIND against E1 (10/12 to 11/12) and INIT against E2 (8/12 to 7/12). Both still fail the side
+outcome and pass the win test. That fits intake 99's change to infantry fire, which moves game
+detail in pairings that have infantry. The quick lane was not run again: on d9ad36c it showed no
+change in any game, and the sweep's hit lands after a two-house game is decided.
