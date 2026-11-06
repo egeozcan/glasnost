@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 46
+revision: 52
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-06
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702]
 supersedes: []
 ---
 
@@ -476,7 +476,13 @@ used by this spec:
    scatter comes before the walker's own locomotion in the tick, as at a hit in another actor's
    update earlier in the tick (claim 15), that locomotion finds the walking target already chosen
    and takes the first step towards it, so the walker moves on the tick of the scatter. When the
-   scatter comes after it, the first step comes in the next tick. A walker that already has a
+   scatter comes after it, the first step comes in the next tick. A walker standing with no walking
+   target that keeps a stored path at the scatter (*A stored path kept under enter* below) has the
+   extra locomotion too, in the original and in our engine (where with
+   `quirks.enter_keeps_stored_path` off no walker keeps its path at a scatter), and in it chooses
+   its walking target in the path's next cell (S-0209 claim 6) without a search (medium, unmeasured:
+   the scatter starts the extra locomotion whatever the walker's state, and such a walker accepts a
+   scatter only by claim 11's third case, which no setup here arranges). A walker that already has a
    walking target is not given this extra locomotion in our engine (Open questions). A scatter whose
    destination is chosen among the eight neighbours, by claim 12 or by claim 13's fall-back when the
    search gives no cell, has none, so the walker has no walking target until its next locomotion.
@@ -492,10 +498,10 @@ used by this spec:
    **A new destination while a step is under way (Q-2657).** A walker that has a walking target
    keeps it when it is given a new destination, by an order or by any other rule. It finishes the
    step under way and arrives there by this claim, whatever the new destination is, and its stored
-   path is dropped. A walker whose current or queued behaviour is *enter* keeps that path instead,
-   and the rest of this paragraph is not given for it (Open questions). Its destination reads the
-   new cell from then on, but the new destination is first searched for at its first locomotion with
-   no walking target, the tick after that arrival tick. If that search fails at the reachability
+   path is dropped, except where the paragraph on *enter* below keeps it. What follows in this
+   paragraph is for a walker whose path is dropped. Its destination reads the new cell from then on,
+   but the new destination is first searched for at its first locomotion with no walking target, the
+   tick after that arrival tick. If that search fails at the reachability
    gate, the destination is cleared there (S-0212 claim 23) and the walker stops on the standing
    position it arrived on. Until then no gate test is made, so no gate failure can clear the
    destination earlier. A walker whose current behaviour is *move* then falls back to rest at the
@@ -525,8 +531,7 @@ used by this spec:
      behaviour processing: no scenario here can time such a destination apart from the order of part
      a, and it follows from the same place of the locomotion that part a tests. The end-of-update
      case is `unmeasured` here: S-0215 claim 22 owns it, and no scenario of this spec gives such a
-     destination. The path kept under *enter* is `unmeasured`: where it leads was not traced, so no
-     result can be expected (Open questions).
+     destination.
    - Confidence for the two paragraphs above: high for the first step 1 tick after the turn of the
      factory's scatter request in M-0023's set-up (S-0417 scenario U10 part b), and, for an order to
      a cell in another reach region given at the start of the tick in which a single step first
@@ -537,11 +542,119 @@ used by this spec:
      request in the walker's update (after the locomotion), for the first step on the tick of a
      scatter that comes before the walker's own locomotion, for the neighbour choice and the
      end-of-update case being searched one tick later, for the walking target kept and the step
-     under way finished in other cases, for the stored path being dropped and for the original
-     keeping it under *enter*, for the walking target that a later request in the same tick finds
-     and the draw its choice takes, for the search in the tick after the arrival tick and for the
-     arrival in the new destination's cell. Low for where the path kept under *enter* leads, and so
-     for our engine's use of it matching the original (Open questions).
+     under way finished in other cases, for the stored path being dropped, for the walking target
+     that a later request in the same tick finds and the draw its choice takes, for the search in
+     the tick after the arrival tick and for the arrival in the new destination's cell.
+
+   **A stored path kept under *enter* (Q-2701).** A walker given a new destination, by an order or
+   by any other rule, keeps its stored path instead of dropping it when, at that moment, its
+   current or queued behaviour is *enter* and it is in contact with nothing (glossary *contact*).
+   Whether it has a walking target plays no part, so a walker standing between steps with a stored
+   path keeps it too. With
+   `quirks.enter_keeps_stored_path` off, the path is dropped in this case as in every other (Edge
+   cases). An ordinary behaviour order breaks off the actor's contact, queues the order's
+   behaviour and then assigns its destination (S-0213 table T3, parts b, d and f, in that order).
+   So:
+   - An enter order (into a transport, or into a building to garrison) given to a walker under
+     another behaviour, such as *move*, keeps its path: *enter* is queued when the destination is
+     assigned.
+   - Any behaviour order given to a walker under *enter* keeps its path: *enter* is still current
+     at the assignment.
+   - Both hold for a walker that is not held by a tether link, since the order has broken off its
+     contact by then. A walker held by a tether link keeps its link at the order (part b), so it
+     drops its path, unless the link is with a building of the unloading kind, which the order
+     breaks off too.
+   - A destination given by a rule that is not an order, such as an accepted scatter (claims 12
+     and 13), breaks off no contact. A walker under *enter* keeps its path then only when it is in
+     contact with nothing, so one in contact with what it is entering drops it.
+
+   A walker that keeps its path goes on following it: at each locomotion with no walking target it
+   chooses its walking target in the path's next cell (S-0209 claim 6), and it makes no search for
+   the new destination while stored steps remain. A search replaces the path when a step on it is
+   blocked (S-0209 claims 7 and 10) and when no stored steps are left (the fresh search of S-0212
+   claim 20). Both of these searches are for the new destination. So a walker given an enter order
+   while it walks goes on along its old route to the end of its stored path (S-0212 claim 20 gives
+   how many steps a path holds), unless it arrives earlier by claim 16 in the cell of its locomotor
+   destination, before it first heads for what it enters. A walker under *enter* that is ordered
+   elsewhere keeps its path towards what it was entering in the same way, and its next steps follow
+   it. While the walker follows its old path under *enter*, its processings of *enter* ask what it
+   enters to load it (S-0507 claim 5). A vehicle transport at rest accepts a requester that is
+   moving, which keeps the walker in *enter*, but it does not call to its cell a requester that is
+   moving towards a destination, so it does not call such a walker. For the walker ordered away, the
+   order has broken off its contact, and what its processings of *enter* do until the order's
+   behaviour becomes current belongs to S-0507 claim 5 and S-0215. A walker follows a stored path
+   only towards a destination, so a destination that becomes nothing, as at a stop order (S-0213
+   claim 8), leaves it no path to follow, whatever it keeps.
+   - Backing: `measurable` (scenario W17: part f for an enter order to a walker under *move*, part g
+     for a move order to a walker under *enter*, part h for an enter order to a walker standing
+     between steps with a stored path). `unmeasured` for the walker held by a tether link and for
+     the scatter to a walker under *enter*. Which exchanges tether a walker under *enter*, and when,
+     belong to S-0507 and S-0213 (Terms), and no setup here times an order within one. A walker
+     under *enter* that follows a path has a destination, so its locomotor is moving, and it accepts
+     a scatter only by claim 11's third case, which no setup here arranges.
+   - Confidence: high for the behaviours read at the assignment and for the condition's not
+     depending on a walking target. Medium for its contact part: every order here breaks off the
+     contact before the assignment, so no scenario here has a walker in contact then, and the
+     scatter to a walker under *enter* is `unmeasured`. Medium for the consequences: the old path
+     followed to its end or to a blocked step, and the cases of the bullets. Medium for the
+     transport's acceptance and its not calling such a walker: S-0507 claim 5 rates its replies
+     high, and that the walker's state meets their conditions here was not traced further. Low for
+     how far the walker ordered away from what it was entering follows the old path, which depends
+     on its processings of *enter* before the order's behaviour becomes current.
+
+   **Requests sent from an extra locomotion (Q-2702).** The extra locomotion that a scatter gives
+   (*Destinations given during a unit's update* above) is a whole locomotion of the walker, the same
+   as the one of its update. After its search it makes the asks of S-0209 claims 6 to 10 about the
+   next cell of its path, with their reactions on that asking tick: claim 7's immediate new path,
+   claim 8's give-up or its request to make room, claim 9's gate and obstacles, and claim 10's
+   moving-blocker wait. A request of claim 8 sent there reaches the objects listed in that cell at
+   once (S-0209 claim 11). An occupant that accepts it with a destination from the nearby-cell
+   search has an extra locomotion of its own, inside the first one. So such requests can pass from
+   cell to cell within one tick. When the extra locomotion comes before the walker's own locomotion
+   in the tick and leaves it with no walking target, that locomotion asks again on the same tick,
+   and the ask is a first reaction (S-0209 claim 7). A walker standing with no walking target that
+   keeps its stored path at such a scatter (the paragraph above) has the extra locomotion too, as
+   claim 6 gives above, and in it follows that path. One that keeps its path and already has a
+   walking target has none in our engine (Open questions).
+   - *A unit asked again while a locomotion of its own is under way.* A request reaches such a unit
+     only through something that its own locomotion set off, such as its request to make room, so
+     the unit has a destination then and its locomotor is moving. By claim 11 (third case) only a
+     fraidycat whose current behaviour has the scatter property, and that has scatter permission,
+     can accept a request then. In the original such a unit has a second locomotion inside the
+     first. Nothing bounds that nesting: it ends only when no ask sends a further request, for
+     example when the occupants that accepted earlier requests now have movement in progress, so
+     that the cell they stand in gives *moving blocker* (S-0209 claim 4, row WR5) instead of
+     *stationary friendly*. Where it never ends, the original crashes.
+   - **In our engine** (a departure, no switch): no unit is given an extra locomotion while a
+     locomotion of its own, that of its update or an extra one, is under way. The request is
+     otherwise accepted as claims 11 to 13 give, with its draw and its destination, and the stored
+     path is dropped or kept as above. The locomotion under way finishes as it would have without
+     the request (after S-0209 claim 8's request, it makes no further ask). The unit's next
+     locomotion is the first to act on the new destination. So each unit has at most one locomotion
+     under way at a time. The ground (glossary *departure*) is a design choice of scope: telling a
+     nesting that ends from one that never does would need a depth limit that no game rule gives.
+     The bound also rules out the original's fault on legal data, should a legal set-up exist in
+     which the nesting never ends (Open questions). The choice changes only a fraidycat asked again
+     within a crowd's chain: its walking target, the start of its moving-blocker wait or a request
+     it sends comes at its next locomotion instead of at once.
+   - Backing: `unmeasured` for the asks of the extra locomotion and the chain: in the set-ups here
+     the scatter comes before the walker's own locomotion in the same tick, which would make the
+     same ask in that tick, so a request sent from either locomotion falls in the tick of the
+     scatter and no record tells them apart. Scenario W17, part i, and scenario W9, part f, check
+     only that the request and the draws of the occupants that accept fall in that tick.
+     `unmeasured` for the original's nesting and its end: a setup needs a fraidycat in a behaviour
+     with the scatter property listed in a cell that a request of the chain reaches again, with its
+     occupants still giving *stationary friendly* then, and none is known that arranges that
+     reliably. `unmeasured` for the walker's own locomotion asking again on the tick of an earlier
+     extra one: in the set-ups here that second ask only starts a moving-blocker wait one tick
+     sooner, which no record shows. Our engine's bound is a rule of our engine and needs no backing.
+   - Confidence: medium that the extra locomotion is the whole locomotion, with every ask and
+     reaction of S-0209 claims 6 to 10, S-0209 claim 8's request to make room among them. Medium for
+     the original having no bound of its own on the nesting and crashing where the nesting never
+     ends, for the chain within one tick, for the walker's own locomotion asking again on the same
+     tick, for only such a fraidycat being asked again with success, as claim 11 rates its cases,
+     and for the nesting's end. Low for whether a legal setup exists in which the nesting never ends
+     (Open questions).
 
 7. **Walking speed.** On every step, a walker's walking speed *s* in leptons per tick is the value
    that Formulas F5 gives from the unit's values at that step: its type's base speed *b* (Formulas
@@ -1477,6 +1590,15 @@ position stops on that same tick and does not ask for a next walking target (sce
   formulas (scenario W8, part c). With the switch off, a step that would end 17 leptons or more
   beyond the walking target ends exactly on the target instead, and the walker arrives on the next
   tick as under claim 6. Nothing changes for speeds up to 33, which can never end that far beyond.
+- **An *enter* walker keeps its old path** (`quirks.enter_keeps_stored_path`, default: the
+  original). By claim 6, a walker given a new destination keeps its stored path when its current
+  or queued behaviour is *enter* and it is in contact with nothing at that moment (glossary
+  *contact*). So an infantry unit ordered
+  into a transport while it walks elsewhere walks on along its old route, up to the whole stored
+  path, before it turns towards the transport, and one ordered away from a transport walks on
+  towards it first. With the switch off, every new destination drops the stored path, whatever
+  the behaviour, and the walker searches for the new destination as claim 6 gives for a dropped
+  path. Scenario W17, parts f to h, tests the original's behaviour.
 - **A walker of speed 1 can stall** (`quirks.slow_walker_stall`, default: the original). By claim 14,
   a walker of speed 1 whose walking target lies strictly between due map east and due map south of
   it takes steps that leave its position unchanged, so no rule of this spec moves it on. Medium
@@ -2254,6 +2376,10 @@ cases).**
     - W7 (m): the same part without the celebration order, whose three occupants accept the
       first request and so take three draws over 0 to 4; on the tick of the first request, (m)
       takes those three draws fewer than this reference.
+    - W9 (f): a run set up as part (f) but with the celebration order of W7 part (m) given to the
+      three occupants of *b* before the scatter order, so that they refuse the request that *A*
+      sends; on the tick of the scatter order, part (f) itself takes three draws over 0 to 4 more
+      than this reference run.
 
     Since no seed can be fixed, a run and its reference start from different random states, and a
     draw whose range is not a power of two can take a different number of raw values in each. So a
@@ -2283,7 +2409,8 @@ cases).**
   (the outer cells of the block hold occupants, the neighbours cannot be entered, and the cells
   outside the block fail as in W7 part (k)), and no neighbour is enterable, so neither request
   finds a destination. 5 runs. (e) Request A not sent to a walking unit: the hit of W7 part (b),
-  40 runs, counted as there.
+  40 runs, counted as there. (f) Requests from an extra locomotion: the set-up and order of W17
+  part (i), 5 runs.
 - *Observable:* per tick, the number of draws taken from the stream and their values, replayed
   from the state recorded at the end of the tick before.
 - *Expected:*
@@ -2305,6 +2432,10 @@ cases).**
   - (e) one draw over 0 to 4 on the tick of the hit, besides the hit's own draws: request B's.
     Request A is not sent, since the walking civilian's locomotor is moving and it has a
     destination (claim 15, second case).
+  - (f) four draws over 0 to 4 on the tick of the scatter order: *A*'s, then one for each of the
+    three occupants of *b*, which accept the request that *A*'s extra locomotion sends (claim 6,
+    *Requests sent from an extra locomotion*). All four stand on side positions, so as in part (b)
+    the walking targets they choose at once take no draw of claim 3.
 - *Falsified if:* (a) a draw on another tick, or two on one asking tick. (b) no draw or two draws
   for the accepted request, or a draw for the refused one. (c) another count or order of draws
   besides the hit's own draws than the one expected in part c1 or c2, or a final destination that
@@ -2312,7 +2443,9 @@ cases).**
   the value of the last, or a destination outside *H*₂. (d) fewer than two draws besides the hit's
   own draws (which would mean that a request that finds no destination takes no draw), or the
   civilian moves on the tick of the hit. (e) two draws besides the hit's own draws (which would mean
-  that request A was sent to a walking unit and accepted), or none.
+  that request A was sent to a walking unit and accepted), or none. (f) one draw on the tick of the
+  scatter order and the occupants' three on a later tick. Part (f) does not tell the extra
+  locomotion from *A*'s own locomotion of that tick (claim 6).
 
 **Scenario W10: end of a walk and the approaching walker's stop (claims 16 to 18).**
 - *Setup:* a tiny flat map at level 0, clear terrain, game speed index 2. A named test file (a loose
@@ -2633,7 +2766,7 @@ cases).**
   action or externally supplied order makes that interval inconclusive instead.
 
 **Scenario W17: destinations given during an update, and a new destination during a step
-(claim 6; Q-2657).**
+(claim 6; Q-2657, Q-2701, Q-2702).**
 - *Setup:* M-0023's map and settings, stock data. The recorder reads at the end of each tick, for
   the test unit, its current and queued behaviour, destination and position. Unit *I* is an ordinary
   infantry unit of a human-controlled house, resting in *guard* on open, flat ground with no other
@@ -2655,17 +2788,49 @@ cases).**
   with one asking tick after the arrival tick. (e) As (c), the second order to the free cell *I* is
   stepping into. Expected: *I* arrives there, has no destination at the end of that arrival tick and
   moves no further. Falsified by a further step or a destination held after that tick.
+- *Stored path kept under enter (Q-2701):* an empty friendly infantry transport *V*, of a type that
+  accepts *I* as a passenger, stands at rest 2 cells from *I*'s start, on the backward extension of
+  the line that part c orders it along. (f) As (c), the second order an enter order on *V*.
+  Expected: *I* finishes the step under way and goes on along its line to the cell of the first
+  order (its stored path is shorter than a path can hold), with *enter* queued or current, and only
+  then walks back towards *V*. Falsified by a step towards *V* before *I* reaches the end of its
+  line. (g) On a purpose-made map of open ground, with *V* placed in a straight line from *I*
+  farther away than a stored path holds steps (S-0212 claim 20), order *I* into *V*. While it is
+  between its first and second standing positions, at the start of a tick, order it to a free cell 3
+  cells to the side of its start. Expected: its first step after the step under way is along its
+  line towards *V*, and the recorded behaviours show when *move* becomes current. Falsified by a
+  first step towards the new cell right after the step under way. How far it goes on along the line
+  is recorded without an expected value (claim 6, low). (h) As (f), with the enter order given at
+  the start of the tick after *I*'s first arrival tick, when it stands with no walking target and a
+  stored path. Expected as in (f). Falsified as in (f).
+- *Requests from an extra locomotion (Q-2702):* (i) Infantry *A* stands on a side position of cell
+  *a*. A neighbouring cell *b* holds three allied infantry of the same house on its three side
+  positions, resting in *guard*, so that *b* gives *stationary friendly* to a walker from *a*
+  (S-0209 claim 4, row WR4). Every other neighbour of *a* is of a land type that infantry cannot
+  enter (as in W9 part d), so every path from *a* leads through *b*, and the cells beyond *b* are
+  free. Give *A* the human scatter order (S-0213 claim 9) at the start of a tick *T*. Keep only runs
+  in which *A*'s recorded destination is at least S-0209's close-enough distance (Formulas F1) away.
+  Expected: at the end of tick *T* the three occupants of *b* each hold a destination (claim 13), so
+  the request of S-0209 claim 8 was sent in tick *T*. The run does not tell whether it was sent from
+  *A*'s extra locomotion or from its own locomotion of that tick (claim 6). Falsified if they first
+  hold destinations at the end of tick *T* + 1 or later, or not at all.
 
 ## Open questions
 
 - A walker that already has a walking target and accepts a scatter whose destination comes from the
-  nearby-cell search (such as the requests without a threat point of W7 part r) probably has the
-  same extra locomotion in the original (low). What that locomotion does where a step is under way
-  was not traced. Our engine gives such a walker no extra locomotion: it keeps its walking target
-  and steps as in claim 6 (low).
-- Under *enter* as the current or queued behaviour, a walker given a new destination keeps its
-  stored path in the original (claim 6, *A new destination while a step is under way*). Where that
-  path then leads it was not traced. Our engine keeps the path in that case too (low).
+  nearby-cell search (such as the requests without a threat point of W7 part r) has the same extra
+  locomotion in the original: the scatter starts it whatever the walker's state (medium: the start
+  of the extra locomotion at a scatter was traced without a condition on the walker's state, and no
+  scenario here gives such a scatter to a walker with a walking target). What that locomotion does
+  where a step is under way was not traced, so there is no traced behaviour to copy. Our engine
+  gives such a walker no extra locomotion for now: it keeps its walking target and steps as in claim
+  6, a provisional rule until that is traced (low). The same holds for a walker under *enter* that
+  is given such a scatter in the middle of a step (claim 6, *A stored path kept under enter*).
+- A walker asked again while a locomotion of its own is under way (claim 6, *Requests sent from an
+  extra locomotion*): whether a legal setup exists in which the original's nesting never ends was
+  not shown (low). One would need two cells, each with three still occupants that refuse every
+  request and one such fraidycat whose new paths lead through the other cell. Our engine's bound
+  makes the question matter only for matching the original's finite nestings.
 - The screen-cover check (Terms) is exact as arithmetic, but three parts of it are not confirmed:
   the property of *C* that, in the original, lets a high-bridge cell count 4 levels higher was not
   identified, and our engine raises such a cell whenever it is a high-bridge cell (Terms); a cell
@@ -2704,9 +2869,34 @@ cases).**
   the step under way has ended: a walker with a walking target finishes that step and first searches
   for the new destination in the tick after its arrival tick (S-0208 claim 6). The same holds for
   its State and ordering row "| any | destination changes | stored path cleared, fresh search.": for
-  the walk locomotor the fresh search waits until the step under way has ended, and the stored path
-  is not cleared for a walker whose current or queued behaviour is *enter*, which keeps it (S-0208
-  claim 6 and Open questions). The bullet and the row should say so for the walk locomotor.
+  the walk locomotor the fresh search waits until the step under way has ended. With
+  `quirks.enter_keeps_stored_path` on, the stored path is not cleared for a walker whose current or
+  queued behaviour is *enter* and that is in contact with nothing at the change, with or without a
+  walking target. Such a walker follows the old path and first searches for the new destination
+  when a step on it is blocked or no stored steps are left (S-0208 claim 6, *A stored path kept
+  under enter*). The bullet and the row should say so for the walk locomotor.
+- **S-0209, claims 6 to 9.** Claim 6's "The walker stops for that tick and asks again on the next
+  one", for a *clear* cell with no free standing position, claim 9's "On the repeated ask it waits
+  for the rest of that tick", and claims 7 and 8's "waits for the rest of that tick", after claim
+  8's request and after a repeated ask that gives *blocked*, hold for an ask made in the walker's
+  own locomotion. A walker that asks in the extra locomotion of a scatter that comes before its own
+  locomotion in the tick and is left with no walking target asks again in its own locomotion, on the
+  same tick, as a first reaction (S-0208 claim 6, *Requests sent from an extra locomotion*, medium).
+  The same holds for S-0209's State and ordering rows for *clear, no position free* ("stops this
+  tick, asks again next tick") and for the repeated asks that give *stationary friendly* and
+  *blocked* ("waits for the rest of the tick; on the next tick it asks again as a first reaction").
+  The four claims and those rows should say "until the walker's next locomotion" (claim 6: "asks
+  again at its next locomotion") or point to S-0208 claim 6 for that case.
+- **S-0209, Terms, *first ask* and the two cells of an asking tick.** "On one asking tick the entry
+  outcomes of up to two cells decide what the walker does", with the first ask the next cell of "the
+  path it holds when the tick begins", holds for one locomotion. A walker whose extra locomotion at
+  a scatter (S-0208 claim 6) comes before its own locomotion in the tick makes the asks of each
+  locomotion on that tick: in the extra one its first ask is the next cell of the path it holds
+  after the scatter (the one its search there gives, or the stored path it keeps), and in its own
+  one it is the next cell of the path it then holds, so the
+  outcomes of up to two cells per locomotion decide what it does on that tick (S-0208 claim 6,
+  *Requests sent from an extra locomotion*, medium). The term should say "per locomotion" or point
+  to S-0208 claim 6 for that case.
 - **S-0209, Terms, *Asking tick*.** Its sentences "The walker does not move on the tick on which it
   chooses a walking target, and takes its first step towards it on the next tick (S-0208 claim 6).
   So at a free cell boundary the asking tick is the last tick before the walker's position changes
