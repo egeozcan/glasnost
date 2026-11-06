@@ -728,6 +728,25 @@ at e782d3b showed no experience), the case note 49 describes; passed to the lead
 - Note 47: build a hovercraft and park it on land, on water and on a slope, then drive it about. Its shadow lies on the ground or the water under it, clearly visible, and stays put while the craft bobs.
 - Note 54: rest the pointer on a unit or building without moving it. After one second a small black box with a coloured frame shows its name 16 pixels below the pointer, for ten seconds. Any movement, a press or release of any mouse button or turning *Name tips* off in the settings (from the main menu or the options menu) hides it. Over the black shroud it shows the shroud's text; an enemy spy in disguise shows the name of what it poses as; a cloaked enemy shows nothing. The names are still the internal type names, until Q-2686 lets us read the string table.
 
+### Round 8c, rendering and UI (answers to Q-2686 and Q-2687)
+
+The lead's answers replace round 8b's interims for note 54: S-0015 (Q-2686, the string table file)
+and S-0111 r40 (Q-2687, the name tip's open points). Built in M8 step A3 intake 109 (ledger:
+[intake109.md](intake109.md)); lane `crates/app/tests/r8_render_lane.rs`
+(`i109_the_name_tip_shows_the_display_name`, `i109_the_install_string_table_reads`), frames in
+`local-lane/m8/i109/render/before/` (main at c410e7f, no table read: the type's section name) and
+`after/`. The departures these answers name come without a switch: judged in
+[c7-play-fixes.md](c7-play-fixes.md), *A3 intake 109*.
+
+| Request | Notes | Answer | Built | Status |
+|---|---|---|---|---|
+| [Q-2686](../../spec/requests/Q-2686-the-string-table-file-its-decoding-and-the-missing-label-marker.md) | 54 | S-0015: the string table is the install's `ra2md.csf` (never `ra2.csf`); a 24-byte header, entries of labelled texts, each stored unit the complement of its text unit, a text ending before a stored 0 or 65535; a lookup gives the entry's first text (empty for an entry with none); a label no entry matches shows the placeholder, the marker word, a colon and the label between apostrophes; a damaged file is used as far as its whole entries | `csf::StringFile::read` (the layout, the decoding, the warnings), `strings::{StringTable::from_bytes, read, placeholder, resolve}`; `install::prepare` reads the table once when the program starts (a missing or bad one stops start-up), the client hands it to each game, and every display name and fixed label resolves through it | Built. Our stand-in names now show only in a game built without an install (tests) |
+| [Q-2687](../../spec/requests/Q-2687-the-name-tips-open-points.md) | 54 | S-0111 r40 claims 20, 24, 25, 26: the pointer leaving the window is no event; a held left or right button pressed over the view, an order block, a moving view and the options menu block the tip; the text is chosen again in every drawn frame while it shows (another text replaces it, none hides it); the box has margins 8 and 4, wraps at the last space within W − 8, flips with its last row on the pointer's row, and its text starts 4 right and 2 below its corner | `name_tip` (`NameTip::update`, `lines`, `size`, `place`, `INSET`), `Session::{view_button_held, update_name_tip, pointer_left, open_options, close_options}` | Built (a button held in the route mode: Q-2736 open, interim: it blocks) |
+
+**Try it (round 8c, rendering and UI).**
+- Q-2686: start a skirmish, rest the pointer on a unit or building for one second. The box now shows the unit's or building's real display name, not its internal type name. A type whose label the string table lacks shows the word MISSING, a colon and the label between apostrophes.
+- Q-2687: rest the pointer on a unit: the box is a little roomier than before (the text starts 4 pixels in from the left and 2 down). Put the pointer within a box height of the bottom of the view: the box flips above the pointer, its last row on the pointer's row. Hold the left or right button down on the map and move the pointer a little: no box shows while the button is held, nor after you let go until you move and rest again. Open the options menu with a box showing: it goes and does not come back after the menu closes. Select a unit while the box shows: no change; destroy the unit under the box: the box goes (or shows what is then under the pointer). Take the pointer off the window and back: the wait runs from the last move inside the window.
+
 ## Round 9 (2026-11-06, implementer findings on main)
 
 Findings of the intakes and of round 8b's lanes, not notes of the lead's. Lane outputs are in

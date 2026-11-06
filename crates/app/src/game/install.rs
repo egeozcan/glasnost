@@ -16,6 +16,8 @@ use glasnost_ui::draw::Rgba;
 use glasnost_ui::setup::{MapEntry, SetupRules};
 use glasnost_vfs::Vfs;
 
+use super::strings::StringTable;
+
 /// The install's data the menus need.
 pub struct Install {
     /// The setup screen's values and ranges.
@@ -44,6 +46,9 @@ pub struct Install {
     /// The cursor palette as the session keeps it (S-0111 claim 19a),
     /// read here, before any game, when the switch keeps it.
     pub cursor_palette: super::session::CursorPaletteKeep,
+    /// The string table (S-0015), read once when the program starts and
+    /// handed to each game.
+    pub strings: Option<StringTable>,
     /// What was found, for the menu's status line.
     pub summary: String,
 }
@@ -173,6 +178,14 @@ async fn database(vfs: &Vfs, name: &str) -> Option<Document> {
 /// Reads the install's menus data: the base rules resolved, the
 /// multiplayer maps with at least two start positions, and the samples.
 pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
+    // spec: S-0015 claims 1 and 2, S-0005 claim 16 (the string table `ra2md.csf` is read once, when the program starts; one that cannot be resolved, or whose header fails claim 2's checks, stops the program from starting)
+    let mut table = super::strings::read(vfs)
+        .await
+        .map_err(|e| format!("the program cannot start: {e}"))?;
+    // spec: S-0015 claim 9 (the importer's warnings of a table read as far as its whole entries)
+    for w in std::mem::take(&mut table.warnings) {
+        log::warn!("{w}");
+    }
     let import = glasnost_convert::import(vfs, &glasnost_convert::ImportOptions::default()).await;
     let resolved = glasnost_rules::resolve_ruleset(
         Some((import.tree.clone(), import.provenance.clone())),
@@ -246,6 +259,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         bank,
         music,
         cursor_palette,
+        strings: Some(table),
         summary,
     })
 }

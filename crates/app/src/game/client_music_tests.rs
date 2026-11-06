@@ -96,6 +96,7 @@ fn install() -> Install {
         speech: None,
         bank: Default::default(),
         cursor_palette: Default::default(),
+        strings: None,
         music: Some(music()),
         summary: "synthetic".into(),
     }

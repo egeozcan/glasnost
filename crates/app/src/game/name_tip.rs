@@ -18,9 +18,11 @@ pub const TEXT_LIMIT: usize = 256; // spec: S-0111 Constants (name-tip text limi
 /// The box's distance below the pointer, pixels.
 pub const BELOW: i32 = 16; // spec: S-0111 claim 24 (m = y + 16)
 /// The box's width beyond the widest line, pixels.
-pub const EXTRA_W: i32 = 4; // spec: S-0111 claim 24 (w = w_t + 4)
+pub const EXTRA_W: i32 = 8; // spec: S-0111 claim 24 (r40: w = w_t + 8) and Constants (margins 8 and 4)
 /// The box's height beyond the lines, pixels.
-pub const EXTRA_H: i32 = 3; // spec: S-0111 claim 24 (h = h_t + 3)
+pub const EXTRA_H: i32 = 4; // spec: S-0111 claim 24 (r40: h = h_t + 4)
+/// What the wrap width takes from the view's width, pixels.
+pub const WRAP_ALLOWANCE: i32 = 8; // spec: S-0111 claim 24 (r40: lines wrap to the wrap width W − 8) and Constants (wrap allowance 8)
 /// The tab stop of a tip line, pixels.
 pub const TAB_STOP: i32 = 64; // spec: S-0111 claim 24 (a tab moves the line's width up to the next multiple of 64)
 /// The extra pixel each text unit adds to a line's width.
@@ -30,8 +32,7 @@ pub const INK_SIDE_0: [u8; 3] = [164, 210, 255]; // spec: S-0111 claim 25 (RGB (
 /// The tip colour for any other side index.
 pub const INK_OTHER: [u8; 3] = [255, 255, 0]; // spec: S-0111 claim 25 (RGB (255, 255, 0) for any other side index)
 /// Where the text sits inside the box, pixels from its top left.
-// design: Q-2687 (S-0111 claim 25 leaves the text's inset inside the frame open: 2 and 2, inside the 1-pixel frame with one free pixel, which the margins of 4 and 3 leave room for)
-pub const INSET: (i32, i32) = (2, 2);
+pub const INSET: (i32, i32) = (4, 2); // spec: S-0111 claim 25 (r40: the text's origin is 4 pixels right of the box's left edge and 2 below its top edge) and Constants (text origin 4, 2)
 /// The painter's sprite id of the tip glyphs in side index 0's colour; the
 /// next id holds them in the other colour.
 // nocite: our own sprite ids, after the status glyphs'
@@ -44,6 +45,9 @@ const CR: u16 = 13;
 /// A tip that shows: its lines, its box and when it goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shown {
+    /// The text the tip was chosen for (cut to the text limit), to tell a
+    /// text chosen again that differs.
+    pub text: Vec<u16>,
     /// The text's lines, without their breaks.
     pub lines: Vec<Vec<u16>>,
     /// The box in screen pixels.
@@ -93,24 +97,49 @@ impl NameTip {
         self.rest.is_some_and(|s| now - s >= WAIT_MS)
     }
 
-    /// One frame at real time `now`: a tip whose lifetime is over hides;
-    /// when the wait ends, the rest's one choice is made: no tip while
-    /// `blocked`, else `choose` gives the tip, if any.
-    pub fn update(&mut self, now: i64, blocked: bool, choose: impl FnOnce() -> Option<Shown>) {
+    /// One drawn frame at real time `now`. A tip whose lifetime is over
+    /// hides. A tip that shows has its text chosen again: `choose(Some(tip))`
+    /// gives the tip for the pointer's place now; none, or `blocked`, hides
+    /// it, a different text replaces it with the lifetime unchanged, the same
+    /// text leaves it. When the wait ends, the rest's one choice is made: no
+    /// tip while `blocked`, else `choose(None)` gives the tip, if any.
+    pub fn update(
+        &mut self,
+        now: i64,
+        blocked: bool,
+        choose: impl FnOnce(Option<&Shown>) -> Option<Shown>,
+    ) {
         if self.shown.as_ref().is_some_and(|s| now >= s.until) {
             // spec: S-0111 claim 20 (Lifetime: it hides after 10000 ms and does not show again until the pointer moves and rests again)
             self.shown = None;
         }
+        if let Some(old) = self.shown.take() {
+            // spec: S-0111 claim 26 (while it shows, its text is chosen again in every drawn frame; no text, an empty text or a blocked tip hides it and nothing shows until the pointer moves and rests again)
+            if blocked {
+                return;
+            }
+            match choose(Some(&old)) {
+                None => {}
+                // spec: S-0111 claim 26 (the same text: the tip stays as it is)
+                Some(new) if new.text == old.text => self.shown = Some(old),
+                // spec: S-0111 claims 20 and 26 (another text replaces the shown one, laid out and placed again; the lifetime does not start again)
+                Some(mut new) => {
+                    new.until = old.until;
+                    self.shown = Some(new);
+                }
+            }
+            return;
+        }
         if !self.due(now) {
             return;
         }
-        // spec: S-0111 claim 20 (One choice per rest: the text is chosen once, when the wait ends; nothing then shows until the pointer moves and rests again)
+        // spec: S-0111 claim 20 (One choice per rest: the text is chosen once, when the wait ends; nothing then shows until the pointer moves and rests again, even if the block ends)
         self.rest = None;
         if blocked {
-            // spec: S-0111 claim 20 (Blocked: no tip shows when the wait ends while the cursor is hidden, the input is locked or the view is moving)
+            // spec: S-0111 claim 20 (Blocked: the wait that ends while the cursor is hidden, the input is locked, the view is moving, a left or right button pressed over the view is held, shows nothing)
             return;
         }
-        self.shown = choose();
+        self.shown = choose(None);
     }
 }
 
@@ -136,26 +165,45 @@ fn advance(x: i32, c: u16, glyph_width: &impl Fn(u16) -> i32) -> i32 {
     }
 }
 
+const SPACE: u16 = 0x20;
+
 /// The lines of `units`: a carriage return, a line feed or a carriage
 /// return followed by a line feed starts a new line, and a line wider than
-/// `view_w` is wrapped.
-pub fn lines(units: &[u16], glyph_width: &impl Fn(u16) -> i32, view_w: i32) -> Vec<Vec<u16>> {
+/// the wrap width `wrap_w` (the view's width less [`WRAP_ALLOWANCE`]) is
+/// wrapped at its last space.
+pub fn lines(units: &[u16], glyph_width: &impl Fn(u16) -> i32, wrap_w: i32) -> Vec<Vec<u16>> {
     let mut out = vec![Vec::new()];
+    // The last break point of the current line: a space with a unit before it.
+    let mut space: Option<usize> = None;
     let mut i = 0;
     while i < units.len() {
         let c = units[i];
         if c == CR || c == LF {
-            // spec: S-0111 claim 24 (a carriage return or a line feed starts a new line, a carriage return followed by a line feed counting as one)
+            // spec: S-0111 claim 24 (a carriage return or a line feed starts a new line, a carriage return followed by a line feed counting as one; a line break forgets every earlier space)
             if c == CR && units.get(i + 1) == Some(&LF) {
                 i += 1;
             }
             out.push(Vec::new());
+            space = None;
         } else {
             let line = out.last_mut().expect("one line at least");
-            // design: Q-2687 (S-0111 claim 24 wraps lines to the view's width but leaves how open: a line breaks before the text unit that would take it past the width, keeping one unit at least)
-            if !line.is_empty() && advance(line_width(line, glyph_width), c, glyph_width) > view_w {
-                out.push(vec![c]);
+            // spec: S-0111 claim 24 (Wrapping: a unit that would make its line wider than the wrap width, and is not first on its line, breaks it)
+            if !line.is_empty() && advance(line_width(line, glyph_width), c, glyph_width) > wrap_w {
+                let mut next = Vec::new();
+                if let Some(k) = space.take() {
+                    // spec: S-0111 claim 24 (Wrapping: at the last break point; the space is dropped and the next line starts with the unit after it)
+                    next = line.split_off(k + 1);
+                    line.pop();
+                }
+                next.push(c);
+                // spec: S-0111 claim 24 (Wrapping: a space is a break point when at least one unit comes before it on its line, also one that starts the new line after moved units)
+                space = (c == SPACE && next.len() > 1).then(|| next.len() - 1);
+                out.push(next);
             } else {
+                // spec: S-0111 claim 24 (Wrapping: a space is a break point only when at least one unit comes before it on its line)
+                if c == SPACE && !line.is_empty() {
+                    space = Some(line.len());
+                }
                 line.push(c);
             }
         }
@@ -171,7 +219,7 @@ pub fn size(lines: &[Vec<u16>], glyph_width: &impl Fn(u16) -> i32, pitch: i32) -
         .map(|l| line_width(l, glyph_width))
         .max()
         .unwrap_or(0);
-    // spec: S-0111 claim 24 (h_t is the number of lines times the font's line pitch; w = w_t + 4, h = h_t + 3)
+    // spec: S-0111 claim 24 (h_t is the number of lines times the font's line pitch; w = w_t + 8, h = h_t + 4)
     (wt + EXTRA_W, lines.len() as i32 * pitch + EXTRA_H)
 }
 
@@ -179,9 +227,13 @@ pub fn size(lines: &[Vec<u16>], glyph_width: &impl Fn(u16) -> i32, pitch: i32) -
 /// `(x, y)` in a view whose right and bottom edges (exclusive) are `x1`
 /// and `y1`.
 pub fn place((x, y): (i32, i32), (w, h): (i32, i32), (x1, y1): (i32, i32)) -> (i32, i32) {
-    // spec: S-0111 claim 24 (l = x, or X1 − w when x + w > X1; m = y + 16, or y − h when y + 16 + h > Y1; no correction at the left or top edge)
+    // spec: S-0111 claim 24 (r40: l = x, or X1 − w when x + w > X1; m = y + 16, or y − h + 1 when y + 16 + h > Y1, the last row on the pointer's row; no correction at the left or top edge)
     let l = if x + w > x1 { x1 - w } else { x };
-    let m = if y + BELOW + h > y1 { y - h } else { y + BELOW };
+    let m = if y + BELOW + h > y1 {
+        y - h + 1
+    } else {
+        y + BELOW
+    };
     (l, m)
 }
 
@@ -259,11 +311,13 @@ pub fn tip(
         return None;
     }
     let (glyph_width, pitch) = font;
-    let lines = lines(units, glyph_width, view.w);
+    // spec: S-0111 claim 24 (r40: lines wrap to the wrap width W − 8, W the view's width)
+    let lines = lines(units, glyph_width, view.w - WRAP_ALLOWANCE);
     let (w, h) = size(&lines, glyph_width, pitch);
     // spec: S-0111 claim 24 (the box is placed once, from the pointer's position when the tip shows; it does not move while it shows)
     let (l, m) = place(p, (w, h), (view.right(), view.bottom()));
     Some(Shown {
+        text: units.to_vec(),
         lines,
         rect: Rect::new(l, m, w, h),
         // spec: S-0111 claim 20 (Lifetime: 10000 ms after it shows)
@@ -321,29 +375,33 @@ mod tests {
     #[test]
     fn claim_20_wait_lifetime_and_one_choice() {
         let mut t = NameTip::default();
-        t.update(5000, false, || panic!("no rest yet"));
+        t.update(5000, false, |_| panic!("no rest yet"));
         t.moved(1000);
-        t.update(1999, false, || panic!("the wait runs"));
+        t.update(1999, false, |_| panic!("the wait runs"));
         assert!(t.shown.is_none());
         t.moved(1500);
-        t.update(2400, false, || panic!("the wait started again"));
+        t.update(2400, false, |_| panic!("the wait started again"));
         let mut asked = 0;
-        t.update(2500, false, || {
+        t.update(2500, false, |_| {
             asked += 1;
             shown(2500)
         });
         assert_eq!(asked, 1);
         assert_eq!(t.shown.as_ref().unwrap().until, 12_500);
-        t.update(6000, false, || panic!("one choice per rest"));
+        // While it shows, the text is chosen again (claim 26): the same text stays.
+        t.update(6000, false, |old| {
+            assert!(old.is_some(), "chosen again while it shows");
+            shown(6000)
+        });
         assert!(t.shown.is_some());
-        t.update(12_499, false, || panic!("one choice per rest"));
-        assert!(t.shown.is_some());
-        t.update(12_500, false, || panic!("no second tip in the same rest"));
+        t.update(12_499, false, |_| shown(12_499));
+        assert_eq!(t.shown.as_ref().unwrap().until, 12_500);
+        t.update(12_500, false, |_| panic!("no second tip in the same rest"));
         assert!(t.shown.is_none(), "the lifetime ended");
         // An empty choice shows nothing, and nothing until the pointer moves.
         t.moved(20_000);
-        t.update(21_000, false, || None);
-        t.update(22_000, false, || panic!("one choice per rest"));
+        t.update(21_000, false, |_| None);
+        t.update(22_000, false, |_| panic!("one choice per rest"));
         assert!(t.shown.is_none());
     }
 
@@ -354,31 +412,83 @@ mod tests {
     fn claims_20_and_26_what_hides_it() {
         let mut t = NameTip::default();
         t.moved(0);
-        t.update(1000, false, || shown(1000));
+        t.update(1000, false, |_| shown(1000));
         assert!(t.shown.is_some());
         t.button();
         assert!(t.shown.is_none());
-        t.update(5000, false, || panic!("the wait stopped"));
+        t.update(5000, false, |_| panic!("the wait stopped"));
         t.moved(5000);
         t.button();
-        t.update(7000, false, || panic!("the wait stopped"));
+        t.update(7000, false, |_| panic!("the wait stopped"));
         t.moved(7000);
-        t.update(8000, false, || shown(8000));
+        t.update(8000, false, |_| shown(8000));
         t.moved(8100);
         assert!(t.shown.is_none(), "a movement hides it");
-        t.update(9100, true, || panic!("blocked: no choice"));
+        t.update(9100, true, |_| panic!("blocked: no choice"));
         assert!(t.shown.is_none());
-        t.update(9200, false, || panic!("the rest's choice is spent"));
+        t.update(9200, false, |_| panic!("the rest's choice is spent"));
         t.moved(10_000);
-        t.update(11_000, false, || shown(11_000));
+        t.update(11_000, false, |_| shown(11_000));
         t.off();
         assert!(t.shown.is_none());
-        t.update(13_000, false, || panic!("off: no wait"));
+        t.update(13_000, false, |_| panic!("off: no wait"));
+    }
+
+    /// spec: S-0111 claim 26 (a text chosen again while it shows: no text or blocked hides it with
+    /// nothing until the pointer moves and rests again; another text replaces it, the lifetime
+    /// unchanged; the same text leaves it) and claim 20 (the tip is blocked: a wait that ends
+    /// blocked shows nothing, and the block ending brings nothing back)
+    #[test]
+    fn claim_26_chosen_again() {
+        let other = |now: i64| {
+            tip(
+                &u("abc"),
+                (10, 10),
+                Rect::new(0, 0, 640, 400),
+                (&gw, 12),
+                INK_SIDE_0,
+                now,
+            )
+        };
+        let mut t = NameTip::default();
+        t.moved(0);
+        t.update(1000, false, |_| shown(1000));
+        let first = t.shown.clone().unwrap();
+        // Another text: replaced, laid out again, the lifetime not started again.
+        t.update(3000, false, |_| other(3000));
+        let s = t.shown.as_ref().unwrap();
+        assert_eq!(s.lines, vec![u("abc")]);
+        assert_eq!(s.until, first.until, "the lifetime does not start again");
+        assert_ne!(s.rect, first.rect);
+        // The same text: as it is.
+        let before = t.shown.clone();
+        t.update(4000, false, |_| other(4000));
+        assert_eq!(t.shown, before);
+        // No text hides it, and nothing shows again until a movement and a rest.
+        t.update(5000, false, |_| None);
+        assert!(t.shown.is_none());
+        t.update(6000, false, |_| panic!("one choice per rest"));
+        t.update(20_000, false, |_| panic!("one choice per rest"));
+        // Blocked while it shows: hides.
+        t.moved(30_000);
+        t.update(31_000, false, |_| shown(31_000));
+        t.update(31_100, true, |_| panic!("blocked: no choice"));
+        assert!(t.shown.is_none());
+        t.update(31_200, false, |_| {
+            panic!("the block ending brings nothing back")
+        });
+        assert!(t.shown.is_none());
+        // A wait that ends blocked uses up the rest's choice.
+        t.moved(40_000);
+        t.update(41_000, true, |_| panic!("blocked"));
+        t.update(42_000, false, |_| panic!("the choice is spent"));
+        assert!(t.shown.is_none());
     }
 
     /// spec: S-0111 claim 24 (width: glyph widths plus 1 per unit, a tab to the next multiple of 64;
-    /// CR, LF and CRLF each start one new line; w = w_t + 4, h = lines × P_f + 3) and Q-2687 (the
-    /// wrap before the unit that would pass the view's width)
+    /// CR, LF and CRLF each start one new line; w = w_t + 8, h = lines × P_f + 4; Wrapping: at the
+    /// last space before the unit that passes the wrap width, the space dropped, a space first on
+    /// its line no break point, a line break forgetting earlier spaces, a first unit always kept)
     #[test]
     fn claim_24_layout() {
         assert_eq!(line_width(&u("ab"), &gw), 10);
@@ -393,9 +503,34 @@ mod tests {
         let l = lines(&u("ab\rc\nd\r\ne"), &gw, 640);
         assert_eq!(l, vec![u("ab"), u("c"), u("d"), u("e")]);
         assert_eq!(lines(&u("a\n\nb"), &gw, 640).len(), 3);
-        assert_eq!(size(&l, &gw, 12), (10 + 4, 4 * 12 + 3));
+        assert_eq!(size(&l, &gw, 12), (10 + 8, 4 * 12 + 4));
         assert_eq!(lines(&u("aaaa"), &gw, 12), vec![u("aa"), u("aa")]);
         assert_eq!(lines(&u("W"), &gw, 3), vec![u("W")], "one unit at least");
+        // Three equal words, 5 pixels a unit: "aaa bbb " is 40 wide, and the third word's first
+        // unit passes 44. The break is at the last space, which is dropped.
+        let three = u("aaa bbb ccc");
+        assert_eq!(
+            lines(&three, &gw, 44),
+            vec![u("aaa bbb"), u("ccc")],
+            "the last space is the break, dropped"
+        );
+        assert_eq!(lines(&three, &gw, 24), vec![u("aaa"), u("bbb"), u("ccc")]);
+        // The overflowing unit is a space after moved units: a break point of the new line.
+        assert_eq!(
+            lines(&u("aaa bbb ccccc"), &gw, 39),
+            vec![u("aaa"), u("bbb"), u("ccccc")],
+            "bbb is moved down, then the space after it breaks"
+        );
+        // A space first on its line is no break point: the line keeps it.
+        assert_eq!(
+            lines(&u(" aaaaa"), &gw, 14),
+            vec![u(" a"), u("aa"), u("aa")]
+        );
+        // A line break forgets every earlier space.
+        assert_eq!(
+            lines(&u("a b\naaaaa"), &gw, 24),
+            vec![u("a b"), u("aaaa"), u("a")]
+        );
     }
 
     /// spec: S-0111 claim 24 (16 below the pointer at its column; the right-edge shift; the flip
@@ -417,12 +552,12 @@ mod tests {
         );
         assert_eq!(
             place((100, 365), (50, 20), edges),
-            (100, 345),
-            "last row on y − 1"
+            (100, 346),
+            "last row on the pointer's row y (r40): 365 + 20 − 1 = y"
         );
         assert_eq!(
             place((10, 5), (700, 500), edges),
-            (-60, -495),
+            (-60, -494),
             "no left or top correction"
         );
     }
@@ -465,8 +600,9 @@ mod tests {
     }
 
     /// spec: S-0111 claims 24 and 25 (drawn in the game font with the layout's widths: the text in
-    /// the tip colour inside the frame, over the black fill, inset by our Q-2687 margin; one line
-    /// pitch per line) and S-0014 claim 5 (one bits paint the foreground)
+    /// the tip colour inside the frame, over the black fill, from the origin 4 right and 2 below
+    /// the box's corner; one line pitch per line) and S-0014 claim 5 (one bits paint the
+    /// foreground)
     #[test]
     fn claims_24_and_25_the_drawn_tip() {
         let font = StatusFont::new(glasnost_fmt::fnt::synthetic_font()).unwrap();
@@ -474,7 +610,7 @@ mod tests {
         let width = |c: u16| font.width(c);
         let pitch = font.line_pitch() as i32;
         let s = tip(&u("A\nA"), (10, 10), view, (&width, pitch), INK_OTHER, 0).unwrap();
-        assert_eq!(s.rect, Rect::new(10, 26, 5 + 4, 2 * pitch + 3));
+        assert_eq!(s.rect, Rect::new(10, 26, 5 + 8, 2 * pitch + 4));
         let mut painter = Painter::new();
         let mut rows = [None; 2];
         register(&mut painter, &font, &s, &mut rows);

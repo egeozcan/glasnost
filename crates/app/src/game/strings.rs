@@ -2,17 +2,27 @@
 //! lookup, its matching, the space normalisation of the entry's text and
 //! the display-name label of a type.
 //!
-//! Which file the string table is, which of a label's strings is its text
-//! and the placeholder's marker word are not given by any spec yet
-//! (Q-2686). So no table is read from the install: [`StringTable`] is
-//! built from entries already decoded, and the interface resolves every
-//! label through [`resolve`], which gives our stand-in for a table it
-//! cannot read.
+//! The string table is the install's `ra2md.csf` (S-0015 claim 1), read
+//! at run time ([`read`]) by [`StringTable::from_bytes`] in the layout of
+//! S-0015 claims 2 to 4. The interface resolves every label through
+//! [`resolve`]: the entry's text, the missing-label placeholder of S-0015
+//! claim 8 for a label no entry matches, and our stand-in only when no
+//! table could be read.
 
 use std::collections::BTreeMap;
 
-use glasnost_fmt::csf::Csf;
+use glasnost_fmt::csf::StringFile;
 use glasnost_ini::value;
+use glasnost_vfs::Vfs;
+
+/// The string table file (S-0015 claim 1), resolved as S-0005 claim 9 gives.
+pub const FILE: &str = "ra2md.csf"; // spec: S-0015 claim 1 (the program reads one string table, ra2md.csf; ra2.csf is never read)
+/// The missing-label placeholder's marker word.
+const MARKER: &str = "MISSING"; // spec: S-0015 Constants (marker word MISSING) and claim 8
+/// The apostrophe text unit.
+const APOSTROPHE: u16 = 39; // spec: S-0015 claim 8 (an apostrophe, text unit 39)
+/// An entry label of this many bytes or more matches no lookup.
+const LONGEST_MATCH: usize = 31; // spec: S-0015 Constants (longest label that a lookup can match: 31 bytes) and claim 5
 
 /// The byte limit of a display-name label (S-0003 claim 1 text value).
 // spec: S-0004 claim 17 (the label is read as a text value with a 31-byte limit)
@@ -41,8 +51,7 @@ pub struct StringTable {
 pub enum Found {
     /// The matching entry's text, its spaces normalised.
     Text(Vec<u16>),
-    /// No entry matches: the table's placeholder shows (its marker word
-    /// waits on Q-2686).
+    /// No entry matches: the placeholder shows ([`placeholder`]).
     Missing,
 }
 
@@ -62,6 +71,15 @@ impl StringTable {
         let mut by_label = BTreeMap::new();
         let mut warnings = Vec::new();
         for (i, (label, _)) in entries.iter().enumerate() {
+            if label.len() > LONGEST_MATCH {
+                // spec: S-0015 claim 5 (an entry label of 32 bytes or more matches no lookup, and the importer warns)
+                warnings.push(format!(
+                    "string table: the entry label {:?} has {} bytes and matches no lookup",
+                    String::from_utf8_lossy(label),
+                    label.len()
+                ));
+                continue;
+            }
             match by_label.entry(folded(label)) {
                 std::collections::btree_map::Entry::Vacant(v) => {
                     v.insert(i);
@@ -85,23 +103,19 @@ impl StringTable {
         }
     }
 
-    /// A table from a parsed CSF file: each label's first string as its
-    /// text, none for a label without strings.
-    pub fn from_csf(csf: &Csf) -> Self {
-        // design: Q-2686 (no formats spec gives the string table's decoding, S-0004 Open questions 8: each label's first string, as XCC's reader takes it, and an empty text for a label with none)
-        Self::new(
-            csf.labels
-                .iter()
-                .map(|l| {
-                    let text = l
-                        .strings
-                        .first()
-                        .map(|s| s.units.clone())
-                        .unwrap_or_default();
-                    (l.name.clone(), text)
-                })
-                .collect(),
-        )
+    /// A table from the bytes of the string table file (S-0015). `Err` is
+    /// a header that fails claim 2's checks.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
+        // spec: S-0015 claims 2 to 9 (the layout, the decoding, the first text of each entry, an empty text for an entry with none, the reading stopped by damage)
+        let file = StringFile::read(data).map_err(|e| e.to_string())?;
+        let mut t = Self::new(file.entries);
+        t.warnings.splice(0..0, file.warnings);
+        Ok(t)
+    }
+
+    /// The entry labels as stored, in file order.
+    pub fn labels(&self) -> impl Iterator<Item = &[u8]> {
+        self.entries.iter().map(|(l, _)| l.as_slice())
     }
 
     /// The number of entries.
@@ -159,9 +173,23 @@ pub fn label(stored: Option<&[u8]>) -> Option<&[u8]> {
         .filter(|l| !l.is_empty())
 }
 
-/// The text a label shows, as text units: the table's entry, or for a
-/// label the table lacks (and while no table is read) our stand-in
-/// `stand_in`. No label gives empty text.
+/// The text a missing label shows: the marker word, a colon, an apostrophe,
+/// the requested label with each byte as the text unit of the same value,
+/// and an apostrophe. Spaces are kept, no normalisation.
+pub fn placeholder(label: &[u8]) -> Vec<u16> {
+    // spec: S-0015 claim 8 (the marker word, a colon, an apostrophe, the requested label's bytes as text units of the same value, an apostrophe; no space normalisation)
+    let mut out: Vec<u16> = MARKER.encode_utf16().collect();
+    out.push(u16::from(b':'));
+    out.push(APOSTROPHE);
+    out.extend(label.iter().map(|&b| u16::from(b)));
+    out.push(APOSTROPHE);
+    out
+}
+
+/// The text a label shows, as text units: the table's entry, the
+/// placeholder for a label the table lacks, and, while no table is read
+/// (a table that cannot be read), our stand-in `stand_in`. No label gives
+/// empty text.
 pub fn resolve(table: Option<&StringTable>, label: Option<&[u8]>, stand_in: &str) -> Vec<u16> {
     // spec: S-0004 claim 17 (Resolving it: empty text when the type has no label, never its type name)
     let Some(label) = label else {
@@ -169,15 +197,33 @@ pub fn resolve(table: Option<&StringTable>, label: Option<&[u8]>, stand_in: &str
     };
     match table.map(|t| t.find(label)) {
         Some(Found::Text(t)) => t,
-        // design: Q-2686 (the placeholder's marker word and the string table's file are not given: our stand-in for a missing entry and for a table not read)
-        Some(Found::Missing) | None => stand_in.encode_utf16().collect(),
+        // spec: S-0015 claim 8 (no entry matches: the placeholder)
+        Some(Found::Missing) => placeholder(label),
+        // design: S-0015 claim 1 (the program refuses to start without a table, so only a game built without an install, as in tests, has none: it shows our stand-in)
+        None => stand_in.encode_utf16().collect(),
     }
+}
+
+/// Reads the install's string table: `ra2md.csf` resolved as S-0005
+/// claim 9 gives. `Err` is a diagnostic naming the file and the reason; the
+/// table's importer warnings are `StringTable::warnings`.
+pub async fn read(vfs: &Vfs) -> Result<StringTable, String> {
+    // spec: S-0015 claims 1 and 2 (one table, ra2md.csf; a missing file or a header that fails the checks is a table that cannot be resolved, S-0005 claim 16, which in our session is a diagnostic and the stand-in names)
+    let Some(r) = vfs.resolve(FILE) else {
+        return Err(format!("{FILE}: the string table is missing"));
+    };
+    let bytes = vfs
+        .read_resolved(&r)
+        .await
+        .map_err(|_| format!("{FILE}: the string table cannot be read"))?;
+    StringTable::from_bytes(&bytes)
+        .map_err(|e| format!("{FILE}: the string table is rejected: {e}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use glasnost_fmt::csf::{CsfLabel, CsfString};
+    use glasnost_fmt::csf::{Csf, CsfLabel, CsfString};
 
     fn u(s: &str) -> Vec<u16> {
         s.encode_utf16().collect()
@@ -203,7 +249,7 @@ mod tests {
                 })
                 .collect(),
         };
-        StringTable::from_csf(&Csf::parse(&csf.write()).unwrap())
+        StringTable::from_bytes(&csf.write()).unwrap()
     }
 
     /// spec: S-0004 claim 17 (Matching: the letters A to Z equal a to z, every other byte equal,
@@ -258,8 +304,119 @@ mod tests {
         assert_eq!(t.find(b"l"), Found::Text(u("two words")));
     }
 
+    /// spec: S-0015 claim 8 (the placeholder: marker word, colon, apostrophe, the label's bytes as
+    /// units of the same value with spaces kept, apostrophe), claim 5 (an entry label of 32 bytes
+    /// or more matches nothing and warns), claim 6 (an entry with no texts gives empty text, not
+    /// the placeholder) and claims 2 and 9 (the file's reading)
+    #[test]
+    fn s0015_placeholder_and_reading() {
+        assert_eq!(placeholder(b"A  b"), u("MISSING:'A  b'"));
+        assert_eq!(placeholder(&[0xE9]), {
+            let mut v = u("MISSING:'");
+            v.push(0xE9);
+            v.push(39);
+            v
+        });
+        let long = "L".repeat(32);
+        let ok = "L".repeat(31);
+        let t = table(&[
+            (&long, &["x"]),
+            (&ok, &["y"]),
+            ("Cut\0tail", &["z"]),
+            ("E", &[]),
+        ]);
+        assert_eq!(t.find(long.as_bytes()), Found::Missing);
+        assert_eq!(t.find(ok.as_bytes()), Found::Text(u("y")));
+        assert_eq!(
+            t.find(b"cut"),
+            Found::Text(u("z")),
+            "cut before a zero byte"
+        );
+        assert_eq!(t.find(b"E"), Found::Text(Vec::new()), "present, no texts");
+        assert!(t.warnings.iter().any(|w| w.contains("32 bytes")));
+        assert!(StringTable::from_bytes(b"not a table at all, but long enough").is_err());
+        assert!(StringTable::from_bytes(&[]).is_err());
+        // A damaged tail keeps the entries before it and warns.
+        let mut bytes = Csf {
+            version: 3,
+            language: 0,
+            unused: 0,
+            labels: ["A", "B"]
+                .iter()
+                .map(|n| CsfLabel {
+                    name: n.as_bytes().to_vec(),
+                    strings: vec![CsfString {
+                        units: u(n),
+                        extra: None,
+                    }],
+                })
+                .collect(),
+        }
+        .write();
+        let n = bytes.len();
+        bytes.truncate(n - 1);
+        let t = StringTable::from_bytes(&bytes).unwrap();
+        assert_eq!(t.find(b"A"), Found::Text(u("A")));
+        assert_eq!(t.find(b"B"), Found::Missing);
+        assert!(!t.warnings.is_empty());
+    }
+
+    /// A synthetic install whose language archive `langmd.mix` holds `members`.
+    fn install(members: &[(&str, Vec<u8>)]) -> Vfs {
+        use glasnost_fmt::mix::{MixWriter, WriteLayout, id_hash};
+        use glasnost_vfs::{GameOptions, MemSource, PickedFile};
+        let mut files: Vec<_> = members
+            .iter()
+            .map(|(n, b)| (id_hash(n), b.clone()))
+            .collect();
+        files.push((id_hash("filler.ini"), b"[Filler]\n".to_vec()));
+        let lang = MixWriter {
+            layout: WriteLayout::Plain,
+            files,
+        }
+        .write();
+        let mut vfs = Vfs::default();
+        pollster::block_on(vfs.mount_install(vec![PickedFile {
+            path: "langmd.mix".into(),
+            source: std::rc::Rc::new(MemSource(lang)),
+        }]));
+        pollster::block_on(vfs.mount_startup(GameOptions::default()));
+        vfs
+    }
+
+    /// spec: S-0015 claims 1 and 2 (the program reads `ra2md.csf`, a member of the language
+    /// archive, and never `ra2.csf`; a missing file or a header that fails the checks is a table
+    /// that cannot be resolved)
+    #[test]
+    fn s0015_claims_1_and_2_the_file() {
+        let good = Csf {
+            version: 3,
+            language: 0,
+            unused: 0,
+            labels: vec![CsfLabel {
+                name: b"Probe".to_vec(),
+                strings: vec![CsfString {
+                    units: u("shown"),
+                    extra: None,
+                }],
+            }],
+        }
+        .write();
+        let t = pollster::block_on(read(&install(&[("ra2md.csf", good.clone())]))).unwrap();
+        assert_eq!(t.find(b"probe"), Found::Text(u("shown")));
+        let mut bad = good.clone();
+        bad[0] = b'X';
+        assert!(pollster::block_on(read(&install(&[("ra2md.csf", bad)]))).is_err());
+        assert!(pollster::block_on(read(&install(&[]))).is_err(), "no file");
+        assert!(
+            pollster::block_on(read(&install(&[("ra2.csf", good)]))).is_err(),
+            "ra2.csf alone is never read"
+        );
+    }
+
     /// spec: S-0004 claim 17 (Reading the label: a 31-byte text value; no label gives empty text,
-    /// never the type name; Resolving it) and Q-2686 (the stand-in for a missing entry)
+    /// never the type name; Resolving it) and S-0015 claim 8 (the placeholder for a missing entry;
+    /// our stand-in only without a table)
     #[test]
     fn claim_17_labels_and_resolving() {
         assert_eq!(label(None), None);
@@ -270,7 +427,10 @@ mod tests {
         assert_eq!(resolve(Some(&t), None, "TYPE"), u(""));
         assert_eq!(resolve(Some(&t), Some(b"name:x"), "TYPE"), u("Shown"));
         assert_eq!(resolve(Some(&t), Some(b"Empty"), "TYPE"), u(""));
-        assert_eq!(resolve(Some(&t), Some(b"Other"), "TYPE"), u("TYPE"));
+        assert_eq!(
+            resolve(Some(&t), Some(b"Other"), "TYPE"),
+            u("MISSING:'Other'")
+        );
         assert_eq!(resolve(None, Some(b"Name:X"), "TYPE"), u("TYPE"));
         assert_eq!(resolve(None, None, "TYPE"), u(""));
     }

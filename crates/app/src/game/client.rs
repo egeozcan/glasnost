@@ -492,6 +492,10 @@ impl Client {
                     // (the multiplayer screen says so): no game.
                     Ok(_) if net_start && self.net.is_none() => {}
                     Ok(mut s) => {
+                        // spec: S-0015 State and ordering (the string table is read once, when the program starts; each game gets the install's copy)
+                        if s.strings.is_none() {
+                            s.strings = self.install.as_ref().and_then(|i| i.strings.clone());
+                        }
                         for p in &s.problems {
                             log::info!("game load: {p}");
                         }
