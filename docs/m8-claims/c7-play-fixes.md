@@ -568,3 +568,14 @@ state, so the repeat shot in *prone* comes at most once per start of *prone*. Th
 | `prone_attack_state_persists` | S-0107 r40 claim 11 (*End of the attack state*) and Quirks | rejected (not in the layer) | (1) Holds: the Quirks entry states the off position (a prone unit's attack state ends when *fire-prone*, or *secondary-fire-prone* not repeated for an airstrike, completes), and it is built. (2) Fails: neither the quirk text nor any play note or request names a stuck unit, a give-up or a glitch. The on position gives a prone unit one extra shot from *prone*, with no firing sequence, at most once per start of *prone*; the unit keeps taking orders and firing in both positions. (3) Fails: the switch changes how often a prone unit fires when its rearm countdown ends while *fire-prone* still plays, a change of prone rate of fire and so a balance change (D14). Tests: both positions in `claims_s0215_r118::m8_a_prone_short_rearm_repeat_shot_in_prone_by_the_switch` and `m8_a_prone_long_rearm_every_shot_from_a_new_fire_prone`. |
 
 Intake 99 leaves the layer file unchanged.
+
+## Intake 105 (S-0203 r50): the leftover sweep switch judged
+
+Ledger: [intake105.md](intake105.md). S-0203 r44 to r50 answer Q-2636 and add one quirk, a new
+switch of `quirks.rs` with the original's position as default.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `defeat_sweep_leftovers` | S-0203 claim 13 (c), Edge cases (r50, Q-2636) | rejected (not in the layer) | Condition 1 holds: the Edge case states the off position (the sweep offers no hit to any leftover, so a recording shows no hit on the leftover after its destroying hit), built in `leftover::sweep_hit`, which `econ::victory`'s sweep calls at each leftover's place. Condition 2 fails: on, a house's vehicles destroyed with no health in the tick of its defeat or surrender show their death effects once more (debris, the death weapon of an exploding vehicle, the animations, a crate they carry). The spec states this as the original's behaviour, not as a unit stuck, a give-up or a visible glitch, and no play note or request names it. Condition 3 fails too: the off position withholds a second death weapon and a second crate, which changes the damage done and the crates left in the defeat tick, a combat change, as for the rebound switches in part 3. Tests, both positions: `claims_s0203_r50::o18_a_the_last_vehicle_destroyed_in_the_turn_pass`. |
+
+Intake 105 leaves the layer file unchanged.
