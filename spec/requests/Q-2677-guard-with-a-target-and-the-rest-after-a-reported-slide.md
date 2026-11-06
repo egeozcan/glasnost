@@ -3,7 +3,7 @@ id: Q-2677
 title: Guard with a target while an aircraft slides after its entry report, and where it then comes to rest
 status: open
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
