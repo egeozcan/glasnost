@@ -429,7 +429,11 @@ pub fn idle(w: &World, id: ObjectId) -> bool {
                 o.beh.current == Some(Behaviour::Move)
                     && dist2(c, o.pos.cell()) <= ARRIVED * ARRIVED
             }
-            Some(_) => false,
+            // design: a move toward an object that is no longer in play
+            // goes nowhere, and a person sees the unit standing and gives
+            // it an order (M8 step A4 round 9: a drainer bound for a
+            // building destroyed under it stood for the rest of the game)
+            Some(Target::Object(k)) => o.beh.current == Some(Behaviour::Move) && w.obj(k).is_none(),
         };
         // A deployed vehicle or one changing form takes no destination (S-0517 claim 9), so it is not free for a wave.
         // A bunkered vehicle refuses a destination (S-0606; `bunker` lets it out first).
