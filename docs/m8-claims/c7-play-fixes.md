@@ -554,3 +554,17 @@ default changes.
 | `aircraft_corner_sector_untracked` | S-0501 claim 47 (c), Edge cases (r134, Q-2647) | rejected (not in the layer); no earlier C7 entry judged it | r134 widens the on position to one more state: an aircraft that an untested touchdown left holding its flight point, on the ground as in flight, is not tracked while its cell lies in sector (0, 0). Condition 1 holds: the Edge case states the off position (at its first movement update with a positive carried fraction it joins the end of sector (0, 0)'s list like any other), built in `air::sector_update`. Condition 2 fails: the text states that neither area damage nor the airborne scan finds such an aircraft in that sector, which is not a unit stuck, a give-up or a visible glitch, and no play note or request names it. Condition 3 fails too: the off position decides which aircraft area damage and the airborne scan can reach, a combat change, as for the rebound switches in part 3. Tests, both positions: `claims_s0501_r134::claim_47_the_corner_switch_applies_to_a_sliding_aircraft` (new state) and intake 16's `claims_s0501_tracking::claim_47_corner_sector_quirk_both_ways`. |
 
 Intake 104 leaves the layer file unchanged.
+
+## Intake 99 (S-0215 r118, S-0107 r40, S-0513 r122): the prone attack-state switch judged
+
+Ledger: [intake99.md](intake99.md). S-0107 r40 restates `quirks.prone_attack_state_persists`
+(Quirks; claim 11, *End of the attack state*) with both positions: the shot now ends the attack
+state, so the repeat shot in *prone* comes at most once per start of *prone*. The switch was in
+`quirks.rs` before with only its on position read; intake 99 builds the off position
+(`infantry::sequence_turn`). S-0215 r118 and S-0513 r122 add no switch.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `prone_attack_state_persists` | S-0107 r40 claim 11 (*End of the attack state*) and Quirks | rejected (not in the layer) | (1) Holds: the Quirks entry states the off position (a prone unit's attack state ends when *fire-prone*, or *secondary-fire-prone* not repeated for an airstrike, completes), and it is built. (2) Fails: neither the quirk text nor any play note or request names a stuck unit, a give-up or a glitch. The on position gives a prone unit one extra shot from *prone*, with no firing sequence, at most once per start of *prone*; the unit keeps taking orders and firing in both positions. (3) Fails: the switch changes how often a prone unit fires when its rearm countdown ends while *fire-prone* still plays, a change of prone rate of fire and so a balance change (D14). Tests: both positions in `claims_s0215_r118::m8_a_prone_short_rearm_repeat_shot_in_prone_by_the_switch` and `m8_a_prone_long_rearm_every_shot_from_a_new_fire_prone`. |
+
+Intake 99 leaves the layer file unchanged.

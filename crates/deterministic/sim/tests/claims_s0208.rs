@@ -1230,16 +1230,21 @@ fn walker_in_move_does_not_stop_in_range() {
     );
 }
 
-// spec: S-0208 claim 17 (exception: a destination that is the target object itself is lost as the firing sequence starts)
+// spec: S-0208 claim 17 (exception: a destination that is the target object itself is lost as the firing sequence starts). The firing sequence's start is the observation: with a fire frame of 0 the shot leaves on that tick and ends the attack state at once (S-0107 r40 claim 11, End of the attack state)
 #[test]
 fn destination_on_the_target_is_lost_on_firing() {
     let (mut w, a, t) = approach_duel(Behaviour::Attack, 2, 0);
     w.obj_mut(a).unwrap().dest = Some(Target::Object(t));
     let mut fired = false;
     for _ in 0..60 {
+        let now = w.tick;
         tick::step(&mut w);
         let o = w.obj(a).unwrap();
-        if o.infantry.as_ref().is_some_and(|s| s.attack) {
+        if o.last_fired == now
+            || o.infantry.as_ref().is_some_and(|s| {
+                s.attack || matches!(s.seq, Some(Seq::FireStanding | Seq::FireProne))
+            })
+        {
             fired = true;
             assert_eq!(o.dest, None, "lost with the firing sequence");
             assert_eq!(o.target, Some(Target::Object(t)));

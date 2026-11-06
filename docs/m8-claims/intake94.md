@@ -86,11 +86,11 @@ committed goldens.
 | 39a, in *attack* a drop with no target found falls a non-jumpjet unit back to rest, which lets the beam go | Tested: `claims_s0513_r89::r108_claim39a_a_deployed_infantry_firer_beyond_range_*` (now asserts the release), `r91_claim39a_a_vehicle_firer_beyond_range_*` (re-cited) |
 | 39a, a jumpjet type stays in *attack* with its beam; a second fall-back of the tick keeps it | Tested: `r115_claim39a_a_deployed_jumpjet_firer_and_a_second_fall_back_of_the_tick_keep_the_beam_in_attack` |
 | 39a, in *guard* the beam stays attached | Tested: `r115_claim39a_sw12_l9a_and_l9_*` (after the completed deploy) |
-| SW12 l9a, the deploy-order span: *unload* current by the second update, no *attack* processing, no target, beam attached, the deploy goes on | Tested: `r115_claim39a_sw12_l9a_and_l9_*` (one synthetic run, not five seeds) |
+| SW12 l9a, the deploy-order span: *unload* current by the second update, no *attack* processing, no target, beam attached, the deploy goes on | Tested: `r115_claim39a_sw12_l9a_and_l9_*` (one synthetic run, not five seeds). Sharpened in intake 99: r122 makes *unload* current and processed in the first update, and the test asserts that ([intake99.md](intake99.md)) |
 | SW12 l9, after the deploy: *guard*, no target, beam attached; the attack order, then no target, beam let go, *guard* current or queued, no move or turn | Tested: `r115_claim39a_sw12_l9a_and_l9_*` |
-| SW12 l9b, the release at an *attack* processing before *unload* starts | Seam: S-0215 claim 11's "in the middle of firing" readiness is not built, so *unload* is current at the first update |
+| SW12 l9b, the release at an *attack* processing before *unload* starts | Seam: S-0215 claim 11's "in the middle of firing" readiness is not built, so *unload* is current at the first update. Closed in intake 99: S-0513 r122 drops l9b and sharpens l9a (*unload* current and processed in the first update), tested ([intake99.md](intake99.md)) |
 | 39a, row 6 (zombie, paralysed) keeps *unload*; the attack-move refresh loses it | Seam: neither property nor attack-move memory reaches a deploy order in our engine; `unmeasured` in the spec |
-| 39a, the firing state ends after both of the first update's per-tick starts | Seam: as l9b |
+| 39a, the firing state ends after both of the first update's per-tick starts | Seam: as l9b. Closed in intake 99: the firing state is S-0107 claim 11's attack state (Q-2566), and a deploy order's change of target ends it as the order takes effect ([intake99.md](intake99.md)) |
 
 ### S-0309 r116
 

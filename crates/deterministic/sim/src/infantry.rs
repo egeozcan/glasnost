@@ -164,6 +164,10 @@ pub struct InfantryState {
     pub idle_until: i32,
     /// The water record of an amphibious-destroyer type (S-0107 claim 7).
     pub wet: Option<bool>,
+    /// The target as the last change-of-target test left it (S-0107 claim
+    /// 11, S-0215 claim 11): [`watch_set`] and [`watch_test`].
+    #[serde(default)]
+    pub watch: Option<Target>,
 }
 
 impl InfantryState {
@@ -431,6 +435,122 @@ pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool)
     }
 }
 
+/// The end of the attack state (S-0107 claim 11) with the request of a
+/// not-ready fire frame or a change of target: *deployed* when deploying,
+/// *prone* when prone, *stand* otherwise, not forced (claim 6 decides).
+/// With `ask` false only the state ends.
+pub(crate) fn end_attack(w: &mut World, id: ObjectId, ask: bool) {
+    let Some(s) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) else {
+        return;
+    };
+    s.attack = false;
+    let (prone, deploying) = (s.prone, s.seq.is_some_and(Seq::is_deploy));
+    if ask {
+        // spec: S-0107 claim 11 (the unit asks, not forced, for deployed when deploying, prone when prone and stand otherwise)
+        let q = if deploying {
+            Seq::Deployed
+        } else if prone {
+            Seq::Prone
+        } else {
+            Seq::Stand
+        };
+        request(w, id, q, false);
+    }
+}
+
+/// A change of an infantry unit's target (S-0107 r40 claim 11, *End of the
+/// attack state*; S-0215 r118 claim 11, *Other endings*): the attack state
+/// ends, and the unit asks (not forced) for *deployed*, *prone* or
+/// *stand*, whether or not it was in the attack state.
+pub(crate) fn target_changed(w: &mut World, id: ObjectId) {
+    if !w
+        .obj(id)
+        .is_some_and(|o| o.kind == Kind::Infantry && o.infantry.is_some() && o.health > 0)
+    {
+        return;
+    }
+    // spec: S-0107 r40 claim 11 (a change of target ends the attack state and asks, not forced, for deployed, prone or stand, in or out of the attack state) and S-0215 r118 claim 11 (Other endings)
+    end_attack(w, id, true);
+    if let Some(o) = w.obj_mut(id) {
+        let t = o.target;
+        if let Some(s) = o.infantry.as_mut() {
+            s.watch = t;
+        }
+    }
+}
+
+/// Takes the unit's target as the baseline of its next change-of-target
+/// test ([`watch_test`]).
+pub(crate) fn watch_set(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        let t = o.target;
+        if let Some(s) = o.infantry.as_mut() {
+            s.watch = t;
+        }
+    }
+}
+
+/// The change-of-target test (S-0107 claim 11): a unit that held a target
+/// at the baseline and now holds another, or none, has had its target
+/// changed ([`target_changed`]). A unit that held none and gains one has
+/// not (Q-2616 interim). The baseline becomes the target it holds now.
+pub(crate) fn watch_test(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(s) = o.infantry.as_ref() else { return };
+    // spec: S-0107 r40 claim 11 (its target changes, to another target or to none) and Q-2616 interim (gaining a target from none is no change)
+    let changed = s.watch.is_some() && s.watch != o.target;
+    if changed {
+        target_changed(w, id);
+    } else {
+        watch_set(w, id);
+    }
+}
+
+/// The attack-move rule's exception (S-0215 r118 claim 11, S-0309 claim
+/// 23): a discard of the target with no other found, or a remembered target
+/// put back, is no change of target. `before` is the target the unit held
+/// just before that rule wrote it; when no change is pending since the
+/// baseline, the baseline follows the rule's write.
+pub(crate) fn watch_carry(w: &mut World, id: ObjectId, before: Option<Target>) {
+    let Some(o) = w.obj_mut(id) else { return };
+    let t = o.target;
+    if let Some(s) = o.infantry.as_mut()
+        && s.watch == before
+    {
+        // spec: S-0215 r118 claim 11 (the attack-move rule of S-0309 claim 23 discards a target, and puts a remembered target back, without the change-of-target ending)
+        s.watch = t;
+    }
+}
+
+/// The stage-delay-0 ending (S-0107 r40 claim 11): a unit in the attack
+/// state whose update began with a current sequence of stage delay 0
+/// (`began_frozen`, taken at the start of its turn) leaves the state and
+/// asks (not forced) for *stand*. S-0215 r118 claim 11 places it after the
+/// update's processing and before its late start.
+pub(crate) fn stage_delay_zero_end(w: &mut World, id: ObjectId, began_frozen: bool) {
+    let Some(s) = w.obj(id).and_then(|o| o.infantry.as_ref()) else {
+        return;
+    };
+    if !(began_frozen && s.attack) {
+        return;
+    }
+    // spec: S-0215 r118 claim 11 (Other endings: a current sequence whose stage delay is 0, after the update's processing and before its late start, so only the first start sees the state) and S-0107 r40 claim 11 (a tick that begins with a current sequence whose stage delay is 0 ends the attack state; the unit also asks, not forced, for stand)
+    if let Some(s) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
+        s.attack = false;
+    }
+    request(w, id, Seq::Stand, false);
+}
+
+/// Whether the unit's update begins with a current sequence whose stage
+/// delay is 0 (S-0107 claim 11; only *stand* and guard have one, T1). A
+/// unit with no current sequence reads the delay 0 that its stage rule
+/// uses then (claim 4), as before.
+pub(crate) fn begins_frozen(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| o.infantry.as_ref())
+        .is_some_and(|s| s.seq_delay == 0)
+}
+
 /// The completion follow-up (S-0107 claim 8) and the movement rule (claim
 /// 10) of a tick: the part of the sequence rules that comes after the
 /// firing rules of the same tick (S-0107 State and ordering: the fear and
@@ -452,6 +572,14 @@ pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress:
     let complete = s.seq.is_none() || s.stage(tick) >= c;
     if complete {
         let cur = s.seq;
+        if s.prone
+            && matches!(cur, Some(Seq::FireProne | Seq::SecondaryFireProne))
+            && !w.rules().quirks.prone_attack_state_persists
+            && let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut())
+        {
+            // spec: S-0107 r40 claim 11 and Quirks (quirks.prone_attack_state_persists off: a prone unit's attack state ends when fire-prone, or secondary-fire-prone that is not repeated for an airstrike, completes; no airstrike repeat is built, seam)
+            st.attack = false;
+        }
         let follow = match cur {
             Some(Seq::Deploy) => Some(Seq::Deployed),
             Some(Seq::Undeploy) => Some(Seq::Stand),

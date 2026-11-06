@@ -1,7 +1,9 @@
-//! S-0215 r104 claim 16 (M8 seam): the no-threat fall-back on damage. A
-//! mobile actor that is not a team member, whose current behaviour has the
-//! no-threat property and not the zombie property, falls back to rest at
-//! once (claims 13 to 15) when it survives damage from a known attacker.
+//! S-0215 r118 claim 16 (M8 seam, intake 99): the no-threat fall-back on
+//! damage. A mobile actor that is not a team member, whose current behaviour
+//! at that point of the hit has the no-threat property and not the zombie
+//! property, falls back to rest at once (claims 13 to 15) after a hit that
+//! names an attacker, lowers its health and reports unchanged, now yellow or
+//! now red. The test comes after the retaliation (claim 18), Q-2586 answered.
 //! Every hit here is a real shot: the firer's weapon fires a projectile
 //! (`combat::fire::shot`) or a player's attack order makes it fire, and the
 //! projectile detonates in the tick pipeline. Synthetic data only (the
@@ -269,9 +271,9 @@ fn claim_16_no_fall_back_without_a_known_attacker() {
     assert_eq!(common_effects(&w, s), c0, "no fall-back to rest");
 }
 
-// spec: S-0215 claim 16 (rated medium: "any damage that changes health and leaves the actor alive") and Q-2586 interim question 3 (a heal, S-0302 claims 1 and 11, and a hit that lowers no health are not damage: no fall-back). The synthetic ruleset has no healing weapon, so the hits enter at `damage::apply`, the entry a detonation uses, with a known attacker
+// spec: S-0215 r118 claim 16, Results (Q-2586 answered: a healing hit, S-0302 claim 11, raises health and reports unaffected, and neither it nor any other hit that changes no health triggers the fall-back) and scenario B5 part (d) (harmless stays current and nothing is queued). The synthetic ruleset has no healing weapon, so the hits enter at `damage::apply`, the entry a detonation uses, with a known attacker
 #[test]
-fn claim_16_interim_a_heal_or_a_hit_that_lowers_no_health_gives_no_fall_back() {
+fn claim_16_b5_d_a_heal_or_a_hit_that_lowers_no_health_gives_no_fall_back() {
     let (mut w, s, _, a) = b5(&rules(true, false), Kind::Vehicle, "CART");
     let he = w
         .rules()
@@ -391,30 +393,76 @@ fn claim_16_the_rest_tables_decide_an_armed_vehicle_in_guard_queues_nothing() {
     );
 }
 
-// spec: S-0215 claim 16 and Q-2586 interim (the fall-back comes before retaliation, judged on the behaviour current when the hit lands; the retaliation override then puts the queued rest behaviour aside, claim 10 with quirks.override_suspends_queued on, and it stays queued); claim 18 (the neutral house is not held to the behaviour list); claim 15 row 12
+// spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the test comes after the retaliation, claim 18; an actor that retaliates at that hit has attack current, claim 10, when the test is made, does not fall back unless attack has the no-threat property, and its no-threat behaviour stays suspended until the revert) and scenario B5 part (c) (player return fire on; expected at the end of the tick of the first hit: attack current, harmless suspended and nothing queued)
 #[test]
-fn claim_16_interim_the_fall_back_comes_before_retaliation() {
+fn claim_16_b5_c_retaliation_comes_before_the_no_threat_test() {
     let mut r = rules(true, false);
-    // harmless keeps the retaliate property (absent-key default yes, Constants).
+    // B5 c's file: harmless with the no-threat and retaliate properties,
+    // attack with neither no-threat nor zombie, player return fire on.
     r.sim.behaviours.get_mut("harmless").unwrap().retaliate = Some(true);
-    let mut w = testkit::game_with_non_players(&r, SIZE, 3);
-    // S of the neutral house (house 2), A of house 0.
-    let s = spawn(&mut w, Kind::Vehicle, "CART", 2, mid(SIZE, 0, 0), 0);
+    r.sim.behaviours.insert(
+        "attack".into(),
+        BehaviourProps {
+            no_threat: Some(false),
+            zombie: Some(false),
+            ..Default::default()
+        },
+    );
+    r.sim.general.player_return_fire = Some(true);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    // S, an armed vehicle of a human-controlled house in harmless with no
+    // target and no destination; A, an enemy vehicle within S's range.
+    let s = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 0, 0), 0);
     force(&mut w, s, Behaviour::Harmless);
     let a = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, -3, 0), 64);
+    assert!(w.houses[1].human, "set-up: a human-controlled owner");
     assert!(!w.allied(w.obj(s).unwrap().owner, w.obj(a).unwrap().owner));
+    let c0 = common_effects(&w, s);
+    assert_eq!(
+        w.obj(s).unwrap().target,
+        None,
+        "set-up: no target before the hit"
+    );
     shoot(&mut w, a, s);
     assert!(health(&w, s) > 0);
     let o = w.obj(s).unwrap();
-    assert_eq!(o.target, Some(Target::Object(a)), "S retaliates");
+    assert_eq!(
+        o.target,
+        Some(Target::Object(a)),
+        "set-up: S retaliates at A"
+    );
     assert_eq!(
         (o.beh.current, o.beh.queued, o.beh.suspended),
-        (
-            Some(Behaviour::Attack),
-            Some(Behaviour::AreaGuard),
-            Some(Behaviour::AreaGuard)
-        ),
-        "the override puts aside the queued rest behaviour"
+        (Some(Behaviour::Attack), None, Some(Behaviour::Harmless)),
+        "attack current, harmless suspended and nothing queued"
+    );
+    assert_eq!(common_effects(&w, s), c0, "no fall-back to rest");
+}
+
+// spec: S-0215 r118 claim 16 (an actor that retaliates falls back when attack has the no-threat property: the test is made on the behaviour current at that point of the hit)
+#[test]
+fn claim_16_a_retaliation_into_a_no_threat_attack_falls_back() {
+    let mut r = rules(true, false);
+    r.sim.behaviours.get_mut("harmless").unwrap().retaliate = Some(true);
+    r.sim.behaviours.insert(
+        "attack".into(),
+        BehaviourProps {
+            no_threat: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.general.player_return_fire = Some(true);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let s = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 0, 0), 0);
+    force(&mut w, s, Behaviour::Harmless);
+    let a = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, -3, 0), 64);
+    let c0 = common_effects(&w, s);
+    let t = shoot(&mut w, a, s);
+    assert!(health(&w, s) > 0);
+    let c1 = common_effects(&w, s);
+    assert!(
+        c1 != c0 && c1.is_some_and(|c| c > t - 2 && c <= t),
+        "the fall-back runs on attack: {c0:?} then {c1:?}, shot detonated by {t}"
     );
 }
 

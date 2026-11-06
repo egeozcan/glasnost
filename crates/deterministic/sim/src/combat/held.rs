@@ -104,6 +104,8 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
             crate::spawn::clear_own_target(ob);
         }
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        // spec: S-0215 r118 claim 11 (Other endings: a change of target because the target leaves play ends the attack state when the target leaves, so no start after it sees the state) and S-0107 r40 claim 11 (the change asks for deployed, prone or stand); the drop is the change even where a revert gives the same object back
+        crate::infantry::target_changed(w, x);
         if let Some(before) = restored {
             // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
             crate::infantry::destination_assigned(w, x, before);

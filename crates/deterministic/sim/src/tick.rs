@@ -233,6 +233,13 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0616 claim 1 (a deactivated vehicle's spark step comes first in its turn, before every other draw of that turn, also in turns that end early for another reason)
     crate::emitters::deactivated_sparks(w, id);
+    let on_foot = kind == Kind::Infantry;
+    // spec: S-0107 r40 claim 11 (a tick that begins with a current sequence whose stage delay is 0: read at the start of the unit's turn)
+    let frozen = on_foot && infantry::begins_frozen(w, id);
+    if on_foot {
+        // The baseline of the change-of-target tests of this turn (S-0107 claim 11).
+        infantry::watch_set(w, id);
+    }
     // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r89 claim 39a (The firer: an infantry or vehicle firer whose beam is attached to a departed member keeps it) and r91 claim 39a (Q-2376 answered: so do a building firer and an infantry or vehicle firer beyond range of the old position); an aircraft firer: the aircraft specs', kept meanwhile as our own rule
     crate::combat::held::turn_start_drop(w, id);
     let member = crate::superweapons::warp::is_member(w, id);
@@ -278,6 +285,10 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     // spec: S-0601 claim 16 (revision 9: the overload update runs in exactly the updates in which the berserk countdown runs: not in an excluded update, S-0215 claim 2's being erased (a tunnel is not built), nor in a warp-only update, which returned above, S-0513 claim 51 and S-0203 claim 4)
     // spec: S-0610 r12 claim 5 (the excluded updates include a superweapon-warp member's phasing-in updates that S-0215 claim 2 excludes, S-0513 claim 39a)
     let early = crate::mind::unlimited(w, id) && !crate::temporal::cut_short(w, id);
+    if on_foot {
+        // spec: S-0215 r118 claim 11 (Other endings: a change of target before the first per-tick start, such as the turn-start drop, the target having left play, ends the state before any start sees it)
+        infantry::watch_test(w, id);
+    }
     if early {
         // spec: S-0601 claim 16 and State and ordering (revision 9: the overload update follows the berserk countdown of S-0610 claim 5, which follows the first per-tick start, and precedes self-healing, behaviour processing, movement and firing; so an unlimited controller's first per-tick start and countdown come here, ahead of its self-healing, an order S-0610 claim 6 and S-0314 claim 9 leave to the engine)
         process::head(w, id);
@@ -467,6 +478,12 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once); S-0314 claim 23 (with the position change, before the queued-entry retry)
     crate::transport::sync(w, id);
+    if on_foot {
+        // spec: S-0215 r118 claim 11 (Other endings: a change of target made by the unit's own processing or by claim 33's per-tick search ends the state in it, so the first start of the update sees the state and its late start does not; the berserk countdown and S-0309 claim 29's check, between the first start and the processing, as our engine's reading of the same place)
+        infantry::watch_test(w, id);
+        // spec: S-0215 r118 claim 11 (Other endings: a current sequence whose stage delay is 0, after the update's processing and before its late start)
+        infantry::stage_delay_zero_end(w, id, frozen);
+    }
     // spec: S-0215 claim 11 (the late start of an infantry unit or vehicle: after this update's movement, before its separate firing; a tunnel, erasing, leaving-stage or warp-only update never gets here, claim 2 and S-0513 claim 51)
     process::late_start(w, id);
     // spec: S-0605 claim 4 (in each of its own turns, after its behaviour processing and its movement, an actor waiting in line asks for contact: S-0314 claim 23's turn position) and claim 17 (quirks.absorber_stale_contact_kept off: the contact check at the same place)
@@ -499,6 +516,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
         // spec: S-0107 State and ordering (the fear rules of a tick come before its firing rules: a sequence they start already holds for the firing rules)
         infantry::fear_turn(w, id, in_progress, has_dest);
+        // spec: S-0107 r40 claim 11 (a change of target ends the attack state at once: one made since the late start comes before the firing turn)
+        infantry::watch_test(w, id);
         // spec: S-0107 claim 11 (firing); S-0107 State and ordering (judged against the sequence current before the tick's completion follow-up, so a fire frame equal to the count still releases the shot on the completion tick); S-0301 claim 9 rank 4 and S-0511 claim 10 (a unit still falling cannot fire, even with a firing sequence begun before the drop)
         crate::combat::behave::infantry_step(w, id);
         // spec: S-0107 State and ordering (the completion follow-up after the firing rules; the movement rule after the follow-up)
