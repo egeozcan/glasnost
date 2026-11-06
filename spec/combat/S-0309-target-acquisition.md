@@ -2,14 +2,14 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 116
+revision: 120
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-06
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
-Q-2262, Q-2263, Q-2264, Q-2376, Q-2418]
+Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712]
 supersedes: []
 ---
 
@@ -1866,6 +1866,54 @@ index 1. This is a design rule, not an additional claim about the original.
       claim 9's order of ranks 1 to 4 among themselves, low there). For the warp
       members: low for the original's checks, which S-0513 claims 48 and 52 leave unsettled, and
       high as design for our engine's suppression of them
+
+### A holder that changes owner
+
+30. **A holder that changes owner drops its target (Q-2712).** When an infantry unit, vehicle,
+    aircraft or building changes owner to another house, whatever the cause, it drops its target at
+    that moment, inside the change. The causes include the occupation and return of a civilian
+    garrison building (S-0508 claims 7 and 8), an engineer capture (S-0509 claim 8), a trigger's
+    change-owner action (S-0011 claim 24) and a mind-control takeover or release (S-0601 claims 6
+    and 9). The drop does not depend on the target: an enemy target, a target that the change makes
+    an object of the holder's own house or of a house allied with it, and a target given by an order
+    are all dropped. A change to the house the holder already belongs to is no change and drops
+    nothing (glossary, *building ownership change*).
+    - The drop takes no targeting-timer draw. Claim 27's reset over 4 to 8 ticks belongs to the
+      drops of claims 27 and 28, not to this one, so the holder's targeting timer goes on counting
+      down from its value before the change.
+    - After the change the holder has no target until a search, an order or retaliation gives it
+      one. A building whose animation-delayed shot (S-0301 claim 14) is pending at the change acts
+      in the turn that ends the delay as claim 27's consequences give: it makes no firing check and
+      no shot if it then holds no target, and the shot is no longer pending. A target that a revert
+      or a search has given it by then is the one that check uses. Claim 29's check and claim 25
+      part k never act on the dropped target.
+    - For every cause listed, the same change also clears the holder's destination and requests
+      *guard* in the way that S-0601 claim 9 gives for a release, with that claim's exception for a
+      simple-deployer vehicle in *unload*, and S-0215 claim 7 owns the start (high for a release, as
+      S-0601 claim 9 rates it, medium for the other causes, `unmeasured`: no scenario here records a
+      holder's destination and behaviours at those changes, so for them this rests on the change
+      being the same for every cause). Whether a building that is being sold at the change also gets
+      the *guard* request is not given here (Open questions). A mind-control takeover adds S-0215
+      claim 9's guard reset (S-0601 claim 6).
+    - Backing: `measurable` (scenario A19: part a for a building by capture, part b for a vehicle
+      and an infantry unit by a trigger's change-owner action, part c for the targeting timer, part
+      d for a vehicle by a mind-control takeover, for the drop by the end of the takeover's tick,
+      and S-0508 scenario G20 for a building by occupation). That the drop at a takeover comes
+      inside the change, not from the guard reset that the takeover adds, is `unmeasured`: part d's
+      record is the same either way. The drop at a mind-control release is `unmeasured`: no setup
+      here gives a controlled holder a target at its release. The destination and *guard* for the
+      other causes are `unmeasured`, as the bullet above gives. The return of S-0508 claim 8 is
+      `unmeasured`: no setup here gives an empty garrison building a target. The aircraft holder and
+      the pending animation-delayed shot are `unmeasured`: no setup here changes an aircraft's owner
+      while it holds a target, or a building's owner while its delayed shot is pending.
+    - Confidence: high (the drop at the change, for infantry units, vehicles and buildings, for
+      every cause listed but the return of S-0508 claim 8 and the mind-control takeover and
+      release, and its independence from the target's owner; the drop by the end of the tick of
+      a mind-control takeover); the destination and *guard* at the levels the bullet above
+      gives; medium (no targeting-timer draw, because not every step of the change was traced
+      for draws; the aircraft holder; the return of S-0508 claim 8; the drop's place inside the
+      change at a mind-control takeover; the drop at a mind-control release; the pending
+      animation-delayed shot, which follows claim 27's consequences)
 
 ## Formulas
 
@@ -3904,8 +3952,63 @@ hit or leaves the map. Each part runs 5 times from a fresh game, unless it says 
   (update order or distance order), or in f2 *H*1 has it (the draws ordered by holder, not by
   removed object).
 
+**A19: a holder that changes owner (claim 30; Q-2712).** A tiny flat skirmish map, one human house
+*H* and two computer houses *E* and *F*, none allied with another, game speed 6, no engine add-on
+and no mods (the named test files of a scenario excepted). The normal targeting delay is given a
+test value of 100 ticks. Record each tick, at the end of each object's turn where the recorder
+allows it and otherwise at the end of the tick: the owner and the target of each test object, its
+fire events (tick, weapon and what was aimed at), its targeting timer and the scenario random state.
+Each part runs 5 times from a fresh game.
+- *Part a (capture):* a defensive building *D* of *E*, of a capturable type, attacks an infantry
+  unit *U* of *H* standing in its range, with *U*'s health and the engineer's raised so that *D*
+  cannot kill them. Once *D* holds *U*, an engineer of *H* captures *D*. A run in which *D* does not
+  hold *U* at the end of the tick before the capture decides nothing, and so does one in which *D*'s
+  targeting timer has run out before the capture or, counting down from its value immediately before
+  the capture, runs out at or before the end of the tick after the capture, the capture tick
+  included. So no search of *D*'s own comes in that window: the per-tick search runs only for an
+  actor whose targeting timer has run out (S-0215 claim 33). *Expected:* at the end of the
+  engineer's turn in the capture tick, where read, and at the end of that tick, *D* holds no target,
+  and it has no fire event at *U* after the capture. *Falsified if:* *D* still holds *U* after the
+  capture, or fires at it.
+- *Part b (change-owner action):* a vehicle *V* of *H*, ordered by the player to attack a vehicle
+  *W* of *E* with raised health. *V* carries the tag of a map trigger, set off by elapsed time once
+  *V* has fired at *W*, whose change-owner action gives the carriers of that tag to *F* (S-0011
+  claim 24). *F* is not allied with *E*, so *W* is still an enemy of *V*'s new owner. Run b2 repeats
+  it with an infantry unit of *H* in place of *V*. A run in which the holder's targeting timer has
+  run out before the change or, counting down from its value immediately before the change, runs out
+  at or before the end of the tick after the change, the tick of the change included, decides
+  nothing, so that no search of its own gives it a target there (S-0215 claim 33). *Expected:* from
+  the end of the tick of the change, the holder holds no target, and it has no fire event at *W*
+  until a search of its own (a restart of its targeting timer) or an order gives it a target again.
+  *Falsified if:* the holder still holds *W* at the end of the tick of the change.
+- *Part c (no timer draw):* part a, with the capture tick placed at different points of *D*'s
+  targeting timer, repeating until at least five runs that part a's conditions do not void have more
+  than 10 ticks left on it at the capture and five such runs have at most 10 left. Only those runs
+  count. This overrides the count of 5 runs. The recorder lists the scenario-stream draws taken in
+  the engineer's turn in the capture tick, each with its range, where it allows that read, and
+  otherwise those of the whole capture tick, with the draws that other specs predict set aside, and
+  reads *D*'s targeting timer immediately before the capture and at the end of the capture tick.
+  *Expected:* in both groups, no draw over 4 to 8 that no other spec predicts, and *D*'s timer goes
+  on counting down from its value before the capture. *Falsified if:* such a draw appears, or *D*'s
+  timer at the end of the capture tick does not go on counting down from its value before the
+  capture (a new value or a held value).
+- *Part d (mind-control takeover):* *H* plays a country whose side has a mind-controlling infantry
+  unit. A vehicle *V* of *E* attacks an unarmed infantry unit *U* of *H*, such as an engineer,
+  standing in its range, with *U*'s health raised so that *V* cannot kill it, and no other object of
+  *E* or *F* is in *V*'s weapon range. Once *V* holds *U*, the player orders a mind-controlling
+  infantry unit *M* of *H* to take *V* (S-0601 claim 6). A run in which *V* does not hold *U* at the
+  end of the tick before the takeover decides nothing, and so does one in which part a's
+  targeting-timer condition, with the takeover in place of the capture, holds for *V*. *Expected:*
+  at the end of the tick in which *V*'s owner becomes *H*, *V* holds no target, and it has no fire
+  event at *U* after that tick. *Falsified if:* *V* holds *U* at the end of that tick, or fires at
+  it after it. This part shows the drop at the takeover whether the change or the guard reset that
+  the takeover adds (S-0601 claim 6) makes it.
+
 ## Open questions
 
+- Claim 30: whether a building that is being sold when it changes owner gets the *guard* request of
+  the change, or keeps selling without it (low). A capture or a change-owner action during the sale,
+  with the building's behaviours recorded per tick, would decide it.
 - Q-2112 question 1: which occasion gives the hunting vehicles of the games that the request
   cites their hovering-jumpjet targets after their first targets die. Their own map-wide search
   never finds one (claim 7). The occasions that can are a target picked while the jumpjet was in
@@ -4329,6 +4432,9 @@ S-0203 claim 4's list of that work gains it: "the periodic held-target check (S-
 design for our engine's suppression. Backing: `unmeasured` for the original (no part here gives a
 warp member a refused held target at a check tick), `measurable` in our engine (S-0513 scenario SW23
 part f).
+
+S-0509 claim 12, its table of effects owned elsewhere: it gains the row "The building's held target
+dropped at the change | S-0309 claim 30". Level and backing: as claim 30 gives for a building.
 
 ## Questions for the project lead
 
