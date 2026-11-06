@@ -43,24 +43,49 @@ pub fn nearby_point(w: &World, q: Pos, r: i32, b: u32, snap: bool) -> Pos {
     if snap { Pos::centre(c, q.z) } else { p }
 }
 
+/// What an object's debris (S-0312 claim 4) reads from it: its position,
+/// its house and its type's debris fields.
+#[derive(Clone, Debug)]
+pub(crate) struct DebrisPlan {
+    pos: Pos,
+    owner: Option<crate::world::HouseId>,
+    tc: crate::combat::data::TypeCombat,
+}
+
+/// The debris an object would throw (S-0312 claim 4): none when its type
+/// throws at most 0 pieces. Reads only.
+fn debris_plan(w: &World, id: ObjectId) -> Option<DebrisPlan> {
+    let o = w.obj(id)?;
+    let tc = type_combat(w, id)?;
+    if tc.max_debris <= 0 {
+        return None;
+    }
+    Some(DebrisPlan {
+        pos: o.pos,
+        owner: o.owner,
+        tc: tc.clone(),
+    })
+}
+
 /// Debris (S-0312 claim 4, F1; S-0303 F6 for the dealing).
 fn debris(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    let Some(tc) = type_combat(w, id).cloned() else {
-        return;
-    };
-    if tc.max_debris <= 0 {
-        return;
+    if let Some(p) = debris_plan(w, id) {
+        throw_debris(w, &p);
     }
+}
+
+/// Throws the debris of a plan, with its draws (S-0312 claim 4, F1).
+fn throw_debris(w: &mut World, p: &DebrisPlan) {
+    let tc = &p.tc;
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0312 F1 (N = R(Y, X − 1))
     let n = w.rng.ranged(tc.min_debris, tc.max_debris - 1, half);
     let metallic = w.rules().combat.general.metallic_debris.clone();
     // spec: S-0312 F1 (debris animations raised by 20 leptons)
-    let raised = Pos::new(o.pos.x, o.pos.y, o.pos.z + 20);
+    let raised = Pos::new(p.pos.x, p.pos.y, p.pos.z + 20);
     if !tc.debris_types.is_empty() {
         // spec: S-0312 claim 4 (revision 44: the voxel debris consists of S-0317 pieces, objects of play created at the unraised position with S-0317 claims 3 and 4 draws, owned by the object's house; that house changes neither their ground-impact hits nor their end's area damage, which carry no attacking house, S-0317 claims 1, 7 and 11)
-        deal_debris(w, n, &tc.debris_types, &tc.debris_maximums, o.pos, o.owner);
+        deal_debris(w, n, &tc.debris_types, &tc.debris_maximums, p.pos, p.owner);
     } else if !tc.debris_anims.is_empty() {
         let c = tc.debris_anims.len() as i32;
         for _ in 0..n.max(0) {
@@ -215,6 +240,8 @@ pub fn leave_play(w: &mut World, id: ObjectId) {
     // spec: S-0312 claims 12 and 15 and S-0507 claim 16 (remaining passengers die at removal, without attacker credit)
     crate::transport::remove_passengers(w, id);
     crate::objects::remove(w, id);
+    // spec: S-0203 claim 13 (c) (the leftover of a death: the sweep's hit can reach it)
+    crate::leftover::died(w, id);
 }
 
 /// The death of a passenger inside a transport (S-0312 claims 5, 12 and
@@ -268,26 +295,50 @@ pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
 /// A killed vehicle's explosion and destruction animations (S-0312 claim
 /// 9), shown at `o`'s position: also a crushed vehicle's (S-0210 claim 4).
 pub(crate) fn vehicle_animations(w: &mut World, id: ObjectId, o: &crate::world::Object) {
+    let p = animation_plan(w, id, o);
+    show_animations(w, &p);
+}
+
+/// What a killed vehicle's animations (S-0312 claim 9) read from it: the
+/// position, the two lists and whether the explosion list's last entry is
+/// shown.
+#[derive(Clone, Debug)]
+pub(crate) struct AnimationPlan {
+    pos: Pos,
+    explosion: Vec<String>,
+    last: bool,
+    destroy: Vec<String>,
+}
+
+/// The animations of claim 9 for vehicle `id` shown at `o`'s position.
+/// Reads only.
+fn animation_plan(w: &World, id: ObjectId, o: &crate::world::Object) -> AnimationPlan {
     let tc = type_combat(w, id).cloned().unwrap_or_default();
-    // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
-    if !tc.explosion.is_empty() {
-        let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;
-        let unlimited = tc.ammo < 0 || o.combat.ammo != 0;
-        let explodes =
-            tc.explodes || veterancy::has_ability(w, id, crate::combat::data::Ability::Explodes);
+    let unlimited = tc.ammo < 0 || o.combat.ammo != 0;
+    let explodes =
+        tc.explodes || veterancy::has_ability(w, id, crate::combat::data::Ability::Explodes);
+    AnimationPlan {
+        pos: o.pos,
         // spec: S-0312 claim 9 (an exploding vehicle with ammunition shows the last entry; the draw is still taken)
-        let pick = if explodes && unlimited {
-            tc.explosion.len() - 1
-        } else {
-            k
-        };
-        let name = tc.explosion[pick].clone();
-        effects::anim(w, &name, o.pos);
+        last: explodes && unlimited,
+        explosion: tc.explosion,
+        destroy: tc.destroy_anim,
     }
-    if !tc.destroy_anim.is_empty() {
-        let k = w.rng.list_pick(tc.destroy_anim.len() as u32) as usize;
-        let name = tc.destroy_anim[k].clone();
-        effects::anim(w, &name, o.pos);
+}
+
+/// Shows the animations of a plan, with their list picks (S-0312 claim 9).
+fn show_animations(w: &mut World, p: &AnimationPlan) {
+    // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
+    if !p.explosion.is_empty() {
+        let k = w.rng.list_pick(p.explosion.len() as u32) as usize;
+        let pick = if p.last { p.explosion.len() - 1 } else { k };
+        let name = p.explosion[pick].clone();
+        effects::anim(w, &name, p.pos);
+    }
+    if !p.destroy.is_empty() {
+        let k = w.rng.list_pick(p.destroy.len() as u32) as usize;
+        let name = p.destroy[k].clone();
+        effects::anim(w, &name, p.pos);
     }
 }
 
@@ -401,6 +452,73 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Terrain => {}
     }
     let _ = half;
+}
+
+/// What the death effects that a leftover vehicle repeats at the defeat
+/// sweep's hit read from it (S-0203 claim 13 (c); the S-0312 entry of its
+/// Changes for other specs): its debris, the death weapon when it is
+/// exploding, the animations of claim 9 at its last position and the crate
+/// it carries.
+#[derive(Clone, Debug)]
+pub(crate) struct Repeat {
+    debris: Option<DebrisPlan>,
+    weapon: Option<(WeaponId, i32)>,
+    pos: Pos,
+    owner: Option<crate::world::HouseId>,
+    animations: AnimationPlan,
+    crate_drop: Option<(glasnost_map::CellXY, bool)>,
+    /// It meets claim 10's sinking conditions or claim 15's crash
+    /// conditions at the hit, which the S-0312 entry leaves open.
+    pub unsettled: bool,
+}
+
+/// The repeated death effects of vehicle `id` (S-0203 claim 13 (c)), read
+/// from the world. Reads only.
+pub(crate) fn repeat_plan(w: &World, id: ObjectId) -> Option<Repeat> {
+    let o = w.obj(id)?;
+    let crashable = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.vehicle.crashable);
+    // spec: S-0203 claim 13 (c), S-0312 entry of Changes for other specs (what happens to a leftover that meets claim 10's sinking conditions or claim 15's crash conditions at this hit is not established); S-0312 claims 10 and 15 (a naval type on water; a type that can crash, above the terrain)
+    let unsettled =
+        crate::naval::sinks_at_kill(w, id) || (crashable && w.height_above_surface(id) > 0);
+    Some(Repeat {
+        debris: debris_plan(w, id),
+        // spec: S-0312 claim 6 (the death weapon of an exploding object only)
+        weapon: exploding(w, id).then(|| death_weapon(w, id)).flatten(),
+        pos: o.pos,
+        owner: o.owner,
+        animations: animation_plan(w, id, o),
+        crate_drop: crate::crates::death_crate_plan(w, id),
+        unsettled,
+    })
+}
+
+/// The death effects a leftover vehicle repeats (S-0203 claim 13 (c); the
+/// S-0312 entry of its Changes for other specs), in claim 1's order and
+/// with their draws, as at a further killing hit of claim 32, at the
+/// sweep's place in the tick. No destruction is registered: no credit, no
+/// destruction raise. The effects whose subject is gone do nothing again:
+/// its passengers were dealt with at its first death and its bomb went off
+/// then. `source` is the leftover itself, which nothing in the world can
+/// find any more (claim 13 (e)), as a removed firer.
+pub(crate) fn repeat(w: &mut World, source: ObjectId, p: &Repeat) {
+    // spec: S-0312 table, step 1 and claim 4 (debris, with its draws)
+    if let Some(d) = &p.debris {
+        throw_debris(w, d);
+    }
+    // spec: S-0312 table, step 2 and claim 6 (the death weapon of an exploding object, at its last position)
+    if let Some((wp, dmg)) = p.weapon {
+        crate::combat::projectile::detonate_weapon(w, wp, dmg, p.pos, Some(source), p.owner, true);
+    }
+    // spec: S-0312 claim 9 (the explosion and destruction animations at its last position, with their list picks)
+    show_animations(w, &p.animations);
+    // spec: S-0312 claim 13 (the crew rule with the hit's no-escape marker: no crew and no draw, `crew`'s first test)
+    // spec: S-0312 claim 14 (a crate it carries)
+    if let Some((at, money)) = p.crate_drop {
+        crate::crates::place_death(w, at, money);
+    }
 }
 
 /// The passengers of a destroyed vehicle that claim 5 has not killed

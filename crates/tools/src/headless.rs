@@ -194,6 +194,7 @@ async fn smoke_async(
                         | Effect::Infiltrated { .. }
                         | Effect::Cloak { .. }
                         | Effect::GasHit { .. }
+                        | Effect::LeftoverHit { .. }
                         | Effect::SpecialAnims { .. }
                         | Effect::DepotSlot { .. }
                         | Effect::Bunkered { .. }

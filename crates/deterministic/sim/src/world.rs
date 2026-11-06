@@ -492,6 +492,12 @@ pub struct World {
     /// The corridor exemption of buildings and aircraft (S-0212 claim 13).
     #[serde(default)]
     pub threat: crate::threat::ThreatWorld,
+    /// The leftovers of the tick that has run last (S-0203 claim 13): the
+    /// objects of the four kinds removed in it, kept to its end and gone
+    /// at the start of the next tick. Only the defeat sweep reads them
+    /// (`crate::leftover`).
+    #[serde(default)]
+    pub leftovers: BTreeMap<ObjectId, crate::leftover::Leftover>,
     /// The pathfinder in use (S-0212, behind a swappable interface).
     pub pathfinder: PathfinderChoice,
     /// The rules (not saved).

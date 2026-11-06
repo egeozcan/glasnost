@@ -73,6 +73,10 @@ pub struct Quirks {
     // spec: S-0203 claims 10 and 11
     #[serde(default = "on")]
     pub update_order_removal_skip: bool,
+    /// A defeat or surrender sweep offers its hit to the house's vehicles removed earlier in the same tick with no health, which repeat their death effects; off: no hit to any such object.
+    // spec: S-0203 claim 13 (c) and Edge cases
+    #[serde(default = "on")]
+    pub defeat_sweep_leftovers: bool,
     /// Distances use the table square root; off: the exact integer square root.
     // spec: S-0204 claim 5
     #[serde(default = "on")]
@@ -2275,6 +2279,7 @@ impl Default for Quirks {
             vehicle_destruction_extra_raises: true,
             random_magnitude_overflow: true,
             update_order_removal_skip: true,
+            defeat_sweep_leftovers: true,
             table_root_distance: true,
             table_direction: true,
             one_sided_building_distance: true,
@@ -2842,6 +2847,7 @@ impl Quirks {
             ),
             ("random_magnitude_overflow", self.random_magnitude_overflow),
             ("update_order_removal_skip", self.update_order_removal_skip),
+            ("defeat_sweep_leftovers", self.defeat_sweep_leftovers),
             ("table_root_distance", self.table_root_distance),
             ("table_direction", self.table_direction),
             (

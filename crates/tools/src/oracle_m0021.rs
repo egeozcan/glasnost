@@ -705,10 +705,12 @@ fn in_play(w: &World, id: ObjectId) -> Option<Pos> {
 /// every derived distance is within the weapon's range tests the
 /// derivation against the engine's own firing test ([`Findings::reach`]).
 ///
-/// A vehicle destroyed in the tick has left the world (S-0203 claim 6 (a)),
-/// so its position after its move is the one its last hit of the tick
-/// records (`gone`: `Effect::Hit`'s position, the hit object's own position
-/// at the hit, read in `combat::damage` before the hit's effects).
+/// A vehicle destroyed in the tick has left play (S-0203 claim 6 (a)) and is
+/// no object of the world, only a leftover the tool does not read here
+/// (claim 13 (e)), so its position after its move is the one its last hit
+/// of the tick records (`gone`: `Effect::Hit`'s position, the hit object's
+/// own position at the hit, read in `combat::damage` before the hit's
+/// effects).
 fn shot_positions(
     w: &World,
     order: &[ObjectId],
@@ -836,15 +838,17 @@ pub fn play_to(
             })
             .collect();
         rec.spins.insert(t, spins);
+        // spec: S-0203 claim 13 (a) and (e) (a vehicle removed in tick t is still among the game's objects after t's last part, off the map, and gone after t + 1)
+        let row_obj = |id: ObjectId| w.obj(id).or_else(|| glasnost_sim::leftover::object(w, id));
         let rows = all
             .iter()
-            .filter_map(|&id| w.obj(id).map(|o| (id, (o.pos, o.health))))
+            .filter_map(|&id| row_obj(id).map(|o| (id, (o.pos, o.health))))
             .collect();
         rec.rows.insert(t, rows);
         // measure: M-0021 (Procedure, revised for Q-2596: each vehicle's row gives whether it is on the map)
         let off = all
             .iter()
-            .filter(|&&id| w.obj(id).is_some_and(|o| !o.on_map))
+            .filter(|&&id| row_obj(id).is_some_and(|o| !o.on_map))
             .copied()
             .collect();
         rec.off_map.insert(t, off);
@@ -906,6 +910,19 @@ pub fn play_to(
                     warhead,
                     attacker,
                     health,
+                }),
+                // spec: S-0203 claim 13 (c) (the defeat sweep's hit on a leftover vehicle: no attacker, the demolition warhead, no health taken)
+                Effect::LeftoverHit {
+                    id,
+                    warhead,
+                    health,
+                    ..
+                } if all.contains(&id) => rec.hits.push(HitRec {
+                    tick: t,
+                    id,
+                    warhead,
+                    attacker: None,
+                    health: (health, health),
                 }),
                 _ => {}
             }
@@ -1573,7 +1590,7 @@ fn reading_points(rec: &Recording) -> (Reading, Reach) {
             row(t - 1, x),
             row(t, x),
         );
-        // A vehicle that left the world in the tick has no row stamped t: the four readings need all four rows.
+        // A vehicle with no row stamped t − 1 or t (gone from the world before that tick ended) is left out: the four readings need all four rows.
         let (Some(f0), Some(f1), Some(x0), Some(x1)) = rows4 else {
             continue;
         };
@@ -2914,7 +2931,7 @@ pub fn verdicts(
         "has a per-tick row stamped t, off the map, with no health left",
         at_t,
         format!(
-            "ours removes a destroyed vehicle from the world at its destroying hit (S-0203 claim 6 (a), S-0312 claim 15), so it has no row stamped t; seam, Q-2636; the others: {} (first: {})",
+            "ours keeps a vehicle removed at t as a leftover, off the map, to the end of t (S-0203 claim 13 (a) and (e)); the others: {} (first: {})",
             deaths - at_t,
             other.first().cloned().unwrap_or_default()
         ),
@@ -2950,7 +2967,7 @@ pub fn verdicts(
             check(
                 extra.is_empty(),
                 format!(
-                    "{}; ours removes the vehicle at its destroying hit (S-0203 claim 6 (a)), so no later hit can reach it in that tick; the record does not say where the hit comes from (Q-2636)",
+                    "{}; ours gives the hit through the defeat sweep of the house's leftover vehicles with no health (S-0203 claim 13 (c), quirks.defeat_sweep_leftovers)",
                     extra.join("; ")
                 ),
             )
@@ -3922,10 +3939,11 @@ mod tests {
                 assert!(s.target_pos.is_some(), "tick {}", s.tick);
             }
         }
-        // The destroyed vehicle has no row at the tick of its death (S-0203 claim 6 (a)): its last row is the one before, on the map with health left, and none follows.
+        // spec: S-0203 claim 13 (a) and (e): the destroyed vehicle is kept to the end of the tick of its death, so it has the row stamped t, off the map with no health left; its last row on the map is the one before, with health left, and none follows.
         let r = &f.reading;
-        assert_eq!(r.deaths_row_at_t, 0);
-        assert_eq!(r.deaths, r.deaths_other.len());
+        assert!(r.deaths > 0);
+        assert_eq!(r.deaths_row_at_t, r.deaths, "{:?}", r.deaths_other);
+        assert!(r.deaths_other.is_empty());
         assert_eq!(
             (r.deaths_none_after, r.deaths_on_map_before),
             (r.deaths, r.deaths)

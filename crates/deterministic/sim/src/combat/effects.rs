@@ -169,6 +169,22 @@ pub enum Effect {
         /// The object's health before the hit and after it.
         health: (i32, i32),
     },
+    /// A defeat or surrender sweep's hit on a leftover (S-0203 claim 13
+    /// (c)): no attacker, no health taken, no destruction registered. No
+    /// presentation reads it (no spec gives it a sound); the arena's M-0021
+    /// recorder does.
+    LeftoverHit {
+        /// The leftover.
+        id: ObjectId,
+        /// Its owner.
+        owner: Option<crate::world::HouseId>,
+        /// Its last position.
+        pos: Pos,
+        /// The hit's warhead.
+        warhead: Option<crate::combat::data::WarheadId>,
+        /// Its health, before the hit and after it (the same).
+        health: i32,
+    },
     /// A gas particle hit an object (S-0613 claim 13); the hit itself is
     /// ordinary damage, reported as for any other.
     GasHit {
