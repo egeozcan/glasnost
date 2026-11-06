@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 118
-sources-class: [decomp, design]
+revision: 132
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
-measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586]
+approved-on: 2026-11-06
+measurements: [M-0023]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586, Q-2656]
 supersedes: []
 ---
 
@@ -780,16 +780,21 @@ Terms used by this spec:
    - *hunt*, whose general with-target outcome can start *capture* or *sabotage* (claim 27),
    - *guard* and *area guard* carrying out one of the two occupy instructions (original only),
      which can start *capture* (claims 24 and 26, row 3),
-   - an aircraft in claim 28's second row, whose fall-back to rest, the first one and the second
-     one at a *scatter off a building* request, makes current the behaviour that S-0501 table T2
-     chooses, for instance *enter* (claim 28, S-0501 claims 18 and 49).
+   - an aircraft in claim 28's second row, whose fall-back to rest, the first one and the second one
+     at a *scatter off a building* request, makes current the behaviour that S-0501 table T2
+     chooses, for instance *enter* (claim 28, S-0501 claims 18 and 49),
+   - a processing whose fall-back to rest issues a route point by claim 13's route row and then
+     chooses the standard delay, such as *attack* with no target (claim 23): the queue of *wait*
+     with an immediate start before the issue (S-0213 claim 16c) makes *wait* current for a holder
+     that is ready to change, so that delay uses the rate of *wait* (medium, `measurable` by
+     scenario B15 part g).
 
-   A behaviour that a processing only queues, without making it current, leaves the rate as it
-   was. The starts of *hunt*, *guard* and *area guard* above are readiness-dependent: when the
-   actor is not ready to change, the new behaviour stays queued and the rate is that of the
-   behaviour still current. Which behaviour an aircraft's fall-back leaves current follows
-   S-0501 claim 18's end states. The infantry
-   rules of claims 23 and 27 that end with 1 tick take no rate at all.
+   A behaviour that a processing only queues, without making it current, leaves the rate as it was.
+   The starts of *hunt*, *guard*, *area guard* and the route row's *wait* above are
+   readiness-dependent: when the actor is not ready to change, the new behaviour stays queued and
+   the rate is that of the behaviour still current. Which behaviour an aircraft's fall-back leaves
+   current follows S-0501 claim 18's end states. The infantry rules of claims 23 and 27 that end
+   with 1 tick take no rate at all.
 
    **Observable random-stream result.** In a processing that takes a delay draw, its delay
    receives the stream value after the values assigned to every other draw belonging to that
@@ -814,8 +819,9 @@ Terms used by this spec:
      alone cannot identify the draw assigned to each rule. The aircraft item of the list above is
      `unmeasured`, as claim 28 and S-0501 claim 49 rate an aircraft's answer: no scenario
      records the rate taken after an aircraft's fall-back has changed its current behaviour.
-   - Confidence: high, except the aircraft item of the list above (medium, as S-0501 claim 49
-     rates an aircraft's answer, and low for the outcome that claim 28 rates low)
+   - Confidence: high, except the route-row item of the list above (medium, B15 part g) and the
+     aircraft item (medium, as S-0501 claim 49 rates an aircraft's answer, and low for the outcome
+     that claim 28 rates low)
 
 ### Changing behaviours
 
@@ -1340,13 +1346,16 @@ Terms used by this spec:
     and the destination and clears the target.
 
     The **stop order** is not a behaviour order: it changes no slot and forces nothing. It clears
-    the actor's target, destination, queued destinations and route, ends its contacts, and
-    leaves its guard spot alone. Two exceptions: a harvester vehicle whose current behaviour is
-    *harvest* or *return* queues *guard* and starts it at once, whether or not it is ready to
-    change, and a slave master also gives its harvesting slaves a guard reset. The stop order does nothing to an actor whose current behaviour
-    is *construction* or *selling*. As a consequence, an actor in *move* or *attack* that has been
-    stopped falls back to rest at a later processing (claims 22 and 23), once it has stopped moving.
-    The order specs own the stop order's further conditions.
+    the actor's target, destination, queued destinations and route, ends its contacts, and leaves
+    its guard spot alone. Two exceptions: a harvester vehicle whose current behaviour is *harvest*
+    or *return* queues *guard* and starts it at once, whether or not it is ready to change, and a
+    slave master also gives its harvesting slaves a guard reset. The stop order does nothing to an
+    actor whose current behaviour is *construction* or *selling*. As a consequence, an actor in
+    *move* or *attack* that has been stopped falls back to rest at a later processing (claims 22 and
+    23), once it has stopped moving. An infantry unit in *move* instead falls back at the end of the
+    update after which it has stopped moving (claim 22, end-of-update check), unless a *move*
+    processing already finds it stopped, with no destination and nothing queued, and falls back
+    first by claim 22's general rule. The order specs own the stop order's further conditions.
 
     **Destination clears for jumpjets.** S-0502 claim 24 governs every effective destination
     clear in this spec, including the fall-back outcomes of claims 13 to 15 and the
@@ -1426,7 +1435,7 @@ Terms used by this spec:
     |---|---|
     | its own locomotor has been temporarily replaced by another and that replacement can end | it gets its own locomotor back; S-0607 claim 20 owns seized-jumpjet restoration eligibility, its end-of-turn opportunities and its exclusions; S-0417 claim 5 establishes temporary driving during factory exit; S-0207 claim 21 owns the restored teleporting state |
     | it is a vehicle with approach destinations remaining after refresh | the first of them becomes its destination and is removed from the list; the route row and the guard-spot row do not apply in this fall-back |
-    | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it issues the action of the next route point as an order; this is not an immediate destination assignment |
+    | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it queues *wait* with an immediate start and issues the action of the next route point as an order (S-0213 claim 16c); this is not an immediate destination assignment |
     | it is an infantry unit that is not a harvesting slave, its guard spot is on another cell, the approach row does not apply, and it has not got its own locomotor back in this fall-back | the guard spot becomes its destination; unless its current behaviour is *area guard*, it also queues *move* and forgets the guard spot |
 
     Restoration retains the suspended movement state, rather than creating an empty one.
@@ -1436,10 +1445,13 @@ Terms used by this spec:
     or cancellation by those later effects.
 
     The approach row prevents the route and guard-spot rows. Otherwise the guard-spot row's
-    destination survives this fall-back. A route point issues an order through the ordinary order
-    timing of S-0213 claim 1, so its destination and behaviour do not replace the actor's state
-    within this fall-back. Its later application is governed by the order specs. This corrects
-    the earlier claim that the next route point immediately supplied a destination.
+    destination survives this fall-back. A route point issues an order through the ordinary
+    order timing of S-0213 claim 1, so its destination and behaviour do not replace the actor's
+    state within this fall-back. The issue is preceded by S-0213 claim 16c's queue of *wait*
+    with an immediate start, so for a holder that is ready to change (claim 11) *wait* is
+    current when the rest tables of claims 14 and 15 run, their row 1 applies, and the fall-back
+    queues no *guard*. Its later application is governed by the order specs. This corrects the
+    earlier claim that the next route point immediately supplied a destination.
 
     **Repair/reload route points.** For a route point resolving to an object, the action is
     classified as an ordinary object click (S-0214 claims 4, 7 and 8), with the actor owner's
@@ -1499,9 +1511,12 @@ Terms used by this spec:
       so a surviving approach entry can become the destination. That row itself queues no
       behaviour: the resumed *attack* is current if it could start, queued otherwise.
     - A route row that remains eligible issues its next-point order even when memory survives.
-      Within this fall-back it leaves the refreshed destination, target and slots alone; an
+      Within this fall-back it leaves the refreshed destination and target alone, and changes
+      the slots only by the queue of *wait* that precedes the issue (S-0213 claim 16c); an
       eligible infantry guard-spot row can still replace the destination. A later route order
-      takes effect at the order boundary, not as a second refresh or an immediate start here.
+      takes effect at the order boundary, not as a second refresh or an immediate start of the
+      order's behaviour here (the *wait* before the issue has S-0213 claim 16c's immediate
+      start).
     - Removing memory because the actor is neither engaged nor in *guard* does not suppress
       the approach, route or guard-spot rows. They apply as without memory; the ordinary rest
       table then judges their resulting state. Removal alone queues no behaviour.
@@ -1528,38 +1543,40 @@ Terms used by this spec:
     playing another house, qualifies for the owner-based service branch; using that person's
     house instead fails the reverse-alliance guard even if the ordinary classification is
     *enter*. This is a design consequence, not an additional observed route case in the original.
-    - Backing: `measurable` (S-0514 scenario E10 for attached-beam release and the distinction
-      from target clearing and stop/sleep processing; scenario B15: cases a and d for the guard-spot row, case b for the
-      route row's eventual movement; B15 e and S-0417 U6 for temporary driving restoration,
-      B33 for route-order timing; B40 for repair/reload route-point selection; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
-      rest table and its resumption or removal outcomes). The original's choice of the local player's routes over the owner's is
-      `unmeasured`: it differs from the owner's routes only for an actor that follows a route while
-      its owner is not the house played on the machine. Network games, where that is common, are
-      out of scope here (S-0202, claim 12); in a skirmish the only known way is an owner change
-      during a route, and since it is not established that a route survives an owner change, no
-      setup is known that is sure to produce the case. The approach row and its refresh collision
-      are `unmeasured`: no known input reliably provides specified approach entries at a
+    - Backing: `measurable` (S-0514 scenario E10 for attached-beam release and the distinction from
+      target clearing and stop/sleep processing; scenario B15: cases a and d for the guard-spot
+      row, case b for the route row's eventual movement; B15 e and S-0417 U6 for temporary driving
+      restoration, B33 for route-order timing; B40 for repair/reload route-point selection; S-0309
+      scenario A6, parts g, n and o, for attack-move refresh preceding the rest table and its
+      resumption or removal outcomes). The original's choice of the local player's routes over the
+      owner's is `unmeasured`: it differs from the owner's routes only for an actor that follows a
+      route while its owner is not the house played on the machine. Network games, where that is
+      common, are out of scope here (S-0202, claim 12); in a skirmish the only known way is an
+      owner change during a route, and since it is not established that a route survives an owner
+      change, no setup is known that is sure to produce the case. The approach row and its refresh
+      collision are `unmeasured`: no known input reliably provides specified approach entries at a
       fall-back. Temporary driving restoration is measurable for a factory-produced teleporting
-      vehicle. Magnetic-lift restoration,
-      its end-of-turn opportunities and its exclusions keep S-0607 claim 20's backing and
-      confidence, branch by branch (its being-erased case is `unmeasured`, low); other temporary
-      replacements remain `unmeasured` without an established setup.
-      The guard-spot/memory and route/memory collisions are `unmeasured`: ordinary attack-move
-      input clears the guard spot and ends the route, and no stock input sequence reliably keeps
-      both states. B33 gives conditional recorder checks, not a way to manufacture them. Also `unmeasured`: the route row's condition on a *patrol* that has
-      begun, because the *patrol* processing belongs to other topics (claim 34). Route-action
-      guards involving asymmetric alliances or owner-changed route holders are also
-      `unmeasured`: no established skirmish input preserves such a route and isolates those
-      classifications. B40 does not establish those guards. Also unmeasured is the rule of at
-      most once per tick, which needs two fall-backs of one actor in one tick, which no setup is
-      known to time. Scenario B15, case d, backs the guard-spot row for a unit whose current
-      behaviour is not *area guard*.
-    - Confidence: medium (the effects and which destination remains, and that the original uses
-      the local player's routes); high (that no scatter request
-      is sent, and that memory refresh precedes the destination rows and rest table),
-      medium for route-order timing and vehicle assignment's list effects; the memory lifecycle has
-      S-0309 claim 23's confidence; medium (factory-exit restoration and its guard-spot
-      exclusion); magnetic-lift restoration has S-0607 claim 20's confidence; low (other
+      vehicle. Magnetic-lift restoration, its end-of-turn opportunities and its exclusions keep
+      S-0607 claim 20's backing and confidence, branch by branch (its being-erased case is
+      `unmeasured`, low); other temporary replacements remain `unmeasured` without an established
+      setup. The guard-spot/memory and route/memory collisions are `unmeasured`: ordinary
+      attack-move input clears the guard spot and ends the route, and no stock input sequence
+      reliably keeps both states. B33 gives conditional recorder checks, not a way to manufacture
+      them. Also `unmeasured`: the route row's condition on a *patrol* that has begun, because the
+      *patrol* processing belongs to other topics (claim 34). Route-action guards involving
+      asymmetric alliances or owner-changed route holders are also `unmeasured`: no established
+      skirmish input preserves such a route and isolates those classifications. B40 does not
+      establish those guards. Also unmeasured is the rule of at most once per tick, which needs two
+      fall-backs of one actor in one tick, which no setup is known to time. Scenario B15, case d,
+      backs the guard-spot row for a unit whose current behaviour is not *area guard*. The queue of
+      *wait* before a route point's issue, and the *guard* that the fall-back then does not queue,
+      have S-0213 claim 16c's backing (`measurable` by S-0213 Scenario O8, part t at P₁).
+    - Confidence: medium (the effects and which destination remains, and that the original uses the
+      local player's routes); high (that no scatter request is sent, and that memory refresh
+      precedes the destination rows and rest table), medium for route-order timing, for the queue of
+      *wait* before a route point's issue and for vehicle assignment's list effects; the memory
+      lifecycle has S-0309 claim 23's confidence; medium (factory-exit restoration and its
+      guard-spot exclusion); magnetic-lift restoration has S-0607 claim 20's confidence; low (other
       temporary replacements and which rules fill the approach destinations)
 
 14. **Falling back to rest: infantry.** When an infantry unit falls back to rest, after the common
@@ -1925,6 +1942,71 @@ apply in our engine to the actors of every player house.
 22. **Move.** If the actor has no destination, is not moving and has nothing queued, it falls back
     to rest and chooses a delay of 1 tick. Otherwise it chooses the standard delay. The movement
     itself is carried out by the locomotion rules on every tick, not by the processing.
+
+    **End-of-update check (infantry).** At the end of each update of an infantry unit, after its
+    late start (claim 11), the unit is checked: if its current behaviour is *move*, or it has no
+    current behaviour and *move* is queued, and it is not moving (S-0208 Terms, the same test as in
+    the general rule above) and has no destination, it falls back to rest (claims 13 and 14). This
+    check is separate from the processing. It is made whether or not *move* was processed in that
+    update and whatever is queued (medium, `unmeasured` for an update with no *move* processing or
+    with something queued, Backing). A behaviour that the fall-back queues without an immediate
+    start is not started in that update, because the late start has passed. It becomes current at
+    the unit's next per-tick start at which the unit is ready (claim 11), the first start of the
+    next tick if it is ready there. The start restarts the processing timer (claim 8), whatever
+    delay the last *move* processing chose: at a first start the behaviour is processed there at
+    once (claim 3 (a)), and at a later start, such as a late start, on the next tick or in a second
+    turn of the same tick (claim 3 (b), claim 2). So the check catches an infantry unit whose *move*
+    is still current at the end of an update after which it has neither a destination nor movement
+    in progress. This happens in the update whose locomotion clears its destination, by an arrival
+    that ends its walk (S-0208) or a search that fails at the reachability gate (S-0212 claim 23),
+    after a stop order (claim 12) in the update whose locomotion ends the step under way, and in the
+    jump tick of a teleporting infantry unit, whose jump in its own locomotion stops its movement
+    and removes its destination (S-0207 claim 20 (e)), so that its rest behaviour is queued at the
+    end of that tick. A *move* processing that finds the unit already stopped, with no destination
+    and nothing queued, falls back to rest by the general rule above instead, and its rest behaviour
+    can become current at that update's late start, before the check. What the fall-back leaves is
+    given by claim 13's common effects and then claim 14's first matching row: a route holder issues
+    its next point after a queue of *wait* with an immediate start, so a holder that is ready to
+    change (claim 11) has *wait* current at the end of that update and queues no *guard* (claim 13,
+    S-0213 claim 16c), a guard spot on another cell gives the unit a new destination by claim 13,
+    and a target, queued destinations or attack-move memory decide by claim 14's earlier rows. For a
+    unit with none of these, whose *move* has neither the zombie nor the paralysed property, the
+    fall-back queues its rest behaviour: it ends that update with *move* current and its rest
+    behaviour queued, and, if it is ready there, has its rest behaviour current at the first start
+    of the next tick and processed there. When the update's own locomotion clears the destination, a
+    *move* processing earlier in that update sees the destination as it was before the locomotion
+    (S-0203, from S-0516 claim 42: ordinary mobile locomotion follows due behaviour processing), so
+    it chooses the standard delay and takes its draw (medium, `unmeasured`, Backing). For the gate
+    failure this holds alike for a unit in its first turn after its release from a factory and for a
+    unit that was resting before the order. An update that ends before its late start (claim 11) has
+    no check. A team member's current behaviour under a team script's move step was not traced, so
+    whether the check catches it is open (Open questions); our engine has no team members (claim
+    14).
+    - Backing: `measured` (M-0023 run 1: at the end of the turn whose search fails at the gate,
+      *move* current, *guard* queued and no destination; *guard* current in the next tick) for a
+      released infantry unit in its first turn, and (M-0023 controls: a walker given a destination
+      in another reach region at the start of a single step arrives, its destination is cleared in
+      the next tick with *move* current and *guard* queued, and *guard* is current in the tick after
+      that) for the failed gate in the tick after an arrival. An arrival that ends the walk at its
+      own destination is not in M-0023: its controls' destination lies in another reach region, so
+      their arrival does not end the walk. `measurable` (scenario B49) for a resting infantry unit
+      on open ground, after a failed gate (part a), an arrival (part b), a stop order (part c) and a
+      teleporting unit's jump (part d). The standard delay of the *move* processing in that update
+      is `unmeasured`: M-0023 records in that tick one draw that its baseline does not have, and the
+      recording ties no draw to a unit, and *move* is replaced before that delay ends. The check
+      made whatever is queued, with *move* queued and nothing current, or in an update with no
+      *move* processing, and no check in an update that ends before its late start, are
+      `unmeasured`: no scenario here sets up a queued behaviour or such an update at that point, and
+      claim 11 owns the updates that end early. What the fall-back leaves has the backing of the
+      claim 13 and claim 14 rows that decide it.
+    - Confidence: high for the released unit's slots at the end of that update and for its rest
+      behaviour being current in the next tick, and for the walker's slots after a failed gate in
+      the tick after its arrival (M-0023 controls). Medium for the resting unit, for arrival, the
+      stop order and the teleporting unit's jump tick, for the check with *move* queued and nothing
+      current, for the check being made whatever is queued and whether or not *move* was processed,
+      for the standard delay in that update and for no check in an update that ends before its late
+      start. What the fall-back leaves has the confidence of the claim 13 and claim 14 rows that
+      decide it.
 
     **Vehicle goal cleanup (Q-0797).** An ordinary driving or ship vehicle's *move*
     processing does not remove a retained destination merely because the vehicle occupies
@@ -3899,7 +3981,8 @@ human-controlled owner):
 |---|---|---|
 | any | move order | *move* queued; current at the next per-tick start when ready (claim 12) |
 | *move* | due processing finds no destination, no movement and nothing queued | falls back to rest: usually *guard* or *area guard* queued, then current at the next permitted start, including that update's late start if ready (claims 11, 14, 15, 22) |
-| *move* | stop order | no slot change; destination cleared; falls back to rest at a processing after it has stopped (claims 12, 22) |
+| *move* (infantry) | at the end of an update, still current, not moving and no destination, after its arrival, a stop order, a failed reachability gate or a teleporting unit's jump | falls back to rest by claims 13 and 14: usually the rest behaviour queued, then current at the next first start if ready, processed at once (claim 22) |
+| *move* | stop order | no slot change; destination cleared; falls back to rest at a processing after it has stopped (claims 12, 22); infantry at the end of the update after which it has stopped, unless a *move* processing already finds it stopped (claim 22) |
 | *attack* | target gone | falls back to rest (claim 23) |
 | *guard* | attacked, retaliation allowed | override to *attack*; revert to *guard* at the killing hit on the attacker, or when the attacker goes off the map or changes owner (claims 10, 18) |
 | any but *wait* | taken over by mind control, with the guard reset applicable under S-0601 claim 6 | *guard* current at once; target, destination and guard spot cleared (claim 9) |
@@ -4196,29 +4279,28 @@ veterancy ability lists (veterancy specs).
 
 Common setup: the measurement setup of the glossary, a small flat test map, skirmish, stock data
 unless a scenario names a test file. No external automated player or state-changing engine add-on
-is active. The scenarios' ban on an external controller excludes such additional automation,
-not their stated scripted mouse/keyboard inputs, map actions or the original's computer player.
-Any game speed, held fixed within a run: no scenario here
-observes a delay that the game speed changes. A rule that waits on a speed-normalised delay
-(glossary, claim G3) inherits that dependence, for example claim 11's infantry readiness while a
-*cheer* plays; where an infantry unit of a scenario may play such a sequence, its runs are not
-compared across game speeds. The recorder
-reads, on every tick, each actor's current, queued and suspended behaviour, the tick on which its
-processing timer next runs out, its target and its destination, and, where a scenario says so,
-its queued destinations, its house's skill level, its contact, and whether its distributed-fire
-candidate list is empty; "processing tick" means a tick on which that
-expiry tick moves forward. Scenarios with units of a computer-controlled house test the
-original's own rules, including the parts marked as the original's only (notes for the AI
-designers). A scenario that has a test map place an object with a
-behaviour expects that behaviour to be current once the object is placed; a run in which it is
-not is invalid (repeat it), not a falsification. A scenario that looks for draws has the recorder
-also read the position of the scenario random stream in its stream sequence (S-0202) at the start
-and end of every tick, which gives the number of raw values taken in the tick. A draw *U*(*a*, *b*)
-with *a* < *b* takes at least one raw value (S-0202, claim 4), so a processing that takes one
-advances the stream further. The scenario compares ticks on which the actor under test processes
-with otherwise similar ticks on which it does not, so that raw values taken by other rules
-(movement, other actors) cancel out on average; "an extra draw" means that processing ticks take
-more raw values on average than the comparison ticks.
+is active. The scenarios' ban on an external controller excludes such additional automation, not
+their stated scripted mouse/keyboard inputs, map actions, the original's computer player or a
+scenario's stated direct order given by the harness, as in M-0023 (B49). Any game speed, held
+fixed within a run: no scenario here observes a delay that the game speed changes. A rule that
+waits on a speed-normalised delay (glossary, claim G3) inherits that dependence, for example
+claim 11's infantry readiness while a *cheer* plays; where an infantry unit of a scenario may
+play such a sequence, its runs are not compared across game speeds. The recorder reads, on every
+tick, each actor's current, queued and suspended behaviour, the tick on which its processing
+timer next runs out, its target and its destination, and, where a scenario says so, its queued
+destinations, its house's skill level, its contact, and whether its distributed-fire candidate
+list is empty; "processing tick" means a tick on which that expiry tick moves forward. Scenarios
+with units of a computer-controlled house test the original's own rules, including the parts
+marked as the original's only (notes for the AI designers). A scenario that has a test map place
+an object with a behaviour expects that behaviour to be current once the object is placed; a run
+in which it is not is invalid (repeat it), not a falsification. A scenario that looks for draws
+has the recorder also read the position of the scenario random stream in its stream sequence
+(S-0202) at the start and end of every tick, which gives the number of raw values taken in the
+tick. A draw *U*(*a*, *b*) with *a* < *b* takes at least one raw value (S-0202, claim 4), so a
+processing that takes one advances the stream further. The scenario compares ticks on which the
+actor under test processes with otherwise similar ticks on which it does not, so that raw values
+taken by other rules (movement, other actors) cancel out on average; "an extra draw" means that
+processing ticks take more raw values on average than the comparison ticks.
 
 *Houses.* Every scenario is a skirmish with one human player, the *human-controlled house*, and
 one enemy bystander computer player (glossary). Scenario B28 has one allied and one enemy
@@ -4404,64 +4486,65 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   with no retaliate property, and turning the player-scatter setting on (case 2 of claim 19 then
   holds for a human-controlled owner, as it does for every house in our engine). Test map places
   unarmed vehicles of the human-controlled house of an ordinary driving stock type: *K* in
-  *sticky*, *Z* in *sleep*, *G* in *guard* and *A* in *area guard*, each on open ground with no unit
-  within 2 cells.
-  (a) Give *K* and *Z* a move order. Expected: *K* never starts *move* (the move stays queued); *Z*,
-  if ready, starts *move*.
-  (b) Damage *G*, *A*, *K* and *Z* from out of their range while they stand still with no
-  destination. Expected: *G* and *A* move away to scatter (the scatter from damage names no point,
-  so the paralysed refusal of claim 17 does not apply, and S-0207 claim 16 lets them accept). *K*
-  and *Z* do not move: a vehicle in *sticky* or *sleep* refuses every scatter request (S-0207
-  claim 16, case a). Repeat with the scatter property off for *G* and *A*: expected no scatter
-  (case 2 of claim 19 needs the property). Original-only variant (claim 19, case 2 for a
-  computer-controlled owner): repeat the damage of *G* and *A* with the player-scatter setting off
-  (a second test file that differs only in that setting), once with *G* and *A* owned by the
-  bystander (named test objects) and once with them owned by the human-controlled house. Expected: the computer-controlled *G* and *A* scatter, the
-  human-controlled ones do not.
-  (c) *G* stands on a cell of a bunker of its own house that has room for one vehicle and no other
-  unit on its cells; another vehicle of the same house is ordered into the bunker. Expected: once
-  the entering vehicle has stopped on the bunker's cell, *G* stays where it is. Control run with a
-  test file that turns the paralysed property of *guard* off: expected *G* moves away from the
-  bunker. Factory variant: use S-0417 U5's blocked-apron setup, with *G* on one apron
-  neighbour and a stationary blocker on the apron itself. Observe the first clearing request
-  while the blocker remains. Expected: *G* refuses the neighbour's threat-point request with
-  the paralysed property on; with it off, *G* accepts and scatters under S-0207 claim 16.
-  Record the request options, destination, movement and scenario-stream state. One run per
-  setting; movement with the property on falsifies the refusal. A run without a blocked-apron
-  clearing request is void.
-  Falsified by *K* starting *move* in (a), by *Z* not starting *move* at a per-tick start at which it
-  is ready, by a scatter of *G* or *A* with the property off in (b), by *G* or *A* not scattering
-  with the property on in (b), by *K* or *Z* scattering in (b), in the variant of (b) by a
-  computer-controlled *G* or *A* that does not scatter or a human-controlled one that does, or in
-  (c) by *G* moving away with the paralysed property on. A (c) control
-  run in which *G* does not move either leaves claim 17's refusal untested. (d) Case 1 of claim 19:
-  named test file turning the player-scatter setting on. An armed vehicle of the human-controlled
-  house stands in *guard* with no target and no destination. An enemy unit whose weapon outranges
-  the vehicle's fires at it from beyond the vehicle's weapon range and beyond (*S* + 0.5) × 256
-  leptons, *S* its sight (F7), so it does not retaliate. Expected: the vehicle moves away to
-  scatter, with no override to *attack* (the suspended slot stays empty). Control 1: the
-  player-scatter setting off and no scatter veterancy ability: expected no move. Control 2: the
-  attacker within (*S* + 0.5) × 256 leptons but beyond the weapon range: expected an override to
-  *attack* and no scatter move. Falsified by no move in the main run, by a move in control 1, or by
-  a scatter move instead of the override in control 2. Runs: three each.
-  (e) Fall-back rows (claim 17; claim 14 row 6, claim 15 rows 7 and 9): a named test file gives
-  *move* the zombie property (run Z), a second one gives it the paralysed property (run P), and the
-  stock rules serve as control (run C). On a test map with no object of another house, the
-  human-controlled house has an armed infantry unit of a type that does not default to area guard
-  and has no guard-area veterancy ability, an armed vehicle that is not a harvester, and an unarmed
-  vehicle that is not a harvester, a loaner or a deployer. Each is ordered to move 5 cells and
-  arrives. Expected in Z and in P: at the first *move* processing after it has stopped, the
-  infantry unit and the armed vehicle queue nothing, *move* stays current and the next processing
-  comes 1 tick later, and so on over 20 processings (each one falls back to rest again and reaches
-  row 6 or 9); the unarmed vehicle queues *guard* at that processing (row 7 comes before row 9),
-  which becomes current at the next permitted start, including that update's late start
-  when ready. Expected in C: all three queue a resting behaviour at
-  that processing (*guard* for the infantry unit, *area guard* or *guard* for the armed vehicle by
-  claim 15 rows 10 and 12, *guard* for the unarmed vehicle). A run in which the recorder shows a
-  target, a destination or queued destinations at that processing is invalid. Falsified in Z or P
-  by a behaviour queued for the infantry unit or the armed vehicle, by *move* not staying current,
-  or by no *guard* queued for the unarmed vehicle; in C by nothing queued. Runs: three per run and
-  unit.
+  *sticky*, *Z* in *sleep*, *G* in *guard* and *A* in *area guard*, each on open ground with no
+  unit within 2 cells. (a) Give *K* and *Z* a move order. Expected: *K* never starts *move* (the
+  move stays queued); *Z*, if ready, starts *move*. (b) Damage *G*, *A*, *K* and *Z* from out of
+  their range while they stand still with no destination. Expected: *G* and *A* move away to
+  scatter (the scatter from damage names no point, so the paralysed refusal of claim 17 does not
+  apply, and S-0207 claim 16 lets them accept). *K* and *Z* do not move: a vehicle in *sticky* or
+  *sleep* refuses every scatter request (S-0207 claim 16, case a). Repeat with the scatter
+  property off for *G* and *A*: expected no scatter (case 2 of claim 19 needs the property).
+  Original-only variant (claim 19, case 2 for a computer-controlled owner): repeat the damage of
+  *G* and *A* with the player-scatter setting off (a second test file that differs only in that
+  setting), once with *G* and *A* owned by the bystander (named test objects) and once with them
+  owned by the human-controlled house. Expected: the computer-controlled *G* and *A* scatter, the
+  human-controlled ones do not. (c) *G* stands on a cell of a bunker of its own house that has
+  room for one vehicle and no other unit on its cells; another vehicle of the same house is
+  ordered into the bunker. Expected: once the entering vehicle has stopped on the bunker's cell,
+  *G* stays where it is. Control run with a test file that turns the paralysed property of *guard*
+  off: expected *G* moves away from the bunker. Factory variant: use S-0417 U5's blocked-apron
+  setup, with *G* on one apron neighbour and a stationary blocker on the apron itself. Observe the
+  first clearing request while the blocker remains. Expected: *G* refuses the neighbour's
+  threat-point request with the paralysed property on; with it off, *G* accepts and scatters under
+  S-0207 claim 16. Record the request options, destination, movement and scenario-stream state.
+  One run per setting; movement with the property on falsifies the refusal. A run without a
+  blocked-apron clearing request is void. Falsified by *K* starting *move* in (a), by *Z* not
+  starting *move* at a per-tick start at which it is ready, by a scatter of *G* or *A* with the
+  property off in (b), by *G* or *A* not scattering with the property on in (b), by *K* or *Z*
+  scattering in (b), in the variant of (b) by a computer-controlled *G* or *A* that does not
+  scatter or a human-controlled one that does, or in (c) by *G* moving away with the paralysed
+  property on. A (c) control run in which *G* does not move either leaves claim 17's refusal
+  untested. (d) Case 1 of claim 19: named test file turning the player-scatter setting on. An
+  armed vehicle of the human-controlled house stands in *guard* with no target and no destination.
+  An enemy unit whose weapon outranges the vehicle's fires at it from beyond the vehicle's weapon
+  range and beyond (*S* + 0.5) × 256 leptons, *S* its sight (F7), so it does not retaliate.
+  Expected: the vehicle moves away to scatter, with no override to *attack* (the suspended slot
+  stays empty). Control 1: the player-scatter setting off and no scatter veterancy ability:
+  expected no move. Control 2: the attacker within (*S* + 0.5) × 256 leptons but beyond the weapon
+  range: expected an override to *attack* and no scatter move. Falsified by no move in the main
+  run, by a move in control 1, or by a scatter move instead of the override in control 2. Runs:
+  three each. (e) Fall-back rows (claim 17; claim 14 row 6, claim 15 rows 7 and 9): a named test
+  file gives *move* the zombie property (run Z), a second one gives it the paralysed property (run
+  P), and the stock rules serve as control (run C). On a test map with no object of another house,
+  the human-controlled house has an armed infantry unit of a type that does not default to area
+  guard and has no guard-area veterancy ability, an armed vehicle that is not a harvester, and an
+  unarmed vehicle that is not a harvester, a loaner or a deployer. Each is ordered to move 5 cells
+  and arrives. Expected in Z and in P: at the first *move* processing after it has stopped, the
+  infantry unit and the armed vehicle queue nothing (the infantry unit also at the end of each
+  update, by claim 22's end-of-update check), *move* stays current and the next processing comes 1
+  tick later, and so on over 20 processings (each one falls back to rest again and reaches row 6
+  or 9); the unarmed vehicle queues *guard* at that processing (row 7 comes before row 9), which
+  becomes current at the next permitted start, including that update's late start when ready.
+  Expected in C: the two vehicles queue a resting behaviour at that processing (*area guard* or
+  *guard* for the armed vehicle by claim 15 rows 10 and 12, *guard* for the unarmed vehicle), and
+  the infantry unit has *move* current and *guard* queued at the end of the first tick at whose
+  end it has no destination (claim 22's end-of-update check, as in B49 (b)), before any *move*
+  processing after it has stopped. A run in which the recorder shows a target, a destination or
+  queued destinations at that processing, or for the infantry unit in C at the end of that tick,
+  is invalid. Falsified in Z or P by a behaviour queued for the infantry unit or the armed
+  vehicle, by *move* not staying current, or by no *guard* queued for the unarmed vehicle; in C by
+  nothing queued for a vehicle at that processing, or by *guard* not queued for the infantry unit
+  at the end of that tick. Runs: three per run and unit.
 - **B7 (claims 8, 10, 12, 18).** (a) A human-controlled armed vehicle in *move* (long route) is fired at by
   an enemy within its weapon range; expected: no retaliation, *move* continues. (b) The same vehicle
   in *guard*, fired at by an enemy land vehicle that neither sinks nor crashes; expected: an
@@ -4764,55 +4847,70 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   target; in neither case does *attack move* become queued or current. Falsified by any movement,
   target search or other interval in (a), or in (b) by *attack move* in a slot or by the other
   behaviour becoming current. Runs: one each in (a), three in (b).
-- **B15 (claims 13, 14 row 4 and 15 row 3).** (a) Guard-spot row: a human-controlled infantry unit given an area-guard
-  order on a cell 5 cells away arrives there. Named test file: player scatter on. It is then
-  damaged by an attacker it cannot fire back at, so that it scatters off the guard spot's cell (an
-  order would clear the guard spot, claim 12). Expected, if the scatter ends with a fall-back to
-  rest: the unit takes the guard spot as its destination and walks back, keeping the guard spot.
-  (b) Route row and claim 15, row 3: with the route-mode input of S-0213 (claim 16), give an
-  unarmed vehicle of the human-controlled house, in *move*, a planned route of three move points,
-  each 6 cells from the last, and commit it. Expected: when it arrives at the first point and
-  falls back to rest, the next point eventually becomes its destination without further player input, while the
-  recorder shows its queued destinations empty. Record the route-generated order and its
-  boundary of application: the next point is not assigned inside the fall-back. With no other
-  destination, that fall-back can queue *guard* under claim 15; the later route order replaces
-  it with *move*. It then heads to the next point. (c) Claim 14, row 4: the same as (b) with an infantry unit of the human-controlled
-  house, of a type that does not default to area guard and without the guard-area veterancy
-  ability. Expected: as in (b), with claim 14's ordinary rest table allowed to queue *guard*
-  before the route-generated order applies. A run in which
-  the recorder shows a current behaviour other than *move* when the unit reaches the first point
-  is invalid. Falsified in (a) by a unit that falls back to rest away from the guard spot and
-  stays there; in (b) and (c) by an actor that never takes the next route point, by immediate
-  assignment within the fall-back rather than an order boundary, or by continuation only through
-  a non-empty queued-destinations list (that would be the queued-destinations row, not the route). (d) Guard-spot row outside *area guard*: the
+- **B15 (claims 13, 14 row 4 and 15 row 3).** (a) Guard-spot row: a human-controlled infantry unit
+  given an area-guard order on a cell 5 cells away arrives there. Named test file: player scatter
+  on. It is then damaged by an attacker it cannot fire back at, so that it scatters off the guard
+  spot's cell (an order would clear the guard spot, claim 12). Expected, if the scatter ends with a
+  fall-back to rest: the unit takes the guard spot as its destination and walks back, keeping the
+  guard spot. (b) Route row and claim 15, row 3: with the route-mode input of S-0213 (claim 16),
+  give an unarmed vehicle of the human-controlled house, in *move*, a planned route of three move
+  points, each 6 cells from the last, and commit it. Expected: when it arrives at the first point
+  and falls back to rest, the next point eventually becomes its destination without further player
+  input, while the recorder shows its queued destinations empty. Record the route-generated order
+  and its boundary of application: the next point is not assigned inside the fall-back. With no
+  other destination, that fall-back queues *wait* with an immediate start before the issue (claim
+  13), so for a vehicle that is ready to change (claim 11) *wait* is current until the later route
+  order replaces it with *move*. For a vehicle that is not ready, *move* stays current and *wait* is
+  queued, claim 15's row 1 does not match, and its rest table can queue *guard* in place of *wait*
+  (claim 7), until the later route order replaces the queued behaviour with *move*. It then heads to
+  the next point. (c) Claim 14, row 4: the same as (b) with an infantry unit of the human-controlled
+  house, of a type that does not default to area guard and without the guard-area veterancy ability.
+  Expected: as in (b), for the infantry unit with claim 14's table in place of claim 15's, except
+  that its fall-back comes from claim 22's end-of-update check at the end of the update whose
+  locomotion ends its walk at the first point, not from a later *move* processing. So at the end of
+  that update a unit that is ready to change has *wait* current and no *guard* queued (claim 22),
+  and one that is not ready has *move* current and *wait* queued, or *guard* in its place as in (b).
+  The recorder reads at the end of each update. A run in which it shows a current behaviour other
+  than *move* at the end of the update before that arrival update is invalid. Falsified in (a) by a
+  unit that falls back to rest away from the guard spot and stays there; in (b) and (c) by an actor
+  that never takes the next route point, by immediate assignment within the fall-back rather than an
+  order boundary, or by continuation only through a non-empty queued-destinations list (that would
+  be the queued-destinations row, not the route). (d) Guard-spot row outside *area guard*: the
   recorder also reads the guard spot. An armed infantry unit of the human-controlled house, of a
-  type that does not default to area guard, is given an area-guard order on a cell 5 cells away
-  and arrives. An enemy unit beyond its weapon range and within (*S* + 0.5) × 256 leptons (F7)
-  fires at it, so that it overrides to *attack* (claims 10 and 18) and walks off the guard spot's
-  cell towards the attacker. Once it is at least 2 cells from that cell, it is given the stop order
+  type that does not default to area guard, is given an area-guard order on a cell 5 cells away and
+  arrives. An enemy unit beyond its weapon range and within (*S* + 0.5) × 256 leptons (F7) fires at
+  it, so that it overrides to *attack* (claims 10 and 18) and walks off the guard spot's cell
+  towards the attacker. Once it is at least 2 cells from that cell, it is given the stop order
   (claim 12: target and destination cleared, guard spot kept, no revert). Expected: at its next
   *attack* processing, which falls back to rest, its destination becomes the guard spot's cell,
-  *move* is queued, and the guard spot is empty. A run in which the recorder shows no guard spot,
-  or a current behaviour other than *attack*, just before that processing is invalid. Falsified
-  by a destination other than the guard spot's cell, by no *move* queued, or by a guard spot kept.
-  Runs: three each. (e) Temporary driving: produce a stock teleporting vehicle at a stock
-  ground vehicle factory with no rally point, recording locomotion, contact, behaviours and
-  fall-backs as S-0417 U6/U8 propose. Expected: factory exit uses temporary driving, and at the
-  first eligible fall-back the recorder shows the active movement kind change from driving to
-  teleporting. After release, order a distant clear cell: on the order's tick the movement kind
-  changes back to driving (S-0207 claim 28) and the vehicle drives there. No restoration at that
-  fall-back, or a jump to the ordered cell, falsifies. A docking jump at a later refinery approach
-  (S-0402) is a further sign that teleporting locomotion was restored. Three runs; no modified
-  locomotor data is needed.
-  (f) Rest with an existing destination: a named test map gives *move* the no-threat property,
-  clears its zombie and retaliate properties, and turns player scatter off. Order a plain long
-  move to a non-area-guard-default infantry unit and an unarmed vehicle, with no route,
-  guard spot, scatter ability or queued destinations. An enemy damages each while it is still
-  moving, leaving it alive. Record its damage-time fall-back, destination and slots. Expected:
-  the destination survives and no resting *guard* is queued, because the destination row queues
-  the already-current *move*. Loss of the destination or a queued *guard* on that fall-back
-  falsifies the destination row's precedence. Three runs per kind; a run without the damage-time
-  fall-back is invalid, not confirming evidence.
+  *move* is queued, and the guard spot is empty. A run in which the recorder shows no guard spot, or
+  a current behaviour other than *attack*, just before that processing is invalid. Falsified by a
+  destination other than the guard spot's cell, by no *move* queued, or by a guard spot kept. Runs:
+  three each. (e) Temporary driving: produce a stock teleporting vehicle at a stock ground vehicle
+  factory with no rally point, recording locomotion, contact, behaviours and fall-backs as S-0417
+  U6/U8 propose. Expected: factory exit uses temporary driving, and at the first eligible fall-back
+  the recorder shows the active movement kind change from driving to teleporting. After release,
+  order a distant clear cell: on the order's tick the movement kind changes back to driving (S-0207
+  claim 28) and the vehicle drives there. No restoration at that fall-back, or a jump to the ordered
+  cell, falsifies. A docking jump at a later refinery approach (S-0402) is a further sign that
+  teleporting locomotion was restored. Three runs; no modified locomotor data is needed. (f) Rest
+  with an existing destination: a named test map gives *move* the no-threat property, clears its
+  zombie and retaliate properties, and turns player scatter off. Order a plain long move to a
+  non-area-guard-default infantry unit and an unarmed vehicle, with no route, guard spot, scatter
+  ability or queued destinations. An enemy damages each while it is still moving, leaving it alive.
+  Record its damage-time fall-back, destination and slots. Expected: the destination survives and no
+  resting *guard* is queued, because the destination row queues the already-current *move*. Loss of
+  the destination or a queued *guard* on that fall-back falsifies the destination row's precedence.
+  Three runs per kind; a run without the damage-time fall-back is invalid, not confirming evidence.
+  (g) Rate after the route row (claim 6): a named test file sets the rate of *wait* to 0.06 and that
+  of *attack* to 0.05, as in B2. With the route-mode input, give an armed vehicle of the
+  human-controlled house, ready to change, a route whose first point attacks a building of a
+  computer-controlled house and whose second point is a move point 6 cells further, and commit it.
+  While the vehicle's *attack* is current, destroy the building with a second unit of the
+  human-controlled house. Record the slots and the processing timer at the exit of the vehicle's
+  first *attack* processing with no target, as B3 part e does. Expected: *wait* current at that exit
+  and the delay set there one of those that claim 6 gives for 0.06, as in B2. Falsified by a delay
+  that only 0.05 gives. Runs: 20.
 - **B16 (claims 11 and 32, buildings).** (a) Record the processing intervals of an armed defensive
   building without the SAM flag while it attacks a stationary target in range, with a weapon whose
   rate-of-fire field (in a named test file) is 20 ticks or more: expected an interval of 1 tick
@@ -6103,8 +6201,54 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     unsuitable for that comparison. If no legal order retains the needed state,
     report that subcase inconclusive; do not synthesize a queued slot.
 
+- **B49 (claim 22, Q-2656: the infantry end-of-update check).** Proposed measurement, not a result.
+  M-0023's map and settings, stock data. An infantry unit *I* of a human-controlled house, of a type
+  that does not default to area guard and without the guard-area veterancy ability (so claim 14
+  queues *guard* for it), rests in *guard* on open ground, a few cells from the walled pen and on no
+  factory's cells. (a) Give *I* an ordinary move order to the pen's centre, a cell in another reach
+  region, taking effect at the start of a tick. The harness gives every move order of this scenario
+  directly, as in M-0023, not through a player's input: an order given at the interface would have
+  the pen's cell replaced by a cell in reach (S-0214 claim 11). Record at the end of each tick, for
+  20 ticks from the order, *I*'s current and queued behaviour, destination and position. Expected:
+  at the end of the tick at whose start the order takes effect, *move* current, *guard* queued and
+  no destination; at the end of the next tick *guard* current, nothing queued and no destination; no
+  step in the 20 ticks. Falsified by *move* current with nothing queued at the end of the order's
+  tick, or by *guard* becoming current later than the next tick. (b) As (a), with the order to a
+  free cell 5 cells away on open ground. Find the first tick at whose end *I* has no destination:
+  its walk ends on its arrival in the destination's cell, and the destination is cleared there
+  (S-0208 claims 6 and 16). Expected: *move* current and *guard* queued at the end of that tick, and
+  *guard* current at the end of the next. Falsified by *move* current with nothing queued at the end
+  of that tick, or by *guard* becoming current later. (c) As (b), with a stop order while *I* walks.
+  Its arrival update (S-0208 claim 6) is the tick of its last change of position, when the arrival
+  places it on its walking target, or the tick after it, when the last step ends exactly there.
+  Expected: *move* current and *guard* queued at the end of exactly one tick after the stop order,
+  which is the tick of *I*'s last change of position or the tick after it, and *guard* current at
+  the end of the next tick. Falsified by no such tick, by such a tick later than the tick after the
+  last change of position, or by *guard* not current at the end of the tick that follows such a
+  tick. (d) A separate game on open flat ground: an infantry unit of a type that does not default to
+  area guard, without the guard-area veterancy ability, of a human-controlled house, where a named
+  test rules file sets that type's locomotor field (S-0207 claim 14) to the teleporting locomotor's
+  class identifier (S-0207 table T3) and changes nothing else, rests in *guard* and is given a move
+  order to a free cell 5 cells away. Find its jump tick, the tick in which its position changes to
+  the landing cell. Expected: at the end of the jump tick *move* current, *guard* queued and no
+  destination. Falsified by *move* current with nothing queued at the end of the jump tick.
+
 ## Open questions
 
+- **Other cases of the end-of-update check (claim 22).** When the check finds an infantry unit in
+  *move* not moving but holding a destination, the original sets that destination again (medium for
+  the setting itself, `unmeasured`: no scenario here can hold an infantry unit in *move*, not
+  moving, with a destination, at the end of an update). What that does to its path and to a running
+  retry delay (S-0212 claims 20 and 21) is not traced, and our engine does nothing in that case,
+  which matches the original only if setting the destination again has no effect there (low).
+  Whether a vehicle in *move* has a like check is not traced either. Our engine makes the check for
+  infantry only.
+- **A team member under a team script's move step (claim 22).** Which behaviour a team script's move
+  step makes current for an infantry team member was not traced. If it is *move*, the end-of-update
+  check catches the member at the end of the update in which its search fails at the gate, and claim
+  14 row 12 queues *guard* for it there, so S-0212 scenario P7 run 7b's "no behaviour is queued"
+  would hold only for the gate failure itself, not at the end of that update (low). Our engine has
+  no team members, so it makes no choice here.
 - **A berserk hit and the no-threat fall-back.** A hit that makes its target go berserk reports
   *unchanged* without lowering health (S-0302 claim 10). Whether it makes an actor in a no-threat
   behaviour fall back to rest (claim 16), as a hit that lowers health does, is open here: S-0302
@@ -6289,6 +6433,44 @@ checks, not additional rules of this spec.
 
 ## Changes for other specs
 
+- **S-0212, claim 23 (the gate row).** Its "no behaviour is queued" holds for the gate failure
+  itself. An infantry unit whose current behaviour is *move* then falls back to rest at the end of
+  the same update (S-0215 claim 22), so what claims 13 and 14 queue, usually its rest behaviour, is
+  queued at the end of that update and current at the first start of the next tick if it is ready
+  there. The gate row should point to S-0215 claim 22 for this, and scenario P7 run 7b, whose
+  Expected gives "no behaviour is queued" for a team member after the gate failure, should record
+  its current behaviour and point to S-0215's Open question on team members.
+- **S-0417, claim 17 (*No path*).** For an infantry unit in *move* whose search fails at the gate,
+  the same holds: what claims 13 and 14 queue, usually its rest behaviour, is queued at the end of
+  that turn and is current and processed at the first start of the next tick if it is ready there
+  (S-0215 claim 22), not after the *move* processing's standard delay. The bullet for a search that
+  fails at the gate should say so.
+- **S-0207, claim 20 (e).** Its "but not within the jump tick: the behaviour is processed before the
+  locomotion (part d), so the fall-back comes at a later tick, at the behaviour's next processing or
+  at the end of phasing in with no target (part f), whichever is first" does not hold for an
+  infantry unit. An infantry unit whose *move* is current falls back to rest at the end of its jump
+  tick by S-0215 claim 22's end-of-update check, since the jump in its own locomotion stops its
+  movement and removes its destination before that check: its rest behaviour is queued at the end of
+  the jump tick (S-0215 claim 22, medium, `measurable` by scenario B49 part d). For the other kinds
+  the sentence is unchanged. Claim 20 (e) should except infantry from the sentence, as the claim
+  does elsewhere where it names infantry, and point to S-0215 claim 22 for it.
+- **S-0309, claim 23 (d), its Backing, its Import mapping row and scenario A6 parts n and o.** For
+  an infantry unit, the uncontested arrival is caught by S-0215 claim 22's end-of-update check at
+  the end of the update whose locomotion ends the walk, after that update's late start and before
+  any later *move* processing. That fall-back's refresh removes the memory (S-0309 claim 23 (b),
+  S-0215 claim 13), and the rest behaviour of S-0215 claim 14 is queued at the end of that update
+  and current at the first start of the next tick if the unit is ready there (S-0215 claim 22,
+  medium, `measurable` by scenario B49 part b for an arrival under a plain move order, and by A6
+  part n's record for the attack move). So no *move* processing of the infantry unit chooses 1 tick
+  at that fall-back. These places give the 1-tick delay at the arrival and hold for a vehicle only:
+  part (d)'s "Its next *move* processing falls back to rest and chooses an integer delay of 1 tick
+  (S-0215 claim 22)", the claim's Backing "part n for arrival, memory removal and the 1-tick delay",
+  the Import mapping row "claim 23's arrival delay, memory refresh and removed-target conversion |
+  fixed behaviour and integer 1-tick processing delay", A6 part n's "and that processing chooses 1
+  tick", and A6 part o's run 2 "arrival clears the memory as part n gives, with a 1-tick
+  arrival-processing delay". Each should name the end-of-update check for an infantry unit, and
+  parts n and o should expect an infantry attack mover to fall back at the end of its arrival
+  update.
 - **S-0302, claims 10 and 12.** They say that a berserk hit sets off none of the reactions that
   claim 12 ties to a result ("a berserk hit has none, whatever it reports"). The crush response
   (claim 39) is not tied to the result and is made after a berserk hit too. S-0302 claims 10 and
