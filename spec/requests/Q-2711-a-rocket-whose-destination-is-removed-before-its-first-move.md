@@ -1,9 +1,9 @@
 ---
 id: Q-2711
 title: A rocket missile whose destination object is removed before its first move
-status: open
+status: answered
 related: [S-0506, S-0215, S-0309, S-0414]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
