@@ -1984,3 +1984,29 @@ fn no_attack_order_to_an_aircraft_with_no_ammunition() {
         }
     }
 }
+
+// design (M8 step A4 round 9, item 1): a unit moving toward an object that is no longer in play goes nowhere, so the script counts it idle and may order it; one moving toward an object still in play is busy.
+#[test]
+fn a_move_toward_a_removed_object_leaves_the_unit_idle() {
+    let mut g = start(5);
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let mut w = g.world.clone();
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    let cells = free_cells(&w, glasnost_map::CellXY::new(yard.x, yard.y + 8), 2);
+    let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, cells[0], 0);
+    let goal = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, cells[1], 0);
+    let o = w.obj_mut(tank).unwrap();
+    o.beh.current = Some(glasnost_sim::rules::Behaviour::Move);
+    o.dest = Some(Target::Object(goal));
+    o.target = None;
+    assert!(
+        !glasnost_ai::scripted::idle(&w, tank),
+        "bound for an object in play"
+    );
+    objects::remove(&mut w, goal);
+    assert!(w.obj(goal).is_none());
+    assert!(
+        glasnost_ai::scripted::idle(&w, tank),
+        "bound for a removed object"
+    );
+}
