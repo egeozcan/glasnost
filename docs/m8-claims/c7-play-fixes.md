@@ -540,3 +540,17 @@ fixes:
 | `harvest_cell_shared` | no | It chooses which field cell a harvester heads for. A different field cell now ends a running delay in both positions; the docking offer keeps its delay (S-0402 claim 10a). |
 
 Intake 103 leaves the layer file unchanged.
+
+## Intake 104 (S-0501 r134, S-0302 r43): three aircraft switches judged again
+
+Ledger: [intake104.md](intake104.md). S-0501 r134 answers Q-2646 to Q-2650 and adds no quirk,
+but it changes the scope of three switches. S-0302 r43 answers Q-2626 and names no switch. No
+default changes.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `aircraft_descent_touchdown_untested` | S-0501 claim 7, Edge cases (r134, Q-2646) | rejected (not in the layer), unchanged | r134 takes one touchdown out of the switch: the touchdown in the update of the landing check's refusal, which that refusal's take-off has already ended, is untested in both positions, and its forget test is made against the free cell the refusal gave as flight point. That removes a case from the off position and adds nothing to the on position, so intake 102's reasons stand: condition 2 still fails (no stuck unit, give-up or glitch stated, no play note or request), and the off position still brings the hold 10 leptons above a refused cell that the spec states as a unit with nothing to move it. Built in `air::check_refused` (the refusing update's touchdown, the same in both positions). Tests, both positions on the new case: `claims_s0501_r134::claim_7_the_touchdown_in_a_refusing_update_is_untested_and_climbs_with_no_slide` and `claim_7_a_refusing_update_over_a_free_cell_rests_there`; the earlier tests unchanged. |
+| `aircraft_refused_kept_drop` | S-0501 claim 7, Edge cases (r134, Q-2646) | rejected (not in the layer), unchanged | r134 takes the same touchdown out of this switch: the refusing update's take-off has given the aircraft the held height of ordinary flight, so it climbs from its next update in both positions and never slides. The on position's slide, the effect intake 102 judged, is unchanged and still ends by itself: condition 2 fails as before. Built in `air::refusal_touchdown_kept` (the held height kept at cruise height, no slide). Tests, both positions on the new case: `claims_s0501_r134::claim_7_the_touchdown_in_a_refusing_update_is_untested_and_climbs_with_no_slide`; the earlier tests unchanged. |
+| `aircraft_corner_sector_untracked` | S-0501 claim 47 (c), Edge cases (r134, Q-2647) | rejected (not in the layer); no earlier C7 entry judged it | r134 widens the on position to one more state: an aircraft that an untested touchdown left holding its flight point, on the ground as in flight, is not tracked while its cell lies in sector (0, 0). Condition 1 holds: the Edge case states the off position (at its first movement update with a positive carried fraction it joins the end of sector (0, 0)'s list like any other), built in `air::sector_update`. Condition 2 fails: the text states that neither area damage nor the airborne scan finds such an aircraft in that sector, which is not a unit stuck, a give-up or a visible glitch, and no play note or request names it. Condition 3 fails too: the off position decides which aircraft area damage and the airborne scan can reach, a combat change, as for the rebound switches in part 3. Tests, both positions: `claims_s0501_r134::claim_47_the_corner_switch_applies_to_a_sliding_aircraft` (new state) and intake 16's `claims_s0501_tracking::claim_47_corner_sector_quirk_both_ways`. |
+
+Intake 104 leaves the layer file unchanged.
