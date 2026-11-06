@@ -989,11 +989,14 @@ fn retry_delay_after_fresh_searches() {
     assert_eq!(r, Search::Found);
     path::failed(&mut w, id, r, false);
     assert!(w.obj(id).unwrap().path.retry_at <= t);
-    // Gate failed after a fresh search: R from this tick.
+    // Gate failed after a fresh search: r97, the driving locomotor's
+    // destination is cleared, which ends the delay, so none remains.
+    // spec: S-0212 claims 21 and 23 (r97: for the driving and walk locomotors the clearing ends the retry delay, so none remains)
     let r = compute_to(&mut w, id, cell(5, 0), Mode::Fresh);
     assert_eq!(r, Search::GateFailed);
     path::failed(&mut w, id, r, false);
-    assert_eq!(w.obj(id).unwrap().path.retry_at, t + 45);
+    assert!(w.obj(id).unwrap().path.retry_at <= t);
+    assert!(!path::delay_runs(&w, id));
     // Gate failed after a re-path of the drive locomotor: no delay.
     w.obj_mut(id).unwrap().path.retry_at = 0;
     let r = compute_to(&mut w, id, cell(5, 0), Mode::Blocked);
@@ -1136,7 +1139,9 @@ fn search_failure_far_away_gives_up() {
     let o = w.obj(id).unwrap();
     assert_eq!(o.dest, None);
     assert_eq!(o.beh.queued, Some(Behaviour::Guard));
-    assert_eq!(o.path.retry_at, w.tick + w.rules().general.retry_delay);
+    // spec: S-0212 claim 23 row 2 (r97: R starts, and the clearing of the destination ends it again for the driving locomotor, claim 21)
+    assert!(o.path.retry_at <= w.tick);
+    assert!(!path::delay_runs(&w, id));
 }
 
 // spec: S-0212 claim 23 (search failure within 1 cell: the unit stops without giving up; a driving unit's destination is cleared)
@@ -1155,7 +1160,9 @@ fn search_failure_within_one_cell_does_not_give_up() {
     let o = w.obj(id).unwrap();
     assert_eq!(o.dest, None);
     assert_eq!(o.beh.queued, None);
-    assert_eq!(o.path.retry_at, w.tick + w.rules().general.retry_delay);
+    // spec: S-0212 claim 23 row 3 (r97: a driving unit ends up without a destination and with no retry delay, claim 21)
+    assert!(o.path.retry_at <= w.tick);
+    assert!(!path::delay_runs(&w, id));
 }
 
 // spec: S-0212 claim 15 (a unit already next to its blocked destination gets no path: the search fails)

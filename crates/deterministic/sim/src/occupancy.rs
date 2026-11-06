@@ -83,7 +83,8 @@ pub fn moving_or_dest(w: &World, id: ObjectId) -> bool {
 pub fn in_progress(w: &World, id: ObjectId) -> bool {
     moving_on_tick(w, id)
         || w.obj(id).is_some_and(|o| {
-            // spec: S-0417 claim 17 (No path: the walk locomotor has movement in progress from the moment a destination reaches it, before any path is found, and keeps it while it waits for the retry delay; a failed search ends it although the destination is kept, S-0212 claim 23)
+            // spec: S-0107 Terms (movement in progress: true while the unit still has movement to carry out, so for the walk locomotor from the moment a destination reaches it, before any path is found, and while it waits for a running retry delay)
+            // spec: S-0417 claim 17 (No path: a failed search ends the walk locomotor's movement in progress although the destination is kept, S-0212 claim 23)
             o.walk.is_some() && o.dest.is_some() && o.path.failed_for != o.dest
         })
 }

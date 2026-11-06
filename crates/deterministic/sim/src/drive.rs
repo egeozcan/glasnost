@@ -792,8 +792,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
             }
             discard_path(w, id);
             wait(w, id);
-            // spec: S-0207 claim 15 table T4 (the fresh search on the same tick only when the path retry timer has run out)
-            if t >= o.path.retry_at {
+            // spec: S-0207 claim 15 table T4 (the fresh search on the same tick only when the path retry timer has run out); S-0212 claim 21 (a changed destination has ended it)
+            if !path::waits(w, id) {
                 return search_and_recheck(w, id, u);
             }
             return false;
@@ -849,7 +849,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 // spec: S-0207 table T5 (obstacle: discard the path; a fresh search once the retry timer has run out)
                 discard_path(w, id);
                 wait(w, id);
-                if t >= o.path.retry_at && fresh_search(w, id, u) == Search::Found {
+                // spec: S-0212 claim 21 (a changed destination has ended the retry timer)
+                if !path::waits(w, id) && fresh_search(w, id, u) == Search::Found {
                     // spec: S-0207 claim 15 (after T5's obstacle row: the look at the new first cell, then, facing the new first step, a step check of the same kind that begins only a straight or diagonal track; not facing it, it turns and makes no step check)
                     let Some(nd) = w.obj(id).and_then(|x| x.path.steps.first().copied()) else {
                         return false;
@@ -888,7 +889,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 }
                 discard_path(w, id);
                 wait(w, id);
-                if t >= o.path.retry_at {
+                // spec: S-0207 table T5 (cloaked blocker: as in T4); S-0212 claim 21 (a changed destination has ended the retry timer)
+                if !path::waits(w, id) {
                     return search_and_recheck(w, id, u);
                 }
                 return false;
@@ -1327,11 +1329,13 @@ pub(crate) fn blocked_step(w: &mut World, id: ObjectId) {
             dd.budget = 0;
         }
     }
+    let waiting = path::delay_runs(w, id);
     trace::record(w, id, || trace::What::Blocked {
         since,
-        waiting_until: (t < o.path.retry_at).then_some(o.path.retry_at),
+        waiting_until: waiting.then_some(o.path.retry_at),
     });
-    if t < o.path.retry_at {
+    // spec: S-0212 claim 22 (a re-path for a blocked next step waits for the retry delay); claim 21 (a changed destination has ended it)
+    if path::waits(w, id) {
         return;
     }
     let delay = w.rules().general.blockage_delay;
@@ -1346,9 +1350,9 @@ pub(crate) fn blocked_step(w: &mut World, id: ObjectId) {
     match res {
         Search::GateFailed => path::failed(w, id, res, true),
         other => {
-            // spec: S-0212 claim 21 (after a re-path for a blocked step the delay R starts again)
+            // spec: S-0212 claim 21 (after a re-path for a blocked step the delay R starts again; a failed search that clears the destination ends it again for the driving locomotor, path::failed)
             if let Some(ob) = w.obj_mut(id) {
-                ob.path.retry_at = t.wrapping_add(r);
+                path::start_delay(ob, t, r);
             }
             if other == Search::SearchFailed {
                 path::failed(w, id, other, true);
@@ -1698,9 +1702,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 arrive_or_rest(w, id);
                 return false;
             }
-            // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over)
+            // spec: S-0212 claims 20 and 21 (a fresh search once the retry delay is over; r97: for the driving locomotor a destination changed to a different one or cleared has ended it)
             // spec: S-0207 claim 3 (without a path the vehicle is not due to begin a track: its budget is kept)
-            if t < o.path.retry_at {
+            if path::waits(w, id) {
                 return false;
             }
             // spec: S-0207 claim 15 (a fresh search that finds a path looks at the new path's first cell)

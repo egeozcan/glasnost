@@ -305,7 +305,7 @@ pub fn grinder_fate(w: &mut World, u: ObjectId) -> bool {
         // spec: S-0603 claim 14 (it queues eaten, without an immediate start)
         ob.beh.queue(Some(Behaviour::Eaten));
         ob.path.steps.clear();
-        // spec: S-0212 claim 21 and its state table, row "destination changes" (a new destination does not cut a running retry delay short: the walk locomotor by claim 21, the others at low confidence)
+        // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
     // spec: S-0603 claim 14 (it takes that building as its destination)
     crate::econ::assign_destination(w, u, Some(Target::Object(b)));

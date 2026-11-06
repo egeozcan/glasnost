@@ -1,21 +1,20 @@
-//! Claim tests of S-0212 revision 87: claim 21's running delay against a
-//! new destination, and claim 23's gate row for the walk locomotor (after
-//! a fresh search and after a re-path) with the end of its movement in
-//! progress (scenario P7 run 7b). Synthetic data only: the test kit's
-//! invented walker and buggy, our own water cells, no game data.
+//! Claim tests of S-0212 revision 87, as revision 97 leaves them: claim
+//! 23's gate row for the walk locomotor (after a fresh search and after a
+//! re-path) with the end of its movement in progress (scenario P7 run 7b),
+//! and no delay left after it (claim 21, r97). Synthetic data only: the
+//! test kit's invented walker, our own water cells, no game data.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::Decimal;
 use glasnost_sim::occupancy::in_progress;
-use glasnost_sim::orders::{self, Order};
 use glasnost_sim::path::{self, Search};
-use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit::{self, SIZE, mid};
 use glasnost_sim::tick;
 use glasnost_sim::trace::{self, What};
-use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::world::{ObjectId, Target, World};
 
 /// The combat ruleset with the path-retry delay field at 0.1 game minutes,
 /// R = 90 ticks (S-0212 claim 21 and P25 a).
@@ -50,18 +49,6 @@ fn island(w: &mut World, c: CellXY) {
     }
 }
 
-/// A move order to cell `c`.
-fn move_to(w: &mut World, id: ObjectId, c: CellXY) {
-    let o = Order::Behaviour {
-        actor: id,
-        behaviour: Behaviour::Move,
-        attack_move: false,
-        target: None,
-        dest: Some(Target::Cell(c)),
-    };
-    assert!(orders::issue(w, HouseId(0), o), "move order refused");
-}
-
 /// The ticks of `id`'s path computations and their results.
 fn searches(events: &[trace::Event], id: ObjectId) -> Vec<(i32, Search)> {
     events
@@ -72,18 +59,6 @@ fn searches(events: &[trace::Event], id: ObjectId) -> Vec<(i32, Search)> {
             _ => None,
         })
         .collect()
-}
-
-/// Steps up to `n` ticks until `id` makes a path computation; returns its
-/// tick and result.
-fn next_search(w: &mut World, id: ObjectId, n: i32) -> Option<(i32, Search)> {
-    for _ in 0..n {
-        tick::step(w);
-        if let Some(&x) = searches(&trace::take(w), id).first() {
-            return Some(x);
-        }
-    }
-    None
 }
 
 // spec: S-0212 claim 23 (gate row: a unit with the walk locomotor has its destination cleared after a fresh search, takes no step, does not give up and has nothing queued; its movement in progress ends in the same movement update)
@@ -114,18 +89,21 @@ fn p7_run_7b_walker_to_an_island() {
     assert_eq!(o.dest, None, "cleared in the first movement update");
     assert!(!in_progress(&w, g), "its movement in progress ended");
     assert_eq!(o.beh.queued, queued, "nothing queued");
-    assert_eq!(
-        o.path.retry_at,
-        t + 90,
-        "the delay runs after the fresh search"
+    // S-0212 r97 claim 21: the clearing ends the delay the fresh search
+    // started, so none remains.
+    assert!(
+        o.path.retry_at <= w.tick,
+        "no delay remains after the failed gate"
     );
+    assert!(!path::delay_runs(&w, g));
     for _ in 0..30 {
         tick::step(&mut w);
         assert_eq!(w.obj(g).unwrap().pos.cell(), here, "no step");
     }
 }
 
-// spec: S-0212 claim 23 (gate row: for the walk locomotor the destination is cleared after a re-path for a moving blocker too, and its movement in progress ends in the same movement update; the retry delay runs after a walker's re-path, claim 21)
+// spec: S-0212 claim 23 (gate row: for the walk locomotor the destination is cleared after a re-path for a moving blocker too, and its movement in progress ends in the same movement update)
+// spec: S-0212 claim 21 (r97: the re-path's delay ends at that clearing, so none remains)
 #[test]
 fn claim_23_walker_repath_gate_failure_clears() {
     let (mut w, g) = one(Kind::Infantry, "WALKER");
@@ -144,7 +122,8 @@ fn claim_23_walker_repath_gate_failure_clears() {
     assert_eq!(o.dest, None);
     assert!(o.path.steps.is_empty());
     assert!(!in_progress(&w, g), "its movement in progress ended");
-    assert_eq!(o.path.retry_at, t + 90);
+    assert_eq!(o.path.retry_at, t, "the delay ended at the clearing");
+    assert!(!path::delay_runs(&w, g));
 }
 
 // spec: S-0212 claim 23 (the sentence after the table: for the walk locomotor, the stop of rows 2 and 3 ends its movement in progress in the same movement update, whether or not the unit keeps its destination)
@@ -173,54 +152,6 @@ fn claim_23_walker_search_failure_ends_movement() {
     }
 }
 
-// spec: S-0212 claim 21 (a new destination does not cut a running delay short for the walk locomotor: the first search for it waits for what remains of R)
-#[test]
-fn claim_21_walker_new_destination_waits_for_the_delay() {
-    let (mut w, g) = one(Kind::Infantry, "WALKER");
-    let isle = mid(SIZE, 8, 0);
-    island(&mut w, isle);
-    move_to(&mut w, g, isle);
-    let (t, r) = next_search(&mut w, g, 5).expect("a search");
-    assert_eq!(r, Search::GateFailed);
-    assert_eq!(w.obj(g).unwrap().path.retry_at, t + 90);
-    for _ in 0..20 {
-        tick::step(&mut w);
-    }
-    let open = mid(SIZE, -6, 0);
-    move_to(&mut w, g, open);
-    tick::step(&mut w);
-    assert_eq!(w.obj(g).unwrap().dest, Some(Target::Cell(open)));
-    assert!(
-        in_progress(&w, g),
-        "the new destination reached the locomotor"
-    );
-    let here = w.obj(g).unwrap().pos.cell();
-    while w.tick < t + 90 {
-        tick::step(&mut w);
-        assert_eq!(w.obj(g).unwrap().pos.cell(), here);
-        assert!(in_progress(&w, g), "it waits with movement in progress");
-    }
-    assert_eq!(
-        next_search(&mut w, g, 5),
-        Some((t + 90, Search::Found)),
-        "the search when R is over"
-    );
-}
-
-// spec: S-0212 state table, row "destination changes" (for the locomotors other than walking the same rule, at low confidence: a fresh search for a new destination waits for a running retry delay)
-#[test]
-fn state_table_drive_new_destination_waits_for_the_delay() {
-    let (mut w, v) = one(Kind::Vehicle, "BUGGY");
-    let isle = mid(SIZE, 8, 0);
-    island(&mut w, isle);
-    move_to(&mut w, v, isle);
-    let (failed_at, r) = next_search(&mut w, v, 5).expect("a search");
-    assert_eq!(r, Search::GateFailed);
-    assert_eq!(w.obj(v).unwrap().dest, None);
-    assert_eq!(w.obj(v).unwrap().path.retry_at, failed_at + 90);
-    move_to(&mut w, v, mid(SIZE, -6, 0));
-    assert_eq!(
-        next_search(&mut w, v, 120),
-        Some((failed_at + 90, Search::Found))
-    );
-}
+// S-0212 r97 replaced claim 21's wait for a new destination: a different
+// destination now ends a running delay for the driving and walk
+// locomotors. The tests of r97 are in claims_s0212_r97.rs.

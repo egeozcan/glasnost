@@ -810,6 +810,52 @@ fn m0020_rows_hold_in_our_engine() {
     );
 }
 
+/// M-0023 (S-0417 U10 g run 1, a released infantry unit ordered into a
+/// walled pen before its first turn) on our engine: the stock arena map
+/// from the install with the record's ring of walls, the types and cells
+/// read at run time from the git-ignored `measurements/local/M-0023.json`
+/// (`glasnost_tools::oracle_m0023`). Local lane only. Prints each Result
+/// row's verdict; the report with the local values goes to the git-ignored
+/// `local-lane/m7b/arena/oracle-M-0023.txt`. Fails while a row fails other
+/// than the four that Q-2656 and Q-2657 ask about.
+#[test]
+fn m0023_rows_hold_in_our_engine() {
+    let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+        println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
+        return;
+    };
+    let m = measurements();
+    let values = glasnost_tools::oracle_m0023::local_path(&m);
+    if !values.exists() {
+        println!("skipped: no local values of M-0023 (GLASNOST_M0023_LOCAL)");
+        return;
+    }
+    let records = oracle::load_records(&m).unwrap();
+    let map = oracle::find_record(&records, glasnost_tools::oracle_m0023::MAP_RECORD)
+        .expect("M-0001's record");
+    let (ground, _, _) =
+        oracle::stock_inputs(Path::new(&dir), &map.map_file, &map.map_sha256).unwrap();
+    let local = glasnost_tools::oracle_m0023::read_local(&values).unwrap();
+    let (summary, full) = glasnost_tools::oracle_m0023::run(&ground, &local).unwrap();
+    println!("{summary}");
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7b/arena");
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("oracle-M-0023.txt"), &full).unwrap();
+    // measure: M-0023 (every Result row holds, but for the end of F and G − F, which Q-2656 asks about, and the first step after G and the controls, which Q-2657 asks about)
+    let asked = [
+        "At the end of F:",
+        "| G − F |",
+        "| First step after G",
+        "| Controls:",
+    ];
+    let failing: Vec<&str> = summary
+        .lines()
+        .filter(|l| l.ends_with("| no |"))
+        .filter(|l| !asked.iter().any(|a| l.contains(a)))
+        .collect();
+    assert!(failing.is_empty(), "rows of M-0023 fail: {failing:?}");
+}
+
 /// The oracle comparison end to end on the synthetic ground: a record made
 /// in a temporary folder from our own games passes; the same record with
 /// the winners swapped fails. Invented test data, not measurements.
