@@ -2824,7 +2824,10 @@ fn check_refused(w: &mut World, id: ObjectId, t: &Ty) -> bool {
 /// r134): at its take-off step, which makes claim 8's take-off requests for
 /// the height the aircraft has, toward point `to`.
 fn end_refusal_take_off(w: &mut World, id: ObjectId, t: &Ty, to: Option<Pos>) {
-    let (h, here) = (height(w, id), w.obj(id).map_or(Pos::new(0, 0, 0), |o| o.pos));
+    let (h, here) = (
+        height(w, id),
+        w.obj(id).map_or(Pos::new(0, 0, 0), |o| o.pos),
+    );
     // spec: S-0501 claim 7 (r134: that take-off, unlike a refused touchdown's, ends in the same movement update, at its take-off step, which makes claim 8's take-off requests for the height the aircraft has; the climb comes from the next movement update, since the refusing update has already changed the height)
     let full = take_off_requests(w, id, t.cruise, h, here, to);
     let one = F64::from_i64(1, w.rules().mode);
@@ -3568,8 +3571,7 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
         }
         let Some(o) = w.obj(x).cloned() else { continue };
         // spec: S-0501 claim 26 (an aircraft still flying in, in enter, or still moving is skipped) and claim 24 (r110, Q-2436: neither the report nor the pad tests where it touched down, so one settled off the foundation is serviced there)
-        let skipped =
-            o.beh.current == Some(Behaviour::Enter) || moving(w, x) || !st(w, x).ground;
+        let skipped = o.beh.current == Some(Behaviour::Enter) || moving(w, x) || !st(w, x).ground;
         settled |= !skipped;
         let release = |w: &mut World| {
             // spec: S-0501 claim 26 (released: it falls back to rest and its guard is forced)

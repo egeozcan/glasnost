@@ -240,17 +240,28 @@ fn claim_7_the_touchdown_in_a_refusing_update_is_untested_and_climbs_with_no_sli
             );
             assert_eq!(s.held, cruise(&w, a), "the take-off's held height: {tag}");
             assert!(zero(s.cur) && zero(s.tgt), "both fractions 0: {tag}");
-            assert_eq!(o.dest, Some(Target::Object(k)), "the destination kept: {tag}");
+            assert_eq!(
+                o.dest,
+                Some(Target::Object(k)),
+                "the destination kept: {tag}"
+            );
             let Some(Target::Cell(c)) = s.flying_to else {
                 panic!("a free cell as its flight point: {tag}");
             };
             assert!(c != x && !foundation(&w, k).contains(&c), "{tag}");
-            assert!(!flying::tracked(&w, a), "the touchdown ends tracking: {tag}");
+            assert!(
+                !flying::tracked(&w, a),
+                "the touchdown ends tracking: {tag}"
+            );
             assert!(w.cells.list(x, Layer::Ground).contains(&a), "listed: {tag}");
             assert_eq!(s.mark, Some(x), "its flag: {tag}");
             step(&mut w);
             let s = st(&w, a);
-            assert!(air::height(&w, a) > 0, "it climbs at once: {}", describe(&w, a));
+            assert!(
+                air::height(&w, a) > 0,
+                "it climbs at once: {}",
+                describe(&w, a)
+            );
             assert!(!s.sliding && s.mark.is_none(), "{}", describe(&w, a));
             assert!(!w.cells.list(x, Layer::Ground).contains(&a));
         }
@@ -343,7 +354,14 @@ fn kept_touchdown(r: &Ruleset) -> (World, ObjectId, ObjectId, CellXY) {
     let mut w = game(r);
     let k = building(&mut w, "APAD", 0, -2, 8);
     ready(&mut w);
-    let a = testkit::spawn(&mut w, Kind::Aircraft, "JET", 0, testkit::mid(SIZE, -8, 0), 0);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, -8, 0),
+        0,
+    );
     step(&mut w);
     let c = w.obj(a).unwrap().pos.cell();
     assert!(issue(
@@ -421,12 +439,22 @@ fn claim_47_a_sliding_aircraft_is_listed_and_flagged_until_it_climbs() {
         let c = w.obj(a).unwrap().pos.cell();
         let s = st(&w, a);
         if air::height(&w, a) > 0 {
-            assert_eq!(s.mark, None, "the climb clears its flag: {}", describe(&w, a));
+            assert_eq!(
+                s.mark,
+                None,
+                "the climb clears its flag: {}",
+                describe(&w, a)
+            );
             assert!(!w.cells.list(c, Layer::Ground).contains(&a), "unlisted");
             assert!(!w.cells.list(was_cell, Layer::Ground).contains(&a));
             break;
         }
-        assert_eq!(s.mark, Some(c), "its flag in the cell it ends in: {}", describe(&w, a));
+        assert_eq!(
+            s.mark,
+            Some(c),
+            "its flag in the cell it ends in: {}",
+            describe(&w, a)
+        );
         assert_eq!(
             w.cells.list(c, Layer::Ground).first(),
             Some(&a),
@@ -488,7 +516,12 @@ fn claim_47_the_corner_switch_applies_to_a_sliding_aircraft() {
         assert!(!flying::tracked(&w, a));
         step(&mut w);
         assert_eq!(air::height(&w, a), 0, "{}", describe(&w, a));
-        assert_eq!(flying::tracked(&w, a), !on, "switch {on}: {}", describe(&w, a));
+        assert_eq!(
+            flying::tracked(&w, a),
+            !on,
+            "switch {on}: {}",
+            describe(&w, a)
+        );
         // Away from the corner the same aircraft is tracked again at once.
         if on {
             let (mut v, _, b, _) = kept_touchdown(&r);
@@ -508,7 +541,11 @@ fn claim_6_a_sliding_aircraft_given_no_destination_takes_off() {
     let r = rules(true, true, "1", [0, 0, 0]);
     let (mut w, _, a, _) = kept_touchdown(&r);
     step(&mut w);
-    assert!(st(&w, a).sliding && air::height(&w, a) == 0, "{}", describe(&w, a));
+    assert!(
+        st(&w, a).sliding && air::height(&w, a) == 0,
+        "{}",
+        describe(&w, a)
+    );
     glasnost_sim::econ::assign_destination(&mut w, a, None);
     let s = st(&w, a);
     assert_eq!(w.obj(a).unwrap().dest, None);
@@ -552,7 +589,14 @@ fn claim_24_an_entry_restarted_in_the_approaching_stage_makes_its_beginning_at_o
     let mut w = game(&r);
     let k = building(&mut w, "APAD", 0, 0, 0);
     ready(&mut w);
-    let a = testkit::spawn(&mut w, Kind::Aircraft, "JET", 0, testkit::mid(SIZE, 8, 0), 0);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, 8, 0),
+        0,
+    );
     step(&mut w);
     w.obj_mut(a).unwrap().combat.ammo = 0;
     glasnost_sim::process::fall_back(&mut w, a, false);
@@ -616,7 +660,12 @@ fn claim_26_the_release_comes_before_the_skip() {
         assert_eq!(o.beh.current, Some(Behaviour::Guard), "{}", describe(&w, a));
         assert_eq!(o.beh.queued, None, "no sleep queued: {}", describe(&w, a));
         if full {
-            assert_eq!(o.beh.start_tick, t, "released: guard forced: {}", describe(&w, a));
+            assert_eq!(
+                o.beh.start_tick,
+                t,
+                "released: guard forced: {}",
+                describe(&w, a)
+            );
         } else {
             assert_eq!(o.beh.start_tick, t - 5, "skipped: {}", describe(&w, a));
             assert_eq!(o.dest, Some(Target::Object(k)));
