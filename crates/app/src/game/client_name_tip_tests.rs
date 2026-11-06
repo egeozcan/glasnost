@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use super::access_tests::{client, own, session_mut, start_by_keyboard_with};
 use super::*;
+use crate::game::play::Button;
 use crate::game::strings::StringTable;
 use crate::game::{name_tip, status_font};
 use glasnost_ai::fixture;
@@ -151,8 +152,8 @@ fn cell_of(s: &Session, id: ObjectId) -> CellXY {
 /// it holds; nothing with no pointer object; the name for an own object, a cloaked one included;
 /// for another house's: nothing when fully cloaked and not sensed, or for a type with the
 /// invisible flag, a building's invisible-in-game key included) and S-0004 claim 17 (the text the
-/// label resolves to; empty for a type with no label; a missing entry and no table read give our
-/// stand-in, Q-2686)
+/// label resolves to; empty for a type with no label; a missing entry gives the placeholder,
+/// S-0015 claim 8, and no table read our stand-in)
 #[test]
 fn claim_21_which_objects_get_a_tip() {
     let mut c = game(&[
@@ -206,10 +207,10 @@ fn claim_21_which_objects_get_a_tip() {
     // A type with no label: empty text, so no tip.
     let (lnch, cl) = spawn(s, mcv, Kind::Vehicle, "LNCH", me, 5);
     assert!(s.name_tip_text(cl, Some(lnch)).is_empty(), "no label");
-    // A missing entry, and no table read: our stand-ins (Q-2686).
+    // A missing entry: the placeholder (S-0015 claim 8). No table read: our stand-ins.
     s.strings = Some(StringTable::new(Vec::new()));
-    assert_eq!(s.name_tip_text(cm, Some(minr)), u("MINR"));
-    assert_eq!(s.name_tip_text(dark, None), u("TXT_SHADOW"));
+    assert_eq!(s.name_tip_text(cm, Some(minr)), u("MISSING:'N:MINR'"));
+    assert_eq!(s.name_tip_text(dark, None), u("MISSING:'TXT_SHADOW'"));
     s.strings = None;
     assert_eq!(s.name_tip_text(cm, Some(minr)), u("MINR"));
 }
@@ -357,6 +358,10 @@ fn claims_20_24_25_a_tip_shows_after_the_wait() {
     let font = glasnost_fmt::fnt::synthetic_font();
     session_mut(&mut c).play.status_font = Some(status_font::StatusFont::new(font).unwrap());
     let s = session_mut(&mut c);
+    // The order block of a game's first ticks blocks the tip (claim 20, r40).
+    while s.play.game.world.tick <= s.play.game.world.orders_blocked_through {
+        s.step();
+    }
     let m = s.map_rect();
     let p = m.centre();
     let (cell, id) = s.under(p);
@@ -399,4 +404,198 @@ fn claims_20_24_25_a_tip_shows_after_the_wait() {
         session_mut(&mut c).name_tip_shown().is_none(),
         "the option is off"
     );
+}
+
+/// A game with a font where the order block of the first ticks is over, and
+/// a point on the battlefield view whose pointer place has a tip text.
+fn tip_game() -> (Client, Point) {
+    let (mut c, p) = font_game();
+    let s = session_mut(&mut c);
+    while s.play.game.world.tick <= s.play.game.world.orders_blocked_through {
+        s.step();
+    }
+    (c, p)
+}
+
+/// A game with a font, still inside the order block of its first ticks, and
+/// a point on the battlefield view whose pointer place has a tip text.
+fn font_game() -> (Client, Point) {
+    let mut c = game(&[]);
+    let font = glasnost_fmt::fnt::synthetic_font();
+    let s = session_mut(&mut c);
+    s.play.status_font = Some(status_font::StatusFont::new(font).unwrap());
+    let m = s.map_rect();
+    // Away from the view's edges, where the pointer would scroll it.
+    let p = (60..m.h - 60)
+        .step_by(7)
+        .flat_map(|dy| {
+            (60..m.w - 60)
+                .step_by(7)
+                .map(move |dx| Point::new(m.x + dx, m.y + dy))
+        })
+        .find(|&p| {
+            let (cell, id) = s.under(p);
+            !s.name_tip_text(cell, id).is_empty()
+        })
+        .expect("a point with a tip text");
+    (c, p)
+}
+
+/// One frame at real time `*clock + ms`.
+fn frame_at(c: &mut Client, clock: &mut i64, ms: i64) {
+    *clock += ms;
+    c.update(*clock);
+    let _ = c.frame();
+}
+
+fn shown(c: &mut Client) -> Option<name_tip::Shown> {
+    session_mut(c).name_tip_shown().cloned()
+}
+
+/// spec: S-0111 claim 20 (r40, Wait: the pointer leaving the window is not an event of its own;
+/// the last movement restarts the wait as usual, and a wait that ends with the pointer outside the
+/// window shows nothing and uses up the rest's choice)
+#[test]
+fn claim_20_the_pointer_leaving_the_window() {
+    let (mut c, p) = tip_game();
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    c.pointer_moved(p);
+    frame_at(&mut c, &mut t, 400);
+    c.pointer_left();
+    frame_at(&mut c, &mut t, 600);
+    assert!(shown(&mut c).is_none(), "outside the window: nothing shows");
+    frame_at(&mut c, &mut t, 3000);
+    assert!(shown(&mut c).is_none(), "the rest's choice is used up");
+    c.pointer_moved(p);
+    frame_at(&mut c, &mut t, 999);
+    assert!(shown(&mut c).is_none());
+    frame_at(&mut c, &mut t, 1);
+    assert!(shown(&mut c).is_some(), "back inside, moved and rested");
+}
+
+/// spec: S-0111 claim 20 (r40, Blocked: a left or right button pressed over the battlefield view
+/// and held blocks the tip; the release brings nothing back until the pointer moves and rests
+/// again; a middle button is no held button) and claim 26 (a press or release hides it)
+#[test]
+fn claim_20_a_held_button_blocks() {
+    for b in [Button::Left, Button::Right] {
+        let (mut c, p) = tip_game();
+        let mut t = 10_000;
+        frame_at(&mut c, &mut t, 0);
+        c.pointer_down(b, p);
+        c.pointer_moved(Point::new(p.x + 1, p.y));
+        frame_at(&mut c, &mut t, 1000);
+        assert!(shown(&mut c).is_none(), "{b:?} held: blocked");
+        c.pointer_up(b, Point::new(p.x + 1, p.y), Default::default());
+        frame_at(&mut c, &mut t, 3000);
+        assert!(
+            shown(&mut c).is_none(),
+            "{b:?} released: nothing until a rest"
+        );
+        c.pointer_moved(p);
+        frame_at(&mut c, &mut t, 1000);
+        assert!(shown(&mut c).is_some(), "{b:?}: moved and rested");
+    }
+    let (mut c, p) = tip_game();
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    c.middle_button(p);
+    c.pointer_moved(Point::new(p.x + 1, p.y));
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&mut c).is_some(), "a middle button blocks nothing");
+}
+
+/// spec: S-0111 claim 20 (r40, Blocked: an order block locks the input and hides the cursor, as
+/// the block of a game's first ticks, S-0201 claim 14: a wait that ends in it shows nothing, and
+/// the block ending brings nothing back)
+#[test]
+fn claim_20_the_order_block() {
+    let (mut c, p) = font_game();
+    let s = session_mut(&mut c);
+    assert!(s.play.game.world.tick <= s.play.game.world.orders_blocked_through);
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    c.pointer_moved(p);
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&mut c).is_none(), "blocked at the end of the wait");
+    let s = session_mut(&mut c);
+    while s.play.game.world.tick <= s.play.game.world.orders_blocked_through {
+        s.step();
+    }
+    frame_at(&mut c, &mut t, 3000);
+    assert!(
+        shown(&mut c).is_none(),
+        "the block ending brings nothing back"
+    );
+    c.pointer_moved(Point::new(p.x + 1, p.y));
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&mut c).is_some(), "moved and rested after the block");
+}
+
+/// spec: S-0111 claim 20 (r40, Options menu: opening it hides a tip and stops the wait; while it
+/// is open no wait runs; when it closes nothing shows until the pointer moves and rests again)
+#[test]
+fn claim_20_the_options_menu() {
+    let (mut c, p) = tip_game();
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    c.pointer_moved(p);
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&mut c).is_some());
+    assert!(session_mut(&mut c).open_options());
+    assert!(shown(&mut c).is_none(), "opening hides it");
+    frame_at(&mut c, &mut t, 3000);
+    assert!(shown(&mut c).is_none(), "no wait runs while it is open");
+    session_mut(&mut c).close_options();
+    frame_at(&mut c, &mut t, 3000);
+    assert!(
+        shown(&mut c).is_none(),
+        "a tip hidden by the menu does not come back"
+    );
+    c.pointer_moved(Point::new(p.x, p.y + 1));
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&mut c).is_some(), "moved and rested after it closed");
+}
+
+/// spec: S-0111 claim 26 (r40: while the tip shows, its text is chosen again in every drawn frame:
+/// another text replaces it, laid out and placed again, with the lifetime unchanged; the same
+/// text leaves it; no text hides it and nothing shows until the pointer moves and rests again)
+/// and S-0015 claim 8 (a label no entry matches shows as the placeholder)
+#[test]
+fn claim_26_the_text_is_chosen_again() {
+    let (mut c, p) = tip_game();
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    c.pointer_moved(p);
+    frame_at(&mut c, &mut t, 1000);
+    let first = shown(&mut c).expect("a tip");
+    // The same text in the next frames: as it is.
+    frame_at(&mut c, &mut t, 100);
+    assert_eq!(shown(&mut c), Some(first.clone()));
+    // The entries change under the resting pointer: another text.
+    session_mut(&mut c).strings = Some(StringTable::new(Vec::new()));
+    frame_at(&mut c, &mut t, 2000);
+    let second = shown(&mut c).expect("the tip stays, with another text");
+    assert_ne!(second.text, first.text);
+    assert!(second.text.starts_with(&u("MISSING:'")));
+    assert_eq!(
+        second.until, first.until,
+        "the lifetime does not start again"
+    );
+    assert_eq!((second.rect.x, second.rect.y), (p.x, p.y + name_tip::BELOW));
+    // No text: it hides, and nothing shows until the pointer moves and rests again.
+    let empty = table()
+        .labels()
+        .map(|l| (l.to_vec(), Vec::new()))
+        .collect::<Vec<_>>();
+    session_mut(&mut c).strings = Some(StringTable::new(empty));
+    frame_at(&mut c, &mut t, 100);
+    assert!(shown(&mut c).is_none(), "no text hides it");
+    session_mut(&mut c).strings = Some(table());
+    frame_at(&mut c, &mut t, 3000);
+    assert!(shown(&mut c).is_none(), "nothing until a rest");
+    c.pointer_moved(Point::new(p.x, p.y + 1));
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&mut c).is_some());
 }

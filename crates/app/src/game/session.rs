@@ -140,7 +140,9 @@ pub struct Session {
     /// The player's tooltip option (S-0111 claim 20), as the client's
     /// settings give it.
     pub tool_tips: bool,
-    /// The string table (S-0004 claim 17); none is read yet (Q-2686).
+    /// The string table (S-0004 claim 17, S-0015): the install's
+    /// `ra2md.csf`, read once when the program starts and handed to each
+    /// game by the client; none in a game started without an install.
     pub strings: Option<strings::StringTable>,
     /// The view's centre at the last name-tip update, to tell a moving view
     /// (S-0111 claim 20).
@@ -154,6 +156,9 @@ pub struct Session {
     /// order block: S-0201 claim 14).
     edge_live: bool,
     press: Option<(Point, Button)>,
+    /// Whether a left or right button pressed over the battlefield view is
+    /// still held (blocks the name tip, S-0111 claim 20).
+    view_button_held: bool,
     /// The armed band-box drag (S-0214 claim 18).
     drag: Option<band::Drag>,
     /// The right-button press in the battlefield and its scroll-drag
@@ -527,13 +532,14 @@ impl Session {
             name_tip: name_tip::NameTip::default(),
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
             tool_tips: true,
-            // design: Q-2686 (no spec gives the string table's file: none is read, and every label shows our stand-in)
+            // spec: S-0015 State and ordering (the table is read once, at start-up, by the install: `install::prepare`; the client hands it to the game)
             strings: None,
             tip_centre: (0, 0),
             tip_rows: [None; 2],
             edge: EdgeScroll::default(),
             edge_live: true,
             press: None,
+            view_button_held: false,
             drag: None,
             right: None,
             drag_refused: None,
@@ -770,8 +776,10 @@ impl Session {
             .map(|r| hud::CountdownRow {
                 // Seam (countdown display name): claim 18 shows the type's
                 // display name, a string-table label (S-0512 Import mapping);
-                // the client reads no string table yet, so the row shows the
-                // type's name, as the sidebar's icons do.
+                // the row still shows the type's name, as the sidebar's icons
+                // do: routing the superweapon's label through the table
+                // (`strings::resolve`) is not part of the name tip's
+                // intake 109 and stays a seam.
                 name: types
                     .get(r.sw as usize)
                     .map_or_else(String::new, |t| t.name.clone()),
@@ -1188,8 +1196,8 @@ impl Session {
         self.press = None;
         self.drag = None;
         self.right = None;
-        // design: Q-2687 (a pointer that left the window rests on no battlefield view: the tip hides and the wait stops until it comes back and moves)
-        self.name_tip.button();
+        self.view_button_held = false;
+        // spec: S-0111 claim 20 (r40: the pointer leaving the window is not an event of its own; the last movement restarts the wait as usual, and a wait that ends with the pointer outside the window shows nothing and uses up the rest's choice)
     }
 
     /// The middle button went down or up: it does nothing in the game but
@@ -1224,6 +1232,9 @@ impl Session {
         self.hud_focus.shown = false;
         self.pause_focus.shown = false;
         let on_map = self.hud_at(p) == Some(HudHit::Map);
+        // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the battlefield view is held; a held middle button does not block)
+        // design: Q-2736 (S-0111 Open questions leave a button pressed in the route mode and held undecided: it blocks like any other held left or right button pressed over the view)
+        self.view_button_held = on_map && matches!(b, Button::Left | Button::Right);
         if on_map {
             self.aim = None;
         }
@@ -1311,6 +1322,7 @@ impl Session {
         self.pointer_at(p);
         // spec: S-0111 claim 20 (releasing the left or right mouse button hides the tip and stops the wait)
         self.name_tip.button();
+        self.view_button_held = false;
         let drag = self.drag.take();
         let right = self.right.take();
         let Some((start, pb)) = self.press.take() else {
@@ -2111,6 +2123,8 @@ impl Session {
         // spec: S-0213 claim 16h, End of route mode (in our engine route mode ends, with the commit, when the options menu is opened while it is on)
         self.route_key(false);
         self.paused = true;
+        // spec: S-0111 claim 20 (Options menu: opening it hides a tip that shows and stops the wait)
+        self.name_tip.off();
         self.menu_speed = self.speed_in_force();
         true
     }
@@ -2123,8 +2137,10 @@ impl Session {
 
     /// Closes the options menu; a speed control set to an index other than
     /// the one in force sends the speed change (S-0201 claims 8 and 17).
-    fn close_options(&mut self) {
+    pub(super) fn close_options(&mut self) {
         self.paused = false;
+        // spec: S-0111 claim 20 (Options menu: when it closes nothing shows until the pointer moves and rests again; a tip hidden by the menu does not come back)
+        self.name_tip.off();
         if self.network {
             // spec: S-0201 claim 15 (closing the menu brings back drawing: the battlefield as the ticks left it, nothing to catch up)
             self.with_live(|live, inputs, scene| live.redraw(inputs, scene));
@@ -2414,29 +2430,33 @@ impl Session {
     /// One frame of the name tip (S-0111 claims 20 and 26): the option, the
     /// view's movement, and the rest's one choice when the wait ends.
     fn update_name_tip(&mut self) {
-        if !self.tool_tips {
+        let moving = self.centre != self.tip_centre;
+        self.tip_centre = self.centre;
+        // spec: S-0111 claim 20 (Options menu: opening the in-game options menu hides a tip and stops the wait; while it is open no wait runs and no tip shows; when it closes nothing shows until the pointer moves and rests again) and claim 20 (the tooltip option off)
+        if !self.tool_tips || self.paused {
             self.name_tip.off();
             return;
         }
         // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame
-        let moving = self.centre != self.tip_centre;
-        self.tip_centre = self.centre;
-        // spec: S-0111 claim 20 (Blocked: a hidden cursor or locked input): our engine never hides the cursor over the battlefield view and has no locked input (Q-2687)
-        // design: Q-2687 (the options menu covers the battlefield view: a wait that ends while it is open shows no tip)
-        let blocked = moving || self.paused;
+        // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the view and held)
+        // spec: S-0111 claim 20 (Blocked: a hidden cursor or locked input; an order block locks the input and hides the cursor, S-0201 claims 11 and 14): the ticks up to the world's last blocked tick
+        let w = &self.play.game.world;
+        let order_block = w.tick <= w.orders_blocked_through;
+        let blocked = moving || self.view_button_held || order_block;
         let now = self.clock_ms;
         let mut tip = std::mem::take(&mut self.name_tip);
-        tip.update(now, blocked, || self.choose_name_tip(now));
+        tip.update(now, blocked, |_| self.choose_name_tip(now));
         self.name_tip = tip;
     }
 
-    /// The tip for the pointer at the end of its wait at real time `now`
-    /// (S-0111 claims 21 to 25): `None` when it rests off the battlefield
-    /// view or the text is empty.
+    /// The tip for the pointer's place at real time `now` (S-0111 claims 21
+    /// to 25): `None` when it rests off the battlefield view or the text is
+    /// empty. Used for the rest's choice and again in every drawn frame
+    /// while the tip shows (claim 26).
     fn choose_name_tip(&mut self, now: i64) -> Option<name_tip::Shown> {
         let p = self.pointer?;
         let m = self.map_rect();
-        // design: Q-2687 (the pointer rests on the battlefield view when it is inside the view and over no interface target drawn on it)
+        // spec: S-0111 claim 20 (Where the pointer rests: over the battlefield view; over the sidebar, the radar included, no tip; outside the window nothing; the status message lines drawn on the view are not a place of their own)
         if !m.contains(p) || self.hud_at(p) != Some(HudHit::Map) {
             return None;
         }
@@ -2622,7 +2642,7 @@ impl Session {
 
     /// The display name of the type of `kind` named `name` (S-0004 claim
     /// 17): the text its label in force resolves to; without a string
-    /// table, the type's name stands in (Q-2686).
+    /// table read, the type's name stands in.
     fn display_name(&self, kind: Kind, name: &str) -> Vec<u16> {
         let import = &self.loaded.import;
         let Some(i) = build::find_type(import, kind, &live::name_bytes(name)) else {
@@ -2635,7 +2655,7 @@ impl Session {
     }
 
     /// The text of a fixed string-table entry `label` (S-0004 claim 17);
-    /// without a string table, the label stands in (Q-2686).
+    /// without a string table read, the label stands in.
     fn fixed_label(&self, label: &str) -> Vec<u16> {
         strings::resolve(self.strings.as_ref(), Some(label.as_bytes()), label)
     }
@@ -3001,7 +3021,7 @@ impl Session {
         }
         ui.extend(overlay);
         d.scaled(self.ui, ui);
-        // spec: S-0111 claim 25 (the name tip on top of everything else on the battlefield view, never over the sidebar: kept inside the view); design: Q-2687 (not drawn while the options menu covers the view)
+        // spec: S-0111 claim 25 (the name tip on top of everything else on the battlefield view, never over the sidebar: kept inside the view) and claim 20 (Options menu: no tip shows while the menu is open)
         if let (Some(s), Some(font), false) = (
             self.name_tip.shown.as_ref(),
             self.play.status_font.as_ref(),

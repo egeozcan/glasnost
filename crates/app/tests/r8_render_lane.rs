@@ -819,3 +819,95 @@ fn note_54_the_pointer_rests_on_a_unit() {
     println!("pointer moved off: name tip {:?}", tag(&lane));
     lane.save("n54-1-two-seconds");
 }
+
+/// Intake 109 (S-0015): the install's `ra2md.csf` reads at the start of a
+/// game. Counts only: no label or text is printed or compared.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn i109_the_install_string_table_reads() {
+    let Some(lane) = Lane::start() else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let s = lane.c.session.as_ref().unwrap();
+    let t = s.strings.as_ref().expect("the string table is read");
+    // The reading's warnings went to the log when the program started
+    // (they carry labels, so they are never printed here).
+    println!("string table: {} entries", t.len());
+    assert!(!t.is_empty());
+}
+
+/// Intake 109 (S-0015, S-0111 r40): the name tip of a unit and of a
+/// building shows the display name read from the install's string table.
+/// Screens go under the tag (`GLASNOST_R8_TAG`: `before` on main, `after`
+/// here). It prints the tip's size and line count and whether its text is
+/// the placeholder, never the text.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn i109_the_name_tip_shows_the_display_name() {
+    let Some(mut lane) = Lane::start() else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    println!(
+        "string table read: {}",
+        lane.c.session.as_ref().unwrap().strings.is_some()
+    );
+    if std::env::var_os("GLASNOST_I109_NO_TABLE").is_some() {
+        // The "before" frames: the session as it was without a table, every
+        // name our stand-in.
+        lane.c.session.as_mut().unwrap().strings = None;
+    }
+    let home = lane.home();
+    let local = lane.local();
+    let r = lane.world().rules_arc();
+    let Some(vt) = vehicle_type(lane.world(), |u| {
+        u.locomotor == Locomotor::Drive && !u.combat.naval && u.combat.slots[0].is_some()
+    }) else {
+        println!("no armed driving type");
+        return;
+    };
+    let Some(bt) = r
+        .buildings
+        .iter()
+        .find(|b| b.raw.tech_level.is_some_and(|t| t >= 0) && b.foundation.0 <= 3)
+        .map(|b| b.name.clone())
+    else {
+        println!("no building type");
+        return;
+    };
+    for (name, kind, t, dx) in [
+        ("unit", Kind::Vehicle, vt, 5),
+        ("building", Kind::Building, bt, 9),
+    ] {
+        let at = lane
+            .open(CellXY::new(home.x + dx, home.y + dx), |l| {
+                l != land::WATER && l != land::ROCK
+            })
+            .expect("open land");
+        let o = lane.spawn(kind, &t, local, at);
+        lane.ticks(8);
+        lane.look_at(at);
+        let Some(p) = lane.centre_of(o) else {
+            println!("{name}: not on screen");
+            continue;
+        };
+        lane.c.pointer_moved(p);
+        let _ = lane.c.frame();
+        for _ in 0..12 {
+            lane.clock += 100;
+            lane.c.update(lane.clock);
+            let _ = lane.c.frame();
+        }
+        let s = lane.c.session.as_ref().unwrap();
+        let tip = s.name_tip_shown().map(|t| {
+            let text = t.lines.concat();
+            let placeholder = text.starts_with(&"MISSING:'".encode_utf16().collect::<Vec<_>>());
+            (t.rect, t.lines.len(), text.len(), placeholder)
+        });
+        println!("{name}: name tip (box, lines, units, placeholder) {tip:?}");
+        lane.zoom(&format!("i109-{name}"), p, (300, 140, 3));
+        lane.c.pointer_moved(Point::new(p.x + 300, p.y + 100));
+        let _ = lane.c.frame();
+    }
+}
