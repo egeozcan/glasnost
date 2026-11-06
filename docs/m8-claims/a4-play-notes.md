@@ -734,8 +734,8 @@ The lead's answers replace round 8b's interims for note 54: S-0015 (Q-2686, the 
 and S-0111 r40 (Q-2687, the name tip's open points). Built in M8 step A3 intake 109 (ledger:
 [intake109.md](intake109.md)); lane `crates/app/tests/r8_render_lane.rs`
 (`i109_the_name_tip_shows_the_display_name`, `i109_the_install_string_table_reads`), frames in
-`local-lane/m8/i109/render/before/` (the session with no table read, our stand-in names, as round
-8b) and `after/`. The departures these answers name come without a switch: judged in
+`local-lane/m8/i109/render/before/` (main at c410e7f, no table read: the type's section name) and
+`after/`. The departures these answers name come without a switch: judged in
 [c7-play-fixes.md](c7-play-fixes.md), *A3 intake 109*.
 
 | Request | Notes | Answer | Built | Status |
