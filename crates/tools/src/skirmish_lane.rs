@@ -794,6 +794,13 @@ fn play_ai(
     let dump_at: Vec<i32> = std::env::var("GLASNOST_AI_DUMP")
         .map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect())
         .unwrap_or_default();
+    // `GLASNOST_AI_STALE=n`: every n ticks, the player houses' objects that
+    // hold a removed object as destination or target, and the rockets on the
+    // map whose flight has not started.
+    let stale_every: i32 = std::env::var("GLASNOST_AI_STALE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     // `GLASNOST_AI_WATCH=id,from,to`: one object's state every tick in a range.
     let watch_obj: Option<(u32, i32, i32)> =
         std::env::var("GLASNOST_AI_WATCH").ok().and_then(|v| {
@@ -1064,6 +1071,9 @@ fn play_ai(
         }
         if dump_at.contains(&w.tick) {
             print!("{}", dump(w));
+        }
+        if stale_every > 0 && w.tick % stale_every == 0 {
+            print!("{}", stale(w));
         }
         if w.tick == EARLY {
             for h in 0..PLAYERS {
@@ -1927,6 +1937,57 @@ fn watch_vs_line(
         "  vs {}: slot {slot} weapon {:?} check {every:?} lasting {lasting:?} target hp {hp} owner {owner:?} seq {seq:?}",
         vs.0, wp
     )
+}
+
+/// A diagnostic list of the player houses' objects that hold a removed
+/// object as destination or target, and of rocket missiles on the map whose
+/// flight has not started (`GLASNOST_AI_STALE=n`, every n ticks; M8 step A4
+/// round 9): one line each, with the object's state.
+fn stale(w: &World) -> String {
+    use glasnost_sim::world::Target;
+    let mut s = String::new();
+    let gone = |t: Option<Target>| matches!(t, Some(Target::Object(k)) if w.obj(k).is_none());
+    for o in w
+        .objects
+        .values()
+        .filter(|o| o.owner.is_some_and(|h| usize::from(h.0) < PLAYERS))
+    {
+        let rocket_waits = o.on_map && o.rocket.as_ref().is_some_and(|r| r.phase.is_none());
+        if !(gone(o.dest) || gone(o.target) || rocket_waits) {
+            continue;
+        }
+        let name = match o.kind {
+            Kind::Building => w
+                .rules()
+                .buildings
+                .get(o.type_index as usize)
+                .map(|b| b.name.clone()),
+            _ => w.rules().unit(o.kind, o.type_index).map(|u| u.name.clone()),
+        }
+        .unwrap_or_default();
+        let c = o.pos.cell();
+        let _ = writeln!(
+            s,
+            "stale tick {} obj {} {:?} {name} house {:?} at ({},{}) z {} hp {} map {} beh {:?}/{:?} due {} dest {:?}{} target {:?}{} rocket waits {rocket_waits}",
+            w.tick,
+            o.id.0,
+            o.kind,
+            o.owner.map(|h| h.0),
+            c.x,
+            c.y,
+            o.pos.z,
+            o.health,
+            o.on_map,
+            o.beh.current,
+            o.beh.queued,
+            o.beh.due(w.tick),
+            o.dest,
+            if gone(o.dest) { " (gone)" } else { "" },
+            o.target,
+            if gone(o.target) { " (gone)" } else { "" },
+        );
+    }
+    s
 }
 
 fn dump(w: &World) -> String {
