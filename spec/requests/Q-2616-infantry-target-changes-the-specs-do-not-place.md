@@ -1,9 +1,9 @@
 ---
 id: Q-2616
 title: When an infantry unit's change of target outside the routes S-0215 claim 11 names ends its attack state and asks for stand
-status: open
+status: answered
 related: [S-0215, S-0107, S-0309, S-0610]
-answered-by: []
+answered-by: [S-0107]
 ---
 
 ## Need
