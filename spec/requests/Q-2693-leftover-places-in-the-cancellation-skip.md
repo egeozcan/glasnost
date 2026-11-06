@@ -1,9 +1,9 @@
 ---
 id: Q-2693
 title: Whether leftovers that take no hit hold places in the sweep's cancellation skip
-status: open
+status: answered
 related: [S-0203, S-0414]
-answered-by: []
+answered-by: [S-0203]
 ---
 
 ## Need
