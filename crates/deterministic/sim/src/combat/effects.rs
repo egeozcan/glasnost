@@ -148,8 +148,8 @@ pub enum Effect {
     /// A hit's damage-state result (S-0302 claim 12), for the sound
     /// reactions of S-0701 claims 20 and 28. Not reported for a hit that
     /// claim 8 stops before its health stage, nor for a berserk hit (S-0302
-    /// r41 claim 10: its harvester announcement is `Sound::HarvesterAttacked`;
-    /// the damage sound is Q-2626).
+    /// r43 claim 10, Q-2626: it plays no damage sound, and its harvester
+    /// announcement is `Sound::HarvesterAttacked`).
     Hit {
         /// The object hit.
         id: ObjectId,
@@ -752,10 +752,10 @@ pub enum Sound {
     /// rules-wide walls-down sound at the bunker's position; `of` is the
     /// bunker's type.
     BunkerWallsDown,
-    /// A berserk hit on a unit (S-0302 r41 claim 10): the announcement that a
+    /// A berserk hit on a unit (S-0302 r43 claim 10): the announcement that a
     /// harvester is under attack (S-0701 claim 28), made when `of` is a
     /// harvester type of the local player (`house`), at `pos`. No other
-    /// sound (Q-2626).
+    /// sound, announcement or radar event (r43, Q-2626).
     HarvesterAttacked,
 }
 

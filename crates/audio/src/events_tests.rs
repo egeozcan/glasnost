@@ -1504,7 +1504,45 @@ fn berserk_hit(of: TypeRef, owner: u8) -> Effect {
     }
 }
 
-// spec: S-0302 r41 claim 10 and S-0701 claim 28 (a berserk hit on the local player's harvester makes the harvester-under-attack announcement and its F7 event, which suppresses a second one nearby; another type, or another owner's harvester, makes none; Q-2626: no damage sound for the hit)
+// spec: S-0302 r43 claim 10 (Q-2626: a berserk hit reports unchanged, but the target type's damage sound that S-0701 claim 20 gives other unchanged hits is not played, whoever owns the target; the sim reports no Effect::Hit for it, only Sound::HarvesterAttacked)
+#[test]
+fn a_berserk_hit_plays_no_damage_sound() {
+    let w = world();
+    let t = tref(&w, Kind::Vehicle, "CRUSHER");
+    let mut a = audio_with(&w, &["Ouch"], Quirks::default());
+    a.set_names(damage_names(&w));
+    let mut u = Rng::new(1);
+    // The type's damage sound plays for an ordinary unchanged hit.
+    a.tick(&w, &[hit(&w, t, 0, HitResult::Unchanged, None)], &mut u);
+    assert_eq!(a.mixer().alive(), 1);
+    for owner in [0, 1] {
+        a.mixer_mut().clear();
+        let before = u.taken();
+        a.tick(&w, &[berserk_hit(t, owner)], &mut u);
+        assert_eq!(a.mixer().alive(), 0, "no damage sound, owner {owner}");
+        assert_eq!(u.taken(), before, "no draw");
+    }
+}
+
+// spec: S-0302 r43 claim 10 (Q-2626: of S-0701 claim 28's announcements only the harvester one can come from a berserk hit; the base and ally announcements come only from hits on buildings, which a berserk hit leaves unaffected, so a berserk hit on any other unit, the local player's or another house's, makes none and no radar event)
+#[test]
+fn a_berserk_hit_on_another_unit_is_not_announced() {
+    let w = world();
+    let mut a = base_audio(&w);
+    let mut u = Rng::new(1);
+    let tank = tref(&w, Kind::Vehicle, "CRUSHER");
+    a.tick(&w, &[berserk_hit(tank, 0)], &mut u);
+    assert!(!announced(&mut a, 1000), "the local player's tank");
+    a.tick(&w, &[berserk_hit(tank, 1)], &mut u);
+    assert!(!announced(&mut a, 2000), "another house's tank");
+    assert!(heard(&mut a, 2500).is_empty(), "no attack-warning sound");
+    // No radar event was raised: a later harvester announcement at the same place is not suppressed.
+    let cart = tref(&w, Kind::Vehicle, "CART");
+    a.tick(&w, &[berserk_hit(cart, 0)], &mut u);
+    assert!(announced(&mut a, 3000));
+}
+
+// spec: S-0302 r43 claim 10 and S-0701 claim 28 (a berserk hit on the local player's harvester makes the harvester-under-attack announcement and its F7 event, which suppresses a second one nearby; another type, or another owner's harvester, makes none; Q-2626: no damage sound for the hit)
 #[test]
 fn a_berserk_hit_on_a_local_harvester_is_announced() {
     let w = world();

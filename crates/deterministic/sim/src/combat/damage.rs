@@ -453,7 +453,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         };
         let _ = h;
         // spec: S-0302 claim 10 and S-0610 claim 4 (entry: T, target dropped, hunt queued; a further berserk hit sets the remaining time to the new T; quirks.berserk_zero_duration)
-        // spec: S-0302 r41 claim 10 (the fall-back of S-0215 claim 16 is judged on the behaviour current when the hit lands, so before the entry queues hunt; it needs a known attacker)
+        // spec: S-0302 r43 claim 10 (the fall-back of S-0215 claim 16 is judged on the behaviour current when the hit lands, so before the entry queues hunt; it needs a known attacker)
         let falls = hit.attacker.is_some() && crate::process::no_threat_applies(w, target);
         if crate::psychic::enter(w, target, t) {
             berserk_reactions(w, target, &hit, falls);
@@ -545,28 +545,29 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     result
 }
 
-/// The reactions that follow a berserk hit which took effect (S-0302 r41
+/// The reactions that follow a berserk hit which took effect (S-0302 r43
 /// claim 10), after the hit's own damage step, none of whose reactions (anger,
-/// retaliation, scatter, trigger event, damage effect, disguise loss) a
-/// berserk hit makes: the no-threat fall-back (S-0215 claim 16; the hunt of
-/// the berserk entry is replaced by what it queues), the change of fear of an
-/// infantry unit (S-0107 claim 16) and the announcement that a harvester is
-/// under attack (S-0701 claim 28). The crush response (S-0215 claim 39)
+/// retaliation, scatter, trigger event, damage effect, disguise loss, and the
+/// damage sound of S-0701 claim 20) a berserk hit makes: the no-threat
+/// fall-back (S-0215 claim 16; the hunt of the berserk entry is replaced by
+/// what it queues), the change of fear of an infantry unit (S-0107 claim 16)
+/// and the announcement that a harvester is under attack (S-0701 claim 28),
+/// the only announcement it can make. The crush response (S-0215 claim 39)
 /// follows in [`apply`]. Request B of S-0208 claim 15 is the seam of the
 /// scatter from damage, built for no hit (`docs/m8-claims/intake100.md`).
 fn berserk_reactions(w: &mut World, id: ObjectId, hit: &Hit, falls: bool) {
-    // spec: S-0302 r41 claim 10 (a team member that the hit makes berserk has left its team by then: no teams in our engine, so the team exception of the fall-back never holds it back)
+    // spec: S-0302 r43 claim 10 (a team member that the hit makes berserk has left its team by then: no teams in our engine, so the team exception of the fall-back never holds it back)
     if falls {
         // spec: S-0215 claim 16 (the fall-back to rest, claims 13 to 15) and S-0610 claim 4 (a behaviour the fall-back queues replaces the queued hunt)
         crate::process::fall_back(w, id, false);
     }
     let Some(o) = w.obj(id) else { return };
-    // spec: S-0302 r41 claim 10 and S-0107 claim 16 (the table of fear applies to a berserk hit, with the health ratio as it stands; a known attacker only selects its rows)
+    // spec: S-0302 r43 claim 10 and S-0107 claim 16 (the table of fear applies to a berserk hit, with the health ratio as it stands; a known attacker only selects its rows)
     if o.kind == Kind::Infantry && o.health > 0 {
         crate::combat::fear::damaged(w, id, hit.attacker.is_some());
     }
     let Some(o) = w.obj(id) else { return };
-    // spec: S-0302 r41 claim 10 and S-0701 claim 28 (a berserk hit on a harvester is announced like any hit that takes health and leaves it alive; Q-2626 for the other sound reactions)
+    // spec: S-0302 r43 claim 10 and S-0701 claim 28 (a berserk hit on a harvester is announced like any hit that takes health and leaves it alive; Q-2626: it is the only announcement a berserk hit can make, the base and ally ones coming only from hits on buildings, which it leaves unaffected, so it makes no other announcement and no other radar event, and no damage sound: no Effect::Hit is reported for it)
     let (of, owner, pos) = (
         crate::econ::TypeRef {
             kind: o.kind,
