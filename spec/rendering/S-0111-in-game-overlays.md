@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia, name tip)
 topic: rendering
-revision: 34
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-06
 measurements: []
-requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673]
+requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673, Q-2687]
 supersedes: []
 ---
 
@@ -612,37 +612,73 @@ S-0108 (Formulas F3).
       palette part d, which tells the two apart only as far as S-0005 claim 1's test for a loose
       file at every open holds (itself medium); medium for the importer warning.
 
-20. **Name tip: when it shows (Q-2673).** The name tip shows only while the player's tooltip
+20. **Name tip: when it shows (Q-2673, Q-2687).** The name tip shows only while the player's tooltip
     option is on (Import mapping). It is on unless the player's settings turn it off, and both
     options menus change it. With the option off, no name tip ever shows.
     - **Wait.** The tip shows once the pointer has rested on the battlefield view for 1000 ms of
-      real time. Every pointer movement, of any distance and whether or not the pointer object
-      changes, hides a tip that is showing and starts the wait again. Pressing or releasing the
-      left, right or middle mouse button hides the tip and stops the wait. No tip then shows until
-      the pointer has moved and rested again. The mouse wheel affects neither.
+      real time. Every pointer movement in the game's window, over the sidebar too, of any distance
+      and whether or not the pointer object changes, hides a tip that is showing and starts the wait
+      again. Pressing or releasing the left, right or middle mouse button hides the tip and stops
+      the wait. No tip then shows until the pointer has moved and rested again. The mouse wheel
+      affects neither. The pointer leaving the game's window is not an event of its own: the last
+      movement inside the window restarts the wait as usual, and a wait that ends with the pointer
+      outside the window shows nothing and uses up the rest's choice.
     - **Real time, not ticks.** The wait and the lifetime below are real time. Game speed does not
-      change them, and a paused game does not stop them. Our engine keeps this real-time timing:
-      the tip feeds no game state.
-    - **One choice per rest.** When the wait ends, the text is chosen once, from the state at that
-      moment (claims 21 to 23). If there is no text, or it is empty, nothing shows. Nothing then
-      shows until the pointer moves and rests again, even if an object later comes under the
-      resting pointer.
+      change them. Our engine keeps this real-time timing: the tip feeds no game state.
+    - **Where the pointer rests.** When the wait ends, a name tip is chosen only if the pointer is
+      then over the battlefield view. Over the sidebar, the radar included, no name tip shows (a tip
+      of a sidebar control is not this spec's), and outside the game's window nothing shows. Drawing
+      on the battlefield view, such as the status message lines of S-0213 claim 25, is not a place
+      of its own: the tip is chosen for the pointer object under it, as anywhere else on the view.
+    - **One choice per rest.** When the wait ends, the text is chosen from the state at that moment
+      (claims 21 to 23). If there is no text, the text is empty, or the wait ends while the tip is
+      blocked (below), nothing shows. Nothing then shows until the pointer moves and rests again,
+      even if an object later comes under the resting pointer or the block ends. While the tip
+      shows, claim 26 chooses its text again.
     - **Lifetime.** A tip stays for 10000 ms of real time after it shows, and then hides. It does
-      not show again until the pointer moves and rests again.
-    - **Blocked.** No tip shows when the wait ends while the mouse cursor is hidden, while the
-      player's input is locked, or while the battlefield view is moving, as during a scroll. One
-      further internal state of the view also blocks it (Open questions).
-    - Backing: `measurable` (scenario NT1 for the wait, its restart, the buttons, the wheel, the
-      lifetime, game speed and the one choice per rest; NT2 for the option, its settings key and
-      both options menus; NT8 for a scroll). `unmeasured` for a locked input and a hidden cursor: no
-      ordinary skirmish action is known to cause them while the pointer rests on the battlefield
-      view. `unmeasured` for a paused game: no way is known to the measurement setup to pause a
-      skirmish while the pointer rests on the battlefield view and the tip's timing is observed.
-    - Confidence: high for the 1000 ms wait, the 10000 ms lifetime, the restart on any movement, the
-      three buttons, the option and game speed not changing the wait or the lifetime; medium for the
-      wheel, for a paused game, for the hidden cursor, the locked input and the moving view, and for
-      the one choice per rest; low for the further internal state of the view that also blocks it,
-      which is not identified (Open questions)
+      not show again until the pointer moves and rests again. A text chosen again while the tip
+      shows (claim 26) does not start the lifetime again.
+    - **Blocked.** The tip is blocked while the mouse cursor is hidden, while the player's input is
+      locked, while the battlefield view is moving, as during a scroll, and while a left or right
+      mouse button that was pressed over the battlefield view is held, as while a selection box is
+      dragged (for a press in the route mode, Open questions). A held middle button does not block
+      it. An order block (S-0201 Terms) locks the input and hides the cursor: in a skirmish, the
+      block of a game's first ticks (S-0201 claim 14) and a block that the map's trigger actions
+      make, a chrono flash's included (S-0201 claim 11). No other ordinary skirmish situation is
+      known to lock the input or hide the cursor while the pointer is over the battlefield view.
+    - **Options menu.** Opening the in-game options menu (S-0213 claim 23) hides a tip that shows
+      and stops the wait. While the menu is open, no wait runs and no tip shows. When it closes, the
+      tooltip option in force applies again, and nothing shows until the pointer moves and rests
+      again: a tip hidden by the menu does not come back.
+    - Backing: `measurable` (scenario NT1 for the wait, its restart, the buttons, the held buttons,
+      the wheel, the lifetime, game speed, the one choice per rest; NT2 for the option, its settings
+      key, both options menus and the menu's opening; NT8 for a scroll and a held left button).
+      `unmeasured` for a locked input and a hidden cursor: the block of a game's first ticks lasts 4
+      ticks, into which no set-up here can time the end of a 1000 ms real-time wait, and a test
+      map's block would have to be timed against that wait, which no NT part does. `unmeasured` for
+      the pointer outside the window: whether it can leave the window depends on the display mode,
+      which no set-up here fixes. `unmeasured` for a rest over a status message line: a set-up here
+      can produce such a line at a chosen time only by S-0213's route refusals (its scenario O21),
+      whose fixtures this spec does not take over. `unmeasured` for the menu's closing bringing no
+      tip back: closing it takes a press on the menu or a key that S-0213 claim 23 does not give,
+      and a press hides the tip anyway. `unmeasured` for a rest over the sidebar giving no tip and
+      for a movement over the sidebar starting the wait again: the battlefield view does not include
+      the sidebar (glossary), so no run can put an object a tip could be chosen for under a pointer
+      that rests on the sidebar, and a rest there gives no tip with or without the rule, while a
+      movement from the sidebar back onto the view starts the wait anyway. `unmeasured` for a text
+      chosen again not starting the lifetime again: no set-up here changes a showing tip's text at a
+      chosen time (claim 26). `unmeasured` for a block that ends while the pointer still rests: no
+      NT set-up holds the pointer still through a block that ends without a scroll, such as a block
+      of the map's trigger actions or a chrono flash (S-0201 claim 11), and a scroll moves the
+      battlefield under the pointer, so no set-up here keeps a known object under it.
+    - Confidence: high for the 1000 ms wait, the 10000 ms lifetime, the restart on any movement over
+      the battlefield view, the three buttons, the option and game speed not changing the wait or
+      the lifetime. Medium, `measurable`, for the wheel, the moving view, the held buttons, the one
+      choice per rest and the options menu's opening (NT1, NT2 and NT8). Medium, `unmeasured`
+      (Backing), for the hidden cursor, the locked input, a block that ends while the pointer rests,
+      a rest over a message line, the pointer outside the window, a rest over the sidebar giving no
+      tip, the window's edge not being a movement, a movement over the sidebar starting the wait
+      again, the lifetime not starting again and the menu's closing bringing no tip back
 
 21. **Name tip: which pointer objects get one.** When the wait ends, the tip's text is:
     - the shroud label (Import mapping) when the pointer cell is not explored by the local
@@ -746,31 +782,55 @@ S-0108 (Formulas F3).
     width in pixels is the sum, over its text units (S-0014 Terms), of each text unit's glyph width
     (S-0014 claims 3 and 4) plus 1, except that a tab moves the line's width up to the next multiple
     of 64. A line break (a carriage return or a line feed, a carriage return followed by a line feed
-    counting as one) starts a new line, and lines are also wrapped to the width of the battlefield
-    view. How a wrapped line is broken is not specified here (Open questions). *w*<sub>t</sub> is
-    the width of the widest line and *h*<sub>t</sub> is the number of lines times the font's line
-    pitch *P*<sub>f</sub> (S-0014 claim 1). The box is *w* = *w*<sub>t</sub> + 4 pixels wide and *h*
-    = *h*<sub>t</sub> + 3 pixels high. Let (*x*, *y*) be the pointer's screen position when the tip
-    shows, and let the battlefield view span *X*<sub>0</sub> to *X*<sub>1</sub> horizontally and
-    *Y*<sub>0</sub> to *Y*<sub>1</sub> vertically (its right and bottom edges exclusive). The box's
-    top-left corner is (*l*, *m*):
+    counting as one) starts a new line. Lines are also wrapped to the wrap width *W* − 8, where *W*
+    is the battlefield view's width in pixels:
+    - **Wrapping.** When a text unit would make its line wider than the wrap width and it is not the
+      first unit on its line, the line is broken. A space is a break point only when at least one
+      unit comes before it on its line. If the line has a break point before that unit, it breaks at
+      the last one: the line ends just before that space, the space is dropped (neither drawn nor
+      counted in the line's width), and the next line starts with the unit after it. Otherwise the
+      line ends just before the unit, which starts the next line. A unit that is first on its line
+      stays on it even when it alone is wider than the wrap width, so every line holds at least one
+      unit. So a line whose only space is its first unit, as when a text starts with a space (claim
+      23), keeps that space and breaks just before the unit that passes the wrap width. The box then
+      has no empty line, and its text starts at the usual origin (claim 25), the space taking its
+      width at the start of the first line. Only the space at the break is dropped, and only spaces
+      of the current line count: a line break forgets every earlier space.
+    - **Size.** *w*<sub>t</sub> is the width of the widest line and *h*<sub>t</sub> is the number of
+      lines times the font's line pitch *P*<sub>f</sub> (S-0014 claim 1). The box is *w* =
+      *w*<sub>t</sub> + 8 pixels wide and *h* = *h*<sub>t</sub> + 4 pixels high.
+
+    Let (*x*, *y*) be the pointer's screen position when the tip shows, and let the battlefield view
+    span *X*<sub>0</sub> to *X*<sub>1</sub> horizontally and *Y*<sub>0</sub> to *Y*<sub>1</sub>
+    vertically (its right and bottom edges exclusive). The box's top-left corner is (*l*, *m*):
     - *l* = *x*, or *X*<sub>1</sub> − *w* when *x* + *w* > *X*<sub>1</sub>, so the box keeps its
       right edge inside the view
-    - *m* = *y* + 16, or *y* − *h* when *y* + 16 + *h* > *Y*<sub>1</sub>, so a tip near the bottom
-      edge flips above the pointer, its last row on row *y* − 1, just above the pointer's row.
+    - *m* = *y* + 16, or *y* − *h* + 1 when *y* + 16 + *h* > *Y*<sub>1</sub>, so a tip near the
+      bottom edge flips above the pointer, its last row on the pointer's row *y*.
 
-    There is no correction at the left or top edge. The box is placed once and does not move while
-    it shows. The box is drawn with the size it is placed with. A box as wide as the view or wider
-    is not specified here (Open questions).
+    There is no correction at the left or top edge: the view cuts a box that reaches past them. With
+    the wrap width above, only a line holding a single unit wider than the wrap width can make a box
+    wider than the view. The box is drawn with the size it is placed with (Edge cases give the
+    original's display bugs here). While the tip shows, it keeps the pointer position it was placed
+    for, and a text chosen again (claim 26) is laid out and placed again by the same rules.
     - Backing: `measurable` (scenario NT6, which measures the drawn box against the probe texts'
-      layout, and for the absence of a top correction through its many-line probe). `unmeasured` for
-      the absence of a left correction: the left edge is reached only by a box as wide as the view
-      or wider, which this claim leaves unspecified (Open questions).
-    - Confidence: high for the distance of 16 pixels below the pointer, and the left edge at the
-      pointer's column when the box is not shifted, and medium for the absence of a left or top
-      correction, which NT6 reaches only at the top, the drawn box having its placement size, the
-      text layout (*w*<sub>t</sub> and *h*<sub>t</sub>), the margins of 4 and 3 pixels, the flip and
-      the right-edge shift, which rest on the box's size, and for the line breaks
+      layout, the absence of a top correction through its many-line probe, the break at the last
+      space with its dropped space through its three-word probe, and the original's placing, which
+      gives claim 24's box at the right edge and at every pointer row that NT6 runs, Edge cases).
+      `unmeasured` for the absence of a left correction, the break of a line with no space and a
+      unit wider than the wrap width: in the original only a box that reaches past the view's left
+      edge shows them, and there its lines are cut (Edge cases). `unmeasured` for a text laid out
+      and placed again while the tip shows: no set-up here changes a showing tip's text at a chosen
+      time (claim 26). The wrap width *W* − 8, a line break forgetting earlier spaces, no break at a
+      space that is first on its line and our engine's placing with the drawn size at the one
+      pointer row where the original's flip differs (Edge cases) are presentation design rules, not
+      oracle predictions.
+    - Confidence: high for the distance of 16 pixels below the pointer, the left edge at the
+      pointer's column when the box is not shifted, and the four design rules above; medium for the
+      box's margins of 8 and 4 pixels, the text layout (*w*<sub>t</sub> and *h*<sub>t</sub>), the
+      flip and the right-edge shift, which rest on the box's size, the line breaks, the wrapping
+      rules, the absence of a left or top correction, which NT6 reaches only at the top, and the
+      layout and placing again of a text chosen again
 
 25. **Name tip: look and layer.** The box is filled with opaque black and framed by a line one pixel
     wide along its four edges. The frame and the text have one colour, the tip colour: RGB (164,
@@ -779,33 +839,49 @@ S-0108 (Formulas F3).
     is drawn on top of everything else on the battlefield view, status extras included, and never
     over the sidebar (claim 24 keeps it inside the view). A building's name tip is not S-0102's
     information tip of a building, which is drawn right after the ground layer (S-0102 claim 2): the
-    name tip is drawn after the whole battlefield view, the information tips included. The text sits
-    inside the frame. Its exact inset is not established (Open questions). The tip colour and the
-    black fill are drawn as they are: the cell's light, a lighting tint and shroud (S-0104, S-0409)
-    change neither, since the tip is drawn over the battlefield with no shade table.
+    name tip is drawn after the whole battlefield view, the information tips included. The text's
+    origin, from which S-0014 claims 3 and 4 draw its first line, is 4 pixels right of the box's
+    left edge and 2 pixels below its top edge, so 3 columns of black lie between the frame and the
+    text's origin on the left and 1 row above it. Each further line starts *P*<sub>f</sub> lower at
+    the same column. The tip colour and the black fill are drawn as they are: the cell's light, a
+    lighting tint and shroud (S-0104, S-0409) change neither, since the tip is drawn over the
+    battlefield with no shade table.
     - Backing: `measurable` (scenario NT7)
     - Confidence: high for the black fill, the frame, the one colour of frame and text, and the two
       RGB values; medium for the side mapping, the layer, the colours under a lighting tint and over
-      shroud, and the text's place inside the frame
+      shroud, and the text's origin inside the frame
 
-26. **Name tip: when it goes.** A tip hides when the pointer moves, when a left, right or middle
-    mouse button is pressed or released, when its lifetime ends (claim 20), and when the tooltip
-    option is turned off. Nothing else hides it or changes it while it shows. Its text and its
-    place stay as they were chosen, also when its object dies, moves, leaves the map, changes
-    owner, cloaks or changes disguise, when the selection changes, and when the view scrolls
-    under the resting pointer. Nothing outside claim 20's blocking conditions stops it from
-    showing: a mouse button held through the wait (as while a selection box is dragged), a
-    building placement, a superweapon aim and any order cursor all leave it able to show.
+26. **Name tip: when it goes or changes.** A tip hides when the pointer moves, when a left, right or
+    middle mouse button is pressed or released, when its lifetime ends (claim 20), when the tooltip
+    option is turned off and when the in-game options menu opens (claim 20). While it shows, its
+    text is chosen again in every drawn frame, by claims 21 to 23 for the place where the pointer
+    rests and with claim 20's blocking conditions:
+    - When that gives no text or an empty text, or the tip is blocked, the tip hides, and nothing
+      shows until the pointer moves and rests again. So it hides when its object dies or leaves the
+      pointer's place and nothing with a text is left there, when an object of another house fully
+      cloaks there unsensed (claim 21), and when the view scrolls under the resting pointer.
+    - When it gives another text, that text replaces the shown one, and the box is laid out and
+      placed again for it (claim 24). So another object left under the pointer when the first one
+      dies or leaves gives its own name, and a change of disguise gives the new disguise's name
+      (claim 22).
+    - Otherwise the tip stays as it is. A change of the selection, a change of owner that leaves
+      claim 22's name the same and an own object cloaking change nothing.
+
+    Nothing outside claim 20's blocking conditions stops the tip from showing: a building placement,
+    a superweapon aim and any order cursor all leave it able to show.
     - Backing: `measurable` (scenario NT1 (c) for the pointer and (g) for a press or release while
-      the tip shows; NT8: parts a and b for death, departure and a selection change, f for a cloak,
-      g for a scroll while it shows, c and d for the held button, the placement, the aim and an
-      order cursor). `unmeasured` for an owner change and a disguise change while the tip shows:
-      neither can be timed into the tip's lifetime without a press, which hides the tip, or another
-      house's action. `unmeasured` for the option turned off while it shows: turning it off takes a
-      press in the options menu, which itself hides the tip.
-    - Confidence: high for the pointer, the buttons and the lifetime; medium for everything that
-      leaves the tip unchanged, the option turned off while it shows and for the held button, the
-      placement, the aim and the order cursors
+      the tip shows; NT2 for the options menu; NT8: part a for death and departure, b for a
+      selection change, f for an own cloak, g for a scroll while the tip shows, d for the placement,
+      the aim and an order cursor). The choice in every drawn frame, as against a slower cadence, is
+      `unmeasured`: NT8 bounds only how soon the tip hides after its cause, and no part records the
+      frame in which it hides. `unmeasured` for another text replacing the shown one, for a change
+      of owner or disguise and for another house's object cloaking while the tip shows: none can be
+      timed into the tip's lifetime without a press, which hides the tip, or another house's action.
+      `unmeasured` for the option turned off while the tip shows: turning it off takes a press in
+      the options menu, which itself hides the tip.
+    - Confidence: high for the pointer, the buttons and the lifetime; medium for the choice in every
+      drawn frame and what it hides, replaces or leaves, for the option turned off while the tip
+      shows, the options menu, and for the placement, the aim and the order cursors
 
 ## Formulas
 
@@ -908,7 +984,9 @@ rounded.
 | Name-tip wait | 1000 | ms of real time | claim 20 |
 | Name-tip lifetime | 10000 | ms of real time | claim 20 |
 | Name-tip distance below the pointer | 16 | pixels | claim 24 |
-| Name-tip margins | 4 (width), 3 (height) | pixels added to the laid-out text | claim 24 |
+| Name-tip margins | 8 (width), 4 (height) | pixels added to the laid-out text | claim 24 |
+| Name-tip wrap allowance | 8 | pixels taken from the view's width for the wrap width | claim 24 |
+| Name-tip text origin | 4 (right), 2 (down) | pixels from the box's top-left corner | claim 25 |
 | Name-tip colour, side index 0 | (164, 210, 255) | RGB | claim 25 |
 | Name-tip colour, other side indices | (255, 255, 0) | RGB | claim 25 |
 | Name-tip text limit | 256 | text units (S-0014) | Edge cases |
@@ -963,22 +1041,25 @@ timing is real time.
 
 | State | Event | Next state | Effect |
 |---|---|---|---|
-| any | tooltip option turned off | off | tip hidden, none shows while off |
-| off | tooltip option turned on | idle | none |
+| any | tooltip option turned off, or in-game options menu opened | off | tip hidden, none shows while off |
+| off, in-game options menu not open | tooltip option turned on | idle | none |
+| off | in-game options menu closed with the option on | idle | none |
 | idle, waiting or showing | pointer moves | waiting | tip hidden; the 1000 ms wait starts again |
 | waiting or showing | left, right or middle button pressed or released | idle | tip hidden; no wait runs |
-| waiting | wait ends, claim 20 does not block, text not empty | showing | text chosen and box placed (claims 21 to 24); 10000 ms lifetime starts |
+| waiting | wait ends over the battlefield view, claim 20 does not block, text not empty | showing | text chosen and box placed (claims 21 to 24); 10000 ms lifetime starts |
 | waiting | wait ends otherwise | idle | nothing shows |
+| showing | drawn frame, claim 20 does not block, text not empty | showing | text chosen and box placed again (claims 21 to 24, 26); lifetime unchanged |
+| showing | drawn frame otherwise | idle | tip hidden |
 | showing | lifetime ends | idle | tip hidden |
 
-The state table restates claims 20 and 26. Backing: `measurable` (scenarios NT1, NT2 and NT8), and
-`unmeasured` for the option turned off while a tip shows (claim 26 gives the reason). Confidence:
-high for the pointer, button and lifetime rows, turning the option on, and the 1000 ms wait of the
-two wait-end rows; medium for the blocking conditions and the one choice per rest that those two
-rows restate from claim 20, for the text and box that the showing row chooses by claims 21 to 24,
-and for turning the option off while a tip shows; low for the further internal state of the view
-that claim 20 also checks, on which the rows "claim 20 does not block" and "wait ends otherwise"
-depend (Open questions).
+The state table restates claims 20 and 26. While the in-game options menu is open the state stays
+off, whatever the option: turning the option on in that menu takes effect when the menu closes
+(claim 20). Backing: `measurable` (scenarios NT1, NT2 and NT8), and `unmeasured` where claims 20 and
+26 give a part as `unmeasured`, with their reasons. Confidence: high for the pointer, button and
+lifetime rows, turning the option on, and the 1000 ms wait of the two wait-end rows; medium for the
+blocking conditions, the place of the rest and the one choice per rest that those two rows restate
+from claim 20, for the text and box that the showing rows choose by claims 21 to 24, for the two
+drawn-frame rows (claim 26), for the options menu, and for turning the option off while a tip shows.
 
 The overlap order between insignia, health bar and pip scale is `unmeasured`, confidence medium:
 no scenario below isolates their overlapping nontransparent pixels. The visibility table restates
@@ -1037,6 +1118,41 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
   undefined: it can show text units that are not in the name. Our engine shows the first 256 text
   units. A text of up to 255 text units shows whole in both. Backing: `unmeasured`, since the
   original's result is undefined. Confidence: medium.
+- **Name-tip box at the bottom edge** (display-only, no switch; claim 24). In the original, at the
+  one pointer row *h* + 15 pixels above the view's bottom edge, where *h* is the box's drawn height,
+  the box does not flip above the pointer, and its last row falls outside the view and is cut. For a
+  box no wider than the view whose text has not been chosen again with a smaller size (the next
+  bullet and the last bullet give those cases), the original's box stands where claim 24 places it
+  at every other pointer position, at the right edge included. Our engine flips the box at that row
+  as claim 24 gives.
+- **Name-tip box wider than the view** (display-only, no switch; claim 24). In the original a line
+  wraps only when it would be wider than *W*, not *W* − 8, so a text with a line wider than *W* − 8
+  gives a box wider than the view. That box stands with its right edge on the view's last column and
+  is cut at the view's left edge, and near the bottom edge its flip can come at other pointer rows
+  than claim 24 gives. Our engine wraps at *W* − 8.
+- **Name-tip wrap after a line break** (display-only, no switch; claim 24). In the original a wrap
+  can go back to the last space before an earlier line break, which draws part of the text twice and
+  makes the box taller. Our engine forgets every space at a line break.
+- **Name-tip wrap at a leading space** (display-only, no switch; claim 24). In the original a line
+  whose only space is its first unit breaks at that space when a later unit passes the wrap width,
+  which leaves an empty first line, so the box is one line pitch taller and the text starts one line
+  lower. Our engine does not break at a space that is first on its line.
+- **Name-tip box after a smaller text** (display-only, no switch; claims 24 and 26). In the
+  original, when a text chosen again while the tip shows is narrower or has fewer lines than an
+  earlier text of the same showing, the box can stand further left or higher than claim 24 places
+  it, as the earlier, larger box would, until the tip hides. Our engine places each text by its own
+  size.
+- Backing for the five bullets above: `measurable` (scenario NT6) for the drawn size and the
+  original's placing at the right edge and at every pointer row NT6 runs. `unmeasured` for the
+  original's results in each bullet, for a reason of set-up: no NT6 run reaches the one row of the
+  first bullet (its runs near the bottom edge keep the pointer within 20 pixels of that edge, while
+  that row lies more than 20 pixels above it for every box, its many-line run flips under both
+  rules, and its other runs at the view's centre end far above the bottom edge); no NT probe text
+  has a line wider than *W* − 8 for the second; no NT probe text has a line break followed by a line
+  that passes the wrap width for the third; no NT run wraps a text that starts with a space (an
+  empty modifier or type name, claim 23; NT5 gives such texts but does not wrap them) for the
+  fourth; and no set-up here changes a showing tip's text at a chosen time (claim 26) for the fifth.
+  Confidence: medium.
 - **Two disguise tests** (no switch; claim 22). The tip uses S-0516 claim 35's test for vehicles
   only. Infantry uses the simpler test of claim 22, as the original does. An enemy spy inside the
   local player's detector coverage therefore still shows its disguise's name.
@@ -1515,13 +1631,16 @@ involved.
   period 3 ticks and image frames 0, 3, 6 at tick residues 0, 1, 2, respectively, at every speed.
   Falsified by any different image frame or period.
 
-**Name-tip scenarios (claims 20 to 26, Q-2673).** Common setup as above, with the tooltip option
-on unless stated. A presentation-only probe string table is a loose copy of the stock string
-table (resolved by S-0005) that keeps every entry and replaces only the texts of the entries a
-scenario names, each by a distinct short probe text. The pointer is moved by the glossary's
-scripted-input allowance. The screen is captured at 60 frames a second with the capture time of
-each frame. A wait is measured from the last pointer movement to the first frame that shows the
-tip. Expected waits allow up to two frame times (34 ms) of capture and timer granularity.
+**Name-tip scenarios (claims 20 to 26, Q-2673).** Common setup as above, with the tooltip option on
+unless stated. A presentation-only probe string table is a loose copy of the stock string table
+(resolved by S-0005) that keeps every entry and replaces only the texts of the entries a scenario
+names, each by a distinct short probe text. The pointer is moved by the glossary's scripted-input
+allowance. The screen is captured at 60 frames a second with the capture time of each frame. A wait
+is measured from the last pointer movement to the first frame that shows the tip. A tip can first
+show only in a drawn frame, and the game draws one each cycle (S-0201 claim 6), 16 × *s* ms apart at
+a game-speed index *s* from 1 to 6 with a host that keeps up (S-0201 claim 2). Expected waits and
+lifetimes therefore allow one such cycle at the index in force plus two capture frame times (34 ms)
+of capture and timer granularity.
 
 - **NT1 (claim 20).** One own vehicle on open ground. (a) Move the pointer onto it and rest for 15
   s. Expected: the tip shows after 1000 ms and hides 10000 ms after it showed, and does not show
@@ -1538,17 +1657,26 @@ tip. Expected waits allow up to two frame times (34 ms) of capture and timer gra
   then in further runs the right and the middle button. In three more runs, press the button with
   the pointer on open ground beside the vehicle, move the pointer onto the vehicle with the button
   held, by less than S-0214 claim 27's drag threshold so that a held right button starts no scroll
-  drag (S-0101 claim 16), and rest; once the tip shows (NT8 (c)), release the button. Expected: the
-  tip hides in the frame of the press in the first three runs and in the frame of the release in the
-  other three, and does not show again during the rest. Falsified by a wait or lifetime outside the
-  margin, a tip in (f), a wait that follows the first movement in (b), a tip after a button in (d),
-  a tip 1000 ms after the wheel turn in (d), a time that changes with game speed in (e), or a tip
-  that stays after the press or the release in (g).
+  drag (S-0101 claim 16), and rest for 3 s, then release the button and keep resting for 3 s.
+  Expected: the tip hides in the frame of the press in the first three runs. In the other three, no
+  tip shows with the left or the right button, while it is held or after its release, and with the
+  middle button the tip shows 1000 ms after the last movement and hides in the frame of the release.
+  In no run does it show again during the rest. Falsified by a wait or lifetime outside the margin,
+  a tip in (f), a wait that follows the first movement in (b), a tip after a button in (d), a tip
+  1000 ms after the wheel turn in (d), a time that changes with game speed in (e), a tip that stays
+  after the press or the release in (g), or a tip with the left or right button held or no tip with
+  the middle button held in (g).
 - **NT2 (claim 20, option).** As NT1 (a) with the tooltip option turned off in the in-game options
   menu, then turned on again. Expected: no tip during a 15 s rest while off, and the tip of NT1 (a)
   after it is on again. Repeat with the option turned off in the main menu's options menu before the
   game starts, and once with the settings file's tooltip key set to no before the program starts,
-  each followed by a 15 s rest. Expected: no tip in either. Falsified by any tip while off.
+  each followed by a 15 s rest. Expected: no tip in either. Then, with the option on, the vehicle
+  and the pointer placed so that the tip's box lies where the open options menu leaves the
+  battlefield image visible, and NT1 (a)'s tip showing, open the in-game options menu with the
+  Escape key (S-0213 claim 23) without moving the pointer, and in another run open it the same way
+  300 ms into the rest and keep the pointer still for 3 s. Expected: no tip in any frame that shows
+  the open menu. Falsified by any tip while off, or by a tip in a frame that shows the open menu. If
+  the open menu leaves no such place visible, these two runs are inconclusive.
 - **NT3 (claim 21).** A probe string table gives each display-name label used here a distinct probe
   text, and the shroud label one too. Rest the pointer for 3 s on each of: an own, an allied and an
   enemy vehicle, infantry unit, aircraft (landed, then flying) and building; a civilian building; an
@@ -1616,43 +1744,65 @@ tip. Expected waits allow up to two frame times (34 ms) of capture and timer gra
   20 pixels of its right edge, then of its bottom edge, then of the bottom-right corner. Rest on it
   and measure the box's corners and the pointer position in screen pixels. Expected: the box at
   (*x*, *y* + 16) in the centre; right edge on the view's last column near the right edge; last row
-  on row *y* − 1, just above the pointer's row, near the bottom edge; both near the corner. Repeat
-  with a probe text holding a line break and one holding a tab, at the centre. Expected: for the
-  line-break probe two lines and the box 2 *P*<sub>f</sub> + 3 high, and for the tab probe one line
-  and the box *P*<sub>f</sub> + 3 high; each box *w*<sub>t</sub> + 4 wide by claim 24's line width,
-  with the glyph widths of the stock font. Then give the vehicle a probe text of enough lines that
-  its box is more than 24 pixels taller than half the view's height, put the vehicle at the view's
-  centre and rest on it with the pointer within 8 pixels of the view's centre row, so that the box
-  both flips and reaches above the view's top edge. Expected: the box flipped, its last row on row
-  *y* − 1 and its top above the view's top edge, so that only its lower part shows. Falsified by
-  another distance below the pointer, a many-line box moved down to the view's top edge, flip or
-  shift, another box size than claim 24's layout gives, or a box that leaves the view on the right
-  or the bottom.
+  on the pointer's row *y* near the bottom edge; both near the corner. Repeat with a probe text
+  holding a line break and one holding a tab, at the centre. Expected: for the line-break probe two
+  lines and the box 2 *P*<sub>f</sub> + 4 high, and for the tab probe one line and the box
+  *P*<sub>f</sub> + 4 high; each box *w*<sub>t</sub> + 8 wide by claim 24's line width, with the
+  glyph widths of the stock font. Then give the vehicle a probe text of enough lines that its box is
+  more than 24 pixels taller than half the view's height, put the vehicle at the view's centre and
+  rest on it with the pointer within 8 pixels of the view's centre row, so that the box both flips
+  and reaches above the view's top edge. Expected: the box flipped, its last row on the pointer's
+  row *y* and its top above the view's top edge, so that only its lower part shows. Then give the
+  vehicle a probe text of three equal words joined by single spaces, each word one letter repeated,
+  where *W* is the view's width in pixels measured from the capture, at 800 × 600, so that the line
+  width (claim 24, from the stock font's glyph widths) of the first two words with the space between
+  them and the space after them is less than *W* − 8 and that of the whole text is more than *W*,
+  with a letter wide enough that the whole text has at most 255 text units (Edge cases), and rest on
+  it at the view's centre. Expected: two lines, the first two words with the space between them on
+  the first and the third word, with no space before it, on the second, and the box 8 pixels wider
+  than the first line, shifted to the view's right edge. So under claim 24, and under the original's
+  wrap at *W* (Edge cases), the first unit that passes the wrap width lies inside the third word,
+  the last break point before it is the second space, and the third word alone, being no wider than
+  the first two, fits on its line. A break at the first space would put the first word alone on the
+  first line. No run here reaches the one pointer row where the original's flip differs from claim
+  24's (Edge cases), and at the right edge the original's box stands where claim 24 places it, so
+  every expectation here holds for the original. Falsified by another distance below the pointer, a
+  many-line box moved down to the view's top edge, flip or shift, another box size than claim 24's
+  layout gives, a box that leaves the view on the right or the bottom, or in the three-word probe
+  the first word alone on the first line, another break or a space at the start of the second line.
 - **NT7 (claim 25).** As NT6 at the centre, playing a country of side index 0, then 1, then 2.
   Observable: the box's pixels. Expected: black inside, a one-pixel frame and the text in RGB (164,
   210, 255) for side index 0 and RGB (255, 255, 0) for 1 and 2, after S-0103 claim 9's output step,
   and the tip over every other battlefield drawing. Repeat at the centre with a named map lighting
-  variant whose ambient light is tinted, and with the tip's box partly over shroud. Also record the
-  text's inset in the frame. Then rest on an own building, with an own selected ground vehicle just
-  below the pointer so that the tip's box covers its health bar and with an own aircraft flying
-  across the box. Expected: the name tip over the health bar, the aircraft and any information tip
-  of the building (S-0102 Terms), since it is not an information tip. Falsified by another fill,
-  frame width or colour, a colour that changes with the tint or over shroud, or a battlefield
-  drawing over the tip.
+  variant whose ambient light is tinted, and with the tip's box partly over shroud. Also record
+  where the text's first glyph is drawn. Expected also: the first glyph drawn from an origin 4
+  pixels right of the box's left edge and 2 pixels below its top edge (S-0014 claim 3 gives which of
+  its pixels are set). Then rest on an own building, with an own selected ground vehicle just below
+  the pointer so that the tip's box covers its health bar and with an own aircraft flying across the
+  box. Expected: the name tip over the health bar, the aircraft and any information tip of the
+  building (S-0102 Terms), since it is not an information tip. Falsified by another fill, frame
+  width or colour, a colour that changes with the tint or over shroud, a battlefield drawing over
+  the tip, or another text origin.
 - **NT8 (claim 26).** (a) While the tip of an enemy vehicle shows, destroy the vehicle; in another
-  run let it drive away. Expected: the tip keeps its text and place until its lifetime ends. (b)
-  Select and deselect another unit with the keyboard while a tip shows. Expected: no change. (c)
-  Hold the left button, drag a selection box and rest, still holding, for 3 s with an own vehicle
-  under the pointer. Expected: the tip after 1000 ms. (d) Rest with a building placement and then a
-  superweapon aim active over an own vehicle, and then with an own unit selected and the pointer,
+  run let it drive away. Expected: no later than 2 s after the vehicle is destroyed, and in the
+  other run by the time the vehicle is 2 cells or more from the pointer's cell, the tip has hidden
+  or shows the name of what is then under the pointer (claim 26), and once hidden it does not show
+  again during the rest. (b) Select and deselect another unit with the keyboard while a tip shows.
+  Expected: no change. (c) Hold the left button, drag a selection box and rest, still holding, for 3
+  s with an own vehicle under the pointer, then release the button and rest for 3 s more. Expected:
+  no tip while the button is held or after its release. (d) Rest with a building placement and then
+  a superweapon aim active over an own vehicle, and then with an own unit selected and the pointer,
   showing the attack cursor, on an enemy vehicle. Expected: the tip after 1000 ms in each. (e) Fill
   a strip of the map with own vehicles packed side by side, start a keyboard scroll along it and
   rest the pointer on the view during it, so that an own vehicle is under the pointer when each wait
   inside the scroll ends. Expected: no tip at the end of a wait that falls inside the scroll. (f)
   With S-0516's cloak fixtures, let an own unit that can cloak cloak while its tip shows. Expected:
-  no change. (g) While the tip of an own building shows, scroll the view with the keyboard.
-  Expected: the tip keeps its text and screen place until its lifetime ends. Falsified by a tip that
-  hides or changes in (a), (b), (f) or (g), no tip in (c) or (d), or a tip in (e).
+  no change. (g) While the tip of an own building shows, scroll the view with the keyboard for 1 s
+  and then keep the pointer still for 5 s. Expected: the tip hidden within 200 ms after the view
+  first moves, and no tip for the rest of the rest. Falsified by a tip that hides or changes in (b)
+  or (f), a tip that still shows the vehicle's or the building's name after the times given in (a)
+  or (g), a tip that shows again during the same rest after it hid in (a) or (g), a tip in (c) or
+  (e), or no tip in (d).
 - **NT9 (claim 22, technician mark).** With a probe string table for the technician label, destroy
   and, in another run, sell an own and then a captured building whose survivors include a type with
   the nominal flag (set by test map if needed). Rest on each survivor. Observable: each survivor's
@@ -1672,16 +1822,16 @@ tip. Expected waits allow up to two frame times (34 ms) of capture and timer gra
 - The extra-information overlay that some units draw beside the pip scale is not covered, nor is the
   talk bubble that can be shown over one object at a time (it uses its own sprite, drawn at the
   status anchor without shading; what shows it is not traced).
-- Name tip (claim 20): besides a hidden cursor, a locked input and a moving view, one further
-  internal view state blocks the tip. What sets it is not identified. Confidence: low.
+- Name tip (claim 20): whether a left or right button pressed in the route mode (S-0213 claim 16)
+  and still held blocks the tip after the pointer moves and rests while it is held (the press itself
+  hides the tip and stops the wait, as any press does, so the block matters only for a movement
+  while the button is held), and whether any sequence of skirmish play other than S-0201's order
+  blocks locks the input or hides the cursor. Confidence: low for the route mode, medium for the
+  others.
 - Name tip (claim 22): which releases from a building set the technician mark. It is set for a
   survivor of a building in some building state, and when a building puts a unit of the nominal
   type on the map in some other way. Neither condition is identified. Scenario NT9 explores it.
   Confidence: low.
-- Name tip (claim 24): how a text wider than the view is broken into lines, and the box of a text
-  whose box would be as wide as the view or wider. Neither occurs with ordinary display names.
-- Name tip (claim 25): the exact inset of the text inside the frame, a few pixels from its top
-  and left edges. Scenario NT7 records it.
 
 ## Cross-spec consistency
 
@@ -1741,6 +1891,10 @@ tip. Expected waits allow up to two frame times (34 ms) of capture and timer gra
   claim 35's rule for a disguised building or aircraft does not reach the hover name: claim 22 here
   shows a building's or aircraft's own type name whatever its disguise. S-0516's rules do not
   change.
+- Hand off with S-0004 scenario L2: its view-height condition "more than 2 × (23 × *P*<sub>f</sub> +
+  3) pixels tall" uses claim 24's former height margin of 3 pixels. With the margin of 4 pixels it
+  should read 2 × (23 × *P*<sub>f</sub> + 4), so that the view is still more than twice as tall as
+  (xii)'s box. L2's expectations and S-0004's rules do not change.
 - Claims 21 to 23 rely on S-0004 claim 17 for every display name and fixed label they show,
   including the placeholder for a missing entry. This spec states no lookup rule of its own.
 - Hand off with S-0006 claim 13 and S-0411's Import mapping: S-0006's placeholder for a missing
