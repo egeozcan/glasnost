@@ -10,7 +10,7 @@ measured-on: 2026-11-05
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-06
 ---
 
 # M-0023: A released infantry unit given a move order into a walled pen before its first turn
@@ -128,7 +128,9 @@ whose order takes effect after the unit's first turn, do not test the part.
    Draws are matched to the baseline's by their source, which stays in the local recordings. The recording does
    not tie a draw to an object.
 5. In the baseline, take its request turn, the first tick after *t* at whose end *U* holds a
-   destination, with that tick's draws, and the tick of the first step.
+   destination, with that tick's draws, and the tick of the first step. In the baseline and the
+   controls, also take the arrival tick: the first tick from which *U*'s position does not change
+   again within the record.
 
 ## Result
 
@@ -165,9 +167,12 @@ whose order takes effect after the unit's first turn, do not test the part.
   was in the game folder after the run, but nothing in any arm shows that the game read the field.
 - **Controls.** In tick *t* + 1, before the order, the update has the draws of the baseline's request
   turn, and *U* gets the baseline's destination. Its positions over the 300 ticks are identical to the baseline's,
-  tick for tick. From *t* + 2 its destination reads the pen's centre and *move* is current. When its
-  walk ends on the baseline's destination cell, the destination is cleared and *guard* becomes
-  current there. Tick *t* + 2's update has one draw that the baseline does not have. Later draws
+  tick for tick. From *t* + 2 its destination reads the pen's centre and *move* is current. It
+  arrives on the baseline's standing position (*Baseline*, below) in the baseline's arrival tick,
+  and its destination still reads the pen's centre at the end of that tick. The
+  destination is cleared in the next tick, with *move* still current and *guard* queued, and
+  *guard* is current in the tick after that. Tick *t* + 2's update has one draw that the baseline
+  does not have. Later draws
   are not compared. Their two data sets give identical object rows. As planned, they do not test the part:
   the order takes effect after the unit's first turn, in which the update had the baseline's
   request-turn draws and the unit got the baseline's destination. Its position first changes in
@@ -175,7 +180,10 @@ whose order takes effect after the unit's first turn, do not test the part.
 - **Baseline.** Part b on this map: no destination from the release itself; in tick *t* + 1 *guard*
   current, three draws in that tick's update besides those that every run takes, and a
   destination on a cell that does not hold K (read as part b's scatter request), outside the pen
-  and not next to it; the first step in tick *t* + 2.
+  and not next to it; the first step in tick *t* + 2. Its walk is a single step: *U*'s position
+  moves from the release position to a standing position in a cell next to the release cell,
+  changing in every tick with no stop between, and does not change again within the 300 ticks.
+  Its destination is cleared in its arrival tick.
 
 Every tick, cell, walk duration and type is kept `local` (`measurements/local/M-0023.json`).
 
@@ -210,6 +218,10 @@ Every tick, cell, walk duration and type is kept `local` (`measurements/local/M-
     request turn has three besides those that every run takes.
   - the other parts of U10. The baseline is part b's set-up on this map, at one seed, without
     part b's second unit or its rally-point step.
+- **Also recorded, outside the verdict:** the baseline's single step, and the ticks in which the
+  baseline's and the controls' destinations are cleared (Result, *Baseline* and *Controls*). They are observations for
+  other specs to cite. The record makes no claim about why the controls' destination is kept
+  through the arrival tick.
 - **Run 2 could count** once a passed-gate search with a kept destination (S-0212 scenario
   P25 a), run with the same test rules file in the same game folder, reads the 90 ticks. That
   check has not been run.
