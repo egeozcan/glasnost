@@ -1,9 +1,9 @@
 ---
 id: Q-2686
 title: Which file is the string table, how its texts decode, and the missing-label marker word
-status: open
+status: answered
 related: [S-0004, S-0005, S-0111, S-0213]
-answered-by: []
+answered-by: [S-0015]
 ---
 
 ## Need
