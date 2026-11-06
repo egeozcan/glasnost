@@ -142,3 +142,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0319](combat/S-0319-bouncing-animations.md) | Bouncing animations (sprite debris and meteors): motion, landing and end | combat | 26 | approved | — |
 | [S-0216](simulation/S-0216-units-placed-mid-game.md) | Units placed after the game has started | simulation | 70 | approved | — |
 | [S-0113](rendering/S-0113-body-rocking.md) | Body rocking | rendering | 17 | approved | — |
+| [S-0015](formats/S-0015-string-table-layout.md) | String table file layout and lookup results | formats | 4 | approved | — |
