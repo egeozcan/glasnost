@@ -1,9 +1,9 @@
 ---
 id: Q-2712
 title: A civilian garrison building's search in the entry tick and its target across the owner change
-status: open
+status: answered
 related: [S-0508, S-0309, S-0509, S-0215, S-0311, S-0203]
-answered-by: [S-0508]
+answered-by: [S-0508, S-0309]
 ---
 
 ## Need
