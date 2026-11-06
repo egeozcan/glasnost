@@ -1,9 +1,9 @@
 ---
 id: Q-2691
 title: Whether a defeat sweep reaches the leftovers that an earlier sweep of the same tick made
-status: open
+status: answered
 related: [S-0203, S-0414, S-0312]
-answered-by: []
+answered-by: [S-0203]
 ---
 
 ## Need
