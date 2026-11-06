@@ -1,9 +1,9 @@
 ---
 id: Q-2687
 title: The name tip's open points - wrapping, inset, blocking states and where the pointer rests
-status: open
+status: answered
 related: [S-0111, S-0213, S-0214]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
