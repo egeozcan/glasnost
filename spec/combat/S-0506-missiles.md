@@ -2,13 +2,13 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 20
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-06
 measurements: []
-requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159]
+requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159, Q-2711]
 supersedes: []
 ---
 
@@ -197,12 +197,13 @@ above the terrain*.
    slot): even slots take the first-shot side and odd slots the other side. An object of the set-C
    rocket type is placed 40 leptons further towards map north on the map *y* axis and 40 leptons
    further towards map west on the map *x* axis, and a take-off animation (cosmetic) plays at the
-   placement point. This set-specific placement is ordinary launch geometry, not a defect or
-   quirk: the displaced position is the origin of the actual flight, not merely its drawing.
-   The object's facing is the spawner's body facing rounded to 256 steps
-   (Formulas F2). A missile slot's object is then given the controller target as its destination
-   and the move behaviour; a non-missile slot's object is sent to the neighbouring cell of the
-   spawner's cell in step direction 0 (S-0501 owns the rest). The slot becomes preparing.
+   placement point. This set-specific placement is ordinary launch geometry, not a defect or quirk:
+   the displaced position is the origin of the actual flight, not merely its drawing. The object's
+   facing is the spawner's body facing rounded to 256 steps (Formulas F2). A missile slot's object
+   is then given the move behaviour, and the controller target as its destination when that target's
+   in-the-air answer is false (the other case is an Open question); a non-missile slot's object is
+   sent to the neighbouring cell of the spawner's cell in step direction 0 (S-0501 owns the rest).
+   The slot becomes preparing.
    - Backing: `measurable` (scenario R4)
    - Confidence: high for the fire-point choice, the 10-lepton rise and the facing rounding; medium
      for the burst side assignment and the set-C shift (signs as stated)
@@ -223,8 +224,8 @@ above the terrain*.
    preparing missiles left, so the reset only clears the controller target and state). It then
    becomes cooling down. All the missiles of a salvo are therefore released in the same pass even
    though they were launched (placed on the map) one spacing apart. Release is not the start of
-   flight: each rocket begins its own flight cycle on its first move order after placement,
-   independently of when the other slots launch.
+   flight: each rocket whose destination's in-the-air answer is false at its launch begins its own
+   flight cycle at that launch (claim 14), independently of when the other slots launch.
    - Backing: `measurable` (scenarios R2, R3)
    - Confidence: high
 
@@ -277,15 +278,15 @@ above the terrain*.
       here separates that answer's reset from the disabling event's own reset.
     - Confidence: high for the reset's effect; medium for the complete list of events that cause it
 
-12. **What a release fixes.** A released missile, from claim 8 or 11 (or the spawner events of
-    claim 13), gets a *release cell*: the cell under the target's position when there is a target,
-    and otherwise the neighbouring cell of the missile's own cell in the step direction nearest its
-    body facing (Formulas F8). From then on the game re-orders it every 30 ticks to attack the
-    release cell; these orders do not change its flight, because a rocket missile's aim point is
-    fixed by its first move order (claim 14) and never changes afterwards. The 30-tick interval
-    belongs to a shared re-order cycle, not a fresh per-missile delay; claim 26 defines its
-    deadlines and ordering. A released object of a type without the missile-spawn flag instead
-    starts to crash at once (S-0312, claim 16).
+12. **What a release fixes.** A released missile, from claim 8 or 11 (or the spawner events of claim
+    13), gets a *release cell*: the cell under the target's position when there is a target, and
+    otherwise the neighbouring cell of the missile's own cell in the step direction nearest its body
+    facing (Formulas F8). From then on the game re-orders it every 30 ticks to attack the release
+    cell; these orders do not change the flight of a missile whose aim point claim 14 fixes at its
+    launch, because that point never changes afterwards. The 30-tick interval belongs to a shared
+    re-order cycle, not a fresh per-missile delay; claim 26 defines its deadlines and ordering. A
+    released object of a type without the missile-spawn flag instead starts to crash at once
+    (S-0312, claim 16).
     - Backing: `measurable` for fixed aim and non-missile crash (R7, R14), and for release-cell
       selection and repeated orders with an ordinary-flight flagged aircraft (R21).
     - Confidence: high
@@ -301,7 +302,7 @@ above the terrain*.
     |---|---|
     | docked, reloading | removed silently |
     | on the rail | removed silently: a missile whose slot rail time has not ended vanishes without a detonation, regardless of its own flight phase (`quirks.rail_missile_vanishes_with_spawner`) |
-    | preparing, attacking, returning | released (claim 12) with the controller target: a missile flies on to its aim point; a non-missile aircraft starts to crash |
+    | preparing, attacking, returning | released (claim 12) with the controller target: a missile whose aim point is fixed (claim 14) flies on to it; a non-missile aircraft starts to crash |
     | empty | (nothing) |
 
     Each occupied slot then becomes empty. Its regeneration countdown is the spawner type's
@@ -323,22 +324,95 @@ above the terrain*.
 
 ### Rocket flight
 
-14. **The aim point.** A rocket missile's aim point is fixed when it first carries out its move
-    behaviour, using the destination given in claim 7. The target's heading point is sampled then,
-    not necessarily in the placement tick. Later move orders are ignored. The aim point is the destination's *heading point*:
+14. **The aim point.** When the destination's in-the-air answer is false at a rocket missile's
+    launch, the missile's aim point is fixed at that launch, when claim 7 gives it the controller
+    target as its destination: in the launch pass, in the tick of its placement. It does not change,
+    whatever the destination does afterwards. Later move orders to such a missile are ignored. The
+    aim point is the destination's *heading point*:
     - for a unit: the point its locomotor is moving it to at that moment (the end of the step it is
       on), or its position when it is not moving; for a unit inside a tunnel, the tunnel's exit,
     - for a building: its centre, the point 128 × (*W* − 1) leptons further on the map *x* axis and
       128 × (*H* − 1) further on the map *y* axis than its position, *W* × *H* being its foundation,
       except that a building whose type is a helipad, a unit repair or reload building, or a bunker
       gives its docking point,
-    - for a cell: the cell's centre point (S-0204).
+    - for a cell: the cell's centre point (S-0204). This claim does not give the aim point or the
+      flight of a missile whose destination's in-the-air answer is true at its launch (Open
+      questions).
 
-    A missile fired at a moving unit therefore flies to where the unit was heading when its first
-    move behaviour supplied the aim point, not to where it is when the missile arrives
-    (`quirks.rocket_aim_at_heading_point`; off: sample the unit's position at that same moment).
-    - Backing: `measurable` (scenario R9)
-    - Confidence: high for the fixing; medium for the building docking cases and the tunnel case
+    A missile fired at a moving unit therefore flies to where the unit was heading at the launch,
+    not to where it is when the missile arrives (`quirks.rocket_aim_at_heading_point`; off: sample
+    the unit's position at that same moment).
+
+    **A destination that leaves play after the launch** (Q-2711). After the launch the missile's aim
+    point and flight do not depend on the destination. When the destination object leaves play at
+    any later time, whether at the end of the ticks it stays in play once destroyed (a death
+    sequence, a sinking or crashing object), by its removal, or by going inside a building or a
+    transport, the missile goes on through the phases of claim 15, on claim 24's ticks, toward the
+    aim point fixed at the launch, and detonates by claim 19. The leaving changes neither that aim
+    point nor those phases. A leaving by removal or by going inside is itself a removal, so, like
+    any removal, it can cost the missile one turn (S-0203 claims 4 and 10), its first update in the
+    launch tick included (claim 24). Claim 24's timer runs on the tick number (S-0203 claim 9), so a
+    lost turn within a phase does not shift its ticks: the missile makes no update in that turn, and
+    its next update finds the timer run on. A phase's end is acted on at the missile's first update
+    at or after its timer runs out, and the next phase's timer starts at that update (Rocket table),
+    so where the lost turn is the one in which a phase's timer runs out, the later phases come one
+    tick later. In any phase, the lost turn is an update the missile does not make: none of the
+    Rocket table's steps for that update (movement, height, speed or pitch) is applied. In tilt,
+    whose pitch F3 computes from the elapsed ticks, the next update's pitch is the same as without
+    the loss. In every other phase (pause aside, which makes no step) the path has that update's
+    step fewer, and ascent ends at the first later update whose test finds cruise altitude. The
+    leaving changes claim 24's ticks and the path in no other way. Other events end a missile's
+    flight as they do for any rocket missile (claims 13 and 20). So no rocket missile stays on the
+    map without a flight because its destination has gone, and none keeps its house alive under the
+    survival test of S-0414 claims 3 and 4 for that reason: Q-2711's question 4 does not arise from
+    this cause. The missile that Q-2711 reports staying without a flight was seen in our engine, not
+    in the original. How a rocket missile counts in that test while it flies is S-0414's, and this
+    spec does not give it. What the leaving does to the spawner depends on whether the leaving
+    object is the controller target at that moment. Claim 7 gave the controller target as the
+    missile's destination, but the controller target need not still be that object: a pending target
+    adopted at a later launch replaces it (claim 3), and the reset after claim 8's release, like any
+    other reset of claim 11, clears it. When the leaving object is the controller target and no
+    pending target is waiting, claim 11's reset follows when the object leaves play, not at a hit
+    that destroys it while it stays in play, which releases every preparing object of a missile type
+    (claim 11) and makes its slot empty. A preparing rocket missile of a type without the
+    missile-spawn flag is not affected by that reset (claim 11), and claims 8 and 13 apply to it as
+    they would with the destination still in play. Which cell claim 12 gives a released missile, the
+    cell of the object that has left play or claim 12's cell for no target, is not given here (Open
+    questions). A missile that the reset releases belongs to no slot from then on, so claim 13's row
+    for a slot on the rail does not apply to it: when claim 13's events later clear the spawner's
+    slots, it flies on, whereas a missile that claim 8 released onto the rail vanishes when they
+    come during its slot's rail time. When a pending target is waiting, the controller does not
+    reset and goes on with that target (claim 25), and claims 8 and 13 apply to the salvo as usual.
+    When the leaving object is not the controller target at that moment, claim 11 gives no reset:
+    claims 8 and 13 apply to the missile and its salvo as they would with the destination still in
+    play. This holds for a destination whose in-the-air answer is false at the launch (Open
+    questions).
+    - Backing: `measurable` (scenario R9) for the fixing at the launch, and (scenario R25) for the
+      aim point, the path and the detonation after a destination leaves play by going inside, by a
+      death sequence, by its removal or by sinking, early or late in the flight, and (scenario R7
+      part b) for the flight on, after a later death of the spawner, of a missile of a missile type
+      still preparing when the destination leaves play; that the reset releases it, and when the
+      reset comes, rest on claim 11. `unmeasured` for the leaving not delaying the flight, that is
+      for claim 24's ticks after it, and for what an update lost to the leaving does to the timer
+      and the path: a missed turn (S-0203 claim 10) and a delay give the same record, so no set-up
+      here tells them apart, and R25 rejects only an earlier first tick. `unmeasured` for no reset
+      when the leaving object is not then the controller target: it rests on claim 11's list of
+      reset events, which no scenario here shows to be complete. `unmeasured` for a preparing rocket
+      missile of a type without the missile-spawn flag being unaffected by the reset: it rests on
+      claim 11's rule for such an object. `unmeasured` for a crashing destination: no stock rocket
+      launcher reliably targets an object that is not in the air at the launch and then crashes.
+    - Confidence: high for the fixing at the launch. High, for a destination that leaves play other
+      than by crashing and a missile that loses no update after the leaving, for the aim point, the
+      path and the detonation and for no missile being left on the map without a flight, which
+      follows from that flight. High for the reset's release of a still-preparing missile of a
+      missile type and its flight on after a later death of the spawner. Medium for all of these
+      with a crashing destination, which claim 14 treats like any other leaving. Medium for what an
+      update lost to the leaving does (the later phases one tick later after a lost turn at a
+      phase's end, one step fewer in a phase other than pause and tilt) and for the leaving changing
+      the timer and the path in no other way. Medium for the reset's timing at the leaving and for
+      no reset when the leaving object is not then the controller target, as claim 11 rates its list
+      of events. Medium for a preparing rocket missile without the flag being unaffected by the
+      reset, and for the building docking cases and the tunnel case
 
 15. **Flight phases.** A rocket missile goes through these phases, by the Rocket table under State
     and ordering:
@@ -519,10 +593,11 @@ above the terrain*.
     - Backing: `measurable` (scenario R17)
     - Confidence: high
 
-24. **Exact flight and pass boundaries.** Let *t*₀ be the tick fixing the aim point, *P* the
-    nonnegative integer pause time, and *T* the nonnegative integer tilt time, both in ticks.
-    The timer starts in *t*₀ with zero elapsed ticks, not one elapsed tick. Its first rocket
-    update is in that same tick. With positive acceleration and positive type speed,
+24. **Exact flight and pass boundaries.** For a missile whose aim point claim 14 fixes at its
+    launch, let *t*₀ be the tick of that launch, *P* the nonnegative integer pause time, and *T* the
+    nonnegative integer tilt time, both in ticks. The timer starts in *t*₀ with zero elapsed ticks,
+    not one elapsed tick. Its first rocket update is in that same tick, unless a removal costs it
+    that turn (S-0203 claims 4 and 10). With positive acceleration and positive type speed,
     uninterrupted ordinary rocket updates and no earlier removal, the boundaries are:
 
     | Pause time | Phase boundaries and first positive-speed movement attempt |
@@ -892,7 +967,7 @@ required order of internal processing.
 
 | Phase | Event | Result |
 |---|---|---|
-| (none) | first move order | aim point fixed; pause (or tilt when the pause time is 0, including set C); pitch = *P*ᵢ × π/2 |
+| (none) | launch (claim 7), destination's in-the-air answer false (claim 14) | aim point fixed; pause (or tilt when the pause time is 0, including set C); pitch = *P*ᵢ × π/2 |
 | pause | pause time over | tilt (sets A, B) or raise (set C), timer = tilt time |
 | tilt | each tick | pitch by F3 |
 | raise | each tick | world height + raise rate, when that position is legal |
@@ -932,6 +1007,11 @@ Ordering consequences:
   despite cancellation of the own target. Off: every explicit own-target clear empties pending.
   Neither setting adds a per-pass sweep of targetless spawners.
 - **`quirks.rocket_aim_at_heading_point`** (default on). Claim 14.
+- **A destination that leaves play after the launch.** Claim 14, for a destination whose in-the-air
+  answer is false at the launch: the missile flies on toward the aim point fixed at its launch and
+  detonates by claim 19, unless an event that ends any rocket missile's flight ends it (claims 13
+  and 20). No missile is left standing on the map for that reason, so none keeps its house alive
+  under S-0414's survival test for that reason.
 - **`quirks.destroyed_rocket_still_detonates`** (default on). Claim 20.
 - **`quirks.rocket_stalls_at_map_edge`** (default on). Claim 18: a missile whose path leaves the
   legal cells keeps the last legal position and continues its phase, speed and pitch updates.
@@ -1025,17 +1105,17 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   recorder; sub-tick ordering unresolved by the samples is inconclusive.
 - **R2. Pass timing and targets (claims 2–5, 8).** In range of a static target, record the spawner's
   creation tick, the actual shot tick *t*₀ (not the attack-order tick), missile appearances, aim
-  points and first motion. Expected for a fresh idle controller: appearance at the second pass
-  after the shot, with passes at creation + 20 and every 10 thereafter. Repeat ten times with
-  input timed on either side of a pass. On a named two-slot map, send a second shot at another
-  in-range target between appearances. Expected: the later launch adopts the pending target,
-  while the earlier missile keeps its fixed aim. Both slots enter the rail interval together at
-  the final launch pass, but their individual flight timers start from their own first move orders.
-  Clear the own target before first adoption: with an empty controller target the pending shot
-  survives (claim 25), rather than being cancelled merely by that clear.
-  During cooling down, deliver another shot and record the next appearances: no launch occurs
-  until a later pass after the return to idle. Fire again at the already adopted target while a
-  different pending target is waiting: the pending replacement remains, not overwritten.
+  points and first motion. Expected for a fresh idle controller: appearance at the second pass after
+  the shot, with passes at creation + 20 and every 10 thereafter. Repeat ten times with input timed
+  on either side of a pass. On a named two-slot map, send a second shot at another in-range target
+  between appearances. Expected: the later launch adopts the pending target, while the earlier
+  missile keeps its fixed aim. Both slots enter the rail interval together at the final launch pass,
+  but their individual flight timers start from their own launches. Clear the own target before
+  first adoption: with an empty controller target the pending shot survives (claim 25), rather than
+  being cancelled merely by that clear. During cooling down, deliver another shot and record the
+  next appearances: no launch occurs until a later pass after the return to idle. Fire again at the
+  already adopted target while a different pending target is waiting: the pending replacement
+  remains, not overwritten.
 - **R3. Launch spacing and blockers (claims 6, 8).** A named test map gives a stock launcher two
   slots and varies only its own missile-spawn flag. Record appearance ticks: expected 20 ticks
   apart without the flag and 10 with it. In separate runs order movement before the first launch,
@@ -1086,14 +1166,21 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   expected *impossible* and no shot, even for a non-organic host. Repeat with only the host's
   organic flag changed; the spawner answer remains *impossible*, not the later organic-only
   *illegal* answer. A shot or different answer under these conditions falsifies this lockout.
-- **R7. Reset.** (a) Target driven out of range in the ticks between the shot and adoption:
-  expected no launch. (b) Target killed by another unit while a missile is preparing: expected the
-  missile still flies to the original aim point and detonates there. Also move the target out of
-  range after adoption: this alone does not reset a launching controller. Use a named pulse test
-  weapon to disable the spawner during preparation: preparing missiles are released, the target
-  clears and replacement countdowns start. Repeat target loss with a pending replacement target
-  to distinguish reset from pending-target adoption. Repeat a carrier reset during preparation:
-  those unflagged aircraft remain linked rather than crashing or regenerating.
+- **R7. Reset.** (a) Target driven out of range in the ticks between the shot and adoption: expected
+  no launch. (b) Target killed by another unit while a missile is preparing: expected the missile
+  still flies to the original aim point and detonates there. In a second run of (b), with no pending
+  target, record whether the missile is still preparing when the target leaves play; only runs in
+  which it is count, and a run in which claim 8 released it onto the rail before that leaving is
+  void for this test (R8 (a) covers it). In a counted run, kill the spawner after the target has
+  left play and within the rail time that claim 8's release would have given that missile: expected
+  the missile flies on and detonates by claim 19, and its vanishing falsifies claim 14's account of
+  the reset. The run does not tell a reset at the leaving from one at the killing hit: that timing
+  is claim 11's. Also move the target out of range after adoption: this alone does not reset a
+  launching controller. Use a named pulse test weapon to disable the spawner during preparation:
+  preparing missiles are released, the target clears and replacement countdowns start. Repeat target
+  loss with a pending replacement target to distinguish reset from pending-target adoption. Repeat a
+  carrier reset during preparation: those unflagged aircraft remain linked rather than crashing or
+  regenerating.
 - **R8. Spawner death and capture.** Kill the spawner (a) while a missile's slot is on the rail,
   independently of the missile's own flight phase: expected the missile vanishes, no detonation; (b) after the rail interval has ended:
   expected the missile flies on. Mind-control while docked: replacements appear at the next pass.
@@ -1108,10 +1195,14 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   own spawned slots if given them by a named map variant; compare with ground destruction.
   These variants name only the aircraft's spawned type and positive spawn count as extra data.
 - **R9. Moving target.** Target a unit driving across the spawner's line of fire; record the impact
-  point, the missile's first move-behaviour tick and the target's step end then. Expected: fixed
-  aim at that step end, not the placement-tick or arrival-tick position; compare the nose using F9,
-  not an arbitrary tolerance. Add tunnel, ordinary building and docking-building targets to test
-  each heading-point case of claim 14.
+  point, the missile's launch tick and the end of the step the target is on at the missile's
+  placement (when the target begins a new step in the launch tick, record both of that tick's step
+  ends and which step was under way at the placement), and the target's step end at the missile's
+  first move-behaviour processing. Use a target fast enough that the two step ends differ. Expected:
+  fixed aim at the end of the step under way at the placement, not the step end at that first
+  processing nor the arrival-tick position; compare the nose using F9, not an arbitrary tolerance.
+  Add tunnel, ordinary building and docking-building targets to test each heading-point case of
+  claim 14.
 - **R10. Flight profile.** Record the missile's position and height each tick for sets A (lazy curve)
   and B (plain cruise) at several distances. Expected: no motion during pause/tilt; ascent at
   speed growing by the acceleration per tick to the type speed; cruise start at the cruise
@@ -1385,11 +1476,49 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   point and the distance from the launcher to that point. No expected value: the record answers
   the open question.
 
+- **R25. A destination that leaves play after the launch (claim 14; Q-2711).** A stock launcher with
+  one rocket slot, of the human-controlled house, force-fires at a unit of its own house, on a small
+  flat map with the recorder. Per tick from the launch until the missile leaves play, record the
+  missile's position, height and pitch, its phase as drawn, its speed, and its detonation tick and
+  point; record the target's heading point in the launch tick (its step end, or its position when it
+  is not moving) and the tick and way it leaves play. Variants, each with 5 runs: (a) the target is
+  an infantry unit that boards a transport of its house standing next to it, ordered in so that it
+  goes inside within 10 ticks after the launch; (b) the target is an engineer that enters and
+  captures a building of a computer-controlled house, timed to go inside in the launch tick (the
+  capture order is given first and the launcher fires when the engineer is one step from the
+  building; runs in which it goes inside in another tick are void for this variant); (c) the target
+  is an infantry unit killed by a second unit's weapon within 10 ticks after the launch, with a
+  death sequence; (d) the target is a vehicle destroyed the same way; (e) as (d), with the vehicle
+  destroyed 30 ticks or more after the launch and before the detonation; (f) where a stock launcher
+  can target one, the target is a naval unit on water destroyed the same way so that it sinks. A run
+  in which the target leaves play before the launch or only in or after the tick of the detonation,
+  as the recorded tick of its leaving shows, or the missile is hit or disabled before its
+  detonation, is void: claim 24's ticks hold only for uninterrupted ordinary rocket updates.
+  Expected in every variant: the missile's first tick with positive speed is not earlier than claim
+  24's first positive-speed attempt for the launch tick as *t*₀; a later one is consistent with
+  claim 14 and with turns the missile misses (S-0203 claim 10), so this scenario does not test that
+  the leaving leaves claim 24's ticks unchanged. Its path is that of claims 15 to 18 towards the
+  target's heading point in the launch tick, and it detonates by claim 19 with its nose point (F9)
+  at the detonation, then leaves play. Falsified by a first tick with positive speed earlier than
+  claim 24's first positive-speed attempt for that *t*₀, *P* and *T*, by a missile whose speed is
+  still 0 or that is still on the map 2000 ticks after the launch, or by a detonation elsewhere than
+  claim 19 gives for that aim point.
+
 ## Open questions
 
 - The complete list of events that reset the controller (claim 11) and clear its slots (claim 13),
   especially other disabling effects than the electromagnetic pulse.
 - Whether all building docking classifications in claim 14 are reachable as stock rocket targets.
+- Which cell claim 12 gives a missile that claim 11's reset releases when the controller target
+  leaves play (claim 14): the cell of the object that has left play, or claim 12's cell for no
+  target.
+- What a rocket missile does when its destination's in-the-air answer is true at its launch is not
+  given here: claims 7, 14 and 24 and the rocket table's launch row cover a destination whose
+  in-the-air answer is false then. They are stated only for that case because the aim and flight for
+  a destination in the air at the launch were not traced, so no behaviour is given to copy.
+- Which behaviours a rocket missile takes after its launch, with or without its destination, and the
+  random draws of their processing, have not been traced. Claim 14 states only that they change
+  neither its aim point nor its phases and ticks.
 - (Q-2159 question 1.) How each of the last launchers leaves play in the games of M-0016 that a
   chaos-drone group wins against a missile-launcher group is not established: M-0016 records
   outcomes only. Scenario R24 records it.
@@ -1402,5 +1531,10 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   damage and the animation's own effects), so it is not a drawing-only defect and this spec keeps
   it. Should a drawing-only remedy (for example a depth lift for detonation animations only) be
   added to S-0102 as a quirk, or should the original's drawing stand?
+
+- Glossary *aim point*: the entry says the point is set when the missile first carries out its move
+  behaviour. Claim 14 fixes it at the launch, from the destination's heading point in the launch
+  tick, so the entry should say that it is set at the missile's launch, for a destination whose
+  in-the-air answer is false then.
 
 - Confirm the proposed quirk names and alternatives, including the map-edge option, before sign-off.
