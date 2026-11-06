@@ -579,3 +579,21 @@ switch of `quirks.rs` with the original's position as default.
 | `defeat_sweep_leftovers` | S-0203 claim 13 (c), Edge cases (r50, Q-2636) | rejected (not in the layer) | Condition 1 holds: the Edge case states the off position (the sweep offers no hit to any leftover, so a recording shows no hit on the leftover after its destroying hit), built in `leftover::sweep_hit`, which `econ::victory`'s sweep calls at each leftover's place. Condition 2 fails: on, a house's vehicles destroyed with no health in the tick of its defeat or surrender show their death effects once more (debris, the death weapon of an exploding vehicle, the animations, a crate they carry). The spec states this as the original's behaviour, not as a unit stuck, a give-up or a visible glitch, and no play note or request names it. Condition 3 fails too: the off position withholds a second death weapon and a second crate, which changes the damage done and the crates left in the defeat tick, a combat change, as for the rebound switches in part 3. Tests, both positions: `claims_s0203_r50::o18_a_the_last_vehicle_destroyed_in_the_turn_pass`. |
 
 Intake 105 leaves the layer file unchanged.
+
+## A4 round 8b (Q-2671 to Q-2674): departures without a switch
+
+Ledger: [a4-play-notes.md](a4-play-notes.md), *Round 8b, rendering and UI*. S-0614 r32 (Q-2671),
+S-0105 r44 (Q-2672), S-0111 r34 (Q-2673) and S-0004 r29 (Q-2674) add no quirk switch. Every
+departure they name states that it has no switch, so none is a layer candidate (condition 1
+needs a switch with an off position). Each is built as the spec states it.
+
+| Departure | Spec | Verdict | Built |
+|---|---|---|---|
+| A vehicle's shadow anchor uses S-0101 claim 3's signed lift for *B* and the anchor | S-0105 claim 44, *Which lift* | no switch (the spec's) | `build::vehicle_shadow_point` |
+| The flying locomotor gets claim 44's anchor, not *B*; a hunter-seeker type gets claim 40's *P* | S-0105 claim 44, *Locomotors* ("presentation glitches, corrected here without a switch") | no switch (the spec's) | `build.rs` (`hunter_seeker`, the shadow point) |
+| Claim 39's own-image exclusion compares at the same screen position | S-0105 claim 44, *Own-image comparison in the original* (corrected "without a switch") | no switch (the spec's) | `build::vehicle_shadow` (the parts' shift from the shadow's point) |
+| A name-tip text of 256 text units or more shows its first 256 | S-0111 Edge cases (departure, no switch) | no switch (the spec's) | `name_tip::cut` |
+| Two disguise tests: S-0516 claim 35's for vehicles, claim 22's for infantry | S-0111 Edge cases (no switch) | no switch (the spec's; the original's behaviour) | `Session::name_by_kind` |
+| Two string-table entries whose labels differ only in letter case: the first in the file, with a warning naming both | S-0004 Edge cases (departure, no switch) | no switch (the spec's) | `strings::StringTable::new` |
+
+S-0614 r32's claim 25 names no quirk and no departure. The layer file is unchanged.
