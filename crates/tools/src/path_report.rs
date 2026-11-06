@@ -1162,6 +1162,12 @@ fn event_text(n: &Noted, _samples: &[Sample]) -> String {
             cell_text(*refuge)
         ),
         What::Resumed => "resumes the order it gave way from".into(),
+        What::ExtraLocomotion { draws, target } => format!(
+            "had the extra locomotion of a scatter ({draws} draws): {}",
+            target
+                .map(|c| format!("walking target in {}", cell_text(c)))
+                .unwrap_or_else(|| "no walking target".into())
+        ),
         What::Spread { common, cell } => format!(
             "group order: its destination {} spread to {}",
             cell_text(*common),

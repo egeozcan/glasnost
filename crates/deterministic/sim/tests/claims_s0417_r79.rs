@@ -198,16 +198,18 @@ fn u10_g_run_2_gate_failure_then_the_walk_without_a_wait() {
     );
     assert!(!path::delay_runs(&w, g));
     assert_eq!(o.pos, release_pos, "no step");
-    // Our engine: the order's move, processed in F before the movement
-    // update (S-0215 claims 2, 3 and 22), saw the destination and chose the
-    // standard delay, so it is still current with nothing queued. M-0023
-    // shows guard queued at the end of F and G = F + 1 (Q-2656).
+    // spec: S-0215 claim 22 (r132, End-of-update check: the order's move, processed in F before the movement update, saw the destination and chose the standard delay; at the end of F it is still current, not moving and with no destination, so the check queues guard, current at G = F + 1)
     assert_eq!(o.beh.current, Some(Behaviour::Move));
+    assert_eq!(
+        o.beh.queued,
+        Some(Behaviour::Guard),
+        "guard queued at the end of F"
+    );
     // G: the first later turn in which guard is current on a cell of K.
     let (acc, moved, fails) = walk_off(&mut w, g, 200);
     assert!(fails.is_empty(), "{fails:?}");
     let (a, d) = acc.expect("an accepted request");
-    assert!(a > f);
+    assert_eq!(a, f + 1, "G = F + 1");
     assert_ne!(d, isle);
     assert!(!holds(&w, d, k), "off the factory");
     let m = moved.expect("a first step");

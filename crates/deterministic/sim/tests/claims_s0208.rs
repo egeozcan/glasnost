@@ -1614,7 +1614,9 @@ fn claim_24_scatter_is_no_escape() {
         open_orders(&mut w);
         set_guard(&mut w, id);
         assert!(scatter::request(&mut w, id, req), "accepted");
-        assert!(w.obj(id).unwrap().dest.is_some(), "a destination");
+        // spec: S-0208 claim 6 (r46: the destination comes from the nearby-cell search, so the standing walker has its extra locomotion at once; its search fails at the gate, which clears the destination, S-0212 claim 23)
+        assert_eq!(w.obj(id).unwrap().dest, None, "the gate cleared it at once");
+        assert!(walk_target(&w, id).is_none(), "no path, no walking target");
         for _ in 0..300 {
             tick::step(&mut w);
             assert_eq!(pos(&w, id).cell(), cell(0, 0), "it never leaves its cell");

@@ -597,3 +597,25 @@ needs a switch with an off position). Each is built as the spec states it.
 | Two string-table entries whose labels differ only in letter case: the first in the file, with a warning naming both | S-0004 Edge cases (departure, no switch) | no switch (the spec's) | `strings::StringTable::new` |
 
 S-0614 r32's claim 25 names no quirk and no departure. The layer file is unchanged.
+
+## Intake 106 (S-0215 r132, S-0208 r46, M-0023): no new switch; the own pathing improvements re-read
+
+Ledger: [intake106.md](intake106.md). Neither revision adds, renames or rewrites a quirk, so no
+switch is added and no default changes. S-0208 r46 only rewraps the line of claim 15 that says the
+damage scatter's miss has no switch. S-0215 r132 names no quirk.
+
+S-0215 r132 claim 22 adds the end-of-update check (an infantry unit in *move*, not moving and with
+no destination, falls back to rest at the end of its update), and S-0208 r46 claim 6 gives a
+standing walker an extra locomotion at a scatter whose destination comes from the nearby-cell
+search. Whether that changes what each of our own pathing improvements fixes:
+
+| Switch (off) | Changed? | Reason |
+|---|---|---|
+| `path_through_stalled_blockers` | no | It acts on stalled units, which hold their destinations; the check needs no destination, so it never catches them. |
+| `unreachable_move_dropped` | no | Off, a failed move gets the nearest reachable cell as its destination inside the failed computation (`path::compute_untraced`), so a unit that has such a cell keeps a destination and the check does not catch it. On (the original), or with no such cell, the failure clears the destination and the check now queues the rest behaviour at the end of that update instead of at the next *move* processing. What the switch fixes, a move to a cell out of reach doing nothing, is the same. |
+| `group_spread_no_detour` | no | It chooses each member's cell at the order. The check only shortens the time a member that has arrived spends in *move*. |
+| `rally_point_shared` | no | Released units get their rally move at the release. The factory's scatter request, whose walk-off the extra locomotion makes one tick earlier, goes to a resting unit on the factory's cells, which a unit with a rally move is not until it has stopped. |
+| `deadlock_no_yield` | no | The yield gives the yielding unit a refuge cell as its destination, so the check does not catch it while it walks there. The extra locomotion is a scatter's, which the yield is not. |
+| `harvest_cell_shared` | no | Harvesters are vehicles; the check is for infantry only. |
+
+Intake 106 leaves the layer file unchanged.

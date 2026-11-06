@@ -152,6 +152,14 @@ pub enum What {
     },
     /// The unit resumes the order it gave way from.
     Resumed,
+    /// The unit had the extra locomotion of an accepted scatter (S-0208
+    /// claim 6, r46).
+    ExtraLocomotion {
+        /// The simulation draws it took.
+        draws: u64,
+        /// Its walking target afterwards.
+        target: Option<CellXY>,
+    },
     /// A group order spread the unit's destination (S-0213 claim 7).
     Spread {
         /// The common destination.

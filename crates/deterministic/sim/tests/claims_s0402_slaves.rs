@@ -1997,9 +1997,12 @@ fn s0203_claim_12_delivery_removal_counts_before_master() {
     for _ in 0..600 {
         let t = w.tick;
         let inside = group(&w, v).members.iter().filter(|m| m.inside).count();
+        // The slaves still out, in the update order: one already taken
+        // inside has left it (S-0203 claim 10).
         let earlier = slaves::slaves_of(&w, v)
             .iter()
-            .all(|&s| pos(&w, s).is_some_and(|p| Some(p) < pos(&w, v)));
+            .filter_map(|&s| pos(&w, s))
+            .all(|p| Some(p) < pos(&w, v));
         testkit::run(&mut w, 1);
         let now = group(&w, v).members.iter().filter(|m| m.inside).count();
         if now > inside {
@@ -2015,6 +2018,11 @@ fn s0203_claim_12_delivery_removal_counts_before_master() {
             break;
         }
     }
+    assert_eq!(
+        group(&w, v).members.iter().filter(|m| m.inside).count(),
+        SLAVES as usize,
+        "every recalled slave gets back inside"
+    );
     assert!(skipped > 0);
 
     // Control: slaves that emerged after their master cost nobody a turn.

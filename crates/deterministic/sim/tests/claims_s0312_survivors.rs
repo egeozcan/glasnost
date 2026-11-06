@@ -15,6 +15,7 @@ use glasnost_sim::combat::{death, survivors};
 use glasnost_sim::rng::Rng;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
+use glasnost_sim::trace;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
 const SIZE: i32 = 24;
@@ -215,6 +216,37 @@ fn new_infantry(w: &World, after: ObjectId) -> Vec<ObjectId> {
         .collect()
 }
 
+/// The draws of each survivor's extra locomotion (S-0208 claim 6, r46: an
+/// accepted scatter whose destination comes from the nearby-cell search
+/// gives the standing survivor one more locomotion at once, inside its
+/// request, so its draws, claim 3's position choice or a failed search's,
+/// follow the request's own draw). Read from the movement trace switched
+/// on for the run; the infantry created after `after`, in creation order,
+/// 0 for one with no extra locomotion.
+fn extra_draws(w: &World, after: ObjectId) -> std::vec::IntoIter<u64> {
+    let ev = trace::take(w);
+    new_infantry(w, after)
+        .into_iter()
+        .map(|s| {
+            ev.iter()
+                .filter(|e| e.unit == s)
+                .map(|e| match e.what {
+                    trace::What::ExtraLocomotion { draws, .. } => draws,
+                    _ => 0,
+                })
+                .sum()
+        })
+        .collect::<Vec<u64>>()
+        .into_iter()
+}
+
+/// Takes `n` draws for an extra locomotion.
+fn skip_n(rr: &mut Rng, n: u64) {
+    for _ in 0..n {
+        rr.raw();
+    }
+}
+
 /// Claim 19 (a)'s draws for a 3 × 3 building: two discarded draws over 0
 /// to 1 (`quirks.building_smudge_discarded_draws`), then the percent draw.
 fn smudge_a(w: &World, rr: &mut Rng) {
@@ -243,6 +275,7 @@ fn replay_round(
     g: i32,
     over: bool,
     ty: &mut dyn FnMut(&mut Rng) -> Option<&'static str>,
+    extra: &mut dyn Iterator<Item = u64>,
     full: &[CellXY],
     unclear: &[CellXY],
 ) -> Vec<Expected> {
@@ -261,6 +294,8 @@ fn replay_round(
             if !full.contains(&cell) {
                 let hp = rr.ranged(5, strength(name), h);
                 let _scatter = rr.ranged(0, 4, h);
+                // spec: S-0208 claim 6 (r46: the extra locomotion inside the scatter request, after its draw)
+                skip_n(rr, extra.next().unwrap_or(0));
                 out.push((cell, name.to_string(), hp));
             }
         }
@@ -288,11 +323,16 @@ fn kill_and_check(
 ) -> Vec<ObjectId> {
     let tl = w.obj(id).unwrap().pos.cell();
     let after = w.objects.keys().copied().max().unwrap();
-    let mut rr = w.rng.clone();
-    smudge_a(w, &mut rr);
-    skip_draws(w, &mut rr);
-    let want = replay_round(w, &mut rr, tl, skip, c, g, false, ty, full, unclear);
+    let pre = w.clone();
+    trace::switch_on(w);
     assert_eq!(damage::apply(w, id, killing()), HitResult::NowDead);
+    let mut extra = extra_draws(w, after);
+    let mut rr = pre.rng.clone();
+    smudge_a(&pre, &mut rr);
+    skip_draws(&pre, &mut rr);
+    let want = replay_round(
+        &pre, &mut rr, tl, skip, c, g, false, ty, &mut extra, full, unclear,
+    );
     assert_eq!(w.rng, rr, "draws");
     let got = new_infantry(w, after);
     let got_v: Vec<Expected> = got
@@ -547,7 +587,8 @@ fn claim_18_owner_defeated() {
     let mut rr = w.rng.clone();
     smudge_a(&w, &mut rr);
     let mut ty = |_: &mut Rng| Some("ACREW");
-    let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, &[], &[]);
+    let none = &mut std::iter::empty();
+    let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, none, &[], &[]);
     assert!(want.is_empty());
     damage::apply(&mut w, id, killing());
     assert_eq!(w.rng, rr);
@@ -787,7 +828,12 @@ fn claim_21_second_round() {
             assert_eq!(damage::apply(&mut w, id, hit), HitResult::NowDead);
             assert!(w.obj(id).is_some(), "awaits removal");
             let after = w.objects.keys().copied().max().unwrap();
-            let mut rr = w.rng.clone();
+            let pre = w.clone();
+            trace::switch_on(&mut w);
+            death::removal_turn(&mut w, id);
+            assert!(w.obj(id).is_none(), "left play");
+            let mut extra = extra_draws(&w, after);
+            let mut rr = pre.rng.clone();
             let mut ty = |rr: &mut Rng| {
                 rr.percent();
                 Some("ACREW")
@@ -796,10 +842,20 @@ fn claim_21_second_round() {
             let want = if c == 0 {
                 Vec::new()
             } else {
-                replay_round(&w, &mut rr, tl, 0, c, 2, false, &mut ty, &[], &[])
+                replay_round(
+                    &pre,
+                    &mut rr,
+                    tl,
+                    0,
+                    c,
+                    2,
+                    false,
+                    &mut ty,
+                    &mut extra,
+                    &[],
+                    &[],
+                )
             };
-            death::removal_turn(&mut w, id);
-            assert!(w.obj(id).is_none(), "left play");
             assert_eq!(w.rng, rr, "seed {seed}");
             let got: Vec<Expected> = new_infantry(&w, after)
                 .iter()
@@ -873,6 +929,7 @@ fn replay_sale(
     rr: &mut Rng,
     c: i32,
     ty: &mut dyn FnMut(&mut Rng) -> Option<&'static str>,
+    extra: &mut dyn Iterator<Item = u64>,
 ) -> Vec<&'static str> {
     let h = half(w);
     let mut out = Vec::new();
@@ -893,6 +950,8 @@ fn replay_sale(
         rr.ranged(0, 8, h);
         rr.ranged(0, 3, h);
         rr.ranged(0, 4, h);
+        // spec: S-0208 claim 6 (r46: the extra locomotion inside the scatter request, after its draw)
+        skip_n(rr, extra.next().unwrap_or(0));
         out.push(t);
     }
     out
@@ -919,13 +978,16 @@ fn s0408_claim_7_sale_survivors() {
                 let refund = glasnost_sim::seams::building_refund(&w, id);
                 assert_eq!(survivors::count(&w, &src, refund), c);
                 let after = w.objects.keys().copied().max().unwrap();
-                let mut rr = w.rng.clone();
+                let pre = w.clone();
+                trace::switch_on(&mut w);
+                assert_eq!(survivors::sold(&mut w, id), c);
+                let mut extra = extra_draws(&w, after);
+                let mut rr = pre.rng.clone();
                 let mut ty = |rr: &mut Rng| {
                     rr.percent();
                     Some("ACREW")
                 };
-                let want = replay_sale(&w, &mut rr, c, &mut ty);
-                assert_eq!(survivors::sold(&mut w, id), c);
+                let want = replay_sale(&pre, &mut rr, c, &mut ty, &mut extra);
                 assert_eq!(w.rng, rr);
                 let got = new_infantry(&w, after);
                 assert_eq!(got.len(), want.len());
@@ -952,7 +1014,11 @@ fn s0408_claim_7_one_engineer() {
         let mut w = game(&r, seed);
         let id = spawn(&mut w, Kind::Building, "YARD", 0, 0, 0);
         let after = w.objects.keys().copied().max().unwrap();
-        let mut rr = w.rng.clone();
+        let pre = w.clone();
+        trace::switch_on(&mut w);
+        survivors::sold(&mut w, id);
+        let mut extra = extra_draws(&w, after);
+        let mut rr = pre.rng.clone();
         let mut ty = |rr: &mut Rng| {
             if rr.percent() < 25 {
                 Some("ENGI")
@@ -960,8 +1026,7 @@ fn s0408_claim_7_one_engineer() {
                 Some("ACREW")
             }
         };
-        let want = replay_sale(&w, &mut rr, 5, &mut ty);
-        survivors::sold(&mut w, id);
+        let want = replay_sale(&pre, &mut rr, 5, &mut ty, &mut extra);
         assert_eq!(w.rng, rr, "seed {seed}");
         let names: Vec<String> = new_infantry(&w, after)
             .iter()
@@ -984,14 +1049,17 @@ fn s0408_engineer_choice_limit() {
     let mut w = game(&r, 3);
     let id = spawn(&mut w, Kind::Building, "BOX", 0, 0, 0);
     let after = w.objects.keys().copied().max().unwrap();
-    let mut rr = w.rng.clone();
+    let pre = w.clone();
+    trace::switch_on(&mut w);
+    survivors::sold(&mut w, id);
+    let mut extra = extra_draws(&w, after);
+    let mut rr = pre.rng.clone();
     let mut ty = |rr: &mut Rng| {
         rr.percent();
         Some("ENGI")
     };
-    let want = replay_sale(&w, &mut rr, 2, &mut ty);
+    let want = replay_sale(&pre, &mut rr, 2, &mut ty, &mut extra);
     assert_eq!(want, vec!["ENGI"]);
-    survivors::sold(&mut w, id);
     assert_eq!(w.rng, rr);
     assert_eq!(new_infantry(&w, after).len(), 1);
 }
@@ -1139,7 +1207,8 @@ fn claim_19g_clear_for_movement() {
         smudge_a(&w, &mut rr);
         let mut ty = |_: &mut Rng| Some("ACREW");
         let unclear = [cells[1], cells[2], cells[3]];
-        let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, &[], &unclear);
+        let none = &mut std::iter::empty();
+        let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, none, &[], &unclear);
         assert!(want.is_empty());
         assert_eq!(damage::apply(&mut w, id, killing()), HitResult::NowDead);
         assert_eq!(w.rng, rr, "seed {seed}");
@@ -1187,7 +1256,8 @@ fn claim_19g_a_high_bridge_cell_reads_the_deck_record() {
         smudge_a(&w, &mut rr);
         let mut ty = |_: &mut Rng| Some("ACREW");
         let unclear = [cells[1], cells[5]];
-        let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, &[], &unclear);
+        let none = &mut std::iter::empty();
+        let want = replay_round(&w, &mut rr, tl, 0, 2, 2, true, &mut ty, none, &[], &unclear);
         assert!(want.is_empty());
         assert_eq!(damage::apply(&mut w, id, killing()), HitResult::NowDead);
         assert_eq!(w.rng, rr, "seed {seed}");

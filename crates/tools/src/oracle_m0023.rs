@@ -584,6 +584,60 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
         format!("positions {}, t + 2 {}", yes(same_pos), yes(c2)),
     );
 
+    // measure: M-0023 (Also recorded, outside the verdict: the arrival tick of step 5, the first tick from which the position does not change again within the record)
+    let arrival = |r: &Recording| {
+        let last = r.rows.last()?.pos;
+        let i = r
+            .rows
+            .iter()
+            .rposition(|x| x.pos != last)
+            .map_or(0, |i| i + 1);
+        Some(i)
+    };
+    let mut also: Vec<(String, bool)> = Vec::new();
+    // measure: M-0023 (Also recorded, Controls: at the end of the arrival tick the destination still reads the pen's centre; cleared in the next tick with move current and guard queued; guard current in the tick after that)
+    let ctrl = arrival(&after).map(|i| {
+        let at = |k: usize| after.rows.get(i + k);
+        let kept = at(0).is_some_and(|x| x.dest == Some(Target::Cell(local.centre)));
+        let cleared = at(1).is_some_and(|x| {
+            x.dest.is_none()
+                && x.current == Some(Behaviour::Move)
+                && x.queued == Some(Behaviour::Guard)
+        });
+        let guard = at(2).is_some_and(|x| x.current == Some(Behaviour::Guard));
+        (kept, cleared, guard)
+    });
+    also.push((
+        "Controls: the pen's centre kept through the arrival tick".into(),
+        ctrl.is_some_and(|c| c.0),
+    ));
+    also.push((
+        "Controls: cleared the next tick, move current and guard queued".into(),
+        ctrl.is_some_and(|c| c.1),
+    ));
+    also.push((
+        "Controls: guard current the tick after that".into(),
+        ctrl.is_some_and(|c| c.2),
+    ));
+    // measure: M-0023 (Also recorded, Baseline: a single step from the release position to a standing position in a cell next to the release cell, changing in every tick with no stop, then no change; the destination cleared in its arrival tick)
+    let single = db.w.zip(arrival(&none)).is_some_and(|(w, i)| {
+        let first = none.rows.iter().position(|x| x.tick == none.t + w);
+        let end = none.rows[i].pos.cell();
+        let from = none.release_pos.cell();
+        first.is_some_and(|f| (f..=i).all(|k| k == 0 || none.rows[k].pos != none.rows[k - 1].pos))
+            && (end.x - from.x).abs() <= 1
+            && (end.y - from.y).abs() <= 1
+            && end != from
+    });
+    also.push(("Baseline: a single step".into(), single));
+    let base_cleared = arrival(&none).is_some_and(|i| {
+        none.rows[i].dest.is_none() && (i == 0 || none.rows[i - 1].dest.is_some())
+    });
+    also.push((
+        "Baseline: the destination cleared in its arrival tick".into(),
+        base_cleared,
+    ));
+
     let failing = rows.iter().filter(|r| !r.1).count();
     let mut summary = String::new();
     let _ = writeln!(summary, "| Row | Ours holds |");
@@ -592,6 +646,10 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
         let _ = writeln!(summary, "| {name} | {} |", yes(*ok));
     }
     let _ = writeln!(summary, "{ID}: rows failing: {failing} of {}", rows.len());
+    let _ = writeln!(summary, "Also recorded, outside the verdict:");
+    for (name, ok) in &also {
+        let _ = writeln!(summary, "- {name}: ours as recorded: {}", yes(*ok));
+    }
     let mut full = summary.clone();
     let _ = writeln!(full, "\nOur readings (local values; never commit):");
     for (name, _, ours) in &rows {

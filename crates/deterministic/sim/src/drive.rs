@@ -1912,9 +1912,15 @@ mod tests {
             // The walker that accepted holds a destination, so it has
             // movement in progress and would refuse a second request
             // (S-0417 claim 17, No path; S-0208 claim 11): clear it, so that
-            // a request that reaches it is accepted and draws.
+            // a request that reaches it is accepted and draws. Its extra
+            // locomotion (S-0208 claim 6, r46) chose a walking target and a
+            // stored path: clear those too.
             if let Some(o) = w.obj_mut(walker) {
                 o.dest = None;
+                o.path.steps.clear();
+                if let Some(s) = o.walk.as_mut() {
+                    s.target = None;
+                }
             }
         }
         w
