@@ -1,9 +1,9 @@
 ---
 id: Q-2656
 title: Why guard is queued at the end of the first turn of a released walker whose ordered search fails at the gate
-status: open
+status: answered
 related: [S-0417, S-0215, S-0212, S-0516]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
