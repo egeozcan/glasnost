@@ -40,6 +40,8 @@ impl Client {
                     Row::Scroll => s.step_scroll(d),
                     Row::Scale => s.step_scale(d),
                     Row::Captions => s.captions = !s.captions,
+                    // spec: S-0111 claim 20 (both options menus change the tooltip option: the main menu's settings and the game's options menu reach this screen) and claim 26 (turning it off hides a tip)
+                    Row::ToolTips => s.tool_tips = !s.tool_tips,
                     Row::Colours => {
                         s.colour_blind = !s.colour_blind;
                         if self.session.is_some() {
@@ -124,6 +126,7 @@ impl Client {
                 },
                 on(s.captions),
                 on(s.colour_blind),
+                on(s.tool_tips),
             ],
             bindings: ACTIONS
                 .iter()

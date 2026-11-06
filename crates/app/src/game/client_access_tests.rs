@@ -366,14 +366,15 @@ fn keyboard_reaches_every_control_of_the_screens() {
     assert!(c.menu_focus.rect(&c.menu_targets).is_none());
     c.pointer_up(Button::Left, Point::new(0, 0), Modifiers::default());
 
-    // The settings screen: 7 values, 10 bindings, Reset and Back.
+    // The settings screen: 8 values (the name tips' since M8 A4 round 8b),
+    // 10 bindings, Reset and Back.
     while c.menu_focus.target(&c.menu_targets) != Some(MenuHit::Settings) {
         key(&mut c, Key::Down);
     }
     key(&mut c, Key::Enter);
     assert_eq!(c.shell.screen, Screen::Settings);
     let _ = c.frame();
-    assert_eq!(c.settings_targets.stops.len(), 19);
+    assert_eq!(c.settings_targets.stops.len(), 20);
     key(&mut c, Key::Tab);
     assert_eq!(
         c.settings_focus.target(&c.settings_targets),
@@ -383,7 +384,7 @@ fn keyboard_reaches_every_control_of_the_screens() {
     assert_eq!(c.settings.sound, 90, "Left steps the focused value down");
     key(&mut c, Key::Right);
     assert_eq!(c.settings.sound, 100);
-    // Down to the captions and colours rows; Enter toggles them.
+    // Down to the captions, colours and name tips rows; Enter toggles them.
     for _ in 0..5 {
         key(&mut c, Key::Down);
     }
@@ -392,6 +393,9 @@ fn keyboard_reaches_every_control_of_the_screens() {
     key(&mut c, Key::Down);
     key(&mut c, Key::Space);
     assert!(c.settings.colour_blind);
+    key(&mut c, Key::Down);
+    key(&mut c, Key::Enter);
+    assert!(!c.settings.tool_tips);
     // A binding: Enter waits for a key, the letter rebinds.
     key(&mut c, Key::Tab);
     key(&mut c, Key::Enter);

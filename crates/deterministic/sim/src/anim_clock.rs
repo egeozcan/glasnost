@@ -452,6 +452,18 @@ impl Player {
         self.k = k;
     }
 
+    /// A creator sets the stage to `k` in tick `tick` and restarts the
+    /// stage clock with a stage delay of `delay` ticks, leaving the
+    /// direction of play, the remaining passes and any loop delay as they
+    /// are (S-0614 claim 25: a grab animation's setting). The delay is used
+    /// as given, never normalised to the game speed.
+    pub fn set_stage(&mut self, k: i32, tick: i32, delay: i32) {
+        // spec: S-0614 claim 25 (k set, the direction of play unchanged, the clock restarted with the given stage delay in ticks at every game speed)
+        self.k = k;
+        self.last = tick;
+        self.delay = delay;
+    }
+
     /// Makes the current pass the last: the remaining passes become 0
     /// (S-0522 claim 13, a parachute still present when its paratrooper
     /// lands; S-0109 claim 7).

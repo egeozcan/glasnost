@@ -405,6 +405,11 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 let b = match button {
                     MouseButton::Left => Button::Left,
                     MouseButton::Right => Button::Right,
+                    MouseButton::Middle => {
+                        self.client.middle_button(self.pointer);
+                        self.after_input();
+                        return;
+                    }
                     _ => return,
                 };
                 match state {

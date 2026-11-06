@@ -2190,6 +2190,7 @@ What is stored (all fields optional on load):
 | Music volume | `music` | 0 to 100, 100 | `Mixer::set_music_volume`, scales the music voice linearly (step C1, "Music (M8 step C1 part 1)") |
 | Scroll speed | `scroll` | index 0 fastest to 6 slowest, 3 (S-0101 Terms and Import mapping) | `Session::scroll_index`, replacing the fixed default in the edge, drag and arrow scroll |
 | Display scale | `scale` | 100, 125, 150, 200, 300 percent, 100 (our own) | the interface scale of step C3 (see "Accessibility (M8 step C3)") |
+| Name tips | `tool_tips` | 0 or 1, 1 (S-0111 claim 20 and Import mapping: the tooltip option, on unless the settings turn it off) | the name tip over the battlefield (`game::name_tip`, M8 A4 round 8b); turning it off hides a tip at once (claim 26) |
 | Command keys | `key.stop`, `key.scatter`, `key.guard`, `key.deploy`, `key.cheer` | a lower-case letter or digit each, S X G D C (S-0213 claim 22) | `client::bound_with` |
 | Relay address | `relay` | text, empty | the multiplayer screen's field, set from it when a connection is tried; the command line's `--relay` still wins for a run |
 | Game to rejoin | `rejoin` | `CODE SLOT TICKET RELAY` (the ticket as 32 hex digits), none | the multiplayer screen's **Reconnect** (M9 N5): written when a network game begins, removed when it ends or the person leaves it; a wrong line is ignored |

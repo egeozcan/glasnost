@@ -137,26 +137,42 @@ pub fn register(
     messages: &[Message],
     row: &mut Option<u32>,
 ) {
-    let row = *row.get_or_insert_with(|| {
-        let mut pal = [0u8; 1024];
-        // spec: S-0014 claim 5 (a one bit paints the line's foreground; a zero bit leaves the destination unchanged; there is no font palette). Our own messages use our text colour: no route-refusal notice is shown yet
-        pal[4..8].copy_from_slice(&colour::TEXT);
-        painter.add_palette(pal)
-    });
-    for msg in messages {
-        for &c in &msg.units {
-            let g = font.glyph(c);
-            if painter.has_sprite(SPRITE, frame(g)) {
-                continue;
-            }
-            // spec: S-0014 claim 3 (a zero-width glyph paints no pixels in our engine)
-            let Some(mask) = font.mask(g).filter(|m| m.width > 0 && m.height > 0) else {
-                continue;
-            };
-            let px = mask.bits.iter().map(|&b| u8::from(b)).collect();
-            if let Ok(img) = IndexedImage::new(mask.width as u32, mask.height as u32, px) {
-                painter.add_sprite(SPRITE, frame(g), &img, row);
-            }
+    // Our own messages use our text colour: no route-refusal notice is shown yet.
+    let row = *row.get_or_insert_with(|| ink_row(painter, colour::TEXT));
+    let units = messages.iter().flat_map(|m| m.units.iter().copied());
+    register_glyphs(painter, font, units, SPRITE, row);
+}
+
+/// A palette row for one-bit glyph masks in `ink`: index 0 transparent,
+/// index 1 the foreground (S-0014 claim 5).
+pub fn ink_row(painter: &mut Painter, ink: [u8; 4]) -> u32 {
+    let mut pal = [0u8; 1024];
+    // spec: S-0014 claim 5 (a one bit paints the line's foreground; a zero bit leaves the destination unchanged; there is no font palette)
+    pal[4..8].copy_from_slice(&ink);
+    painter.add_palette(pal)
+}
+
+/// Registers with `painter`, under sprite id `sprite` through palette row
+/// `row`, the glyphs the text units `units` draw, each once.
+pub fn register_glyphs(
+    painter: &mut Painter,
+    font: &StatusFont,
+    units: impl IntoIterator<Item = u16>,
+    sprite: u32,
+    row: u32,
+) {
+    for c in units {
+        let g = font.glyph(c);
+        if painter.has_sprite(sprite, frame(g)) {
+            continue;
+        }
+        // spec: S-0014 claim 3 (a zero-width glyph paints no pixels in our engine)
+        let Some(mask) = font.mask(g).filter(|m| m.width > 0 && m.height > 0) else {
+            continue;
+        };
+        let px = mask.bits.iter().map(|&b| u8::from(b)).collect();
+        if let Ok(img) = IndexedImage::new(mask.width as u32, mask.height as u32, px) {
+            painter.add_sprite(sprite, frame(g), &img, row);
         }
     }
 }

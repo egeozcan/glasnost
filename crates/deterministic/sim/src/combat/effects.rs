@@ -846,6 +846,19 @@ pub fn trailer(w: &mut crate::world::World, name: &str, pos: Pos) {
     anim_spawned(w, name, pos, false, None, spawn);
 }
 
+/// Creates an ordinary animation of type `name` at `pos` with what its
+/// creator gives (`spawn`: creation, owner and role) and its presentation
+/// event (S-0109 claim 29); returns its number in the update order, `None`
+/// when no type has that name.
+pub fn anim_spawn(
+    w: &mut crate::world::World,
+    name: &str,
+    pos: Pos,
+    spawn: crate::anims::Spawn,
+) -> Option<crate::world::ObjectId> {
+    anim_spawned(w, name, pos, false, None, spawn).id
+}
+
 /// The initial loop delay a projectile gives its trailer, in updates.
 const TRAILER_LOOP_DELAY: i32 = 1; // spec: S-0109 claim 29 (a projectile trailer: an initial loop delay of 1 update)
 
@@ -858,7 +871,7 @@ fn anim_spawned(
     reverse: bool,
     z_adjust: Option<i32>,
     mut spawn: crate::anims::Spawn,
-) {
+) -> crate::anims::Spawned {
     // spec: S-0109 claim 29 and Terms (a reverse request: the deploying presentation of an undeploy, S-0517 claim 7)
     spawn.creation.reverse |= reverse;
     let made = crate::anims::spawn(w, name, Some(pos), spawn);
@@ -870,6 +883,7 @@ fn anim_spawned(
         z_adjust,
         id: made.id,
     });
+    made
 }
 
 /// Whether a shot of weapon `wr` that launched a projectile makes a bolt

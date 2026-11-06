@@ -57,6 +57,17 @@ pub enum Role {
     SourceMarker(HouseId),
     /// A drainer's drain animation (S-0608 claims 5 and 14).
     Drain(ObjectId),
+    /// A grappling parasite's grab animation (S-0614 claim 25), with the
+    /// house whose house-colour palette and the cell whose unscaled ground
+    /// level the parasite last gave it.
+    Grab {
+        /// The grappling parasite.
+        parasite: ObjectId,
+        /// The parasite's house, for its palette.
+        house: Option<HouseId>,
+        /// The host's cell, for its brightness.
+        cell: Option<glasnost_map::CellXY>,
+    },
 }
 
 /// One ordinary animation in play.

@@ -28,6 +28,7 @@ fn custom() -> Settings {
         }),
         direct: false,
         ice: "stun:stun.example:3478 turn:turn.example:3478".into(),
+        tool_tips: false,
     }
 }
 
@@ -68,6 +69,16 @@ fn direct_links_are_on_with_no_servers_by_default() {
     assert!(!off.direct);
     assert_eq!(off.ice, "stun:a:1");
     assert!(Settings::from_text("direct=yes").direct);
+}
+
+/// spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's
+/// settings turn it off: a settings text without the key gives it on)
+#[test]
+fn the_tooltip_option_is_on_unless_turned_off() {
+    assert!(Settings::default().tool_tips);
+    assert!(Settings::from_text("version=1\n").tool_tips);
+    assert!(!Settings::from_text("version=1\ntool_tips=0\n").tool_tips);
+    assert!(Settings::from_text("version=1\ntool_tips=1\n").tool_tips);
 }
 
 #[test]

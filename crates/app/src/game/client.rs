@@ -720,6 +720,17 @@ impl Client {
         }
     }
 
+    /// The middle button went down or up (S-0111 claim 20: it only hides
+    /// the name tip).
+    pub fn middle_button(&mut self, p: Point) {
+        self.pointer = Some(p);
+        if self.shell.screen == Screen::Game
+            && let Some(s) = self.session.as_mut()
+        {
+            s.middle_button(p);
+        }
+    }
+
     /// A mouse-wheel event with the sign of its vertical delta (S-0411
     /// claim 18).
     pub fn wheel(&mut self, delta: i32) {
@@ -1329,6 +1340,7 @@ impl Client {
                 self.captions.draw(&mut overlay, map);
                 match self.session.as_mut() {
                     Some(s) => {
+                        s.tool_tips = self.settings.tool_tips;
                         s.update_marks();
                         s.update_cursor(&mut self.painter);
                         s.update_status_glyphs(&mut self.painter);
@@ -1511,3 +1523,7 @@ mod play_notes_tests;
 #[cfg(test)]
 #[path = "client_watch_tests.rs"]
 mod watch_tests;
+
+#[cfg(test)]
+#[path = "client_name_tip_tests.rs"]
+mod name_tip_tests;

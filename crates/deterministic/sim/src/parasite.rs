@@ -67,6 +67,16 @@ pub struct ParasiteState {
     pub grabbing: bool,
     /// Suppressed while the tick is below this (S-0315 claim 6).
     pub suppressed_until: Option<i32>,
+    /// A grappling parasite's grab animation in play, from its creation in
+    /// the grab's first turn until its removal or end (claim 25).
+    #[serde(default)]
+    pub grab_anim: Option<ObjectId>,
+    /// The tick the grappling cycle's current phase started (table G).
+    #[serde(default)]
+    pub phase_start: i32,
+    /// The current push's way draw (claim 10); `None` in the grab.
+    #[serde(default)]
+    pub push_way: Option<i32>,
     // --- As a mobile unit ---
     /// The parasite attached to it (claim 2: at most one).
     pub attached: Option<ObjectId>,
@@ -534,6 +544,8 @@ pub enum Leave {
 
 fn unlink(w: &mut World, p: ObjectId) -> Option<ObjectId> {
     let host = state(w, p).and_then(|s| s.host)?;
+    // spec: S-0614 claim 25 (the grab animation is removed when the parasite leaves the host by any way of claims 11 to 13, when the host is lost and when the parasite is removed; before the host leaves play)
+    remove_grab_anim(w, p);
     if let Some(s) = state_mut(w, p) {
         s.host = None;
     }
@@ -913,25 +925,159 @@ fn grapple_turn(w: &mut World, host: ObjectId, p: ObjectId) {
         s.started = true;
         s.grabbing = true;
         s.next = now.wrapping_add(GRAB_END);
+        s.phase_start = now;
+        s.push_way = None;
+        // spec: S-0614 claim 25 (created once per hold, in the grab's first turn, after the hold renewal and the water check, before the phase-frame step)
+        create_grab_anim(w, host, p);
     }
+    // spec: S-0614 claim 25 (in each turn of the hold that reaches the step: reattached when found detached, the parasite's palette and the host's cell given)
+    tend_grab_anim(w, host, p);
+    // spec: S-0614 claim 25 and table G (the phase-frame step: a step of j to 1 … 9 sets the grab animation's stage)
+    grab_stage(w, host, p);
+    let Some(s) = state_mut(w, p) else { return };
     if now < s.next {
         return;
     }
     if s.grabbing {
         s.grabbing = false;
         // spec: S-0614 table G (the grab ends: a push starts in the same tick)
-        push_start(w, host);
+        let way = push_start(w, host);
         if let Some(s) = state_mut(w, p) {
             s.next = now.wrapping_add(PUSH);
+            s.phase_start = now;
+            s.push_way = Some(way);
         }
         return;
     }
     strike(w, host, p, weapon);
 }
 
+/// The fixed grab animation type's name (claim 25, Import mapping).
+const GRAB_ANIM: &str = "SQDG"; // spec: S-0614 Import mapping (the grab animation: animation type `SQDG`, an engine constant, found without regard to letter case)
+/// The grab animation's stage delay at each setting, in ticks.
+const GRAB_STAGE_DELAY: i32 = 128; // spec: S-0614 claim 25 (the stage clock restarted with a stage delay of 128 ticks, at every game speed)
+/// Ticks per phase frame in the grab.
+const GRAB_FRAME: i32 = 3; // spec: S-0614 table G and F3 (phase frames advance one per 3 ticks in the grab)
+/// Ticks per phase frame in a push.
+const PUSH_FRAME: i32 = 4; // spec: S-0614 table G and F3 (one per 4 ticks in a push)
+/// The last phase frame whose step sets the stage.
+const LAST_SET_FRAME: i32 = 9; // spec: S-0614 claim 25 (a step of j to 1 … 9 sets k; a step to 10 sets nothing)
+/// The stage offset *b* in a push with σ = −1 and σ = +1.
+const PUSH_BASE_DOWN: i32 = 80; // spec: S-0614 claim 25 (b = 80 in a push with σ = −1)
+const PUSH_BASE_UP: i32 = 160; // spec: S-0614 claim 25 (b = 160 in a push with σ = +1)
+/// Stages per 8-direction step.
+const DIRECTION_STAGES: i32 = 10; // spec: S-0614 claim 25 (k = b + 10 × d + j)
+
+/// The grab animation's creation (claim 25): at the host's position,
+/// height included, with no loop delay, a repeat factor of 1 and no
+/// reverse request, attached to the host with no displacement. Nothing
+/// when no animation type has the fixed name.
+fn create_grab_anim(w: &mut World, host: ObjectId, p: ObjectId) {
+    let Some(at) = w.obj(host).map(|o| o.pos) else {
+        return;
+    };
+    let spawn = crate::anims::Spawn {
+        // spec: S-0614 claim 25 (no initial loop delay, a repeat factor of 1, no reverse request)
+        creation: crate::anim_clock::Creation {
+            loop_delay: 0,
+            repeat: 1,
+            reverse: false,
+        },
+        // spec: S-0614 claim 25 and S-0109 claim 22 (attached to the host with no displacement)
+        owner: Some((host, Pos::new(0, 0, 0))),
+        role: crate::anims::Role::Grab {
+            parasite: p,
+            house: None,
+            cell: None,
+        },
+    };
+    // spec: S-0614 claim 25 (the creation draws of S-0109 claims 3 and 13, from the scenario stream, in turn g; an absent type: none created and no draw)
+    let made = crate::combat::effects::anim_spawn(w, GRAB_ANIM, at, spawn);
+    if let Some(s) = state_mut(w, p) {
+        s.grab_anim = made;
+    }
+}
+
+/// The parasite tends its grab animation in a turn of the hold that
+/// reaches the attached-parasite step (claim 25): attached again when
+/// found detached, given the parasite's house for its palette and the
+/// host's cell for its brightness. Nothing once it has ended.
+fn tend_grab_anim(w: &mut World, host: ObjectId, p: ObjectId) {
+    let Some(id) = state(w, p).and_then(|s| s.grab_anim) else {
+        return;
+    };
+    let house = w.obj(p).and_then(|o| o.owner);
+    let cell = w.obj(host).filter(|o| o.on_map).map(|o| o.pos.cell());
+    let Some(a) = w.anims.anims.get_mut(&id) else {
+        // spec: S-0614 claim 25 (when the animation has ended, nothing recreates it in that hold)
+        if let Some(s) = state_mut(w, p) {
+            s.grab_anim = None;
+        }
+        return;
+    };
+    if a.owner.is_none() {
+        // spec: S-0614 claim 25 (attached again, with no displacement, in a later turn that finds it detached)
+        a.owner = Some((host, Pos::new(0, 0, 0)));
+    }
+    // spec: S-0614 claim 25 (the house-colour palette of the parasite's house; the unscaled ground level of the host's cell, when it is in a cell: the view reads both)
+    a.role = crate::anims::Role::Grab {
+        parasite: p,
+        house,
+        cell: cell.or(match a.role {
+            crate::anims::Role::Grab { cell, .. } => cell,
+            _ => None,
+        }),
+    };
+}
+
+/// The phase-frame step of the grappling cycle (table G) and the grab
+/// animation's stage setting (claim 25): in the turn at which phase frame
+/// *j* steps to a value from 1 to 9, *k* = *b* + 10 × *d* + *j*.
+fn grab_stage(w: &mut World, host: ObjectId, p: ObjectId) {
+    let now = w.tick;
+    let Some(s) = state(w, p) else { return };
+    let Some(id) = s.grab_anim else { return };
+    // spec: S-0614 table G and F3 (the phase's first frame counted in the tick it starts: frame j at its turn n = offset + 1 is ⌊n / 3⌋ in the grab, ⌊n / 4⌋ in a push)
+    let (period, base) = match s.push_way {
+        None => (GRAB_FRAME, 0), // spec: S-0614 claim 25 (b = 0 in the grab)
+        // spec: S-0614 claim 25 and S-0113 claim 14 (σ = +1 for a way draw of 0, −1 for 1)
+        Some(0) => (PUSH_FRAME, PUSH_BASE_UP),
+        Some(_) => (PUSH_FRAME, PUSH_BASE_DOWN),
+    };
+    let turn = now.wrapping_sub(s.phase_start).wrapping_add(1);
+    // spec: S-0614 claim 25 (set only at a step of j: the grab's turns 3, 6, …, 27 and a push's turns 4, 8, …, 36)
+    if turn <= 0 || turn % period != 0 {
+        return;
+    }
+    let j = turn / period;
+    if !(1..=LAST_SET_FRAME).contains(&j) {
+        return;
+    }
+    let Some(f) = w.obj(host).map(|o| o.body.value(now)) else {
+        return;
+    };
+    // spec: S-0614 claim 25 (d: the 8-direction of the host's current body facing at that step, S-0204 F4)
+    let d = i32::from(eight_direction(f));
+    if let Some(a) = w.anims.anims.get_mut(&id) {
+        // spec: S-0614 claim 25 (k = b + 10 × d + j, the clock restarted with a 128-tick stage delay; no draw)
+        a.player
+            .set_stage(base + DIRECTION_STAGES * d + j, now, GRAB_STAGE_DELAY);
+    }
+}
+
+/// Removes a parasite's grab animation now (claim 25).
+fn remove_grab_anim(w: &mut World, p: ObjectId) {
+    let Some(id) = state_mut(w, p).and_then(|s| s.grab_anim.take()) else {
+        return;
+    };
+    // spec: S-0614 claim 25 (removed at once: no longer drawn from that turn on, it leaves play in that turn, S-0203 claim 10)
+    crate::anims::remove(w, id);
+}
+
 /// A push starts (claim 10): R(0, 1) for its way, then three wakes, each
-/// after R(−180, 180) and R(−64, 64) for its displacement.
-fn push_start(w: &mut World, host: ObjectId) {
+/// after R(−180, 180) and R(−64, 64) for its displacement. Returns the
+/// way draw.
+fn push_start(w: &mut World, host: ObjectId) -> i32 {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let pos = w.obj(host).map_or(Pos::default(), |o| o.pos);
@@ -948,6 +1094,7 @@ fn push_start(w: &mut World, host: ObjectId) {
             crate::combat::effects::anim(w, &wake, Pos::new(pos.x + dx, pos.y + dy, pos.z));
         }
     }
+    way
 }
 
 fn strike(w: &mut World, host: ObjectId, p: ObjectId, weapon: Option<WeaponId>) {
@@ -990,12 +1137,18 @@ fn strike(w: &mut World, host: ObjectId, p: ObjectId, weapon: Option<WeaponId>) 
                 no_escape: true,
             },
         );
+        if w.obj(host).is_none_or(|o| o.health <= 0) {
+            // spec: S-0614 claim 25 (removed when the strike's own hit destroys the host, in that strike's turn)
+            remove_grab_anim(w, p);
+        }
     }
     // spec: S-0614 claim 10 and table G (when the host still has this parasite: the next push starts in the strike's tick)
     if host_of(w, p) == Some(host) && w.obj(host).is_some() {
-        push_start(w, host);
+        let way = push_start(w, host);
         if let Some(s) = state_mut(w, p) {
             s.next = now.wrapping_add(PUSH);
+            s.phase_start = now;
+            s.push_way = Some(way);
         }
     }
 }

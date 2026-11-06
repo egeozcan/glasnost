@@ -213,3 +213,55 @@ fn a_map_vehicle_before_any_tick_shows_its_creation_index() {
         None
     );
 }
+
+/// spec: S-0111 claim 23 (a turret-tip vehicle's t: S-0105 claim 43's index, except that a type
+/// with rotating-barrel weapon stages gets t by the gunner rules, the table entry for its weapon
+/// number, and none when it is not a gunner type or has the charge-turret flag)
+#[test]
+fn the_name_tip_index_of_a_rotating_barrel_type() {
+    use super::build::tip_turret_index;
+    let t = table();
+    let r = with_multi("SPIN", |t| {
+        t.gunner = Some(true);
+        t.combat.is_gattling = Some(true);
+    });
+    let mut w = testkit::game_with(&r, SIZE, 5);
+    let s = spawn(&mut w, "SPIN", 0, 0);
+    assert_eq!(
+        selected_turret_index(&w, s, 0, Some(&t)),
+        None,
+        "not multi-turret"
+    );
+    assert_eq!(tip_turret_index(&w, s, 0, Some(&t)), Some(2), "T[0]");
+    weapon::set_weapon_number(&mut w, s, 2);
+    assert_eq!(tip_turret_index(&w, s, 0, Some(&t)), Some(1), "T[2]");
+    assert_eq!(tip_turret_index(&w, s, 0, None), None, "an all-none table");
+    for (name, f) in [
+        (
+            "SPINX",
+            (|t| t.combat.is_gattling = Some(true)) as fn(&mut glasnost_rules::sim::UnitType),
+        ),
+        ("SPINC", |t| {
+            t.gunner = Some(true);
+            t.combat.is_gattling = Some(true);
+            t.combat.is_charge_turret = Some(true);
+        }),
+    ] {
+        let r = with_multi(name, f);
+        let mut w = testkit::game_with(&r, SIZE, 5);
+        let v = spawn(&mut w, name, 0, 0);
+        assert_eq!(tip_turret_index(&w, v, 0, Some(&t)), None, "{name}");
+        weapon::set_weapon_number(&mut w, v, 2);
+        assert_eq!(tip_turret_index(&w, v, 0, Some(&t)), None, "{name}");
+    }
+    // Any other type: the drawing's index.
+    let r = with_multi("MULTI", |t| t.gunner = Some(true));
+    let mut w = testkit::game_with(&r, SIZE, 5);
+    let m = spawn(&mut w, "MULTI", 0, 0);
+    weapon::set_weapon_number(&mut w, m, 1);
+    assert_eq!(
+        tip_turret_index(&w, m, 0, Some(&t)),
+        selected_turret_index(&w, m, 0, Some(&t))
+    );
+    assert_eq!(tip_turret_index(&w, m, 0, Some(&t)), Some(0));
+}

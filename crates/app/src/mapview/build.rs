@@ -317,7 +317,7 @@ mod notes {
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
-    pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point, or on its surface below a vehicle above it (our design, Q-2672): the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
+    pub const VOXEL_SHADOW_LIFTED: &str = "a vehicle lifted by a carrier aircraft would have its voxel shadow raised 14 rows, and 60 more over a qualifying bridge (S-0105 claim 44); the simulation has no lifted state yet (the transport specs set it up), so no vehicle shadow is raised";
     pub const SLOT_ANIMS_STILL: &str = "the static scene's building slot animations (S-0108 claim 11) are drawn at their first image frame: they do not advance and power (S-0108 claim 13) does not change them";
     /// See [`SLOT_ANIMS_STILL`].
     pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 13 (power, disabling and re-enabling), 15 (empty storage), 17, 20 and 26 to 28 and S-0606's walls; the special outage and low-power slot (S-0108 claim 14), silo fill, the superweapon slots and super-low-power, and the turret and upgrade slots are not modelled; a repair depot's production and special slots are the simulation's (S-0108 claim 20)";
@@ -5079,7 +5079,10 @@ impl<'a> Builder<'a> {
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
         // bridge, whatever its flight height; it is not the body's lifted point).
-        let shadow_point = if kind == Kind::Aircraft {
+        // spec: S-0105 claim 44 Locomotors (our engine: claim 40's P itself for a vehicle type with the hunter-seeker property, a corrected presentation glitch without a switch)
+        let hunter_seeker =
+            kind == Kind::Vehicles && rule_bool(self.import, kind, idx, b"HunterSeeker", false);
+        let shadow_point = if kind == Kind::Aircraft || hunter_seeker {
             let anchor = m.shadow.unwrap_or_else(|| ShadowAnchor {
                 ground: self.terrain_height(m.pos.0, m.pos.1),
                 deck: false,
@@ -5087,7 +5090,8 @@ impl<'a> Builder<'a> {
             let (sx, sy) = project_lifted(m.pos.0, m.pos.1, anchor.ground);
             (sx, sy - if anchor.deck { SHADOW_DECK_RAISE } else { 0 })
         } else {
-            vehicle_shadow_point(m.pos, m.above, point)
+            // spec: S-0105 claim 44 (B moved down by L(a); the flying locomotor too, our engine's correction)
+            vehicle_shadow_point(point, m.above)
         };
         let mut items = Vec::new();
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
@@ -5312,7 +5316,7 @@ impl<'a> Builder<'a> {
                     Group::Shadows,
                     object,
                 ));
-                self.note(notes::VOXEL_SHADOW_POINT);
+                self.note(notes::VOXEL_SHADOW_LIFTED);
             }
         }
         items
@@ -5405,23 +5409,19 @@ fn placed_image(scene: &Scene, (id, offset): PlacedPart) -> voxel::PartImage {
     }
 }
 
-/// A voxel vehicle's shadow draw point, for a vehicle whose body is drawn
-/// at `point` from position `pos`, `above` leptons above its surface (the
-/// glossary's height above the surface, 0 on a bridge deck).
+/// A voxel vehicle's shadow draw point (S-0105 claim 44): the body's draw
+/// point *B* (`point`, with any locomotor draw shift) moved down by the
+/// lift of `above`, its signed height above the surface in leptons (the
+/// glossary's, less 416 on a bridge deck).
 ///
-/// The vehicle shadow point has no spec (S-0105 and S-0102 Open questions,
-/// Q-2672). Our design (M8 A4 round 8 note 47): a vehicle above its surface,
-/// a hovering one above all, casts its shadow on that surface, at the
-/// projection of its horizontal position at the surface's height, as claim
-/// 40 places an aircraft's on terrain; a vehicle at or below its surface
-/// keeps the body's point, as before.
-pub fn vehicle_shadow_point(pos: (i32, i32, i32), above: i32, point: (i32, i32)) -> (i32, i32) {
-    // design: Q-2672 interim (the surface under a vehicle above it; S-0101 claims 1 and 3 project it)
-    if above > 0 {
-        project_lifted(pos.0, pos.1, pos.2 - above)
-    } else {
-        point
-    }
+/// The same rule holds at every height: at 0 the anchor is *B*, below the
+/// surface the signed lift places it at or above *B*. A vehicle lifted by a
+/// carrier aircraft would be raised 14 rows, and 60 more over a qualifying
+/// bridge; the simulation has no lifted state yet (the transport specs set
+/// it up), so no vehicle is raised.
+pub fn vehicle_shadow_point(point: (i32, i32), above: i32) -> (i32, i32) {
+    // spec: S-0105 claim 44 (B moved down by L(a) rows, S-0101 claim 3's signed lift, the same lift that lifts B; exact signed integer arithmetic)
+    (point.0, point.1 + height_lift(above))
 }
 
 /// A vehicle shadow's appearance (S-0105 claims 31, 39). `fresh` is the
@@ -5432,7 +5432,8 @@ pub fn vehicle_shadow_point(pos: (i32, i32, i32), above: i32, point: (i32, i32))
 /// The cache keeps the unmasked footprint, and every appearance, fresh or
 /// reused, excludes the current parts (claim 39). `shift` is the parts'
 /// draw point less the shadow's, in screen pixels: (0, 0) unless the
-/// vehicle stands above its surface (design, Q-2672).
+/// vehicle's height above its surface has a lift (S-0105 claim 44), so the
+/// exclusion compares at the same screen position.
 fn vehicle_shadow(
     scene: &mut Scene,
     cache: &mut voxel::ImageCache<Option<PlacedPart>>,
@@ -5553,9 +5554,10 @@ pub struct Mobile {
     /// For a loading vehicle harvester: its harvesting image (S-0402
     /// claim 5a, F8).
     pub harvesting: Option<super::harvesting::Harvesting>,
-    /// For an aircraft: the surface anchor of its voxel shadow (S-0105
-    /// claim 40), when the caller knows the game state; `None` takes the
-    /// terrain under it from the map and no bridge deck.
+    /// For an aircraft, or a vehicle (used for a hunter-seeker type, S-0105
+    /// claim 44): the surface anchor of claim 40, when the caller knows the
+    /// game state; `None` takes the terrain under it from the map and no
+    /// bridge deck.
     pub shadow: Option<ShadowAnchor>,
     /// For a vehicle that carries spawned aircraft: no spawned aircraft is
     /// docked, so a type with the alternative-body option draws its
@@ -5625,6 +5627,30 @@ pub fn selected_turret_index(
         (o.combat.rearm_until, o.combat.rearm_delay, shown),
         table,
     )
+}
+
+/// The selected turret index *t* a turret-tip vehicle's name tip reads
+/// (S-0111 claim 23): [`selected_turret_index`], except for a type with
+/// rotating-barrel weapon stages, which gets *t* by the rules of a gunner
+/// type: the turret table entry for its weapon number when it is a gunner
+/// type without the charge-turret flag, *none* otherwise.
+pub fn tip_turret_index(
+    w: &glasnost_sim::world::World,
+    id: glasnost_sim::world::ObjectId,
+    shown: i32,
+    table: Option<&glasnost_convert::turrets::TurretTable>,
+) -> Option<i32> {
+    let tc = glasnost_sim::combat::veterancy::type_combat(w, id)?;
+    if !tc.gattling {
+        return selected_turret_index(w, id, shown, table);
+    }
+    if tc.gunner && !tc.charge_turret {
+        // spec: S-0111 claim 23 (a rotating-barrel type gets t by the rules for a gunner type: the turret table entry for the weapon number, set at creation and at every hand-over, S-0308 claim 6; a change of weapon stage never changes t)
+        let weapon = glasnost_sim::combat::weapon::weapon_number(w, id);
+        return table.and_then(|t| t.get(weapon).copied().flatten());
+    }
+    // spec: S-0111 claim 23 (none for a rotating-barrel type that is not a gunner type, and for one with the charge-turret flag for its whole life)
+    None
 }
 
 /// The selected turret index of a vehicle whose type has the combat
@@ -6613,8 +6639,9 @@ mod shadow_tests {
     }
 
     /// spec: S-0105 claim 39 (a part pixel at the same screen position excludes the shadow
-    /// pixel); design: Q-2672 interim (a vehicle above its surface: the shadow drawn below
-    /// the body, so the parts are shifted by their draw point less the shadow's)
+    /// pixel) and claim 44 (a vehicle above its surface: the shadow drawn below the body, so the
+    /// parts are shifted by their draw point less the shadow's; our engine compares at the same
+    /// screen position, MS-34 part e)
     #[test]
     fn a_lowered_shadow_excludes_the_parts_where_they_land() {
         let mut scene = Scene::default();
@@ -6658,19 +6685,46 @@ mod shadow_tests {
         assert_eq!(pixels(&scene, level), [m, 0, m, m]);
     }
 
-    /// design: Q-2672 interim (a vehicle above its surface casts its shadow at the projection of
-    /// its position at the surface's height; at or below its surface, at the body's point);
-    /// S-0101 claims 1 and 3 (the projection and its height lift)
+    /// spec: S-0105 claim 44 and MS-34 part e (B moved down by S-0101 claim 3's signed lift of
+    /// the height above the surface: exactly the surface projection on a surface at a whole
+    /// level, within one row of it elsewhere, B itself at a = 0, at or above B for a < 0)
     #[test]
-    fn a_vehicle_above_its_surface_casts_its_shadow_on_it() {
-        let pos = (3000, 2000, 400);
-        let point = project_lifted(pos.0, pos.1, pos.2);
-        assert_eq!(vehicle_shadow_point(pos, 0, point), point);
-        assert_eq!(vehicle_shadow_point(pos, -50, point), point);
-        let lowered = vehicle_shadow_point(pos, 104, point);
-        assert_eq!(lowered, project_lifted(pos.0, pos.1, 296));
-        assert_eq!(lowered.0, point.0);
-        assert!(lowered.1 > point.1, "{lowered:?} below {point:?}");
+    fn a_vehicle_shadow_anchor_is_the_body_point_lowered_by_the_lift() {
+        let (x, y) = (3000, 2000);
+        // A surface at a whole level h (104 leptons a level): exactly the surface projection.
+        for h in 0..=13 {
+            for a in [0, 1, 7, 52, 103, 104, 300, 416, 1500] {
+                let b = project_lifted(x, y, 104 * h + a);
+                assert_eq!(
+                    vehicle_shadow_point(b, a),
+                    project_lifted(x, y, 104 * h),
+                    "level {h}, a = {a}"
+                );
+            }
+        }
+        // A slope (any surface height s): within one row of the surface projection.
+        for s in [5, 37, 60, 99, 151, 260, 777] {
+            for a in [0, 1, 20, 104, 333, 1000] {
+                let b = project_lifted(x, y, s + a);
+                let at = vehicle_shadow_point(b, a);
+                let surface = project_lifted(x, y, s);
+                assert_eq!(at.0, surface.0);
+                assert!((at.1 - surface.1).abs() <= 1, "s = {s}, a = {a}");
+            }
+        }
+        // a = 0: B itself; a < 0: the signed lift places the anchor at or above B.
+        let b = project_lifted(x, y, 400);
+        assert_eq!(vehicle_shadow_point(b, 0), b);
+        for a in [-1, -50, -104, -416] {
+            let at = vehicle_shadow_point(b, a);
+            assert_eq!(at, (b.0, b.1 + height_lift(a)));
+            assert!(at.1 <= b.1, "a = {a}");
+        }
+        // Applied to B as drawn: a locomotor draw shift of B moves the anchor with it.
+        assert_eq!(
+            vehicle_shadow_point((b.0, b.1 - 3), 104),
+            (b.0, b.1 - 3 + 15)
+        );
     }
 }
 

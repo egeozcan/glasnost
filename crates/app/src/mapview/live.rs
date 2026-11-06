@@ -2252,6 +2252,7 @@ impl Live {
     fn follow_sim_anims(&mut self) {
         let world = &self.world;
         let table = &self.anim_table;
+        let painter = &self.painter;
         self.anims.retain_mut(|a| {
             let Some(id) = a.sim else { return true };
             let Some(s) = world.anims.anims.get(&id) else {
@@ -2266,6 +2267,18 @@ impl Live {
             a.player.clone_from(&s.player);
             if let Some(p) = s.pos {
                 a.pos = p;
+            }
+            if let glasnost_sim::anims::Role::Grab { house, cell, .. } = s.role {
+                // spec: S-0614 claim 25 (attached to its host: in the ground render layer, S-0109 claim 22)
+                a.layer = super::slots::Layer::Ground;
+                // spec: S-0614 claim 25 and S-0103 claim 8 row 3 (drawn with the parasite's house-colour palette at the unscaled ground level of the host's cell, both as the parasite last gave them; the normal-light flag and the earlier rows and tiled copies stay S-0103's)
+                a.carrier = house
+                    .and_then(|h| world.houses.get(usize::from(h.0)))
+                    .map(|h| {
+                        // design: no cell given yet (never in play: the host is on the map through the hold, claim 15) draws at 1000
+                        let light = cell.map_or(NEUTRAL_LIGHT, |c| painter.ground_light(c));
+                        (h.name.as_bytes().to_vec(), light)
+                    });
             }
             true
         });
@@ -2928,7 +2941,8 @@ impl Live {
             harvesting: super::harvesting::of(w, id, self.walks.of(id).counter as i32),
             // spec: S-0102 claim 22, S-0105 claim 16 (the walk counter and the moving state of the shown tick)
             walk: self.walks.of(id),
-            shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
+            // spec: S-0105 claims 40 and 44 (an aircraft's anchor; a hunter-seeker vehicle type's is claim 40's P too)
+            shadow: (kind == Kind::Aircraft || kind == Kind::Vehicles).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
             attitude: attitude_with(w, o, &self.rocking),

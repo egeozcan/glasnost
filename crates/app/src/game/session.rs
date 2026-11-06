@@ -14,6 +14,7 @@ use glasnost_rules::layers::Layers;
 use std::collections::BTreeMap;
 
 use glasnost_ai::game::Game;
+use glasnost_convert::kinds::Kind;
 use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
 use glasnost_map::CellXY;
@@ -38,11 +39,13 @@ use glasnost_vfs::{FileRef, Vfs};
 
 use super::band;
 use super::cursor::{self, Offer};
+use super::name_tip;
 use super::paint::Painter;
 use super::play::{Button, GROUPS, Play, Reach, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
 use super::sidebar_art::{self, SidebarArt};
 use super::status_font;
+use super::strings;
 use crate::mapview::build::{self, GameMode, Inputs, Options};
 use crate::mapview::combat::CURSOR_PALETTE;
 use crate::mapview::cover;
@@ -132,9 +135,19 @@ pub struct Session {
     /// The button images the sidebar draws and lays out (S-0411 claim 19).
     buttons: hud::ButtonArt,
     pointer: Option<Point>,
-    /// The object under the pointer and the interface time it came under
-    /// it, for its name tag (our design, M8 A4 round 8 note 54).
-    hover_tip: Option<(ObjectId, i64)>,
+    /// The name tip's rest and the tip that shows (S-0111 claims 20 to 26).
+    name_tip: name_tip::NameTip,
+    /// The player's tooltip option (S-0111 claim 20), as the client's
+    /// settings give it.
+    pub tool_tips: bool,
+    /// The string table (S-0004 claim 17); none is read yet (Q-2686).
+    pub strings: Option<strings::StringTable>,
+    /// The view's centre at the last name-tip update, to tell a moving view
+    /// (S-0111 claim 20).
+    tip_centre: (i32, i32),
+    /// The name tip glyphs' painter rows, one per tip colour
+    /// ([`name_tip::register`]).
+    tip_rows: [Option<u32>; 2],
     /// Edge momentum and its retained direction (S-0101 F9).
     edge: EdgeScroll,
     /// Whether the last scroll cycle allowed edge scrolling (focus, no
@@ -511,7 +524,13 @@ impl Session {
             sidebar_art: None,
             buttons: hud::ButtonArt::default(),
             pointer: None,
-            hover_tip: None,
+            name_tip: name_tip::NameTip::default(),
+            // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
+            tool_tips: true,
+            // design: Q-2686 (no spec gives the string table's file: none is read, and every label shows our stand-in)
+            strings: None,
+            tip_centre: (0, 0),
+            tip_rows: [None; 2],
             edge: EdgeScroll::default(),
             edge_live: true,
             press: None,
@@ -1143,7 +1162,7 @@ impl Session {
 
     /// The pointer moved.
     pub fn pointer_moved(&mut self, p: Point) {
-        self.pointer = Some(p);
+        self.pointer_at(p);
         let mode = self.play.game.world.rules().mode;
         if let Some(d) = self.drag.as_mut() {
             d.motion(p, mode);
@@ -1153,12 +1172,32 @@ impl Session {
         }
     }
 
+    /// The pointer is at `p`: a change of place is a movement, which hides
+    /// a name tip and starts its wait again (S-0111 claim 20).
+    fn pointer_at(&mut self, p: Point) {
+        if self.pointer != Some(p) {
+            // spec: S-0111 claim 20 (every pointer movement, of any distance, hides a showing tip and starts the wait again)
+            self.name_tip.moved(self.clock_ms);
+        }
+        self.pointer = Some(p);
+    }
+
     /// The pointer left the window.
     pub fn pointer_left(&mut self) {
         self.pointer = None;
         self.press = None;
         self.drag = None;
         self.right = None;
+        // design: Q-2687 (a pointer that left the window rests on no battlefield view: the tip hides and the wait stops until it comes back and moves)
+        self.name_tip.button();
+    }
+
+    /// The middle button went down or up: it does nothing in the game but
+    /// hide the name tip and stop its wait (S-0111 claim 20).
+    pub fn middle_button(&mut self, p: Point) {
+        self.pointer_at(p);
+        // spec: S-0111 claim 20 (pressing or releasing the middle mouse button hides the tip and stops the wait)
+        self.name_tip.button();
     }
 
     /// A mouse-wheel event, anywhere over the game (S-0411 claim 18).
@@ -1177,7 +1216,9 @@ impl Session {
 
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
-        self.pointer = Some(p);
+        self.pointer_at(p);
+        // spec: S-0111 claim 20 (pressing the left or right mouse button hides the tip and stops the wait)
+        self.name_tip.button();
         self.press = Some((p, b));
         // The pointer takes over from the keyboard.
         self.hud_focus.shown = false;
@@ -1267,7 +1308,9 @@ impl Session {
 
     /// A button went up: a click or the end of a drag.
     pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) -> SessionEvent {
-        self.pointer = Some(p);
+        self.pointer_at(p);
+        // spec: S-0111 claim 20 (releasing the left or right mouse button hides the tip and stops the wait)
+        self.name_tip.button();
         let drag = self.drag.take();
         let right = self.right.take();
         let Some((start, pb)) = self.press.take() else {
@@ -2263,11 +2306,15 @@ impl Session {
         Some((offer, shrouded))
     }
 
-    /// Registers the game-font glyphs the status lines draw with the
-    /// painter ([`status_font::register`]).
+    /// Registers the game-font glyphs the status lines and the name tip
+    /// draw with the painter ([`status_font::register`],
+    /// [`name_tip::register`]).
     pub fn update_status_glyphs(&mut self, painter: &mut Painter) {
         if let Some(font) = self.play.status_font.as_ref() {
             status_font::register(painter, font, &self.play.messages, &mut self.status_row);
+            if let Some(s) = self.name_tip.shown.as_ref() {
+                name_tip::register(painter, font, s, &mut self.tip_rows);
+            }
         }
     }
 
@@ -2351,7 +2398,7 @@ impl Session {
             .pointer
             .filter(|&p| self.map_rect().contains(p))
             .and_then(|p| self.under(p).1);
-        self.hover_tip = next_hover_tip(hovered, self.hover_tip, self.clock_ms);
+        self.update_name_tip();
         let selection = self.play.selection.clone();
         let digits = self.play.group_digits();
         self.with_live(|live, inputs, scene| {
@@ -2364,43 +2411,233 @@ impl Session {
         });
     }
 
-    /// The name tag of the object resting under the pointer, once it has
-    /// rested there [`HOVER_TAG_MS`] of interface time.
-    ///
-    /// design: M8 A4 round 8 note 54. No spec gives hover tips (S-0105 Open
-    /// questions, Q-2673). Ours: a unit or building the pointer has rested
-    /// on for the wait shows its type's name, the name the sidebar's icons
-    /// show (display names wait on the string table, Q-2674). None while the
-    /// options menu is open, the keyboard aims, a box is dragged or the
-    /// right button is held, for a terrain object, and for a unit that
-    /// appears disguised to the local player's house (S-0516 claim 35), so
-    /// the tag never tells what the drawing must not.
-    pub fn hover_tag(&self) -> Option<String> {
-        let (id, since) = self.hover_tip?;
-        let dragging = self.drag.is_some_and(|d| d.active) || self.right.is_some();
-        if !hover_tag_due(since, self.clock_ms)
-            || self.paused
-            || self.aim_cell().is_some()
-            || dragging
-        {
+    /// One frame of the name tip (S-0111 claims 20 and 26): the option, the
+    /// view's movement, and the rest's one choice when the wait ends.
+    fn update_name_tip(&mut self) {
+        if !self.tool_tips {
+            self.name_tip.off();
+            return;
+        }
+        // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame
+        let moving = self.centre != self.tip_centre;
+        self.tip_centre = self.centre;
+        // spec: S-0111 claim 20 (Blocked: a hidden cursor or locked input): our engine never hides the cursor over the battlefield view and has no locked input (Q-2687)
+        // design: Q-2687 (the options menu covers the battlefield view: a wait that ends while it is open shows no tip)
+        let blocked = moving || self.paused;
+        let now = self.clock_ms;
+        let mut tip = std::mem::take(&mut self.name_tip);
+        tip.update(now, blocked, || self.choose_name_tip(now));
+        self.name_tip = tip;
+    }
+
+    /// The tip for the pointer at the end of its wait at real time `now`
+    /// (S-0111 claims 21 to 25): `None` when it rests off the battlefield
+    /// view or the text is empty.
+    fn choose_name_tip(&mut self, now: i64) -> Option<name_tip::Shown> {
+        let p = self.pointer?;
+        let m = self.map_rect();
+        // design: Q-2687 (the pointer rests on the battlefield view when it is inside the view and over no interface target drawn on it)
+        if !m.contains(p) || self.hud_at(p) != Some(HudHit::Map) {
             return None;
         }
+        let (cell, id) = self.under(p);
+        let text = self.name_tip_text(cell, id);
+        // spec: S-0111 claim 25 (the tip colour by the local player's side index, S-0005 claim 13a); design: with no side index, the other colour
+        let ink = self
+            .local_side(self.play.watching())
+            .map_or(name_tip::INK_OTHER, name_tip::ink);
+        // design: S-0213 Import mapping (without the game font no text is drawn: no tip shows)
+        let font = self.play.status_font.as_ref()?;
+        let pitch = i32::try_from(font.line_pitch()).unwrap_or(i32::MAX);
+        let width = |c: u16| font.width(c);
+        name_tip::tip(&text, (p.x, p.y), m, (&width, pitch), ink, now)
+    }
+
+    /// The name tip that shows, if any: its lines and its box, for checks.
+    pub fn name_tip_shown(&self) -> Option<&name_tip::Shown> {
+        self.name_tip.shown.as_ref()
+    }
+
+    /// The name tip's text for pointer cell `cell` and pointer object `id`
+    /// (S-0111 claims 21 to 23), in text units; empty for no tip.
+    pub fn name_tip_text(&self, cell: CellXY, id: Option<ObjectId>) -> Vec<u16> {
         let w = &self.play.game.world;
-        let o = w.obj(id)?;
-        if !o.on_map || o.kind == SimKind::Terrain {
-            return None;
-        }
-        // design: M8 A4 round 8 note 54 (no tag for an object at a point shrouded for the local player: S-0110 claim 8's point test)
-        if let Some(h) = self.play.local
-            && glasnost_sim::econ::shroud::point_shrouded(w, h, o.pos)
+        // design: watch mode (lead request 2026-11-02): the watcher has no house, so no cell is unexplored to it and no object is its own
+        let local = self.play.local;
+        if let Some(h) = local
+            && !glasnost_sim::econ::shroud::explored(w, h, cell)
         {
-            return None;
+            // spec: S-0111 claim 21 (the shroud label when the pointer cell is not explored by the local player's house, whatever the cell holds)
+            return self.fixed_label(SHROUD_LABEL);
         }
-        // spec: S-0516 claim 35 (appears disguised to the local player's house)
-        if glasnost_sim::cloak::disguise::appears_disguised(w, id, self.play.local) {
-            return None;
+        // spec: S-0111 claim 21 (nothing when there is no pointer object)
+        let Some(o) = id.and_then(|id| w.obj(id)) else {
+            return Vec::new();
+        };
+        let Some(kind) = live::import_kind(o.kind).filter(|_| o.kind != SimKind::Terrain) else {
+            // spec: S-0111 claim 21 (any other pointer object, such as a terrain object: the display name of the resource kind of the pointer cell's resource overlay, S-0401; nothing without one)
+            return glasnost_sim::econ::resource::resource_at(w, cell)
+                .and_then(|(t, _)| w.rules().econ.resource.tiberiums.get(t))
+                .map(|t| self.display_name(Kind::Tiberiums, &t.name))
+                .unwrap_or_default();
+        };
+        let own = local.is_some() && o.owner == local;
+        if !own {
+            // spec: S-0111 claim 21 (another house's object: nothing when fully cloaked and not sensed by the local player's house, S-0516 Terms, also when its owner is allied)
+            if glasnost_sim::cloak::fully_cloaked(w, o.id)
+                && !glasnost_sim::cloak::senses(w, local, o.id)
+            {
+                return Vec::new();
+            }
+            let name = live::type_name(w.rules(), o.kind, o.type_index);
+            let idx = build::find_type(&self.loaded.import, kind, &live::name_bytes(&name));
+            let flag = |k: &[u8]| {
+                idx.is_some_and(|i| build::rule_bool(&self.loaded.import, kind, i, k, false))
+            };
+            // spec: S-0111 claim 21 and Import mapping (nothing for a type with the invisible flag: Invisible, absent no; a building type whose InvisibleInGame is yes also gets it)
+            if flag(b"Invisible") || (o.kind == SimKind::Building && flag(b"InvisibleInGame")) {
+                return Vec::new();
+            }
         }
-        Some(live::type_name(w.rules(), o.kind, o.type_index))
+        self.name_by_kind(o, own)
+    }
+
+    /// The name of claim 22 of S-0111 for object `o`, `own` when the local
+    /// player owns it.
+    fn name_by_kind(&self, o: &glasnost_sim::world::Object, own: bool) -> Vec<u16> {
+        let w = &self.play.game.world;
+        let local = self.play.local;
+        let own_name = || {
+            let kind = live::import_kind(o.kind).expect("every unit kind has an import kind");
+            self.display_name(kind, &live::type_name(w.rules(), o.kind, o.type_index))
+        };
+        match o.kind {
+            // spec: S-0111 claim 22 (a building or an aircraft: its type's display name; a disguise does not change it)
+            SimKind::Building | SimKind::Aircraft | SimKind::Terrain => own_name(),
+            SimKind::Infantry => {
+                // spec: S-0111 claim 22 (the technician label only for a unit with the technician mark): our engine sets no mark yet, which releases set it being open (S-0111 Open questions)
+                // spec: S-0111 claim 22 (the disguise's display name when the unit is disguised and its owner does not ally the local player's house; not S-0516 claim 35's test)
+                let allies = own || w.allied(o.owner, local);
+                match o.cloak.disguise {
+                    Some(d) if !allies => self.disguise_name(d.what),
+                    _ => own_name(),
+                }
+            }
+            SimKind::Vehicle => {
+                // spec: S-0111 claim 22 (a vehicle that appears disguised to the local player's house, S-0516 claim 35, with a disguise: nothing for a disguise without a house, else the disguise's display name)
+                if let Some(d) = o.cloak.disguise
+                    && glasnost_sim::cloak::disguise::appears_disguised(w, o.id, local)
+                {
+                    return if d.house.is_none() {
+                        Vec::new()
+                    } else {
+                        self.disguise_name(d.what)
+                    };
+                }
+                let name = live::type_name(w.rules(), o.kind, o.type_index);
+                let import = &self.loaded.import;
+                let idx = build::find_type(import, Kind::Vehicles, &live::name_bytes(&name));
+                // spec: S-0111 Import mapping (HasTurretTooltips: the turret-tip flag, absent no) and claim 22 (any other turret-tip vehicle: claim 23)
+                match idx.filter(|&i| {
+                    build::rule_bool(import, Kind::Vehicles, i, b"HasTurretTooltips", false)
+                }) {
+                    Some(i) => self.turret_tip_text(o, i, own_name()),
+                    // spec: S-0111 claim 22 (any other vehicle: its type's display name)
+                    None => own_name(),
+                }
+            }
+        }
+    }
+
+    /// The text of a turret-tip vehicle `o` of import type `idx` whose own
+    /// type's display name is `name` (S-0111 claim 23).
+    fn turret_tip_text(
+        &self,
+        o: &glasnost_sim::world::Object,
+        idx: usize,
+        name: Vec<u16>,
+    ) -> Vec<u16> {
+        let w = &self.play.game.world;
+        let import = &self.loaded.import;
+        // spec: S-0111 claim 23 (P is the passenger at position 1 of the passenger order, S-0507 claim 3)
+        let p = o.transport.passengers.first().and_then(|&p| w.obj(p));
+        let modifier = match p.filter(|p| p.kind == SimKind::Infantry) {
+            // spec: S-0111 claim 23 (with no passenger, or a P that is not infantry, label A)
+            None => self.fixed_label(TIP_LABEL_A),
+            Some(p) => {
+                let pname = live::type_name(w.rules(), p.kind, p.type_index);
+                let pidx = build::find_type(import, Kind::Infantry, &live::name_bytes(&pname));
+                // spec: S-0111 Import mapping (UseOwnName: the own-name flag, absent no)
+                let u = pidx.is_some_and(|i| {
+                    build::rule_bool(import, Kind::Infantry, i, b"UseOwnName", false)
+                });
+                let p_name = || self.display_name(Kind::Infantry, &pname);
+                // spec: S-0111 claim 23 (the selected turret index t, S-0105 claim 43, and for a rotating-barrel type by the gunner rules)
+                let shown = (w.tick - 1).max(0);
+                let t = build::tip_turret_index(w, o.id, shown, import.turret_tables.get(&idx));
+                // spec: S-0111 claim 23 (the modifier table: 0 label A; 1 P's name if u, else label B; 2 label C; 3 P's name; any other value, none included, P's name if u, else label A)
+                match t {
+                    Some(0) => self.fixed_label(TIP_LABEL_A),
+                    Some(1) if u => p_name(),
+                    Some(1) => self.fixed_label(TIP_LABEL_B),
+                    Some(2) => self.fixed_label(TIP_LABEL_C),
+                    Some(3) => p_name(),
+                    _ if u => p_name(),
+                    _ => self.fixed_label(TIP_LABEL_A),
+                }
+            }
+        };
+        // spec: S-0111 claim 23 (the modifier, one space, and the vehicle's own type's display name, never its disguise's; an empty modifier or name still leaves the space)
+        let mut text = modifier;
+        text.push(u16::from(b' '));
+        text.extend(name);
+        text
+    }
+
+    /// The display name of a disguise's type (S-0111 claim 22: that of the
+    /// type it copies, which can be a terrain object's or an overlay's).
+    fn disguise_name(&self, what: Option<glasnost_sim::cloak::disguise::DisguiseAs>) -> Vec<u16> {
+        use glasnost_sim::cloak::disguise::DisguiseAs;
+        let r = self.play.game.world.rules();
+        let (kind, name) = match what {
+            Some(DisguiseAs::Infantry(i)) => {
+                (Kind::Infantry, live::type_name(r, SimKind::Infantry, i))
+            }
+            Some(DisguiseAs::Vehicle(i)) => {
+                (Kind::Vehicles, live::type_name(r, SimKind::Vehicle, i))
+            }
+            Some(DisguiseAs::Terrain(i)) => (
+                Kind::TerrainObjects,
+                live::type_name(r, SimKind::Terrain, i),
+            ),
+            Some(DisguiseAs::Overlay(i)) => match r.overlays.get(usize::from(i)) {
+                Some(ov) => (Kind::Overlays, ov.name.clone()),
+                None => return Vec::new(),
+            },
+            // spec: S-0004 claim 17 (no type, so no label: empty text)
+            None => return Vec::new(),
+        };
+        self.display_name(kind, &name)
+    }
+
+    /// The display name of the type of `kind` named `name` (S-0004 claim
+    /// 17): the text its label in force resolves to; without a string
+    /// table, the type's name stands in (Q-2686).
+    fn display_name(&self, kind: Kind, name: &str) -> Vec<u16> {
+        let import = &self.loaded.import;
+        let Some(i) = build::find_type(import, kind, &live::name_bytes(name)) else {
+            // spec: S-0004 claim 17 (a type that never had a label has an empty display name)
+            return Vec::new();
+        };
+        // spec: S-0004 claim 17 and S-0111 Import mapping (UIName: the display-name label, as layered)
+        let label = strings::label(build::rule(import, kind, i, b"UIName"));
+        strings::resolve(self.strings.as_ref(), label, name)
+    }
+
+    /// The text of a fixed string-table entry `label` (S-0004 claim 17);
+    /// without a string table, the label stands in (Q-2686).
+    fn fixed_label(&self, label: &str) -> Vec<u16> {
+        strings::resolve(self.strings.as_ref(), Some(label.as_bytes()), label)
     }
 
     /// The interface over the battlefield image: the image, the
@@ -2751,10 +2988,6 @@ impl Session {
             hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover)
         };
         ui.extend(hud_list);
-        // design: M8 A4 round 8 note 54 (the name tag beside the pointer, over the battlefield and kept inside it)
-        if let (Some(name), Some(p)) = (self.hover_tag(), pointer) {
-            hud::name_tag(&mut ui, self.ui.to_ui(p), &name, lm);
-        }
         self.targets = targets;
         if self.paused {
             let speed = self.speed_offered().then_some(self.menu_speed);
@@ -2768,6 +3001,14 @@ impl Session {
         }
         ui.extend(overlay);
         d.scaled(self.ui, ui);
+        // spec: S-0111 claim 25 (the name tip on top of everything else on the battlefield view, never over the sidebar: kept inside the view); design: Q-2687 (not drawn while the options menu covers the view)
+        if let (Some(s), Some(font), false) = (
+            self.name_tip.shown.as_ref(),
+            self.play.status_font.as_ref(),
+            self.paused,
+        ) {
+            name_tip::draw(&mut d, font, s, m);
+        }
         if let (Some((frame, (hx, hy))), Some(p)) = (self.cursor_shown, pointer) {
             // spec: S-0214 claim 22 (the hot spot coincides with the pointer's input pixel)
             let all = Rect::new(0, 0, size.0, size.1);
@@ -2846,33 +3087,15 @@ const AIM_INK: [u8; 4] = [96, 208, 255, 90];
 /// The type-select tap limit: the longest hold that is a tap, whole
 /// milliseconds.
 pub const TYPE_SELECT_TAP_MS: i64 = 500; // spec: S-0214 Constants (type-select tap limit: 500 milliseconds; a release at most 500 after the press is a tap)
-/// How long the pointer rests on an object, in milliseconds of interface
-/// time, before its name tag shows.
-pub const HOVER_TAG_MS: i64 = 700; // design: M8 A4 round 8 note 54 (no spec gives hover tips, Q-2673)
+/// The name tip's shroud label: a fixed string-table entry identifier.
+const SHROUD_LABEL: &str = "TXT_SHADOW"; // spec: S-0111 Import mapping (string table TXT_SHADOW: the shroud label of claim 21, a fixed entry identifier)
+/// Label A of a turret-tip vehicle's modifier.
+const TIP_LABEL_A: &str = "Tip:Rocket"; // spec: S-0111 Import mapping (string table Tip:Rocket: label A of claim 23)
+/// Label B of a turret-tip vehicle's modifier.
+const TIP_LABEL_B: &str = "Tip:MachineGun"; // spec: S-0111 Import mapping (string table Tip:MachineGun: label B of claim 23)
+/// Label C of a turret-tip vehicle's modifier.
+const TIP_LABEL_C: &str = "Tip:Repair"; // spec: S-0111 Import mapping (string table Tip:Repair: label C of claim 23)
 
-/// The object under the pointer and the interface time it came there,
-/// after a frame whose hovered object is `hovered`: the time is kept while
-/// the same object stays under the pointer and starts again at `now` when
-/// another comes there.
-pub fn next_hover_tip(
-    hovered: Option<ObjectId>,
-    was: Option<(ObjectId, i64)>,
-    now: i64,
-) -> Option<(ObjectId, i64)> {
-    // design: M8 A4 round 8 note 54 (the name tag's wait starts when an object comes under the pointer, on the interface clock)
-    match (hovered, was) {
-        (Some(id), Some((w, since))) if w == id => Some((id, since)),
-        (Some(id), _) => Some((id, now)),
-        (None, _) => None,
-    }
-}
-
-/// Whether a pointer resting on an object since `since` has waited long
-/// enough for its name tag at `now`.
-pub fn hover_tag_due(since: i64, now: i64) -> bool {
-    // design: M8 A4 round 8 note 54 (the tag shows once the wait has passed; Q-2673)
-    now - since >= HOVER_TAG_MS
-}
 /// The group repeat interval: a *select group* press less than this after
 /// the last one that selected the group can be a repeat, milliseconds.
 pub const GROUP_REPEAT_MS: i64 = 800; // spec: S-0214 Constants (group repeat interval: 800 milliseconds of real time, less than counts)
@@ -3426,28 +3649,6 @@ mod cursor_palette_tests {
             pollster::block_on(CursorPaletteKeep::EachGame.for_game(&later)),
             Some(vec![7u8; 768])
         );
-    }
-}
-
-#[cfg(test)]
-mod hover_tag_tests {
-    use super::*;
-
-    /// design: M8 A4 round 8 note 54 (Q-2673): the name tag waits
-    /// [`HOVER_TAG_MS`] of interface time on one object; another object
-    /// under the pointer starts the wait again, and none ends it.
-    #[test]
-    fn the_name_tag_waits_on_one_object() {
-        let (a, b) = (ObjectId(1), ObjectId(2));
-        let t = next_hover_tip(Some(a), None, 1000);
-        assert_eq!(t, Some((a, 1000)));
-        let t = next_hover_tip(Some(a), t, 1600);
-        assert_eq!(t, Some((a, 1000)), "the same object keeps its time");
-        assert!(!hover_tag_due(1000, 1000 + HOVER_TAG_MS - 1));
-        assert!(hover_tag_due(1000, 1000 + HOVER_TAG_MS));
-        let t = next_hover_tip(Some(b), t, 1800);
-        assert_eq!(t, Some((b, 1800)), "another object starts again");
-        assert_eq!(next_hover_tip(None, t, 1900), None);
     }
 }
 
