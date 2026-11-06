@@ -1903,7 +1903,9 @@ fn attacking(f: i32, stage: i32) -> (World, ObjectId, ObjectId) {
     let o = w.obj_mut(a).unwrap();
     o.combat.last_shot_target = o.target;
     o.combat.rearm_until = t + 50;
+    let held = o.target;
     let st = o.infantry.as_mut().unwrap();
+    st.watch = held;
     st.attack = true;
     st.seq = Some(Seq::FireStanding);
     st.seq_delay = 3;
@@ -1941,9 +1943,41 @@ fn s0107_claim_11_attack_ends_without_a_target() {
     assert!(in_attack(&w, a));
 }
 
-// spec: S-0107 claim 11 (the attack state ends when its target changes)
+// spec: S-0107 r46 claim 11, Changes of target (Q-2616: every change of the target ends the attack state at the moment it is made, whatever rule makes it and in whichever actor's turn: a retaliation or other override's new target, the drop of the target at a berserk hit, the gaining of a target by a unit that had none; a target that does not differ is no change)
 #[test]
 fn s0107_claim_11_attack_ends_on_a_new_target() {
+    use glasnost_sim::combat::acquire::override_attack;
+    let buggy =
+        |w: &mut World| testkit::spawn(w, Kind::Vehicle, "BUGGY", 1, testkit::mid(N, 2, 2), WEST);
+    // A retaliation's override in another actor's turn: ended at once.
+    let (mut w, a, _) = attacking(2, 0);
+    let other = buggy(&mut w);
+    override_attack(&mut w, a, other);
+    assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(other)));
+    assert!(!in_attack(&w, a), "a retaliation's new target");
+    // The drop of the target at a berserk hit.
+    let (mut w, a, _) = attacking(2, 0);
+    assert!(glasnost_sim::psychic::enter(&mut w, a, 100));
+    assert_eq!(w.obj(a).unwrap().target, None);
+    assert!(!in_attack(&w, a), "a berserk hit's drop");
+    // The gaining of a target by a unit still in the attack state with none.
+    let (mut w, a, b) = attacking(2, 0);
+    {
+        let o = w.obj_mut(a).unwrap();
+        o.target = None;
+        o.infantry.as_mut().unwrap().watch = None;
+    }
+    override_attack(&mut w, a, b);
+    assert!(!in_attack(&w, a), "gaining a target");
+    // Control: an override on the target it holds is no change.
+    let (mut w, a, b) = attacking(2, 0);
+    override_attack(&mut w, a, b);
+    assert!(in_attack(&w, a), "the same target");
+}
+
+// spec: S-0107 r46 claim 11, Changes of target (Q-2616: a change of target ends the attack state; our engine's test at the start of the unit's turn catches a rule that writes a target without testing, and the firing turn has no lazy ending of its own)
+#[test]
+fn s0107_claim_11_a_change_written_elsewhere_ends_before_the_turn() {
     let (mut w, a, _) = attacking(2, 0);
     let other = testkit::spawn(
         &mut w,
@@ -1954,8 +1988,17 @@ fn s0107_claim_11_attack_ends_on_a_new_target() {
         WEST,
     );
     w.obj_mut(a).unwrap().target = Some(Target::Object(other));
-    behave::infantry_step(&mut w, a);
-    assert!(!in_attack(&w, a));
+    // The firing turn with no test before it keeps the state (the lazy
+    // ending of the Q-2616 interim is gone) ...
+    let (mut w2, a2) = (w.clone(), a);
+    behave::infantry_step(&mut w2, a2);
+    assert!(in_attack(&w2, a2), "no lazy ending at the firing turn");
+    // ... and the unit's own turn ends it, with the new target as the
+    // baseline of the next test (the weapon is not ready, so no new entry).
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.infantry.as_ref().unwrap().watch, o.target);
+    assert!(!in_attack(&w, a), "ended in the unit's turn");
 }
 
 // spec: S-0107 claim 11 (the firing kind: fire-prone for a prone unit, fire-standing otherwise; the attack state is entered even when the request is turned down)

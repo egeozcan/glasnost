@@ -52,7 +52,7 @@ fn world(on: bool) -> World {
     w
 }
 
-fn leftover_hits(w: &World, id: ObjectId) -> Vec<(Option<u32>, i32)> {
+fn leftover_hits(w: &World, id: ObjectId) -> Vec<(Option<u32>, (i32, i32))> {
     w.effects
         .iter()
         .filter_map(|e| match e {
@@ -136,7 +136,7 @@ fn o18_a_the_last_vehicle_destroyed_in_the_turn_pass() {
         if on {
             assert_eq!(
                 hits,
-                vec![(c4(&w), 0)],
+                vec![(c4(&w), (0, 0))],
                 "one sweep hit, the demolition warhead, no health"
             );
         } else {
@@ -164,9 +164,9 @@ fn o18_b_no_hit_on_a_vehicle_destroyed_in_the_tick_before() {
     assert_eq!(w.crates.places.len(), 1);
 }
 
-// spec: S-0203 claim 13 (c) (O18 part e): the sweep's hit on a leftover vehicle raises no tag and registers no destruction (no kill, no loss); our engine offers it to no leftover with health left and to no leftover of another kind
+// spec: S-0203 claim 13 (c) (O18 part e): the sweep's hit on a leftover vehicle with no health raises no tag and registers no destruction (no kill, no loss); our engine offers no hit to a leftover of another kind. r53 claim 13 (c) and (g): a leftover vehicle removed with health left, whatever removed it, takes a killing hit that registers its destruction once more with no attacker (a loss, no kill)
 #[test]
-fn o18_e_the_sweep_hit_raises_no_tag_and_counts_nothing() {
+fn o18_e_the_sweep_hit_raises_no_tag_and_only_a_killing_hit_counts() {
     let (mut w, _, victim) = duel(true);
     let kept = spawn(&mut w, Kind::Vehicle, "UNARMED", 1, at(4, 4));
     let man = spawn(&mut w, Kind::Infantry, "WALKER", 1, at(-4, 4));
@@ -174,6 +174,8 @@ fn o18_e_the_sweep_hit_raises_no_tag_and_counts_nothing() {
     damage::apply(&mut w, victim, lethal());
     damage::apply(&mut w, man, lethal());
     // A removal with health left (not a death).
+    let kept_health = w.obj(kept).unwrap().health;
+    assert!(kept_health > 0);
     glasnost_sim::objects::remove(&mut w, kept);
     assert!(w.triggers.variables[1], "the destroying hit raised the tag");
     w.triggers.variables[1] = false;
@@ -183,14 +185,27 @@ fn o18_e_the_sweep_hit_raises_no_tag_and_counts_nothing() {
     let crates = w.crates.places.len();
     // The sweep within the same tick as the destructions.
     victory::defeat(&mut w, B);
-    assert_eq!(leftover_hits(&w, victim), vec![(c4(&w), 0)]);
-    assert!(leftover_hits(&w, kept).is_empty(), "health left: no hit");
+    assert_eq!(leftover_hits(&w, victim), vec![(c4(&w), (0, 0))]);
+    assert_eq!(
+        leftover_hits(&w, kept),
+        vec![(c4(&w), (kept_health, 0))],
+        "health left: a killing hit"
+    );
     assert!(leftover_hits(&w, man).is_empty(), "another kind: no hit");
     assert_eq!(w.triggers.fired, fired, "no tag raise");
     assert!(!w.triggers.variables[1]);
-    assert_eq!(stats::of(&w, B).losses, losses, "no loss");
+    assert_eq!(
+        stats::of(&w, B).losses,
+        losses + 1,
+        "no loss for the leftover with no health, one for the killing hit"
+    );
     assert_eq!(stats::of(&w, A).kills, kills, "no kill");
-    assert_eq!(w.crates.places.len(), crates + 1, "the crate once more");
+    assert_eq!(
+        w.crates.places.len(),
+        crates + 2,
+        "the crate once more, and the removed carrier's crate at its killing hit"
+    );
+    assert_eq!(leftover::object(&w, kept).unwrap().health, 0);
     assert_eq!(
         leftover::object(&w, victim).unwrap().health,
         0,

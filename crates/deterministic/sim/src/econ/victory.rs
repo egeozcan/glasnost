@@ -645,14 +645,14 @@ fn destroy_all(w: &mut World, h: HouseId) {
             .map(|(_, o)| o)
             .find(|o| swept_kind(o.kind))
             .map(|o| (o.id, o.owner, o.health));
-        // spec: S-0203 claim 13 (a) and (c) (the sweep finds the tick's leftovers of the four kinds at their places in creation order, those of objects removed earlier in the sweep itself included)
+        // spec: S-0203 claim 13 (a), (c) and (f) (the sweep finds the tick's leftovers of the four kinds at their places in creation order, whatever removed them: those of objects removed earlier in the sweep itself, by its death effects, or by an earlier sweep of the same house update included)
         let left = crate::leftover::next(w, from);
         if let Some(l) = left
             && next.is_none_or(|(id, _, _)| l < id)
         {
             place = Some(l);
             if skip > 0 {
-                // spec: S-0414 claim 15 (a skipped place, whoever owns the object) and S-0203 claim 13 (c) (a leftover has its place in creation order); Q-2693 (interim: every leftover of the four kinds holds its place, in both positions of quirks.defeat_sweep_leftovers)
+                // spec: S-0414 claim 15 (a skipped place, whoever owns the object) and S-0203 claim 13 (h) (every leftover of the four kinds holds its place in creation order until it ends, whichever house owns it and whether or not it is offered the hit, in both positions of quirks.defeat_sweep_leftovers; a vessel kept to the end of the game included)
                 skip -= 1;
                 continue;
             }

@@ -974,6 +974,8 @@ pub(crate) fn guard_reset(w: &mut World, id: ObjectId) {
         ob.guard_spot = None;
         ob.beh.force(crate::rules::Behaviour::Guard, t, stale);
     }
+    // spec: S-0107 r46 claim 11, Changes of target (the loss of the target at a guard reset, mind control's included, S-0601 claim 6, ends an infantry unit's attack state and makes its request at once, before the destination's clear)
+    crate::infantry::watch_test(w, id);
     super::assign_destination(w, id, None);
 }
 

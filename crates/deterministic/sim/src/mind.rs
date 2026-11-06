@@ -389,11 +389,16 @@ fn release_orders(w: &mut World, id: ObjectId) {
     }
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    // Q-2717 (interim: the readiness of the guard request is read before the release clears the target, as before S-0107 r46, so an infantry unit's attack state, which that clear now ends, still holds it back)
     let ready = crate::process::ready(w, id);
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0601 claim 9 (the ownership change clears the target)
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    // spec: S-0107 r46 claim 11, Changes of target (the loss of the target at a release, S-0601 claim 9, ends an infantry unit's attack state and makes its request at once)
+    crate::infantry::watch_test(w, id);
+    if let Some(ob) = w.obj_mut(id) {
         // spec: S-0601 claim 9 and S-0215 claim 7 (guard requested with a readiness-dependent immediate start)
         ob.beh
             .queue_and_start(Some(Behaviour::Guard), ready, t, stale);

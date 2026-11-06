@@ -840,6 +840,8 @@ pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
             crate::spawn::clear_own_target(ob);
         }
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        // spec: S-0107 r46 claim 11, Changes of target (the loss of a target that teleports, or the earlier target put back when the override ends, S-0215 claim 10, ends an infantry holder's attack state and makes its request at once)
+        crate::infantry::watch_test(w, x);
         if let Some(before) = restored {
             // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
             crate::infantry::destination_assigned(w, x, before);

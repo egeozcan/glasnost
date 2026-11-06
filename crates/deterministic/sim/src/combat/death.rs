@@ -240,8 +240,6 @@ pub fn leave_play(w: &mut World, id: ObjectId) {
     // spec: S-0312 claims 12 and 15 and S-0507 claim 16 (remaining passengers die at removal, without attacker credit)
     crate::transport::remove_passengers(w, id);
     crate::objects::remove(w, id);
-    // spec: S-0203 claim 13 (c) (the leftover of a death: the sweep's hit can reach it)
-    crate::leftover::died(w, id);
 }
 
 /// The death of a passenger inside a transport (S-0312 claims 5, 12 and
@@ -455,10 +453,11 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
 }
 
 /// What the death effects that a leftover vehicle repeats at the defeat
-/// sweep's hit read from it (S-0203 claim 13 (c); the S-0312 entry of its
-/// Changes for other specs): its debris, the death weapon when it is
-/// exploding, the animations of claim 9 at its last position and the crate
-/// it carries.
+/// sweep's hit read from it (S-0203 claim 13 (c) and (g); the S-0312 entry
+/// of its Changes for other specs): its debris, the death weapon when it
+/// is exploding, the animations of claim 9 at its last position, the crate
+/// it carries, and whether the hit sets it sinking (claim 10) or would
+/// start a crash (claim 15).
 #[derive(Clone, Debug)]
 pub(crate) struct Repeat {
     debris: Option<DebrisPlan>,
@@ -467,22 +466,40 @@ pub(crate) struct Repeat {
     owner: Option<crate::world::HouseId>,
     animations: AnimationPlan,
     crate_drop: Option<(glasnost_map::CellXY, bool)>,
-    /// It meets claim 10's sinking conditions or claim 15's crash
-    /// conditions at the hit, which the S-0312 entry leaves open.
-    pub unsettled: bool,
+    /// It meets claim 10's sinking conditions at the hit.
+    pub sinks: bool,
+    /// Its type can crash.
+    pub crashable: bool,
+    /// It is above the terrain at the hit.
+    above: bool,
 }
 
-/// The repeated death effects of vehicle `id` (S-0203 claim 13 (c)), read
-/// from the world. Reads only.
-pub(crate) fn repeat_plan(w: &World, id: ObjectId) -> Option<Repeat> {
+impl Repeat {
+    /// The hit sets it sinking again and its type cannot crash, so it is
+    /// never removed (S-0203 claim 13 (g), *Sinking*).
+    pub fn kept(&self) -> bool {
+        self.sinks && !self.crashable
+    }
+
+    /// It would start a crash after its other death effects (S-0203 claim
+    /// 13 (g), *Crashing*; S-0312 claim 15): a type that can crash, above
+    /// the terrain, not sinking.
+    fn crash_start(&self) -> bool {
+        !self.sinks && self.crashable && self.above
+    }
+}
+
+/// The repeated death effects of vehicle `id` (S-0203 claim 13 (c) and
+/// (g)), read from the world; `health_left` tells a leftover with health
+/// left from one with none. Reads only.
+pub(crate) fn repeat_plan(w: &World, id: ObjectId, health_left: bool) -> Option<Repeat> {
     let o = w.obj(id)?;
     let crashable = w
         .rules()
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.vehicle.crashable);
-    // spec: S-0203 claim 13 (c), S-0312 entry of Changes for other specs (what happens to a leftover that meets claim 10's sinking conditions or claim 15's crash conditions at this hit is not established); S-0312 claims 10 and 15 (a naval type on water; a type that can crash, above the terrain)
-    let unsettled =
-        crate::naval::sinks_at_kill(w, id) || (crashable && w.height_above_surface(id) > 0);
+    // spec: S-0203 claim 13 (g), Sinking (the vehicle's state where it left play decides, as at any killing hit; one that left play with no health failed claim 10's conditions at its destroying hit and the hit of no amount starts no sinking; one with health left that meets them takes claim 10's branch)
+    let sinks = health_left && crate::naval::sinks_at_kill(w, id);
     Some(Repeat {
         debris: debris_plan(w, id),
         // spec: S-0312 claim 6 (the death weapon of an exploding object only)
@@ -491,18 +508,22 @@ pub(crate) fn repeat_plan(w: &World, id: ObjectId) -> Option<Repeat> {
         owner: o.owner,
         animations: animation_plan(w, id, o),
         crate_drop: crate::crates::death_crate_plan(w, id),
-        unsettled,
+        sinks,
+        crashable,
+        // spec: S-0203 claim 13 (g), Crashing (S-0312 claim 15: a type that can crash starts a crash above the terrain)
+        above: w.height_above_surface(id) > 0,
     })
 }
 
-/// The death effects a leftover vehicle repeats (S-0203 claim 13 (c); the
-/// S-0312 entry of its Changes for other specs), in claim 1's order and
-/// with their draws, as at a further killing hit of claim 32, at the
-/// sweep's place in the tick. No destruction is registered: no credit, no
-/// destruction raise. The effects whose subject is gone do nothing again:
-/// its passengers were dealt with at its first death and its bomb went off
-/// then. `source` is the leftover itself, which nothing in the world can
-/// find any more (claim 13 (e)), as a removed firer.
+/// The death effects a leftover vehicle repeats (S-0203 claim 13 (c) and
+/// (g); the S-0312 entry of its Changes for other specs), in claim 1's
+/// order and with their draws, as at a further killing hit of claim 32, at
+/// the sweep's place in the tick. No destruction raise comes (Q-2716); the
+/// caller registers the destruction of a leftover with health left. The
+/// effects whose subject is gone do nothing again: its passengers were
+/// dealt with when it left play (`leave_play`, S-0312 claim 12) and its
+/// bomb went off then. `source` is the leftover itself, which nothing in
+/// the world can find any more (claim 13 (e)), as a removed firer.
 pub(crate) fn repeat(w: &mut World, source: ObjectId, p: &Repeat) {
     // spec: S-0312 table, step 1 and claim 4 (debris, with its draws)
     if let Some(d) = &p.debris {
@@ -512,10 +533,26 @@ pub(crate) fn repeat(w: &mut World, source: ObjectId, p: &Repeat) {
     if let Some((wp, dmg)) = p.weapon {
         crate::combat::projectile::detonate_weapon(w, wp, dmg, p.pos, Some(source), p.owner, true);
     }
-    // spec: S-0312 claim 9 (the explosion and destruction animations at its last position, with their list picks)
-    show_animations(w, &p.animations);
+    if !p.sinks {
+        // spec: S-0312 claim 9 (the explosion and destruction animations at its last position, with their list picks); S-0203 claim 13 (g), Sinking (one that sinks takes claim 10's branch: neither animation nor pick). S-0312 claim 11's wake and splash for a bomb-marked vehicle low over water is not built in our engine (seam)
+        show_animations(w, &p.animations);
+    }
     // spec: S-0312 claim 13 (the crew rule with the hit's no-escape marker: no crew and no draw, `crew`'s first test)
-    // spec: S-0312 claim 14 (a crate it carries)
+    if p.crash_start() {
+        // spec: S-0203 claim 13 (g), Crashing (after its other death effects it loses any passengers still held, none in our engine since `leave_play` took them, and takes the three tumbling draws of S-0312 claim 16; taking no turn, it does not fall and ends with its tick)
+        let mode = w.rules().mode;
+        let half = w.rules().quirks.ranged_draw_half_span;
+        // spec: S-0312 claim 16 (one unit-interval value, one ranged draw over 0 to 1, one more unit-interval value)
+        let _ = w.rng.unit(mode);
+        let _ = w.rng.ranged(0, 1, half);
+        let _ = w.rng.unit(mode);
+        return;
+    }
+    if p.kept() {
+        // spec: S-0203 claim 13 (g), Sinking and S-0312 claim 10 (a type that cannot crash is set sinking and stays; no removal, so no crate, claim 14)
+        return;
+    }
+    // spec: S-0312 claim 14 (a crate it carries, at its removal: once more for a leftover, and for a crashable one set sinking that fails its crash start and is removed again, S-0203 claim 13 (g))
     if let Some((at, money)) = p.crate_drop {
         crate::crates::place_death(w, at, money);
     }

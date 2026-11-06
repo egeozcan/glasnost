@@ -4,15 +4,18 @@
 //!
 //! Our engine's form (claim 13 (e)): every infantry unit, vehicle, aircraft
 //! and building that `objects::remove` takes out of the game is kept here,
-//! as it was when it left, until the start of the next tick. Nothing in the
-//! simulation reads this store but the sweep (`econ::victory`), which finds
-//! its leftovers at their places in creation order, and the sweep offers its
-//! hit only to vehicles that left play at their own death with no health
-//! (claim 13 (c)). The arena's recorder lists them, off the map, after the
-//! tick has run.
+//! as it was when it left, until the start of the next tick, except a
+//! vehicle that a sweep's hit set sinking again and whose type cannot
+//! crash, which is kept to the end of the game (claim 13 (g)). Nothing in
+//! the simulation reads this store but the sweep (`econ::victory`), which
+//! finds every leftover at its place in creation order (claim 13 (h)) and
+//! offers its hit to the house's leftover vehicles, with or without health
+//! left (claim 13 (c) and (g)). The arena's recorder lists them, off the
+//! map, after the tick has run.
 
 use serde::{Deserialize, Serialize};
 
+use crate::combat::damage::Hit;
 use crate::combat::effects::Effect;
 use crate::rules::Kind;
 use crate::world::{HouseId, Object, ObjectId, World};
@@ -22,10 +25,9 @@ use crate::world::{HouseId, Object, ObjectId, World};
 pub struct Leftover {
     /// The object as it left play, off the map.
     pub object: Object,
-    /// It left play at its own death (S-0203 claim 6, `death::leave_play`),
-    /// not as a passenger dying with its carrier, a crushed or erased
-    /// object, or by any other removal.
-    pub death: bool,
+    /// A sweep's hit set it sinking again and its type cannot crash, so it
+    /// is kept to the end of the game (S-0203 claim 13 (a) and (g)).
+    pub kept: bool,
 }
 
 /// Whether an object is of the four kinds a leftover is kept for (S-0203
@@ -49,23 +51,25 @@ pub fn keep(w: &mut World, mut o: Object) {
         o.id,
         Leftover {
             object: o,
-            death: false,
+            kept: false,
         },
     );
 }
 
-/// Marks a leftover as one that left play at its own death (S-0203 claim 6
-/// (a), S-0312 claim 15).
-pub fn died(w: &mut World, id: ObjectId) {
+/// Gives leftover `id` back the health it had before its death as a
+/// passenger killed with its transport (S-0203 claim 13 (b): such a
+/// passenger keeps its health, S-0312 claims 5 and 12).
+pub fn keep_health(w: &mut World, id: ObjectId, health: i32) {
     if let Some(l) = w.leftovers.get_mut(&id) {
-        l.death = true;
+        l.object.health = health;
     }
 }
 
 /// The end of the leftovers of the tick before (S-0203 claim 13 (a)): at the
-/// start of a tick, before any of its parts.
+/// start of a tick, before any of its parts. A leftover kept to the end of
+/// the game stays (claim 13 (g)).
 pub fn clear(w: &mut World) {
-    w.leftovers.clear();
+    w.leftovers.retain(|_, l| l.kept);
 }
 
 /// The first leftover at or after `from` in creation order (S-0414 claim 15:
@@ -81,13 +85,16 @@ pub fn object(w: &World, id: ObjectId) -> Option<&Object> {
 }
 
 /// The sweep's hit on leftover `id` for defeated or surrendering house `h`
-/// (S-0203 claim 13 (c)), at its place in creation order. Under
-/// `quirks.defeat_sweep_leftovers` it reaches a vehicle of the house that
-/// left play at its own death with no health. The hit has no amount, the
-/// demolition warhead, ignores defences, has the no-escape marker and
-/// neither attacker nor attacking house. It changes no health, registers no
-/// destruction (no kill, no loss) and raises no tag; the vehicle's death
-/// effects come once more.
+/// (S-0203 claim 13 (c) and (g)), at its place in creation order. Under
+/// `quirks.defeat_sweep_leftovers` it reaches every leftover vehicle of the
+/// house, whatever removed it, with or without health left. The hit's
+/// amount is the leftover's health, with the demolition warhead, ignoring
+/// defences, with the no-escape marker and neither attacker nor attacking
+/// house. On a leftover with no health it changes no health and registers
+/// no destruction; on one with health left it is a killing hit whose
+/// destruction is registered once more with no attacker. Either way the
+/// vehicle's death effects come once more, as its state where it left play
+/// allows.
 pub fn sweep_hit(w: &mut World, id: ObjectId, h: HouseId) {
     // spec: S-0203 claim 13 (c) and Edge cases (quirks.defeat_sweep_leftovers off: the sweep offers no hit to any leftover)
     if !w.rules().quirks.defeat_sweep_leftovers {
@@ -96,33 +103,64 @@ pub fn sweep_hit(w: &mut World, id: ObjectId, h: HouseId) {
     let Some(l) = w.leftovers.get(&id) else {
         return;
     };
-    let o = &l.object;
-    // spec: S-0203 claim 13 (c) (our engine offers the hit only to leftover vehicles with no health; one with health left, such as a passenger killed with its transport, and leftovers of other kinds get none) and (b) (the health of none, if damage destroyed it and nothing restored health before its removal)
-    if !(l.death && o.kind == Kind::Vehicle && o.health <= 0) {
+    let o = l.object.clone();
+    // spec: S-0203 claim 13 (c) (our engine offers the hit to every leftover vehicle of the house, with or without health left, and to no leftover of another kind until its effects are traced) and (f) (whatever removed it, a sweep included)
+    if o.kind != Kind::Vehicle {
         return;
     }
     // spec: S-0203 claim 13 (c) and S-0414 claim 5 (the ownership conditions: S-0601 claim 12 took a removed victim out of its controller's list, so a leftover is the house's by its kept owner)
     if o.owner != Some(h) {
         return;
     }
-    let o = o.clone();
     let warhead = w.rules().combat.general.c4_warhead;
-    let plan = read_restored(w, o.clone(), |w| crate::combat::death::repeat_plan(w, id));
-    let Some(plan) = plan else { return };
-    if plan.unsettled {
-        // Q-2692 (interim: a leftover that meets S-0312 claim 10's sinking or claim 15's crash conditions at the hit is offered no hit, as claim 13 (c) does for the other cases it leaves open)
-        return;
-    }
-    // spec: S-0203 claim 13 (c) (a hit of no amount with the demolition warhead and no attacker; it changes no health)
+    // spec: S-0203 claim 13 (c) and (g) (the hit's amount is the leftover's current health: no amount on one with none, a killing hit on one with health left)
+    let before = o.health.max(0);
+    let health_left = before > 0;
+    // spec: S-0203 claim 13 (g), Sinking (the vehicle's state where it left play decides, as at any killing hit; one with no health starts no sinking)
+    let sinks = health_left && read_restored(w, o, |w| crate::naval::sinks_at_kill(w, id));
+    // spec: S-0203 claim 13 (g), Sinking and S-0312 claim 10 (one that sinks has its health back to 1 health point; any other killing hit leaves it none)
+    let after = if sinks { 1 } else { 0 };
     w.effects.push(Effect::LeftoverHit {
         id,
-        owner: o.owner,
-        pos: o.pos,
+        owner: Some(h),
+        pos: w.leftovers[&id].object.pos,
         warhead,
-        health: o.health,
+        health: (before, after),
     });
-    // spec: S-0203 claim 13 (c) and S-0312 entry of Changes for other specs (the death effects that the vehicle's state allows, once more, with their draws, without the credit and with no tag raise)
+    if let Some(l) = w.leftovers.get_mut(&id) {
+        l.object.health = after;
+    }
+    if health_left {
+        let hit = Hit {
+            amount: before,
+            warhead,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: true,
+        };
+        // spec: S-0203 claim 13 (g) (a killing hit: its destruction is registered once more, with no attacker: no kill, and counted as S-0414 claim 21 counts a destruction with no attacker; it is killed, as at any killing hit, S-0302 claim 1)
+        with_restored(w, id, |w| {
+            crate::combat::damage::credit(w, id, &hit);
+            crate::combat::death::mark_killed(w, id);
+        });
+        // Q-2716 (interim: removal detached its tag, triggers::detach_object, so a leftover carries none and claim 13 (g)'s raises of S-0312 claim 29 come for no tag)
+    }
+    let o = w.leftovers[&id].object.clone();
+    let plan = read_restored(w, o, |w| {
+        crate::combat::death::repeat_plan(w, id, health_left)
+    });
+    let Some(plan) = plan else { return };
+    // spec: S-0203 claim 13 (c) and (g) and S-0312 entry of Changes for other specs (the death effects of S-0312 once more, as the vehicle's state where it left play allows, with their draws and the sweep's markers, with no tag raise)
     crate::combat::death::repeat(w, id, &plan);
+    if plan.kept() {
+        // spec: S-0203 claim 13 (g), Sinking (marked as sinking, out of play and off the map; it never descends, and a type that cannot crash is never removed: kept to the end of the game); S-0504 Terms (sinking)
+        with_restored(w, id, |w| crate::naval::start_sinking(w, id));
+        if let Some(l) = w.leftovers.get_mut(&id) {
+            l.kept = true;
+        }
+    }
 }
 
 /// Reads `f` with leftover object `o` put back among the world's objects for
@@ -139,4 +177,26 @@ fn read_restored<T>(w: &mut World, o: Object, f: impl FnOnce(&World) -> T) -> T 
         w.objects.insert(id, b);
     }
     out
+}
+
+/// Runs `f` with leftover `id` put back among the world's objects and
+/// stores the object it leaves in the leftover again (S-0203 claim 13 (e)).
+/// For the bookkeeping of the sweep's killing hit alone, whose helpers look
+/// the victim up by its number and change only it and the scores: the
+/// destruction's registration and the sinking mark. No turn, rule or
+/// search runs while it is there.
+fn with_restored(w: &mut World, id: ObjectId, f: impl FnOnce(&mut World)) {
+    let Some(l) = w.leftovers.get(&id) else {
+        return;
+    };
+    let o = l.object.clone();
+    let before = w.objects.insert(id, o);
+    f(w);
+    let back = w.objects.remove(&id);
+    if let Some(b) = before {
+        w.objects.insert(id, b);
+    }
+    if let (Some(b), Some(l)) = (back, w.leftovers.get_mut(&id)) {
+        l.object = b;
+    }
 }

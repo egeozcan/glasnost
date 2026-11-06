@@ -616,6 +616,8 @@ pub fn clear_passenger_targets(w: &mut World, t: ObjectId) {
             crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         }
+        // spec: S-0107 r46 claim 11, Changes of target (whatever rule makes the change: an infantry passenger's loss of its target ends its attack state and makes its request at once)
+        crate::infantry::watch_test(w, p);
     }
 }
 
@@ -642,6 +644,8 @@ pub fn hand_down_target(w: &mut World, t: ObjectId) {
         }
         // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
         crate::emitters::retarget_let_go(w, p);
+        // spec: S-0107 r46 claim 11, Changes of target (an order's change, when it takes effect: the passenger's new target)
+        crate::infantry::watch_test(w, p);
     }
 }
 
@@ -1445,7 +1449,18 @@ pub fn kill_passengers(w: &mut World, t: ObjectId, hit: &crate::combat::damage::
         }
         // spec: S-0312 claim 5 (the passengers of a passenger die before it does)
         kill_passengers(w, p, hit);
-        crate::combat::death::passenger_death(w, p, hit);
+        died_with_transport(w, p, hit);
+    }
+}
+
+/// A passenger's death with its transport (S-0312 claims 5 and 12): as a
+/// leftover it keeps the health it had (S-0203 claim 13 (b)).
+fn died_with_transport(w: &mut World, p: ObjectId, hit: &crate::combat::damage::Hit) {
+    let health = w.obj(p).map(|o| o.health);
+    crate::combat::death::passenger_death(w, p, hit);
+    if let Some(hp) = health {
+        // spec: S-0203 claim 13 (b) (a passenger killed with its transport keeps its health)
+        crate::leftover::keep_health(w, p, hp);
     }
 }
 
@@ -1533,7 +1548,7 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
             || !placeable
         {
             kill_passengers(w, p, hit);
-            crate::combat::death::passenger_death(w, p, hit);
+            died_with_transport(w, p, hit);
             continue;
         }
         crate::objects::place(w, p, Pos::new(to.pos.x, to.pos.y, z), facing);

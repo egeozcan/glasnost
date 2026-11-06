@@ -911,7 +911,7 @@ pub fn play_to(
                     attacker,
                     health,
                 }),
-                // spec: S-0203 claim 13 (c) (the defeat sweep's hit on a leftover vehicle: no attacker, the demolition warhead, no health taken)
+                // spec: S-0203 claim 13 (c) and (g) (the defeat sweep's hit on a leftover vehicle: no attacker, the demolition warhead; no health taken from one with none, a killing hit on one with health left)
                 Effect::LeftoverHit {
                     id,
                     warhead,
@@ -922,7 +922,7 @@ pub fn play_to(
                     id,
                     warhead,
                     attacker: None,
-                    health: (health, health),
+                    health,
                 }),
                 _ => {}
             }
