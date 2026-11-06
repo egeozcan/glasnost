@@ -1,9 +1,9 @@
 ---
 id: Q-2701
 title: Which walkers under enter keep their stored path when given a new destination
-status: open
+status: answered
 related: [S-0208, S-0212, S-0213]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
