@@ -504,7 +504,11 @@ fn claim_7_a_refused_touchdown_in_the_flight_points_cell_forgets_and_holds() {
     step(&mut w);
     assert_eq!(w.obj(a).unwrap().dest, None, "{}", describe(&w, a));
     let s = st(&w, a);
-    assert!(!s.taking_off, "the take-off ends in the next update");
+    assert!(
+        !s.taking_off,
+        "the take-off ends in the next update: {}",
+        describe(&w, a)
+    );
     assert_eq!(s.held, 0, "the landing's held height");
     let mut held = 0;
     while w.obj(a).unwrap().dest.is_none() && held < 300 {

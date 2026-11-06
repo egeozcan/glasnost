@@ -1434,7 +1434,7 @@ impl Audio {
                     self.announce(Announcement::RepairComplete);
                 }
             }
-            // spec: S-0302 r41 claim 10 and S-0701 claim 28 (a berserk hit on the local player's harvester: the announcement and its F7 event; no damage sound, Q-2626)
+            // spec: S-0302 r43 claim 10 and S-0701 claim 28 (a berserk hit on the local player's harvester: the announcement and its F7 event; Q-2626: no damage sound, and no other announcement or radar event, the local player's unit or an ally's)
             Sound::HarvesterAttacked => {
                 if house.is_some()
                     && house == self.local
