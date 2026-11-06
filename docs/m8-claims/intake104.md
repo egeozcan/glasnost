@@ -136,8 +136,13 @@ before is main 7a2ab68, after is this branch on 7a2ab68. No lane was tuned towar
   after run shows two of house 1's DMISL rockets (8800, 9604) placed near tick 35449 and never
   moving: they stay in *move* toward objects that have gone, their target switching between
   none and a cell, hp 50 and then 0 at 110000. A V3ROCKET does the same at 110000. Rockets
-  fly by S-0506 (`rocket.rs`), which this intake does not touch, so this is an earlier state
-  that the diverged game reached. It is left for the lead to look at.
+  fly by S-0506 (`rocket.rs`), which this intake does not touch. Every launched missile is
+  placed with its rocket state and `tick.rs` sends it to `rocket::tick`, which calls nothing in
+  `air`, so this is an earlier state that the diverged game reached. It is left for the lead to
+  look at. The map-8 game was traced too, with the same binaries (sampled every 2500 ticks; the
+  lane's results repeat): the runs agree through tick 20000 and part at 22500, first in house
+  0's aircraft (in contact: entering ×2 and asleep before, entering, guarding and asleep after).
+  House 1 has no aircraft, so this too is r134's order.
 - **Arena** (`arena --record all --threads 2`): identical before and after apart from
   timings. M-0001 still fails 10 of 96, M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6,
   M-0021 10 of 50 and M-0020 1 of 25. The same pairings fail with the same counts.
