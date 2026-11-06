@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 143
+revision: 146
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1425,44 +1425,69 @@ pad leaves its pad reservation when it takes any destination other than that pad
       the pad's turn comes after the aircraft's update in that tick (claim 26). That release makes
       it fall back to rest with *guard* forced, which empties its queue (S-0215 claim 9), so at the
       end of that tick it has *guard* current and nothing queued, not *move*. That release and those
-      slots at the end of that tick are medium, `unmeasured` (Backing). Whether that *guard* is
-      processed after the release, whether claim 33 queues *move* for it again, and what its flight
-      does from there were not traced, so this claim gives nothing for them (Open question 30).
-      Until *move*'s first processing, its slide is claim 7's slide on the ground, in the movement
-      updates before the report and in that of the report's tick alike. Where it brings the aircraft
-      into its flight point's cell, the docking position's, in a movement update with that update's
+      slots at the end of that tick are medium, `unmeasured` (Backing). That fall-back is T2's row
+      on the ground, so it forgets the pad as destination. Claim 33 then queues no *move* for it
+      while it has no destination, and its *guard* stays current, processed by claim 29's rules. As
+      it still holds its flight point, it is moving, so being given no destination there is claim
+      6's *Landing where it is* for a moving aircraft on the ground: it takes off toward the centre
+      of the cell that claim 40's selection gives around the cell it is over (claim 6). Its slide
+      ends at the release. If a processing of its *guard* comes while it is at exactly its cruise
+      height before that flight's landing starts, claim 29's processing at cruise height acts there:
+      a team member, which has no destination, does nothing there, and outside a team an armed
+      aircraft falls back to rest by claim 18, while an unarmed one is given its own cell and *move*
+      (claim 29). Otherwise its landing is
+      claim 6's landing where it is, unless claim 5's hover stops it short of claim 6's triggers
+      (claims 5 and 6). These consequences of the release are medium, `unmeasured` (Backing), and
+      which of the two comes is not traced: it depends on whether that short flight reaches its
+      cruise height before its landing starts and on when its *guard* is next processed. Until
+      *move*'s first processing, its slide is claim 7's slide on the ground, in the movement updates
+      before the report and in that of the report's tick alike. Where it brings the aircraft into
+      its flight point's cell, the docking position's, in a movement update with that update's
       target speed fraction at 0 and claim 6's other conditions holding, claim 6's exact-cell
       trigger starts a landing that touches down in that update, and the aircraft forgets the pad as
-      destination and its flight point (claim 7). What follows that forget before *move*'s first
-      processing was not traced, so this claim gives nothing for it (Open question 30). For an
-      aircraft that still holds the pad as destination there, *move*'s first processing keeps the
-      pad as destination by claim 40, since F7 accepts the pad's cell for an aircraft in contact
-      with it, and gives it, which takes the aircraft off (claim 8): the slide ends at that
-      processing. Where claim 40's tests refuse the pad, the replacement cell is its destination
-      instead, and what follows holds with that cell's centre in place of the docking position
-      (claim 8 gives when that destination ends its contact). It flies to its contact place's
-      docking position (claim 40), where claim 6's triggers start a new landing, unless claim 6's
-      holding-height mark keeps it from landing, as a target with ammunition left does, or claim 5's
-      hover, which a converted speed below 20 can give, stops it short of claim 6's triggers (claim
-      5). That landing's touchdown follows claim 7 again. In the docking position's cell it forgets
-      the destination. In a cell next to it, it keeps the pad and slides again, now in *move*, and
-      lands again, after its climb, or at once on the ground when the slide brings it into its
-      flight point's cell, where claim 6's exact-cell trigger starts a landing that touches down in
-      that update (claim 7), until a touchdown makes it forget the destination. Its locomotor then
-      reports stopped (claim 40), so its next processing of *move* makes it fall back to rest (claim
-      33). On the ground, holding its contact, that fall-back queues *enter* (claim 18), which
-      becomes current at once, since the aircraft is ready to change (claim 31). That *enter*, in
-      contact on the ground, not landing and not pad-bound, is the stay above
-      (`quirks.aircraft_grounded_enter_stall`): it makes no second report and its pad never services
-      it. With that switch off it is moved on to the docking stage as a pad-bound one is, so it
-      reports entry at its next processing (Edge cases), and that report starts its pad's servicing
-      (claim 26). Its pad's servicing, started by its first report, ends at the first service step
-      that finds no aircraft settled on it (claim 26), so for an aircraft alone on that pad it has
-      ended before the aircraft rests. Where another aircraft keeps it going, a service step between
-      the touchdown that forgets the destination and that fall-back finds the aircraft settled in
-      *move*, with no destination, and tells it to queue *sleep* (claim 26). When that *sleep*
-      becomes current before that processing of *move* (claim 31), the pad services it where it
-      rests, with no second report. Otherwise the fall-back's *enter* replaces the queued *sleep*
+      destination and its flight point (claim 7). Where that forget comes in a movement update
+      before the report's tick, the aircraft is then as after a touchdown in the docking position's
+      cell (above): its next processing reports entry, and it has no destination, so claim 33 queues
+      nothing for it and the pad services it where it rests. Where it comes in the movement update
+      of the report's tick, claim 33 has already queued *move* in that update, before the landing
+      starts, so *move* becomes current at claim 31's third point with no destination. Its next
+      processing of *move* makes it fall back to rest, which queues *enter* and leaves it in the
+      stay below (`quirks.aircraft_grounded_enter_stall`), as after the touchdown in the docking
+      position's cell in *move*, unless a service step first releases it or has it queue a *sleep*
+      that becomes current before that processing. A service step between that touchdown and that
+      processing finds it settled, and the first step of the servicing that its report started can
+      be one (claim 26). That step releases it when it is ready for take-off at full health, and it
+      then rests in *guard*: being given no destination while not moving changes nothing for its
+      flight (claim 6). Otherwise it tells it to queue *sleep*, with the outcome given below for a
+      service step between that touchdown and that fall-back. What follows that forget is medium,
+      `unmeasured` (Backing). For an aircraft that still holds the pad as destination there,
+      *move*'s first processing keeps the pad as destination by claim 40, since F7 accepts the pad's
+      cell for an aircraft in contact with it, and gives it, which takes the aircraft off (claim 8):
+      the slide ends at that processing. Where claim 40's tests refuse the pad, the replacement cell
+      is its destination instead, and what follows holds with that cell's centre in place of the
+      docking position (claim 8 gives when that destination ends its contact). It flies to its
+      contact place's docking position (claim 40), where claim 6's triggers start a new landing,
+      unless claim 6's holding-height mark keeps it from landing, as a target with ammunition left
+      does, or claim 5's hover, which a converted speed below 20 can give, stops it short of claim
+      6's triggers (claim 5). That landing's touchdown follows claim 7 again. In the docking
+      position's cell it forgets the destination. In a cell next to it, it keeps the pad and slides
+      again, now in *move*, and lands again, after its climb, or at once on the ground when the
+      slide brings it into its flight point's cell, where claim 6's exact-cell trigger starts a
+      landing that touches down in that update (claim 7), until a touchdown makes it forget the
+      destination. Its locomotor then reports stopped (claim 40), so its next processing of *move*
+      makes it fall back to rest (claim 33). On the ground, holding its contact, that fall-back
+      queues *enter* (claim 18), which becomes current at once, since the aircraft is ready to
+      change (claim 31). That *enter*, in contact on the ground, not landing and not pad-bound, is
+      the stay above (`quirks.aircraft_grounded_enter_stall`): it makes no second report and its pad
+      never services it. With that switch off it is moved on to the docking stage as a pad-bound one
+      is, so it reports entry at its next processing (Edge cases), and that report starts its pad's
+      servicing (claim 26). Its pad's servicing, started by its first report, ends at the first
+      service step that finds no aircraft settled on it (claim 26), so for an aircraft alone on that
+      pad it has ended before the aircraft rests. Where another aircraft keeps it going, a service
+      step between the touchdown that forgets the destination and that fall-back finds the aircraft
+      settled in *move*, with no destination, and tells it to queue *sleep* (claim 26). When that
+      *sleep* becomes current before that processing of *move* (claim 31), the pad services it where
+      it rests, with no second report. Otherwise the fall-back's *enter* replaces the queued *sleep*
       (S-0215 claim 7).
     - **Pad-bound and armed.** It does not land in a cell that holds no building it is in contact
       with (claim 6's pad-bound rule), so where the cell it stands in lies outside the foundation
@@ -1606,10 +1631,13 @@ pad leaves its pad reservation when it takes any destination other than that pad
       with no ammunition). The release in the report's tick of a sliding aircraft that is ready for
       take-off at full health, which leaves *guard* current at the end of that tick, is
       `unmeasured`: part h (6)'s aircraft has spent its ammunition, and no set-up here docks a
-      sliding aircraft with full ammunition and full health. Its flight after that release is not
-      traced (Open question 30). The forget in its flight point's cell during the slide before
-      *move*'s first processing is `unmeasured`, as claim 7 rates the exact-cell trigger on the
-      ground, and what follows it is not traced (Open question 30). The skip while that aircraft
+      sliding aircraft with full ammunition and full health. What follows that release, the
+      forgotten destination, no further *move* from claim 33, *guard* kept, the take-off toward the
+      selected cell's centre and the choice between its landing there and claim 29's outcome at
+      cruise height, is `unmeasured` for the same reason. The forget in its flight point's cell
+      during the slide before *move*'s first processing is `unmeasured`, as claim 7 rates the
+      exact-cell trigger on the ground, and so is what follows it: no scenario here records an
+      untested touchdown's slide into the docking position's cell. The skip while that aircraft
       slides is `unmeasured`: part h (6) has the pad's servicing end at its first service step
       whether that step skips the aircraft or finds it unsettled for any other reason. For one that
       no service step releases in the report's tick, the *move* that claim 33 gives it in that tick,
@@ -1702,11 +1730,12 @@ pad leaves its pad reservation when it takes any destination other than that pad
       not pad-bound, the report and the servicing after a touchdown in the docking position's cell
       (run (1)), and for the pad kept as destination after a touchdown in a cell next to the
       docking position's; medium (`unmeasured`) for the skip while that aircraft slides and for its
-      release in the report's tick when it is ready for take-off at full health; medium
-      (`unmeasured`, as claim 7 rates the exact-cell trigger on the ground) for the forget in the
-      flight point's cell during the slide before *move*'s first processing; medium, until AC31
-      part h (6) runs, for the report after a touchdown in a cell next to the docking position's,
-      the *move* it gets in the report's tick with no processing of *guard* while it slides with no
+      release in the report's tick when it is ready for take-off at full health and for what
+      follows that release; medium (`unmeasured`, as claim 7 rates the exact-cell trigger on the
+      ground) for the forget in the flight point's cell during the slide before *move*'s first
+      processing, and medium (`unmeasured`) for what follows that forget; medium, until AC31 part h
+      (6) runs, for the report after a touchdown in a cell next to the docking position's, the
+      *move* it gets in the report's tick with no processing of *guard* while it slides with no
       ammunition and no target, the take-off at *move*'s first processing, the new landing at the
       docking position and its rest there in *enter* with no second report and no servicing; medium
       (`unmeasured`) for no processing of *guard* while an aircraft with ammunition or a target
@@ -1776,10 +1805,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
     it (first bullet). For such an aircraft its first round or repair step comes at the step after
     that, *P* ticks later. One that is not pad-bound and slides after its report has *move* current
     instead, unless a service step in the report's tick releases it first (first bullet; claim 24,
-    *Not pad-bound*: the release and the slots at the end of that tick medium, `unmeasured`, and its
-    flight after the release not traced, Open question 30), and has not settled, and the steps treat
-    it as claim 24 gives (*Not pad-bound*; medium, the *move* `measurable` by AC31 part h (6) and
-    the skip `unmeasured`, as claim 24's Backing rates them).
+    *Not pad-bound*: the release, the slots at the end of that tick and its flight after the release
+    medium, `unmeasured`), and has not settled, and the steps treat it as claim 24 gives (*Not
+    pad-bound*; medium, the *move* `measurable` by AC31 part h (6) and the skip `unmeasured`, as
+    claim 24's Backing rates them).
     - Backing: `measurable` (scenarios AC15 and AC23; AC31 part h (1) for the first step after
       an entered report)
     - Confidence: high; medium, until AC15 or AC31 part h (1) runs, for the first step after an
@@ -6162,15 +6191,18 @@ destination once that touchdown has made it forget the edge cell and it rests th
     given no destination (claim 6), and is landed by the exact-cell trigger in its flight point's
     cell, with its touchdown in that update (claim 7).
 
-30. Q-2677 is answered by claims 24 and 33, except for the two open cases below. An aircraft that is
-    not pad-bound and slides after its entry report gets *move* in the report's tick, with no
-    processing of *guard*, takes off at *move*'s first processing and lands again at its docking
-    position (claim 24, *Not pad-bound*). One that is ready for
-    take-off at full health can instead be released by a service step in the report's tick and then
-    has *guard* current at the end of that tick (claims 24 and 26, medium, `unmeasured`). That is
-    the first open case: whether its *guard* is processed after the release, whether claim 33 queues
-    *move* for it again, and what its flight does from there were not traced. The second open case
-    is one whose slide brings it into its flight point's cell before *move*'s first processing (in
-    the movement updates before the report or in that of the report's tick), where claim 7's
-    exact-cell trigger lands it at once and it forgets the pad as destination (claim 24, medium,
-    `unmeasured`): what follows that forget was not traced.
+30. Q-2677 is answered by claims 24 and 33. An aircraft that is not pad-bound and slides after its
+    entry report gets *move* in the report's tick, with no processing of *guard*, takes off at
+    *move*'s first processing and lands again at its docking position (claim 24, *Not pad-bound*).
+    One that is ready for take-off at full health can instead be released by a service step in the
+    report's tick and then has *guard* current at the end of that tick, keeps it with no *move* from
+    claim 33 while it has no destination, and takes off toward the centre of the cell selected
+    around the one it is over. It lands where it is by claim 6, or hovers short of that by claim 5,
+    unless a processing of its *guard* at exactly its cruise height comes first, which gives claim
+    29's outcome at that height (claims 5, 6, 18, 24, 26 and 29, medium, `unmeasured`). One whose
+    slide brings it into its flight point's cell before *move*'s first processing is landed at once
+    by claim 7's exact-cell trigger and forgets the pad as destination. Before the report's tick it
+    is then serviced where it rests after its report. In the report's tick it has *move* current
+    with no destination and falls back to rest into the stay of
+    `quirks.aircraft_grounded_enter_stall`, unless a service step first releases it or has it queue
+    a *sleep* that becomes current first (claim 24, medium, `unmeasured`).
