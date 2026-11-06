@@ -1,9 +1,9 @@
 ---
 id: Q-2657
 title: The first step one tick after a released walker's scatter request, and a walker that keeps walking to its old destination
-status: open
+status: answered
 related: [S-0417, S-0208, S-0212, S-0516]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
