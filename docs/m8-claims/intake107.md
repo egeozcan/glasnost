@@ -67,8 +67,8 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   cancellation skip in both positions of the switch, as built at intake 105; the cite now names
   claim 13 (h) in place of the Q-2693 interim.
 - **The M-0021 recorder** (`oracle_m0021`) reads the hit's health pair directly.
-- **Formats.** Save format 108 to 109, AI game format 72 to 73 (`Leftover`'s fields), one past main
-  07d549c.
+- **Formats.** Save format 108 to 109, AI game format 73 to 74 (`Leftover`'s fields), one past main
+  01c5688 (A4 round 9b took AI game 73).
 
 ### S-0107 r46 (claim 11, *Changes of target*)
 
@@ -141,21 +141,22 @@ passes, as before, and the first-capture ticks are unchanged.
 
 ## Goldens
 
-Eight goldens change (commit `aa8ada9`): `combat`, `duel`, `duel-diagonal`, `duel-m6c`,
-`duel-m7a`, `duel-m7b`, `duel-naval` and `skirmish`, 110 lines changed in each direction, no
-line added or removed. Only state hashes change, and only in ticks that hold a leftover: a
-leftover now stores whether it is kept, so the hashed form changed. No event, count or end
-changes, and `scripted` is unchanged. Formats: save 108 to 109, AI game 72 to 73, wire 12
-unchanged.
+Eight goldens change, regenerated on main 01c5688 after the rebase: `combat`, `duel`,
+`duel-diagonal`, `duel-m6c`, `duel-m7a`, `duel-m7b`, `duel-naval` and `skirmish`. Against main,
+111 lines change in each direction and none is added or removed. Only state hashes change, and only
+in ticks that hold a leftover: a leftover now stores whether it is kept, so its hashed form
+changed. No event, count or end changes, and `scripted` is unchanged. Formats: save 108 to 109, AI
+game 73 to 74, wire 12 unchanged.
 
 ## Lanes
 
 Before: binaries built on main 07d549c. After: this branch's code on 0051f51 (origin/main then).
 The commits between those two bases are intake 109's, in the app and the string table only, with
-no simulation or AI code. The branch was then rebased onto origin/main 3b978f8, which adds only
-spec commits (S-0208 r52, S-0506 r34), so the lanes were not run again there; the checks were.
-Local `main` has since merged A4 round 9b (1ec07d1), which this branch does not include, so no
-lane here has seen it. Local lane; install values are not quoted.
+no simulation or AI code. Those bases hold no A4 round 9b, so the sweeps, the arena and the quick
+lane below have not seen it. The branch was then rebased onto main 01c5688, which merges A4
+round 9b (AI end-games) and spec commits (S-0208 r52, S-0506 r34). There
+the AI suite and the checks were run again (the AI suite line says which base each figure is
+from). Local lane; install values are not quoted.
 
 - **Sweeps, seeds 1 to 16.** All six runs are identical before and after, apart from timings.
   - M6c reference: smallest minimum 0. M6c play fixes: 0.
