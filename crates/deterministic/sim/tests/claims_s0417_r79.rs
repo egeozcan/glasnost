@@ -116,14 +116,15 @@ fn probe(w: &World, g: ObjectId) -> (bool, u64) {
     (accepted, p.rng.taken() - before)
 }
 
+/// What [`walk_off`] saw: the first accepted request's tick and
+/// destination, the tick in which the unit first moved, and every failure
+/// recorded (tick, search result, destination cleared).
+type WalkOff = (Option<(i32, CellXY)>, Option<i32>, Vec<(i32, Search, bool)>);
+
 /// Steps `w` up to `n` ticks; returns the first accepted request's tick
 /// and destination, the tick in which `g` first moved from where it stood
 /// at that request, and every failure recorded.
-fn walk_off(
-    w: &mut World,
-    g: ObjectId,
-    n: i32,
-) -> (Option<(i32, CellXY)>, Option<i32>, Vec<(i32, Search, bool)>) {
+fn walk_off(w: &mut World, g: ObjectId, n: i32) -> WalkOff {
     let mut accepted = None;
     let mut from = None;
     let mut fails = Vec::new();
@@ -184,7 +185,10 @@ fn u10_g_run_2_gate_failure_then_the_walk_without_a_wait() {
     step(&mut w);
     let ev = trace::take(&w);
     assert_eq!(failures(&ev, g), vec![(f, Search::GateFailed, true)]);
-    assert!(answers(&ev, g).iter().all(|a| !a.1), "no request accepted at F");
+    assert!(
+        answers(&ev, g).iter().all(|a| !a.1),
+        "no request accepted at F"
+    );
     let o = w.obj(g).unwrap();
     assert_eq!(o.dest, None, "cleared in the failure's update");
     assert!(!in_progress(&w, g));
@@ -208,7 +212,11 @@ fn u10_g_run_2_gate_failure_then_the_walk_without_a_wait() {
     assert!(!holds(&w, d, k), "off the factory");
     let m = moved.expect("a first step");
     assert_eq!(m - a, lag_b, "as soon after the request as part b's step");
-    assert!(m - f < 88, "fewer than R - 2 ticks after the failure: {}", m - f);
+    assert!(
+        m - f < 88,
+        "fewer than R - 2 ticks after the failure: {}",
+        m - f
+    );
 }
 
 // spec: S-0417 claim 17 (r79, No path, waiting for the retry delay: a walking unit that keeps its destination after a failed search waits for the delay with it; its movement in progress ended, so the first request is accepted with its draw, and a new destination different from the kept one ends the delay)
@@ -238,7 +246,10 @@ fn claim_17_kept_destination_request_ends_the_delay() {
     let d = p.obj(g).unwrap().dest;
     assert!(d.is_some_and(|d| matches!(d, Target::Cell(c) if !holds(&p, c, k))));
     assert_ne!(d, Some(Target::Cell(near)));
-    assert!(!path::delay_runs(&p, g), "the different destination ended it");
+    assert!(
+        !path::delay_runs(&p, g),
+        "the different destination ended it"
+    );
     assert!(in_progress(&p, g));
     assert_eq!(probe(&p, g), (false, 0), "the next request refused");
     let from = p.obj(g).unwrap().pos;
@@ -315,9 +326,7 @@ fn claim_17_every_failing_destination_takes_a_draw_each_turn() {
     let failed = failures(&ev, g);
     assert!(failed.len() >= 30, "{failed:?}");
     assert!(
-        failed
-            .iter()
-            .all(|f| f.1 == Search::GateFailed && f.2),
+        failed.iter().all(|f| f.1 == Search::GateFailed && f.2),
         "{failed:?}"
     );
     assert!(no <= 1, "refused {no}");

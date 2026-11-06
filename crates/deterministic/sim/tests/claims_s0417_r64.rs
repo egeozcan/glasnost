@@ -164,7 +164,10 @@ fn claim_17_running_delay_ended_by_the_request() {
         step(&mut look);
         moved |= look.obj(g).unwrap().pos != at;
     }
-    assert!(moved && look.tick < wait, "it walks while the delay would run");
+    assert!(
+        moved && look.tick < wait,
+        "it walks while the delay would run"
+    );
     // It walks off as the unit with no delay does, tick for tick.
     let n = until_free(&mut w, g, 200).expect("contact ends");
     let m = until_free(&mut plain, g, 201).expect("contact ends");

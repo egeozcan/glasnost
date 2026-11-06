@@ -106,8 +106,8 @@ pub fn local_path(measurements: &Path) -> std::path::PathBuf {
 
 /// Reads the record's local values from `path` ([`local_path`]).
 pub fn read_local(path: &Path) -> Result<Local, String> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("{}: {:?}", path.display(), e.kind()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("{}: {:?}", path.display(), e.kind()))?;
     let two = |s: &str, sep: &str| -> Result<(String, String), String> {
         s.split_once(sep)
             .map(|(a, b)| (a.trim().to_owned(), b.trim().to_owned()))
@@ -332,9 +332,13 @@ pub fn play(g: &Ground, local: &Local, arm: Arm) -> Result<Recording, String> {
         && w.cells.list(local.centre, Layer::Ground).is_empty();
     // measure: M-0023 (Setup, Houses: K and the human's power plant, one power plant for each computer house; the buildings created on their stated cells before tick 0)
     let k = glasnost_sim::testkit::spawn(&mut w, Kind::Building, &local.factory, 0, local.k, 0);
-    for (i, (h, ty)) in [(0, &local.plants[0]), (1, &local.plants[0]), (2, &local.plants[1])]
-        .into_iter()
-        .enumerate()
+    for (i, (h, ty)) in [
+        (0, &local.plants[0]),
+        (1, &local.plants[0]),
+        (2, &local.plants[1]),
+    ]
+    .into_iter()
+    .enumerate()
     {
         glasnost_sim::testkit::spawn(&mut w, Kind::Building, ty, h, local.plant_cells[i], 0);
     }
@@ -438,18 +442,47 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
             && first.is_some_and(|x| x.on_k)
             && r.rows.iter().all(|x| x.health == r.rows[0].health)
             && (r.arm != Arm::Now
-                || f.is_some_and(|f| r.rows.iter().take_while(|x| x.tick <= r.t + f).all(|x| x.on_k)))
+                || f.is_some_and(|f| {
+                    r.rows
+                        .iter()
+                        .take_while(|x| x.tick <= r.t + f)
+                        .all(|x| x.on_k)
+                }))
     };
     let v = [void(&now, dn.f), void(&after, None), void(&none, None)];
     // measure: M-0023 (Result: the void rules of step 2 pass in every arm; the P25(a) rule is run 2's and not ours)
-    push("Void rules of step 2", v.iter().all(|&b| b), format!("now {}, controls {}, baseline {}", yes(v[0]), yes(v[1]), yes(v[2])));
+    push(
+        "Void rules of step 2",
+        v.iter().all(|&b| b),
+        format!(
+            "now {}, controls {}, baseline {}",
+            yes(v[0]),
+            yes(v[1]),
+            yes(v[2])
+        ),
+    );
     // measure: M-0023 (Result: U on a cell that holds K at t + 1, every arm)
     let on_k = [&now, &after, &none].map(|r| at(r, 1).is_some_and(|x| x.on_k));
-    push("U on a cell that holds K at t + 1", on_k.iter().all(|&b| b), format!("{on_k:?}"));
+    push(
+        "U on a cell that holds K at t + 1",
+        on_k.iter().all(|&b| b),
+        format!("{on_k:?}"),
+    );
     // measure: M-0023 (Result: at t + 1, guard current and a new destination: run 1 no; controls and baseline yes)
-    let req1 = |r: &Recording| at(r, 1).is_some_and(|x| x.current == Some(Behaviour::Guard) && x.dest.is_some());
+    let req1 = |r: &Recording| {
+        at(r, 1).is_some_and(|x| x.current == Some(Behaviour::Guard) && x.dest.is_some())
+    };
     let (r1n, r1a, r1b) = (req1(&now), req1(&after), req1(&none));
-    push("At t + 1: guard current, a new destination", !r1n && r1a && r1b, format!("now {}, controls {}, baseline {}", yes(r1n), yes(r1a), yes(r1b)));
+    push(
+        "At t + 1: guard current, a new destination",
+        !r1n && r1a && r1b,
+        format!(
+            "now {}, controls {}, baseline {}",
+            yes(r1n),
+            yes(r1a),
+            yes(r1b)
+        ),
+    );
     // measure: M-0023 (Result: F − t = 1)
     push("F − t", dn.f == Some(1), format!("{:?}", dn.f));
     let fr = rowf(&now, dn.f);
@@ -457,7 +490,11 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
     let f_ok = fr.as_ref().is_some_and(|x| {
         x.current == Some(Behaviour::Move) && x.queued == Some(Behaviour::Guard) && x.dest.is_none()
     });
-    push("At the end of F: move current, guard queued, no destination", f_ok, format!("{:?}", fr.as_ref().map(|x| (x.current, x.queued, x.dest))));
+    push(
+        "At the end of F: move current, guard queued, no destination",
+        f_ok,
+        format!("{:?}", fr.as_ref().map(|x| (x.current, x.queued, x.dest))),
+    );
     // measure: M-0023 (Result: G − F = 1)
     push("G − F", dn.g == Some(1), format!("{:?}", dn.g));
     let gr = dn.f.zip(dn.g).and_then(|(f, g)| at(&now, f + g));
@@ -465,7 +502,11 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
     let g_ok = gr.as_ref().is_some_and(|x| {
         x.current == Some(Behaviour::Guard) && x.queued.is_none() && x.dest.is_some()
     });
-    push("At the end of G: guard current, nothing queued, a new destination", g_ok, format!("{:?}", gr.as_ref().map(|x| (x.current, x.queued, x.dest))));
+    push(
+        "At the end of G: guard current, nothing queued, a new destination",
+        g_ok,
+        format!("{:?}", gr.as_ref().map(|x| (x.current, x.queued, x.dest))),
+    );
     let gd = gr.as_ref().and_then(|x| dest_cell(x.dest, k_cells));
     let base_d = rowf(&none, db.request).and_then(|x| dest_cell(x.dest, k_cells));
     let ctrl_d = rowf(&after, da.request).and_then(|x| dest_cell(x.dest, k_cells));
@@ -481,15 +522,32 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
     };
     // measure: M-0023 (Result: the new destination on a cell that holds K: no, in every arm)
     let on = [gd, ctrl_d, base_d].map(|d| d.is_some_and(k_foot));
-    push("New destination on a cell that holds K", on.iter().all(|&b| !b) && gd.is_some(), format!("{on:?}"));
+    push(
+        "New destination on a cell that holds K",
+        on.iter().all(|&b| !b) && gd.is_some(),
+        format!("{on:?}"),
+    );
     // measure: M-0023 (Result: the new destination in the pen or next to it: no, in every arm)
     let pen = [gd, ctrl_d, base_d].map(|d| d.is_some_and(|c| in_or_next_to_pen(local.centre, c)));
-    push("New destination in the pen or next to it", pen.iter().all(|&b| !b), format!("{pen:?}"));
+    push(
+        "New destination in the pen or next to it",
+        pen.iter().all(|&b| !b),
+        format!("{pen:?}"),
+    );
     // measure: M-0023 (Result: steps before W: none; W is the first position change, so this holds by its definition, and is judged as no cell change before W)
     let steps = [(&now, dn.w), (&after, da.w), (&none, db.w)].map(|(r, w)| {
-        w.is_some_and(|w| r.rows.iter().take_while(|x| x.tick < r.t + w).all(|x| x.pos == r.release_pos))
+        w.is_some_and(|w| {
+            r.rows
+                .iter()
+                .take_while(|x| x.tick < r.t + w)
+                .all(|x| x.pos == r.release_pos)
+        })
     });
-    push("Steps before W: none", steps.iter().all(|&b| b), format!("{steps:?}"));
+    push(
+        "Steps before W: none",
+        steps.iter().all(|&b| b),
+        format!("{steps:?}"),
+    );
     // measure: M-0023 (Result: the first step 1 tick after G; the baseline's 1 tick after its request turn; the controls' as the baseline's)
     let lag_now = dn.w.zip(dn.f.zip(dn.g)).map(|(w, (f, g))| w - f - g);
     let lag_base = db.w.zip(db.request).map(|(w, q)| w - q);
@@ -501,17 +559,30 @@ pub fn run(ground: &Ground, local: &Local) -> Result<(String, String), String> {
     );
     // measure: M-0023 (Result: U enters the pen within 300 ticks: no, every arm)
     let entered = [&now, &after, &none].map(|r| {
-        r.rows
-            .iter()
-            .any(|x| (x.pos.cell().x - local.centre.x).abs() <= 1 && (x.pos.cell().y - local.centre.y).abs() <= 1)
+        r.rows.iter().any(|x| {
+            (x.pos.cell().x - local.centre.x).abs() <= 1
+                && (x.pos.cell().y - local.centre.y).abs() <= 1
+        })
     });
-    push("U enters the pen within 300 ticks", entered.iter().all(|&b| !b), format!("{entered:?}"));
+    push(
+        "U enters the pen within 300 ticks",
+        entered.iter().all(|&b| !b),
+        format!("{entered:?}"),
+    );
     // measure: M-0023 (Result, Controls: positions identical to the baseline's tick for tick; from t + 2 the destination reads the pen's centre and move is current)
-    let same_pos = after.rows.iter().zip(none.rows.iter()).all(|(a, b)| a.pos == b.pos);
+    let same_pos = after
+        .rows
+        .iter()
+        .zip(none.rows.iter())
+        .all(|(a, b)| a.pos == b.pos);
     let c2 = at(&after, 2).is_some_and(|x| {
         x.dest == Some(Target::Cell(local.centre)) && x.current == Some(Behaviour::Move)
     });
-    push("Controls: positions as the baseline's; at t + 2 the pen's centre and move", same_pos && c2, format!("positions {}, t + 2 {}", yes(same_pos), yes(c2)));
+    push(
+        "Controls: positions as the baseline's; at t + 2 the pen's centre and move",
+        same_pos && c2,
+        format!("positions {}, t + 2 {}", yes(same_pos), yes(c2)),
+    );
 
     let failing = rows.iter().filter(|r| !r.1).count();
     let mut summary = String::new();

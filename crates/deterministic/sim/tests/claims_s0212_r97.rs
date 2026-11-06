@@ -224,7 +224,11 @@ fn claim_21_drive_failures_that_clear_leave_no_delay() {
     move_to(&mut w, v, mid(SIZE, -6, 0));
     let (s, r) = next_search(&mut w, v, 120).expect("a search");
     assert_eq!(r, Search::Found);
-    assert!(s < failed_at + 5, "searched at once, not at {}", failed_at + 90);
+    assert!(
+        s < failed_at + 5,
+        "searched at once, not at {}",
+        failed_at + 90
+    );
 
     // Row 2: a destination beyond 1 cell whose search finds no path.
     let (mut w, v) = one(Kind::Vehicle, "BUGGY");
