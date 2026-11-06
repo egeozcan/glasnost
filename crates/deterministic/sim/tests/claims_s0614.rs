@@ -1,6 +1,7 @@
 //! S-0614 Parasites on invented data: a drone that latches onto vehicles
 //! and infantry, a grappling parasite on water, release, exit and host
-//! loss. Every type name and number here is made up.
+//! loss. Every type name and number here is made up, except the grab
+//! animation's fixed type name, which S-0614's Import mapping gives.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -1885,4 +1886,229 @@ fn claim_10_each_push_reports_its_way() {
     w.effects.clear();
     testkit::run(&mut w, 1);
     assert!(pushes(&w).is_empty(), "no push between");
+}
+
+// ---------------------------------------------------------------------------
+// The grab animation (claim 25)
+// ---------------------------------------------------------------------------
+
+/// The grab animation's fixed type name (S-0614 Import mapping).
+const GRAB: &str = "SQDG";
+
+/// The ruleset with a grab animation type of 300 frames and a stage delay
+/// of 2 ticks (P15's test type has a delay of exactly 2), or of a random
+/// rate when `random`.
+fn grab_ruleset(random: bool) -> Ruleset {
+    let mut r = ruleset();
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push(GRAB.into());
+    r.sim.animations.insert(
+        GRAB.into(),
+        glasnost_rules::sim::AnimationType {
+            frame_count: Some(300),
+            rate: Some(2),
+            // spec: S-0109 claim 3 and F1 (rates 40 and 30 give the delays 22 and 30: a ranged draw)
+            random_rate: random.then_some([40, 30]),
+            ..Default::default()
+        },
+    );
+    r
+}
+
+/// The grab animations in play.
+fn grabs(w: &World) -> Vec<(ObjectId, glasnost_sim::anims::Anim)> {
+    w.anims
+        .anims
+        .iter()
+        .filter(|(_, a)| matches!(a.role, glasnost_sim::anims::Role::Grab { .. }))
+        .map(|(&id, a)| (id, a.clone()))
+        .collect()
+}
+
+fn grab_effects(w: &World) -> usize {
+    w.effects
+        .iter()
+        .filter(|e| matches!(e, Effect::Anim { name, .. } if name == GRAB))
+        .count()
+}
+
+/// The 8-direction of the host's body facing now (S-0204 F4).
+fn direction(w: &World, host: ObjectId) -> i32 {
+    i32::from(glasnost_num::geom::eight_direction(
+        w.obj(host).unwrap().body.value(w.tick),
+    ))
+}
+
+// spec: S-0614 claim 25 (created once per hold, in the grab's first turn g, at the host's position, attached to the host with no displacement, with the parasite's house and the host's cell; not at the grab's end, a push start or a strike)
+#[test]
+fn claim_25_the_grab_animation_is_created_once_in_the_grabs_first_turn() {
+    let (mut w, squid, boat, t) = grappled(&grab_ruleset(false));
+    let g = t + 1;
+    assert!(grabs(&w).is_empty(), "nothing before the grab's first turn");
+    w.effects.clear();
+    testkit::run(&mut w, 1);
+    assert_eq!(w.tick, g + 1);
+    let made = grabs(&w);
+    assert_eq!(made.len(), 1);
+    assert_eq!(grab_effects(&w), 1, "one creation report");
+    let (id, a) = &made[0];
+    assert_eq!(ps(&w, squid).grab_anim, Some(*id));
+    let boat_at = w.obj(boat).unwrap().pos;
+    assert_eq!(
+        a.pos,
+        Some(boat_at),
+        "at the host's position, height included"
+    );
+    assert_eq!(
+        a.owner,
+        Some((boat, glasnost_sim::world::Pos::new(0, 0, 0)))
+    );
+    assert_eq!(
+        a.role,
+        glasnost_sim::anims::Role::Grab {
+            parasite: squid,
+            house: Some(ALPHA),
+            cell: Some(boat_at.cell()),
+        }
+    );
+    // No new one at the grab's end, a push start or a strike.
+    for _ in 0..150 {
+        w.effects.clear();
+        testkit::run(&mut w, 1);
+        assert_eq!(grab_effects(&w), 0, "tick {}", w.tick);
+        assert_eq!(grabs(&w).len(), 1);
+    }
+    assert!(w.tick > g + 109, "past two strikes");
+}
+
+// spec: S-0614 claim 25 and Import mapping (no animation type has the fixed name: none is created, no draw is taken for it, and the cycle runs as claim 10 gives)
+#[test]
+fn claim_25_an_absent_type_shows_none_and_the_cycle_runs() {
+    let (mut w, _squid, boat, t) = grappled(&ruleset());
+    let g = t + 1;
+    testkit::run(&mut w, 1);
+    assert!(grabs(&w).is_empty());
+    assert_eq!(next_hit(&mut w, boat, 200), Some(g + 69));
+    // A type with a random rate takes its creation draw in turn g; one without takes none.
+    let rng = |r: &Ruleset| {
+        let (mut w, _, _, _) = grappled(r);
+        let before = w.rng.clone();
+        testkit::run(&mut w, 1);
+        (before, w.rng.clone())
+    };
+    let (b0, a0) = rng(&ruleset());
+    let (b1, a1) = rng(&grab_ruleset(false));
+    let (b2, a2) = rng(&grab_ruleset(true));
+    assert_eq!((&b0, &a0), (&b1, &a1), "no random rate: no draw");
+    assert_eq!(b0, b2, "nothing drawn before the grab's first turn");
+    assert_ne!(a0, a2, "the random rate's draw in turn g");
+}
+
+// spec: S-0614 claim 25 and table G (k = b + 10 × d + j at each step of phase frame j to 1 … 9: the grab's turns 3, 6, …, 27 with b = 0, a push's turns 4, 8, …, 36 with b = 160 for σ = +1 and 80 for σ = −1; each setting restarts the clock with a 128-tick delay and leaves the direction alone; nothing at a step to 10 or in a push's first three turns)
+#[test]
+fn claim_25_the_stage_follows_the_cycle() {
+    let (mut w, squid, boat, t) = grappled(&grab_ruleset(false));
+    let g = t + 1;
+    run_to(&mut w, g + 1);
+    let id = ps(&w, squid).grab_anim.unwrap();
+    let stage = |w: &World| {
+        let a = &w.anims.anims[&id];
+        (a.player.stage(), a.player.delay())
+    };
+    // The grab's first two turns: the type's own fields (rate 2 gives the
+    // delay ⌊900 / 2⌋ = 450, S-0109 F1; no advance yet).
+    assert_eq!(stage(&w), (0, 450));
+    testkit::run(&mut w, 1);
+    assert_eq!(stage(&w), (0, 450), "turn 2");
+    for j in 1..=9 {
+        // Turn 3j (tick g + 3j − 1) sets j; the turns between keep it.
+        run_to(&mut w, g + 3 * j);
+        let d = direction(&w, boat);
+        assert_eq!(stage(&w), (10 * d + j, 128), "grab frame {j}");
+        if j < 9 {
+            testkit::run(&mut w, 2);
+            assert_eq!(stage(&w).0, 10 * d + j, "between settings");
+        }
+    }
+    // The grab's end (turn 30, the step to 10) sets nothing; the push's first three turns neither.
+    w.effects.clear();
+    run_to(&mut w, g + 30);
+    let way = w
+        .effects
+        .iter()
+        .find_map(|e| match e {
+            Effect::GrapplePush { way, .. } => Some(*way),
+            _ => None,
+        })
+        .expect("the first push");
+    let held = stage(&w).0;
+    run_to(&mut w, g + 29 + 3);
+    assert_eq!(stage(&w).0, held, "a push's first three turns set nothing");
+    let b = if way == 0 { 160 } else { 80 };
+    for j in 1..=9 {
+        // Push turn 4j: tick (g + 29) + 4j − 1.
+        run_to(&mut w, g + 29 + 4 * j);
+        let d = direction(&w, boat);
+        assert_eq!(stage(&w), (b + 10 * d + j, 128), "push frame {j}");
+    }
+    // The push's turn 40 (step to 10) and the strike set nothing.
+    let last = stage(&w).0;
+    run_to(&mut w, g + 29 + 41);
+    assert_eq!(stage(&w).0, last);
+    assert_eq!(ps(&w, squid).push_way.map(|_| ()), Some(()));
+}
+
+// spec: S-0614 claim 25 (removed at once when the parasite leaves off water, at a cull and when the strike's own hit destroys the host, which then sinks without it)
+#[test]
+fn claim_25_removal() {
+    let shown = |w: &World| grabs(w).len();
+    // Off water.
+    let (mut w, squid, boat, _) = grappled(&grab_ruleset(false));
+    testkit::run(&mut w, 3);
+    assert_eq!(shown(&w), 1);
+    let c = w.obj(boat).unwrap().pos.cell();
+    w.cells.grid.get_mut(c).unwrap().tile = 0;
+    testkit::run(&mut w, 1);
+    assert_eq!(parasite::host_of(&w, squid), None);
+    assert_eq!(shown(&w), 0, "off water");
+    assert_eq!(ps(&w, squid).grab_anim, None);
+    // A cull.
+    let (mut w, squid, boat, t) = grappled(&grab_ruleset(false));
+    w.obj_mut(boat).unwrap().health = 100;
+    run_to(&mut w, t + 1 + 69);
+    assert_eq!(shown(&w), 1);
+    testkit::run(&mut w, 1);
+    assert!(naval::sinking(&w, boat));
+    assert_eq!(parasite::host_of(&w, squid), None);
+    assert_eq!(shown(&w), 0, "the cull");
+    // The destroying strike (no cull flag).
+    let mut r = grab_ruleset(false);
+    r.sim.warheads.get_mut("Squeeze").unwrap().culling = None;
+    let (mut w, squid, boat, t) = grappled(&r);
+    w.obj_mut(boat).unwrap().health = 20;
+    run_to(&mut w, t + 1 + 69);
+    assert_eq!(shown(&w), 1);
+    testkit::run(&mut w, 1);
+    assert!(health(&w, boat) <= 0, "destroyed by the strike");
+    assert_eq!(shown(&w), 0, "the destroying strike");
+    assert_eq!(ps(&w, squid).grab_anim, None);
+}
+
+// spec: S-0614 claim 25 and State and ordering (the grab animation and the cycle's phase are saved: a save and load mid-grab and mid-push gives the same hash and both copies continue identically)
+#[test]
+fn claim_25_save_load_mid_hold() {
+    for ticks in [5, 45] {
+        let (mut w, squid, _boat, _) = grappled(&grab_ruleset(true));
+        testkit::run(&mut w, ticks);
+        assert!(ps(&w, squid).grab_anim.is_some());
+        let bytes = save::save(&w);
+        let mut l = save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+        assert_eq!(save::state_hash(&l), save::state_hash(&w));
+        testkit::run(&mut w, 60);
+        testkit::run(&mut l, 60);
+        assert_eq!(save::state_hash(&l), save::state_hash(&w));
+        assert_eq!(grabs(&l), grabs(&w));
+    }
 }
