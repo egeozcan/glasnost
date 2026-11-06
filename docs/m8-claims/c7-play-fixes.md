@@ -619,3 +619,16 @@ search. Whether that changes what each of our own pathing improvements fixes:
 | `harvest_cell_shared` | no | Harvesters are vehicles; the check is for infantry only. |
 
 Intake 106 leaves the layer file unchanged.
+
+## A3 intake 109 (S-0015 r4, S-0111 r40): departures without a switch
+
+Ledger: [intake109.md](intake109.md). Neither spec adds a quirk switch. Every departure they name
+states that it has no switch, so none is a layer candidate (condition 1 needs a switch with an off
+position). Each is built as the spec states it.
+
+| Departure | Spec | Verdict | Built |
+|---|---|---|---|
+| An entry with no texts gives empty text, not the next entry's text | S-0015 claim 6 (a drawing-only defect, lead decision 2026-10-14) | no switch (the spec's) | `strings::StringTable` (`find`) |
+| A damaged entry in cases ii to iv, entries beyond the header's counts: the entries read whole are kept, with a warning | S-0015 claim 9 (departure for bad data) | no switch (the spec's) | `csf::StringFile::read` |
+| An entry label of 32 bytes or more matches no lookup, with a warning | S-0015 claim 5 | no switch (the spec's) | `strings::StringTable::new` |
+| The name tip's box flips at the pointer row the original does not; wraps at W − 8; forgets spaces at a line break; no break at a leading space; places each text by its own size | S-0111 Edge cases (display-only, no switch) | no switch (the spec's) | `name_tip::{place, lines}` |
