@@ -1,9 +1,9 @@
 ---
 id: Q-2736
 title: A left or right button pressed in the route mode and held while the pointer rests
-status: open
+status: answered
 related: [S-0111, S-0213]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
