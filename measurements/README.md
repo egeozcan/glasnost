@@ -41,3 +41,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0021](combat/M-0021-arena-fragment-gattling-test-pairing.md) | Unit arena, a test pairing after Q-1714's (fragments per shot, first shots, gaps, stages) | combat | confirms | local |
 | [M-0020](simulation/M-0020-unit-arena-standing-positions-yuri-caos.md) | Unit arena, YURI against GGI and SHK and CAOS against E1 (placement at tick 0, standing positions and the winner, first targets, captures, the drones' end) | simulation | new finding | local |
 | [M-0023](structures/M-0023-released-infantry-walled-pen-order.md) | A released infantry unit given a move order into a walled pen before its first turn (S-0417 U10 part g run 1) | structures | confirms | local |
+| [M-0024](simulation/M-0024-hunt-scatter-from-damage.md) | The scatter from damage for hunting vehicles of computer-controlled houses (S-0215 B6 part f) | simulation | confirms | local |
