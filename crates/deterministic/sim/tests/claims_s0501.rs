@@ -3218,10 +3218,13 @@ fn lost_target_no_dock_types_heads_for_the_edge_and_lands_near_it() {
     let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
     lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
     let e = edge_destination(&mut w, a);
+    // spec: S-0501 claim 33 (r146, Q-2677: the movement update in which guard becomes current at claim 31's first point queues move for it, with its destination and nothing queued, and move becomes current at the third point, so the tick can end with move current and the edge cell as destination)
     let guard = run_until(&mut w, 100, |w| {
-        w.obj(a).unwrap().beh.current == Some(Behaviour::Guard)
+        let o = w.obj(a).unwrap();
+        o.beh.current == Some(Behaviour::Guard)
+            || (o.beh.current == Some(Behaviour::Move) && dest_cell(w, a) == Some(e))
     });
-    assert!(guard, "guard: {}", describe(&w, a));
+    assert!(guard, "guard, or the move it gets: {}", describe(&w, a));
     let c = replaced_near(&mut w, a, e);
     lands_at_and_rests(&mut w, a, c, 2);
 }

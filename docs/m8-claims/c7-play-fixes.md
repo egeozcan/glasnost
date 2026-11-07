@@ -653,3 +653,15 @@ changes, only `tick.rs` (`absorber_stale_contact_kept`) and `orders.rs` (`group_
 `rally_point_shared`) read a switch of the layer, and in both only the change-of-target test of
 S-0107 r46 moves (a `watch_test` in place of a `watch_set`), away from the code those switches
 guard. Intake 107 leaves the layer file unchanged.
+
+## Intake 108 (S-0501 r146): two aircraft switches judged again
+
+Ledger: [intake108.md](intake108.md). S-0501 r146 answers Q-2676 and Q-2677 and adds no quirk,
+but the texts of two switches gain a case. No default changes.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `aircraft_edge_hold` | S-0501 claims 4, 7 and 10, Edge cases (r146, Q-2676) | admitted (off), unchanged | r146 adds claim 7's survivor to the switch's text "as any aircraft is": one that may not leave the map now is moved on outside the legal map with either setting, where claim 7's rules for it go on acting. That adds nothing to either position: the push-back and the off position's removal both act only on an aircraft that may leave the map now (claim 10), and the survivor is that only when it is visiting, as any aircraft would be. The three conditions of its first entry (above) are untouched: the off position still takes an aircraft that is leaving play out at the edge instead of holding it there. The survivor flying on outside the legal map is the same in both positions, so the switch does not decide it. Built as before in `air::tick_flight` and `air::leave_map_test`. Tests, both positions on the new case: `claims_s0501_r146::claim_7_a_survivor_flies_on_off_the_legal_map` (the pad-bound survivor never removed with either setting; a visiting survivor with the fly-back flag held at the edge with the switch on, removed on leaving the legal map with it off); the earlier `claims_s0501_r93_edge::quirk_aircraft_edge_hold_both_positions` unchanged. |
+| `aircraft_grounded_enter_stall` | S-0501 claim 24, Edge cases (r146, Q-2677) | admitted (off), unchanged | r146 names one more aircraft that reaches the stay: one that is not pad-bound, slid after its entry report, was taken off by claim 33's *move*, landed again at its docking position and fell back into *enter* in contact on the ground (claim 24, *Not pad-bound*). Condition 1 holds as before: the Edge case states the off position (it is moved on to the docking stage, reports at its next processing and is serviced), built in `air::enter`. Condition 2 holds more strongly: the spec now traces a whole docking flight that ends in the stay, with its ammunition never refilled, the unit stuck that intake 92 judged. Condition 3 holds: the off position gives it the service a pad-bound aircraft in the same state gets, by claim 26's rules unchanged. Tests, both positions on the new case: `claims_s0501_r146::ac31h6_after_a_touchdown_beside_the_docking_position_it_takes_off_and_lands_again` (on: *enter* to the end of the record, no round; off: a second report and a round); the earlier `claims_s0501_r110::claim_24_grounded_in_contact_stall_switch_both_positions` unchanged. |
+
+Intake 108 leaves the layer file unchanged.

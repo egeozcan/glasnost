@@ -314,7 +314,7 @@ fn claim_7_a_refusal_in_flight_flies_on_to_the_free_cell() {
     assert_eq!(st(&w, a).flying_to, Some(Target::Cell(c)), "the point kept");
 }
 
-// spec: S-0501 claim 7 (r134, Q-2646: when no free cell is found, the aircraft takes a hit of its current health with the demolition warhead, ignoring its defences, with no attacker and no house, S-0302 claim 1 deciding its outcome; its flight point is cleared and no touchdown follows in that update) and Import mapping (C4Warhead); S-0302 F3 case (i) (a hit that ignores defences: d₀, the warhead's verses not applied, so the hit of its current health destroys it whatever the verses); Open question 28 (what follows when it survives, Q-2676, which these rules do not reach)
+// spec: S-0501 claim 7 (r134, Q-2646: when no free cell is found, the aircraft takes a hit of its current health with the demolition warhead, ignoring its defences, with no attacker and no house, S-0302 claim 1 deciding its outcome; no touchdown follows in that update; r146, Q-2676: its flight point becomes the map's origin point, which a destroyed aircraft holds too, its flight unfinished) and Import mapping (C4Warhead); S-0302 F3 case (i) (a hit that ignores defences: d₀, the warhead's verses not applied, so the hit of its current health destroys it whatever the verses, unless a stage 2 row of S-0302 claim 8 stops it, which these rules give no row for; the survivor is `claims_s0501_r146`'s)
 #[test]
 fn claim_7_with_no_free_cell_it_takes_the_demolition_hit() {
     for verses in ["1", "0.5"] {
@@ -333,7 +333,11 @@ fn claim_7_with_no_free_cell_it_takes_the_demolition_hit() {
         let o = w.obj(a).unwrap();
         let s = st(&w, a);
         assert!(!s.landing && !s.ground, "no touchdown: {tag}");
-        assert_eq!(s.flying_to, None, "its flight point cleared: {tag}");
+        assert_eq!(
+            s.flying_to, None,
+            "no flight point but the origin point: {tag}"
+        );
+        assert!(s.origin, "the origin point: {tag}");
         assert_eq!(o.health, 0, "{tag}");
         assert!(glasnost_sim::combat::damage::dead(o), "{tag}");
     }
