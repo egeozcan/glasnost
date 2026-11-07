@@ -2,13 +2,13 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 26
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-07
 measurements: []
-requests: [Q-0269, Q-0510]
+requests: [Q-0269, Q-0510, Q-2716]
 supersedes: []
 ---
 
@@ -145,21 +145,35 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
      for the loading hang on a cycle). The safe chain cut is our engine's departure
    - Confidence: high (medium for the shared member)
 
-2. **One tag per tag definition.** Every carrier of a tag definition carries the same tag, so all
-   of them share one set of trigger instances, one trigger timer per instance and one latch set
-   per instance. The tag is created the first time a cell tag, a pre-placed object or the end
-   of loading needs it (claim 34). The tag counts its carriers: attaching it to a cell or an object adds
-   one, and detaching it removes one.
-   A cell tag names its tag definition by the definition's ID, without regard to letter case
-   (Import mapping). A pre-placed object's tag field matches either the ID or the name field of a
-   tag definition, without regard to letter case: the object gets the first tag definition in
-   registration order (claim 7) whose ID or name equals the field. A tag name longer than 48 bytes
-   is cut to its first 48 bytes, so only that cut name matches. A tag field that matches no tag
-   definition gives the object no tag and creates no definition. The `none` marker of an untagged
-   object normally matches nothing in this way; the importer warns about any other unmatched
-   field.
-   - Backing: `measurable` (scenario T6, variants E and F)
-   - Confidence: high (medium for the name-field match and the cut)
+2. **One tag per tag definition.** Every carrier of a tag definition carries the same tag, so all of
+   them share one set of trigger instances, one trigger timer per instance and one latch set per
+   instance. The tag is created the first time a cell tag, a pre-placed object or the end of loading
+   needs it (claim 34). The tag counts its carriers: attaching it to a cell or an object adds one,
+   and detaching it removes one. Being destroyed, leaving play and being removed (glossary) do not
+   by themselves detach an object's tag. A removed object therefore still carries its tag while it
+   is a leftover (S-0203 claim 13), for the rest of the tick of its removal, and for the rest of the
+   game when it is kept to the game's end (S-0203 claim 13 (g)). Nothing detaches it when it stops
+   existing either, so a carrier that stops existing while it carries the tag keeps its place in the
+   tag's carrier count for the rest of the game (`quirks.removed_carrier_keeps_tag`). A cell tag
+   names its tag definition by the definition's ID, without regard to letter case (Import mapping).
+   A pre-placed object's tag field matches either the ID or the name field of a tag definition,
+   without regard to letter case: the object gets the first tag definition in registration order
+   (claim 7) whose ID or name equals the field. A tag name longer than 48 bytes is cut to its first
+   48 bytes, so only that cut name matches. A tag field that matches no tag definition gives the
+   object no tag and creates no definition. The `none` marker of an untagged object normally matches
+   nothing in this way; the importer warns about any other unmatched field.
+   - Backing: `measurable` (scenario T6, variants E and F, and variant H, whose carriers are
+     vehicles, for a carrier that stops existing keeping its place in the count). `unmeasured` for a
+     destroyed carrier of another kind (an infantry unit, an aircraft or a building) keeping its tag
+     and its place in the count: no scenario here destroys a carrier of another kind under an
+     all-carriers tag. `unmeasured` for a leftover still carrying its tag: the only rule known to
+     reach a leftover is S-0203's defeat sweep, whose raises S-0203 claim 13 (g) gives as
+     `unmeasured`, so no scenario here can show the tag on a leftover. `unmeasured` for an object
+     that leaves play or is removed without being destroyed: no scenario here takes a carrier out of
+     play in another way, and which of those ways raise its tag is not established here
+   - Confidence: high (medium for the name-field match and the cut, for a leftover still carrying
+     its tag, for an object taken out of play without being destroyed and for a destroyed carrier
+     other than a vehicle keeping its tag and its place in the count)
 
 3. **Enabled at start.** A trigger instance starts enabled exactly when its definition's disabled
    flag is clear and its difficulty flag at the game's difficulty position is set (claim 4 gives
@@ -307,11 +321,15 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
 10. **Repeat types.** The repeat type decides what happens when a trigger instance is satisfied in a
     raise. The full table is in State and ordering. In short: a one-time tag fires the trigger, and
     then the tag leaves all its carriers and is deleted. An all-carriers tag fires the trigger only
-    when the tag has exactly one carrier left, and otherwise only detaches the raising carrier. So
-    an all-carriers tag with no carrier (for example one that is only polled) never fires
+    when the tag has exactly one carrier left, and otherwise only detaches the raising carrier. A
+    carrier that stopped existing while it carried the tag still counts (claim 2), so when one of
+    two carriers is destroyed and none of its destruction raises satisfies the trigger, the other's
+    later raise finds two carriers and only detaches it (scenario T6, variant H). So an all-carriers
+    tag with no carrier (for example one that is only polled) never fires
     (`quirks.all_carriers_without_carrier`). A repeating tag fires the trigger every time and stays.
     Any other repeat value never fires, and the importer warns.
-    - Backing: `measurable` (scenario T6, including G for an unknown repeat value)
+    - Backing: `measurable` (scenario T6, including G for an unknown repeat value and H for a
+      carrier that stopped existing)
     - Confidence: high for one-time and repeating, medium for all-carriers
 
 11. **Firing.** When a trigger fires, its actions take effect in the order of its action list,
@@ -1049,6 +1067,12 @@ Claim 14 owns the resource-glint conditions, draw ranges and singleton-frequency
 - **All-carriers tag without a carrier** (`quirks.all_carriers_without_carrier`, YR default: on).
   It never fires (claim 10). *Fixed behaviour:* a carrier count of 0 counts like 1, so the tag fires
   once and is deleted.
+- **Removed carrier keeps its tag** (`quirks.removed_carrier_keeps_tag`, YR default: on). An
+  object keeps its tag, and its place in the tag's carrier count, when it is destroyed, leaves
+  play or is removed, and the place is not given back when it stops existing (claim 2). So an
+  all-carriers tag that has lost a carrier in this way does not fire at the raise of its last
+  remaining carrier (claim 10). *Fixed behaviour:* an object loses its tag when it is removed, as
+  at a detachment, so the count drops by one and a leftover (S-0203 claim 13) carries no tag.
 - **Entered-by with a player position** (`quirks.entered_by_country_only`, YR default: on). The
   entered-by value is read only as a country index, so the player-position values never match (claim
   18). *Fixed behaviour:* the value is resolved like an action's house value (claim 23), and the event
@@ -1484,17 +1508,24 @@ radar event is shown, not two. *Falsified if:* any differs. In part (c), in part
 the second entry (which would mean that the first entry re-armed the timer).
 
 **Scenario T6 (claims 2, 10).** *Setup:* three neutral vehicles carry the same tag, whose trigger
-(destroyed-by-anything) counts. The human destroys them one by one with single shots of a weapon that
-kills each in one hit. Variants: repeat type 1, 0, and 2. Variant D: an all-carriers tag carried by
-nothing, with event any-event and a count action. Variant E: as type 0, but the tag's name field
-differs from its ID, and the vehicles' tag fields give the name, in another letter case. Variant F:
-as type 0, but the tag's name is 50 characters long; the three vehicles' tag fields give its first
-48 characters, and a fourth such vehicle, whose tag field gives all 50 characters, is destroyed
-first. *Observable:* counter drops after each destruction. *Expected:* type 1: one drop, after the
-third destruction. Type 0: one drop, after the first; the other two no longer carry the tag. Type 2:
-a drop after each destruction (and more, see T7). D: no drop. E: as type 0. F: no drop at the fourth
-vehicle's destruction (it carries no tag), then as type 0. Variant G: repeat value 3; no firing
-at any destruction. *Falsified if:* any differs.
+(destroyed-by-anything) counts. The human destroys them one by one with single shots of a weapon
+that kills each in one hit. Variants: repeat type 1, 0, and 2. Variant D: an all-carriers tag
+carried by nothing, with event any-event and a count action. Variant E: as type 0, but the tag's
+name field differs from its ID, and the vehicles' tag fields give the name, in another letter case.
+Variant F: as type 0, but the tag's name is 50 characters long; the three vehicles' tag fields give
+its first 48 characters, and a fourth such vehicle, whose tag field gives all 50 characters, is
+destroyed first. *Observable:* counter drops after each destruction. *Expected:* type 1: one drop,
+after the third destruction. Type 0: one drop, after the first; the other two no longer carry the
+tag. Type 2: a drop after each destruction (and more, see T7). D: no drop. E: as type 0. F: no drop
+at the fourth vehicle's destruction (it carries no tag), then as type 0. Variant G: repeat value 3,
+and no firing at any destruction. Variant H: an all-carriers tag carried by two neutral vehicles A
+and B, whose trigger has a game-time event (claim 16) as its first event and destroyed-by-anything
+as its second, and counts. In run 1 the human destroys A in a tick before the game-time event is
+satisfied and B in a tick after it, and in run 2 both in ticks after it. Expected: in run 1 no drop,
+and in run 2 one drop, at B's destruction. Run 1 is the run that tells the two settings of
+`quirks.removed_carrier_keeps_tag` apart: with the switch off, B's raise finds one carrier and the
+counter drops. In run 2, A's satisfied raise detaches A under either setting. *Falsified if:* any
+differs.
 
 **Scenario T7 (claims 9, 19).** *Setup:* two neutral vehicles V1 and V2 carry one repeating tag whose
 only trigger has the single event destroyed-by-anything and a count action. The human destroys V1, then
@@ -1981,9 +2012,6 @@ using named test maps removed afterwards.
   That includes the extra latch rule
   (a few codes of the latchable set, the build-type events for example, latch on any repeat type)
   and how polling (claim 6) treats a code that is both polled and code-matched (code 50).
-- **Carrier count of a lost carrier.** Whether an object that is destroyed, or leaves the map
-  otherwise, while it still carries a tag stops counting as a carrier of it (claims 2, 10 and 19).
-  It matters for all-carriers tags.
 - **Re-raises outside the subset** (claim 8). The exact codes and conditions of extra raises
   at a unit's arrival, under a unit in the air every 16 ticks, at an attack on a building
   (claim 35) and at team events. S-0312 claim 29 and its Import mapping establish the
