@@ -90,24 +90,46 @@ origin point asserted).
 
 ## Goldens
 
-Regenerated, through the state hash only: duel, duel-diagonal, duel-m6c, duel-naval and skirmish.
-duel-m7a and duel-m7b did not move.
+Regenerated on main 01c5688's goldens, through the state hash only: duel, duel-diagonal,
+duel-m6c, duel-naval and skirmish. duel-m7a and duel-m7b do not move. Save format 109, AI game
+format 74 (main: 108 and 73).
 
 ## Lanes
 
-Main 07d549c's simulation (before) against the branch (after); main's later commits up to 0051f51,
-onto which the branch is rebased, touch no simulation code.
+The branch is rebased onto main 01c5688. Main's code there equals 926f78d's, the base the binaries
+were built from. Before is main, after is the branch.
 
-- The M6c, M7a and M7b seed sweeps, seeds 1 to 16, with and without `GLASNOST_PLAY_FIXES`: the same
-  output line for line. Smallest counters: M6c 0 (median 4) both ways; M7a 2 with the layer, 1
-  without (median 2); M7b no drain counter below 3 on any seed.
-- The arena (`--record all --threads 2`): byte-identical reports and CSVs. M-0001 11 of 96 pairings
-  failing, M-0002 2 of 24, M-0003 1 of 35, M-0019 0 of 6, M-0020 1 of 25 (YURI against SHK, arm S),
-  M-0021 8 of 50.
-- The AI quick lane (seeds 7 to 10, maps 0, 2 and 8, 36 games): 34 games identical apart from
-  timings. Two end sooner with the same winner: seed 8, map 0, sides 0 and 2 (46 839 to 38 619
-  ticks, house 1) and seed 9, map 0, sides 0 and 1 (40 923 to 36 184 ticks, house 0). No winner
-  changed. The one game without a winner (seed 10, map 8) is unchanged.
-- `cargo test --release -p glasnost-ai -- --include-ignored`: 228 passed, 1 failed, as on main.
-  `skirmish::plays_to_the_last_side` still fails the same way ("the game is over within 40000
-  ticks"). A4 round 9b owns it.
+- **The M6c, M7a and M7b seed sweeps**, seeds 1 to 16, with and without `GLASNOST_PLAY_FIXES`: the
+  same output line for line. Smallest counters: M6c 0 (median 4) both ways; M7a 2 with the layer
+  and 1 without (median 2); M7b, no drain counter below 3 on any seed. The same held against main
+  07d549c before round 9b.
+- **The arena** (`--record all --threads 2`, main 07d549c against the branch on 07d549c):
+  byte-identical reports and CSVs. M-0001 has 11 of 96 pairings failing, M-0002 2 of 24, M-0003 1
+  of 35, M-0019 0 of 6, M-0020 1 of 25 (YURI against SHK, arm S) and M-0021 8 of 50. Main's later
+  commits change no code the arena runs: the arena and oracle modules do not use the AI, and the
+  simulation and tools crates are unchanged. So it was not run again.
+- **The AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games). Every game ends, before and
+  after. 32 games are identical apart from timings; 4 games changed:
+
+  | Seed | Map | Sides | Main | Branch |
+  |---|---|---|---|---|
+  | 7 | 0 | 0 and 1 | 62 196 ticks, house 0 | 52 253 ticks, house 0 |
+  | 8 | 0 | 0 and 2 | 45 358 ticks, house 1 | 38 619 ticks, house 1 |
+  | 9 | 0 | 0 and 1 | 33 361 ticks, house 0 | 33 982 ticks, house 0 |
+  | 9 | 0 | 0 and 2 | 51 113 ticks, house 0 | 70 236 ticks, house 1 (the winner changed) |
+
+  - **Trace of the changed winner.** The object dumps are equal up to tick 29 600 and differ at
+    29 700. The first object that differs is house 0's ASW aircraft 11814, a destroyer's slot
+    aircraft.
+  - In tick 29 682 it leaves *attack* for *guard* with a destination cell, (35,43). On main it
+    stays in *guard* for three ticks and gets *move* toward its destroyer at 29 685. On the branch,
+    claim 33's *move* (r146, at the movement update) is current in tick 29 682 itself. Its
+    processing gives the destination (43,51), and at 29 685 it gets the same *move* toward its
+    destroyer.
+  - From there its flight is a cell and a tick apart, and the long game drifts. This is the change
+    r146 asks for, not a defect.
+  - Against main 07d549c (before round 9b), 2 of the 36 games changed and no winner changed.
+- **`cargo test --release -p glasnost-ai -- --include-ignored`**: 263 passed and 0 failed on main
+  01c5688, and the same on the branch. `skirmish::plays_to_the_last_side` passes on both, so the
+  change does not move it. Against main 07d549c the result was 228 passed and 1 failed on both
+  sides, that test failing the same way on both.
