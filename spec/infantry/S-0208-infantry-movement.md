@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 53
+revision: 58
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-08
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782]
 supersedes: []
 ---
 
@@ -171,7 +171,9 @@ used by this spec:
   conditions for a human-controlled owner), together with the retaliation conditions that the
   target-acquisition specs own (glossary *retaliation*), among them that the actor has a weapon it
   can use against the attacker. An actor whose current behaviour lacks the retaliate property may
-  not. An actor that may retaliate does retaliate against the hit when S-0215 claim 18 lets it
+  not, and neither may an actor whose owner allies the attacker's house (S-0309 claim 18), so an
+  attacker of its own house is one it may not retaliate against (a house counts as allied with
+  itself, glossary *alliance*). An actor that may retaliate does retaliate against the hit when S-0215 claim 18 lets it
   override: in the original, an actor of a computer-controlled owner always does, at once, and an
   actor of a human-controlled owner does when its weapon already reaches the attacker or the
   attacker lies within the distance of S-0215 Formulas F7.
@@ -467,11 +469,12 @@ used by this spec:
    searched for in that same update, which is the asking tick of the walk's first cell. A
    destination given after it, such as by the end-of-update check of S-0215 claim 22, is searched
    for in the next tick, which is then the asking tick. For a walker standing with no walking target
-   and no stored path, a scatter that takes its destination from the nearby-cell search (claim 13)
-   is an exception: at the scatter the walker has one more locomotion at once, in which it searches
-   for that destination and, when the search gives a path, chooses its walking target without
-   moving. That choice is the walk's first position choice (claim 3), so it takes claim 3's draw
-   when its desired point has class centre, after the scatter's own draw and before any later
+   that holds no stored path once the scatter's destination is given, because it held none or the
+   scatter dropped the one it held, a scatter that takes its destination from the nearby-cell search
+   (claim 13) is an exception: at the scatter the walker has one more locomotion at once, in which
+   it searches for that destination and, when the search gives a path, chooses its walking target
+   without moving. That choice is the walk's first position choice (claim 3), so it takes claim 3's
+   draw when its desired point has class centre, after the scatter's own draw and before any later
    request's. A later request in the same tick finds that walking target (claim 15). When that
    scatter comes before the walker's own locomotion in the tick, as at a hit in another actor's
    update earlier in the tick (claim 15), that locomotion finds the walking target already chosen
@@ -482,18 +485,34 @@ used by this spec:
    `quirks.enter_keeps_stored_path` off no walker keeps its path at a scatter), and in it chooses
    its walking target in the path's next cell (S-0209 claim 6) without a search (medium, unmeasured:
    the scatter starts the extra locomotion whatever the walker's state, and such a walker accepts a
-   scatter only by claim 11's third case, which no setup here arranges). A walker that already has a
-   walking target is not given this extra locomotion in our engine (Open questions). A scatter whose
-   destination is chosen among the eight neighbours, by claim 12 or by claim 13's fall-back when the
-   search gives no cell, has none, so the walker has no walking target until its next locomotion.
-   What decides is which choice gives the destination, not where the cell lies: the nearby-cell
-   search can give a cell next to the walker's own, and a scatter that takes it has the extra
-   locomotion. In the original, the factory's scatter request of S-0417 claim 17 is acted on in the
-   released walker's own update, after that update's behaviour processing and locomotion. Our
-   engine's order of S-0417 claim 17 also puts it after the locomotion, so what follows holds in
-   both. So the tick of that request is the asking tick and the first step is in the next tick when
-   the destination comes from the nearby-cell search, while for a destination chosen among the eight
-   neighbours the next tick is the asking tick and the first step comes one tick later.
+   scatter only by claim 11's third case, which no setup here arranges). A walker standing with no
+   walking target whose stored path the scatter drops is in the state of one that held none: it
+   searches in the extra locomotion for the scatter's destination and chooses its walking target
+   there. Examples are a walker in *move* after the arrival tick of a standing position in the
+   middle of its walk and before its next locomotion, one waiting for a blocked next cell (S-0209
+   claims 6 and 10), one under *enter* whose path is dropped, and, in our engine, any walker with
+   `quirks.enter_keeps_stored_path` off. A scatter whose cell differs from the walker's destination
+   ends any retry delay that was running (S-0212 claim 21), so the search in the extra locomotion is
+   not held back whatever the walker's earlier searches were. The scatter restarts the blockage
+   delay (S-0209 claim 10). So for such a scatter it makes no difference whether the walker stands
+   after an arrival tick, before its next locomotion (as at the start of the tick after that arrival
+   tick), or on a later tick of waiting with its stored path. If the scatter's cell is already
+   the walker's destination, the scatter gives that destination again; what that does to a running
+   retry delay is S-0212 claim 21's case of a destination given again, which that spec leaves open
+   (its Open questions). A walker whose stored path the scatter drops has a destination, so its
+   locomotor is moving and it accepts the scatter only by claim 11's third case. A walker that
+   already has a walking target is not given
+   this extra locomotion in our engine (Open questions). A scatter whose destination is chosen among
+   the eight neighbours, by claim 12 or by claim 13's fall-back when the search gives no cell, has
+   none, so the walker has no walking target until its next locomotion. What decides is which choice
+   gives the destination, not where the cell lies: the nearby-cell search can give a cell next to
+   the walker's own, and a scatter that takes it has the extra locomotion. In the original, the
+   factory's scatter request of S-0417 claim 17 is acted on in the released walker's own update,
+   after that update's behaviour processing and locomotion. Our engine's order of S-0417 claim 17
+   also puts it after the locomotion, so what follows holds in both. So the tick of that request is
+   the asking tick and the first step is in the next tick when the destination comes from the
+   nearby-cell search, while for a destination chosen among the eight neighbours the next tick is
+   the asking tick and the first step comes one tick later.
 
    **A new destination while a step is under way (Q-2657).** A walker that has a walking target
    keeps it when it is given a new destination, by an order or by any other rule. It finishes the
@@ -522,16 +541,20 @@ used by this spec:
      locomotion, which only a destination from the nearby-cell search has. So M-0023 shows that the
      baseline's destination came from the nearby-cell search, which the record does not say by
      itself, only together with W17 part b. The first step on the tick of a scatter that comes
-     before the walker's own locomotion is `unmeasured`: no scenario here sets which of two actors
-     updates first in a tick, so none can place a hit before the walker's update. `measurable`
-     (scenario W17: part a for an order given before the update's locomotion, part b for the
-     neighbour choice, parts c and d for a walker on a longer stored path, part e for the arrival in
-     the new destination's cell; W7 part j for the walking target that a later request finds, W9
-     part c for the draw of its choice). `unmeasured` for a destination given by the update's
-     behaviour processing: no scenario here can time such a destination apart from the order of part
-     a, and it follows from the same place of the locomotion that part a tests. The end-of-update
-     case is `unmeasured` here: S-0215 claim 22 owns it, and no scenario of this spec gives such a
-     destination.
+     before the walker's own locomotion is `measurable` for a scatter order that takes effect at the
+     start of the tick (scenario W17, part l and its control) and `unmeasured` for a hit: no
+     scenario here sets which of two actors updates first in a tick, so none can place a hit before
+     the walker's update. `measurable` (scenario W17: part a for an order given before the update's
+     locomotion, part b for the neighbour choice, parts c and d for a walker on a longer stored
+     path, part e for the arrival in the new destination's cell, part l for a walker whose stored
+     path a scatter drops after an arrival tick, part m for one waiting for a moving blocker; W7
+     part j for the walking target that a later request finds, W9 part c for the draw of its
+     choice). `unmeasured` for a destination given by the update's behaviour processing: no scenario
+     here can time such a destination apart from the order of part a, and it follows from the same
+     place of the locomotion that part a tests. The end-of-update case is `unmeasured` here: S-0215
+     claim 22 owns it, and no scenario of this spec gives such a destination. The extra locomotion
+     of a walker under *enter* whose path a scatter drops is `unmeasured`, as for the path kept
+     under *enter*: no setup here gives such a walker a scatter it accepts.
    - Confidence for the two paragraphs above: high for the first step 1 tick after the turn of the
      factory's scatter request in M-0023's set-up (S-0417 scenario U10 part b), and, for an order to
      a cell in another reach region given at the start of the tick in which a single step first
@@ -544,7 +567,18 @@ used by this spec:
      end-of-update case being searched one tick later, for the walking target kept and the step
      under way finished in other cases, for the stored path being dropped, for the walking target
      that a later request in the same tick finds and the draw its choice takes, for the search in
-     the tick after the arrival tick and for the arrival in the new destination's cell.
+     the tick after the arrival tick and for the arrival in the new destination's cell. Medium for
+     the extra locomotion of a walker whose stored path a scatter drops and its search there (the
+     scatter's start of that locomotion and the search in it were traced with no condition on the
+     walker's earlier path), with S-0212 claim 21's rating (medium) for the end of a running retry
+     delay at a scatter's cell that differs from the walker's destination, and medium for the
+     restart of the blockage delay at a scatter.
+   - Backing for the restart of the blockage delay at a scatter: `unmeasured`, with S-0209 claim
+     10's backing for the walker's rule (its scenario C5 part c backs the restart at an order's new
+     destination, and no scenario gives a walker a scatter whose path then leads into a moving
+     blocker; W17 part m reads the end of the retry delay, not the blockage delay). Confidence:
+     medium, as S-0209 claim 10 rates the walker's rule; S-0212 claim 22's low rating of what ends
+     a blockage is for the driving, ship and hovering locomotors that claim covers.
 
    **A stored path kept under *enter* (Q-2701).** A walker given a new destination, by an order or
    by any other rule, keeps its stored path instead of dropping it when, at that moment, its
@@ -983,10 +1017,15 @@ used by this spec:
       for the outcome when both requests are accepted). `unmeasured` for the tether-link condition
       of the second case: factory release supplies a tether situation (S-0417 claim 10), but no
       reliable setup yet isolates this condition while the unit also has no target, destination or
-      movement in progress. Scenario W12 is exploratory, not backing for that condition
+      movement in progress. Scenario W12 is exploratory, not backing for that condition.
+      `unmeasured` for an attacker of the unit's own house or of an allied house falling under the
+      second case (Terms *May retaliate*): S-0215 scenario B6 part g sets this up for a vehicle
+      only, and an infantry unit in its place could also be sent request B, whose acceptance and
+      destination differ from request A's, so no run here isolates the case for infantry.
     - Confidence: medium for the two cases of request A, for request B and for the scatter centre
       cell of request B when both requests are accepted; the factory-release tether situation has
-      S-0417 claim 10's confidence
+      S-0417 claim 10's confidence; medium for an attacker of the unit's own or an allied house
+      counting as one it may not retaliate against.
 
 ### End of a walk and the approaching walker
 
@@ -2778,7 +2817,7 @@ cases).**
   action or externally supplied order makes that interval inconclusive instead.
 
 **Scenario W17: destinations given during an update, and a new destination during a step
-(claim 6; Q-2657, Q-2701, Q-2702, Q-2746).**
+(claim 6; Q-2657, Q-2701, Q-2702, Q-2746, Q-2750).**
 - *Setup:* M-0023's map and settings, stock data. The recorder reads at the end of each tick, for
   the test unit, its current and queued behaviour, destination and position. Unit *I* is an ordinary
   infantry unit of a human-controlled house, resting in *guard* on open, flat ground with no other
@@ -2839,6 +2878,37 @@ cases).**
   step after the step under way goes towards the new cell, and the recorded behaviours show *move*
   becoming current with the new cell as destination. Falsified by a first step after the step under
   way along its line towards *G*.
+- *Stored path dropped at a scatter (Q-2750):* *F* is a fraidycat civilian of an unarmed type, owned
+  by a computer-controlled house (named test objects), whose *move* behaviour has the scatter
+  property (a named test file gives it if the imported behaviour lacks it). The harness gives every
+  order to *F* directly. (l) On open, flat ground with no other unit within 3 cells of its line,
+  order *F* to a free cell 6 cells away in a straight line. At the start of the tick after its
+  second arrival tick, when it stands with no walking target and its stored path (claim 6), give it
+  the scatter order (S-0213 claim 9). Its locomotor is moving, so claim 11's third case accepts the
+  request (fraidycat, scatter property, computer-controlled owner), and the request has no threat
+  point, so its destination comes from the nearby-cell search (claim 13). Expected: *F*'s position
+  changes in the tick of the order, towards the scatter's destination, and, when that destination is
+  off its line, it does not walk on along the line. Falsified by a first change of position in the
+  next tick or later. Control: the same order given at the start of a tick on which *F* stands at
+  rest with no destination after a walk has ended. Expected: a change of position in the tick of the
+  order as well (the extra locomotion of a walker that held no stored path, before its own
+  locomotion). A control whose first change comes in the next tick voids part l. (m) S-0209 scenario
+  C5's corridor and part a's blocker *V*₁, with *F* in place of the infantry and *V*₁ and *V*₂ of
+  *F*'s house, *V*₁'s order given by the harness. A test file sets the path-retry delay to a value
+  *P* with trunc(*P* × 900) = 90 ticks (S-0212 F3). *F*'s last search before it waits behind *V*₁
+  is the one for its order, or an immediate new path of S-0209 claim 7, and either leaves no retry
+  delay when it gives a path (S-0212 claim 21). So *F* re-paths on the first tick of that wait, the
+  first tick on which its position no longer changes (S-0209 claim 10), and that re-path starts a
+  delay of 90 ticks. At the start of a tick 10 to 80 ticks after that first tick, while *F* still
+  waits there, give it the scatter order. A run in which *F*, once it has taken its first step,
+  stands still on two or more ticks in a row before that wait decides nothing: it has then waited
+  earlier, and a re-path in that wait may have started the delay at another tick. Expected: its
+  position changes in the tick of the order, towards the scatter's destination, and it does not walk
+  on through the corridor. Also record *F*'s destination at the end of that
+  tick. A run in which that destination is a cell whose route from *F* leads through *V*₁'s cell
+  decides nothing: *F* is then held by *V*₁, not by a retry delay. Falsified by no change of
+  position in that tick, in particular by *F* standing until a retry delay that started at its last
+  search has run out.
 
 ## Open questions
 
@@ -2947,3 +3017,17 @@ cases).**
   established for the original" can cite S-0208 claim 6 for the request's place after the walker's
   behaviour processing and locomotion in the original (medium). S-0208 claim 6 does not place the
   request relative to the late start, so that part of Open question 11 stays open.
+- **S-0212, claim 21.** Its "That clearing or changing the destination ends a delay still running
+  from an earlier tick ... is `unmeasured` for both locomotors" can cite S-0208 scenario W17 part m
+  as a `measurable` setup for the walk locomotor: a scatter order to a walker waiting for a moving
+  blocker, with the path-retry delay at 90 ticks and a delay from its last re-path still running,
+  is followed by a change of position in the tick of the order only when the new destination ends
+  that delay (S-0208 claim 6).
+- **S-0212, claim 22.** Its "S-0209 claim 10 gives the same rule for a walker, for which only a
+  step ends it" should read that for a walker too a step or a replaced destination ends the
+  blockage (S-0209 claim 10, S-0208 claim 6).
+- **S-0309, claim 18.** S-0208 Terms *May retaliate* and S-0215 claim 19 say that an actor
+  may not retaliate against an attacker whose house its owner allies, its own house included,
+  through this claim's condition "*X* is not allied with it". The claim may say with it that a house
+  counts as allied with itself (glossary *alliance*), so that a hit by an attacker of the object's
+  own house falls under that condition.
