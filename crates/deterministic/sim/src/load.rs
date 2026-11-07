@@ -543,7 +543,7 @@ pub fn new_game(
         catalogue: Some(catalogue.clone()),
         regions: Default::default(),
         scratch: Default::default(),
-        extra_locomotion: Vec::new(),
+        locomotion_under_way: Vec::new(),
         trace: Default::default(),
         pathfinder: Default::default(),
     };

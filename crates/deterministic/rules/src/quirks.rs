@@ -149,6 +149,13 @@ pub struct Quirks {
     // spec: S-0208 Edge cases
     #[serde(default = "on")]
     pub walker_overshoot: bool,
+    /// A walker given a new destination keeps its stored path when its
+    /// current or queued behaviour is *enter* and it is in contact with
+    /// nothing at that moment; off: every new destination drops the stored
+    /// path.
+    // spec: S-0208 claim 6 (A stored path kept under enter) and Edge cases
+    #[serde(default = "on")]
+    pub enter_keeps_stored_path: bool,
     /// A walker of speed 1 heading between east and south stalls.
     // spec: S-0208 claim 14
     #[serde(default = "on")]
@@ -2298,6 +2305,7 @@ impl Default for Quirks {
             top_position_counts_as_centre: true,
             prone_noncrawler_speedup: true,
             walker_overshoot: true,
+            enter_keeps_stored_path: true,
             slow_walker_stall: true,
             walker_bridge_destination_deck: true,
             teleport_infantry_negative_level_entry: true,
@@ -2884,6 +2892,7 @@ impl Quirks {
             ),
             ("prone_noncrawler_speedup", self.prone_noncrawler_speedup),
             ("walker_overshoot", self.walker_overshoot),
+            ("enter_keeps_stored_path", self.enter_keeps_stored_path),
             ("slow_walker_stall", self.slow_walker_stall),
             (
                 "walker_bridge_destination_deck",
