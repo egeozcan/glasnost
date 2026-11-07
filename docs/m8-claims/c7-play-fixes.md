@@ -690,3 +690,16 @@ and empty-path searches (S-0209 claims 7 and 10, S-0212 claim 20) as before;
 `unreachable_move_dropped` and `group_spread_no_detour` act in the computation and at the order,
 before any stored path exists for the new destination; `rally_point_shared` gives released units
 their rally move, which no *enter* precedes. Intake 110 leaves the layer file unchanged.
+
+## A3 intake 111 (S-0601 r23, S-0111 r49): no switch added or changed
+
+Ledger: [intake111.md](intake111.md). S-0601 r21 to r23 (Q-2717) rewrites claim 9's guard request
+and adds MC4 parts (a) and (b); S-0111 r40 to r49 (Q-2736) rewrites claim 20's held-button block,
+its Backing and Confidence, scenario NT1 part (h) and an Open question. Neither delta adds,
+renames or rewrites a quirk, an Edge case or a departure, so no switch is owed and none is a layer
+candidate (condition 1 needs a switch with an off position). `every_spec_quirk_has_a_switch`
+and `every_rendering_spec_quirk_has_a_switch` pass on this branch, rebased onto main 6b78a92
+(intake 110 added `enter_keeps_stored_path`). The layer file is unchanged, and none of the
+code this intake changes (`mind::release_orders`, `Session::pointer_down`, `Session::route_press`)
+reads a switch of the layer. Intake 110's S-0309 claim 30 causes now reach
+`mind::release_orders` too; they take the same r23 order and read no switch.

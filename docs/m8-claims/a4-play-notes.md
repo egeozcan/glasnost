@@ -747,6 +747,24 @@ and S-0111 r40 (Q-2687, the name tip's open points). Built in M8 step A3 intake 
 - Q-2686: start a skirmish, rest the pointer on a unit or building for one second. The box now shows the unit's or building's real display name, not its internal type name. A type whose label the string table lacks shows the word MISSING, a colon and the label between apostrophes.
 - Q-2687: rest the pointer on a unit: the box is a little roomier than before (the text starts 4 pixels in from the left and 2 down). Put the pointer within a box height of the bottom of the view: the box flips above the pointer, its last row on the pointer's row. Hold the left or right button down on the map and move the pointer a little: no box shows while the button is held, nor after you let go until you move and rest again. Open the options menu with a box showing: it goes and does not come back after the menu closes. Select a unit while the box shows: no change; destroy the unit under the box: the box goes (or shows what is then under the pointer). Take the pointer off the window and back: the wait runs from the last move inside the window.
 
+### Round 8d, rendering and UI (answer to Q-2736)
+
+S-0111 r49 answers Q-2736, the one point round 8c left open for note 54: a mouse button held in the
+route mode. Built in M8 step A3 intake 111 (ledger: [intake111.md](intake111.md)); lane
+`crates/app/tests/r8_render_lane.rs` (`i111_the_name_tip_with_a_button_held_in_the_route_mode`),
+frames in `local-lane/m8/i111/render/before/` (main at 841f16d: no tip in any scene) and `after/`
+(a tip in scenes 1 and 2, none in scene 3). The answer adds no quirk switch: judged in
+[c7-play-fixes.md](c7-play-fixes.md), *A3 intake 111*.
+
+| Request | Notes | Answer | Built | Status |
+|---|---|---|---|---|
+| [Q-2736](../../spec/requests/Q-2736-a-name-tip-wait-and-a-button-held-in-route-mode.md) | 54 | S-0111 r49 claim 20: in the route mode a held right button blocks the tip as outside it, and so does a held left button whose press is an ordinary click (a band box, a click that adds a point or selects at its release, one refused only at its release). A held left button does not block it when the press was refused at the press, for kind or by the point-click test, or took a point, a join or a loop close, or, with nothing selected, an own point that the click selects; then the tip shows once the pointer has rested 1000 ms with the button still held. The block ends at the release, in the route mode too | `Session::pointer_down` clears `view_button_held` when `Session::route_press` reports a press that is not an ordinary click; the release clears it as before | Built. The spec's Open question (a block that may stay after an ordinary route-mode click released over a highlighted or refused point) is not built: our block always ends at the release, as the claim states |
+
+**Try it (round 8d, rendering and UI).**
+- Q-2736: select one of your buildings, hold the route-mode key and press the left button on open ground. The refusal message shows. Keep the button down, move the pointer onto one of your units and hold still: after one second the name box shows, with the button still held, and it goes when you let go. Before, no box showed while the button was down.
+- Q-2736: give a unit one route point (route-mode key, click on the ground), then select a second unit, keep the route-mode key held and press the left button on that point. Keep it down, move onto a unit and hold still: the name box shows after one second. With nothing selected, a press on your own point does the same.
+- Q-2736: with a unit selected and the route-mode key held, press the left button on open ground (or press the right button anywhere on the map), move a little onto a unit and hold still: no box shows while the button is held, as outside the route mode. After you let go, move and rest again: the box shows.
+
 ## Round 9 (2026-11-06, implementer findings on main)
 
 Findings of the intakes and of round 8b's lanes, not notes of the lead's. Lane outputs are in
