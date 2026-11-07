@@ -134,8 +134,8 @@ the lead's records; `cargo xtask gate` ok.
     stays in *guard* for three ticks and gets *move* toward its destroyer at 29 685. On the branch,
     claim 33's *move* (r146, at the movement update) is current in tick 29 682 itself. Claim 35
     puts a slot aircraft that is not visiting under T2's rows, which for a human-controlled house
-    give *guard* with claim 33's *move* (the AI tool's houses are player-owned to the simulation, as
-    the trace's *guard* shows); which row applies is existing code, not this intake's. Its
+    give *guard* with claim 33's *move* (the trace shows *guard*, not *area guard*); which row
+    applies is existing code, not this intake's. Its
     processing gives the destination (43,51), and at 29 685 it gets the same *move* toward its
     destroyer.
   - From there its flight is a cell and a tick apart, and the long game drifts. This is the change
