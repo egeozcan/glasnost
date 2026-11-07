@@ -340,6 +340,38 @@ fn show_animations(w: &mut World, p: &AnimationPlan) {
     }
 }
 
+/// Whether a dying object takes S-0312 claim 11's effects: a vehicle that
+/// carries the bomb mark (Terms) and dies within 10 leptons above a water
+/// cell. Reads only.
+fn marked_low_over_water(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0312 claim 11 (a vehicle that carries the bomb mark, Terms; landing does not clear it, S-0511 claim 10)
+    if o.kind != Kind::Vehicle || !crate::transport::bomb_marked(w, id) {
+        return false;
+    }
+    // spec: S-0312 claim 11 (over a water cell: claim 10's test of the cell at its position)
+    let water = w
+        .cells
+        .cell(o.pos.cell())
+        .is_some_and(|c| c.land == glasnost_map::terrain::land::WATER);
+    // spec: S-0312 claim 11 (within 10 leptons above it, inclusive); Q-2793 (interim: the height above the terrain surface at its position, not the deck; a negative height counts)
+    water && o.pos.z - w.surface_at(o.pos.x, o.pos.y) <= 10
+}
+
+/// S-0312 claim 11's animations in claim 9's place: the game-wide wake
+/// animation, then the last entry of the game-wide splash list (S-0303
+/// F5), at `pos`. No list pick is drawn.
+fn wake_and_splash(w: &mut World, pos: Pos) {
+    // spec: S-0312 claim 11 (the game-wide wake animation at its position)
+    if let Some(name) = w.rules().wake.clone() {
+        effects::anim(w, &name, pos);
+    }
+    // spec: S-0312 claim 11 (the last entry of the splash list) and Edge cases (departure: an empty list shows no splash, no switch)
+    if let Some(name) = w.rules().combat.general.splash_list.last().cloned() {
+        effects::anim(w, &name, pos);
+    }
+}
+
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(o) = w.obj(id).cloned() else { return };
@@ -370,14 +402,19 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::spawn::killed(w, id);
     // spec: S-0601 claim 10 (the controller's killing hit releases its victims in the same tick, as part of that hit)
     crate::mind::killed(w, id);
-    // spec: S-0312 table, step 1 (debris)
-    debris(w, id);
-    // spec: S-0312 table, step 2 and claim 5 (an exploding object: passengers die, in the order held, before the death weapon)
-    if exploding(w, id) {
+    // spec: S-0312 claim 11 (a bomb-marked vehicle dying within 10 leptons above water skips claims 4 to 6 and 9; claim 7's bomb still goes off)
+    let marked_water = marked_low_over_water(w, id);
+    // spec: S-0312 table, step 1 (debris); claim 11 (skipped)
+    if !marked_water {
+        debris(w, id);
+    }
+    // spec: S-0312 table, step 2 and claim 5 (an exploding object: passengers die, in the order held, before the death weapon); claim 11 (skipped: claim 12 kills them or keeps them for the crash)
+    if !marked_water && exploding(w, id) {
         crate::transport::kill_passengers(w, id, hit);
     }
-    // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon)
-    if exploding(w, id)
+    // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon); claim 11 (claim 6 skipped)
+    if !marked_water
+        && exploding(w, id)
         && let Some((wp, dmg)) = death_weapon(w, id)
     {
         let house = o.owner;
@@ -411,7 +448,12 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 crate::naval::start_sinking(w, id);
                 return;
             }
-            vehicle_animations(w, id, &o);
+            if marked_water {
+                // spec: S-0312 claim 11 and State and ordering (the wake and the last splash take claim 9's place, no draws)
+                wake_and_splash(w, o.pos);
+            } else {
+                vehicle_animations(w, id, &o);
+            }
             // spec: S-0312 claim 12 (after the vehicle's animations, before the crew, claim 13)
             passengers_of_destroyed_vehicle(w, id, hit, crashable);
             crew(w, id, hit);
@@ -472,6 +514,9 @@ pub(crate) struct Repeat {
     pub crashable: bool,
     /// It is above the terrain at the hit.
     above: bool,
+    /// It takes S-0312 claim 11's effects: bomb-marked, within 10 leptons
+    /// above a water cell.
+    marked_water: bool,
 }
 
 impl Repeat {
@@ -500,10 +545,15 @@ pub(crate) fn repeat_plan(w: &World, id: ObjectId, health_left: bool) -> Option<
         .is_some_and(|u| u.vehicle.crashable);
     // spec: S-0203 claim 13 (g), Sinking (the vehicle's state where it left play decides, as at any killing hit; one that left play with no health failed claim 10's conditions at its destroying hit and the hit of no amount starts no sinking; one with health left that meets them takes claim 10's branch)
     let sinks = health_left && crate::naval::sinks_at_kill(w, id);
+    // spec: S-0312 claim 11 (a bomb-marked vehicle within 10 leptons above water: no debris, no death weapon, the wake and splash in claim 9's place)
+    let marked_water = marked_low_over_water(w, id);
     Some(Repeat {
-        debris: debris_plan(w, id),
-        // spec: S-0312 claim 6 (the death weapon of an exploding object only)
-        weapon: exploding(w, id).then(|| death_weapon(w, id)).flatten(),
+        // spec: S-0312 claim 4 (debris); claim 11 (skipped)
+        debris: (!marked_water).then(|| debris_plan(w, id)).flatten(),
+        // spec: S-0312 claim 6 (the death weapon of an exploding object only); claim 11 (skipped)
+        weapon: (!marked_water && exploding(w, id))
+            .then(|| death_weapon(w, id))
+            .flatten(),
         pos: o.pos,
         owner: o.owner,
         animations: animation_plan(w, id, o),
@@ -512,6 +562,7 @@ pub(crate) fn repeat_plan(w: &World, id: ObjectId, health_left: bool) -> Option<
         crashable,
         // spec: S-0203 claim 13 (g), Crashing (S-0312 claim 15: a type that can crash starts a crash above the terrain)
         above: w.height_above_surface(id) > 0,
+        marked_water,
     })
 }
 
@@ -533,8 +584,11 @@ pub(crate) fn repeat(w: &mut World, source: ObjectId, p: &Repeat) {
     if let Some((wp, dmg)) = p.weapon {
         crate::combat::projectile::detonate_weapon(w, wp, dmg, p.pos, Some(source), p.owner, true);
     }
-    if !p.sinks {
-        // spec: S-0312 claim 9 (the explosion and destruction animations at its last position, with their list picks); S-0203 claim 13 (g), Sinking (one that sinks takes claim 10's branch: neither animation nor pick). S-0312 claim 11's wake and splash for a bomb-marked vehicle low over water is not built in our engine (seam)
+    if p.marked_water {
+        // spec: S-0312 claim 11 (a bomb-marked vehicle within 10 leptons above water: the wake and the last splash at its last position in claim 9's place, no draws; claim 10 never sinks a marked vessel)
+        wake_and_splash(w, p.pos);
+    } else if !p.sinks {
+        // spec: S-0312 claim 9 (the explosion and destruction animations at its last position, with their list picks); S-0203 claim 13 (g), Sinking (one that sinks takes claim 10's branch: neither animation nor pick)
         show_animations(w, &p.animations);
     }
     // spec: S-0312 claim 13 (the crew rule with the hit's no-escape marker: no crew and no draw, `crew`'s first test)

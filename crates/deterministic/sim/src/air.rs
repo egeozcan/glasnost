@@ -409,6 +409,21 @@ pub fn on_ground(w: &World, id: ObjectId) -> bool {
     listing_height(w, id) <= 0
 }
 
+/// An aircraft on the ground (Terms) that holds a contact with a pad, a
+/// building of one of its type's dock types (Terms, *pad* and *pad
+/// reservation*): the case of Q-2792's interim, which `acquire::retaliate`
+/// holds back.
+pub fn on_its_pad(w: &World, id: ObjectId) -> bool {
+    let Some(k) = w.obj(id).and_then(|o| o.contact) else {
+        return false;
+    };
+    // spec: S-0501 Terms (a pad: a building whose type is one of the aircraft type's dock types; on the ground) and Q-2792 (interim)
+    on_ground(w, id)
+        && w.obj(k).is_some_and(|b| {
+            b.kind == Kind::Building && ty(w, id).is_some_and(|t| t.docks.contains(&b.type_index))
+        })
+}
+
 /// Claim 48 (c)'s low release while it stays at height 0 (*At height 0*):
 /// released above its pad and not yet climbing. It is on the ground by its
 /// height (Terms), so claim 8's landing of an aircraft in flight that has

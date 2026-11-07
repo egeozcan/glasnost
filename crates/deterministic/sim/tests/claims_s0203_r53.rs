@@ -115,6 +115,9 @@ fn rules(on: bool) -> Ruleset {
         add_vehicle(&mut r, n, u);
     }
     r.sim.general.ship_sinking_weight = Some(d("3"));
+    // The game-wide wake animation and splash list of S-0312 claim 11.
+    r.sim.general.wake = Some("RIPPLE".into());
+    r.sim.general.splash_list = Some(vec!["SPLA".into(), "SPLB".into()]);
     r
 }
 
@@ -400,6 +403,36 @@ fn o18_h_a_crashable_vessel_ends_with_its_tick() {
     assert_eq!(anims(&w, "EXPLO") + anims(&w, "WRECK"), 0);
     glasnost_sim::tick::step(&mut w);
     assert!(leftover::object(&w, ship).is_none(), "ends with its tick");
+}
+
+// spec: S-0203 claim 13 (g) and S-0312 claim 11 (a leftover that carries the bomb mark and left play within 10 leptons above water repeats the wake and the last splash entry at the sweep's hit in claim 9's place, with no debris, death weapon, explosion or destruction animation); S-0312 claim 7 (its bomb went off when it left play); the unmarked control repeats debris, death weapon and claim 9's animations
+#[test]
+fn a_bomb_marked_leftover_low_over_water_repeats_the_wake_and_splash() {
+    for marked in [true, false] {
+        let mut w = world(true);
+        let id = spawn(&mut w, Kind::Vehicle, "BOOMER", 1, at(0, 0));
+        make_water(&mut w, at(0, 0), 3);
+        w.obj_mut(id).unwrap().fall.bomb_mark = marked;
+        damage::apply(&mut w, id, lethal());
+        assert!(w.obj(id).is_none(), "{marked}");
+        // The water again after the removal, whose land recompute reads the tiles.
+        make_water(&mut w, at(0, 0), 3);
+        w.effects.clear();
+        victory::defeat(&mut w, B);
+        assert_eq!(leftover_hits(&w, id), vec![(c4(&w), (0, 0))], "{marked}");
+        if marked {
+            assert_eq!((anims(&w, "RIPPLE"), anims(&w, "SPLB")), (1, 1));
+            assert_eq!(anims(&w, "SPLA"), 0, "the last entry only");
+            let ordinary = anims(&w, "DEBRIS") + anims(&w, "EXPLO") + anims(&w, "WRECK");
+            assert_eq!(ordinary, 0);
+            assert_eq!(detonations(&w), 0, "no death weapon");
+        } else {
+            assert_eq!(anims(&w, "RIPPLE") + anims(&w, "SPLB"), 0);
+            assert!(anims(&w, "DEBRIS") >= 1);
+            assert_eq!((anims(&w, "EXPLO"), anims(&w, "WRECK")), (1, 1));
+            assert_eq!(detonations(&w), 1);
+        }
+    }
 }
 
 // spec: S-0203 claim 13 (g) (Q-2692, O18 part i): a vehicle of a type that can crash that left play on the ground with no health takes a hit of no amount at the sweep, which shows claim 9's animations again and starts no crash; it ends with its tick
