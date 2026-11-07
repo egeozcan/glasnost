@@ -367,6 +367,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
             },
         );
         if let Some(cell) = dest
+            // spec: S-0607 claim 9 (a seized unit ignores every new destination, from any rule; the request without a threat point changes nothing else)
+            && !crate::lift::refuses_destination(w, id, Some(Target::Cell(cell)))
             && let Some(ob) = w.obj_mut(id)
         {
             ob.dest = Some(Target::Cell(cell));

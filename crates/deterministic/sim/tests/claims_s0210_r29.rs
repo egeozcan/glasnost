@@ -245,7 +245,14 @@ fn a_hit_naming_no_attacker_gives_no_response() {
     let mut h = hit_from(&w, a);
     h.attacker = None;
     damage::apply(&mut w, c, h);
-    assert_eq!(w.obj(c).unwrap().dest, None);
+    // The same hit sends the computer-owned crusher the scatter from damage (S-0215 claim 19
+    // case 2: no known attacker, guard with the scatter property), whose cell destination
+    // queues nothing; the crush response would name the infantry and queue move.
+    assert!(
+        !matches!(w.obj(c).unwrap().dest, Some(Target::Object(_))),
+        "no destination naming an object"
+    );
+    assert!(!responded(&w, c, a));
     assert_eq!(w.obj(c).unwrap().beh.queued, None);
 }
 
