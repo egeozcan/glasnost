@@ -2,13 +2,13 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 21
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-07
 measurements: []
-requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203]
+requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203, Q-2717]
 supersedes: []
 ---
 
@@ -328,20 +328,35 @@ The glossary also defines *trigger*, used here.
    - for that owner the fate decision of claim 8 runs,
    - *V* stops being controlled, and leaves *C*'s victim list.
 
-   Release makes no explicit guard reset of S-0215 claim 9. Nevertheless the ownership change
-   clears the target and destination and normally requests *guard* with a readiness-dependent
-   immediate start (S-0215 claim 7). It does not promise preservation of the last order.
-   A simple-deployer vehicle currently in *unload* skips that guard request. The owner-independent
-   effects of claim 6 also apply on release: leaving a team, letting go of a temporal target and
-   clearing open-topped passenger targets.
+   Release makes no explicit guard reset of S-0215 claim 9. Nevertheless the ownership change clears
+   the target and destination and then normally requests *guard* with a readiness-dependent
+   immediate start (S-0215 claim 7). The readiness that this request reads is the victim's after
+   both clears. For an infantry victim that holds a target, the clear of its target is a change of
+   target (S-0215 claim 11): an attack state that the victim was in has ended at the clear, with its
+   request for *stand*, *prone* or *deployed*, and does not hold the start back. An infantry victim
+   in the attack state with no target (the attack-move discard of S-0215 claim 11) has no change of
+   target at the clear, so that state still holds the start back. A moving infantry victim whose
+   current behaviour is *attack* is then *attack* without a target, which its movement does not hold
+   back (S-0215 claim 11), so with an interruptible current sequence it starts *guard* at once.
+   Every other readiness condition applies as usual: an infantry victim moving under *move*, for
+   example, is not ready, and *guard* stays queued for a later per-tick start. It does not promise
+   preservation of the last order. A simple-deployer vehicle currently in *unload* skips that guard
+   request. The owner-independent effects of claim 6 also apply on release: leaving a team, letting
+   go of a temporal target and clearing open-topped passenger targets.
 
    The release of a building asks for the capture or loss announcement in the same way as its
    takeover does (claim 6), with the controlling house as the old owner and the original owner as
    the new one.
-   - Backing: `measurable` (MC4 for order clearing and sound; MC9 for a released building's
-     announcement; MC11 for the release exceptions).
-     Scripted-team departure remains `unmeasured` for the reason in claim 6
-   - Confidence: high
+   - Backing: `measurable` (MC4 for order clearing and sound, and its parts (a) and (b) for the
+     readiness that the guard request reads; MC9 for a released building's announcement; MC11 for
+     the release exceptions). Scripted-team departure remains `unmeasured` for the reason in claim
+     6. `unmeasured` for an infantry victim in the attack state with no target: no MC part times a
+     release inside an attack-move discard
+   - Confidence: high; medium for the at-once start of a standing infantry victim in the attack
+     state that holds a target, which rests on S-0107 claim 11's end of that state at once at a
+     change of target (medium there), medium for the at-once start of a walking infantry victim
+     under *attack*, which also needs its current sequence to be interruptible (S-0215 claim 11),
+     and medium for the attack state with no target
 
 10. **What releases every victim.** Each of these releases all of a controller's victims at once,
     the most recently taken first:
@@ -784,13 +799,26 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   landing recheck.
 - **MC4. Death releases** (claims 9, 10). A's Mastermind holds three of B's units; B kills the
   Mastermind. Expected: in the tick of the killing hit all three return to B, the release sound
-  plays three times in reverse acquisition order, and the returned victims have no attack
-  target or movement destination. Give each victim a distinct long movement order while A
-  controls it and record the release tick before the new computer owner's fate order can mask
-  the result. Repeat with a Yuri Clone holding a human-owned map ally where available. If a
-  new computer order masks order clearing, that run tests only ownership and sound, not orders.
-  MC11 isolates order clearing by arranging that the released victims return to A. Continued
-  execution of the old order in that isolated variant falsifies claim 9.
+  plays three times in reverse acquisition order, and the returned victims have no attack target or
+  movement destination. Give each victim a distinct long movement order while A controls it and
+  record the release tick before the new computer owner's fate order can mask the result. Repeat
+  with a Yuri Clone holding a human-owned map ally where available. If a new computer order masks
+  order clearing, that run tests only ownership and sound, not orders. MC11 isolates order clearing
+  by arranging that the released victims return to A. Continued execution of the old order in that
+  isolated variant falsifies claim 9. Parts (a) and (b) (claim 9, the readiness of the guard
+  request). A's Yuri Clone takes V, a pre-placed neutral-house infantry unit (the set-up's
+  counterpart rule), and A orders V to attack a neutral-house object: in part (a) one far enough
+  away that V walks towards it, in part (b) one within V's range, so that V stands and fires. A's
+  tank then destroys the Clone with a projectile shot (S-0203 claim 5), at a recorded tick. The
+  projectile entered play after V, so it takes its turn after V's in the release tick (S-0203 claims
+  3 and 4). Record V's current and queued behaviour at the end of every tick, and in part (b) the
+  tick in which each firing kind of V begins and the tick of each of its shots. Part (a) counts only
+  runs in which V is walking in the release tick, and part (b) only runs in which a firing kind of V
+  began at or before the release tick and V fired no shot of it in or before the release tick, so
+  that V is in the attack state at the release. A run in which V's current or queued behaviour at
+  the end of the release tick is *hunt*, or a trip to a grinder, a bio reactor or a team (claim 8),
+  is void. Expected: in both parts *guard* is V's current behaviour, with nothing queued, at the end
+  of the release tick. Falsified by *guard* still queued at the end of the release tick.
 - **MC6. Removal versus absorption** (claims 9, 10 and 12). On a coastal test map A's
   Mastermind holds B's naval vehicle; sink it. Record victim existence, pip count, ownership and
   sounds each tick. Expected: the slot stays occupied while the original hull still exists,
