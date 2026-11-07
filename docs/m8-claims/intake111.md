@@ -67,7 +67,7 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
 | 9: the attack state with no target holds the start back | tested | `claims_s0601::claim_9_the_attack_state_with_no_target_keeps_guard_queued` |
 | 9: the request for *stand*, *prone* or *deployed* at the clear | partly | made by `infantry::target_changed` (intake 107's tests); the release tests check only that the state ended |
 | 9: a simple-deployer vehicle in *unload* skips the request | tested | `claims_s0601::claim_6_simple_deployer_in_unload_keeps_its_behaviour`, unchanged |
-| 9: S-0309 claim 30's listed causes, through the same function | tested | `claims_s0309_r120::listed_causes_request_guard_the_takeover_drops_only` and `a_trigger_owner_change_drops_target_and_destination` (guard current or queued; they do not pin the readiness) |
+| 9: S-0309 claim 30's listed causes, through the same function | partly | `claims_s0309_r120::listed_causes_request_guard_the_takeover_drops_only` and `a_trigger_owner_change_drops_target_and_destination` still state the spec, but they accept guard current or queued and so cannot tell the two orders apart; no test pins r23's order for a capture, a trigger or an occupation |
 | S-0111 r49 20: in the route mode a held right button blocks | tested | `client::name_tip_tests::claim_20_route_mode_an_ordinary_press_or_the_right_button_blocks` |
 | 20: an ordinary left click blocks | tested | the same test |
 | 20: a kind refusal at the press does not block; the tip shows after 1000 ms of rest with the button held | tested | `claim_20_route_mode_a_press_refused_or_taking_a_point_does_not_block` |
@@ -112,8 +112,9 @@ Before: binaries built on main 841f16d. After: this branch's code on 841f16d (co
 before the rebase). The sweeps, the arena and the quick lane use those two bases. The branch was
 then rebased onto main 6b78a92, which merges intake 110 (S-0208 r52, S-0309 r120, S-0508 r13,
 S-0506 r34; its S-0309 claim 30 causes now call `mind::release_orders`). On that base the AI
-suite, the goldens, the render lane and the final checks were run again. Local lane; install
-values are not quoted.
+suite, the goldens, the render lane and the final checks were run again. The sweep, arena and
+quick-lane figures predate intake 110, so no lane covers its causes taking the r23 order; only the
+workspace and AI tests on the rebased tree do. Local lane; install values are not quoted.
 
 - **Sweeps, seeds 1 to 16.** Five of the six runs are identical before and after, apart from
   timings. M7a with the play fixes changes one counter of one seed: seed 13's berserk weapon
