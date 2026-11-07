@@ -2,17 +2,17 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 146
+revision: 150
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
+approved-on: 2026-11-07
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654,
 Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905,
 Q-1940, Q-1941, Q-1942, Q-2237, Q-2251, Q-2252, Q-2291, Q-2326, Q-2366, Q-2436, Q-2437, Q-2438,
 Q-2506, Q-2507, Q-2508, Q-2576, Q-2577, Q-2578, Q-2579, Q-2646, Q-2647, Q-2648, Q-2649, Q-2650,
-Q-2676, Q-2677]
+Q-2676, Q-2677, Q-2726]
 supersedes: []
 ---
 
@@ -829,8 +829,9 @@ flight point that its cleared destination gave it when it lands where it is, cla
 position; its docking position when it docks, claim 24): its flight ignores that destination, so it
 does not take off, its flight point stays as it was and it goes on landing there. The cell compared
 is that of the new destination's heading point (claim 40). The test is made only when a destination
-is handed to the flight: at the order, and at each processing of *move* that gives one (claim 40),
-not at the movement updates in between. So a landing aircraft that has drifted out of its flight
+is handed to the flight: at the order, at each processing of *move* that gives one (claim 40), and
+whenever another rule gives the aircraft one, as claims 18 and 29 do, whatever its behaviour; not
+at the movement updates in between. So a landing aircraft that has drifted out of its flight
 point's cell still ignores a destination in that cell, and takes off for one in the cell it is now
 over. An ignored destination is still the aircraft's destination, so claim 4's descent move draws it
 toward that cell's centre while it descends. The centre that claim 6 hands to the flight of a
@@ -848,9 +849,13 @@ pad leaves its pad reservation when it takes any destination other than that pad
 (c) for an aircraft that a factory release has left above its pad).
    - Backing: `measurable` (scenario AC4; its same-cell part for the exception, runs (1) to (3) for
      the point compared, the cell left after a drift and the descent move). When the test is made is
-     `unmeasured`: in runs (2) and (3) the destination's heading point and the flight point stay
-     fixed after the order, so a test at every movement update would give the same answer as one at
-     the order alone, and no scenario here moves either point between the order and a landing start.
+     `unmeasured`: in the runs here that can give a landing aircraft a destination, the
+     destination's heading point and the flight point stay fixed from one hand-over to the next (AC4
+     runs (2) and (3) after the order; AC33 part a between the processings of claim 29 that give the
+     cell the aircraft is over), so a test at every
+     movement update would give the same answer as one at each hand-over alone, and no scenario here
+     moves either point between a hand-over and a landing start, whether the destination comes from
+     an order, a processing of *move* or another rule such as claims 18 and 29.
      That the centre claim 6 hands to the flight draws no descent move is `measurable` for an
      aircraft that held no destination (AC4 run (4)), and `unmeasured` for one that held an ignored
      destination: no run gives such an aircraft a stop order over its flight point's cell (claim 6)
@@ -1848,12 +1853,79 @@ pad leaves its pad reservation when it takes any destination other than that pad
     Apart from these processings, claim 33 queues *move* for an aircraft in *guard* that is not
     pad-bound, with a destination and nothing queued, at any height. Other outcomes of *guard* on
     the ground use the standard delay, or 45 ticks for an unarmed aircraft and for an aircraft on
-    the ground with no contact.
+    the ground with no contact. Outside a team, a processing at exactly cruise height ends with a
+    delay of 1 tick.
+
+    *Sticky.* A processing of *sticky* has these same outcomes and delays, since *sticky* is
+    processed as *guard*, with the standard delay read at the rate of *sticky*, not of *guard*
+    (S-0215 claim 5). An aircraft in *sticky* is never ready to
+    change (claim 31), so the behaviour that an outcome queues waits: the team member's *move*, the
+    unarmed aircraft's *move* to its own cell, the *enter* toward a pad, an *attack* and the
+    behaviour that a fall-back's row of T2 names all stay queued. Everything else that an outcome
+    does takes effect at that processing, as in *guard*:
+    - *Destinations.* A destination that an outcome gives, the pad or the unarmed aircraft's own
+      cell, is handed to the flight at once (claim 8). An aircraft on the ground takes off for it,
+      and one in flight turns toward it, as for any destination. So an unarmed aircraft outside a
+      team that flies in *sticky* toward an earlier destination, such as an order's, is given the
+      cell it is over at its first processing at exactly cruise height, and again at each
+      processing, 1 tick apart, while it keeps that height. For a landable type that is not
+      pad-bound, with a positive slowdown distance and a converted speed *V* of at least 20, which claim 5 lets stall at no
+      facing (claim 50), it slows to a stop over the cells it is passing instead of flying on, and
+      lands there by claim 6. With a slowdown distance of 0, or *V* below 20, where it stops and
+      whether it lands are not traced here (Open questions). A type that is not landable
+      flies to that cell as claim 50's last two bullets give for a flight to a cell: one that claim
+      5 does not hold at full speed descends to height 0 with no landing and no touchdown, and goes
+      on along its body facing; for one that claim 5 holds at full speed, where it flies is not
+      traced (Open questions). A landable type that has landed gets nothing more from its
+      processings on the ground (45 ticks each), so it stays there in *sticky* with its *move*
+      queued. An armed aircraft
+      below cruise height that finds a pad takes off for it if it is on the ground and flies to it,
+      with *enter* queued (claim 21). What it does on reaching the pad without
+      *enter* is open (Open questions).
+    - *Fall-back to rest.* For an armed aircraft outside a team at exactly cruise height, the
+      fall-back's own effects take place at each such processing (claim 18 and T2): the destination
+      that its row gives or keeps, the contact that a pad grants, the forgotten target, and the
+      crash of a pad-bound aircraft that obtains no pad (claim 46). So a pad-bound aircraft with
+      dock types whose in-the-air answer is *yes* (Terms) that no pad grants contact crashes at its
+      first processing at that height, and one that a pad grants contact at that processing turns toward that pad, with *enter* queued.
+      A pad-bound type with no dock types crashes only with its ammunition spent (claims 45 and
+      46), so one placed in *sticky* with full ammunition does not crash at these processings; it
+      keeps its destination by T2's *guard* row, as claim 45's pad-bound exception gives. What the
+      processings in the ticks after it do, with that contact held and *enter* already queued, is
+      open (Open questions).
+    - *T2's first three rows.* They do not wait for readiness (claim 18). An overridden behaviour
+      is restored in place of *sticky*, and a queued *paradrop approach* or *spy-plane approach*
+      starts at once. A restored *move* is the only way that *move* can become current for an
+      aircraft in *sticky*. It needs the suspended slot filled while *sticky* is current, which
+      happens only when *sticky* becomes current while an override is still saved, since a force
+      or a start of the next behaviour leaves that slot as it is (S-0215 claims 9 and 10). No set-up
+      here gives that state.
+
+    Apart from these rows, the aircraft keeps *sticky* until a force or an override replaces it
+    (S-0215 claim 25), and no movement update makes *move* current for it (claim 33).
     - Backing: `measurable` (scenario AC10) outside a team, and for the armed aircraft's
       fall-back with a destination (AC19's sale run, AC29 part f (4) to (6)). The team member's
       outcomes are `unmeasured`: no normal input puts an aircraft of a human-controlled house in
-      a team, and AC10 records human-owned outcomes
-    - Confidence: medium; medium (`unmeasured`) for the team member's outcomes
+      a team, and AC10 records human-owned outcomes. The delay of 1 tick at cruise height is
+      `unmeasured`: in *guard* the queued behaviour becomes current at once, so no later processing
+      shows it, and in *sticky* (AC33 part a) a processing that gives the cell it is over again
+      changes no record, so no record here tells a delay of 1 tick from a longer one
+    - Backing (*sticky*): `measurable` (scenario AC33: part a for the unarmed landable aircraft's
+      own cell and its landing, with *move* staying queued, part b for the crash of a pad-bound
+      aircraft with dock types that obtains no pad, part c for the pad that grants contact).
+      `unmeasured` for the pad found below cruise height: an aircraft placed in *sticky* has full
+      ammunition, and its *attack* never becomes current while *sticky* lasts, so no set-up here
+      brings one in *sticky* below full ammunition. Also `unmeasured`, because no set-up here
+      arranges them: T2's first three rows in *sticky* (no set-up fills the suspended slot or queues
+      an approach while *sticky* is current), a type that is not landable, and a pad-bound type with
+      no dock types
+    - Confidence: medium; medium (`unmeasured`) for the team member's outcomes and for the delay of
+      1 tick. For *sticky*: medium for the destinations, the landing with those values and the
+      fall-back's effects, until AC33 runs; medium (`unmeasured`) for the pad found below cruise
+      height, for T2's first three rows, for a type that is not landable that claim 5 does not hold
+      at full speed and for a pad-bound type with no dock types; low for what follows a contact held
+      with *enter* queued, for a slowdown distance of 0 or *V* below 20 and for a type that is not
+      landable that claim 5 holds at full speed (Open questions)
 
 30. **Pad total and the build limit (free docks).** A house's pad total grows by a helipad
     building's docking-place count *d* when the building is placed, moves with the building
@@ -1911,20 +1983,22 @@ pad leaves its pad reservation when it takes any destination other than that pad
     stays current with the queue held while the aircraft keeps that height
     (`quirks.aircraft_ready_mark_outlives_enter`, Edge cases).
     - Backing: `measurable` for ordinary flight, take-off, landing and run-lock queue timing
-      (AC10). The *sticky*, *rescue* and processing-cleared-ready exclusions are `unmeasured`:
-      no normal-input aircraft setup here isolates those exclusions from a run lock or another
-      refusal. The *spy-plane approach* run-lock exception is also `unmeasured`: AC20 dispatches
-      a plane but cannot require a queued behaviour change while that exception applies.
-      AC10 does not infer these exclusions from a delayed order. The kept mark in a behaviour
-      forced on an aircraft whose mark *enter* cleared is `unmeasured`: no player's order is
+      (AC10). The *sticky* exclusion is `measurable` (AC33 part a): an aircraft placed in
+      *sticky* holds no run lock, and the *move* its order queues stays queued. The *rescue* and
+      processing-cleared-ready exclusions are `unmeasured`: no normal-input aircraft setup here
+      isolates those exclusions from a run lock or another refusal. The *spy-plane approach*
+      run-lock exception is also `unmeasured`: AC20 dispatches a plane but cannot require a
+      queued behaviour change while that exception applies. AC10 does not infer these
+      exclusions from a delayed order. The kept mark in a behaviour forced on an aircraft whose
+      mark *enter* cleared is `unmeasured`: no player's order is
       known to force a behaviour on the actor it is given to (S-0215 claim 9), the scenarios
       allow no game-state writes, and no event known here forces one in the 3 ticks between the
       move on to the docking stage and the next processing. The list of what sets, clears and
       leaves the mark is `unmeasured` too: each entry shows only as a queued behaviour that
       starts or waits, and no set-up here separates one entry from the others.
-    - Confidence: medium (the order of the three points within a tick); medium (`unmeasured`) for
-      the mark kept in a forced behaviour and for the list of what sets, clears and leaves the
-      mark
+    - Confidence: medium (the order of the three points within a tick); medium for the *sticky*
+      exclusion, until AC33 part a runs; medium (`unmeasured`) for the mark kept in a forced
+      behaviour and for the list of what sets, clears and leaves the mark
 
 32. **Losing a pad or a target.** Destruction of a helipad destroys every aircraft in contact
     with it, even one still approaching at a distance; destruction of another building destroys
@@ -2022,12 +2096,16 @@ pad leaves its pad reservation when it takes any destination other than that pad
     failing to find one, and the standard delay only when it had no ammunition. When a living
     aircraft that is not pad-bound and not crashing (claim 9) is in *guard* with a destination and
     nothing queued at a movement update, that update queues *move* for it, at any height, on the
-    ground included. The test comes after claim 31's first point in that update, so a *guard* that
+    ground included. Any queued behaviour stops this test, a *guard* that a row of table T2 has
+    queued (claim 18) included. The test comes after claim 31's first point in that update, so a *guard* that
     becomes current there gets its *move* in the same update. On the ground this applies, for
     instance, to an aircraft that slides after its entry report (claim 24, *Not pad-bound*) and to a
     visiting aircraft in a team that keeps its destination when it rests on the ground (claim 18). A
     pad-bound aircraft in *guard* gets *move* queued only by another rule, such as a pad's run-away
-    notice (claim 24).
+    notice (claim 24). The test is for *guard* itself as the current behaviour. An aircraft in
+    *sticky*, which is processed as *guard* (S-0215 claim 5), gets no *move* at a movement update,
+    and keeps *sticky* with its destination there. What a processing of its *sticky* does is
+    claim 29's.
     - Backing: `measurable` for hunt queueing, delays and move completion (scenario AC10).
       Flight-destination substitution and the stopped answer are specified in claim 40 and tested by
       AC23; a zero speed fraction alone does not complete *move*. The *move* that the run-away
@@ -2036,9 +2114,13 @@ pad leaves its pad reservation when it takes any destination other than that pad
       visiting aircraft in a team it is `unmeasured`, as claim 18 rates the team rows. That a
       crashing aircraft gets no such *move* is `unmeasured`: a living aircraft crashes only when its
       locomotor is switched off (claim 9), a branch that claim 9 rates `unmeasured`, and no set-up
-      here gives one in *guard* with a destination.
+      here gives one in *guard* with a destination. That an aircraft in *sticky* gets no such *move*
+      is `unmeasured`: no input known here gives an aircraft in *sticky* a destination with nothing
+      queued. An order queues its behaviour along with its destination, and every outcome of
+      claim 29 that gives a destination queues a behaviour too.
     - Confidence: medium (the notice's *move* as claim 24 rates it; *guard*'s *move* on the ground
       until AC31 part h (6) runs); medium (`unmeasured`) for the exception of a crashing aircraft
+      and for the aircraft in *sticky*
 
 34. **Retreat and the spy plane's flight.** In *retreat* an aircraft with no destination takes a
     cell on its house's arrival edge (S-0522 claim 5), selected as in S-0522 claim 4, as destination.
@@ -5921,6 +6003,45 @@ listed in Open questions are not claimed confirmed by these scenarios.
   **Falsifiers, every case.** A change of body facing after overfly begins (other than finishing
   a turn already under way), a turn toward the exit cell, a slowdown or landing near it, or a
   behaviour change.
+- **AC33 Aircraft in *sticky* (claims 8, 18, 29, 31 and 33; Q-2726).** Skirmish on open flat
+  ground, director and mods off, a human-controlled test house with scripted input and no computer
+  player, measurement harness. Record per tick each test aircraft's current and queued behaviour,
+  destination, target, pad contact, cell, height and existence. Each test aircraft is a map entry
+  of the human-controlled house with *sticky*, on open ground at least 5 cells from any building.
+  It is placed on the ground with *sticky* current. *C* is an open cell at least 40 cells away.
+  Give each test aircraft a move order to *C* and record until 1000 ticks after it lands, crashes
+  or reaches *C*. Control run for each part: the same with the map entry in *guard*. 3 runs per
+  part.
+  - a. *U*: a named test copy of a stock landable aircraft type, unarmed and not pad-bound (test
+    values), whose test file gives it a positive slowdown distance and a speed whose converted value
+    *V* is at least 20, so that claim 5 gives it no stall (claim 50). Expected: at the end of the
+    order's tick *sticky* is current, *move* is queued and the destination is *C*, and *U* takes off
+    toward *C*. Within 45 ticks of first reaching its cruise height its destination becomes the cell
+    it is over. At each later processing while it is still at that height the destination is given
+    again, so the recorded destination is the cell it is over or one next to it. *U* slows to a stop
+    and lands in a cell closer to where it was at the first of these ticks than to *C*. The
+    destination one cell at most from the one it is over and this landing place rest on claim 29's
+    delay of 1 tick at cruise height, which is `unmeasured`; neither is among the falsifiers below. For the rest
+    of the record it stays in that cell on the ground, *sticky* current and *move* queued. Control:
+    *U* lands at *C*. Falsified if *U* reaches *C*, if
+    *move* or any other behaviour becomes current, or if it takes off again.
+  - b. *A*: a named test copy of a stock pad-bound armed aircraft type that has dock types, with
+    full ammunition (test values), with no building of any of its dock types on the map. Expected:
+    *A* takes off toward *C* with *move* queued. At its first processing of *sticky* after it first
+    reaches its cruise height it crashes (claim 46), far short of *C*. That processing comes within
+    45 ticks of first reaching that height, or within one standard delay of *sticky* if that is
+    longer, since the processing before it chose 45 ticks on the ground (claim 29) or, in the
+    climb, that delay or less, as *A* has never fired (S-0215 claim 24). Control: *A* crashes only on reaching *C* (claim 6). Falsified if *A* in
+    *sticky* flies on toward *C* at its cruise height for more than the longer of 45 ticks and one
+    standard delay of *sticky*.
+  - c. As (b), with a pad *P* of *A*'s dock type, with a free place, built by the house with
+    scripted input before the order, at least 20 cells from the line from *A* to *C*. Expected: at
+    the same processing as in (b), *A* gets *P* as its destination and a contact with *P*, and
+    *enter* is queued, with *sticky* still current. What *A* does after that processing is not
+    predicted (Open questions): record it. Control: *A* reaches *C*, then falls back there (claim
+    6) and turns toward *P* with *enter* current. Falsified if, at the end of that processing's
+    tick, *A* in *sticky* has a destination other than *P*, has no contact with *P*, or has no
+    *enter* queued.
 
 ## Changes for other specs
 
@@ -5948,7 +6069,19 @@ listed in Open questions are not claimed confirmed by these scenarios.
   not a strike aircraft and is in *retreat*, *paradrop approach*, *paradrop overfly*,
   *spy-plane approach* or *spy-plane overfly* ignores entirely a request to queue any behaviour
   outside those five (claim 34). Claim 7 could add it as a first row for aircraft.
+- **S-0215 claim 25.** Its list of ways *sticky* differs from *guard* could name one more for
+  aircraft: the *move* that a movement update queues for an aircraft in *guard* (claim 33 here) is
+  not given to one in *sticky*, since that update is not a processing of the behaviour. Claim 5
+  stays true as it stands: a processing of *sticky* is one of *guard* (claim 29 here). Its words
+  "only a force or an override replaces it" could add, for aircraft, the fall-back's first three
+  rows (claim 29 here): a restored overridden behaviour, and a queued *paradrop approach* or
+  *spy-plane approach* starting at once, both without the readiness test.
 
+- **S-0009 scenario G (the aircraft).** Its expectation that each object placed in *sticky*
+  never leaves its cell after the move order does not hold for the aircraft: the order hands its
+  destination to the flight at once (claim 8 here), so the aircraft takes off and flies toward it,
+  while *sticky* stays current and *move* queued (claim 29 here, scenario AC33 part a). For the
+  aircraft the variant could check instead that *move* never becomes current.
 - **S-0215 claim 26.** Its rows, its table and its delay, with *k* = 2 for aircraft (scenario
   B10, case i, an aircraft standing landed), reach an aircraft's *area guard* only at a height
   other than its cruise height, above or below it, and only when no held target makes it queue
@@ -6206,3 +6339,30 @@ destination once that touchdown has made it forget the edge cell and it rests th
     with no destination and falls back to rest into the stay of
     `quirks.aircraft_grounded_enter_stall`, unless a service step first releases it or has it queue
     a *sleep* that becomes current first (claim 24, medium, `unmeasured`).
+
+31. Q-2726 is answered by claims 29, 31 and 33. An aircraft in *sticky* that is not pad-bound and
+    not crashing, with a destination and nothing queued, gets no *move* at a movement update: claim
+    33's test is for *guard* itself. It keeps *sticky* with its destination (medium, `unmeasured`).
+    A processing of its *sticky* gives claim 29's outcomes. What they queue, a *move* included,
+    stays queued while *sticky* lasts, since an aircraft in *sticky* is never ready to change
+    (claim 31), but the destinations, contacts and crashes they give take effect at once. So an
+    unarmed one is given the cell it is over at its first processing at cruise height and, for a
+    landable type with a positive slowdown distance and *V* of at least 20, lands there instead of
+    flying on (medium, AC33). Only a restored overridden *move* from the
+    fall-back's first row can make *move* current for it, and no set-up here gives that state
+    (medium, `unmeasured`).
+32. An armed aircraft in *sticky* that finds a pad below its cruise height flies to it with
+    *enter* queued and no contact (claim 29). What it does on reaching the pad was not traced: the
+    landing rules of claim 6 for a pad-bound aircraft without contact and claim 18's fall-back
+    apply there, but whether it then lands on the pad and is serviced (claim 26) without *enter*
+    current is open. The same holds for an aircraft that AC33 part c sends to a pad. Before it
+    gets there, that aircraft is processed again in each tick it stays at cruise height, now with
+    the pad's contact held and *enter* queued. Whether those processings keep the pad as its
+    destination and keep the contact, or end the contact and give it another destination or
+    queued behaviour, was not traced either (low). AC33 part c records it.
+33. An unarmed landable aircraft in *sticky* outside a team that is given the cell it is over at
+    each processing at cruise height (claim 29), with a slowdown distance of 0 or a converted speed
+    *V* below 20: where it stops and whether it lands were not traced. Claim 50's stall and
+    zero-distance bullets are for a flight to a fixed spot, while here the destination is given
+    again as the aircraft passes from cell to cell. The same holds for an unarmed type that is not
+    landable and that claim 5 holds at full speed: where it flies was not traced (low).
