@@ -367,9 +367,12 @@ mod tests {
         install_archives(&[("langmd.mix", members)])
     }
 
+    /// An archive's members: a name and its bytes each.
+    type Members<'a> = &'a [(&'a str, Vec<u8>)];
+
     /// A synthetic install of the loose top-level archives `archives`, each
     /// holding its members (and a filler, so that none is empty).
-    fn install_archives(archives: &[(&str, &[(&str, Vec<u8>)])]) -> Vfs {
+    fn install_archives(archives: &[(&str, Members<'_>)]) -> Vfs {
         use glasnost_fmt::mix::{MixWriter, WriteLayout, id_hash};
         use glasnost_vfs::{GameOptions, MemSource, PickedFile};
         let picked = archives
