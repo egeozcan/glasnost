@@ -1,9 +1,9 @@
 ---
 id: Q-2747
 title: The destination and guard request at owner changes that S-0309 claim 30 does not list
-status: open
+status: answered
 related: [S-0309, S-0509, S-0601, S-0215]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
