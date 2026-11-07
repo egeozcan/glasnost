@@ -2,14 +2,14 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 120
+revision: 124
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
+approved-on: 2026-11-07
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
-Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712]
+Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747]
 supersedes: []
 ---
 
@@ -21,8 +21,8 @@ How objects pick targets by themselves in *automatic searches* (range, area and 
 search looks for, where and in which order it looks, which objects are candidates, the *threat
 score* and the winner, plus the retaliation conditions, the rules for dropping or replacing a
 self-chosen target, the drop of a held target that is destroyed or removed, starts to cloak or
-goes underground, the periodic check that drops a held target the firing check refuses, and
-the owner rules that the neutral and special houses keep. S-0215 owns when
+goes underground, the periodic check that drops a held target the firing check refuses, the
+target drop and the reset of orders at a change of owner, and the owner rules that the neutral and special houses keep. S-0215 owns when
 most searches run (claim 1 also names contexts owned by other specs). Skirmish only: network games and
 campaign missions are out of scope.
 
@@ -46,7 +46,10 @@ root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *illega
 mode* (S-0308, table N); *spray-attack
 type* (S-0313, Terms); *spawner weapon*, *spawned aircraft* and *launching* (S-0301, Terms),
 *slave master* and *harvesting slave* (S-0215, Terms); *vehicle thief* (glossary); *draining weapon* and *locomotor warhead*
-(S-0308, table P, rows 7 and 8); *charging mark* (S-0518 claim 15).
+(S-0308, table P, rows 7 and 8); *charging mark* (S-0518 claim 15); *contact* and *tether link*
+(glossary); *ready to change* and *ready mark* (S-0215 claim 11 and Terms); *simple-deployer
+vehicle* (S-0206 Terms); *vehicle-like building* (S-0214 Terms); *remembered cell* and the
+*unloading state* (S-0402 Terms and claim 11); *rally point* (S-0213 claim 20).
 
 **Houses in our engine.** By the project lead's decision of 2026-10-09, an AI house follows the
 same unit rules as a human-controlled house (S-0215, Terms, *Houses in our engine*). That ruling
@@ -1881,39 +1884,180 @@ index 1. This is a design rule, not an additional claim about the original.
     - The drop takes no targeting-timer draw. Claim 27's reset over 4 to 8 ticks belongs to the
       drops of claims 27 and 28, not to this one, so the holder's targeting timer goes on counting
       down from its value before the change.
-    - After the change the holder has no target until a search, an order or retaliation gives it
-      one. A building whose animation-delayed shot (S-0301 claim 14) is pending at the change acts
-      in the turn that ends the delay as claim 27's consequences give: it makes no firing check and
-      no shot if it then holds no target, and the shot is no longer pending. A target that a revert
-      or a search has given it by then is the one that check uses. Claim 29's check and claim 25
-      part k never act on the dropped target.
-    - For every cause listed, the same change also clears the holder's destination and requests
-      *guard* in the way that S-0601 claim 9 gives for a release, with that claim's exception for a
-      simple-deployer vehicle in *unload*, and S-0215 claim 7 owns the start (high for a release, as
-      S-0601 claim 9 rates it, medium for the other causes, `unmeasured`: no scenario here records a
-      holder's destination and behaviours at those changes, so for them this rests on the change
-      being the same for every cause). Whether a building that is being sold at the change also gets
-      the *guard* request is not given here (Open questions). A mind-control takeover adds S-0215
-      claim 9's guard reset (S-0601 claim 6).
+    - After the change the holder has no target until a search, an order, retaliation, an attack
+      move resumed at the change or, for an aircraft with an override in effect at the change, the
+      revert of its fall-back (both claim 31) gives it one. A building whose animation-delayed shot
+      (S-0301 claim 14) is pending at the change acts in the turn that ends the delay as claim 27's
+      consequences give: it makes no firing check and no shot if it then holds no target, and the
+      shot is no longer pending. A target that a revert or a search has given it by then is the one
+      that check uses. Claim 29's check and claim 25 part k never act on the dropped target.
+    - The same change also resets the holder's orders, as claim 31 gives. A mind-control takeover
+      adds S-0215 claim 9's guard reset (S-0601 claim 6).
     - Backing: `measurable` (scenario A19: part a for a building by capture, part b for a vehicle
       and an infantry unit by a trigger's change-owner action, part c for the targeting timer, part
       d for a vehicle by a mind-control takeover, for the drop by the end of the takeover's tick,
       and S-0508 scenario G20 for a building by occupation). That the drop at a takeover comes
       inside the change, not from the guard reset that the takeover adds, is `unmeasured`: part d's
       record is the same either way. The drop at a mind-control release is `unmeasured`: no setup
-      here gives a controlled holder a target at its release. The destination and *guard* for the
-      other causes are `unmeasured`, as the bullet above gives. The return of S-0508 claim 8 is
+      here gives a controlled holder a target at its release. The return of S-0508 claim 8 is
       `unmeasured`: no setup here gives an empty garrison building a target. The aircraft holder and
       the pending animation-delayed shot are `unmeasured`: no setup here changes an aircraft's owner
       while it holds a target, or a building's owner while its delayed shot is pending.
     - Confidence: high (the drop at the change, for infantry units, vehicles and buildings, for
       every cause listed but the return of S-0508 claim 8 and the mind-control takeover and
       release, and its independence from the target's owner; the drop by the end of the tick of
-      a mind-control takeover); the destination and *guard* at the levels the bullet above
-      gives; medium (no targeting-timer draw, because not every step of the change was traced
+      a mind-control takeover); medium (no targeting-timer draw, because not every step of the change was traced
       for draws; the aircraft holder; the return of S-0508 claim 8; the drop's place inside the
       change at a mind-control takeover; the drop at a mind-control release; the pending
       animation-delayed shot, which follows claim 27's consequences)
+
+31. **Orders at an owner change (Q-2747).** The change of claim 30 also resets the holder's
+    orders. This holds for every cause that claim lists, for the takeover of a vehicle-like
+    building by an infantry unit (S-0509 claim 17), whose ownership change is the one of an
+    engineer capture, and for each object that changes owner together with a building it is in
+    contact with (S-0509 claim 14). A change to the house the object already belongs to does none
+    of this. The effects below all take place inside the change, after the target drop of claim 30.
+    - *Destination and guard spot.* The object's destination is cleared, and it forgets its guard
+      spot. With it, a factory forgets its rally point (S-0213 claim 20), a harvester its
+      remembered cell (S-0402 claim 3), and a vehicle released from a factory the rally point that
+      it saved at its release (S-0417 claim 8). A vehicle in the middle of deploying or undeploying
+      in place (S-0517 Terms, claims 4 and 6) keeps its guard spot. Clearing a destination that the object does not have changes
+      nothing: a drive vehicle on a factory's exit track has none (S-0417 claim 5), and it goes on
+      along the track.
+    - *Guard request.* The object then requests *guard* with a readiness-dependent immediate start
+      (S-0215 claim 7). Its readiness is read after the clears above; S-0601 claim 9 gives the
+      consequences for an infantry unit. An object whose current behaviour is *selling* gets no
+      request: a building that is being sold when it changes owner keeps *selling* as its current
+      behaviour (whether the change alters the tick at which the sale ends is one of the Open
+      questions). A simple-deployer
+      vehicle whose current behaviour is *unload* gets none either, and S-0215 claim 7 refuses the
+      request of an object in *wait*.
+    - *Rescue.* An object whose current behaviour, or whose queued behaviour left after the guard
+      request, is *rescue* then has *guard* made current at once, without the readiness test.
+    - *Fall-back.* An object on the map then falls back to rest in the ordinary way, with no
+      destination and no target when the fall-back begins. For an infantry unit, vehicle or aircraft, S-0215 claims 13 to 15
+      give that fall-back (for an aircraft with S-0501 claim 18), which can queue another
+      resting behaviour in place of a *guard* that did not start; whether a route survives the
+      change is one of S-0215's Open questions. A building requests its idle body state and queues
+      *guard* without an immediate start, as at the end of S-0417 claim 2. This part is skipped for
+      an object in contact with a vehicle factory (a building of a type with the vehicle-factory
+      flag), and for a vehicle factory whose current behaviour is still *unload* after the guard
+      request. A factory whose *guard* started at that request is no longer in *unload* and gets
+      this part. An object off the map gets none of it.
+    - *Override in effect.* The change does not empty the suspended slot (S-0215 claim 10), so an
+      override that is in effect at the change, such as one made at retaliation (S-0215 claim 18),
+      is still in effect when the fall-back begins. An aircraft's fall-back then takes the first
+      row of S-0501 table T2: its suspended behaviour becomes current again, and the target and
+      destination that the override put aside come back (S-0215 claim 10), whatever their relation
+      to the new owner. This replaces a *guard* that the guard request made current; a *guard* that
+      the request left queued stays queued (S-0215 claims 10 and 11). The aircraft gets none of
+      S-0215 claim 13's common effects there, the attack-move refresh included. A restored target
+      that the change has made one of the aircraft's own house or of an ally is held like any other
+      target: claim 29's check reads it as it reads any target, and claim 25 part k drops it only
+      for the houses that part covers. Any other object keeps the override in
+      effect after the change, because its fall-back has no such row, and so does an aircraft that
+      gets no fall-back here.
+      S-0215 claim 10's causes revert a kept override later; each of them needs a held target, so the kept
+      override gives a holder that has none no target by itself. Once a
+      search or an order has given it one, such a revert brings back the target and destination
+      that the override put aside before the change, as for the aircraft above. With S-0215's
+      `quirks.stale_suspended_revert` off, the first start-next or force at or after the change
+      empties the suspended slot as that switch gives, so the override is kept only until then: for
+      an object whose *guard* starts at the guard request, or that the *rescue* rule gives *guard*,
+      that start ends it within the change. Switch `quirks.owner_change_keeps_override` (Edge cases); with it off the slot is
+      emptied at the change, whichever way the other switch is set.
+    - *Attack-move memory.* The change keeps an attack-move memory (S-0213 Terms) and its engaged
+      mark. The fall-back above refreshes it as claim 23 (b) gives, so the refresh sees the
+      behaviour that the guard request and the *rescue* rule left current. An object that is
+      engaged, or whose current behaviour is then *guard*, resumes the attack move: with a
+      remembered destination, *move* is queued with an immediate start and that destination becomes
+      its destination again; with only a remembered target, *attack* is queued with an immediate
+      start and that target becomes its target again, whatever its relation to the new owner. Any
+      other object loses its memory there. An object that gets no fall-back here (in contact with a
+      vehicle factory, or off the map) keeps its memory as it was, and so do an aircraft whose
+      fall-back is the revert above and an object whose refresh has already been used on that tick
+      (claim 23 (b)). The guard reset that a mind-control takeover
+      adds after the change (S-0601 claim 6, S-0215 claim 9) clears the destination and target that
+      a resumption or an aircraft's revert gave, but it keeps the memory too, which then acts by
+      claim 23. Switch `quirks.owner_change_keeps_attack_move` (Edge cases).
+
+    Consequences for the contacts that follow a building (S-0509 claim 14) and for the factory:
+    - *A harvester unloading at the building.* The guard request finds it not ready, because it is
+      in the unloading state (S-0402 claim 11), so *guard* stays queued. Its fall-back to rest
+      changes nothing while it is in contact (S-0215 claim 15, row 4). It goes on unloading by
+      S-0402 claim 11's rows, and each payment after the change goes to its new owner. At
+      *finishing* it has no destination, so that claim's last row applies: it queues *harvest* in
+      place of *guard* and leaves when it is ready. Having forgotten its remembered cell, it then
+      seeks from where it stands (S-0402 claim 3) instead of driving back to its earlier field.
+    - *A harvester docked but not yet unloading.* A harvester in *unload* that has not yet started
+      unloading is still turning its body towards map east, or faces it and waits for its next
+      processing. It is not in the unloading state, and once its body is not turning it is ready.
+      Its *guard* therefore becomes current at the change, or at the first per-tick start after the
+      turn ends, which comes before its next processing of *unload* (S-0215 claim 11). It then rests
+      in *guard* at the dock with none of its load paid. Nothing in the change breaks its contact,
+      and S-0402 claim 13's rules for a harvester in *guard* give what it does next: with a
+      human-controlled owner it stays there until it is given an order.
+    - *A vehicle on a factory's exit.* A drive vehicle on the exit track, including a tunnelling or
+      teleporting vehicle with its temporary driving (S-0417 claim 5), has no destination. It
+      therefore counts as staying, follows the factory without a distance test (S-0509 claim 14) and
+      goes on along the track. It is moving, so its *guard* request replaces the *move* that the
+      factory queued on it (S-0417 claim 2) and starts only once it is ready. It gets no fall-back,
+      because it is in contact with a vehicle factory. At its clear report it has no saved rally
+      point, so S-0417 claim 8's rows for a vehicle without one apply: for a human-controlled owner,
+      the forced scatter and not the rally point. A vehicle of any other locomotor has a destination
+      from its exit instruction (S-0417 claim 5). While it is still moving it does not count as
+      staying, so it is told to leave, loses its contact and tether link and keeps its old owner
+      (S-0509 claim 14). Once it has stopped it follows the factory as the drive vehicle does.
+    - *The factory.* The factory forgets its rally point, so a unit that it releases later gets no
+      rally destination until the new owner sets one. If the factory is ready to change at the
+      guard request, its *guard* becomes current at once and its unloading ends at the change
+      (S-0417 claim 2). That is the usual case for a factory without a turret: one whose body range
+      has delay 0, as with the absent-key range, is ready on every building turn (S-0417 claim 2).
+      For a turreted factory the body range does not set readiness in *unload*, and S-0215 claim
+      11's rules for a turreted building give when it is ready. Otherwise it goes on
+      unloading with *guard* queued, and S-0417 claim 2's stages go on. What a factory whose
+      unloading ended at the change does with a unit that it has not yet sent out, and with its
+      door, is not established (Open questions).
+    - Backing: `measurable` (scenario A19: part a for the *guard* request at an engineer
+      capture, part e for the harvester unloading at a refinery whose owner a trigger's
+      change-owner action changes, which the harvester follows, part f for a factory's rally point and a drive vehicle on its
+      exit track, part g for the takeover of a vehicle-like building by a vehicle thief, part h for an engaged vehicle
+      that resumes its attack move to a remembered destination; S-0215 scenario B3 part f for a
+      mind-control takeover; S-0601 scenario MC4 for a mind-control release). The occupation and
+      return of a civilian garrison building (S-0508 claims 7 and 8) are `unmeasured` here: S-0508
+      scenario G20 records no behaviours or destination. The destination clear itself is
+      `unmeasured`: no part of scenario A19 records a difference between a clear and no clear, since
+      parts a, f and g give the object no destination before the change, part e names none for the
+      docked harvester, and in part h the resumption sets the remembered destination again. Also `unmeasured`, because no setup here
+      arranges the state at the change or records a state between two of the effects: the order of the
+      effects inside the change, the *guard* request on an object that a change-owner action gives
+      to a house itself (part b records only its target, and part e records the harvester that
+      follows the refinery, not the refinery), the kept guard spot of a vehicle in the middle of deploying
+      or undeploying, the *rescue* rule, the building being sold, a simple-deployer vehicle in
+      *unload*, the harvester docked but not yet unloading (no setup times a change into that window
+      of a few ticks), a vehicle of another locomotor on a factory's exit, the factory's own
+      *guard* request, ready or not (no part records the factory's behaviours), a resumption with only a remembered target or by an object whose *guard*
+      is current and that is not engaged, the memory kept by an object that gets no fall-back, and
+      the memory kept through a mind-control takeover's guard reset, and the override kept
+      through the change with an aircraft's revert at its fall-back (no
+      setup here has an override in effect when an object changes owner).
+    - Confidence: high for the *guard* request at an engineer capture and at the takeover of a
+      vehicle-like building by a vehicle thief (A19 parts a and g), for the forgotten rally point at
+      a trigger's change-owner action (part f), and for the takeover of a vehicle-like building by a
+      vehicle thief reaching the same change as an engineer capture.
+      Medium for everything else: the destination clear, which no part tells from no clear
+      (Backing); the *guard* request on an object that a trigger's change-owner action gives to a
+      house, which no part records (Backing); the takeover by an infantry unit of another type,
+      which S-0509 claim 17 leaves `unmeasured`; the override kept through the change and an aircraft's revert at its fall-back,
+      which rest on S-0215 claims 10 and 13 and S-0501 claim 18; the same effects at a mind-control takeover or release and at the
+      occupation and return of a civilian garrison building; the order of the effects inside the
+      change; the kept guard spot of a vehicle that is deploying or undeploying, the *rescue* rule,
+      and no *guard* request for a building being sold or for a simple-deployer vehicle in
+      *unload*; the fall-back and its exceptions, which rest on S-0215 claims 13 to 15; the
+      attack-move memory and its resumption; the harvester unloading at the building, including the
+      seeking from where it stands; the harvester docked but not yet unloading; the vehicle on a
+      factory's exit and the locomotor split; the end of the factory's unloading at the change,
+      which inherits S-0417 claim 2's readiness rules
 
 ## Formulas
 
@@ -2299,7 +2443,24 @@ between the wall target *W*, the best candidate and no target.
   17 give, without further wall candidates (none can arise once a candidate object exists), and
   picks an object. When no candidate object has been found by the end of ring *r*, the search
   takes *W* and ends there, as with the switch on.
-
+- **An owner change keeps the attack-move memory** (claim 31). The original removes no
+  attack-move memory at an owner change, so an object that the change leaves engaged, or with
+  *guard* current, takes up an attack move that its old owner ordered: it heads again for the
+  remembered destination, or attacks the remembered target, which may now be its own house's or
+  an ally's. Switch `quirks.owner_change_keeps_attack_move` (default on = original). Off: the
+  change removes the memory with its remembered destination and target and its engaged mark,
+  before the guard request, so neither the change's fall-back nor any later refresh resumes it,
+  and the object rests under its new owner as one that never had the memory.
+- **An owner change keeps an override in effect** (claim 31). The original does not empty the
+  suspended slot at an owner change. An aircraft whose override is in effect at the change gets
+  back, at the change's own fall-back, the behaviour, target and destination that the override put
+  aside under its old owner, and any other object gets them back at a later revert; the target may
+  now be its own house's or an ally's. Switch `quirks.owner_change_keeps_override` (default on =
+  original). Off: the change empties the suspended slot and forgets the target and destination that
+  the override put aside, before the guard request, so the override is no longer in effect: an
+  aircraft's fall-back takes the rows of S-0501 table T2 after the first, and no revert of the
+  object follows until a new override. With it on and S-0215's `quirks.stale_suspended_revert` off, the
+  first start-next or force at or after the change empties the slot (claim 31).
 
 ## Import mapping
 
@@ -3969,7 +4130,10 @@ Each part runs 5 times from a fresh game.
   actor whose targeting timer has run out (S-0215 claim 33). *Expected:* at the end of the
   engineer's turn in the capture tick, where read, and at the end of that tick, *D* holds no target,
   and it has no fire event at *U* after the capture. *Falsified if:* *D* still holds *U* after the
-  capture, or fires at it.
+  capture, or fires at it. Record also *D*'s current and queued behaviours and its destination
+  (claim 31). *Expected:* at the end of the capture tick *D* has no destination, and *guard* is
+  current, or queued when *D* is not ready to change. *Falsified if:* *D* has a destination then,
+  or keeps a behaviour other than *guard* with nothing queued.
 - *Part b (change-owner action):* a vehicle *V* of *H*, ordered by the player to attack a vehicle
   *W* of *E* with raised health. *V* carries the tag of a map trigger, set off by elapsed time once
   *V* has fired at *W*, whose change-owner action gives the carriers of that tag to *F* (S-0011
@@ -4003,12 +4167,83 @@ Each part runs 5 times from a fresh game.
   event at *U* after that tick. *Falsified if:* *V* holds *U* at the end of that tick, or fires at
   it after it. This part shows the drop at the takeover whether the change or the guard reset that
   the takeover adds (S-0601 claim 6) makes it.
+- *Part e (harvester at a refinery whose owner changes, claim 31):* the map places a refinery *X*
+  for the passive neutral house, so that *X*'s initial owner is passive and S-0509 claim 16's sale
+  never applies to it, whoever owns it later. *X* carries a tag whose chain holds three map
+  triggers, each a change-owner action that gives the carriers of its tag to a house (S-0011 claim
+  24): trigger 0, set off at the start, gives them to *H*; trigger 1, set off by elapsed time, to
+  *F*; trigger 2, set off a short time after it, back to *H*. *H* owns an ore harvester *Q*. Field
+  *P*1 lies far from *X*, and a smaller patch *P*2 lies next to *X*, nearer to *X*'s docking cell
+  than any cell of *P*1. The player orders *Q* to harvest at *P*1 and gives no other order to it.
+  Record also, each tick, the owner, the current and queued behaviours, the destination, the cell
+  and the load of *Q*, and the credits of *H* and *F*. A run decides something only if both changes
+  come while *Q* is docked at *X*, after its first payment of that docking and before it leaves, and
+  *X* is never put up for sale. Run e0 is the same without triggers 1 and 2. *Expected:* *Q*'s owner
+  follows *X* at both changes; *Q* stays docked and goes on unloading, with *unload* current and
+  *guard* queued from the first change; each payment between the two changes adds to *F*'s credits,
+  every other payment to *H*'s; at *finishing* it queues *harvest*, and after it leaves it heads for
+  a cell of *P*2. In e0 it heads back to *P*1. *Falsified if:* *Q* keeps its old owner, *guard*
+  becomes current while *Q*'s load is not yet paid, a payment between the changes goes to *H*, or in
+  the runs with triggers *Q* heads back to *P*1. Void runs are repeated until 5 runs count.
+- *Part f (a factory's rally point and a vehicle on its exit, claim 31):* the map places a ground
+  vehicle factory *K* for the passive neutral house, with a tag whose chain holds three triggers
+  like those of part e, so that *K* belongs to *H* from the start and its initial owner is passive.
+  *H* sets *K*'s rally point on a cell *R* several cells from *K*. *H* produces a vehicle *V*1 of a
+  type that drives and does not gather ore (S-0417 claim 8's harvest row would come first). Trigger
+  1 is timed to come after *V*1 has been put on the exit track (S-0417 claim 5), and trigger 2
+  shortly after it; a run decides something only if both changes come before *V*1's clear report
+  (S-0417 claim 7) and *K* is never put up for sale. After the second change, without a new rally
+  point, *H* produces a second vehicle *V*2 of the same type. Run f0 is the same without triggers 1
+  and 2. Record also, each tick, the owner, the current and queued behaviours, the destination, the
+  cell and the contact of *V*1 and *V*2. *Expected:*
+  *V*1's owner follows *K* at both changes; *V*1 goes on along the exit track to its end; at its
+  clear report it gets no destination at *R*, and it leaves the apron by the scatter of S-0417 claim
+  8 instead; *V*2 does not head for *R* either. In f0 both head for *R*. *Falsified if:* *V*1 stops on the track at a change or keeps its old owner,
+  *V*1 or *V*2 heads for *R* in a run with triggers. Void runs are repeated until 5 runs count.
+- *Part g (takeover of a vehicle-like building, claim 31):* part a, with a building *B* of *E*
+  that S-0509 scenario E12's test-map override makes vehicle-like, given a weapon by the same
+  test files, in place of *D*, and
+  a vehicle thief of *H* that takes *B* over, as in S-0509 scenario E12 (S-0509 claim 17), in place
+  of the engineer's capture.
+  Record also *B*'s current and queued behaviours and its destination. *Expected:* at the end of
+  the tick of the takeover, *B* belongs to *H*, holds no target and has no destination, and
+  *guard* is current, or queued when *B* is not ready to change; it has no fire event at *U* after
+  the takeover. *Falsified if:* *B* holds *U* or a destination at the end of that tick, keeps a
+  behaviour other than *guard* with nothing queued, or fires at *U* after the takeover.
+- *Part h (attack move resumed at the change, claim 31):* part b, with *V* of a type eligible for
+  attack moves and the player's attack order replaced by an attack-move order (S-0213 claim 6) to
+  a free cell *C* several cells beyond *W*, so that *V*'s memory holds *C*.
+  *V* drives towards *C*, its attack-move search finds *W*, and it stops and fires at *W*. The
+  trigger, its timing and part b's targeting-timer condition are unchanged. Record also *V*'s
+  current and queued behaviours and its destination. Part b itself is the control. *Expected:* at
+  the end of the tick of the change, *V* holds no target, has *C* as its destination with *move*
+  current or queued, and then drives towards *C* before any order; in part b, *V* has no destination
+  and stays where it is. *Falsified if:* in this part *V* has no destination at the end of the tick
+  of the change, or does not drive towards *C* before its next search or an order.
 
 ## Open questions
 
-- Claim 30: whether a building that is being sold when it changes owner gets the *guard* request of
-  the change, or keeps selling without it (low). A capture or a change-owner action during the sale,
-  with the building's behaviours recorded per tick, would decide it.
+- Claim 31: what *attack* does with a remembered target resumed at an owner change that the change
+  has made an object of the holder's own house or of a house allied with it: whether it fires on
+  it, or drops it at its next check as an illegal target, is not established (low). Part h with
+  the attack-move order given on *W* itself, so that the memory holds only a target, if input can
+  give that order (S-0213 claim 6), and with *W* carrying the same tag as *V* so that both go to
+  *F*, would decide it.
+- Claim 31: a building that is being sold when it changes owner gets no *guard* request and goes on
+  selling, but the fall-back to rest of the change still requests its idle body state. Whether that
+  request disturbs the sale's body sequence (S-0408), and so the tick at which the sale ends, is not
+  established (low). A change-owner action during a sale, with the building's body state and the
+  sale's end recorded per tick, would decide it.
+- Claim 31: what a vehicle factory whose unloading ended at an owner change does with a unit in
+  contact that it has not yet sent out (one still at its appear point, before S-0417 claim 5), and
+  what its door does then, is not established (low). Neither the factory's *guard* nor its apron
+  test (S-0417 claim 13) sends such a unit out, so it may stay at its appear point in contact with
+  the factory, and the factory's next release may then be affected. Part f of scenario A19 with the
+  changes timed before *V*1 is put on the track, recording *V*1's cell and contact, *K*'s door and
+  the release of a second vehicle, would decide it. If the unit does stay there, a quirk switch
+  with a fixed alternative is to be proposed then.
+- Claim 31: what a vehicle docked at a captured repair building does after the change's guard
+  request and fall-back, and whether its repair goes on (S-0314), is not established (low).
 - Q-2112 question 1: which occasion gives the hunting vehicles of the games that the request
   cites their hovering-jumpjet targets after their first targets die. Their own map-wide search
   never finds one (claim 7). The occasions that can are a target picked while the jumpjet was in
@@ -4434,7 +4669,78 @@ warp member a refused held target at a check tick), `measurable` in our engine (
 part f).
 
 S-0509 claim 12, its table of effects owned elsewhere: it gains the row "The building's held target
-dropped at the change | S-0309 claim 30". Level and backing: as claim 30 gives for a building.
+dropped at the change; its destination cleared, its rally point forgotten, *guard* requested and the
+fall-back to rest | S-0309 claims 30 and 31". Level and backing: as claims 30 and 31 give for a
+building.
+
+S-0509 claim 14: after "changes owner together with the building and keeps its contact and any
+tether link" it gains "; that owner change resets its orders as S-0309 claim 31 gives, so a
+harvester unloading there goes on unloading for its new owner, and a vehicle on a factory's exit
+track goes on along the track without its saved rally point". Level and backing: as S-0309 claim 31
+gives (medium; `measurable`, S-0309 scenario A19 parts e and f).
+
+S-0509 claim 17: after "a building ownership change to the unit's house follows, with
+announcements" it gains "(with S-0309 claims 30 and 31: the building's target dropped, its
+destination cleared, its rally point forgotten and *guard* requested, as at an engineer capture)".
+Level and backing: high for the target drop and the *guard* request at a vehicle thief's
+takeover, `measurable`, S-0309 scenario A19 part g; medium for a takeover by another infantry
+type, as this claim's Backing leaves it `unmeasured`, and for the destination clear and the
+forgotten rally point, `unmeasured`
+as S-0309 claim 31 gives (no part gives the taken building a destination or a rally point
+before the takeover).
+
+S-0509 scenario E9: its sentence "A still-moving factory contact keeps its owner and is sent away."
+becomes "A factory contact that has a destination and is still moving, such as a vehicle of a
+locomotor other than drive that leaves towards its exit destination, keeps its owner and is sent
+away. A drive vehicle still on the factory's exit track has no destination (S-0417 claim 5), so it
+counts as staying and changes owner with the factory, moving or not (S-0309 claim 31)." Its
+falsifier "a moving factory contact transferring" becomes "a moving factory contact that has a
+destination transferring, or a drive vehicle on the exit track keeping its owner". Claim 14 itself
+needs no change: its test is already "no destination or its movement has stopped". Level and
+backing: medium, as S-0509 claim 14 and S-0309 claim 31 give; `measurable`, S-0509 scenario E9
+with S-0309 scenario A19 part f for the drive vehicle.
+
+S-0601 claim 9, its paragraph on the ownership change at release: after "then normally requests
+*guard* with a readiness-dependent immediate start (S-0215 claim 7)" it gains "; the change also
+forgets the victim's guard spot, and a victim on the map then makes an ordinary fall-back to
+rest, which can queue another resting behaviour in place of a *guard* that did not start and can
+resume a kept attack-move memory (S-0309 claim 31)". Its words "and *guard* stays queued for a
+later per-tick start" become "and *guard* stays queued for a later per-tick start unless that
+fall-back queues another behaviour in its place". Level and backing: as S-0309 claim 31 gives
+(medium; `measurable` by this claim's own MC4 for the release, `unmeasured` for the attack-move
+memory).
+
+S-0402 claim 11: after the paragraph *Refinery sold while unloading* it gains a paragraph
+"*Refinery changing owner while unloading.* A harvester docked at a refinery that changes owner
+follows it (S-0509 claim 14) and has its orders reset (S-0309 claim 31). In the unloading state it
+is not ready to change, so the *guard* request of that change stays queued, and it goes on
+unloading by the rows above; each payment after the change goes to the new owner, and at
+*finishing* it queues *harvest* in place of *guard*. It has forgotten its remembered cell, so back in
+*harvest* it seeks from where it stands (claim 3). A harvester in *unload* that has not yet started
+unloading starts *guard* at the change, or once its body turn ends, and stays docked with its load
+unpaid (claim 13's rules for a harvester in *guard*)." S-0402 Terms, *Remembered cell*, gains "An
+owner change forgets it (S-0309 claim 31)." Level and backing: as S-0309 claim 31 gives
+(medium, `measurable` by S-0309 scenario A19 part e, `unmeasured` for the harvester not yet
+unloading).
+
+S-0417 claim 2: after "Unloading ends when *guard* starts." it gains "An owner change of K requests
+*guard* with a readiness-dependent immediate start, so when K is ready its unloading ends at the
+change (S-0309 claim 31)." Claim 8, third row: after "not re-read from K at the clear report" it
+gains "An owner change of u forgets it (S-0309 claim 31), including the change that u makes when
+it follows K (S-0509 claim 14), so after such a change this row does not apply; K's own owner change
+forgets K's rally point but not the spot that u saved." Level and backing: as S-0309 claim 31 gives (medium; `measurable`, S-0309 scenario
+A19 part f, for claim 8; `unmeasured` for claim 2's addition, since no part records K's behaviours
+at the change).
+
+S-0213 claim 20: after "the place toward which its new units head (production specs)" it gains "An
+owner change of the building forgets it (S-0309 claim 31)." Level and backing: high; `measurable`,
+S-0309 scenario A19 part f.
+
+S-0215 Terms, *Guard spot*: after "an actor that starts *area guard* without one takes its own
+cell" it gains ". An owner change forgets it, except for a vehicle in the middle of deploying or
+undeploying in place (S-0517 claims 4 and 6; S-0309 claim 31)". Level and backing: medium (as S-0309 claim 31 gives for the
+guard spot); `measurable`, S-0309 scenario A19 part f, `unmeasured` for the vehicle that is
+deploying or undeploying.
 
 ## Questions for the project lead
 
