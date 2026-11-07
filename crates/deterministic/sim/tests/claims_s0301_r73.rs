@@ -316,3 +316,33 @@ fn r73_claim9_t1_answers_rank_above_the_held_temporal_rearming() {
         "switched off: T1's impossible, not rearming"
     );
 }
+
+// spec: S-0301 r73 claim 9 (every answer of S-0405 table T1 ranks above the held-temporal-target rearming); S-0405 T1 (illegal: being drained, S-0608 Terms; building or selling, not a pulse cannon) (seam sweep 6: intake 98's other T1 rows; the type rows, a pulse cannon and an occupiable building without firing occupants, answer from the start, so such a building never locks its beam)
+#[test]
+fn seams6_the_other_t1_rows_rank_above_the_held_temporal_rearming() {
+    let (w, t, v, p, _) = locked();
+    assert_eq!(
+        check(&w, t, Some(Target::Object(v)), 0, true),
+        Answer::Rearming,
+        "set-up: the held-temporal-target rearming"
+    );
+    let mut drained = w.clone();
+    drained.drain.links.insert(t, p);
+    assert!(glasnost_sim::econ::power::being_drained(&drained, t));
+    let mut selling = w.clone();
+    selling.obj_mut(t).unwrap().beh.current = Some(Behaviour::Selling);
+    let mut building = w.clone();
+    building.obj_mut(t).unwrap().beh.current = Some(Behaviour::Construction);
+    for (row, w) in [
+        ("drained", drained),
+        ("selling", selling),
+        ("construction", building),
+    ] {
+        assert!(temporal::holds(&w, t, v), "set-up: still attached ({row})");
+        assert_eq!(
+            check(&w, t, Some(Target::Object(v)), 0, true),
+            Answer::Illegal,
+            "{row}: T1's illegal, not rearming"
+        );
+    }
+}

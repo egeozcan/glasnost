@@ -205,11 +205,12 @@ pub fn resolve(table: Option<&StringTable>, label: Option<&[u8]>, stand_in: &str
 }
 
 /// Reads the install's string table: `ra2md.csf` resolved as S-0005
-/// claim 9 gives. `Err` is a diagnostic naming the file and the reason; the
-/// table's importer warnings are `StringTable::warnings`.
+/// claim 9 gives while only the two language archives are mounted. `Err`
+/// is a diagnostic naming the file and the reason; the table's importer
+/// warnings are `StringTable::warnings`.
 pub async fn read(vfs: &Vfs) -> Result<StringTable, String> {
-    // spec: S-0015 claims 1 and 2 (one table, ra2md.csf; a missing file or a header that fails the checks is a table that cannot be resolved, S-0005 claim 16, which in our session is a diagnostic and the stand-in names)
-    let Some(r) = vfs.resolve(FILE) else {
+    // spec: S-0015 claims 1 and 2 (one table, ra2md.csf, resolved while only the two language archives are mounted; a missing file or a header that fails the checks is a table that cannot be resolved, S-0005 claim 16, which in our session is a diagnostic and the stand-in names)
+    let Some(r) = vfs.resolve_language_only(FILE) else {
         return Err(format!("{FILE}: the string table is missing"));
     };
     let bytes = vfs
@@ -363,25 +364,81 @@ mod tests {
 
     /// A synthetic install whose language archive `langmd.mix` holds `members`.
     fn install(members: &[(&str, Vec<u8>)]) -> Vfs {
+        install_archives(&[("langmd.mix", members)])
+    }
+
+    /// An archive's members: a name and its bytes each.
+    type Members<'a> = &'a [(&'a str, Vec<u8>)];
+
+    /// A synthetic install of the loose top-level archives `archives`, each
+    /// holding its members (and a filler, so that none is empty).
+    fn install_archives(archives: &[(&str, Members<'_>)]) -> Vfs {
         use glasnost_fmt::mix::{MixWriter, WriteLayout, id_hash};
         use glasnost_vfs::{GameOptions, MemSource, PickedFile};
-        let mut files: Vec<_> = members
+        let picked = archives
             .iter()
-            .map(|(n, b)| (id_hash(n), b.clone()))
+            .map(|(name, members)| {
+                let mut files: Vec<_> = members
+                    .iter()
+                    .map(|(n, b)| (id_hash(n), b.clone()))
+                    .collect();
+                files.push((id_hash("filler.ini"), b"[Filler]\n".to_vec()));
+                let bytes = MixWriter {
+                    layout: WriteLayout::Plain,
+                    files,
+                }
+                .write();
+                PickedFile {
+                    path: (*name).into(),
+                    source: std::rc::Rc::new(MemSource(bytes)),
+                }
+            })
             .collect();
-        files.push((id_hash("filler.ini"), b"[Filler]\n".to_vec()));
-        let lang = MixWriter {
-            layout: WriteLayout::Plain,
-            files,
-        }
-        .write();
         let mut vfs = Vfs::default();
-        pollster::block_on(vfs.mount_install(vec![PickedFile {
-            path: "langmd.mix".into(),
-            source: std::rc::Rc::new(MemSource(lang)),
-        }]));
+        pollster::block_on(vfs.mount_install(picked));
         pollster::block_on(vfs.mount_startup(GameOptions::default()));
         vfs
+    }
+
+    /// spec: S-0015 claim 1 (`ra2md.csf` is resolved as S-0005 claim 9 gives while only the two
+    /// language archives are mounted: a copy in the base language archive is read, and a copy
+    /// that only a later archive of the search order holds is not, so the table cannot be
+    /// resolved and the program refuses to start, S-0005 claim 16) (seam sweep 6: intake 109's
+    /// row)
+    #[test]
+    fn seams6_the_table_is_resolved_among_the_language_archives_only() {
+        let good = Csf {
+            version: 3,
+            language: 0,
+            unused: 0,
+            labels: vec![CsfLabel {
+                name: b"Probe".to_vec(),
+                strings: vec![CsfString {
+                    units: u("shown"),
+                    extra: None,
+                }],
+            }],
+        }
+        .write();
+        let base = install_archives(&[
+            ("langmd.mix", &[]),
+            ("language.mix", &[("ra2md.csf", good.clone())]),
+        ]);
+        let t = pollster::block_on(read(&base)).expect("the base language archive's copy");
+        assert_eq!(t.find(b"probe"), Found::Text(u("shown")));
+        let later = install_archives(&[
+            ("langmd.mix", &[]),
+            ("language.mix", &[]),
+            ("ra2md.mix", &[("ra2md.csf", good)]),
+        ]);
+        assert!(
+            later.resolve(FILE).is_some(),
+            "set-up: the later archive is in the search order"
+        );
+        assert!(
+            pollster::block_on(read(&later)).is_err(),
+            "a copy only a later archive holds is not read"
+        );
     }
 
     /// spec: S-0015 claims 1 and 2 (the program reads `ra2md.csf`, a member of the language

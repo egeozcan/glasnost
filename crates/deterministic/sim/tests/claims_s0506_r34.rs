@@ -273,6 +273,42 @@ fn no_reset_when_a_pending_target_waits() {
     assert_eq!(c.slots[0].state, SlotState::Preparing);
 }
 
+// spec: S-0506 claim 14 (r34: a leaving by going inside a building or a transport is itself a removal) and claim 25 (the loss notification for the pending target clears it at once, whatever the own target); claim 11 (the leaving object is not the controller target, so no reset: the controller goes on with its target) (seam sweep 6: intake 110's row, a pending target that goes inside)
+#[test]
+fn a_pending_target_that_goes_inside_is_cleared_with_no_reset() {
+    for inside in [true, false] {
+        let r = rules();
+        let mut w = testkit::game_with(&r, SIZE, 7);
+        let lnb = put(&mut w, Kind::Vehicle, "LNB", 0, 0, 0);
+        let victim = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+        let walker = put(&mut w, Kind::Infantry, "WALKER", 1, 8, 4);
+        let (_, _) = launch(&mut w, lnb, victim);
+        spawn::set_own_target(w.obj_mut(lnb).unwrap(), Some(Target::Object(walker)));
+        spawn::shot(&mut w, lnb, Target::Object(walker));
+        assert_eq!(
+            controller(&w, lnb).pending,
+            Some(Target::Object(walker)),
+            "set-up: pending"
+        );
+        if inside {
+            glasnost_sim::objects::take_inside(&mut w, walker);
+            assert!(w.obj(walker).is_some(), "it stays in existence");
+        } else {
+            // Control: the removal that going inside is read as.
+            glasnost_sim::objects::remove(&mut w, walker);
+        }
+        let c = controller(&w, lnb);
+        assert_eq!(c.pending, None, "inside {inside}: pending cleared at once");
+        assert_eq!(
+            c.target,
+            Some(Target::Object(victim)),
+            "inside {inside}: the controller target kept"
+        );
+        assert_ne!(c.state, ControllerState::Idle, "inside {inside}: no reset");
+        assert_eq!(c.slots[0].state, SlotState::Preparing, "inside {inside}");
+    }
+}
+
 // spec: S-0506 claim 14 (r34: claim 24's timer runs on the tick number, S-0203 claim 9, so a turn the missile does not make within a phase does not shift its ticks: its next update finds the timer run on; a phase's end is acted on at the first update at or after its timer runs out, and the next phase's timer starts at that update)
 #[test]
 fn the_flight_timer_runs_on_the_tick_number() {

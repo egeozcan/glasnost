@@ -608,6 +608,37 @@ impl Vfs {
         self.find(name).map(Resolved::Member)
     }
 
+    /// [`Vfs::resolve`] as it stood while only the two language archives
+    /// were mounted (S-0005 Table 1, rows 1 and 2): the loose file under the
+    /// mod layer, else the first of those archives that finds the member. A
+    /// member that only a later archive holds is not found.
+    pub fn resolve_language_only(&self, name: &str) -> Option<Resolved> {
+        if name.len() > LONGEST_NAME {
+            return None;
+        }
+        if self.game.options.mod_layer
+            && let Some(f) = self.loose_top(name)
+        {
+            return Some(f);
+        }
+        let id = glasnost_fmt::mix::id_hash(name);
+        // spec: S-0005 claim 9 (the two language archives are mounted first, so they are the leading ranks of the search order)
+        self.search
+            .iter()
+            .take_while(|r| matches!(r.row, Row::ExpansionLanguage | Row::BaseLanguage))
+            .find_map(|rank| {
+                let entry = index_search(
+                    &self.archives[rank.archive.0 as usize].index,
+                    id,
+                    &self.game.options.quirks,
+                )?;
+                Some(Resolved::Member(FileRef {
+                    archive: rank.archive,
+                    entry,
+                }))
+            })
+    }
+
     /// A loose file that the original would use for `name` but this import
     /// does not, because the mod layer is off (PLAN.md 4.3: such files are
     /// flagged).
