@@ -100,7 +100,12 @@ earlier base (07d549c and 01c5688). Save format 110, AI game format 75 (main: 10
 The branch is now rebased onto main e0695d3 (intake 107). The lane figures below were taken on
 earlier bases, and each says which: main 01c5688 (code equal to 926f78d's) with the branch rebased
 onto it, or main 07d549c with the branch on it. They were not run again on e0695d3. The final
-checks were (see the intake 108 report).
+checks were run on e0695d3 with the branch on it: the workspace tests 7737 passed and 1 failed
+(`quirks::tests::every_spec_quirk_has_a_switch`, from S-0208 r52 on main, intake 110's), 128
+ignored; the simulation tests with `--include-ignored` 5438 passed and 1 failed
+(`pathing_c7p4::diag`, as expected); the AI tests with `--include-ignored` 263 passed and 0
+failed; clippy and fmt clean; `cargo xtask check` with the 128 stock-guard problems main has in
+the lead's records; `cargo xtask gate` ok.
 
 - **The M6c, M7a and M7b seed sweeps**, seeds 1 to 16, with and without `GLASNOST_PLAY_FIXES`: the
   same output line for line. Smallest counters: M6c 0 (median 4) both ways; M7a 2 with the layer
@@ -108,9 +113,10 @@ checks were (see the intake 108 report).
   07d549c before round 9b.
 - **The arena** (`--record all --threads 2`, main 07d549c against the branch on 07d549c):
   byte-identical reports and CSVs. M-0001 has 11 of 96 pairings failing, M-0002 2 of 24, M-0003 1
-  of 35, M-0019 0 of 6, M-0020 1 of 25 (YURI against SHK, arm S) and M-0021 8 of 50. Main's later
-  commits change no code the arena runs: the arena and oracle modules do not use the AI, and the
-  simulation and tools crates are unchanged. So it was not run again.
+  of 35, M-0019 0 of 6, M-0020 1 of 25 (YURI against SHK, arm S) and M-0021 8 of 50. Round 9b
+  (01c5688) changed only AI code, and the arena and oracle modules do not use the AI, so it was
+  not run on 01c5688. It was not run on e0695d3 either: intake 107 changed the simulation, so
+  main's merge lanes cover that base.
 - **The AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games). Every game ends, before and
   after. 32 games are identical apart from timings; 4 games changed:
 
@@ -126,7 +132,10 @@ checks were (see the intake 108 report).
     aircraft.
   - In tick 29 682 it leaves *attack* for *guard* with a destination cell, (35,43). On main it
     stays in *guard* for three ticks and gets *move* toward its destroyer at 29 685. On the branch,
-    claim 33's *move* (r146, at the movement update) is current in tick 29 682 itself. Its
+    claim 33's *move* (r146, at the movement update) is current in tick 29 682 itself. Claim 35
+    puts a slot aircraft that is not visiting under T2's rows, which for a human-controlled house
+    give *guard* with claim 33's *move* (the AI tool's houses are player-owned to the simulation, as
+    the trace's *guard* shows); which row applies is existing code, not this intake's. Its
     processing gives the destination (43,51), and at 29 685 it gets the same *move* toward its
     destroyer.
   - From there its flight is a cell and a tick apart, and the long game drifts. This is the change
