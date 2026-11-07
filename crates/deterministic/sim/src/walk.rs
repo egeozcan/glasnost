@@ -291,14 +291,18 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
 }
 
 /// The locomotion of a walker standing on a standing position with no
-/// walking target (S-0208 claim 6): with no destination and no stored path
-/// it stops; with no stored path it searches for its destination (S-0212
-/// claims 20 and 21); then it asks for its next cell and chooses its walking
-/// target without moving (claim 3, S-0209).
+/// walking target (S-0208 claim 6): with no destination it stops, and a
+/// stored path it still holds is dropped; with no stored path it searches
+/// for its destination (S-0212 claims 20 and 21); then it asks for its next
+/// cell and chooses its walking target without moving (claim 3, S-0209).
 fn standing(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let (dest, no_path, here) = (o.dest, o.path.steps.is_empty(), o.pos.cell());
-    if dest.is_none() && no_path {
+    if dest.is_none() {
+        // spec: S-0208 claim 6 (r52, A stored path kept under enter: a walker follows a stored path only towards a destination, so a destination that becomes nothing leaves it no path to follow, whatever it keeps)
+        if !no_path && let Some(ob) = w.obj_mut(id) {
+            ob.path.steps.clear();
+        }
         stopped(w, id);
         return;
     }
