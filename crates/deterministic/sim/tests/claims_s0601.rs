@@ -1261,7 +1261,9 @@ fn firing(w: &mut World, v: ObjectId, target: ObjectId, stance: Stance) {
 }
 
 fn kind_of(w: &World, v: ObjectId) -> Option<Seq> {
-    w.obj(v).and_then(|o| o.infantry.as_ref()).and_then(|s| s.seq)
+    w.obj(v)
+        .and_then(|o| o.infantry.as_ref())
+        .and_then(|s| s.seq)
 }
 
 // spec: S-0601 r23 claim 9 (the clear of an infantry victim's target is a change of target, S-0215 claim 11 and S-0107 claim 11: the attack state ends at the clear with its request, not forced, for stand, prone or deployed, which the readiness read after both clears then sees, so guard is current with nothing queued); S-0107 r46 claim 11 (the release, Changes of target); S-0215 r118 claim 11 (deployed when deploying, prone when prone, stand otherwise) (seam sweep 6: intake 111's and intake 99's rows)
@@ -1279,7 +1281,11 @@ fn seams6_a_release_asks_for_stand_prone_or_deployed_at_the_clear() {
         assert_eq!(owner(&w, v), Some(ALPHA), "{stance:?}");
         assert_eq!(w.obj(v).unwrap().target, None, "{stance:?}: cleared");
         assert!(!attack_state(&w, v), "{stance:?}: the state ended");
-        assert_eq!(kind_of(&w, v), Some(stance.kinds().1), "{stance:?}: the request");
+        assert_eq!(
+            kind_of(&w, v),
+            Some(stance.kinds().1),
+            "{stance:?}: the request"
+        );
         assert_eq!(
             slots(&w, v),
             (Some(Behaviour::Guard), None),
@@ -1300,7 +1306,11 @@ fn seams6_the_release_request_is_not_forced() {
     w.obj_mut(v).unwrap().infantry.as_mut().unwrap().seq = Some(Seq::GoProne);
     mind::release(&mut w, c, v);
     assert!(!attack_state(&w, v), "the state ended");
-    assert_eq!(kind_of(&w, v), Some(Seq::GoProne), "the request turned down");
+    assert_eq!(
+        kind_of(&w, v),
+        Some(Seq::GoProne),
+        "the request turned down"
+    );
     assert_eq!(
         slots(&w, v),
         (Some(Behaviour::Attack), Some(Behaviour::Guard)),
@@ -1320,9 +1330,17 @@ fn seams6_a_takeover_ends_the_attack_state_and_asks() {
         assert!(mind::take(&mut w, c, v), "{stance:?}: taken");
         let o = w.obj(v).unwrap();
         assert_eq!(o.target, None, "{stance:?}: cleared");
-        assert_eq!(o.beh.current, Some(Behaviour::Guard), "{stance:?}: guard forced");
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::Guard),
+            "{stance:?}: guard forced"
+        );
         assert!(!attack_state(&w, v), "{stance:?}: the state ended");
-        assert_eq!(kind_of(&w, v), Some(stance.kinds().1), "{stance:?}: the request");
+        assert_eq!(
+            kind_of(&w, v),
+            Some(stance.kinds().1),
+            "{stance:?}: the request"
+        );
     }
 }
 

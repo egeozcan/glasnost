@@ -157,11 +157,17 @@ fn seams6_a_berserk_hit_keeps_the_disguise() {
         assert_eq!(res, HitResult::Unchanged, "berserk {berserk}");
         let o = w.obj(s).unwrap();
         if berserk {
-            assert!(o.combat.berserk.is_some(), "set-up: the hit made it berserk");
+            assert!(
+                o.combat.berserk.is_some(),
+                "set-up: the hit made it berserk"
+            );
             assert!(o.cloak.disguise.is_some(), "the disguise is kept");
             assert_eq!(o.cloak.lockout_until, 0, "no disruption countdown");
         } else {
-            assert!(o.cloak.disguise.is_none(), "control: an ordinary hit loses it");
+            assert!(
+                o.cloak.disguise.is_none(),
+                "control: an ordinary hit loses it"
+            );
             assert!(o.cloak.lockout_until > t, "control: the countdown");
         }
     }
