@@ -92,15 +92,15 @@ a threat point, never uses the nearby-cell search and never gives the extra loco
 - The AI quick lane (seeds 7 to 10, maps 0, 2 and 8, 36 games): every game over with a winner on
   both; every winner unchanged; 2 tick counts moved (seeds 7 and 10).
 - The arena (`arena --record all --threads 2`), failing on main and on the branch:
-  - M-0001: 10 of 96 to 12 of 96 (new: LTNK-APOC, LTNK-E1; win counts move in other pairings;
-    side-wise unanimous outcomes reproduced 157 to 155 of 171);
+  - M-0001: 10 of 96 to 12 of 96 (new: LTNK-APOC, LTNK-E1, both in **Q-2782**; win counts move
+    in other pairings; side-wise unanimous outcomes reproduced 157 to 155 of 171);
   - M-0002: 2 of 24, unchanged (INIT-E2's win count moves);
-  - M-0003: 1 of 35 to 2 of 35 (new: MTNK-APOC);
+  - M-0003: 1 of 35 to 2 of 35 (new: MTNK-APOC, in **Q-2782**);
   - M-0019: 0 of 6, unchanged;
   - M-0020: 1 of 25, identical;
   - M-0021: 8 of 50 to 11 of 50 (new: part B's "c ≥ 3 in every judged shot", part B's "hits a
     judged shot owns" and the reading-points row on a part B death's shot whose later hit names
-    no attacker; one part B run's G-dead count moves).
+    no attacker; one part B run's G-dead count moves). All of these are in **Q-2782**.
 
   Traced (a temporary local probe, not committed), with M-0001 LTNK-E1 (side A, seed 0, its
   winner flips) and M-0003 MTNK-APOC (side A, seed 0): every scatter from damage (or request A) sent in
@@ -112,17 +112,27 @@ a threat point, never uses the nearby-cell search and never gives the extra loco
   as written, not from a reading of ours. The details have local values and stay out of this
   file.
 
-  M-0021 was not traced (the oracle has no trace for it). Part B has hits naming no attacker (its
-  reading-points row), and its vehicles are of computer houses, so case 2 is the likely route. That is unconfirmed. This
-  is a tension with the record: by the claim's Original-only note, a computer house meets case
-  2's last condition always, so the original would send the request at least as often as we do.
-  Yet the record has *c* ≥ 3 in every judged shot. If case 2 is the route, the difference lies
-  in another condition. The likeliest is how often our vehicles stand free (no target, no
-  destination) when hit; in the traced game a vehicle stood free for some ticks between dropping
-  one target and taking the next. Left for the lead; no code was tuned toward the lane.
+  M-0021 part B, F on side B, seed 1001, was probed afterwards the same way. Every request of that
+  run is case 2, sent to a free unit in *hunt* of a computer-controlled arena house. Each comes
+  from a hit naming no attacker, or from the same claim 18 answer (one with an allied attacker
+  too). In both of that run's judged shots with *c* < 3, the target *X* is a G vehicle that had
+  been sent the request a few ticks before. It took the next cell toward the F group, and two of
+  its G neighbours were sent it too, near the same ticks, with one shared destination cell. So
+  fewer cells around *X* held a G vehicle and no F vehicle.
+
+  This is in tension with the record. By the claim's Original-only note, a computer house always
+  meets case 2's last condition, so the original would send the request at least as often as we
+  do, yet the record has *c* ≥ 3 in every judged shot. **Q-2782** asks which reading is right:
+  whether case 2 reaches a free vehicle in *hunt* of a computer player house in the original, or
+  whether the original's hunting vehicles do not stand free (no target, no destination) when hit,
+  as ours do between one target and the next. No code was tuned toward the lane.
 
 ## Seams
 
+- **The arena records (Q-2782).** Under the claims as built, case 2 reaches the test-only
+  computer-controlled arena houses' free units in *hunt*. As a result M-0021 part B (*c* ≥ 3, the
+  hits a judged shot owns, a reading-points row, one G-dead count), M-0001 LTNK-APOC and LTNK-E1,
+  and M-0003 MTNK-APOC now fail. Q-2782 asks which reading is right; the build stands meanwhile.
 - **Aircraft retaliation.** Our engine builds no retaliation for an aircraft (`acquire::retaliate`
   never overrides one). An aircraft that may retaliate is answered `Held`, so with the
   player-scatter setting or the scatter ability, and with neither target nor destination, it is
