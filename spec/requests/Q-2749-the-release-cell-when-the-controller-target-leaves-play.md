@@ -1,9 +1,9 @@
 ---
 id: Q-2749
 title: The release cell of a missile released when the controller target leaves play
-status: open
+status: answered
 related: [S-0506]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
