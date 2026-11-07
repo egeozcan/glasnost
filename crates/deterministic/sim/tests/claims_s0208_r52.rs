@@ -112,11 +112,19 @@ fn w17_f_enter_order_during_a_step_keeps_the_old_line() {
     let o = w.obj(id).unwrap();
     assert_eq!(o.path.steps, before, "the stored path is kept");
     assert_eq!(o.dest, Some(Target::Object(v)));
-    assert!(matches!(o.beh.seen(), Some(Behaviour::Enter)) || o.beh.queued == Some(Behaviour::Enter));
+    assert!(
+        matches!(o.beh.seen(), Some(Behaviour::Enter)) || o.beh.queued == Some(Behaviour::Enter)
+    );
     let c = cells(&mut w, id, 400);
-    let end = c.iter().position(|&x| x == cell(4, 0)).expect("reaches the end of its line");
+    let end = c
+        .iter()
+        .position(|&x| x == cell(4, 0))
+        .expect("reaches the end of its line");
     for k in 1..end {
-        assert!(c[k].x >= c[k - 1].x, "no step towards the VAN before the end of the line: {c:?}");
+        assert!(
+            c[k].x >= c[k - 1].x,
+            "no step towards the VAN before the end of the line: {c:?}"
+        );
     }
     assert!(
         c[end..].iter().any(|x| x.x < cell(4, 0).x),
@@ -193,7 +201,11 @@ fn w17_h_enter_order_between_steps_keeps_the_path() {
         assert!(!before.is_empty());
         order_enter(&mut w, id, v);
         orders::apply_pending(&mut w);
-        assert_eq!(steps(&w, id).is_empty(), !keep, "kept exactly with the switch on");
+        assert_eq!(
+            steps(&w, id).is_empty(),
+            !keep,
+            "kept exactly with the switch on"
+        );
     }
 }
 
@@ -208,9 +220,15 @@ fn the_keep_condition() {
         o.contact = c;
     };
     set(&mut w, Some(Behaviour::Enter), None, None);
-    assert!(glasnost_sim::walk::keeps_stored_path(&w, id), "enter current");
+    assert!(
+        glasnost_sim::walk::keeps_stored_path(&w, id),
+        "enter current"
+    );
     set(&mut w, Some(Behaviour::Move), Some(Behaviour::Enter), None);
-    assert!(glasnost_sim::walk::keeps_stored_path(&w, id), "enter queued");
+    assert!(
+        glasnost_sim::walk::keeps_stored_path(&w, id),
+        "enter queued"
+    );
     set(&mut w, Some(Behaviour::Move), None, None);
     assert!(!glasnost_sim::walk::keeps_stored_path(&w, id), "no enter");
     set(&mut w, Some(Behaviour::Enter), None, Some(v));
@@ -267,10 +285,21 @@ fn a_kept_path_is_followed_in_the_extra_locomotion() {
     let (mut w, id, _) = cat_under_enter(true);
     let before = steps(&w, id);
     assert!(scatter::request(&mut w, id, UNFORCED));
-    assert!(matches!(w.obj(id).unwrap().dest, Some(Target::Cell(_))), "the scatter's destination");
+    assert!(
+        matches!(w.obj(id).unwrap().dest, Some(Target::Cell(_))),
+        "the scatter's destination"
+    );
     let t = walk_target(&w, id).expect("a walking target chosen at once");
-    assert_eq!(t.cell(), cell(2, 0), "in the stored path's next cell, towards the VAN");
-    assert_eq!(steps(&w, id).len() + 1, before.len(), "the path is followed, not replaced");
+    assert_eq!(
+        t.cell(),
+        cell(2, 0),
+        "in the stored path's next cell, towards the VAN"
+    );
+    assert_eq!(
+        steps(&w, id).len() + 1,
+        before.len(),
+        "the path is followed, not replaced"
+    );
 }
 
 // spec: S-0208 claim 6 (r52: a destination given by a rule that is not an order breaks off no contact, so a walker under enter in contact with something drops its path at a scatter); Edge cases (quirks.enter_keeps_stored_path off: dropped too); design: Q-2750 interim (the walker held a stored path at the scatter and does not keep it: no extra locomotion, so no walking target until its next locomotion)
@@ -283,11 +312,20 @@ fn a_scatter_drops_the_path_in_contact_or_with_the_switch_off() {
         }
         assert!(scatter::request(&mut w, id, UNFORCED));
         let o = w.obj(id).unwrap();
-        assert!(matches!(o.dest, Some(Target::Cell(_))), "the scatter's destination");
+        assert!(
+            matches!(o.dest, Some(Target::Cell(_))),
+            "the scatter's destination"
+        );
         assert!(o.path.steps.is_empty(), "the stored path is dropped");
-        assert_eq!(walk_target(&w, id), None, "no extra locomotion (Q-2750 interim)");
+        assert_eq!(
+            walk_target(&w, id),
+            None,
+            "no extra locomotion (Q-2750 interim)"
+        );
         // Its next locomotion searches for the scatter's destination.
-        let Some(Target::Cell(d)) = o.dest else { unreachable!() };
+        let Some(Target::Cell(d)) = o.dest else {
+            unreachable!()
+        };
         tick::step(&mut w);
         assert_eq!(w.obj(id).unwrap().path.for_goal, Some(d));
     }
@@ -308,7 +346,10 @@ fn no_destination_no_path_to_follow() {
     w.obj_mut(id).unwrap().dest = None;
     let here = pos(&w, id);
     let c = cells(&mut w, id, 40);
-    assert!(c.iter().all(|&x| x == here.cell()), "no further step: {c:?}");
+    assert!(
+        c.iter().all(|&x| x == here.cell()),
+        "no further step: {c:?}"
+    );
     assert!(steps(&w, id).is_empty(), "no path left");
 }
 
@@ -336,7 +377,10 @@ fn crowd_at_b() -> (World, ObjectId, Vec<ObjectId>) {
     }
     open_orders(&mut w);
     let m = common::objects_of(&w, Kind::Infantry);
-    let a = *m.iter().find(|&&x| pos(&w, x).cell() == cell(0, 0)).unwrap();
+    let a = *m
+        .iter()
+        .find(|&&x| pos(&w, x).cell() == cell(0, 0))
+        .unwrap();
     let b: Vec<ObjectId> = m.into_iter().filter(|&x| x != a).collect();
     (w, a, b)
 }
@@ -345,7 +389,11 @@ fn crowd_at_b() -> (World, ObjectId, Vec<ObjectId>) {
 #[test]
 fn w17_i_requests_from_the_extra_locomotion_fall_in_the_scatter_tick() {
     let (mut w, a, b) = crowd_at_b();
-    assert!(orders::issue(&mut w, HouseId(0), Order::Scatter { actor: a }));
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Scatter { actor: a }
+    ));
     // The order takes effect at the order boundary, the start of tick T.
     orders::apply_pending(&mut w);
     let Some(Target::Cell(d)) = w.obj(a).unwrap().dest else {
@@ -355,7 +403,10 @@ fn w17_i_requests_from_the_extra_locomotion_fall_in_the_scatter_tick() {
     // In our engine the request comes from A's extra locomotion, already
     // at the order (the run of the original does not tell which).
     for &x in &b {
-        assert!(w.obj(x).unwrap().dest.is_some(), "the request reached b at once");
+        assert!(
+            w.obj(x).unwrap().dest.is_some(),
+            "the request reached b at once"
+        );
     }
     tick::step(&mut w);
     for x in b {

@@ -210,7 +210,11 @@ fn a_destination_removed_in_the_launch_tick_does_not_stop_the_flight() {
     spawn::turn(&mut w, lna);
     assert!(w.obj(x).is_some_and(|o| o.on_map), "launched by the pass");
     let rs = state(&w, x);
-    assert_eq!(rs.phase, Some(Phase::Pause), "the flight begins at the launch");
+    assert_eq!(
+        rs.phase,
+        Some(Phase::Pause),
+        "the flight begins at the launch"
+    );
     assert_eq!(rs.started, t0);
     assert_eq!(rs.aim, Some(aim));
     glasnost_sim::objects::remove(&mut w, victim);
@@ -218,7 +222,10 @@ fn a_destination_removed_in_the_launch_tick_does_not_stop_the_flight() {
     let (at, moved) = fly_out(&mut w, x);
     assert!(moved, "it flies");
     let at = at.expect("it detonates");
-    assert!(near(at, aim), "at the aim point fixed at the launch: {at:?} vs {aim:?}");
+    assert!(
+        near(at, aim),
+        "at the aim point fixed at the launch: {at:?} vs {aim:?}"
+    );
 }
 
 // spec: S-0506 claim 14 (r34: a destination that goes inside after the launch: the missile flies on to the aim point fixed at the launch; the controller target leaving play with no pending target resets the controller when it goes inside, claim 11, releasing the preparing missile, which belongs to no slot from then on); scenario R25 part a
@@ -233,7 +240,11 @@ fn a_destination_that_goes_inside_resets_the_controller_and_the_missile_flies_on
     assert_eq!(controller(&w, lnb).slots[0].state, SlotState::Preparing);
     glasnost_sim::objects::take_inside(&mut w, walker);
     let c = controller(&w, lnb);
-    assert_eq!(c.state, ControllerState::Idle, "the reset at the going inside");
+    assert_eq!(
+        c.state,
+        ControllerState::Idle,
+        "the reset at the going inside"
+    );
     assert_eq!(c.target, None);
     assert_eq!(c.slots[0].state, SlotState::Empty, "released from its slot");
     let (at, moved) = fly_out(&mut w, x);
@@ -274,7 +285,11 @@ fn the_flight_timer_runs_on_the_tick_number() {
     w.tick = t0 + 6;
     rocket::tick(&mut w, x);
     let rs = state(&w, x);
-    assert_eq!(rs.phase, Some(Phase::Tilt), "acted on at the first update after");
+    assert_eq!(
+        rs.phase,
+        Some(Phase::Tilt),
+        "acted on at the first update after"
+    );
     assert_eq!(rs.started, t0 + 6, "the tilt's timer starts at that update");
 }
 
@@ -290,7 +305,11 @@ fn uninterrupted_boundaries_from_the_launch_tick() {
     let mut ascent = None;
     for _ in 0..40 {
         testkit::run(&mut w, 1);
-        match w.obj(x).and_then(|o| o.rocket.as_ref()).and_then(|r| r.phase) {
+        match w
+            .obj(x)
+            .and_then(|o| o.rocket.as_ref())
+            .and_then(|r| r.phase)
+        {
             Some(Phase::Tilt) if tilt.is_none() => tilt = Some(w.tick - 1),
             Some(Phase::Ascent) if ascent.is_none() => ascent = Some(w.tick - 1),
             _ => {}
@@ -323,5 +342,9 @@ fn q2748_a_flight_not_fixed_at_the_launch_starts_at_the_first_update() {
     assert_eq!(rs.started, t);
     gone.obj_mut(x).unwrap().dest = None;
     assert!(!rocket::tick(&mut gone, x));
-    assert_eq!(state(&gone, x).phase, None, "no flight without a destination");
+    assert_eq!(
+        state(&gone, x).phase,
+        None,
+        "no flight without a destination"
+    );
 }

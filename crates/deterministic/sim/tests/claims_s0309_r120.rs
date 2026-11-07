@@ -43,7 +43,13 @@ type Left = (
 
 fn left(w: &World, holder: ObjectId) -> Left {
     let o = w.obj(holder).unwrap();
-    (o.target, o.dest, o.beh.current, o.beh.queued, o.targeting_timer)
+    (
+        o.target,
+        o.dest,
+        o.beh.current,
+        o.beh.queued,
+        o.targeting_timer,
+    )
 }
 
 fn guarded(l: &Left) -> bool {
@@ -105,7 +111,11 @@ fn listed_causes_request_guard_the_takeover_drops_only() {
         if listed {
             assert!(guarded(&l), "{cause:?}: guard requested");
         } else {
-            assert_eq!((l.2, l.3), (before.2, before.3), "{cause:?}: behaviours kept");
+            assert_eq!(
+                (l.2, l.3),
+                (before.2, before.3),
+                "{cause:?}: behaviours kept"
+            );
         }
     }
 }
@@ -233,7 +243,11 @@ fn a_mind_control_owner_change_drops_the_target_inside_the_change() {
     arm(&mut w, holder, foe);
     let rng = w.rng.clone();
     glasnost_sim::mind::set_owner(&mut w, holder, Some(HouseId(1)));
-    assert_eq!(w.obj(holder).unwrap().target, None, "dropped inside the change");
+    assert_eq!(
+        w.obj(holder).unwrap().target,
+        None,
+        "dropped inside the change"
+    );
     assert_eq!(w.rng, rng, "no draw");
 }
 
@@ -248,9 +262,17 @@ fn a_pending_delayed_shot_ends_with_the_drop() {
     w.obj_mut(tower).unwrap().combat.delayed_shot = Some(t + 2);
     ownership::change(&mut w, tower, Some(B), Cause::Capture);
     // spec: S-0508 claim 7 (r13: a building's pending delayed shot stays pending across its owner change)
-    assert_eq!(w.obj(tower).unwrap().combat.delayed_shot, Some(t + 2), "pending after the change");
+    assert_eq!(
+        w.obj(tower).unwrap().combat.delayed_shot,
+        Some(t + 2),
+        "pending after the change"
+    );
     let health = w.obj(foe).unwrap().health;
     testkit::run(&mut w, 3);
-    assert_eq!(w.obj(tower).unwrap().combat.delayed_shot, None, "no longer pending");
+    assert_eq!(
+        w.obj(tower).unwrap().combat.delayed_shot,
+        None,
+        "no longer pending"
+    );
     assert_eq!(w.obj(foe).unwrap().health, health, "no shot");
 }
