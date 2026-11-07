@@ -5,8 +5,10 @@ Rows read: every row of `intake96.md` to `intake111.md` marked partly, not teste
 construction, by inspection, built with no test, not built or seam. Each was first checked for a
 later close (a later intake, a spec revision, its `requests:` field, `git log --grep`).
 
-**Counts.** 55 rows read: 15 closed earlier, 7 blocked by an open request, 17 tested (one of them
-with a code change, under *Built*), 16 left.
+**Counts.** 62 rows read: 15 closed earlier, 7 blocked by an open request, 17 tested (one of them
+with a code change, under *Built*), 23 left. A row restated in two intakes counts twice. Intakes
+102 and 103 hold only rows restated from intake 96 (claims 31 and 45) and S-0212 claim 26; their
+other marker words are the untested-touchdown switch's name.
 
 **Result.** 17 rows tested through the real path, in 19 new tests. One test showed the code
 differing from an approved claim: S-0015 claim 1, the string table resolved through the whole
@@ -61,23 +63,24 @@ Q-2596, Q-2597, Q-2649, Q-2716 (13 (g) raises), Q-2726 (*sticky*), Q-2746 (a gar
 
 ## Left (no test written)
 
-| Spec | Claim or row | Why left |
-|---|---|---|
-| S-0501 | claim 31, *move* | no route in our engine reaches it |
-| S-0501 | claim 45 with the switch off | Open question 18 |
-| S-0501 | claim 24, the slide before the report's tick | part h (6) reaches no such cell; no set-up found |
-| S-0215, S-0107 | intake 99's three airstrike rows (the reset, the repeated secondary fire, scenario M8 b) | no airstrike sequence is built |
-| S-0215, S-0208 | the scatter from damage, requests A and B (intakes 99, 100) | not built in our hit reactions |
-| S-0302 | claim 10, a team member has left its team (intake 100) | no house of our engine has teams |
-| S-0208 | follower cars | not built |
-| intake 97 | shot positions | no fire point in our engine |
-| harness | the *by construction* rows | test-harness rows, nothing to test through a game path |
-| S-0312 | claim 11's wake and splash (intake 107) | not built |
-| S-0203 | 13 (a), projectiles and animations; 13 (c), debris | no such object reaches the path in our engine |
-| S-0111 | intake 109's sidebar names seam | the sidebar shows no names yet |
-| S-0208 | intake 110's `econ::assign_destination` seam | an engine seam, no claim behind it |
-| S-0301 | T1's type rows | a pulse cannon or an occupiable building never locks its beam, so no test can hold one |
-| S-0309 | claim 30, capture and occupation | a building's readiness is its ready mark; no game state reaches the row |
+| Rows | Intake | Spec | Claim or row | Why left |
+|---|---|---|---|---|
+| 2 | 96, 102 | S-0501 | claim 31, *move* for a vehicle-carrying type | not built: r120 and r132 name no processing for it |
+| 1 | 102 | S-0501 | claim 45 after the hold, with the untested-touchdown switch off | Open question 18 |
+| 1 | 108 | S-0501 | claim 24, the slide before or in the report's tick | no run of part h (6) reaches the docking position's cell first; no set-up found |
+| 3 | 99 | S-0215, S-0107 | the airstrike rows (the reset, the repeated secondary fire, scenario M8 b) | no airstrike sequence is built |
+| 2 | 99, 100 | S-0215, S-0208 | the scatter from damage, requests A and B | not built in our hit reactions |
+| 1 | 100 | S-0302 | claim 10, a team member has left its team | no house of our engine has teams |
+| 1 | 103 | S-0212 | claim 26, follower cars | not built |
+| 2 | 97 | M-0017 oracle | the shot reading-point rows and G's per-tick distance, *by construction* | oracle rows that follow from our update order; no game-path test adds to them |
+| 1 | 101 | M-0021 oracle | placed infantry at Procedure 5's position, *partly by construction* | as above |
+| 1 | 107 | S-0312 | claim 11's wake and splash for a bomb-marked vehicle | not built |
+| 2 | 105 | S-0203 | 13 (a), projectiles and animations kept; 13 (c), debris, death weapon and animations repeated | no such object reaches the leftover path in a synthetic set-up; the crate part is tested |
+| 1 | 109 | S-0111, S-0015 | the sidebar's names through the table | the sidebar shows no names yet |
+| 1 | 110 | S-0208 | the `econ::assign_destination` seam | an engine seam, no claim behind it |
+| 1 | 98 | S-0301 | T1's type rows | a pulse cannon or an occupiable building never locks its beam, so no test can hold one |
+| 1 | 111 | S-0309 | claim 30, capture and occupation | a building's readiness is its ready mark; no game state reaches the row |
+| 1 | 111 | S-0111 | claim 20's Open question (a block kept after an ordinary click released over a point) | no change: not built, our block always ends at the release, as the claim states |
 
 ## Part 2: the rocket commit c040e98 split
 
@@ -106,7 +109,9 @@ neither does going inside as leaving play (C) nor the aim at the launch (A) in t
 
 **The first difference follows from S-0506 r34.** Seed 7 map 0: house 0's V3 rocket (object 4277)
 fires at house 1's infantry 5614 and starts its tilt at tick 22 102. It makes no update in tick
-22 132 (its last turn stays 22 131): a turn lost by S-0203 claim 10. On e5ac2f4 the counter steps
+22 132 (its last turn stays 22 131), a missed turn whose cause (a removal before it in the update
+order, S-0203 claim 10, is the likely one) was not identified; claim 9's "delays run on" covers any
+missed turn. On e5ac2f4 the counter steps
 once per update, so the tilt's 60 counts end at the update of tick 22 162 instead of 22 161, and
 ascent starts a tick later. With the timer on the tick number (B) the lost turn does not shift
 the tilt, and the rocket is one tick ahead from then on; its position first differs at tick
