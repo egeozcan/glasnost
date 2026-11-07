@@ -1,9 +1,9 @@
 ---
 id: Q-2781
 title: A seized vehicle that accepts a scatter request with a threat point
-status: open
+status: answered
 related: [S-0207, S-0607, S-0215]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
