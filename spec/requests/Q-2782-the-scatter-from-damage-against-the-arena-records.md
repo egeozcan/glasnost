@@ -3,7 +3,7 @@ id: Q-2782
 title: The scatter from damage against the arena records M-0021, M-0001 and M-0003
 status: answered
 related: [S-0215, S-0208, S-0309]
-answered-by: [S-0215]
+answered-by: [S-0215, S-0208]
 ---
 
 ## Need
