@@ -3,13 +3,19 @@
 //! point and its flight fixed at that launch (claims 7, 14 and 24, the
 //! Rocket table's launch row), so a destination that leaves play after the
 //! launch, by its removal or by going inside, changes neither; claim 24's
-//! timer runs on the tick number; and the controller resets when its target
+//! timer runs on the tick number, also when a removal before the missile in
+//! the update order costs it a turn in its tilt (S-0203 claim 10, through
+//! the tick pipeline); and the controller resets when its target
 //! leaves play by going inside (claim 11 through claim 14). On synthetic
 //! data: invented types, weapons and rocket parameter values, none of them
 //! stock values.
 
+use glasnost_num::F32;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Decimal, LocomotionClass, Locomotor, UnitType, WeaponType};
+use glasnost_rules::sim::{
+    AnimationType, Decimal, LocomotionClass, Locomotor, UnitType, WeaponType,
+};
+use glasnost_sim::anims;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::rocket::{self, Phase};
 use glasnost_sim::rules::Kind;
@@ -383,4 +389,169 @@ fn q2748_a_flight_not_fixed_at_the_launch_starts_at_the_first_update() {
         None,
         "no flight without a destination"
     );
+}
+
+/// [`rules`] with two ordinary animations of one pass and no follow-up
+/// type, AN10 and AN17: 10 and 17 frames at rate 900 (one tick a frame), so
+/// each leaves play in its own update 10 or 17 ticks after the tick it was
+/// made before (S-0109 claims 5 and 16). Invented types.
+fn rules_with_anims() -> Ruleset {
+    let mut r = rules();
+    for (name, frames) in [("AN10", 10), ("AN17", 17)] {
+        r.registries
+            .entry("animations".into())
+            .or_default()
+            .push(name.into());
+        r.sim.animations.insert(
+            name.into(),
+            AnimationType {
+                frame_count: Some(frames),
+                rate: Some(900),
+                ..Default::default()
+            },
+        );
+    }
+    r
+}
+
+/// The missile as one tick's turn pass leaves it.
+#[derive(Clone, Debug, PartialEq)]
+struct Seen {
+    /// It took its turn in the tick.
+    turn: bool,
+    phase: Option<Phase>,
+    pitch: F32,
+}
+
+/// What [`flight_with`] saw.
+struct Flight {
+    /// The launch tick t₀.
+    t0: i32,
+    /// The tick the animation left play, and whether it then stood directly
+    /// before the missile in the update order.
+    gone: Option<(i32, bool)>,
+    /// From t₀ on, per tick.
+    seen: Vec<Seen>,
+}
+
+/// LNA's missile shot at VICTIM, through the tick pipeline alone. With
+/// `anim`, that animation is made between ticks three ticks before the
+/// launch tick, so it enters play before the missile and stands directly
+/// before it once the launch appends the missile (S-0203 claim 3).
+fn flight_with(r: &Ruleset, anim: Option<&str>) -> Flight {
+    let mut w = testkit::game_with(r, SIZE, 7);
+    let lna = put(&mut w, Kind::Vehicle, "LNA", 0, 0, 0);
+    let victim = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    let x = controller(&w, lna).slots[0].object.unwrap();
+    spawn::shot(&mut w, lna, Target::Object(victim));
+    let placed = |w: &World| w.obj(x).is_some_and(|o| o.on_map);
+    let mut probe = w.clone();
+    while !placed(&probe) {
+        assert!(probe.tick < 200, "no launch");
+        testkit::run(&mut probe, 1);
+    }
+    let t0 = probe.tick - 1;
+    assert!(t0 - 3 >= w.tick, "room to make the animation first");
+    while w.tick < t0 - 3 {
+        testkit::run(&mut w, 1);
+    }
+    let a = anim.map(|n| {
+        let at = w.obj(victim).unwrap().pos;
+        anims::spawn(&mut w, n, Some(at), anims::Spawn::default())
+            .id
+            .expect("a listed type")
+    });
+    let mut gone = None;
+    let mut seen = Vec::new();
+    while w.tick <= t0 + 20 {
+        let ran = w.tick;
+        let before = |id| w.update.order.iter().position(|o| *o == id);
+        let adjacent =
+            a.is_some_and(|a| before(x).is_some_and(|p| p > 0 && before(a) == Some(p - 1)));
+        let was_placed = placed(&w);
+        testkit::run(&mut w, 1);
+        if !was_placed && placed(&w) {
+            assert_eq!(ran, t0, "the animation does not move the launch");
+        }
+        if let Some(a) = a
+            && gone.is_none()
+            && !w.update.order.contains(&a)
+        {
+            gone = Some((ran, adjacent));
+        }
+        if ran >= t0 {
+            let o = w.obj(x).expect("in flight");
+            let rs = o.rocket.as_ref().unwrap();
+            seen.push(Seen {
+                turn: o.last_turn == ran,
+                phase: rs.phase,
+                pitch: rs.pitch,
+            });
+        }
+    }
+    Flight { t0, gone, seen }
+}
+
+/// The first index of `seen` (ticks after t₀) in phase `p`.
+fn first(seen: &[Seen], p: Phase) -> Option<usize> {
+    seen.iter().position(|s| s.phase == Some(p))
+}
+
+// spec: S-0203 claim 10 (a counting removal costs the object directly after the current one its turn; cause: an animation that ends, removed in its own turn, S-0109 claim 16) and claim 9 (the missile's delays run on); S-0506 claim 14 (r34: a lost turn within a phase does not shift its ticks; the missile makes no update in that turn; in tilt, whose pitch F3 computes from the elapsed ticks, the next update's pitch is the same as without the loss) and claim 24 (pause 4, tilt 10: tilt from t₀ + 4, ascent from t₀ + 14) (the missed turns of seam sweep 6's seed 7 map 0 and seed 10 map 8 games: an ordinary animation directly before the missile ends its last pass in its tilt)
+#[test]
+fn an_animation_ending_before_the_missile_costs_it_a_tilt_turn_and_shifts_nothing() {
+    let r = rules_with_anims();
+    let twin = flight_with(&r, None);
+    let f = flight_with(&r, Some("AN10"));
+    assert_eq!(f.t0, twin.t0);
+    let t0 = f.t0;
+    assert_eq!(
+        f.gone,
+        Some((t0 + 7, true)),
+        "the animation leaves play in its own update of t₀ + 7, directly before the missile"
+    );
+    assert_eq!(f.seen[7].phase, Some(Phase::Tilt), "in the tilt");
+    for (k, s) in f.seen.iter().enumerate() {
+        assert_eq!(s.turn, k != 7, "turn at t₀ + {k}");
+        assert!(twin.seen[k].turn, "twin turn at t₀ + {k}");
+    }
+    // The lost turn makes no update: the pitch stays at the one before.
+    assert_eq!(f.seen[7].pitch, twin.seen[6].pitch);
+    assert_ne!(twin.seen[7].pitch, twin.seen[6].pitch, "the tilt turns");
+    // From the next update on, the flight is the twin's, tick for tick.
+    assert_eq!(f.seen[8..], twin.seen[8..]);
+    assert_eq!(f.seen[..7], twin.seen[..7]);
+    assert_eq!(first(&f.seen, Phase::Tilt), Some(4));
+    assert_eq!(first(&f.seen, Phase::Ascent), Some(14));
+    assert_eq!(first(&twin.seen, Phase::Ascent), Some(14));
+}
+
+// spec: S-0506 claim 14 (r34: a phase's end is acted on at the missile's first update at or after its timer runs out, and the next phase's timer starts at that update, so where the lost turn is the one in which a phase's timer runs out, the later phases come one tick later) and S-0203 claim 10 (the same cause, an animation that ends directly before the missile, in the tilt's last tick)
+#[test]
+fn a_tilt_turn_lost_at_its_end_starts_the_ascent_a_tick_later() {
+    let r = rules_with_anims();
+    let twin = flight_with(&r, None);
+    let f = flight_with(&r, Some("AN17"));
+    let t0 = f.t0;
+    assert_eq!(
+        f.gone,
+        Some((t0 + 14, true)),
+        "gone in the tilt's last tick"
+    );
+    assert!(!f.seen[14].turn);
+    assert_eq!(f.seen[14].phase, Some(Phase::Tilt), "no update: still tilt");
+    assert_eq!(first(&twin.seen, Phase::Ascent), Some(14));
+    assert_eq!(first(&f.seen, Phase::Ascent), Some(15), "a tick later");
+}
+
+// spec: S-0203 claim 10 and Edge cases (`quirks.update_order_removal_skip` off: no removal costs a turn, so the missile keeps its tilt turn)
+#[test]
+fn with_the_removal_skip_off_the_missile_keeps_its_tilt_turn() {
+    let mut r = rules_with_anims();
+    r.globals.quirks.update_order_removal_skip = false;
+    let twin = flight_with(&r, None);
+    let f = flight_with(&r, Some("AN10"));
+    assert_eq!(f.gone.map(|g| g.0), Some(f.t0 + 7));
+    assert!(f.seen.iter().all(|s| s.turn));
+    assert_eq!(f.seen, twin.seen);
 }

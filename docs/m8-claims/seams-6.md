@@ -122,3 +122,44 @@ claim 9), so a lost turn within a phase does not shift its ticks", and S-0203 cl
 skipped object acts normally from the next tick on, with its delays run on (claim 9)". So the
 flips are r34's lost-turn rule reaching two games through a few ticks of rocket timing; nothing
 was tuned.
+
+## Rocket missed turns
+
+Why the missiles of Part 2 make no update in those tilt ticks. Traced on main c2e65bb with
+`GLASNOST_AI_SIDES=1,2 GLASNOST_AI_QUICK=1` on the install and a local diagnostic (not
+committed) that logs, for each turn of the pass, its counting removals with their place in the
+update order and the code that made them, and the objects they cost a turn. Both games end as
+Part 2's row B gives (seed 7 map 0: 55 227 ticks, house 1; seed 10 map 8: 53 646 ticks, house 0),
+and the object numbers and ticks are those of e5ac2f4: the games have not moved. (The tilt
+timers below are the missiles' recorded start ticks: Part 2 names 22 102 for 4277's tilt, main
+records 22 101.)
+
+| Game | Missile, tick | Object directly before it | Removal | Claim |
+|---|---|---|---|---|
+| seed 7 map 0 | 4277 (tilt timer from 22 101), 22 132 | animation 5616, an ordinary sprite animation with no follow-up type, next in creation after the missile's target, infantry 5614, and infantry 5615, all in play before the launch | it ends its last pass in its own turn and leaves play (S-0109 claim 16): the current object leaving, one counting removal | S-0203 claim 10, cause "an animation that ends" |
+| seed 10 map 8 | 6134 (tilt timer from 24 559), 24 598 | animation 7471, the same kind | as above | S-0203 claim 10, the same cause |
+| seed 10 map 8 | 6134, 24 604 | animation 7464 (directly before it once 7471 had gone), the same kind | as above | S-0203 claim 10, the same cause |
+
+So an approved claim makes each missile skip its turn: S-0203 claim 10, a counting removal of the
+current object, an ordinary animation that ends directly before the missile in the update order.
+The missile entered play at its launch, after the animation, so it stands directly behind it
+(claim 3). No skip rule of the turn pass itself is involved, and nothing is a bug. Its effect on
+the flight is S-0506 claim 14 (r34) with claim 24's timer on the tick number (S-0203 claim 9):
+the lost tilt turn makes no update, and the next update's pitch and the tilt's end are as
+without the loss. None of the three falls on its tilt's last tick, where the ascent would come a
+tick later.
+
+Over both whole games the diagnostic logged 455 lost missile turns, in every phase (pause 73,
+tilt 57, raise 164, ascent 42, cruise 39, descent 80). Their 489 counting removals came from: an ending
+animation (230), a death removal (153), a particle system leaving play (85), a projectile's
+detonation (12), a slave going inside its master (5), and one each of boarding a transport, a
+parasite going inside its projectile, a lifter's removal and a domination animation's end. None
+came from a removal between turns (`strike::sweep`). Only the three tilt cases above were checked
+against their claims; the others are listed as counts.
+
+Tests: `an_animation_ending_before_the_missile_costs_it_a_tilt_turn_and_shifts_nothing`,
+`a_tilt_turn_lost_at_its_end_starts_the_ascent_a_tick_later` and
+`with_the_removal_skip_off_the_missile_keeps_its_tilt_turn` (`claims_s0506_r34.rs`). They run
+the tick pipeline alone: an ordinary animation made before the launch stands directly before the
+missile and ends in its tilt, against a twin with no animation. Only tests change: no format
+bump, no golden change, and no lanes run. No request was filed.
