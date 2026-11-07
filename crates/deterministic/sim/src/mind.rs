@@ -379,11 +379,12 @@ fn guard_reset(w: &mut World, id: ObjectId) {
 }
 
 /// What a release's owner change does to orders (claim 9): the target and
-/// destination are cleared and *guard* is requested with the
-/// readiness-dependent immediate start of S-0215 claim 7, except for a
-/// simple-deployer vehicle in *unload*. S-0309 claim 30 gives the same to
-/// the owner changes it lists (an engineer capture, a trigger's change-owner
-/// action, a civilian garrison building's occupation and return), called by
+/// destination are cleared and then *guard* is requested with the
+/// readiness-dependent immediate start of S-0215 claim 7, the readiness
+/// read after both clears, except for a simple-deployer vehicle in
+/// *unload*. S-0309 claim 30 gives the same to the owner changes it lists
+/// (an engineer capture, a trigger's change-owner action, a civilian
+/// garrison building's occupation and return), called by
 /// `structures::ownership` and `triggers`.
 pub(crate) fn release_orders(w: &mut World, id: ObjectId) {
     if deploying_in_place(w, id) {
@@ -392,22 +393,22 @@ pub(crate) fn release_orders(w: &mut World, id: ObjectId) {
     }
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    // Q-2717 (interim: the readiness of the guard request is read before the release clears the target, as before S-0107 r46, so an infantry unit's attack state, which that clear now ends, still holds it back)
-    let ready = crate::process::ready(w, id);
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0601 claim 9 (the ownership change clears the target)
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
-    // spec: S-0107 r46 claim 11, Changes of target (the loss of the target at a release, S-0601 claim 9, ends an infantry unit's attack state and makes its request at once)
+    // spec: S-0601 r23 claim 9 and S-0107 r46 claim 11, Changes of target (the clear of an infantry victim's target is a change of target: an attack state ends at the clear, with its request for stand, prone or deployed; a victim in the attack state with no target has no change and keeps the state)
     crate::infantry::watch_test(w, id);
+    // spec: S-0601 claim 9 (the ownership change clears the destination)
+    crate::econ::assign_destination(w, id, None);
+    // spec: S-0601 r23 claim 9 (Q-2717 answered: the readiness that the guard request reads is the victim's after both clears; every other readiness condition of S-0215 claim 11 applies as usual)
+    let ready = crate::process::ready(w, id);
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0601 claim 9 and S-0215 claim 7 (guard requested with a readiness-dependent immediate start)
+        // spec: S-0601 claim 9 and S-0215 claim 7 (then guard is requested, with a readiness-dependent immediate start)
         ob.beh
             .queue_and_start(Some(Behaviour::Guard), ready, t, stale);
     }
-    // spec: S-0601 claim 9 (the ownership change clears the destination)
-    crate::econ::assign_destination(w, id, None);
 }
 
 // ---------------------------------------------------------------------------
