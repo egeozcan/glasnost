@@ -84,7 +84,7 @@ cargo xtask check                       # dependency rule, determinism, citation
 
 ## Reporting a pathing problem
 
-When a unit takes a strange route or gets stuck, press **M** (mark) as it happens, then **P** (save pathing report) within 20 seconds. Both keys can be changed on the settings screen. The native client writes the report to `path-reports/path-<tick>-<n>.gpath` in the folder you started it from; the browser downloads it. The status line names the file. Run `glasnost-headless path-report <file>` on it to replay the last 20 seconds and explain what each selected or ordered unit did ([docs/development.md](docs/development.md#pathing-reports-m8-a4)). A report holds a save of your game, so keep it out of git: `path-reports/` and `*.gpath` are ignored.
+When a unit takes a strange route or gets stuck, press **M** (mark) as it happens, then **P** (save pathing report) within 20 seconds. Both keys can be changed on the settings screen. The native client writes the report to `path-reports/path-<tick>-<n>.gpath` in the folder you started it from; the browser downloads it. The status line names the file. Run `glasnost-headless path-report <file>` on it to replay the last 20 seconds and explain what each selected or ordered unit did ([docs/development.md](docs/dev/play-notes.md#pathing-reports-m8-a4)). A report holds a save of your game, so keep it out of git: `path-reports/` and `*.gpath` are ignored.
 
 ## Documents
 
