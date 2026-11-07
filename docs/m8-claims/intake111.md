@@ -98,11 +98,61 @@ whose readiness differs between the two orders.
 
 ## Goldens
 
-GOLDENS-PLACEHOLDER
+No golden changes. Regenerated on the rebased tree (main 6b78a92 with this branch) with
+`GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate -- --include-ignored`: every
+test passes and no file under `crates/sim-gate/golden/` changes, because no golden game has a
+release whose readiness differs between the two orders. The formats still move, because the order
+changes what a saved game of another game replays to (the quick lane below shows two such
+games): save 111 to 112 and AI game 76 to 77, one past main 6b78a92 (intake 110 took 111 and
+76). Wire format unchanged.
 
 ## Lanes
 
-LANES-PLACEHOLDER
+Before: binaries built on main 841f16d. After: this branch's code on 841f16d (commit afe0e05,
+before the rebase). The sweeps, the arena and the quick lane use those two bases. The branch was
+then rebased onto main 6b78a92, which merges intake 110 (S-0208 r52, S-0309 r120, S-0508 r13,
+S-0506 r34; its S-0309 claim 30 causes now call `mind::release_orders`). On that base the AI
+suite, the goldens, the render lane and the final checks were run again. Local lane; install
+values are not quoted.
+
+- **Sweeps, seeds 1 to 16.** Five of the six runs are identical before and after, apart from
+  timings. M7a with the play fixes changes one counter of one seed: seed 13's berserk weapon
+  orders go from 78 to 79. Its smallest counter and its minimum are unchanged.
+  - M6c reference: smallest minimum 0. M6c play fixes: 0.
+  - M7a reference: 1. M7a play fixes: 2.
+  - M7b reference and play fixes: drain minimum 3.
+- **Arena, `--record all --threads 2`.** Every output file is byte-identical before and after (the
+  `ours-*.csv` tables and every `oracle-*.txt`): M-0001 11 of 96 failing, M-0002 2 of 24, M-0003
+  1 of 35, M-0019 0 of 6, M-0020 1 of 25 (YURI against SHK, arm S) and M-0021 8 of 50.
+- **`cargo test --release -p glasnost-ai -- --include-ignored`** (`--no-fail-fast`). Before, on
+  841f16d: 33 binaries, 263 pass and 0 fail. After, on 841f16d: 33 binaries, 263 pass and 0 fail.
+  On the rebased tree (6b78a92 with this branch): 33 binaries, 263 pass and 0 fail
+  (`plays_to_the_last_side` included). Main 6b78a92 alone was not run here.
+- **AI quick lane, seeds 7 to 10, maps 0, 2 and 8** (`GLASNOST_AI_QUICK=1`).
+  - 2 of 36 games change, both at seed 8, and **no winner changes**. All 36 games end before and
+    after, and house 0 wins 24 of them both times.
+    - Seed 8, map 2, sides 1 and 2: same winner (house 1) and end (60873), with different detail
+      (house 0 gives one more bomb order).
+    - Seed 8, map 8, sides 0 and 2: the same winner (house 1) at 49320 in place of 51434. A
+      dominator launch at tick 45210 takes a different object.
+  - Seeds 7, 9 and 10 are identical line for line, apart from timings.
+  - **Intake 107's changed winner (seed 9, map 0, sides 1 and 2)** does not change. On main
+    841f16d it ends at 76670, house 0 winning, before and after, and the game's whole report is
+    identical. It no longer passes through the release that intake 107 traced. A run of that game
+    alone (`GLASNOST_AI_SIDES=1,2`, `GLASNOST_AI_WATCH=8993,39440,39470`,
+    `GLASNOST_AI_DUMP=39451,39452,39453`, before binary) has no object 8993 in those ticks: the
+    watch prints nothing and the dumps do not list it. The game has moved on since intake 107
+    (intakes 108 and 109 came between), so the one-tick gap that intake 107 saw is not in it.
+- **Render lane** (`r8_render_lane.rs`, `i111_the_name_tip_with_a_button_held_in_the_route_mode`,
+  local only). The route-mode key is held throughout, and each scene presses the left button,
+  moves onto a unit and rests 1200 ms:
+  - 1, a kind refusal (a building selected);
+  - 2, a press that takes another unit's route point;
+  - 3, an ordinary click on open ground with a unit selected.
+
+  Before (main 841f16d): no tip in any scene. After (rebased tree): the tip shows in scenes 1 and
+  2 while the button is held, none shows in scene 3, and none shows right after any release.
+  Frames are in `local-lane/m8/i111/render/before/` and `after/`.
 
 ## Seams and open points
 
