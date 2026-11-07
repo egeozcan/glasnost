@@ -55,7 +55,8 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   stay of `quirks.aircraft_grounded_enter_stall` (off: it reports again and is serviced). The
   release in the report's tick (claim 26) forces *guard* and empties the queue, T2's ground row
   forgets the pad, and the next movement update gives it claim 6's own point and a take-off.
-- **Format**: save format 109 and AI game format 73 (the new hashed field).
+- **Format**: save format 110 and AI game format 75 (the new hashed field), one past main
+  e0695d3's 109 and 74.
 
 ## Claims
 
@@ -90,14 +91,16 @@ origin point asserted).
 
 ## Goldens
 
-Regenerated on main 01c5688's goldens, through the state hash only: duel, duel-diagonal,
-duel-m6c, duel-naval and skirmish. duel-m7a and duel-m7b do not move. Save format 109, AI game
-format 74 (main: 108 and 73).
+Regenerated on main e0695d3's goldens, through the state hash only: duel, duel-diagonal,
+duel-m6c, duel-naval and skirmish. duel-m7a and duel-m7b do not move. The same five moved on each
+earlier base (07d549c and 01c5688). Save format 110, AI game format 75 (main: 109 and 74).
 
 ## Lanes
 
-The branch is rebased onto main 01c5688. Main's code there equals 926f78d's, the base the binaries
-were built from. Before is main, after is the branch.
+The branch is now rebased onto main e0695d3 (intake 107). The lane figures below were taken on
+earlier bases, and each says which: main 01c5688 (code equal to 926f78d's) with the branch rebased
+onto it, or main 07d549c with the branch on it. They were not run again on e0695d3. The final
+checks were (see the intake 108 report).
 
 - **The M6c, M7a and M7b seed sweeps**, seeds 1 to 16, with and without `GLASNOST_PLAY_FIXES`: the
   same output line for line. Smallest counters: M6c 0 (median 4) both ways; M7a 2 with the layer
