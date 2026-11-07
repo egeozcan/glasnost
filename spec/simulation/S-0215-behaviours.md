@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 132
+revision: 137
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
-measurements: [M-0023]
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586, Q-2656]
+approved-on: 2026-11-08
+measurements: [M-0023, M-0024, M-0025]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586, Q-2656, Q-2782]
 supersedes: []
 ---
 
@@ -1868,8 +1868,11 @@ Terms used by this spec:
       Its owner and its current behaviour do not matter. An example is a human-controlled actor
       beyond the reach of F7. Retaliating gives the actor a target (claims 10 and 18), so an actor
       that retaliates is never sent the request this way.
-    - *Case 2.* The damage has no known attacker or the actor may not retaliate against it, and all
-      of these hold:
+    - *Case 2.* The damage has no known attacker or the actor may not retaliate against it (an actor
+      whose current behaviour lacks the retaliate property may not, claim 18, and no actor may
+      retaliate against an attacker whose house its owner allies, its own house included: S-0309
+      claim 18, and a house counts as allied with itself, glossary *alliance*), and all of these
+      hold:
       - the actor is not an aircraft,
       - its current behaviour has the scatter property,
       - it is not held by a tether link,
@@ -1879,34 +1882,88 @@ Terms used by this spec:
         scatter veterancy ability.
 
     An infantry unit can also be sent request B of S-0208 claim 15, which has the attacker's
-    position as threat point and is not forced. Damage sends no other actor a request with a
-    threat point. The request of both cases is forced, so the scatter property never makes a
-    vehicle refuse it once sent, though the vehicle's other refusals (S-0207 claim 16) still apply.
-    In case 2 the property is tested before the request is sent, so
-    an actor whose behaviour lacks it is not sent the request in that case.
+    position as threat point and is not forced. Damage sends no other actor a request with a threat
+    point. The request of both cases is forced, so the scatter property never makes a vehicle refuse
+    it once sent, though the vehicle's other refusals (S-0207 claim 16) still apply. In case 2 the
+    property is tested before the request is sent, so an actor whose behaviour lacks it is not sent
+    the request in that case. So in the original a vehicle of a computer-controlled house whose
+    current behaviour has the scatter property and lacks the retaliate property, standing with
+    neither a target nor a destination and not held by a tether link, is sent the request by case 2
+    at every hit it survives, by an enemy or by damage that names no attacker. Whether it accepts,
+    and which cell it then takes as its destination on the tick of the hit, is S-0207 claim 16 (it
+    refuses while its body is turning; on open flat ground with no other unit within 2 cells the
+    cell is one next to its own).
 
-    **In our engine** (non-infantry actors; S-0208 claim 15 for infantry) the last condition of case 2 reads "the player-scatter setting is on, or the
-    actor has the scatter veterancy ability" for the actors of every house (Terms, houses in our
-    engine). **Original only (note for AI designers):** in the original, the mobile actors of a
+    **Hunting vehicles in an arena fight.** Case 2 is not withheld from a computer-controlled
+    house's vehicle in *hunt*: whether it is sent depends on the properties that the rules in use
+    give *hunt*, which the original and our engine read from the same data. In a fight of two groups
+    of such vehicles, as in M-0021 part B, hunting vehicles of either side are at times hit while
+    they stand with neither a target nor a destination. A hunting vehicle is left with no target
+    when its target is gone (S-0309's rules for a target's loss) and no revert gives one back
+    (S-0309 claim 27), and with no destination when any destination it held has been reached or
+    cleared, which for a driving vehicle can come at a locomotion update rather than on arrival
+    (S-0207 claims 25 and 26). Its own search looks for a new target only at a processing of *hunt*
+    (claims 27 and 33). So it stands free from the moment it holds neither until a processing of
+    *hunt* gives it a target, or another rule gives it a target or a destination. With *hunt*
+    holding the scatter property and lacking the retaliate property, a hit in that interval sends it
+    the request, and an accepting vehicle moves off. What else can make a record of such a fight
+    differ is in the Open questions (*Arena records and the scatter from damage*).
+
+    **In our engine** (non-infantry actors; S-0208 claim 15 for infantry) the last condition of
+    case 2 reads "the player-scatter setting is on, or the actor has the scatter veterancy ability"
+    for the actors of every house (Terms, houses in our engine). **Original only (note for AI designers):** in the original, the mobile actors of a
     computer-controlled house meet that condition always, so they are sent the request of case 2
     whatever the player-scatter setting says (whether they accept it is decided as for any
     other actor).
-    - Backing: `measurable` (scenario B6 for vehicles, case 2 in part b, with its variant for the
-      original's computer-controlled owners, and case 1 in part d; S-0208 scenario W7 for
-      infantry). Case 1 for aircraft, apart from the answer that the next sentences back, is
-      `unmeasured` here: B6 tests driving vehicles only, and no scenario establishes the
-      movement that follows an aircraft's acceptance of this request.
-      The aircraft's answer to a scatter request has S-0501 claim 49's backing. It is
-      `measurable` (S-0501 scenario AC31 part e) only for the scatter from damage and a cell's
-      request, sent without the move-anywhere option to a landed aircraft of a human-controlled
-      owner that is armed, has ammunition left and has no contact. Every other case is
-      `unmeasured`, as S-0501 claim 49 rates it: the move-anywhere option, both requests in pad
-      contact, the request of claim 28 (as claim 28 rates it), and an aircraft with no current
-      behaviour, since no setup is known that sends an aircraft a request between its creation
-      and its first turn.
-    - Confidence: medium (the aircraft's answer, as S-0501 claim 49 rates it); high (the gate on
-      requests that are not forced, for vehicles; the options of the
-      request from damage); medium (the conditions of the two cases, for non-infantry actors)
+    - Backing:
+      - `measured` (M-0024, scenario B6 part f and its control): case 2 sent to a
+        computer-controlled house's driving vehicle in *hunt* with the scatter property and without
+        the retaliate property, standing still and free, at a hit by an enemy or by damage that
+        names no attacker that it survives; at the end of the hit's tick such a vehicle holds a
+        destination in a cell next to its own and no target, or a target; no such destination with
+        the scatter property off; hunting vehicles of both sides in such a fight are hit at times
+        while they stand free.
+      - `measured` (M-0025, scenario B6 part g): case 2 sent to a computer-controlled house's
+        driving vehicle in *hunt* with the scatter and the retaliate properties, standing still and
+        free, at a hit by an attacker of its own house, of an allied house, or of an enemy house
+        whose attacker its weapon cannot harm; at the end of every such hit's tick it holds a
+        destination in a cell next to its own and no target, and the vehicle hit by that enemy
+        never takes the enemy as its target.
+      - `measurable` (scenario B6 for vehicles: case 2 in part b, with its variant for the
+        original's computer-controlled owners, and case 1 in part d; S-0208 scenario W7 for
+        infantry).
+      - `unmeasured`: how a hunting vehicle comes to stand free, and how long it stays so, since no
+        record times a free vehicle's next search; case 1 for aircraft, apart from the answer
+        below, since B6 tests driving vehicles only and no scenario establishes the movement that
+        follows an aircraft's acceptance of this request.
+      - The aircraft's answer to a scatter request has S-0501 claim 49's backing. It is
+        `measurable` (S-0501 scenario AC31 part e) only for the scatter from damage and a cell's
+        request, sent without the move-anywhere option to a landed aircraft of a human-controlled
+        owner that is armed, has ammunition left and has no contact. Every other case is
+        `unmeasured`, as S-0501 claim 49 rates it: the move-anywhere option, both requests in pad
+        contact, the request of claim 28 (as claim 28 rates it), and an aircraft with no current
+        behaviour, since no setup is known that sends an aircraft a request between its creation
+        and its first turn.
+    - Confidence:
+      - high:
+        - the gate on requests that are not forced, for vehicles.
+        - the options of the request from damage.
+        - case 2 sent, on the tick of the hit, to a computer-controlled house's driving vehicle
+          whose current behaviour has the scatter property and lacks the retaliate property, hit
+          by an enemy or by damage that names no attacker.
+        - case 2 sent, on the tick of the hit, to a computer-controlled house's driving vehicle in
+          *hunt* with the scatter and the retaliate properties, hit by an attacker of its own or an
+          allied house or by an enemy its weapon cannot harm.
+        - hunting vehicles in a fight of two such groups being hit at times while they stand
+          free.
+      - medium:
+        - the aircraft's answer, as S-0501 claim 49 rates it.
+        - the conditions of the two cases for the other non-infantry actors and behaviours.
+        - the destination, the nearby-cell search's cell, next to its own on open flat ground with
+          no other unit within 2 cells, at S-0207 claim 16's confidence for the search without a
+          draw.
+        - how a hunting vehicle comes to stand free and how long it stays so (its target's loss,
+          the end of its destination, and its own search only at a processing of *hunt*).
 
 20. **Recruitable.** The recruitable property is imported for every behaviour (Import mapping), and
     in our engine it has no effect: no rule of any house reads it (Terms, houses in our engine).
@@ -4545,6 +4602,76 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   vehicle, by *move* not staying current, or by no *guard* queued for the unarmed vehicle; in C by
   nothing queued for a vehicle at that processing, or by *guard* not queued for the infantry unit
   at the end of that tick. Runs: three per run and unit.
+  (f) Case 2 of claim 19 for hunting vehicles of computer-controlled houses (original only, Q-2782):
+  M-0021 part B's arena set-up, with a named test file that gives *hunt* the scatter property and no
+  retaliate property; the harness gives no order. The recorder reads, at the end of each tick, each
+  vehicle's target, destination, position and body facing, and each hit with the attacker it names.
+  Here a vehicle is *free* at the end of a tick when it then holds neither a target nor a
+  destination, and *isolated* there when no other unit stands within 2 cells of it. Runs: M-0021
+  part B's three seeds, with F on side A and on side B, for the main runs and for the control.
+  - (f1) Judged hits. Judge every hit with health left on a vehicle in *hunt* that stands on open
+    flat ground and, at the end of the tick before the hit's tick, is free and has the same
+    position and body facing as at the end of the tick before that. Stillness is inferred from
+    position and facing only: it stands for a locomotor that is not moving and a body that is not
+    turning when the hit's tick begins (case 2; S-0207 claim 16, case d), and a vehicle whose
+    movement is still in progress while it keeps its place and facing is not told apart. A hit on
+    the first tick, with no tick before it, is not judged. Expected, for a hit by an enemy and for
+    one that names no attacker alike: at the end of the hit's tick each judged vehicle holds a
+    target, or holds a destination and no target, and one isolated at the ends of the tick before
+    and of the hit's tick holds as that destination one of the 8 cells next to its own. Judged hits
+    also show that hunting vehicles stand free when hit in such a fight (claim 19, *Hunting
+    vehicles in an arena fight*). A run with no judged hit decides nothing. No single judged hit
+    falsifies the claim: within the hit's tick the recorder does not see what happens before the
+    hit lands, so a vehicle can end that tick free without having been sent the request (it took a
+    target there and dropped it again after the hit, through a destruction, through S-0309 claim
+    29's check in a tick whose number is a multiple of 16, through a weapon that fires once, S-0309
+    claim 21, or through distributed fire, S-0309 claim 20), or can refuse it while its movement is
+    still in progress; and another rule can give it a farther destination in the same tick. A judged
+    vehicle left free while one of the 8 cells next to its own was open flat ground with no unit on
+    it at the end of the tick before, or one isolated at the ends of both ticks with a farther
+    destination and no target, counts against the claim and is to be explained; M-0024 records
+    neither.
+  - (f2) Baseline. Expected: no vehicle in *hunt* that is free and isolated at the end of a tick,
+    and is not hit and still isolated in the next, holds at the end of the next tick a destination
+    in a cell next to its own and no target. The other requests without a threat point that can
+    reach a vehicle here are those of a walker, a crushing vehicle and a driving vehicle facing a
+    stationary friendly (S-0209 claim 12), each sent to the cell ahead of the sender, so that the
+    sender is within 2 cells of the receiver at the end of that tick. M-0021's set-up has no
+    aircraft, and its one building stands far from the fight, so none of S-0207 claim 16's other
+    senders reaches a vehicle there. Falsified by such a vehicle with that destination. A
+    destination farther away without a hit is outside this part.
+  - (f3) Control (the property tested before the request is sent): the same runs with a test file
+    that gives *hunt* neither the scatter nor the retaliate property. Expected: no judged vehicle
+    that is isolated at the ends of the tick before and of the hit's tick holds, at the end of the
+    hit's tick, a destination in a cell next to its own and no target. Falsified by one that does.
+  (g) Case 2 for an attacker of the actor's own and of an allied house, and for an enemy that the
+  actor's weapon cannot harm (original only, Q-2782). A named test file gives *hunt* the scatter and
+  the retaliate properties and turns the player-scatter setting off; every type named below is a
+  test type. Houses *A*, *B* and *C* are computer-controlled; *A* and *B* are allied both ways, and
+  *C* is an enemy of both. Every vehicle is in *hunt* and no order is given. The search of *hunt* is
+  map-wide (S-0309 claim 1), so *G* stays free only while no object of its enemies that its weapon
+  can harm stands anywhere on the map. On open flat ground, *G* is an armed vehicle of *A*. *Q* is a
+  sturdy, unarmed object of *C* that does not move, in a cell next to *G*'s, of an armour against
+  which *G*'s weapon has a versus value of 0, so that *G* cannot take it as a target. No other
+  object of *C* is on the map, apart from g3's firer, and at the start no unit other than *Q* stands
+  within 2 cells of *G*. The firer is a vehicle whose weapon deals area damage and harms *Q*,
+  starting out of *G*'s weapon range. *G*'s type is one for which every condition of S-0309 claim 18
+  other than the one on alliance holds against the firer of g1 and g2: its retaliate flag is set, it
+  is not a harvesting slave, a slave master, a spawner type or a mind-controlling type, its weapon
+  has damage above 0, and the firing check without range lets that weapon fire at the firer, whose
+  versus value for it is above S-0304 claim 3's threshold. (g1) The firer is of house *A*; it hunts
+  *Q*, and the blast of its shots at *Q* damages *G*. (g2) It is of house *B*, and acts in the same
+  way. (g3) It is of house *C*, of *Q*'s armour, so that *G* cannot take it as a target either; it
+  hunts *G* and fires at *G* itself. Record at the end of each tick *G*'s target, destination,
+  position, body facing and health, and each hit on *G* with the attacker it names. Judge every hit
+  on *G* that leaves it health when, at the end of the tick before the hit's tick, *G* is free and
+  has the same position and body facing as at the end of the tick before that, as in part f.
+  Expected in g1, g2 and g3: at the end of the hit's tick *G* holds a destination (the cell that the
+  nearby-cell search gives, S-0207 claim 16) and no target. In g1 and g2 retaliation is refused only
+  because *G*'s owner allies the firer's house; in g3 because *G*'s weapon cannot harm the firer
+  (S-0309 claim 18). Falsified by a target, or by no destination, for *G* at the end of a judged
+  hit's tick. A run in which *G* takes no judged hit, in which *G* holds a target before the firer's
+  first hit, or in which a hit on *G* does not name the firer is void. Runs: three each.
 - **B7 (claims 8, 10, 12, 18).** (a) A human-controlled armed vehicle in *move* (long route) is fired at by
   an enemy within its weapon range; expected: no retaliation, *move* continues. (b) The same vehicle
   in *guard*, fired at by an enemy land vehicle that neither sinks nor crashes; expected: an
@@ -6259,6 +6386,17 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   before the hit over the response's destination is not established. Our engine applies claim 10:
   the revert brings back the destination put aside. Whether the original does is `unmeasured`,
   medium.
+- **Arena records and the scatter from damage (claim 19, *Hunting vehicles in an arena fight*).**
+  In the original, case 2 reaches the hunting vehicles of an arena fight whenever the rules in
+  use give *hunt* the scatter property and not the retaliate property, and such vehicles do stand
+  free when hit (M-0024). So a build whose results in such a fight depart from a record once it
+  sends the request does not show that the original sends none. What else differs is not
+  established here: how often and for how long the build's hunting vehicles stand free between
+  targets (claims 27 and 33, and S-0309's search), which cell an accepted request gives (S-0207
+  claim 16 fixes it, on open flat ground with no other unit within 2 cells, by the tick number
+  and the search's collection order, not by where the enemy stands), and what the vehicle does
+  once it has reached that cell. Each of these changes where the vehicles stand at later shots.
+  Which of them accounts for a given row is open (low). No rule of this spec is changed for it.
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
   geometric answer, also answering Q-0312. S-0212 claim 23a supplies the same-tick queue
   and destination rules and final nearby search. Keep Q-0238 open until the
