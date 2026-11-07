@@ -194,8 +194,34 @@ this branch on e0695d3, which gives the cleanest before/after pair for the arena
   BRUTE's and the rest have no owner change and no missile, which leaves S-0208's crowd
   locomotion (the kept path and no extra locomotion inside its own). M-0002's verdicts are
   unchanged: INIT against E2 changes three winners but still fails its side outcome.
-- **Quick lane** (`GLASNOST_AI_QUICK=1 ai-sides 120000 <seed> 0 2 8`, seeds 7 to 10, 36 games):
-  QUICK-LANE
+- **Quick lane** (`GLASNOST_AI_QUICK=1 ai-sides 120000 <seed> 0 2 8`, seeds 7 to 10, 36 games),
+  played on 01c5688, on main 841f16d and on this branch: every game ends with a winner on all
+  three. Against 01c5688, 3 of 36 winners change (seed 7 map 0 sides 1 and 2, seed 9 map 0 sides
+  0 and 2, seed 10 map 8 sides 1 and 2). That pair includes intakes 107 and 108, so the pair to
+  read is main 841f16d against this branch: 4 of 36 winners change, all between sides 1 and 2
+  (seed 7 maps 0 and 2, seed 10 maps 0 and 8), and 33 of 36 games change length. Each changed
+  winner was replayed on this branch's own commits (b79ce47, S-0208 only; e5ac2f4, adding S-0309
+  claim 30), which places it:
+  - **Seed 10 map 0** (house 0 → house 1): S-0309 claim 30. With S-0208 alone the game is main's
+    to the tick (67 544 ticks, house 0). The two commits part at an owner change: house 1
+    occupies a civilian building between ticks 24 350 and 24 375. Without the drop (b79ce47) the
+    building comes to house 1 still holding its target, house 1's own neighbouring civilian
+    building, and by tick 24 400 it is firing at it, the neighbour losing health shot after shot.
+    With the drop (e5ac2f4) it holds no target at 24 375, stays under *guard*, and the neighbour
+    stays at full health. Play note 49's shape; it follows from claim 30 and S-0508 claim 7.
+  - **Seed 7 map 2** (house 0 → house 1): S-0309 claim 30. S-0208 alone changes the length
+    (56 706 → 71 645 ticks) but not the winner; claim 30 flips it (52 349, house 1). Not traced
+    to the first difference.
+  - **Seed 7 map 0** (house 0 → house 1) and **seed 10 map 8** (house 1 → house 0): placed on the
+    rocket commit c040e98 (S-0506 r34); the mechanism is not established. With S-0208 and claim
+    30 both games keep main's winner (seed 7 map 0: S-0208 alone moves its length 38 959 →
+    39 541; seed 10 map 8 ends at 46 880, house 1), and the rocket commit flips both. That commit
+    holds claim 14's aim fixed in the launch pass, the timer on the tick number, going inside as
+    leaving play, and a refactor of `spawn::removing`, and the replay does not tell them apart.
+    In seed 7 map 0 the first difference the 50-tick dumps show is at tick 22 550 (an ore truck
+    takes another ore cell), some 400 ticks after a V3 launched a rocket at an enemy infantry that
+    moved and died before the rocket arrived; the rocket's cells match in both runs, so the link
+    is not seen.
 
 ## M-0001, M-0020 and M-0021
 
