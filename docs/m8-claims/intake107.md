@@ -178,8 +178,10 @@ from). Local lane; install values are not quoted.
   - Before: 255 pass and one fails, `skirmish::plays_to_the_last_side` ("the game is over within
     40000 ticks"). That is main's 228 pass and 1 fail up to that binary, plus `special`, `terror`
     and `water` run from the before binaries, 27 pass.
-  - After: 33 binaries, 255 pass and the same test fails with the same message. A4 round 9b owns
-    it. This change does not move it.
+  - After, on 0051f51: 33 binaries, 255 pass and the same test fails with the same message.
+  - On main 01c5688, which carries A4 round 9b's fix, main has 263 pass and 0 fail. With this
+    change on it, 33 binaries also have 263 pass and 0 fail, `plays_to_the_last_side` included.
+    This change does not move it on either base.
 - **AI quick lane, seeds 7 to 10, maps 0, 2 and 8** (`GLASNOST_AI_QUICK=1`).
   - 19 of 36 games change: 3 at seed 7, 7 at seed 8, 6 at seed 9 and 3 at seed 10.
   - 5 change winner, and in each the house of side 2 (Yuri) is the one that loses or no longer
