@@ -1,9 +1,9 @@
 ---
 id: Q-2746
 title: Whether a walker sent to garrison a building keeps its stored path as one under enter
-status: open
+status: answered
 related: [S-0208, S-0214, S-0508]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
