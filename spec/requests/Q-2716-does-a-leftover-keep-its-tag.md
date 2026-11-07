@@ -3,7 +3,7 @@ id: Q-2716
 title: Does a removed object keep its tag while it is a leftover
 status: open
 related: [S-0203, S-0011, S-0312]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
