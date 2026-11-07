@@ -527,6 +527,17 @@ enum RoutePress {
     /// Nothing selected, a left press on the holder's second point: it
     /// takes the own point, which the click selects (S-0213 claim 16e).
     SelectsPoint,
+    /// The route holder selected, a left press on its own first point: it
+    /// takes the point, a loop close.
+    LoopClose,
+    /// The holder and a GUNR with no route selected, a left press outside
+    /// every click area: an ordinary click, refused only at its release by
+    /// the same-route-state test (S-0213 claim 16d).
+    MixedAtRelease,
+    /// A GUNR with no route selected and the house at the holder limit, a
+    /// left press outside every click area: an ordinary click, refused
+    /// only at its release by the holder limit (S-0213 claim 16).
+    LimitAtRelease,
 }
 
 /// One run: a tip game with `routed`'s three GUNR (the first holding three
@@ -573,6 +584,18 @@ fn route_mode_run(how: RoutePress) -> [bool; 3] {
         RoutePress::PointRefused => (vec![ids[0]], Button::Left, screens[2]),
         RoutePress::TakesPoint => (vec![ids[1]], Button::Left, screens[0]),
         RoutePress::SelectsPoint => (Vec::new(), Button::Left, screens[1]),
+        RoutePress::LoopClose => (vec![ids[0]], Button::Left, screens[0]),
+        RoutePress::MixedAtRelease => (vec![ids[0], ids[1]], Button::Left, p),
+        RoutePress::LimitAtRelease => {
+            let local = s.play.me();
+            s.play
+                .game
+                .world
+                .routes
+                .counts
+                .insert(local, glasnost_sim::routes::HOLDER_LIMIT);
+            (vec![ids[1]], Button::Left, p)
+        }
     };
     let s = session_mut(&mut c);
     s.play.selection = select;
@@ -613,6 +636,34 @@ fn claim_20_route_mode_an_ordinary_press_or_the_right_button_blocks() {
             "{how:?}: blocked while held, nothing until a rest, the block ends at the release"
         );
     }
+}
+
+/// spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: a press that the route mode refuses only
+/// at its release, by the same-route-state test or the holder limit, S-0213 claims 16 and 16d, is
+/// an ordinary click outside every point's click area, so its held left button blocks the tip; the
+/// block ends at the release) (seam sweep 6: intake 111's row)
+#[test]
+fn seams6_route_mode_a_press_refused_only_at_its_release_blocks() {
+    for how in [RoutePress::MixedAtRelease, RoutePress::LimitAtRelease] {
+        assert_eq!(
+            route_mode_run(how),
+            [false, false, true],
+            "{how:?}: blocked while held, nothing until a rest, the block ends at the release"
+        );
+    }
+}
+
+/// spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: a held left button does not block the tip
+/// when its press took a point, S-0213 claim 16b, here the selected holder's own first point, a
+/// loop close; after a movement with the button held the tip shows once the pointer has rested
+/// 1000 ms, and the release hides it) (seam sweep 6: intake 111's row)
+#[test]
+fn seams6_route_mode_a_loop_close_does_not_block() {
+    assert_eq!(
+        route_mode_run(RoutePress::LoopClose),
+        [true, false, true],
+        "a tip with the button held, hidden at the release"
+    );
 }
 
 /// spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: a held left button does not block the tip
