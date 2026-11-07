@@ -204,8 +204,30 @@ from). Local lane; install values are not quoted.
     r118 claim 11). The earlier *guard* is consistent with that, but the watch line does not print
     the attack state, so the trace does not single out the rule. From there on the game parts:
     house 0's credits differ by tick 20210, and house 0 wins at 57013 where house 1 won at 72778.
-  - The other winner changes were not traced one by one: whole AI games part widely after any
-    change to unit behaviour.
+  - The other four winner changes, traced the same way (first difference found with
+    `GLASNOST_AI_TRACE=250`, then per tick, then dumps and a watch):
+    - **Seed 7, map 2, sides 1 and 2:** the first difference is at tick 10574, and it has the same
+      cause. Slave 750 leaves its miner, its target becomes its master (a target gained from none),
+      and after the change it takes *guard* in that tick. Before, it stays in *harvest* through
+      10576.
+    - **Seed 8, map 2, sides 0 and 2:** the first difference is at tick 13436, with the same cause.
+      Slave 2058 emerges with its master as its target and takes *guard* in that tick. Before, it
+      stays in *harvest* through 13438.
+    - **Seed 9, map 0, sides 1 and 2:** the first difference is at tick 39453, and the cause is
+      different. Infantry 8993, in *attack*, is listed under house 1 up to 39451 and under house 0
+      from 39452; at 39452 its target is cleared. This looks like a mind-control release, but the
+      dump shows the owner change and the clear, not their cause. At 39453 it has a new target.
+      After the change it is in *guard* at 39453; before, it stays in *attack*. This fits r46:
+      the release's clear ends the attack state, and the release's guard request is taken a tick
+      later. The one-tick gap matches Q-2717's interim (readiness read before the clear), so this
+      game also leans on that interim.
+    - **Seed 10, map 8, sides 1 and 2:** the first difference is at tick 26041 and is **not
+      singled out**. House 0 counts one more explored resource cell (265 against 264, worth 100
+      more). No player object differs in cell, behaviour or target at the dumped ticks from 24000
+      to 26043. The count changes when a cell is explored or when an explored cell gains ore, and
+      the lane's diagnostics cannot tell which, or which unit or draw led to it. So this game is
+      not shown to follow from r46 or r53, but nothing points elsewhere either: this branch's code
+      changes only the leftover sweep and the change-of-target rule.
 
 ## Seams and open points
 
