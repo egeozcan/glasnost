@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 51
+revision: 54
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-07
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132, Q-2133, Q-2135]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132, Q-2133, Q-2135, Q-2716]
 supersedes: []
 ---
 
@@ -952,13 +952,18 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     vessel that goes on to sink and an aircraft that goes on to crash; neither waits for
     sinking or impact to make this killing-hit raise.
 
-    **Infantry still showing death.** Starting an infantry death sequence does not by itself
-    detach a tag. If S-0011's evaluation has not detached or deleted it, the infantry remains
-    a carrier until removal or an independent tag-detachment event. It is nevertheless no
-    longer a present object for S-0011 claims 24 and 27. Completion of its death sequence and
-    final removal make no new destroyed-by-anything raise. A tag's own polls and raises from
-    other carriers remain S-0011's, not additional death raises from this infantry.
-    - Backing: `measurable` (scenario D20; S-0011 T7 for evaluation and latches)
+    **Infantry still showing death.** Starting an infantry death sequence does not by itself detach
+    a tag. If S-0011's evaluation has not detached or deleted it, the infantry remains a carrier
+    until an independent tag-detachment event: its removal does not detach the tag (S-0011 claim 2,
+    under `quirks.removed_carrier_keeps_tag`; with that switch off, its removal detaches the tag).
+    It is nevertheless no longer a present object for S-0011 claims 24 and 27. Completion of its
+    death sequence and final removal make no new destroyed-by-anything raise. A tag's own polls and
+    raises from other carriers remain S-0011's, not additional death raises from this infantry.
+    - Backing: `measurable` (scenario D20; S-0011 T7 for evaluation and latches). `unmeasured` for
+      the removal not detaching an infantry unit's tag: S-0011 claim 2's scenario for a carrier that
+      stops existing, T6 variant H, has vehicles as its carriers, and in D20's retained-infantry run
+      the first raise detaches the first carrier, so no run leaves a dead infantry carrier attached
+      for a later raise to count
     - Confidence: high for the before-debris timing, vehicle extra group, deferred-death
       timing and absence of a final infantry-removal raise; medium for retained infantry
       carrier status and the hijacker/tag-carries-over combination
