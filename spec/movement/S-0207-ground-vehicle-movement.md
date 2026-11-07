@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 83
+revision: 85
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-07
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759, Q-2781]
 supersedes: []
 ---
 
@@ -897,8 +897,9 @@ The *order-level destination* is the destination that behaviours and factory rep
     *d* + 1, …, *d* + 7 (mod 8), in that order of preference. A candidate qualifies when it lies
     inside the usable area and the vehicle's entry outcome for it is *clear* (S-0209 claim 5). Its
     destination is the first qualifying candidate that passes the screen-cover check (S-0208 Terms)
-    and is not a high-bridge cell, or else the first qualifying candidate. It queues *move* and takes
-    that destination. When no candidate qualifies, it does not move.
+    and is not a high-bridge cell, or else the first qualifying candidate. It queues *move* without
+    an immediate start (S-0215 claim 7) and then takes that destination. When no candidate
+    qualifies, it does not move.
 
     Consequences:
     - The scatter order (S-0213 claim 9: forced, no threat point, not move-anywhere) moves an idle
@@ -922,6 +923,61 @@ The *order-level destination* is the destination that behaviours and factory rep
       0 to 2, no draw over 1 to 4, and queues *move* to the candidate chosen above. Forced and
       move-anywhere bypass only cases c and e, not the other refusals; case j still applies to
       a neighbour's threat-point request.
+    - The requests with a threat point that reach a vehicle are sent by the bunker's clearing
+      (S-0606 claim 6, S-0215 claim 17) and an aircraft's firing pass (S-0501 claim 16), both forced
+      and not move-anywhere, and by factory apron-neighbour clearing (S-0417 claims 4 and 13),
+      forced and move-anywhere. A crusher's warning goes to infantry, with no threat point (S-0210
+      claim 7).
+    - **A seized vehicle** (S-0607 Terms) has no refusal of its own here. Cases a to j and the draw
+      over 1 to 4 apply to it as to any vehicle, read on its state at the request: its behaviour
+      is the one the seize gave it (S-0607 claims 5 and 6) or a later one, and cases b and g read
+      the locomotor it has at that moment. That is the stand-in that the seize installed (S-0607
+      Terms) while it has one, and its own locomotor once a drop-pod stand-in's descent has ended,
+      although it then stays seized (S-0607 claim 24).
+    - While a seized vehicle has a destination, case e refuses every request that is not
+      move-anywhere, so of the senders above only factory apron clearing can reach its acceptance.
+      A gripped unit normally has one: the seize gives it the lifter as its destination (S-0607
+      claim 5), which becomes the cell of the movement point that the seize fixes (S-0607 claim
+      7). A seized vehicle with no destination is not refused by case e, so every sender above can
+      reach its acceptance. That covers a gripped unit left with none (S-0607 claim 9) and a seized
+      vehicle that is no longer gripped (a seized unit is not always gripped, S-0607 Terms), whose
+      destination normally becomes none when its grip ends (S-0607 claims 13 and 17). When a
+      seized vehicle accepts:
+      - a request without a threat point takes no draw and queues no behaviour, and the cell that
+        the search gives is not taken as its destination (S-0607 claim 9). Its destination, or its
+        lack of one, is unchanged.
+      - a request with a threat point takes its draws as above, and its candidates are judged
+        around its vehicle scatter centre cell. For a gripped unit with the jumpjet stand-in, that
+        is the cell of its heading point, the movement point that the seize fixed (S-0607 claim
+        7), not the cell it is flying over. When a candidate qualifies, *move* is queued without
+        an immediate start, as above, and the candidate is not taken as its destination (S-0607
+        claim 9): its destination, or its lack of one, is unchanged. When none qualifies, nothing
+        is queued.
+    - **The queued *move* of a seized vehicle.** Unless a later request replaces it in the queue,
+      it becomes current at the vehicle's next per-tick start at which it is ready to change
+      (S-0215 claim 11). Its processing is a vehicle's ordinary *move* processing (S-0215 claim
+      22), which makes no exception for a seized unit and neither gives nor clears a destination.
+      - *Current while the vehicle is still seized,* in its grip or in the fall and landing after
+        it: the processing does not move it. With a destination, it only chooses the standard
+        delay, and the vehicle goes on as S-0607 moves it (the pull of claim 7, the fall and
+        landing of claims 13 to 17). With no destination, while its movement is not moving and
+        nothing is queued, it falls back to rest (S-0215 claim 22). In the grip that fall-back has
+        the effects that S-0607 claim 9 gives for a fall-back in the grip, a destination it would
+        give is ignored, and it does not restore the unit. A vehicle with the jumpjet stand-in that
+        is set down and whose movement has stopped is restored at that fall-back by S-0607 claim
+        20's test, subject to that claim's exclusion of a hovering set-down unit. The processing
+        never ends a grip: a grip ends at a rule that gives the unit no destination
+        while it has one (S-0607 claim 9), and the processing gives none. Like the queued *hunt*
+        of S-0607 claim 6, this *move* cannot make a seized vehicle move under its own power.
+      - *Current after restoration* (S-0607 claim 20), when the vehicle is no longer seized and has
+        its own locomotor back: it normally has no destination then, since the end of its grip
+        gave it none (S-0607 claims 13 and 17) and as a seized unit it took no new one (S-0607
+        claim 9). The candidate never became its destination, so the vehicle does not drive
+        towards it. Its first *move* processing finds it with no destination and not moving, and,
+        unless something is queued, it falls back to rest and chooses a delay of 1 tick (S-0215
+        claim 22).
+      - So a seized vehicle that accepts a request with a threat point takes the draws and has
+        its behaviours changed, but it does not move towards the chosen candidate.
     - The search and the eight neighbours are centred on the vehicle scatter centre cell (Terms),
       never on the cell of the move destination as such. A drive vehicle that stands still, turns in
       place or waits between tracks searches around its own cell; one that is on a track searches
@@ -953,14 +1009,30 @@ The *order-level destination* is the destination that behaviours and factory rep
       - deploying and undeploying in case f: D18 part g isolates the fully deployed state,
         not the transition ticks; no fixture here establishes a request during either
         transition while every earlier refusal gate passes.
-      - the draw over 1 to 4: both identified threat-point senders, the bunker rule of S-0215
-        claim 17 and factory apron-neighbour clearing of S-0417 claims 4 and 13, send forced requests.
-        Neither reaches this non-forced acceptance draw
+      - the draw over 1 to 4: every identified threat-point sender (the bunker rule of S-0215
+        claim 17, an aircraft's firing pass of S-0501 claim 16 and factory apron-neighbour clearing
+        of S-0417 claims 4 and 13) sends forced requests. None reaches this non-forced acceptance
+        draw
+      - *move* queued without an immediate start, for every vehicle: the end-of-tick record shows
+        the difference only for a receiver whose turn in that tick came before the sender's
+        (S-0203), and no setup here fixes that order
+      - a seized vehicle, gripped or not, and what its queued *move* does once current: a gripped
+        unit normally holds a destination, so only a move-anywhere request reaches the
+        acceptance, and the only such sender with a threat point lists the objects in a factory's
+        apron cells, where no setup here holds a gripped unit. No setup here leaves a seized
+        vehicle with no destination where a bunker's clearing or an aircraft's firing pass reaches
+        it. So no setup here sends a scatter request to a seized vehicle at all, and its refusals
+        by case e are not observed either
     - Confidence: medium for cases a to f, h and i, for the search without a draw and for the
       behaviours left unchanged, and for the threat-point case and its draws (read; known senders
-      are S-0215 claim 17 and S-0417 claims 4 and 13). Low for cases g and j. High for the vehicle
-      scatter centre cell of a drive vehicle (the heading point was read wherever it is set and
-      cleared), including the ship equivalence of S-0504 claim 1. Medium for the tunnel exit.
+      are S-0215 claim 17, S-0501 claim 16 and S-0417 claims 4 and 13). Medium for *move* being
+      queued without an immediate start. Medium for a seized vehicle: no refusal of its own, the
+      locomotor read by cases b and g, the scatter centre of a gripped unit, *move* queued before
+      the destination is refused, the draws taken, and what the queued *move* does once current,
+      both while the vehicle is still seized and after its restoration. Low for cases g and j.
+      High for the vehicle scatter centre cell of a drive vehicle (the heading point was read
+      wherever it is set and cleared), including the ship equivalence of S-0504 claim 1. Medium
+      for the tunnel exit.
       The hovering heading point is defined by S-0503 Terms and claim 5, with medium confidence
 
 ### Engine defaults of the speed-fraction fields
@@ -4538,6 +4610,11 @@ conditional diagnostic for that combination and assignment-time restoration.
   landing point and phase-in expiry". Under claim 21 a jump pending when temporary driving is
   installed is cancelled then, so none is pending at restoration. S-0215 claim 13 should list
   only the landing point and the phase-in expiry as retained.
+- Q-2781: S-0607 claim 9 can point to claim 16 here for a seized vehicle that accepts a scatter
+  request: no seized refusal of the request, case e against the grip's destination, the draws
+  taken, *move* queued for a request with a threat point, the new destination refused as claim 9
+  says, and what that *move* does once current, while the vehicle is seized and after its
+  restoration.
 
 ## Open questions
 
