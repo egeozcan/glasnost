@@ -151,15 +151,73 @@ Older tests changed by these revisions, each with the claim it now cites:
 
 ## Formats and goldens
 
-LANES-FORMATS
+- Save format **111** and AI game format **76**, one past main 841f16d (intake 107 took 109 and
+  74, intake 108 took 110 and 75). The rocket's flight timer is now a start tick
+  (`RocketState::started` in place of `elapsed`), the extra-locomotion stack is renamed and stays
+  unsaved, and saved games replay differently from the first owner change, kept path or launch.
+- **`M6C_SEED` 1 to 2.** The gate's full run of duel-m6c asserts that every counter is above zero.
+  With S-0309 claim 30, seed 1's first engineer capture of a tech building (tick 48) requests
+  *guard* for the building (`Cause::Capture` → `mind::release_orders`), and the game diverges from
+  there: house 1 wins at tick 9605 and no radiation exit is ordered. Bisected by commit: with
+  S-0208 alone seed 1 still plays all 12 000 ticks (smallest counter 3); with claim 30 added it
+  ends at 9605. Flipping `enter_keeps_stored_path` does not change it. Seed 2 plays all its ticks
+  with smallest counter 4 both before (main 01c5688) and after; it is the next seed, as at M7a's
+  move to seed 2. `docs/development.md` names the move.
+- Goldens regenerated on 049bb49 (seven of nine move: duel, duel-diagonal, duel-naval, duel-m6c,
+  duel-m7a, duel-m7b, skirmish; combat and scripted do not). 049bb49 to 841f16d changes only
+  `spec/` and docs, so the code tree is the one regenerated. `cargo xtask gate` passes native and
+  wasm32.
 
 ## Lanes
 
-LANES
+Bases: **before** is main 01c5688 (`bin/before`), unless named. **After** is this branch on
+049bb49 or 841f16d (the same code) unless named. The arena was also played on main e0695d3 and on
+this branch on e0695d3, which gives the cleanest before/after pair for the arena.
+
+- **Sweeps, seeds 1 to 16** (smallest minimum; before → after):
+  - M6c reference 0 → 0 (seeds at 0: 3, 4 → 1, 11); play fixes 0 → 0 (seed 3 → 11).
+  - M7a reference 1 → 1; play fixes 2 → 2.
+  - M7b smallest drain minimum 3 → 3 in both positions. Reference: drain orders min 3 median 5 →
+    min 3 median 4; credits drained min 1560 median 2080 → min 1520 median 2080. Play fixes:
+    orders min 3 median 4 → the same; credits min 1480 median 2000 → min 1480 median 1960.
+- **AI suite** (`cargo test --release -p glasnost-ai -- --include-ignored`): 263 of 263 before
+  and after, `skirmish::plays_to_the_last_side` included.
+- **Arena** (`--record all --threads 2`), failing rows on 01c5688 → e0695d3 → this branch on
+  e0695d3: M-0001 11 → 11 → **10** of 96; M-0002 2 → 2 → 2 of 24; M-0003 1 → 1 → 1 of 35; M-0019
+  0 → 0 → 0 of 6; M-0020 1 → 1 → 1 of 25 (YURI against SHK); M-0021 8 → 8 → 8 of 50. Against
+  e0695d3, intake 110 changes 12 of our 1152 M-0001 games and 21 of 288 M-0002 games, none of
+  M-0003's. The changed M-0001 games are MIND against E1 and E2 (6, mind-control owner changes:
+  claim 30's drop inside the takeover), TELE and CAOS against V3 (5, the V3's missiles: S-0506's
+  aim fixed at the launch) and one CAOS against E2. CAOS against V3 now passes the win test
+  (ours 1/0/11 → 2/1/9 of 12, p 0.0094 → 0.035). The changed M-0002 games are infantry-only rows
+  (INIT, BRUTE and YURI against E1, E2, GGI and SHK). Mind control explains YURI's; INIT's,
+  BRUTE's and the rest have no owner change and no missile, which leaves S-0208's crowd
+  locomotion (the kept path and no extra locomotion inside its own). M-0002's verdicts are
+  unchanged: INIT against E2 changes three winners but still fails its side outcome.
+- **Quick lane** (`GLASNOST_AI_QUICK=1 ai-sides 120000 <seed> 0 2 8`, seeds 7 to 10, 36 games):
+  QUICK-LANE
 
 ## M-0001, M-0020 and M-0021
 
-LANES-RECORDS
+- **M-0001**: every row keeps its verdict but CAOS against V3, which now passes (above). The
+  other ten failing rows are main's.
+- **M-0020**: every row keeps its verdict. 24 of 25 checked rows hold, and part 2's YURI against
+  SHK, arm S, still fails (ours 11/1/0 against the record's 12/0/0, as on main). What moves is the
+  report's diagnostics, not a verdict: the drones' end (tick 351 → 373), a few end ticks and
+  first captures in the mind-control arms. Mind control's owner changes now drop the target inside
+  the change (claim 30).
+- **M-0021**: unchanged: 8 of 50 rows fail, the same rows, and the oracle report is identical to
+  main's. These answers do not touch it.
+- **Play note 49** (a veteran goes into a civilian building; lane
+  `r8_render_lane::note_49_a_veteran_goes_into_a_building` on this branch, local only): once the
+  occupant is inside (tick 415 of the lane), the building has **no experience of its own** and
+  draws no badge. Round 9 found it at the cap by then, from its own house's infantry killed by a
+  target kept across the occupation. Claim 30 now drops that target at the change. Later in the
+  lane the occupants kill the three enemies it sends, and the building then has experience
+  (status items 27 → 28), from enemy kills. That is S-0311's rule for kills, which these answers
+  leave alone. Unchanged and not from this intake: one of the two elite occupiers drops its order
+  within 50 ticks and stays outside, badge showing. Round 8 saw this too and passed it on with
+  note 53.
 
 ## Seams
 
