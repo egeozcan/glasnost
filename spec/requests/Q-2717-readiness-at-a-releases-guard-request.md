@@ -1,9 +1,9 @@
 ---
 id: Q-2717
 title: When a release reads readiness for its guard request
-status: open
+status: answered
 related: [S-0601, S-0107, S-0215]
-answered-by: []
+answered-by: [S-0601]
 ---
 
 ## Need
