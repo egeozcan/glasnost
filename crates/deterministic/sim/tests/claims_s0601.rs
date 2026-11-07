@@ -9,6 +9,7 @@ use glasnost_rules::sim::{BuildingType, Decimal, UnitType, WarheadType, WeaponTy
 use glasnost_sim::combat::check::{Answer, check};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::effects::Effect;
+use glasnost_sim::infantry::Seq;
 use glasnost_sim::mind::{self, MindSound};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
@@ -981,9 +982,11 @@ fn claim_9_release() {
     assert!(mind::ring(&w, a).is_none());
     let o = w.obj(a).unwrap();
     assert_eq!(o.target, None);
-    assert!(
-        o.beh.current == Some(Behaviour::Guard) || o.beh.queued == Some(Behaviour::Guard),
-        "guard requested"
+    // spec: S-0601 r23 claim 9 (a standing vehicle is ready after both clears: guard starts at once)
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (Some(Behaviour::Guard), None),
+        "guard requested and started"
     );
     let of = w.effects.iter().find_map(|e| match e {
         Effect::Mind {
@@ -1002,6 +1005,182 @@ fn claim_9_release() {
             .mind_cleared_sound
             .as_deref(),
         Some("Bye")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Claim 9 (r23, Q-2717 answered): the readiness that the release's guard
+// request reads is the victim's after both clears. Scenario MC4 parts (a)
+// and (b) on synthetic data: a Beta CTRL1 holds an Alpha WALKER (the
+// testkit's armed infantry type), Beta orders it, and the controller then
+// leaves play after every turn of a tick, so the release comes after
+// V's own turn of that tick and the state below is V's at the tick's end.
+// Alpha is a player house, so claim 8's fate draw adds nothing.
+
+/// The world with the Beta controller `c` holding the Alpha WALKER `v` and
+/// an Alpha BOX `near` two cells from it and `far` fourteen cells from it;
+/// the opening order block is over.
+fn held_walker() -> (World, ObjectId, ObjectId, ObjectId, ObjectId) {
+    let mut w = game();
+    let c = veh(&mut w, "CTRL1", BETA, -8, 4);
+    let v = put(&mut w, Kind::Infantry, "WALKER", ALPHA, -6, 0);
+    let near = veh(&mut w, "BOX", ALPHA, -4, 0);
+    let far = veh(&mut w, "BOX", ALPHA, 8, 0);
+    // At capacity from the start, C searches for no other victim (S-0309
+    // claims 2 and 18), so V is its only one and Alpha its original owner.
+    assert!(mind::take(&mut w, c, v));
+    while glasnost_sim::orders::blocked(&w) {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(mind::controlled_by(&w, v), Some(c), "set-up: held");
+    assert_eq!(mind::original_owner(&w, v), Some(HouseId(ALPHA)));
+    (w, c, v, near, far)
+}
+
+/// Beta gives `v` behaviour `b` at `target` (an object) or towards `dest`
+/// (a cell), as a click would.
+fn order(w: &mut World, v: ObjectId, b: Behaviour, target: Option<ObjectId>, dest: Option<CellXY>) {
+    let o = glasnost_sim::orders::Order::Behaviour {
+        actor: v,
+        behaviour: b,
+        attack_move: false,
+        target: target.map(Target::Object),
+        dest: dest.map(Target::Cell),
+    };
+    assert!(glasnost_sim::orders::issue(w, HouseId(BETA), o));
+}
+
+/// Steps until `v` meets `cond` at the end of a tick (at most 200 ticks).
+fn until(w: &mut World, v: ObjectId, cond: impl Fn(&World) -> bool) {
+    for _ in 0..200 {
+        testkit::run(w, 1);
+        assert!(w.obj(v).is_some(), "set-up: V lives");
+        if cond(w) {
+            return;
+        }
+    }
+    panic!("set-up: the condition never held");
+}
+
+fn attack_state(w: &World, v: ObjectId) -> bool {
+    w.obj(v)
+        .and_then(|o| o.infantry.as_ref())
+        .is_some_and(|s| s.attack)
+}
+
+/// The controller leaves play after the tick's turns (claim 10).
+fn kill_controller(w: &mut World, c: ObjectId) {
+    glasnost_sim::objects::remove(w, c);
+    assert!(w.obj(c).is_none(), "set-up: C has left play");
+}
+
+fn slots(w: &World, v: ObjectId) -> (Option<Behaviour>, Option<Behaviour>) {
+    let o = w.obj(v).unwrap();
+    (o.beh.current, o.beh.queued)
+}
+
+// spec: S-0601 r23 claim 9 and MC4 part (b) (a standing infantry victim in the attack state that holds a target: the target clear is a change of target, S-0215 claim 11 and S-0107 claim 11, which ends the state before the guard request reads readiness, so guard is current with nothing queued at the end of the release tick)
+#[test]
+fn claim_9_mc4_b_a_firing_victim_starts_guard_at_once() {
+    let (mut w, c, v, near, _) = held_walker();
+    order(&mut w, v, Behaviour::Attack, Some(near), None);
+    until(&mut w, v, |w| slots(w, v).0 == Some(Behaviour::Attack));
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.target, Some(Target::Object(near)), "set-up: the target");
+    assert!(
+        !glasnost_sim::occupancy::moving_on_tick(&w, v),
+        "set-up: V stands"
+    );
+    // The testkit WALKER has no fire frames, so the firing kind that began
+    // with no shot yet (MC4 (b)) is set as `claims_s0301::attacking` does:
+    // the attack state with its baseline on the held target.
+    {
+        let t = w.tick;
+        let o = w.obj_mut(v).unwrap();
+        let held = o.target;
+        let s = o.infantry.as_mut().unwrap();
+        s.watch = held;
+        s.attack = true;
+        s.seq = Some(Seq::FireStanding);
+        s.seq_delay = 3;
+        s.seq_t0 = t;
+    }
+    assert!(
+        !glasnost_sim::process::ready(&w, v),
+        "set-up: the attack state holds a start back before the clear"
+    );
+    kill_controller(&mut w, c);
+    assert_eq!(owner(&w, v), Some(ALPHA));
+    let o = w.obj(v).unwrap();
+    assert_eq!((o.target, o.dest), (None, None));
+    assert!(!attack_state(&w, v), "the clear ended the attack state");
+    assert_eq!(slots(&w, v), (Some(Behaviour::Guard), None));
+}
+
+// spec: S-0601 r23 claim 9 and MC4 part (a) (a walking infantry victim under attack: after the clear it is attack without a target, which its movement does not hold back, S-0215 claim 11, and its current sequence is interruptible, so guard is current with nothing queued at the end of the release tick)
+#[test]
+fn claim_9_mc4_a_a_victim_walking_to_attack_starts_guard_at_once() {
+    let (mut w, c, v, _, far) = held_walker();
+    order(&mut w, v, Behaviour::Attack, Some(far), None);
+    until(&mut w, v, |w| glasnost_sim::occupancy::moving_on_tick(w, v));
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Attack), "set-up: attack");
+    assert_eq!(o.target, Some(Target::Object(far)), "set-up: the target");
+    kill_controller(&mut w, c);
+    assert_eq!(owner(&w, v), Some(ALPHA));
+    assert_eq!(w.obj(v).unwrap().target, None);
+    assert_eq!(slots(&w, v), (Some(Behaviour::Guard), None));
+}
+
+// spec: S-0601 r23 claim 9 (every other readiness condition applies as usual: an infantry victim moving under move is not ready after both clears, and guard stays queued for a later per-tick start)
+#[test]
+fn claim_9_a_victim_walking_under_move_keeps_guard_queued() {
+    let (mut w, c, v, _, _) = held_walker();
+    let to = at(8, 6);
+    order(&mut w, v, Behaviour::Move, None, Some(to));
+    until(&mut w, v, |w| glasnost_sim::occupancy::moving_on_tick(w, v));
+    assert_eq!(slots(&w, v).0, Some(Behaviour::Move), "set-up: move");
+    kill_controller(&mut w, c);
+    let o = w.obj(v).unwrap();
+    assert_eq!((o.target, o.dest), (None, None), "both cleared");
+    assert!(
+        glasnost_sim::occupancy::moving_on_tick(&w, v),
+        "still moving after the clears"
+    );
+    assert_eq!(
+        slots(&w, v),
+        (Some(Behaviour::Move), Some(Behaviour::Guard))
+    );
+    // The later per-tick start takes it.
+    let mut started = false;
+    for _ in 0..200 {
+        testkit::run(&mut w, 1);
+        if slots(&w, v) == (Some(Behaviour::Guard), None) {
+            started = true;
+            break;
+        }
+    }
+    assert!(started, "guard starts later");
+}
+
+// spec: S-0601 r23 claim 9 (an infantry victim in the attack state with no target, the attack-move discard of S-0215 claim 11, has no change of target at the clear, so that state still holds the start back and guard stays queued)
+#[test]
+fn claim_9_the_attack_state_with_no_target_keeps_guard_queued() {
+    let (mut w, c, v, _, _) = held_walker();
+    {
+        let o = w.obj_mut(v).unwrap();
+        o.beh.current = Some(Behaviour::Attack);
+        o.target = None;
+        let s = o.infantry.as_mut().unwrap();
+        s.attack = true;
+        s.watch = None;
+    }
+    kill_controller(&mut w, c);
+    assert_eq!(owner(&w, v), Some(ALPHA));
+    assert!(attack_state(&w, v), "no change of target: the state holds");
+    assert_eq!(
+        slots(&w, v),
+        (Some(Behaviour::Attack), Some(Behaviour::Guard))
     );
 }
 

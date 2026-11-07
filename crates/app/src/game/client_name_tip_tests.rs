@@ -506,6 +506,137 @@ fn claim_20_a_held_button_blocks() {
     assert!(shown(&mut c).is_some(), "a middle button blocks nothing");
 }
 
+/// How a route-mode run of S-0111 scenario NT1 (h) presses: the button,
+/// the selection and the press place.
+#[derive(Clone, Copy, Debug)]
+enum RoutePress {
+    /// An ordinary left click outside every point's click area, a GUNR
+    /// with no route selected (runs 1 and 3).
+    OrdinaryLeft,
+    /// The right button, the same GUNR selected (run 2).
+    Right,
+    /// A building selected, a left press outside every click area: refused
+    /// for kind at the press (run 4).
+    KindRefused,
+    /// The route holder selected, a left press on its last point: refused
+    /// by the point-click test (run 5).
+    PointRefused,
+    /// The GUNR with no route selected, a left press on the holder's first
+    /// point: it takes the point, a join (run 6).
+    TakesPoint,
+    /// Nothing selected, a left press on the holder's second point: it
+    /// takes the own point, which the click selects (S-0213 claim 16e).
+    SelectsPoint,
+}
+
+/// One run: a tip game with `routed`'s three GUNR (the first holding three
+/// points) and the route-mode key held; the press of `how`, a movement
+/// with the button held onto a place with a tip text (`p`, outside every
+/// click area; one pixel from the press for a press there), a rest of
+/// 1000 ms, the release there, a rest of 3000 ms, then a movement and a
+/// rest of 1000 ms. Returns whether the tip shows at the end of each rest.
+fn route_mode_run(how: RoutePress) -> [bool; 3] {
+    let (mut c, p) = tip_game();
+    let (ids, pts) = super::play_notes_tests::routed(&mut c);
+    let s = session_mut(&mut c);
+    let (cell, id) = s.under(p);
+    assert!(!s.name_tip_text(cell, id).is_empty(), "set-up: a tip text");
+    let m = s.map_rect();
+    let screens: Vec<Point> = pts
+        .iter()
+        .map(|&n| s.route_point_screen(n).expect("set-up: a point"))
+        .collect();
+    for q in &screens {
+        assert!(m.contains(*q), "set-up: the point is on the view");
+        // S-0213 claim 16b, Click areas: 8 pixels right of a place is outside its area.
+        assert!(
+            (q.x - p.x).abs() > 16 || (q.y - p.y).abs() > 16,
+            "set-up: the rest place is outside every click area"
+        );
+    }
+    let (select, button, at) = match how {
+        RoutePress::OrdinaryLeft => (vec![ids[1]], Button::Left, p),
+        RoutePress::Right => (vec![ids[1]], Button::Right, p),
+        RoutePress::KindRefused => {
+            let local = s.play.me();
+            let w = &mut s.play.game.world;
+            let t = w
+                .rules()
+                .index_of(Kind::Building, "POWR")
+                .expect("fixture type");
+            let hut = glasnost_sim::objects::create(w, Kind::Building, t, Some(local));
+            let cell = CellXY::new(4, 4);
+            let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
+            glasnost_sim::objects::place(w, hut, glasnost_sim::world::Pos::centre(cell, z), 0);
+            (vec![hut], Button::Left, p)
+        }
+        RoutePress::PointRefused => (vec![ids[0]], Button::Left, screens[2]),
+        RoutePress::TakesPoint => (vec![ids[1]], Button::Left, screens[0]),
+        RoutePress::SelectsPoint => (Vec::new(), Button::Left, screens[1]),
+    };
+    let s = session_mut(&mut c);
+    s.play.selection = select;
+    c.key(Key::Char('z'), true);
+    assert!(session_mut(&mut c).route_held(), "set-up: route mode");
+    let rest = if at == p { Point::new(p.x + 1, p.y) } else { p };
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    c.pointer_moved(at);
+    c.pointer_down(button, at);
+    c.pointer_moved(rest);
+    frame_at(&mut c, &mut t, 1000);
+    let held = shown(&mut c).is_some();
+    c.pointer_up(button, rest, Default::default());
+    assert!(shown(&mut c).is_none(), "{how:?}: the release hides it");
+    frame_at(&mut c, &mut t, 3000);
+    let released = shown(&mut c).is_some();
+    c.pointer_moved(Point::new(rest.x, rest.y + 1));
+    frame_at(&mut c, &mut t, 1000);
+    let again = shown(&mut c).is_some();
+    assert!(
+        session_mut(&mut c).route_held(),
+        "{how:?}: still route mode"
+    );
+    [held, released, again]
+}
+
+/// spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: in the route mode, S-0213 claim 16, a held
+/// right button blocks the tip as outside it, and so does a held left button whose press is an
+/// ordinary click outside every point's click area, S-0213 claim 16b; the block ends at the
+/// button's release, in the route mode too) and scenario NT1 (h) runs 1 to 3
+#[test]
+fn claim_20_route_mode_an_ordinary_press_or_the_right_button_blocks() {
+    for how in [RoutePress::OrdinaryLeft, RoutePress::Right] {
+        assert_eq!(
+            route_mode_run(how),
+            [false, false, true],
+            "{how:?}: blocked while held, nothing until a rest, the block ends at the release"
+        );
+    }
+}
+
+/// spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: a held left button does not block the tip
+/// when the route mode refused its press at the press, for kind, S-0213 claim 16d, or by the
+/// point-click test, S-0213 claim 16b, or when its press took a point, S-0213 claim 16b, or, with
+/// no object selected, took an own point that the click selects, S-0213 claims 16b and 16e; after a
+/// movement with the button held the tip shows once the pointer has rested 1000 ms, and the release
+/// hides it) and scenario NT1 (h) runs 4 to 6
+#[test]
+fn claim_20_route_mode_a_press_refused_or_taking_a_point_does_not_block() {
+    for how in [
+        RoutePress::KindRefused,
+        RoutePress::PointRefused,
+        RoutePress::TakesPoint,
+        RoutePress::SelectsPoint,
+    ] {
+        assert_eq!(
+            route_mode_run(how),
+            [true, false, true],
+            "{how:?}: a tip with the button held, hidden at the release"
+        );
+    }
+}
+
 /// spec: S-0111 claim 20 (r40, Blocked: an order block locks the input and hides the cursor, as
 /// the block of a game's first ticks, S-0201 claim 14: a wait that ends in it shows nothing, and
 /// the block ending brings nothing back)

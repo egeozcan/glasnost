@@ -906,3 +906,123 @@ fn i109_the_name_tip_shows_the_display_name() {
         let _ = lane.c.frame();
     }
 }
+
+/// Intake 111 (S-0111 r49 claim 20, Q-2736 answered): a left button held
+/// in the route mode (S-0213 claim 16). Three scenes, each with the
+/// route-mode key held: (1) a building selected and a press on open ground,
+/// refused for kind at the press (S-0213 claim 16d); (2) a second vehicle
+/// selected and a press on the first vehicle's route point, which it takes
+/// (S-0213 claim 16b); (3) the vehicle selected and a press on open ground,
+/// an ordinary route-mode click. In each the pointer then moves onto the
+/// vehicle with the button held and rests 1200 ms. r49: a tip in scenes 1
+/// and 2, none in scene 3. Screens go under the tag (`GLASNOST_R8_TAG`:
+/// `before` on main, `after` here). It prints booleans, boxes and counts
+/// only, never the tip's text.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn i111_the_name_tip_with_a_button_held_in_the_route_mode() {
+    use glasnost_app::game::client::Key;
+    let Some(mut lane) = Lane::start() else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let home = lane.home();
+    let local = lane.local();
+    let r = lane.world().rules_arc();
+    let Some(vt) = vehicle_type(lane.world(), |u| {
+        u.locomotor == Locomotor::Drive && !u.combat.naval && u.combat.slots[0].is_some()
+    }) else {
+        println!("no armed driving type");
+        return;
+    };
+    let Some(bt) = r
+        .buildings
+        .iter()
+        .find(|b| b.raw.tech_level.is_some_and(|t| t >= 0) && b.foundation.0 <= 3)
+        .map(|b| b.name.clone())
+    else {
+        println!("no building type");
+        return;
+    };
+    let at = lane
+        .open(CellXY::new(home.x + 6, home.y + 6), |l| {
+            l != land::WATER && l != land::ROCK
+        })
+        .expect("open land");
+    let v = lane.spawn(Kind::Vehicle, &vt, local, at);
+    let w2 = lane.spawn(Kind::Vehicle, &vt, local, CellXY::new(at.x + 2, at.y));
+    let b = lane.spawn(Kind::Building, &bt, local, CellXY::new(at.x - 3, at.y + 3));
+    lane.ticks(8);
+    // V's route point, two cells north of it, laid as a route-mode click does.
+    let cell = CellXY::new(at.x, at.y - 2);
+    let s = lane.c.session.as_mut().unwrap();
+    s.play.issue(vec![glasnost_sim::orders::Order::RoutePoint {
+        actor: v,
+        behaviour: glasnost_sim::rules::Behaviour::Move,
+        attack_move: false,
+        target: None,
+        dest: Some(glasnost_sim::world::Target::Cell(cell)),
+        place: Some(glasnost_sim::world::Target::Cell(cell)),
+    }]);
+    lane.ticks(2);
+    let point = lane.world().routes.points.keys().next().copied();
+    println!("route point laid: {}", point.is_some());
+    lane.look_at(at);
+    let Some(p) = lane.centre_of(v) else {
+        println!("the vehicle is not on screen");
+        return;
+    };
+    let ground = Point::new(p.x - 140, p.y + 70);
+    let free = lane.c.session.as_mut().unwrap().under(ground).1.is_none();
+    println!("open ground press place free of objects: {free}");
+    let tag = |l: &Lane| {
+        l.c.session
+            .as_ref()
+            .and_then(|s| s.name_tip_shown())
+            .map(|t| (t.rect, t.lines.len()))
+    };
+    // The key stays held through the three scenes, so no route is
+    // committed and the vehicle stays where it is.
+    lane.c.key(Key::Char('z'), true);
+    let held = lane.c.session.as_ref().unwrap().route_held();
+    println!("route mode: {held}");
+    for (name, select, press) in [
+        ("1-kind-refused", b, Some(ground)),
+        ("2-point-taken", w2, None),
+        ("3-ordinary", v, Some(ground)),
+    ] {
+        let press = match press
+            .or_else(|| point.and_then(|n| lane.c.session.as_ref().unwrap().route_point_screen(n)))
+        {
+            Some(q) => q,
+            None => {
+                println!("{name}: no press place");
+                continue;
+            }
+        };
+        lane.c.session.as_mut().unwrap().play.selection = vec![select];
+        lane.c.pointer_moved(press);
+        let _ = lane.c.frame();
+        lane.c.pointer_down(Button::Left, press);
+        let _ = lane.c.frame();
+        lane.c.pointer_moved(p);
+        let _ = lane.c.frame();
+        for _ in 0..12 {
+            lane.clock += 100;
+            lane.c.update(lane.clock);
+            let _ = lane.c.frame();
+        }
+        println!(
+            "{name}: route mode {}, name tip with the button held {:?}",
+            lane.c.session.as_ref().unwrap().route_held(),
+            tag(&lane)
+        );
+        lane.zoom(&format!("i111-{name}"), p, (300, 160, 3));
+        lane.c.pointer_up(Button::Left, p, Modifiers::default());
+        let _ = lane.c.frame();
+        println!("{name}: after the release {:?}", tag(&lane));
+        lane.c.pointer_moved(Point::new(p.x + 300, p.y + 100));
+        let _ = lane.c.frame();
+    }
+    lane.c.key(Key::Char('z'), false);
+}

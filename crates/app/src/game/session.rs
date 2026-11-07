@@ -1232,8 +1232,7 @@ impl Session {
         self.hud_focus.shown = false;
         self.pause_focus.shown = false;
         let on_map = self.hud_at(p) == Some(HudHit::Map);
-        // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the battlefield view is held; a held middle button does not block)
-        // design: Q-2736 (S-0111 Open questions leave a button pressed in the route mode and held undecided: it blocks like any other held left or right button pressed over the view)
+        // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the battlefield view is held; a held middle button does not block; r49: in the route mode a held right button blocks as outside it)
         self.view_button_held = on_map && matches!(b, Button::Left | Button::Right);
         if on_map {
             self.aim = None;
@@ -1246,18 +1245,21 @@ impl Session {
             (b == Button::Right && !self.paused && on_map).then(|| band::RightDrag::armed(p));
         self.route.pressed = None;
         // spec: S-0213 claim 16d, When the tests are made (revision 84, Q-2193: only left-button presses are tested; a right press or right click is never tested for kind, whatever is selected, and acts as claim 16h gives) and claim 16h (a right click while the key is held acts as outside route mode)
-        if self.route.held && b == Button::Left && !self.paused && on_map {
-            self.route_press(p);
+        if self.route.held && b == Button::Left && !self.paused && on_map && !self.route_press(p) {
+            // spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: in the route mode a held left button does not block the tip when its press was refused at the press, for kind, S-0213 claim 16d, or by the point-click test, S-0213 claim 16b, or took a point, a join or a loop close, S-0213 claim 16b, or with no object selected took an own point that the click selects, S-0213 claims 16b and 16e; a press that is an ordinary click blocks it, and every block ends at the release)
+            self.view_button_held = false;
         }
     }
 
     /// A route-mode left press on the battlefield (S-0213 claims 16b, 16d
     /// and 16h): claim 16d's kind test first, then what the press does with
-    /// the points whose click areas hold the cursor.
-    fn route_press(&mut self, p: Point) {
+    /// the points whose click areas hold the cursor. Returns whether the
+    /// press is an ordinary click (S-0111 claim 20 then holds the name tip
+    /// back while the button is held).
+    fn route_press(&mut self, p: Point) -> bool {
         let Some(local) = self.play.local else {
-            // design: watch mode (lead request 2026-11-02, an extra not in the original): no route is laid where no house is played
-            return;
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): no route is laid where no house is played, and the press is an ordinary click
+            return true;
         };
         let under = self.points_under(p);
         let w = &self.play.game.world;
@@ -1267,14 +1269,16 @@ impl Session {
             self.press = None;
             self.drag = None;
             self.route_refused(m);
-            return;
+            return false;
         }
         let press = glasnost_sim::routes::press(w, local, &sel, &under);
-        if press != glasnost_sim::routes::Press::Ordinary {
+        let ordinary = press == glasnost_sim::routes::Press::Ordinary;
+        if !ordinary {
             // spec: S-0213 claim 16h (a press that takes a point does that and nothing else) and claim 16b (a press refused with the invalid-point message gives no order)
             self.drag = None;
         }
         self.route.pressed = Some(press);
+        ordinary
     }
 
     /// The route points of any house whose click areas hold screen pixel

@@ -526,7 +526,7 @@ fn route_rules(delete_selects: bool) -> Arc<SimRules> {
 
 /// A started client past the opening order block with two GUNR, the first
 /// routed through three cells beside it (point adds applied in one tick).
-fn routed(c: &mut Client) -> ([ObjectId; 3], [u32; 3]) {
+pub(super) fn routed(c: &mut Client) -> ([ObjectId; 3], [u32; 3]) {
     use glasnost_sim::orders::Order;
     let ids = three_gunrs(c);
     while glasnost_sim::orders::blocked(session(c).play.world()) {
