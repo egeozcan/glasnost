@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 55
+revision: 60
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-08
 measurements: []
-requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560, Q-2396]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560, Q-2396, Q-2750]
 supersedes: []
 ---
 
@@ -1315,19 +1315,28 @@ rank* and *elite weapon*), *n*
 10. **Moving blocker: wait, then route around.**
     - On the first tick on which the next cell gives *moving blocker*, the walker stops and starts a
       wait of the blockage delay.
-    - It keeps waiting while the path retry timer runs. Each time that timer has run out, it searches
-      a new path. That includes the first such tick: when the timer has already run out then, the
-      first search happens on it. Before the blockage delay has run out, the search does not avoid
-      the blocking units; it counts them at a small extra cost (S-0212 claims 8 and 22), so a detour
-      only slightly longer than the blocked route can be taken at once. Once the blockage delay has
-      also run out, the search avoids them.
+    - It keeps waiting while the path retry timer runs. Each time that timer has run out, it
+      searches a new path. That includes the first such tick: when the timer has already run out
+      then, the first search happens on it. Before the blockage delay has run out, the search does
+      not avoid the blocking units; it counts them at a small extra cost (S-0212 claims 8 and 22),
+      so a detour only slightly longer than the blocked route can be taken at once. Once the
+      blockage delay has also run out, the search avoids them.
     - A new path that leads on resumes walking.
-    - The blockage delay starts afresh only after the walker has taken a walking step again. A walker
-      that alternates between short waits and steps never reaches the end of the delay unless one
-      single wait lasts the whole delay.
+    - The blockage delay starts afresh only after the walker has taken a walking step again, or when
+      it is given a new destination, by an order, a scatter or any other rule (S-0208 claim 6). A
+      walker whose destination is cleared does not wait, and any later wait of it follows a new
+      destination, which starts the delay afresh. So a walker that waits for a moving blocker and is
+      then given a new destination whose path leads through the same cell waits the whole blockage
+      delay again, counted from that cell's first *moving blocker* answer after the new destination,
+      before its search avoids the blocker. A walker that alternates between short waits and steps
+      never reaches the end of the delay unless one single wait lasts the whole delay.
     - A walker whose destination turns out to be unreachable gives up its move (S-0212).
-    - Backing: `measurable` (scenario C5, parts a and b; scenario C2, parts c and d)
-    - Confidence: medium
+    - Backing: `measurable` (scenario C5, parts a and b, and part c for the restart at a new
+      destination given by an order; scenario C2, parts c and d). The restart at a scatter's or
+      another rule's new destination is `unmeasured`: no scenario here gives a walker a scatter
+      whose path then leads into a moving blocker, and S-0208 scenario W17 part m reads the end of
+      the retry delay at a scatter, not the blockage delay.
+    - Confidence: medium (the restart at a scatter's or another rule's destination included)
 
 ### Requests to make room
 
@@ -2086,7 +2095,7 @@ stock infantry type has the destroyer zone.
   - (g) the occupants move away, or the walker gives up or moves away before the blockage delay has
     passed.
 
-**Scenario C5: moving blockers and the blockage delay (claims 4 and 10).**
+**Scenario C5: moving blockers and the blockage delay (claims 4 and 10; Q-2750).**
 - *Setup:* a one-cell-wide corridor, eight cells long. A side passage that only infantry can use runs
   around it: a land type that is impassable for the vehicle and passable for walkers (S-0211). The
   side passage is at least 8 cells longer than the infantry's route through the corridor, so that a
@@ -2101,11 +2110,18 @@ stock infantry type has the destroyer zone.
   - (b) No *V*₂. *V*₁ drives through the corridor at a speed below the infantry's, without
     stopping. A test file sets the blockage delay below the corridor transit time of *V*₁ and above
     the time *V*₁ needs per cell.
+  - (c) As (a), with a test file that sets the blockage delay to *D* ticks (Import mapping) and the
+    path-retry delay of S-0212 to *R* ticks (S-0212 F3), with *D* even and *R* at most *D*/2 − 3.
+    At the start of a tick *D*/2 ticks after the infantry's first stop behind *V*₁, while it still
+    waits, the user orders it to the cell next to its destination on the second branch, so that its
+    route still leads through *V*₁'s cell.
 - *Procedure:* record the infantry's position per tick.
 - *Observable:*
   - (a) the ticks between the infantry's first stop behind *V*₁ and the tick on which it starts into
     the side passage.
   - (b) whether the infantry takes the side passage.
+  - (c) the ticks between the second order and the infantry's first step after it, and whether
+    that step leads back towards the side passage.
 - *Runs:* 3 each.
 - *Expected:*
   - (a) At least the blockage delay of the stock rules, and less than the blockage delay plus the
@@ -2114,11 +2130,21 @@ stock infantry type has the destroyer zone.
   - (b) The infantry follows *V*₁ through the corridor. Its total waiting exceeds the blockage delay,
     but no single wait lasts that long. *V*₁ is mostly in the middle of a step, and then the
     vehicle-present flag gives *moving blocker*.
+  - (c) At least *D* ticks: the new destination starts the delay afresh, so the infantry waits it
+    out again after the order before it leaves. Without the restart, its first wait's delay would
+    run out within a tick of *D*/2 ticks after the order, and it would leave at the first search
+    after that. That search comes at most *R* ticks after the delay has run out, and the first step
+    back towards the side passage at most one tick after the search, so at most *D*/2 + *R* + 2
+    ticks after the order, which is below *D* since *R* is at most *D*/2 − 3. So the lower bound
+    tells the two apart.
 - *Falsified if:*
   - (a) the infantry leaves before the blockage delay, or never leaves (with *V*₁ still holding its
     order). If the recorder shows *V*₁ without a destination, or moving, on any tick while the
     infantry waits behind it, the run cannot decide,
-  - (b) the infantry takes the side passage.
+  - (b) the infantry takes the side passage,
+  - (c) the infantry's first step after the second order comes less than *D* ticks after it and
+    leads back towards the side passage; a run in which that step leads on through the corridor
+    cannot decide.
 
 **Scenario C6: crates and computer-owned walkers (claim 4, row WO1).** This scenario measures the
 original's computer behaviour. In our engine an AI house's walkers behave as the human-owned unit
