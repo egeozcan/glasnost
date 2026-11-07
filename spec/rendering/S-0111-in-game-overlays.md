@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia, name tip)
 topic: rendering
-revision: 40
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
+approved-on: 2026-11-07
 measurements: []
-requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673, Q-2687]
+requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673, Q-2687, Q-2736]
 supersedes: []
 ---
 
@@ -641,44 +641,82 @@ S-0108 (Formulas F3).
     - **Blocked.** The tip is blocked while the mouse cursor is hidden, while the player's input is
       locked, while the battlefield view is moving, as during a scroll, and while a left or right
       mouse button that was pressed over the battlefield view is held, as while a selection box is
-      dragged (for a press in the route mode, Open questions). A held middle button does not block
-      it. An order block (S-0201 Terms) locks the input and hides the cursor: in a skirmish, the
-      block of a game's first ticks (S-0201 claim 14) and a block that the map's trigger actions
-      make, a chrono flash's included (S-0201 claim 11). No other ordinary skirmish situation is
-      known to lock the input or hide the cursor while the pointer is over the battlefield view.
+      dragged. That block ends at the button's release, in the route mode too (whether the original
+      ends it there after an ordinary left click in the route mode released over a highlighted or
+      refused route point is an Open question). A held middle button does not block it. In the route
+      mode (S-0213 claim 16), a held right button blocks the tip as it does outside the route mode.
+      So does a held left button whose press is an ordinary click there, inside a point's click area
+      or outside every one (S-0213 claim 16b): one that drags a band box, one that adds a point or
+      selects at its release, and one that the route mode refuses only at its release, for route
+      state or the route-holder limit (S-0213 claim 16d). A held left button does not block the tip
+      when the route mode refused its press at the press, for kind (S-0213 claim 16d) or by the
+      point-click test (S-0213 claim 16b), or when its press took a point, a join or a loop close
+      (S-0213 claim 16b), or, with no object selected, took an own point that the click then selects
+      (S-0213 claims 16b and 16e). Such a press starts no selection box, and after a movement with
+      its button still held, the tip shows once the pointer has rested for 1000 ms, unless another
+      block holds. A press that takes a point differs from a click that adds a point: the latter is
+      an ordinary click and blocks the tip. An order block (S-0201 Terms) locks the input and hides
+      the cursor: in a skirmish, the block of a game's first ticks (S-0201 claim 14) and a block
+      that the map's trigger actions make, a chrono flash's included (S-0201 claim 11). No other
+      ordinary skirmish situation is known to lock the input or hide the cursor while the pointer is
+      over the battlefield view.
     - **Options menu.** Opening the in-game options menu (S-0213 claim 23) hides a tip that shows
       and stops the wait. While the menu is open, no wait runs and no tip shows. When it closes, the
       tooltip option in force applies again, and nothing shows until the pointer moves and rests
       again: a tip hidden by the menu does not come back.
     - Backing: `measurable` (scenario NT1 for the wait, its restart, the buttons, the held buttons,
       the wheel, the lifetime, game speed, the one choice per rest; NT2 for the option, its settings
-      key, both options menus and the menu's opening; NT8 for a scroll and a held left button).
-      `unmeasured` for a locked input and a hidden cursor: the block of a game's first ticks lasts 4
-      ticks, into which no set-up here can time the end of a 1000 ms real-time wait, and a test
-      map's block would have to be timed against that wait, which no NT part does. `unmeasured` for
-      the pointer outside the window: whether it can leave the window depends on the display mode,
-      which no set-up here fixes. `unmeasured` for a rest over a status message line: a set-up here
-      can produce such a line at a chosen time only by S-0213's route refusals (its scenario O21),
-      whose fixtures this spec does not take over. `unmeasured` for the menu's closing bringing no
-      tip back: closing it takes a press on the menu or a key that S-0213 claim 23 does not give,
-      and a press hides the tip anyway. `unmeasured` for a rest over the sidebar giving no tip and
-      for a movement over the sidebar starting the wait again: the battlefield view does not include
-      the sidebar (glossary), so no run can put an object a tip could be chosen for under a pointer
-      that rests on the sidebar, and a rest there gives no tip with or without the rule, while a
-      movement from the sidebar back onto the view starts the wait anyway. `unmeasured` for a text
-      chosen again not starting the lifetime again: no set-up here changes a showing tip's text at a
-      chosen time (claim 26). `unmeasured` for a block that ends while the pointer still rests: no
-      NT set-up holds the pointer still through a block that ends without a scroll, such as a block
-      of the map's trigger actions or a chrono flash (S-0201 claim 11), and a scroll moves the
-      battlefield under the pointer, so no set-up here keeps a known object under it.
+      key, both options menus and the menu's opening; NT8 for a scroll and a held left button; in
+      the route mode, NT1 (h) runs 1 and 2 for an ordinary left press and a held right button, run 3
+      for a click refused at its release, runs 4 and 5 for presses refused at the press and run 6
+      for a press that takes a point). `unmeasured` for a press in the route mode with no object
+      selected that takes an own point: every NT1 (h) run presses with an object selected.
+      `unmeasured` for a held left button that drags a band box in the route mode: no NT1 (h) run
+      moves the pointer with the left button held by more than S-0214 claim 18's band-box distance
+      and rests with the button held, and run 3's band box only sets up its selection. `unmeasured`
+      for the end of the block at the button's release in the route mode: no NT1 (h) run moves the
+      pointer and rests after the release, and the release itself hides the tip and stops the wait,
+      so a block that stays after the release gives the same record. `unmeasured` for the end of the
+      block after an ordinary left click in the route mode released over a highlighted or refused
+      route point: no NT1 (h) run releases such a click over a point, and that end is an Open
+      question. `unmeasured` for a locked input and a hidden cursor: the block of a game's first
+      ticks lasts 4 ticks, into which no set-up here can time the end of a 1000 ms real-time wait,
+      and a test map's block would have to be timed against that wait, which no NT part does.
+      `unmeasured` for the pointer outside the window: whether it can leave the window depends on
+      the display mode, which no set-up here fixes. `unmeasured` for a rest over a status message
+      line: a set-up here can produce such a line at a chosen time only by S-0213's route refusals
+      (its scenario O21), whose fixtures this spec does not take over. `unmeasured` for the menu's
+      closing bringing no tip back: closing it takes a press on the menu or a key that S-0213 claim
+      23 does not give, and a press hides the tip anyway. `unmeasured` for a rest over the sidebar
+      giving no tip and for a movement over the sidebar starting the wait again: the battlefield
+      view does not include the sidebar (glossary), so no run can put an object a tip could be
+      chosen for under a pointer that rests on the sidebar, and a rest there gives no tip with or
+      without the rule, while a movement from the sidebar back onto the view starts the wait anyway.
+      `unmeasured` for a text chosen again not starting the lifetime again: no set-up here changes a
+      showing tip's text at a chosen time (claim 26). `unmeasured` for a block that ends while the
+      pointer still rests: no NT set-up holds the pointer still through a block that ends without a
+      scroll, such as a block of the map's trigger actions or a chrono flash (S-0201 claim 11), and
+      a scroll moves the battlefield under the pointer, so no set-up here keeps a known object under
+      it. `unmeasured` for a held left button whose press is an ordinary click inside a point's
+      click area in the route mode: that needs a point that is not highlighted though the
+      point-click test passes it, such as another house's, which only that house's own route-mode
+      clicks make, and no NT set-up has a second player giving orders.
     - Confidence: high for the 1000 ms wait, the 10000 ms lifetime, the restart on any movement over
       the battlefield view, the three buttons, the option and game speed not changing the wait or
-      the lifetime. Medium, `measurable`, for the wheel, the moving view, the held buttons, the one
-      choice per rest and the options menu's opening (NT1, NT2 and NT8). Medium, `unmeasured`
-      (Backing), for the hidden cursor, the locked input, a block that ends while the pointer rests,
-      a rest over a message line, the pointer outside the window, a rest over the sidebar giving no
-      tip, the window's edge not being a movement, a movement over the sidebar starting the wait
-      again, the lifetime not starting again and the menu's closing bringing no tip back
+      the lifetime. Medium, `measurable` (NT1, NT2 and NT8), for the wheel, the moving view, the one
+      choice per rest, the options menu's opening and the held buttons, in the route mode too while
+      the button is held. The route-mode cases of the `unmeasured` list below are not part of that
+      medium. Low, `unmeasured` (Backing), for the end of the block after an ordinary left click in
+      the route mode released over a highlighted or refused point (Open questions), which that
+      medium does not cover. Medium, `unmeasured` (Backing), for the hidden cursor, the locked
+      input, a block that ends while the pointer rests, a rest over a message line, the pointer
+      outside the window, a rest over the sidebar giving no tip, the window's edge not being a
+      movement, a movement over the sidebar starting the wait again, the lifetime not starting
+      again, the menu's closing bringing no tip back, a held left button whose press is an ordinary
+      click inside a point's click area in the route mode, a held left button that drags a band box
+      in the route mode, a press in the route mode with no object selected that takes an own point
+      and the end of the block at the button's release in the route mode, apart from the low case
+      above
 
 21. **Name tip: which pointer objects get one.** When the wait ends, the tip's text is:
     - the shroud label (Import mapping) when the pointer cell is not explored by the local
@@ -1661,11 +1699,38 @@ of capture and timer granularity.
   Expected: the tip hides in the frame of the press in the first three runs. In the other three, no
   tip shows with the left or the right button, while it is held or after its release, and with the
   middle button the tip shows 1000 ms after the last movement and hides in the frame of the release.
-  In no run does it show again during the rest. Falsified by a wait or lifetime outside the margin,
-  a tip in (f), a wait that follows the first movement in (b), a tip after a button in (d), a tip
-  1000 ms after the wheel turn in (d), a time that changes with game speed in (e), a tip that stays
-  after the press or the release in (g), or a tip with the left or right button held or no tip with
-  the middle button held in (g).
+  In no run does it show again during the rest. (h) Each run starts a new game, with a second own
+  vehicle W and an own building added to the set-up, and the route-mode key (S-0213 claim 16) is
+  held from before the run's first click until after the last release. Runs 1 and 2 are made as the
+  runs of (g) that press beside the vehicle, with the vehicle selected, so that the pointer moves
+  onto the vehicle with the button held and rests there for 3 s before the release. With the left
+  button that movement is by no more than S-0214 claim 18's band-box distance, so that the release
+  is an ordinary click, and with the right button by less than S-0214 claim 27's drag threshold: run
+  1 with the left button, run 2 with the right. In run 3, W is selected by a click on it and given a
+  point by a click on open ground two cells from the vehicle, on the side away from the place of run
+  1's press, so that that press is outside every point's click area (S-0213 claim 16b), both
+  vehicles are then selected by a band box drawn with the route-mode key still held, and run 1 is
+  repeated, except that after the rest the pointer moves back to the place of the press, on open
+  ground beside the vehicle, rests there for 3 s and the button is released there, so that the click
+  is refused only at its release, for route state (S-0213 claim 16d). In runs 1 to 3 no release is
+  over a route point. Runs 4 to 6 use the left button, and the pointer may move by any distance
+  while it is held, since none of their presses starts a band box or a scroll. In run 4 the building
+  is selected and the press is made on open ground beside the vehicle, so that it is refused for
+  kind (S-0213 claim 16d). In runs 5 and 6, W is first given a point as in run 3. In run 5, with W
+  still selected, the press is made on that point, which the point-click test refuses (S-0213 claim
+  16b). In run 6 the vehicle is selected by a click on it and the press is made on that point, which
+  is highlighted, so that the press takes it (S-0213 claim 16b). In runs 4 to 6 the pointer then
+  moves onto the vehicle and rests for 3 s, and the button is released there. Expected: in runs 1 to
+  3 no tip shows while the button is held, run 3's rest after the move back included, or after its
+  release, and runs 3 to 5 each give their refusal message. In runs 4 to 6 the tip shows 1000 ms
+  after the last movement with the button held and hides in the frame of the release. In no run does
+  it show again during the rest. Falsified in any part by a wait or lifetime outside the margin.
+  Falsified in (b) by a wait that follows the first movement, in (d) by a tip after a button or a
+  tip 1000 ms after the wheel turn, in (e) by a time that changes with game speed, and in (f) by a
+  tip. Falsified in (g) by a tip that stays after the press or the release, a tip with the left or
+  right button held, or no tip with the middle button held. Falsified in (h) by a tip in runs 1 to
+  3, a refusal message missing in runs 3 to 5, no tip with the button held in runs 4 to 6, or a tip
+  that stays after the release in runs 4 to 6.
 - **NT2 (claim 20, option).** As NT1 (a) with the tooltip option turned off in the in-game options
   menu, then turned on again. Expected: no tip during a 15 s rest while off, and the tip of NT1 (a)
   after it is on again. Repeat with the option turned off in the main menu's options menu before the
@@ -1822,12 +1887,12 @@ of capture and timer granularity.
 - The extra-information overlay that some units draw beside the pip scale is not covered, nor is the
   talk bubble that can be shown over one object at a time (it uses its own sprite, drawn at the
   status anchor without shading; what shows it is not traced).
-- Name tip (claim 20): whether a left or right button pressed in the route mode (S-0213 claim 16)
-  and still held blocks the tip after the pointer moves and rests while it is held (the press itself
-  hides the tip and stops the wait, as any press does, so the block matters only for a movement
-  while the button is held), and whether any sequence of skirmish play other than S-0201's order
-  blocks locks the input or hides the cursor. Confidence: low for the route mode, medium for the
-  others.
+- Name tip (claim 20): whether any sequence of skirmish play other than S-0201's order blocks locks
+  the input or hides the cursor, and whether the held-button block ends at the release when a left
+  press in the route mode that was an ordinary click is released over a point that is highlighted or
+  that the point-click test refuses (S-0213 claim 16b): the tip may then stay blocked after the
+  release until a later release of the left or right button over the battlefield view. Confidence:
+  medium for the first, low for the second.
 - Name tip (claim 22): which releases from a building set the technician mark. It is set for a
   survivor of a building in some building state, and when a building puts a unit of the nominal
   type on the map in some other way. Neither condition is identified. Scenario NT9 explores it.
