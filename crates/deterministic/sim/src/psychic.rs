@@ -61,6 +61,8 @@ fn drop_target(w: &mut World, id: ObjectId) {
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
+    // spec: S-0107 r46 claim 11, Changes of target (the drop of the target when a hit makes the unit berserk, S-0302 claim 10 and S-0610 claim 4, ends an infantry unit's attack state and makes its request at the hit; the drop at the berserk state's end, in the unit's own update, is a change too)
+    crate::infantry::watch_test(w, id);
 }
 
 /// A berserk hit takes effect (S-0302 claim 10) on `target` with duration

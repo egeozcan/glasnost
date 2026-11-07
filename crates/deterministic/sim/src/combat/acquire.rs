@@ -309,6 +309,8 @@ pub fn override_attack_on(w: &mut World, actor: ObjectId, target: Target) {
         o.dest = None;
     }
     o.combat.opportunity = false;
+    // spec: S-0107 r46 claim 11, Changes of target (a retaliation at a hit, in the turn of the projectile or actor that delivers it, S-0215 claim 18 and S-0309 claim 18, and any other override's new target: the change ends an infantry unit's attack state and makes its request at once)
+    crate::infantry::watch_test(w, actor);
 }
 
 /// The expected remaining health's per-turn change (S-0309 claim 15, F7).

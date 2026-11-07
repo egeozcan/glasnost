@@ -458,10 +458,10 @@ pub(crate) fn end_attack(w: &mut World, id: ObjectId, ask: bool) {
     }
 }
 
-/// A change of an infantry unit's target (S-0107 r40 claim 11, *End of the
-/// attack state*; S-0215 r118 claim 11, *Other endings*): the attack state
-/// ends, and the unit asks (not forced) for *deployed*, *prone* or
-/// *stand*, whether or not it was in the attack state.
+/// A change of an infantry unit's target (S-0107 r46 claim 11, *Changes of
+/// target*; S-0215 r118 claim 11, *Other endings*): the attack state ends,
+/// and the unit asks (not forced) for *deployed*, *prone* or *stand*,
+/// whether or not it was in the attack state.
 pub(crate) fn target_changed(w: &mut World, id: ObjectId) {
     if !w
         .obj(id)
@@ -469,7 +469,7 @@ pub(crate) fn target_changed(w: &mut World, id: ObjectId) {
     {
         return;
     }
-    // spec: S-0107 r40 claim 11 (a change of target ends the attack state and asks, not forced, for deployed, prone or stand, in or out of the attack state) and S-0215 r118 claim 11 (Other endings)
+    // spec: S-0107 r46 claim 11 (a change of target ends the attack state and asks, not forced, for deployed, prone or stand, in or out of the attack state) and S-0215 r118 claim 11 (Other endings)
     end_attack(w, id, true);
     if let Some(o) = w.obj_mut(id) {
         let t = o.target;
@@ -490,15 +490,27 @@ pub(crate) fn watch_set(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The change-of-target test (S-0107 claim 11): a unit that held a target
-/// at the baseline and now holds another, or none, has had its target
-/// changed ([`target_changed`]). A unit that held none and gains one has
-/// not (Q-2616 interim). The baseline becomes the target it holds now.
+/// The change-of-target test (S-0107 r46 claim 11, *Changes of target*): a
+/// unit whose target differs from the baseline (another target, none, or
+/// one gained when it had none) has had its target changed
+/// ([`target_changed`]). The baseline becomes the target it holds now.
+///
+/// The rules that change an infantry unit's target call it right after
+/// the change, so the ending and the request come at the moment the change
+/// is made, in whichever actor's turn: an order, a retaliation or other
+/// override (`acquire::override_attack_on`), a berserk hit's drop
+/// (`psychic`), a guard reset (`econ::power::guard_reset`, a takeover's
+/// included), a release, a revert that puts the earlier target back, an
+/// open-topped transport's clear, and the unit's own turn at its places in
+/// `tick::object_turn`. The target's leaving play calls [`target_changed`]
+/// itself (`held::holders_drop`). Our engine also tests at the start of the
+/// unit's turn, before any start of its update, for a rule that writes a
+/// target without calling it.
 pub(crate) fn watch_test(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let Some(s) = o.infantry.as_ref() else { return };
-    // spec: S-0107 r40 claim 11 (its target changes, to another target or to none) and Q-2616 interim (gaining a target from none is no change)
-    let changed = s.watch.is_some() && s.watch != o.target;
+    // spec: S-0107 r46 claim 11, Changes of target (a target that differs from the one held, the loss of the target, and the gaining of a target by a unit that had none)
+    let changed = s.watch != o.target;
     if changed {
         target_changed(w, id);
     } else {

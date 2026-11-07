@@ -239,8 +239,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     // spec: S-0107 r40 claim 11 (a tick that begins with a current sequence whose stage delay is 0: read at the start of the unit's turn)
     let frozen = on_foot && infantry::begins_frozen(w, id);
     if on_foot {
-        // The baseline of the change-of-target tests of this turn (S-0107 claim 11).
-        infantry::watch_set(w, id);
+        // spec: S-0107 r46 claim 11, Changes of target (every change, by whatever rule and in whichever actor's turn, ends the attack state, so no start of the unit after it sees the state): our engine's test for a change made since its last test by a rule that does not call `infantry::watch_test` itself, before any start of this update; it also sets the baseline of this turn's tests
+        infantry::watch_test(w, id);
     }
     // spec: S-0309 claim 27 (DECIDED: a held object a revert gave back that is off the map, or destroyed and still in play, is dropped at the start of the holder's next turn; no draw); S-0513 r89 claim 39a (The firer: an infantry or vehicle firer whose beam is attached to a departed member keeps it) and r91 claim 39a (Q-2376 answered: so do a building firer and an infantry or vehicle firer beyond range of the old position); an aircraft firer: the aircraft specs', kept meanwhile as our own rule
     crate::combat::held::turn_start_drop(w, id);

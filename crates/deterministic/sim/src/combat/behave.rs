@@ -188,9 +188,9 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
     let tick = w.tick;
     let Some(s) = o.infantry.clone() else { return };
     // The stage-delay-0 ending runs before the late start (`tick`,
-    // `infantry::stage_delay_zero_end`), and a change of target by an order,
-    // the target's leaving or the unit's own turn at once
-    // (`infantry::target_changed`), so the firing turn sees them ended.
+    // `infantry::stage_delay_zero_end`), and every change of target at
+    // once (`infantry::watch_test`, S-0107 r46 claim 11, *Changes of
+    // target*), so the firing turn sees them ended.
     let end_attack = |w: &mut World, ask: bool| crate::infantry::end_attack(w, id, ask);
     // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
     let Some(t) = crate::combat::held::firing_target(w, &o) else {
@@ -200,10 +200,6 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
         }
         return;
     };
-    if s.attack && o.combat.last_shot_target != Some(t) {
-        // spec: S-0107 claim 11 (the attack state ends when its target changes) and Q-2616 interim (a change by a route that S-0215 claim 11 does not place, such as a retaliation in another actor's turn, ends the state here, with no request)
-        end_attack(w, false);
-    }
     let attack = w
         .obj(id)
         .and_then(|o| o.infantry.as_ref())
@@ -226,6 +222,8 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
                     crate::spawn::clear_own_target(ob);
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 }
+                // spec: S-0107 r46 claim 11, Changes of target (a drop in the unit's own firing step ends the state and makes the request at once)
+                crate::infantry::watch_test(w, id);
             }
         }
         if answer != Answer::CanFire {

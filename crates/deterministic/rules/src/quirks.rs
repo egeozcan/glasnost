@@ -73,8 +73,8 @@ pub struct Quirks {
     // spec: S-0203 claims 10 and 11
     #[serde(default = "on")]
     pub update_order_removal_skip: bool,
-    /// A defeat or surrender sweep offers its hit to the house's vehicles removed earlier in the same tick with no health, which repeat their death effects; off: no hit to any such object.
-    // spec: S-0203 claim 13 (c) and Edge cases
+    /// A defeat or surrender sweep offers its hit to the house's leftover vehicles, whatever removed them: one with no health repeats its death effects, one with health left is destroyed once more, and a vessel set sinking again whose type cannot crash is kept to the end of the game; off: no hit to any leftover, none kept.
+    // spec: S-0203 claim 13 (c), (f), (g) and Edge cases
     #[serde(default = "on")]
     pub defeat_sweep_leftovers: bool,
     /// Distances use the table square root; off: the exact integer square root.

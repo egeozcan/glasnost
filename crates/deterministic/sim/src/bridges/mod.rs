@@ -369,6 +369,8 @@ fn drop_cell_targets(w: &mut World, c: CellXY) {
             // spec: S-0511 claim 22 (an aircraft in attack restarts the attack-run substate when its target is lost, keeping the behaviour)
             crate::air::restart_run(w, id);
         }
+        // spec: S-0107 r46 claim 11, Changes of target (the loss of a bridge cell target, or the earlier target put back when the override ends, S-0215 claim 10, ends an infantry unit's attack state and makes its request at once)
+        crate::infantry::watch_test(w, id);
         if let Some(before) = restored {
             // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
             crate::infantry::destination_assigned(w, id, before);

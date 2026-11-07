@@ -632,3 +632,24 @@ position). Each is built as the spec states it.
 | A damaged entry in cases ii to iv, entries beyond the header's counts: the entries read whole are kept, with a warning | S-0015 claim 9 (departure for bad data) | no switch (the spec's) | `csf::StringFile::read` |
 | An entry label of 32 bytes or more matches no lookup, with a warning | S-0015 claim 5 | no switch (the spec's) | `strings::StringTable::new` |
 | The name tip's box flips at the pointer row the original does not; wraps at W − 8; forgets spaces at a line break; no break at a leading space; places each text by its own size | S-0111 Edge cases (display-only, no switch) | no switch (the spec's) | `name_tip::{place, lines}` |
+
+## Intake 107 (S-0203 r53, S-0107 r46): the leftover sweep switch judged again
+
+Ledger: [intake107.md](intake107.md). S-0107 r40 to r46 adds, renames and rewrites no quirk. S-0203
+r50 to r53 adds no switch but rewrites the Edge case of `quirks.defeat_sweep_leftovers` (default
+on, the original's position, unchanged): on, the sweep offers its hit to every leftover vehicle of
+the house, whatever removed it, an earlier sweep of the same house update or a death effect
+earlier in the same sweep included (claim 13 (f)); one with health left is destroyed once more
+(claim 13 (g)); a vessel that the hit sets sinking again and whose type cannot crash is kept, out
+of play, to the end of the game with its place in later sweeps. Off: no leftover takes a hit and
+none is set sinking again. In both positions every leftover holds its place (claim 13 (h)).
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `defeat_sweep_leftovers` | S-0203 claim 13 (c), (f), (g), (h), Edge cases (r53, Q-2691 to Q-2693) | rejected (not in the layer), unchanged | Condition 1 holds: the Edge case states the off position, built in `leftover::sweep_hit`. Condition 2 still fails: on, a swept house's vehicles that left play in the tick show their death effects once more, a vessel whose descent ended is destroyed once more and kept out of play, and a surrender's second sweep repeats them again. The spec states all of this as the original's behaviour, not as a unit stuck, a give-up or a visible glitch; the kept vessel is off the map and out of play, so nothing of it shows; no play note or request names it. Condition 3 fails too: the off position withholds second and third death weapons and crates and a second registered loss, a combat and score change. Tests, both positions: `claims_s0203_r50::o18_a_the_last_vehicle_destroyed_in_the_turn_pass`, `claims_s0203_r53::o18_f_a_death_weapon_destroys_a_later_place`, `o18_g_two_sweeps_in_a_surrender`, `o18_j_switch_off_keeps_no_vessel`; claim 13 (h) in both positions: `claims_s0414::claim_15_cancellation_skip_falls_on_a_leftover`. |
+
+The layer's switches and the own pathing improvements are not touched. Of the files this intake
+changes, only `tick.rs` (`absorber_stale_contact_kept`) and `orders.rs` (`group_spread_no_detour`,
+`rally_point_shared`) read a switch of the layer, and in both only the change-of-target test of
+S-0107 r46 moves (a `watch_test` in place of a `watch_set`), away from the code those switches
+guard. Intake 107 leaves the layer file unchanged.

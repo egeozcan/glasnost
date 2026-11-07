@@ -876,6 +876,59 @@ fn claim_15_cancellation_skip() {
     assert!(!alive(&w, i1) && !alive(&w, i2), "switch off: no skip");
 }
 
+/// V11 part d with both items and, with `leftover`, an infantry unit X of
+/// Alpha's made between the new factory and the two infantry and removed
+/// in the same tick as the surrender's destruction, which then runs at
+/// once (the house update of that tick). Returns the world and the
+/// infantry.
+fn cancellation_with_leftover(sweep_on: bool, leftover: bool) -> (World, ObjectId, ObjectId) {
+    let mut s = production_scene();
+    s.ruleset.globals.quirks.defeat_cancellation_skip = true;
+    s.ruleset.globals.quirks.defeat_sweep_leftovers = sweep_on;
+    let mut w = production_world(&s);
+    let y1 = spawn(&mut w, Kind::Building, "YARD", 0, 4, 4);
+    for name in ["SHED", "TOWER"] {
+        let t = type_ref(&w, Kind::Building, name);
+        glasnost_sim::econ::production::build(&mut w, A, t);
+        assert!(item_of(&w, t).is_some());
+        glasnost_sim::econ::production::hold(&mut w, A, t);
+    }
+    spawn(&mut w, Kind::Building, "YARD", 0, 8, 8);
+    kill(&mut w, y1);
+    let x = leftover.then(|| spawn(&mut w, Kind::Infantry, "GI", 0, 12, 0));
+    let i1 = spawn(&mut w, Kind::Infantry, "GI", 0, 12, 4);
+    let i2 = spawn(&mut w, Kind::Infantry, "GI", 0, 12, 8);
+    if let Some(x) = x {
+        kill(&mut w, x);
+        assert!(
+            glasnost_sim::leftover::object(&w, x).is_some(),
+            "a leftover"
+        );
+    }
+    victory::surrender(&mut w, A);
+    victory::house_update(&mut w, A);
+    (w, i1, i2)
+}
+
+// spec: S-0203 claim 13 (h) (Q-2693: every leftover of the four kinds holds its place in claim 15's creation order, whether or not the sweep offers it the hit, so the cancellation skip can fall on a leftover's place and then costs no object in play its hit; our engine keeps the places in both positions of quirks.defeat_sweep_leftovers); S-0414 claim 15
+#[test]
+fn claim_15_cancellation_skip_falls_on_a_leftover() {
+    let alive = |w: &World, id: ObjectId| w.obj(id).is_some_and(|o| o.health > 0);
+    let (w, i1, i2) = cancellation_with_leftover(true, false);
+    assert!(
+        alive(&w, i1),
+        "control: the skip falls on the first infantry"
+    );
+    assert!(!alive(&w, i2));
+    for on in [true, false] {
+        let (w, i1, i2) = cancellation_with_leftover(on, true);
+        assert!(
+            !alive(&w, i1) && !alive(&w, i2),
+            "the skip falls on the leftover's place (switch {on})"
+        );
+    }
+}
+
 // spec: S-0414 claim 16 (power does not see the update's surrender destruction until the next house update; the tech-tree recheck sees it in the same update)
 #[test]
 fn claim_16_house_update_consequences() {

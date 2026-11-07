@@ -170,9 +170,9 @@ pub enum Effect {
         health: (i32, i32),
     },
     /// A defeat or surrender sweep's hit on a leftover (S-0203 claim 13
-    /// (c)): no attacker, no health taken, no destruction registered. No
-    /// presentation reads it (no spec gives it a sound); the arena's M-0021
-    /// recorder does.
+    /// (c) and (g)): no attacker; of no amount on a leftover with no
+    /// health, a killing hit on one with health left. No presentation reads
+    /// it (no spec gives it a sound); the arena's M-0021 recorder does.
     LeftoverHit {
         /// The leftover.
         id: ObjectId,
@@ -182,8 +182,10 @@ pub enum Effect {
         pos: Pos,
         /// The hit's warhead.
         warhead: Option<crate::combat::data::WarheadId>,
-        /// Its health, before the hit and after it (the same).
-        health: i32,
+        /// Its health before the hit and after it: the same for a hit of no
+        /// amount; 0 after a killing hit, or 1 when the hit set it sinking
+        /// again (S-0312 claim 10).
+        health: (i32, i32),
     },
     /// A gas particle hit an object (S-0613 claim 13); the hit itself is
     /// ordinary damage, reported as for any other.

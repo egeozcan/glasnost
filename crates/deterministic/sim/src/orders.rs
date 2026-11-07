@@ -311,11 +311,12 @@ pub fn apply_pending(w: &mut World) {
             crate::routes::order_ends(w, o);
             let actor = o.actor();
             if let Some(a) = actor {
-                crate::infantry::watch_set(w, a);
+                // spec: S-0107 r46 claim 11, Changes of target (a change made earlier by a rule that does not test it is settled first, so the order's own change is told apart)
+                crate::infantry::watch_test(w, a);
             }
             apply_other(w, HouseId(hi as u8), unrouted(o));
             if let Some(a) = actor {
-                // spec: S-0215 r118 claim 11 (Other endings: a change of an infantry unit's target by an order ends its attack state when the order takes effect, so no start after it sees the state) and S-0107 r40 claim 11 (the change asks for deployed, prone or stand)
+                // spec: S-0215 r118 claim 11 (Other endings: a change of an infantry unit's target by an order ends its attack state when the order takes effect, so no start after it sees the state) and S-0107 r46 claim 11, Changes of target (an order when it takes effect; the change asks for deployed, prone or stand)
                 crate::infantry::watch_test(w, a);
             }
             // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike when the change applies, in the tick of the order)
@@ -330,11 +331,12 @@ pub fn apply_pending(w: &mut World) {
             crate::routes::order_ends(w, m);
             let actor = o.actor();
             if let Some(a) = actor {
-                crate::infantry::watch_set(w, a);
+                // spec: S-0107 r46 claim 11, Changes of target (an earlier change settled first)
+                crate::infantry::watch_test(w, a);
             }
             apply_behaviour(w, o, d);
             if let Some(a) = actor {
-                // spec: S-0215 r118 claim 11 (Other endings: a change of target by an order, at once) and S-0107 r40 claim 11 (its request)
+                // spec: S-0215 r118 claim 11 (Other endings: a change of target by an order, at once) and S-0107 r46 claim 11, Changes of target (its request)
                 crate::infantry::watch_test(w, a);
             }
             // spec: S-0519 claim 19 (revision 3: cancellation when the change applies)
