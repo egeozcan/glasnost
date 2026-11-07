@@ -239,6 +239,53 @@ fn the_keep_condition() {
     assert!(!glasnost_sim::walk::keeps_stored_path(&w, id), "switch off");
 }
 
+// spec: S-0208 claim 6 (r52: a walker held by a tether link keeps its link at the order, S-0213 table T3 (b), so it drops its path, unless the link is with a building of the unloading kind, which the order breaks off too); S-0213 table T3 (b), (d) and (f) in that order. The tether is a factory release's (S-0417 claim 10), set by hand: no setup here times an order within one
+#[test]
+fn seams6_a_tethered_walker_drops_its_path_unless_the_link_is_an_unloading_kind() {
+    for unloading in [false, true] {
+        let mut s = scene(true);
+        let mut hut = glasnost_rules::sim::BuildingType {
+            strength: Some(300),
+            foundation: Some([1, 1]),
+            ..Default::default()
+        };
+        hut.econ.dock_unload = unloading.then_some(true);
+        s.building("HUT", hut);
+        s.place_infantry(0, "TESTMAN", cell(0, 0), 0);
+        s.place_unit(0, "VAN", cell(8, 0), 0);
+        s.place_structure(0, "HUT", cell(-3, 3));
+        let mut w = s.build();
+        open_orders(&mut w);
+        let id = common::objects_of(&w, Kind::Infantry)[0];
+        let v = common::objects_of(&w, Kind::Vehicle)[0];
+        let k = common::objects_of(&w, Kind::Building)[0];
+        order_enter(&mut w, id, v);
+        orders::apply_pending(&mut w);
+        until_mid_step(&mut w, id, cell(1, 0));
+        assert_eq!(w.obj(id).unwrap().beh.current, Some(Behaviour::Enter));
+        assert!(!steps(&w, id).is_empty(), "a stored path");
+        let o = w.obj_mut(id).unwrap();
+        o.econ.exit = Some(glasnost_sim::econ::release::Exit {
+            factory: k,
+            tethered: true,
+            place: 0,
+        });
+        o.contact = Some(k);
+        assert!(glasnost_sim::econ::tethered(&w, id));
+        order_move(&mut w, id, cell(0, 3));
+        orders::apply_pending(&mut w);
+        let o = w.obj(id).unwrap();
+        assert_eq!(o.dest, Some(Target::Cell(cell(0, 3))));
+        if unloading {
+            assert_eq!(o.contact, None, "the order breaks off the unloading link");
+            assert!(!o.path.steps.is_empty(), "so it keeps its path");
+        } else {
+            assert_eq!(o.contact, Some(k), "the tether link is kept");
+            assert!(o.path.steps.is_empty(), "so it drops its path");
+        }
+    }
+}
+
 /// A fraidycat soldier whose *enter* has the scatter property, so it
 /// accepts a request that is not forced while it walks into the VAN
 /// (S-0208 claim 11, third case); stopped at its first standing position,

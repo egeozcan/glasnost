@@ -269,6 +269,56 @@ fn o18_g_two_sweeps_in_a_surrender() {
     }
 }
 
+// spec: S-0203 claim 13 (f) (Q-2691: a vehicle of the house removed earlier in the same tick is reached by both sweeps of a surrender's house update, so its death effects come three times in all; the spec leaves it `unmeasured`, following from O18 parts a and g together) and (a) (it stays a leftover to the end of its tick); quirks.defeat_sweep_leftovers off: once, at its own death (seam sweep 6, intake 107's row)
+#[test]
+fn o18_a_and_g_a_vehicle_removed_earlier_in_the_tick_has_three_sets_of_effects() {
+    for on in [true, false] {
+        let (mut w, (v0, v1, v2)) = world_with(on, |w| {
+            (
+                spawn(w, Kind::Vehicle, "UNARMED", 1, at(0, 0)),
+                spawn(w, Kind::Vehicle, "UNARMED", 1, at(6, 0)),
+                spawn(w, Kind::Vehicle, "UNARMED", 1, at(-6, 8)),
+            )
+        });
+        let crates = w.crates.places.len();
+        let tick = w.tick;
+        // V0 is destroyed by an ordinary hit earlier in the tick; V1 and V2
+        // still count for B.
+        damage::apply(&mut w, v0, lethal());
+        assert!(w.obj(v0).is_none(), "set-up: V0 has left play");
+        assert!(leftover::object(&w, v0).is_some(), "set-up: a leftover");
+        assert_eq!(w.crates.places.len(), crates + 1, "set-up: V0's own crate");
+        assert!(!victory::defeated(&w, B), "B's other vehicles count for it");
+        victory::surrender(&mut w, B);
+        victory::house_update(&mut w, B);
+        assert_eq!(w.tick, tick, "all in one tick");
+        assert!(victory::defeated(&w, B));
+        if on {
+            assert_eq!(
+                leftover_hits(&w, v0),
+                vec![(c4(&w), (0, 0)), (c4(&w), (0, 0))],
+                "both sweeps reach V0"
+            );
+            assert_eq!(leftover_hits(&w, v1), vec![(c4(&w), (0, 0))]);
+            assert_eq!(leftover_hits(&w, v2), vec![(c4(&w), (0, 0))]);
+            // V0: its death and two sweeps; V1 and V2: their destroying hit
+            // and the second sweep. Each death asks for a crate near its
+            // cell; spec: S-0520 claim 3 (the cell the nearby search selects
+            // must hold no overlay), so V0's third, near two crates already
+            // there, may be refused.
+            let n = w.crates.places.len() - crates;
+            assert!(
+                (6..=7).contains(&n),
+                "crates {n}: {:?}",
+                w.crates.places.values().map(|p| p.cell).collect::<Vec<_>>()
+            );
+        } else {
+            assert!(leftover_hits(&w, v0).is_empty());
+            assert_eq!(w.crates.places.len(), crates + 1 + 1 + 1);
+        }
+    }
+}
+
 /// D's vessel W of `name` on open water, destroyed with a lethal hit; with
 /// `descend`, its sinking descent is run until it leaves play.
 fn sunk(w: &mut World, name: &str, descend: bool) -> ObjectId {

@@ -333,6 +333,38 @@ fn claim_7_a_survivor_holds_the_origin_point_in_each_band() {
     }
 }
 
+// spec: S-0501 claim 7 (r146, Q-2676: the hit update's take-off step makes claim 8's requests by band: above the upper threshold the aiming request, lower no aiming request) and claim 8 (above H − ⌊H / 3⌋ the aiming facing is requested to match the current body facing, with no body request) (seam sweep 6: intake 108's row)
+#[test]
+fn seams6_a_survivor_above_the_upper_threshold_makes_the_aiming_request() {
+    use glasnost_sim::turning::Turning;
+    let r = rules(true, OFF_PAD);
+    let heights = band_heights(&r);
+    for (want, dz) in heights.into_iter().enumerate() {
+        let (mut w, _, a) = refused(&r, "BOUND", dz, Behaviour::Sleep);
+        let t = w.tick;
+        let body = w.obj(a).unwrap().body.value(t);
+        let away = body.wrapping_add(16384);
+        let o = w.obj_mut(a).unwrap();
+        o.body = Turning::at(body);
+        o.turret = Turning::at(away);
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        let s = st(&w, a);
+        assert!(s.origin, "the hit's survivor: {}", describe(&w, a));
+        let b = band(air::height(&w, a), cruise(&w, a));
+        assert_eq!(b as usize, want);
+        if b == 2 {
+            assert_eq!(
+                o.turret.target, o.body.target,
+                "the aiming facing is asked to match the body"
+            );
+            assert_eq!(o.body.target, body, "no body request");
+        } else {
+            assert_eq!(o.turret.target, away, "no aiming request in band {b}");
+        }
+    }
+}
+
 // spec: S-0501 claim 7 (r146, Q-2676: the origin point lasts until the survivor is given a destination by an order, which is handed to its flight as any destination is, claim 8) and claim 6 (r146: it is still moving, so a stop order, being given no destination, gives it claim 6's new flight point: the centre of the cell claim 40's selection gives, its own point)
 #[test]
 fn claim_7_an_order_ends_the_origin_point() {

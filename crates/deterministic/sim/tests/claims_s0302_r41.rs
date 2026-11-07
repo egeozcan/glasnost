@@ -112,6 +112,61 @@ fn claim_10_a_berserk_hit_makes_a_no_threat_infantry_unit_fall_back() {
     );
 }
 
+// spec: S-0302 claim 12 (r41: a berserk hit has none of the reactions below, whatever it reports, claim 10, so a target whose type can disguise itself but not permanently keeps its disguise and takes no disruption countdown; an ordinary hit that reports unchanged loses it) and claim 10 (r41: no disguise loss) (seam sweep 6: intake 100's row)
+#[test]
+fn seams6_a_berserk_hit_keeps_the_disguise() {
+    use glasnost_sim::cloak::{Disguise, DisguiseAs};
+    let mut r = rules();
+    let mut disg = r.sim.infantry["WALKER"].clone();
+    disg.combat.can_disguise = Some(true);
+    r.sim.infantry.insert("DISG".into(), disg);
+    r.registries
+        .get_mut("infantry")
+        .unwrap()
+        .push("DISG".into());
+    for berserk in [true, false] {
+        let mut w = testkit::game_with(&r, SIZE, 3);
+        let s = spawn(&mut w, Kind::Infantry, "DISG", 1, mid(SIZE, 0, 0), 0);
+        let a = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, -3, 0), 64);
+        let walker = w.rules().index_of(Kind::Infantry, "WALKER").unwrap();
+        let t = w.tick;
+        let o = w.obj_mut(s).unwrap();
+        o.cloak.disguise = Some(Disguise {
+            what: Some(DisguiseAs::Infantry(walker)),
+            house: Some(HouseId(0)),
+            since: t,
+        });
+        o.cloak.lockout_until = 0;
+        let h = if berserk {
+            berserk_hit(&w, Some(a), Some(HouseId(0)))
+        } else {
+            let sa = w
+                .rules()
+                .combat
+                .warheads
+                .iter()
+                .position(|x| x.name == "SA")
+                .expect("the combat ruleset's SA") as u32;
+            Hit {
+                amount: 4,
+                warhead: Some(sa),
+                ..berserk_hit(&w, Some(a), Some(HouseId(0)))
+            }
+        };
+        let res = damage::apply(&mut w, s, h);
+        assert_eq!(res, HitResult::Unchanged, "berserk {berserk}");
+        let o = w.obj(s).unwrap();
+        if berserk {
+            assert!(o.combat.berserk.is_some(), "set-up: the hit made it berserk");
+            assert!(o.cloak.disguise.is_some(), "the disguise is kept");
+            assert_eq!(o.cloak.lockout_until, 0, "no disruption countdown");
+        } else {
+            assert!(o.cloak.disguise.is_none(), "control: an ordinary hit loses it");
+            assert!(o.cloak.lockout_until > t, "control: the countdown");
+        }
+    }
+}
+
 // spec: S-0302 claim 10 (r41: each reaction that needs a known attacker needs one here too)
 #[test]
 fn claim_10_no_fall_back_without_a_known_attacker() {

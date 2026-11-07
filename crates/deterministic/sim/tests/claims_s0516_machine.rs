@@ -473,6 +473,59 @@ fn claim_14_targets_when_cloaking() {
     );
 }
 
+// spec: S-0516 claim 14 (the start of a cloak: a non-sensing foe drops the target); S-0215 claim 10 (an override's end puts the earlier target back); S-0107 r46 claim 11, Changes of target (the cloak drop's loss of the target, or the earlier target put back, ends an infantry holder's attack state and makes its request, not forced, for stand, at once) (seam sweep 6: intake 107's reverts row)
+#[test]
+fn seams6_a_cloak_drop_or_revert_ends_an_infantry_holders_attack_state() {
+    use glasnost_sim::infantry::Seq;
+    use glasnost_sim::rules::Behaviour;
+    let mut r = ruleset();
+    let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+    for k in ["stand", "fire_standing"] {
+        walker.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: 6,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    for revert in [false, true] {
+        let mut w = game(&r);
+        let s = spawn(&mut w, "SHADE", BETA, 0, 0);
+        let man = spawn(&mut w, "WALKER", ALPHA, -6, 0);
+        let earlier = spawn(&mut w, "PLAIN", BETA, 9, 0);
+        let t = w.tick;
+        let o = w.obj_mut(man).unwrap();
+        o.target = Some(Target::Object(s));
+        o.beh.current = Some(Behaviour::Attack);
+        o.beh.queued = None;
+        if revert {
+            o.beh.suspended = Some(Behaviour::Guard);
+            o.beh.aside = Some((Some(Target::Object(earlier)), None));
+        }
+        let st = o.infantry.as_mut().unwrap();
+        st.watch = Some(Target::Object(s));
+        st.attack = true;
+        st.seq = Some(Seq::FireStanding);
+        st.seq_delay = 3;
+        st.seq_t0 = t;
+        run(&mut w, 1);
+        assert_eq!(state(&w, s), CloakState::Cloaking);
+        let o = w.obj(man).unwrap();
+        let st = o.infantry.as_ref().unwrap();
+        if revert {
+            assert_eq!(o.target, Some(Target::Object(earlier)), "put back");
+            assert_eq!(o.beh.current, Some(Behaviour::Guard), "the suspended one");
+        } else {
+            assert_eq!(o.target, None, "dropped");
+        }
+        assert!(!st.attack, "the attack state ends (revert {revert})");
+        assert_eq!(st.seq, Some(Seq::Stand), "its request for stand");
+    }
+}
+
 // spec: S-0516 claim 15 (the cloak sound at a self-start and at an uncloak cause; none for a repeated cause while uncloaking)
 #[test]
 fn claim_15_cloak_sound() {

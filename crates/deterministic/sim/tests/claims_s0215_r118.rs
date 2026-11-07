@@ -553,6 +553,63 @@ fn m8_d_an_attack_order_on_another_target_after_the_shot() {
     );
 }
 
+// spec: S-0215 r118 claim 11 (the attack-move rule of S-0309 claim 23 discards a target where its search finds no other, and puts a remembered target back, without the change-of-target ending: the attack state lasts); S-0309 claim 23 (a) (a destination memory, engaged, the target out of reach: run as for an object with no target; a target memory out of reach: nothing found, the memory's target again) (seam sweep 6: intake 99's row)
+#[test]
+fn seams6_the_attack_move_discard_and_put_back_are_no_change() {
+    let r = c1_rules();
+    for memory_is_target in [false, true] {
+        let mut w = testkit::game_with(&r, N, 7);
+        let a = testkit::spawn(
+            &mut w,
+            Kind::Infantry,
+            "WALKER",
+            0,
+            testkit::mid(N, -8, 0),
+            EAST,
+        );
+        while w.tick <= w.orders_blocked_through {
+            testkit::run(&mut w, 1);
+        }
+        // Fourteen cells east: out of the range of 10, and the only enemy.
+        let far = testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "BUGGY",
+            1,
+            testkit::mid(N, 6, 0),
+            WEST,
+        );
+        let t = w.tick;
+        let o = w.obj_mut(a).unwrap();
+        o.target = Some(Target::Object(far));
+        o.beh.current = Some(Behaviour::Attack);
+        o.beh.queued = None;
+        o.targeting_timer = t;
+        o.attack_move = Some(if memory_is_target {
+            glasnost_sim::world::AttackMoveMemory::Target(Target::Object(far))
+        } else {
+            glasnost_sim::world::AttackMoveMemory::Dest(Target::Cell(testkit::mid(N, 6, 2)))
+        });
+        o.combat.engaged = true;
+        let st = o.infantry.as_mut().unwrap();
+        st.watch = Some(Target::Object(far));
+        st.attack = true;
+        st.seq = Some(Seq::FireStanding);
+        st.seq_t0 = t;
+        glasnost_sim::combat::acquire::per_tick(&mut w, a);
+        let o = w.obj(a).unwrap();
+        let st = o.infantry.as_ref().unwrap();
+        if memory_is_target {
+            assert_eq!(o.target, Some(Target::Object(far)), "put back");
+        } else {
+            assert_eq!(o.target, None, "discarded, no other found");
+        }
+        assert_eq!(st.watch, o.target, "the baseline follows the rule's write");
+        assert!(st.attack, "no change of target: the attack state lasts");
+        assert_eq!(st.seq, Some(Seq::FireStanding), "no request");
+    }
+}
+
 // spec: S-0215 r118 claim 11 (Infantry is ready unless it is in the middle of firing, S-0107 claim 11's attack state and nothing else: the rearm countdown and a firing kind still playing do not hold readiness back by themselves)
 #[test]
 fn claim_11_readiness_is_the_attack_state() {

@@ -1185,6 +1185,199 @@ fn claim_9_the_attack_state_with_no_target_keeps_guard_queued() {
 }
 
 // ---------------------------------------------------------------------------
+// Seam sweep 6: the request a change of target makes (S-0107 r46 claim 11,
+// S-0215 r118 claim 11, S-0601 r23 claim 9), through the takeover, the
+// release, an open-topped transport's clear and hand-down, and the target
+// leaving play. The testkit WALKER has no sequence entries, so every
+// request it makes is turned down (S-0107 claim 6 row 1); here it is given
+// entries for the kinds asked for and the kinds it stands in, so a request
+// that is made shows as its current kind.
+
+/// The stance an attacking WALKER is put in, and the kind the change of
+/// target asks for from it.
+#[derive(Clone, Copy, Debug)]
+enum Stance {
+    Standing,
+    Prone,
+    Deployed,
+}
+
+impl Stance {
+    /// The kind it fires in, and the kind the request asks for.
+    fn kinds(self) -> (Seq, Seq) {
+        match self {
+            Stance::Standing => (Seq::FireStanding, Seq::Stand),
+            Stance::Prone => (Seq::FireProne, Seq::Prone),
+            Stance::Deployed => (Seq::DeployedFire, Seq::Deployed),
+        }
+    }
+}
+
+const STANCES: [Stance; 3] = [Stance::Standing, Stance::Prone, Stance::Deployed];
+
+/// [`game`] with the WALKER given sequence entries for every kind used here.
+fn seq_game() -> World {
+    let mut r = rules();
+    let walker = r.sim.infantry.get_mut("WALKER").unwrap();
+    for k in [
+        "stand",
+        "prone",
+        "deployed",
+        "fire_standing",
+        "fire_prone",
+        "deployed_fire",
+        "go_prone",
+        "idle_a",
+    ] {
+        walker.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: 6,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    testkit::game_with(&r, SIZE, 1)
+}
+
+/// Puts `v` in the attack state on `target` in `stance`, with its baseline
+/// on that target and *attack* current, as `claims_s0301::attacking` does
+/// (the firing kind begun, no shot yet).
+fn firing(w: &mut World, v: ObjectId, target: ObjectId, stance: Stance) {
+    let t = w.tick;
+    let o = w.obj_mut(v).unwrap();
+    o.target = Some(Target::Object(target));
+    o.beh.current = Some(Behaviour::Attack);
+    o.beh.queued = None;
+    let s = o.infantry.as_mut().unwrap();
+    s.watch = Some(Target::Object(target));
+    s.attack = true;
+    s.prone = matches!(stance, Stance::Prone);
+    s.seq = Some(stance.kinds().0);
+    s.seq_delay = 3;
+    s.seq_t0 = t;
+}
+
+fn kind_of(w: &World, v: ObjectId) -> Option<Seq> {
+    w.obj(v).and_then(|o| o.infantry.as_ref()).and_then(|s| s.seq)
+}
+
+// spec: S-0601 r23 claim 9 (the clear of an infantry victim's target is a change of target, S-0215 claim 11 and S-0107 claim 11: the attack state ends at the clear with its request, not forced, for stand, prone or deployed, which the readiness read after both clears then sees, so guard is current with nothing queued); S-0107 r46 claim 11 (the release, Changes of target); S-0215 r118 claim 11 (deployed when deploying, prone when prone, stand otherwise) (seam sweep 6: intake 111's and intake 99's rows)
+#[test]
+fn seams6_a_release_asks_for_stand_prone_or_deployed_at_the_clear() {
+    for stance in STANCES {
+        let mut w = seq_game();
+        let c = veh(&mut w, "CTRL3", BETA, -8, 4);
+        let v = put(&mut w, Kind::Infantry, "WALKER", ALPHA, -6, 0);
+        let foe = veh(&mut w, "BOX", ALPHA, -4, 0);
+        assert!(mind::take(&mut w, c, v), "set-up: held");
+        firing(&mut w, v, foe, stance);
+        assert!(!glasnost_sim::process::ready(&w, v), "set-up: held back");
+        mind::release(&mut w, c, v);
+        assert_eq!(owner(&w, v), Some(ALPHA), "{stance:?}");
+        assert_eq!(w.obj(v).unwrap().target, None, "{stance:?}: cleared");
+        assert!(!attack_state(&w, v), "{stance:?}: the state ended");
+        assert_eq!(kind_of(&w, v), Some(stance.kinds().1), "{stance:?}: the request");
+        assert_eq!(
+            slots(&w, v),
+            (Some(Behaviour::Guard), None),
+            "{stance:?}: ready after both clears"
+        );
+    }
+}
+
+// spec: S-0107 r46 claim 11 (the request at a change of target is not forced: a current kind that is not interruptible turns it down, S-0107 claim 6 row 5) and S-0215 claim 11 (that kind then holds the release's guard request back); S-0601 r23 claim 9 (every other readiness condition applies as usual)
+#[test]
+fn seams6_the_release_request_is_not_forced() {
+    let mut w = seq_game();
+    let c = veh(&mut w, "CTRL3", BETA, -8, 4);
+    let v = put(&mut w, Kind::Infantry, "WALKER", ALPHA, -6, 0);
+    let foe = veh(&mut w, "BOX", ALPHA, -4, 0);
+    assert!(mind::take(&mut w, c, v));
+    firing(&mut w, v, foe, Stance::Standing);
+    w.obj_mut(v).unwrap().infantry.as_mut().unwrap().seq = Some(Seq::GoProne);
+    mind::release(&mut w, c, v);
+    assert!(!attack_state(&w, v), "the state ended");
+    assert_eq!(kind_of(&w, v), Some(Seq::GoProne), "the request turned down");
+    assert_eq!(
+        slots(&w, v),
+        (Some(Behaviour::Attack), Some(Behaviour::Guard)),
+        "not ready: guard stays queued"
+    );
+}
+
+// spec: S-0107 r46 claim 11, Changes of target (a takeover's guard reset, S-0601 claim 6 and S-0215 claim 9, clears the target: a change that ends the attack state and asks, not forced, for stand, prone or deployed) (seam sweep 6: intake 107's row, the takeover)
+#[test]
+fn seams6_a_takeover_ends_the_attack_state_and_asks() {
+    for stance in STANCES {
+        let mut w = seq_game();
+        let c = veh(&mut w, "CTRL3", BETA, -8, 4);
+        let v = put(&mut w, Kind::Infantry, "WALKER", ALPHA, -6, 0);
+        let foe = veh(&mut w, "BOX", BETA, -4, 0);
+        firing(&mut w, v, foe, stance);
+        assert!(mind::take(&mut w, c, v), "{stance:?}: taken");
+        let o = w.obj(v).unwrap();
+        assert_eq!(o.target, None, "{stance:?}: cleared");
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "{stance:?}: guard forced");
+        assert!(!attack_state(&w, v), "{stance:?}: the state ended");
+        assert_eq!(kind_of(&w, v), Some(stance.kinds().1), "{stance:?}: the request");
+    }
+}
+
+// spec: S-0107 r46 claim 11, Changes of target (whatever rule makes the change: an open-topped transport's clear of its passengers' targets, S-0507 claim 15, and its hand-down of a new target, S-0213 table T3 (f), each end an infantry passenger's attack state and ask, not forced, for its kind) (seam sweep 6: intake 107's row, the transport clears)
+#[test]
+fn seams6_an_open_topped_transports_clear_and_hand_down_end_the_state() {
+    for stance in STANCES {
+        // The clear.
+        let mut w = seq_game();
+        let cart = veh(&mut w, "CART", ALPHA, 0, 0);
+        let p = put(&mut w, Kind::Infantry, "WALKER", ALPHA, 1, 0);
+        let foe = veh(&mut w, "BOX", BETA, 6, 0);
+        glasnost_sim::transport::board(&mut w, p, cart);
+        assert_eq!(
+            glasnost_sim::transport::passengers(&w, cart),
+            vec![p],
+            "set-up: boarded"
+        );
+        firing(&mut w, p, foe, stance);
+        glasnost_sim::transport::clear_passenger_targets(&mut w, cart);
+        assert_eq!(w.obj(p).unwrap().target, None, "{stance:?}: cleared");
+        assert!(!attack_state(&w, p), "{stance:?}: the clear ended it");
+        assert_eq!(kind_of(&w, p), Some(stance.kinds().1), "{stance:?}: asked");
+        // The hand-down of another target.
+        let other = veh(&mut w, "BOX", BETA, 6, 4);
+        firing(&mut w, p, foe, stance);
+        w.obj_mut(cart).unwrap().target = Some(Target::Object(other));
+        glasnost_sim::transport::hand_down_target(&mut w, cart);
+        assert_eq!(w.obj(p).unwrap().target, Some(Target::Object(other)));
+        assert!(!attack_state(&w, p), "{stance:?}: the hand-down ended it");
+        assert_eq!(kind_of(&w, p), Some(stance.kinds().1), "{stance:?}: asked");
+        // Control: handing down the target it holds is no change.
+        firing(&mut w, p, other, stance);
+        glasnost_sim::transport::hand_down_target(&mut w, cart);
+        assert!(attack_state(&w, p), "{stance:?}: the same target");
+        assert_eq!(kind_of(&w, p), Some(stance.kinds().0));
+    }
+}
+
+// spec: S-0107 r46 claim 11, Changes of target (the loss of the target is a change at the moment it is made, in whichever actor's turn) and S-0215 r118 claim 11 (a change of target by the target's leaving play ends the attack state at once, with the request for deployed, prone or stand) (seam sweep 6: intake 99's rows, the target leaving play and the deployed and prone requests)
+#[test]
+fn seams6_the_target_leaving_play_ends_the_state_at_once() {
+    for stance in STANCES {
+        let mut w = seq_game();
+        let v = put(&mut w, Kind::Infantry, "WALKER", ALPHA, -6, 0);
+        let foe = veh(&mut w, "BOX", BETA, -4, 0);
+        firing(&mut w, v, foe, stance);
+        glasnost_sim::objects::remove(&mut w, foe);
+        assert_eq!(w.obj(v).unwrap().target, None, "{stance:?}: dropped");
+        assert!(!attack_state(&w, v), "{stance:?}: ended at the removal");
+        assert_eq!(kind_of(&w, v), Some(stance.kinds().1), "{stance:?}: asked");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Claim 10: what releases every victim.
 
 /// A Beta controller holding Alpha boxes a, b (in that order).
