@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 52
+revision: 53
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
+approved-on: 2026-11-07
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746]
 supersedes: []
 ---
 
@@ -555,9 +555,15 @@ used by this spec:
    cases). An ordinary behaviour order breaks off the actor's contact, queues the order's
    behaviour and then assigns its destination (S-0213 table T3, parts b, d and f, in that order).
    So:
-   - An enter order (into a transport, or into a building to garrison) given to a walker under
-     another behaviour, such as *move*, keeps its path: *enter* is queued when the destination is
-     assigned.
+   - An enter order (into a transport, for example) given to a walker under another behaviour,
+     such as *move*, keeps its path: *enter* is queued when the destination is assigned.
+   - An order whose behaviour is *capture* is not an enter order for this rule (Q-2746). This covers
+     the order to garrison a building (S-0214 row I8, S-0508 claim 2), and the capture, infiltrate
+     and hijack orders. The walker sent to garrison carries *capture*, current or queued. So a
+     walker under *move* that is ordered to garrison a building drops its path. It
+     finishes the step under way and then heads for the building, as the paragraph above gives for a
+     dropped path. A walker under *capture* that is ordered to a free cell drops its path too, and
+     after the step under way it heads for the new cell, not for the building.
    - Any behaviour order given to a walker under *enter* keeps its path: *enter* is still current
      at the assignment.
    - Both hold for a walker that is not held by a tether link, since the order has broken off its
@@ -587,20 +593,24 @@ used by this spec:
    claim 8), leaves it no path to follow, whatever it keeps.
    - Backing: `measurable` (scenario W17: part f for an enter order to a walker under *move*, part g
      for a move order to a walker under *enter*, part h for an enter order to a walker standing
-     between steps with a stored path). `unmeasured` for the walker held by a tether link and for
-     the scatter to a walker under *enter*. Which exchanges tether a walker under *enter*, and when,
-     belong to S-0507 and S-0213 (Terms), and no setup here times an order within one. A walker
-     under *enter* that follows a path has a destination, so its locomotor is moving, and it accepts
-     a scatter only by claim 11's third case, which no setup here arranges.
+     between steps with a stored path, part j for a garrison order to a walker under *move*, part k
+     for a move order to a walker under *capture*). `unmeasured` for the walker held by a tether
+     link and for the scatter to a walker under *enter*. Which exchanges tether a walker under
+     *enter*, and when, belong to S-0507 and S-0213 (Terms), and no setup here times an order within
+     one. A walker under *enter* that follows a path has a destination, so its locomotor is moving,
+     and it accepts a scatter only by claim 11's third case, which no setup here arranges.
    - Confidence: high for the behaviours read at the assignment and for the condition's not
-     depending on a walking target. Medium for its contact part: every order here breaks off the
-     contact before the assignment, so no scenario here has a walker in contact then, and the
-     scatter to a walker under *enter* is `unmeasured`. Medium for the consequences: the old path
-     followed to its end or to a blocked step, and the cases of the bullets. Medium for the
-     transport's acceptance and its not calling such a walker: S-0507 claim 5 rates its replies
-     high, and that the walker's state meets their conditions here was not traced further. Low for
-     how far the walker ordered away from what it was entering follows the old path, which depends
-     on its processings of *enter* before the order's behaviour becomes current.
+     depending on a walking target. High for a garrison order, and every other order whose behaviour
+     is *capture*, not keeping the path of a walker under *move*, and for its consequences in
+     parts j and k. Medium for its
+     contact part: every order here breaks off the contact before the assignment, so no scenario
+     here has a walker in contact then, and the scatter to a walker under *enter* is `unmeasured`.
+     Medium for the consequences: the old path followed to its end or to a blocked step, and the
+     cases of the bullets. Medium for the transport's acceptance and its not calling such a walker:
+     S-0507 claim 5 rates its replies high, and that the walker's state meets their conditions here
+     was not traced further. Low for how far the walker ordered away from what it was entering
+     follows the old path, which depends on its processings of *enter* before the order's behaviour
+     becomes current.
 
    **Requests sent from an extra locomotion (Q-2702).** The extra locomotion that a scatter gives
    (*Destinations given during a unit's update* above) is a whole locomotion of the walker, the same
@@ -1591,14 +1601,16 @@ position stops on that same tick and does not ask for a next walking target (sce
   beyond the walking target ends exactly on the target instead, and the walker arrives on the next
   tick as under claim 6. Nothing changes for speeds up to 33, which can never end that far beyond.
 - **An *enter* walker keeps its old path** (`quirks.enter_keeps_stored_path`, default: the
-  original). By claim 6, a walker given a new destination keeps its stored path when its current
-  or queued behaviour is *enter* and it is in contact with nothing at that moment (glossary
-  *contact*). So an infantry unit ordered
-  into a transport while it walks elsewhere walks on along its old route, up to the whole stored
-  path, before it turns towards the transport, and one ordered away from a transport walks on
-  towards it first. With the switch off, every new destination drops the stored path, whatever
-  the behaviour, and the walker searches for the new destination as claim 6 gives for a dropped
-  path. Scenario W17, parts f to h, tests the original's behaviour.
+  original). By claim 6, a walker given a new destination keeps its stored path when its current or
+  queued behaviour is *enter* and it is in contact with nothing at that moment (glossary *contact*).
+  So an infantry unit ordered into a transport while it walks elsewhere walks on along its old
+  route, up to the whole stored path, before it turns towards the transport, and one ordered away
+  from a transport walks on towards it first. An order to garrison a building gives *capture*, not
+  *enter*, so it drops the path of a walker under *move* under either setting (claim 6). With
+  the switch off, every new
+  destination drops the stored path, whatever the behaviour, and the walker searches for the new
+  destination as claim 6 gives for a dropped path. Scenario W17, parts f to h, tests the original's
+  behaviour.
 - **A walker of speed 1 can stall** (`quirks.slow_walker_stall`, default: the original). By claim 14,
   a walker of speed 1 whose walking target lies strictly between due map east and due map south of
   it takes steps that leave its position unchanged, so no rule of this spec moves it on. Medium
@@ -2766,7 +2778,7 @@ cases).**
   action or externally supplied order makes that interval inconclusive instead.
 
 **Scenario W17: destinations given during an update, and a new destination during a step
-(claim 6; Q-2657, Q-2701, Q-2702).**
+(claim 6; Q-2657, Q-2701, Q-2702, Q-2746).**
 - *Setup:* M-0023's map and settings, stock data. The recorder reads at the end of each tick, for
   the test unit, its current and queued behaviour, destination and position. Unit *I* is an ordinary
   infantry unit of a human-controlled house, resting in *guard* on open, flat ground with no other
@@ -2814,6 +2826,19 @@ cases).**
   the request of S-0209 claim 8 was sent in tick *T*. The run does not tell whether it was sent from
   *A*'s extra locomotion or from its own locomotion of that tick (claim 6). Falsified if they first
   hold destinations at the end of tick *T* + 1 or later, or not at all.
+- *Garrison order and the stored path (Q-2746):* *I*'s type is one that can garrison (S-0214 row
+  I8), and an empty building *G* of a type that *I* can garrison under S-0508 claim 1, owned by the
+  passive neutral house, stands where part f puts *V*: on the backward extension of part c's line,
+  its nearest foundation cell 2 cells from *I*'s start. The harness gives each garrison order
+  directly as a *capture* order with *G* as destination, as row I8 gives. (j) As (c), the second
+  order a garrison order on *G*. Expected: *I* finishes the step under way, and its next step is
+  back along its line towards *G*, with *capture* queued or current, and it then garrisons *G*.
+  Falsified by a step on along the line away from *G* after the step under way. Part f, run on the
+  same layout with *V* in *G*'s place, is the control: there *I* goes on along its line. (k) As
+  (g), with *G* in *V*'s place and a garrison order in place of the enter order. Expected: its first
+  step after the step under way goes towards the new cell, and the recorded behaviours show *move*
+  becoming current with the new cell as destination. Falsified by a first step after the step under
+  way along its line towards *G*.
 
 ## Open questions
 
