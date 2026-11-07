@@ -1,9 +1,9 @@
 ---
 id: Q-2750
 title: The extra locomotion of a standing walker whose stored path a scatter drops
-status: open
+status: answered
 related: [S-0208, S-0209]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
