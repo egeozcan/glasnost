@@ -3,7 +3,7 @@ id: Q-2748
 title: A rocket missile launched at a destination whose in-the-air answer is true
 status: open
 related: [S-0506, S-0307]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
