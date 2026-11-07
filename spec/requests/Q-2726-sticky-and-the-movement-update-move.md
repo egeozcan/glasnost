@@ -1,9 +1,9 @@
 ---
 id: Q-2726
 title: Does claim 33's move at the movement update also come for an aircraft in sticky
-status: open
+status: answered
 related: [S-0501, S-0215]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
