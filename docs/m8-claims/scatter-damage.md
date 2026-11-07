@@ -27,8 +27,8 @@ and no C7 verdict is owed. Save format 113, AI game format 78. No golden moved.
 3. Retaliation: S-0215 claim 18, S-0309 claims 18 and 25 part h. Its answer:
    - `MayNot`: a condition other than F7's distance rule fails (S-0208 Terms *may retaliate*),
    - `Held`: it may retaliate but does not: F7 holds back a player-house actor that cannot reach
-     the attacker, or the override is refused and keeps its slots, or it is an aircraft (seam
-     below),
+     the attacker, or the override is refused and keeps its slots, or it is an aircraft on the
+     ground at its pad (Q-2792 interim, since the aircraft-retaliation build; seam below),
    - `Done`: the override installed the attacker as target.
 4. The scatter from damage (S-0215 claim 19 for a vehicle or an aircraft, request A of S-0208
    claim 15 for infantry): one forced request with no threat point, not move-anywhere, through
@@ -133,13 +133,10 @@ a threat point, never uses the nearby-cell search and never gives the extra loco
   computer-controlled arena houses' free units in *hunt*. As a result M-0021 part B (*c* ≥ 3, the
   hits a judged shot owns, a reading-points row, one G-dead count), M-0001 LTNK-APOC and LTNK-E1,
   and M-0003 MTNK-APOC now fail. Q-2782 asks which reading is right; the build stands meanwhile.
-- **Aircraft retaliation.** Our engine builds no retaliation for an aircraft (`acquire::retaliate`
-  never overrides one). An aircraft that may retaliate is answered `Held`, so with the
-  player-scatter setting or the scatter ability, and with neither target nor destination, it is
-  sent case 1's request even where the original would retaliate (within its weapon's reach, or
-  within F7's distance, or for a computer-controlled owner). The request then makes it fall back
-  to rest when its current behaviour has the scatter property (S-0501 claim 49). Before this
-  build, `retaliate` did not judge an aircraft at all.
+- **Aircraft retaliation.** Closed by the aircraft-retaliation build
+  ([air-retaliate.md](air-retaliate.md)). An aircraft that may retaliate now overrides to
+  *attack* like any other actor (`Done`), so case 1 no longer reaches it. The one exception is an
+  aircraft on the ground at its pad, which is still answered `Held` (the Q-2792 interim).
 - **A refused override.** `quirks.refused_override_retargets` off makes a refused override change
   nothing, so the actor does not retaliate (`Held`) and case 1 can follow. An override to *attack*
   is refused only for an actor in *selling*, which no mobile actor is, so the case never reaches

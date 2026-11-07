@@ -159,8 +159,8 @@ pub enum Retaliation {
     MayNot,
     /// It may retaliate but does not retaliate against this hit: F7's
     /// distance rule holds it back, the override to *attack* is refused
-    /// and keeps its slots, or it is an aircraft, whose override our
-    /// engine does not build.
+    /// and keeps its slots, or it is an aircraft on the ground at its pad
+    /// (Q-2792, interim).
     Held,
     /// It retaliates: the override installed the attacker as its target.
     Done,
@@ -192,6 +192,13 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
     };
     // spec: S-0309 claim 18 (the type's retaliate flag)
     if !tc.retaliate {
+        return MayNot;
+    }
+    // spec: S-0309 claim 18 (neither a harvesting slave nor a slave master, S-0215 Terms) and Terms (not of a spawner type, whether or not any of its spawned aircraft is launching or alive)
+    if crate::seams::is_harvesting_slave(w, actor)
+        || crate::seams::is_slave_master(w, actor)
+        || crate::spawn::spawn_rules(w, actor).is_some()
+    {
         return MayNot;
     }
     // spec: S-0309 claim 18 and S-0601 claim 2 (not a mind-controlling object at capacity)
@@ -298,11 +305,11 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
     if held {
         return Held;
     }
-    if o.kind == Kind::Aircraft {
-        // Seam (docs/m8-claims/scatter-damage.md): aircraft retaliation belongs to the aircraft
-        // specs and is not built, so an aircraft that may retaliate never does here.
+    // spec: S-0501 claim 28 against S-0215 claim 18 (Q-2792, interim: an aircraft on the ground at its pad is not given the attacker; it may retaliate but does not)
+    if o.kind == Kind::Aircraft && crate::air::on_its_pad(w, actor) {
         return Held;
     }
+    // spec: S-0215 claims 10 and 18 (an aircraft overrides to attack as any other actor; S-0501 T1 and T2 row 1 own its attack run and the restore at the target's loss)
     if override_attack(w, actor, attacker) {
         Done
     } else {

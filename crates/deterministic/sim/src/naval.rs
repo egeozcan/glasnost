@@ -165,11 +165,15 @@ pub fn sinking(w: &World, id: ObjectId) -> bool {
 
 /// Whether a killed vehicle sinks instead of exploding (S-0312 claim 10):
 /// a naval type that is not underwater and not organic, whose weight is at
-/// least the game-wide sinking weight, on a water cell. A type without a
-/// weight has weight 1.0 (S-0504 claim 11).
+/// least the game-wide sinking weight, on a water cell, that does not carry
+/// the bomb mark. A type without a weight has weight 1.0 (S-0504 claim 11).
 pub fn sinks_at_kill(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.kind != Kind::Vehicle {
+        return false;
+    }
+    // spec: S-0312 claim 10 (a vessel that carries the bomb mark, Terms, does not sink)
+    if crate::transport::bomb_marked(w, id) {
         return false;
     }
     let Some(tc) = crate::combat::veterancy::type_combat(w, id) else {

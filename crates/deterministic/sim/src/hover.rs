@@ -1470,8 +1470,9 @@ pub fn bomb_mark(w: &World, id: ObjectId) -> bool {
 }
 
 /// The fall of a vehicle given the bomb mark (S-0503 claim 11): it falls by
-/// S-0511 claim 10 ([`crate::fall`]) and is killed when it lands. S-0312
-/// claim 11's low-water death effects for a marked vehicle are not built.
+/// S-0511 claim 10 ([`crate::fall`]) and is killed when it lands. Dying
+/// within 10 leptons above water with the mark, it takes S-0312 claim 11's
+/// effects (`combat::death::kill`).
 pub fn start_fall(w: &mut World, id: ObjectId) {
     // spec: S-0503 claim 11 and S-0511 claim 10 (it starts to fall, with the bomb mark)
     crate::fall::start(w, id, true);
