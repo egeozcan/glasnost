@@ -553,13 +553,20 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
 /// what it queues), the change of fear of an infantry unit (S-0107 claim 16)
 /// and the announcement that a harvester is under attack (S-0701 claim 28),
 /// the only announcement it can make. The crush response (S-0215 claim 39)
-/// follows in [`apply`]. Request B of S-0208 claim 15 is the seam of the
-/// scatter from damage, built for no hit (`docs/m8-claims/intake100.md`).
+/// follows in [`apply`]. Between the fall-back and the fear an infantry
+/// unit is sent request B of S-0208 claim 15 when the hit has a known
+/// attacker; request A, the scatter from damage, is not sent.
 fn berserk_reactions(w: &mut World, id: ObjectId, hit: &Hit, falls: bool) {
     // spec: S-0302 r43 claim 10 (a team member that the hit makes berserk has left its team by then: no teams in our engine, so the team exception of the fall-back never holds it back)
     if falls {
         // spec: S-0215 claim 16 (the fall-back to rest, claims 13 to 15) and S-0610 claim 4 (a behaviour the fall-back queues replaces the queued hunt)
         crate::process::fall_back(w, id, false);
+    }
+    // spec: S-0302 r43 claim 10 and Changes for other specs, S-0208 claim 15 (request B follows a berserk hit with a known attacker, after the fall-back and before the fear; request A does not)
+    if w.obj(id)
+        .is_some_and(|o| o.kind == Kind::Infantry && o.health > 0)
+    {
+        threat_request(w, id, hit);
     }
     let Some(o) = w.obj(id) else { return };
     // spec: S-0302 r43 claim 10 and S-0107 claim 16 (the table of fear applies to a berserk hit, with the health ratio as it stands; a known attacker only selects its rows); S-0215 r118 claim 16, Order within the hit (fear after the no-threat test)
@@ -738,12 +745,15 @@ fn building_fires(w: &mut World, id: ObjectId) {
 }
 
 /// The reactions of a hit outside S-0302, in S-0215 claim 16's order:
-/// anger (S-0309 claim 16), retaliation (S-0309 claim 18), the no-threat
-/// fall-back (S-0215 claim 16), fear (S-0107 claim 16). The scatter from
-/// damage (S-0215 claim 19) and S-0208 claim 15's requests A and B have no
-/// place here yet (seam); the crush response (S-0215 claim 39) follows in
-/// `apply`.
+/// anger (S-0309 claim 16), retaliation (S-0309 claim 18), the scatter from
+/// damage (S-0215 claim 19; request A of S-0208 claim 15 for infantry), the
+/// no-threat fall-back (S-0215 claim 16), request B of S-0208 claim 15 and
+/// fear (S-0107 claim 16) for infantry. The crush response (S-0215 claim
+/// 39) follows in `apply`.
 fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result: HitResult) {
+    use crate::combat::acquire::Retaliation;
+    // The actor as the hit left it, before its reactions: the target and destination it had
+    // when hit (S-0208 claim 15; S-0215 claim 16, Order within the hit).
     let Some(o) = w.obj(id).cloned() else { return };
     let dealt = health_before - o.health;
     // spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the change of health, then anger, then retaliation, then the scatter from damage, then the no-threat test, then fear)
@@ -752,14 +762,28 @@ fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result:
     {
         crate::combat::acquire::anger(w, id, a, dealt);
     }
-    if dealt > 0
+    let retaliation = match hit.attacker {
+        Some(a) if dealt > 0 && o.health > 0 && result != HitResult::Unaffected => {
+            crate::combat::acquire::retaliate(w, id, a)
+        }
+        _ => Retaliation::MayNot,
+    };
+    // spec: S-0215 claim 19 and S-0208 claim 15 (a mobile actor that takes damage and survives it; a hit reporting now dead destroys it even when it stays in play, a sinking vessel at 1 health: S-0302 claim 12, glossary *in play … destroyed, removed*)
+    let survived = dealt > 0
         && o.health > 0
-        && result != HitResult::Unaffected
-        && let Some(a) = hit.attacker
-    {
-        crate::combat::acquire::retaliate(w, id, a);
+        && o.kind.is_mobile()
+        && !matches!(result, HitResult::NowDead | HitResult::PostMortem);
+    if survived && damage_scatter_sent(w, &o, hit.attacker.is_some(), retaliation) {
+        // spec: S-0215 claim 19 and S-0208 claim 15, request A (no threat point, forced, not move-anywhere)
+        let req = crate::scatter::ScatterRequest {
+            threat: None,
+            forced: true,
+            anywhere: false,
+        };
+        // spec: S-0215 claim 19 (acceptance: S-0208 claim 11, S-0207 claim 16, S-0501 claim 49 for an aircraft, whose answer falls back to rest first)
+        crate::scatter::request(w, id, req);
     }
-    // spec: S-0215 r118 claim 16 (a hit that names an attacker, lowers health and reports unchanged, now yellow or now red; Results: unaffected, now dead and post-mortem never trigger it) and Order within the hit (tested on the behaviour current at this point: attack after a retaliation, claim 10)
+    // spec: S-0215 r118 claim 16 (a hit that names an attacker, lowers health and reports unchanged, now yellow or now red; Results: unaffected, now dead and post-mortem never trigger it) and Order within the hit (tested on the behaviour current at this point: attack after a retaliation, claim 10; for an aircraft the behaviour the scatter's fall-back left)
     if dealt > 0
         && matches!(
             result,
@@ -769,10 +793,73 @@ fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result:
     {
         crate::process::no_threat_fall_back(w, id);
     }
+    // spec: S-0215 r118 claim 16, Order within the hit (for an infantry unit request B of S-0208 claim 15, then the change of fear, after the test)
+    if survived && o.kind == Kind::Infantry {
+        threat_request(w, id, hit);
+    }
     // spec: S-0215 r118 claim 16, Order within the hit (for an infantry unit the change of fear, S-0107 claim 16, comes after the test)
     if o.kind == Kind::Infantry && o.health > 0 && dealt > 0 {
         crate::combat::fear::damaged(w, id, hit.attacker.is_some());
     }
+}
+
+/// Whether a hit sends the scatter from damage (S-0215 claim 19; request A
+/// of S-0208 claim 15 for an infantry unit) to the mobile actor `o`, as it
+/// stood when the hit left it, after the hit's retaliation.
+fn damage_scatter_sent(
+    w: &World,
+    o: &crate::world::Object,
+    known: bool,
+    retaliation: crate::combat::acquire::Retaliation,
+) -> bool {
+    use crate::combat::acquire::Retaliation;
+    let r = w.rules();
+    // spec: S-0215 claim 19 and S-0208 claim 15 (it had neither a target nor a destination when hit)
+    let free = o.target.is_none() && o.dest.is_none();
+    // spec: S-0215 claim 19 and S-0208 claim 15 (the player-scatter setting, Import mapping, or the scatter veterancy ability)
+    let permitted = r.general.player_scatter || has_ability(w, o.id, Ability::Scatter);
+    match retaliation {
+        // spec: S-0215 claim 19 case 1 and S-0208 claim 15 first case (a known attacker; the actor may retaliate but does not retaliate against this hit; whatever its owner and behaviour)
+        Retaliation::Held => known && free && permitted,
+        // spec: S-0215 claim 19 and S-0208 claim 15 (retaliating gives a target: never sent by the first case)
+        Retaliation::Done => false,
+        // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (no known attacker, or the actor may not retaliate)
+        Retaliation::MayNot => {
+            // S-0215 Terms *Houses in our engine* and S-0208 claim 15 *Original and our engine*: an
+            // AI house is human-controlled; the neutral and special houses, and a test-only
+            // computer-controlled player house, are not.
+            let computer = !o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
+            // spec: S-0215 claim 19 case 2 (the actor is not an aircraft)
+            o.kind != Kind::Aircraft
+                // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (its current behaviour has the scatter property, S-0215 claim 1: with none current, the queued one)
+                && o.beh.seen().is_some_and(|b| r.behaviour(b).scatter)
+                // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (not held by a tether link)
+                && !crate::econ::tethered(w, o.id)
+                // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (its locomotor is not moving, S-0208 Terms)
+                && !crate::occupancy::in_progress(w, o.id)
+                // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (neither a target nor a destination)
+                && free
+                // spec: S-0215 claim 19 case 2 and In our engine; S-0208 claim 15, Original and our engine (a computer-controlled owner, or the player-scatter setting, or the scatter veterancy ability)
+                && (computer || permitted)
+        }
+    }
+}
+
+/// Request B of S-0208 claim 15: the threat-point request that damage with
+/// a known attacker sends an infantry unit.
+fn threat_request(w: &mut World, id: ObjectId, hit: &Hit) {
+    // spec: S-0208 claim 15, request B (sent whenever the damage has a known attacker); S-0302 claim 1 (a known attacker is an object in the world)
+    let Some(at) = hit.attacker.and_then(|a| w.obj(a)).map(|a| a.pos) else {
+        return;
+    };
+    // spec: S-0208 claim 15, request B (the attacker's position as threat point, neither forced nor move-anywhere)
+    let req = crate::scatter::ScatterRequest {
+        threat: Some(at),
+        forced: false,
+        anywhere: false,
+    };
+    // spec: S-0208 claim 15 (each request judged by claim 11 on its own; an accepted one takes its own draw, claims 12 and 13; B's destination replaces A's)
+    crate::scatter::request(w, id, req);
 }
 
 /// The killing hit (S-0302 claims 14 to 16): cyborg crippling, delayed

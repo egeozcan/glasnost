@@ -148,61 +148,81 @@ pub fn type_cost(w: &World, id: ObjectId) -> i32 {
     }
 }
 
+/// What a hit's retaliation came to (S-0208 Terms *may retaliate*; S-0215
+/// claims 18 and 19).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Retaliation {
+    /// The actor may not retaliate against the attacker: a condition of
+    /// S-0215 claim 18 other than its distance rule, or one of the
+    /// target-acquisition specs' (S-0309 claims 18 and 25 part h, S-0304
+    /// claim 3), does not hold.
+    MayNot,
+    /// It may retaliate but does not retaliate against this hit: F7's
+    /// distance rule holds it back, the override to *attack* is refused
+    /// and keeps its slots, or it is an aircraft, whose override our
+    /// engine does not build.
+    Held,
+    /// It retaliates: the override installed the attacker as its target.
+    Done,
+}
+
 /// Retaliation of `actor` against the attacker of a hit it survived
-/// (S-0309 claim 18, S-0304 claim 3, S-0215 claim 18).
+/// (S-0309 claim 18, S-0304 claim 3, S-0215 claim 18). Returns whether it
+/// may retaliate and whether it does, for the scatter from damage (S-0215
+/// claim 19, S-0208 claim 15).
 // spec: S-0215 F7 ((S + 0.5) × 256 = 256 S + 128 exactly)
-pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
+pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliation {
+    use Retaliation::{Done, Held, MayNot};
     let Some(o) = w.obj(actor).cloned() else {
-        return;
+        return MayNot;
     };
     let Some(a) = w.obj(attacker).cloned() else {
-        return;
+        return MayNot;
     };
-    if o.kind == Kind::Terrain || o.kind == Kind::Aircraft {
-        // Aircraft retaliation belongs to the aircraft specs.
-        return;
+    if o.kind == Kind::Terrain {
+        return MayNot;
     }
     // spec: S-0216 claim 8 (Removal before the groups: no object targets an idle test house's objects, a retaliation included; design)
     if w.of_idle_house(attacker) {
-        return;
+        return MayNot;
     }
     let rules = w.rules_arc();
     let Some(tc) = type_combat(w, actor).cloned() else {
-        return;
+        return MayNot;
     };
     // spec: S-0309 claim 18 (the type's retaliate flag)
     if !tc.retaliate {
-        return;
+        return MayNot;
     }
     // spec: S-0309 claim 18 and S-0601 claim 2 (not a mind-controlling object at capacity)
     if crate::mind::at_capacity(w, actor) {
-        return;
+        return MayNot;
     }
     // spec: S-0309 claim 18 (the attacker is not allied with it); S-0516 claim 36 (and does not appear disguised to its owner)
     if w.allied(o.owner, a.owner) || crate::cloak::appears_disguised(w, attacker, o.owner) {
-        return;
+        return MayNot;
     }
     // spec: S-0309 claim 18 and S-0614 claim 17 (X is not the parasite attached to it)
     if crate::parasite::parasite_of(w, actor) == Some(attacker) {
-        return;
+        return MayNot;
     }
     // spec: S-0309 claim 18 (mean weapon damage above 0, and armed)
     if mean_damage(w, actor) <= 0 || !armed(w, actor) {
-        return;
+        return MayNot;
     }
     let t = Target::Object(attacker);
     let (slot, weapon) = would_use(w, actor, Some(t));
-    let Some(weapon) = weapon else { return };
+    let Some(weapon) = weapon else { return MayNot };
     // spec: S-0304 claim 3 (retaliation needs a versus value above τ_r)
     if !versus(w, weapon, t).is_some_and(|v| v.gt(tau_r())) {
-        return;
+        return MayNot;
     }
     // spec: S-0309 claim 18 (the firing check without range answers neither illegal nor impossible)
     if matches!(
         check(w, actor, Some(t), slot, false),
         Answer::Illegal | Answer::Impossible
     ) {
-        return;
+        return MayNot;
     }
     let player = player_owned(w, actor);
     if player {
@@ -212,7 +232,7 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
             .is_some_and(|u| u.raw.c4.unwrap_or(false))
             || has_ability(w, actor, Ability::C4);
         if a.kind == Kind::Building && charges {
-            return;
+            return MayNot;
         }
         // spec: S-0309 claim 18 (human-controlled owner: a vehicle deploying into an artillery building never retaliates)
         if o.kind == Kind::Vehicle
@@ -222,14 +242,16 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
                 .and_then(|n| rules.index_of(Kind::Building, n))
                 .is_some_and(|b| rules.buildings[b as usize].building.artillary)
         {
-            return;
+            return MayNot;
         }
     }
     // spec: S-0215 claim 18 (only while the current behaviour has the retaliate property)
     let cur = o.beh.seen();
     if !cur.is_some_and(|b| rules.behaviour(b).retaliate) {
-        return;
+        return MayNot;
     }
+    // spec: S-0208 Terms (may retaliate: every condition but claim 18's distance rule; does retaliate: claim 18 lets it override)
+    let mut held = false;
     if player {
         // spec: S-0215 claim 18 (a mobile actor of a player house: guard, area guard or patrol only, unless player return fire)
         let listed = matches!(
@@ -237,11 +259,11 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
             Some(Behaviour::Guard | Behaviour::AreaGuard | Behaviour::Patrol)
         );
         if o.kind.is_mobile() && !listed && !rules.general.player_return_fire {
-            return;
+            return MayNot;
         }
         // spec: S-0215 claim 18 (an actor of a player house that already has a target never retaliates)
         if o.target.is_some() {
-            return;
+            return MayNot;
         }
         // spec: S-0215 claim 18 and F7 (an actor that cannot reach the attacker overrides only within (S + 0.5) × 256)
         let reaches = crate::combat::range::in_range(w, actor, Some(weapon), Some(t), None);
@@ -253,9 +275,8 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
                 .map_or(0, |b| b.raw.econ.sight.unwrap_or(0)),
             _ => rules.unit(o.kind, o.type_index).map_or(0, |u| u.sight),
         };
-        if !reaches && rho3(w, actor, attacker) > i64::from(256 * sight + 128) {
-            return;
-        }
+        // spec: S-0208 Terms (the distance rule is not part of *may retaliate*: an actor it holds back may retaliate but does not)
+        held = !reaches && rho3(w, actor, attacker) > i64::from(256 * sight + 128);
     }
     if !player
         && let Some(Target::Object(y)) = o.target
@@ -266,27 +287,43 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
         if let (Some(sx), Some(sy)) = (sum(attacker), sum(y))
             && !sx.ge(sy)
         {
-            return;
+            return MayNot;
         }
     }
     // spec: S-0309 claim 25 part h (an object of the neutral or special house does not retaliate while it is draining an object with a draining weapon, S-0608)
     if !player && crate::drain::draining(w, actor) {
-        return;
+        return MayNot;
     }
-    override_attack(w, actor, attacker);
+    // spec: S-0215 claim 18 (an actor of a player house that cannot reach the attacker beyond F7's distance does not override)
+    if held {
+        return Held;
+    }
+    if o.kind == Kind::Aircraft {
+        // Seam (docs/m8-claims/scatter-damage.md): aircraft retaliation belongs to the aircraft
+        // specs and is not built, so an aircraft that may retaliate never does here.
+        return Held;
+    }
+    if override_attack(w, actor, attacker) {
+        Done
+    } else {
+        Held
+    }
 }
 
 /// An override to *attack* with `target` as target and no destination
-/// (S-0215 claims 10 and 18).
-pub fn override_attack(w: &mut World, actor: ObjectId, target: ObjectId) {
-    override_attack_on(w, actor, Target::Object(target));
+/// (S-0215 claims 10 and 18). Returns whether the target was installed.
+pub fn override_attack(w: &mut World, actor: ObjectId, target: ObjectId) -> bool {
+    override_attack_on(w, actor, Target::Object(target))
 }
 
 /// [`override_attack`] with any target, an object or a cell (S-0215 claim
-/// 10; S-0209 claim 9 takes a wall's cell so).
-pub fn override_attack_on(w: &mut World, actor: ObjectId, target: Target) {
+/// 10; S-0209 claim 9 takes a wall's cell so). Returns whether the target
+/// was installed: not when the override was refused and kept its slots.
+pub fn override_attack_on(w: &mut World, actor: ObjectId, target: Target) -> bool {
     let q = w.rules().quirks;
-    let Some(o) = w.obj_mut(actor) else { return };
+    let Some(o) = w.obj_mut(actor) else {
+        return false;
+    };
     let slots_changed = o.beh.override_with(
         Behaviour::Attack,
         q.refused_override_retargets,
@@ -294,7 +331,7 @@ pub fn override_attack_on(w: &mut World, actor: ObjectId, target: Target) {
     );
     let refused_kept = !slots_changed && !q.refused_override_retargets;
     if refused_kept {
-        return;
+        return false;
     }
     // spec: S-0215 claim 10 (the target and destination are put aside and replaced)
     o.beh.aside = Some((o.target, o.dest));
@@ -304,13 +341,16 @@ pub fn override_attack_on(w: &mut World, actor: ObjectId, target: Target) {
     crate::emitters::retarget_let_go(w, actor);
     // spec: S-0215 claim 13 and S-0502 claim 28 (a destination clear requested by behaviour processing, here after the override installed its target: a balloon-hover vehicle with a nonempty destination can reject it, keeping destination, point, commitment and reservation)
     let retained = mobile && crate::jump::clear_rejected(w, actor);
-    let Some(o) = w.obj_mut(actor) else { return };
+    let Some(o) = w.obj_mut(actor) else {
+        return true;
+    };
     if mobile && !retained {
         o.dest = None;
     }
     o.combat.opportunity = false;
     // spec: S-0107 r46 claim 11, Changes of target (a retaliation at a hit, in the turn of the projectile or actor that delivers it, S-0215 claim 18 and S-0309 claim 18, and any other override's new target: the change ends an infantry unit's attack state and makes its request at once)
     crate::infantry::watch_test(w, actor);
+    true
 }
 
 /// The expected remaining health's per-turn change (S-0309 claim 15, F7).
