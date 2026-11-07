@@ -823,7 +823,10 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             m.queued_dests.clear();
         }
     }
-    if mobile && !retained {
+    // spec: S-0208 claim 6 (r52, A stored path kept under enter: the order has broken off the contact, part b, and queued its behaviour, part d, before this assignment, part f; a walker whose current or queued behaviour is then enter and that is in contact with nothing keeps its stored path towards the new destination; a destination of nothing leaves it none to follow)
+    let keeps_path =
+        crate::walk::keeps_stored_path(w, actor) && w.obj(actor).is_some_and(|m| m.dest.is_some());
+    if mobile && !retained && !keeps_path {
         // A new destination starts a new path search (S-0212 claim 20).
         // spec: S-0207 claim 11 (revision 39: a cancelled destination need not erase the old path steps, which are inert without a locomotor destination; ours are dropped with it, so no stored path keeps S-0206's in-progress test true)
         let Some(m) = w.obj_mut(actor) else { return };

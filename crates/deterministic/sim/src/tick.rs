@@ -398,6 +398,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         // spec: S-0513 claims 8 and 13 (a silo's accepted launch leaves on its next update)
         crate::superweapons::nuke::silo_turn(w, id);
         if !crate::temporal::building_erased(w, id) {
+            // spec: S-0508 claim 7 (r13: the animation-delayed shot of S-0301 claim 14 comes after the per-tick search in the building's turn, which `process::tail` runs, and before the occupation's owner change in `econ::events::turn`)
             crate::combat::behave::delayed_shot_turn(w, id);
             // spec: S-0518 claim 6 (a recruited supporter's beam comes in its own turn)
             crate::linked::supporter_turn(w, id);

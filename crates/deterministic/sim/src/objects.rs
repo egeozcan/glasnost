@@ -543,6 +543,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::OffMap);
     // spec: S-0306 claim 17 (a projectile whose target goes inside: the cell it stood in when not airborne, else nothing)
     crate::combat::projectile::target_leaves(w, id);
+    // spec: S-0506 claim 14 (r34: going inside a building or a transport is leaving play: claim 11's reset of a controller whose target it is, unless a pending target waits; claim 25's clear of a pending target)
+    crate::spawn::target_leaves_play(w, id);
     // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
     // spec: S-0608 claim 17 and S-0507 claim 6 (Q-1443: successful temporary off-map storage of either party ends its drain links at once, a stranded earlier link included)

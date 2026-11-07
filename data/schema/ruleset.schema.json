@@ -9440,6 +9440,11 @@
           "type": "boolean",
           "default": true
         },
+        "enter_keeps_stored_path": {
+          "description": "A walker given a new destination keeps its stored path when its\ncurrent or queued behaviour is *enter* and it is in contact with\nnothing at that moment; off: every new destination drops the stored\npath.",
+          "type": "boolean",
+          "default": true
+        },
         "enter_nearest_survives_absorption": {
           "description": "A unit of the neutral or special house that took the enter-nearest instruction through the bio-reactor fate keeps it when it goes in and when it is let out, so a released passenger walks straight back in; off: going in clears the instruction.",
           "type": "boolean",

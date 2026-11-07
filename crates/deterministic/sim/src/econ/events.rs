@@ -123,6 +123,13 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
 pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     let Some(o) = w.obj(id) else { return };
     let (kind, new) = (o.kind, o.owner);
+    if old != new
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0309 claim 30 (a holder that changes owner to another house, whatever the cause, drops its target at that moment, inside the change, whatever the target; no targeting-timer draw, the timer counts on; a change to the same house drops nothing)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
     // spec: S-0414 claim 4 (a change of owner on the map: a leaving for the old owner, an entry for the new)
     crate::econ::victory::owner_changed(w, id, old);
     // spec: S-0414 claims 21 and 22 (an ownership gain's kill and score)
@@ -199,7 +206,7 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
     let Some(o) = w.obj(id) else { return };
     match o.kind {
         Kind::Building => {
-            // spec: S-0508 claims 7 to 9 (a civilian garrison building's own turn: forced evacuation, the owner following the first occupant, the return of an abandoned building)
+            // spec: S-0508 claims 7 to 9 (a civilian garrison building's own turn: forced evacuation, the owner following the first occupant, the return of an abandoned building); claim 7 (r13: the owner change comes after the building's behaviour processing, its per-tick search and all its firing in that turn, which `tick::object_turn` runs before this)
             crate::structures::garrison::turn(w, id);
             crate::econ::power::building_turn(w, id);
             // The income cycle of a cash-producing building (S-0515 claims 5 and 6) comes earlier in the building's turn, before its behaviour processing (S-0608 claim 15; `tick::object_turn`).

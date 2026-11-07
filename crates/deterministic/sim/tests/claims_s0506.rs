@@ -2047,7 +2047,7 @@ fn s0312_claim_16_interception_keeps_timer_and_position() {
             break;
         }
         assert_eq!(ra.phase, rb.phase);
-        assert_eq!(ra.elapsed, rb.elapsed);
+        assert_eq!(ra.started, rb.started);
         assert_eq!(a.pos, b.pos);
         compared += 1;
     }

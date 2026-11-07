@@ -187,8 +187,19 @@ const DECK_CHOICE: i32 = 312;
 // spec: S-0209 claim 15 (deck after crossing into a high-bridge cell when b = a − 4 height levels)
 const DECK_DROP: i32 = 4;
 
-/// One tick of a walker (S-0208 claim 6). Returns whether it moved.
+/// One tick of a walker (S-0208 claim 6), the locomotion of its update.
+/// Returns whether it moved. While it runs the walker is listed as having a
+/// locomotion under way, so a request that this locomotion sets off gives it
+/// no extra locomotion inside it ([`extra_locomotion`]).
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
+    let depth = w.locomotion_under_way.len();
+    w.locomotion_under_way.push(id);
+    let moved = own_locomotion(w, id);
+    w.locomotion_under_way.truncate(depth);
+    moved
+}
+
+fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
     let q = r.quirks;
@@ -291,14 +302,18 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
 }
 
 /// The locomotion of a walker standing on a standing position with no
-/// walking target (S-0208 claim 6): with no destination and no stored path
-/// it stops; with no stored path it searches for its destination (S-0212
-/// claims 20 and 21); then it asks for its next cell and chooses its walking
-/// target without moving (claim 3, S-0209).
+/// walking target (S-0208 claim 6): with no destination it stops, and a
+/// stored path it still holds is dropped; with no stored path it searches
+/// for its destination (S-0212 claims 20 and 21); then it asks for its next
+/// cell and chooses its walking target without moving (claim 3, S-0209).
 fn standing(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let (dest, no_path, here) = (o.dest, o.path.steps.is_empty(), o.pos.cell());
-    if dest.is_none() && no_path {
+    if dest.is_none() {
+        // spec: S-0208 claim 6 (r52, A stored path kept under enter: a walker follows a stored path only towards a destination, so a destination that becomes nothing leaves it no path to follow, whatever it keeps)
+        if !no_path && let Some(ob) = w.obj_mut(id) {
+            ob.path.steps.clear();
+        }
         stopped(w, id);
         return;
     }
@@ -336,13 +351,35 @@ fn standing(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Whether `id` stands with no walking target and no stored path: the
-/// walker that S-0208 claim 6 gives an extra locomotion at a scatter whose
-/// destination comes from the nearby-cell search. Read before the request,
-/// which drops the stored path (claim 12).
-pub(crate) fn standing_free(w: &World, id: ObjectId) -> bool {
+/// Whether walker `id` given a new destination now keeps its stored path
+/// (S-0208 claim 6, *A stored path kept under enter*): with
+/// `quirks.enter_keeps_stored_path` on, its current or queued behaviour is
+/// *enter* and it is in contact with nothing at that moment, whether or not
+/// it has a walking target. The caller asks at the assignment, after an
+/// order has broken off the contact and queued its behaviour (S-0213 table
+/// T3, parts b, d and f).
+pub fn keeps_stored_path(w: &World, id: ObjectId) -> bool {
+    // spec: S-0208 Edge cases (quirks.enter_keeps_stored_path off: every new destination drops the stored path)
+    if !w.rules().quirks.enter_keeps_stored_path {
+        return false;
+    }
     w.obj(id).is_some_and(|o| {
-        o.path.steps.is_empty() && o.walk.as_ref().is_some_and(|s| s.target.is_none())
+        // spec: S-0208 claim 6 (r52: current or queued behaviour enter, in contact with nothing, glossary contact; a walking target plays no part)
+        o.walk.is_some()
+            && (o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter))
+            && o.contact.is_none()
+    })
+}
+
+/// Whether `id` stands with no walking target and either no stored path or
+/// one it keeps at the scatter (`keeps`): the walker that S-0208 claim 6
+/// gives an extra locomotion at a scatter whose destination comes from the
+/// nearby-cell search. Read before the request, which drops a stored path
+/// it does not keep (claim 12).
+pub(crate) fn standing_free(w: &World, id: ObjectId, keeps: bool) -> bool {
+    w.obj(id).is_some_and(|o| {
+        // spec: S-0208 claim 6 (r46: no walking target and no stored path; r52: or a stored path kept at the scatter, which it follows; a stored path dropped there gives none, design: Q-2750 interim)
+        (o.path.steps.is_empty() || keeps) && o.walk.as_ref().is_some_and(|s| s.target.is_none())
     })
 }
 
@@ -365,27 +402,28 @@ fn walks_now(w: &World, id: ObjectId) -> bool {
         && crate::lift::stand_in(w, id).is_none()
 }
 
-/// S-0208 claim 6 (r46), *Destinations given during a unit's update*: a
-/// walker standing with no walking target and no stored path that accepts a
-/// scatter whose destination comes from the nearby-cell search has one more
-/// locomotion at once, in which it searches for that destination and, when
-/// the search gives a path, chooses its walking target without moving. The
-/// caller has checked the scatter's side ([`standing_free`] before the
-/// request, the destination from the search).
+/// S-0208 claim 6 (r46, r52), *Destinations given during a unit's update*:
+/// a walker standing with no walking target and no stored path, or with a
+/// stored path it keeps, that accepts a scatter whose destination comes from
+/// the nearby-cell search has one more locomotion at once, in which it
+/// searches for that destination (or follows the kept path) and chooses its
+/// walking target without moving. The caller has checked the scatter's side
+/// ([`standing_free`] before the request, the destination from the search).
 pub(crate) fn extra_locomotion(w: &mut World, id: ObjectId) {
     // spec: S-0208 claim 6 (r46: a walker, moved by the walk locomotor; a teleporting unit has S-0417 claim 17's jump instead)
     if !walks_now(w, id) {
         return;
     }
-    // design: Q-2702 interim (the extra locomotion is a full locomotion with S-0209's asks; a unit gets none while one of its own is already running further up the same call chain, so each unit is in the chain at most once and the chain ends)
-    if w.extra_locomotion.contains(&id) {
+    // spec: S-0208 claim 6 (r52, Requests sent from an extra locomotion, In our engine: a departure, no switch; no unit is given an extra locomotion while a locomotion of its own, that of its update or an extra one, is under way; the request is otherwise accepted, and the locomotion under way finishes as it would have without it)
+    if w.locomotion_under_way.contains(&id) {
         return;
     }
-    w.extra_locomotion.push(id);
+    let depth = w.locomotion_under_way.len();
+    w.locomotion_under_way.push(id);
     let before = w.rng.taken();
-    // spec: S-0208 claim 6 (r46: it searches for the destination and chooses its walking target without moving, claim 3's draw included; the arrival-tick rule of the walker's own locomotion is not part of it)
+    // spec: S-0208 claim 6 (r46: it searches for the destination and chooses its walking target without moving, claim 3's draw included; the arrival-tick rule of the walker's own locomotion is not part of it; r52: the whole locomotion, with the asks of S-0209 claims 6 to 10, and one that keeps its path chooses its walking target in the path's next cell without a search)
     standing(w, id);
-    w.extra_locomotion.pop();
+    w.locomotion_under_way.truncate(depth);
     trace::record(w, id, || trace::What::ExtraLocomotion {
         draws: w.rng.taken() - before,
         target: w

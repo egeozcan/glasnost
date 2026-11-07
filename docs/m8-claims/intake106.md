@@ -65,7 +65,9 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
   choice without it. A neighbour choice (claim 12, claim 13's fall-back) has none.
 - **Q-2702 interim** (`World::extra_locomotion`, a stack of the walkers whose extra locomotion is
   running; `#[serde(skip)]`, empty between calls, so neither saved nor hashed): a unit gets no extra
-  locomotion while its own is already running further up the call chain.
+  locomotion while its own is already running further up the call chain. (Intake 110 renames it
+  `World::locomotion_under_way`, which also holds the unit's update locomotion, as S-0208 r52's
+  departure gives.)
 - **Comments.** `tick.rs`'s note on S-0417 claim 17's request cites S-0208 r46 claim 6 for its
   place after the update's behaviour processing and locomotion; only its place after the late start
   stays `// design:`. No `// design:` interim of intakes 99 or 103 covered Q-2656 or Q-2657 in code
@@ -95,10 +97,10 @@ Tests in `crates/deterministic/sim/tests/claims_s0215_r132.rs` (S-0215) and
 | S-0208 claim 6, extra locomotion at a search scatter (W9 draws) | tested | `extra_locomotion_chooses_the_walking_target_at_once`, `extra_locomotion_before_the_own_locomotion_steps_that_tick`, `neighbour_choice_has_no_extra_locomotion`, `extra_locomotion_only_for_the_walk_locomotor`; `claims_s0417_r64.rs` `claim_17_one_draw_then_refusals` (the factory's request: one scatter draw, then the position choice's draw exactly when the walker's point is of centre class) |
 | S-0208 claim 6, no extra locomotion with a walking target (Open question, our engine) | tested | `a_walker_with_a_walking_target_gets_no_extra_locomotion` |
 | S-0208 claim 6, a new destination while a step is under way (W17 c to e) | tested | `w17_c_order_into_another_reach_region_during_a_step`, `w17_d_order_further_along_the_line_during_a_step`, `w17_e_order_to_the_cell_being_stepped_into` |
-| S-0208 claim 6, *enter* keeps its stored path | seam | Q-2701: which walkers count as under *enter*, and where that path leads, are not given; not built |
+| S-0208 claim 6, *enter* keeps its stored path | seam | Q-2701: which walkers count as under *enter*, and where that path leads, are not given; not built. Answered by S-0208 r52 and built in intake 110 ([intake110.md](intake110.md)) |
 | S-0208 claim 6, the factory request's tick (S-0417 claim 17, M-0023 baseline) | tested | `claims_s0417_r79.rs` (U10), `m0023_rows_hold_in_our_engine` (local lane) |
 | S-0208 claim 15, request B finds request A's walking target (W7 j) | partly | follows from the extra locomotion (`extra_locomotion_chooses_the_walking_target_at_once`); no two-request test of the damage scatter (see Seams) |
-| Q-2702 interim, an extra locomotion inside another | tested | `q2702_extra_locomotions_in_a_crowd_end`, `q2702_no_extra_locomotion_inside_its_own` |
+| Q-2702 interim, an extra locomotion inside another | tested | `q2702_extra_locomotions_in_a_crowd_end`, `q2702_no_extra_locomotion_inside_its_own`. Retired in intake 110: S-0208 r52 makes it a departure (no extra locomotion while a locomotion of the unit's own is under way, `World::locomotion_under_way`) |
 
 Older tests changed by these revisions, each with the claim it now cites:
 
@@ -207,8 +209,10 @@ values are not quoted.
   request test of W7 part j waits for the seam.
 - **Under *enter* (Q-2701).** Claim 6 says a walker whose current or queued behaviour is *enter*
   keeps its stored path at a new destination, but not which walkers that covers or where the path
-  leads. Not built: every walker drops its path, as before.
-- **Extra locomotion inside another (Q-2702).** A `// design:` interim (see Built).
+  leads. Not built: every walker drops its path, as before. (Answered by S-0208 r52; built in
+  intake 110.)
+- **Extra locomotion inside another (Q-2702).** A `// design:` interim (see Built). (Answered by
+  S-0208 r52 as a departure of our engine's; the interim is retired in intake 110.)
 - **The end-of-update check's other cases (S-0215 Open questions).** A unit in *move* holding a
   destination, and vehicles, get no check; team members under a team script's move step are not
   reachable here.

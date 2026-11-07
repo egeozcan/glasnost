@@ -148,7 +148,7 @@ fn neighbour_choice_has_no_extra_locomotion() {
     assert_eq!(c.first(), Some(&1), "{c:?}");
 }
 
-// spec: S-0208 claim 6 (r46: what decides is which choice gives the destination; a walker already holding a stored path, as on its asking tick's arrival, gets no extra locomotion; and a walker that already has a walking target gets none in our engine, Open questions)
+// spec: S-0208 claim 6 (r52: what decides is which choice gives the destination; a walker that already has a walking target is not given this extra locomotion in our engine, Open questions)
 #[test]
 fn a_walker_with_a_walking_target_gets_no_extra_locomotion() {
     // A fraidycat in move with the scatter property accepts a request that
@@ -317,14 +317,15 @@ fn extra_locomotion_only_for_the_walk_locomotor() {
     let mut w = s.build();
     open_orders(&mut w);
     let id = men(&w)[0];
-    // The same request with any extra locomotion held off (the Q-2702
-    // guard): the teleporting unit's request takes the same draws and ends
-    // in the same state, so it had no extra locomotion.
+    // The same request with any extra locomotion held off (the r52
+    // departure's guard, a locomotion of its own under way): the teleporting
+    // unit's request takes the same draws and ends in the same state, so it
+    // had no extra locomotion.
     let mut held = w.clone();
-    held.extra_locomotion.push(id);
+    held.locomotion_under_way.push(id);
     assert!(scatter::request(&mut w, id, FORCED));
     assert!(scatter::request(&mut held, id, FORCED));
-    held.extra_locomotion.clear();
+    held.locomotion_under_way.clear();
     assert_eq!(walk_target(&w, id), None);
     assert_eq!(w.rng.taken(), held.rng.taken(), "no draw of its own");
     assert_eq!(
@@ -356,7 +357,7 @@ fn crowd(n: i32) -> (World, Vec<ObjectId>) {
     (w, m)
 }
 
-// design: Q-2702 interim (a unit in the middle of its own extra locomotion gets no second one from a request sent further down the same chain, so the chain of extra locomotions in a crowd ends; every other unit that accepts such a request gets its extra locomotion)
+// spec: S-0208 claim 6 (r52, Requests sent from an extra locomotion, In our engine: a departure, no switch; no unit is given an extra locomotion while a locomotion of its own is under way, so the chain of extra locomotions in a crowd ends; every other unit that accepts such a request gets its extra locomotion)
 #[test]
 fn q2702_extra_locomotions_in_a_crowd_end() {
     let (mut w, m) = crowd(5);
@@ -368,18 +369,18 @@ fn q2702_extra_locomotions_in_a_crowd_end() {
         glasnost_sim::save::state_hash(&v),
         "deterministic"
     );
-    assert!(w.extra_locomotion.is_empty(), "the chain is unwound");
+    assert!(w.locomotion_under_way.is_empty(), "the chain is unwound");
     for _ in 0..200 {
         tick::step(&mut w);
     }
 }
 
-// design: Q-2702 interim (no extra locomotion for a unit already in its own further up the chain)
+// spec: S-0208 claim 6 (r52, Requests sent from an extra locomotion, In our engine: no extra locomotion for a unit already in its own further up the chain)
 #[test]
 fn q2702_no_extra_locomotion_inside_its_own() {
     let (mut w, id) = alone(0);
-    w.extra_locomotion.push(id);
+    w.locomotion_under_way.push(id);
     assert!(scatter::request(&mut w, id, FORCED));
     assert_eq!(walk_target(&w, id), None, "no second extra locomotion");
-    w.extra_locomotion.clear();
+    w.locomotion_under_way.clear();
 }

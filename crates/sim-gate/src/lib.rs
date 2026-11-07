@@ -83,8 +83,12 @@ pub const DUEL_DIAGONAL_SEED: u32 = 8;
 /// Seed of the M6c duel. Kept at M7a step 2b, after the scenario was given
 /// margins: over the sweep of seeds 1 to 32 (`m6c_seed_sweep`) this seed's
 /// smallest counter is 4, the most any seed reached (see
-/// `docs/development.md`, *Determinism gate*).
-pub const M6C_SEED: u32 = 1;
+/// `docs/development.md`, *Determinism gate*). Moved from 1 at M8 A3 intake
+/// 110 (S-0309 claim 30: an engineer capture of a tech building requests
+/// *guard*, from tick 48 of seed 1 on): seed 1 then ends at tick 9605 with
+/// no radiation exit ordered; seed 2 plays all its ticks with smallest
+/// counter 4 before and after the change (`m6c_seed_sweep`, seeds 1 to 16).
+pub const M6C_SEED: u32 = 2;
 
 /// Ticks of the full run of the M6c duel (shorter than the other duels'
 /// games: every ability is exercised well before it).

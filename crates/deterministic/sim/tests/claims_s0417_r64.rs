@@ -103,9 +103,10 @@ fn claim_17_one_draw_then_refusals() {
     // spec: S-0208 claims 12 and 13 (the one ranged draw over 0 … 4)
     one.ranged(0, 4, q.ranged_draw_half_span);
     // The scatter's own draws, read with the extra locomotion of S-0208
-    // claim 6 (r46) held off by the Q-2702 guard.
+    // claim 6 held off by the r52 departure's guard (a locomotion of its own
+    // under way gives no extra one).
     let mut held = probe.clone();
-    held.extra_locomotion.push(g);
+    held.locomotion_under_way.push(g);
     assert!(scatter::request_resting(&mut held, g, req));
     assert_eq!(
         held.rng.taken() - before,

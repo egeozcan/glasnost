@@ -48,8 +48,10 @@ pub struct RocketState {
     pub spawner: Option<ObjectId>,
     /// The phase; `None` before the aim point is fixed.
     pub phase: Option<Phase>,
-    /// Ticks spent in the current pause, tilt or raise.
-    pub elapsed: i32,
+    /// The tick the current pause, tilt or raise began: claim 24's timer
+    /// runs on the tick number, so its elapsed ticks are the tick less this
+    /// one (S-0506 claim 14, r34).
+    pub started: i32,
     /// The pitch p (single precision, radians).
     pub pitch: F32,
     /// The rocket speed v (double precision, leptons per tick).
@@ -341,6 +343,46 @@ pub fn heading_point_with(w: &World, dest: Target, moving_point: bool) -> Option
     }
 }
 
+/// Fixes a rocket missile's aim point and starts its flight at `t`: the
+/// first phase, claim 24's timer, the initial pitch and zero speed.
+fn start_flight(rs: &mut RocketState, aim: Pos, p: &RocketSet, t: i32, mode: Rounding) {
+    rs.aim = Some(aim);
+    // spec: S-0506 Rocket table (the flight begins in pause, or tilt when the pause time is 0, including set C; pitch = Pᵢ × π/2)
+    rs.phase = Some(if p.pause > 0 {
+        Phase::Pause
+    } else {
+        Phase::Tilt
+    });
+    // spec: S-0506 claim 24 (the timer starts in t₀ with zero elapsed ticks)
+    rs.started = t;
+    rs.pitch = quarter_turns(p.pitch_initial, mode).to_f32(mode);
+    rs.speed = F64::ZERO;
+}
+
+/// Fixes a launched rocket missile's aim point at its launch (S-0506
+/// claim 14, r34), from the heading point of `dest` at that moment, and
+/// starts its flight in the launch tick (claim 24). For a destination whose
+/// in-the-air answer is false at the launch; the caller decides that. No
+/// effect on an object that is not a rocket missile, on one whose aim is
+/// already fixed, or when `dest` gives no heading point.
+pub fn fix_at_launch(w: &mut World, id: ObjectId, dest: Target) {
+    let Some(rs) = w.obj(id).and_then(|o| o.rocket.as_ref()) else {
+        return;
+    };
+    if rs.phase.is_some() {
+        return;
+    }
+    let p = set_of(w, rs.set);
+    let Some(aim) = heading_point(w, dest) else {
+        return;
+    };
+    let (t, mode) = (w.tick, w.rules().mode);
+    if let Some(rs) = w.obj_mut(id).and_then(|o| o.rocket.as_mut()) {
+        // spec: S-0506 claim 14 (r34: the aim point is fixed at the launch, in the launch pass, in the tick of the placement; it does not change whatever the destination does afterwards)
+        start_flight(rs, aim, &p, t, mode);
+    }
+}
+
 /// A rocket missile's turn (S-0506 claims 14 to 21); whether it moved.
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let rules = w.rules_arc();
@@ -361,24 +403,13 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let cap = u.speed;
     let omega = u.turn_rate;
     let trailer = u.raw.trailer.clone();
-    let fresh = rs.phase.is_none();
-    if fresh {
-        // spec: S-0506 claim 14 (the aim point is fixed when it first carries out its move behaviour, from the destination of claim 7)
+    if rs.phase.is_none() {
+        // design: Q-2748 interim (a destination whose in-the-air answer was true at the launch: S-0506 r20's rule, the aim point fixed at the missile's first update from its destination's heading point, claim 24's timer started then; a destination gone by then leaves it without a flight)
         let Some(dest) = o.dest else { return false };
         let Some(aim) = heading_point(w, dest) else {
             return false;
         };
-        rs.aim = Some(aim);
-        // spec: S-0506 Rocket table (first move order: pause, or tilt when the pause time is 0, including set C; pitch = Pᵢ × π/2)
-        rs.phase = Some(if p.pause > 0 {
-            Phase::Pause
-        } else {
-            Phase::Tilt
-        });
-        // spec: S-0506 claim 24 (the timer starts in the aim-fixing tick with zero elapsed ticks; its first rocket update is in that same tick)
-        rs.elapsed = 0;
-        rs.pitch = quarter_turns(p.pitch_initial, mode).to_f32(mode);
-        rs.speed = F64::ZERO;
+        start_flight(&mut rs, aim, &p, t, mode);
     }
     let Some(phase) = rs.phase else {
         return false;
@@ -390,34 +421,34 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         Phase::Pause | Phase::Tilt | Phase::Raise => {
             // spec: S-0506 claim 19 (the elite launch is read in each pause, tilt and raise tick: the spawner exists and is elite)
             rs.elite = crate::spawn::launcher_elite(w, rs.spawner);
-            if !fresh {
-                rs.elapsed += 1;
-            }
+            // spec: S-0506 claim 14 (r34: claim 24's timer runs on the tick number, S-0203 claim 9, so a turn the missile does not make does not shift its ticks; its next update finds the timer run on)
+            let elapsed = t.wrapping_sub(rs.started);
             match phase {
                 Phase::Pause => {
                     if rs.set == RocketSetId::C {
                         set_c_anim(w, &mut rs, t);
                     }
-                    if rs.elapsed >= p.pause {
+                    if elapsed >= p.pause {
                         // spec: S-0506 Rocket table (pause over: tilt for sets A and B, raise for set C)
                         rs.phase = Some(if rs.set == RocketSetId::C {
                             Phase::Raise
                         } else {
                             Phase::Tilt
                         });
-                        rs.elapsed = 0;
+                        // spec: S-0506 claim 14 (r34: a phase's end is acted on at the first update at or after its timer runs out, and the next phase's timer starts at that update)
+                        rs.started = t;
                     }
                 }
                 Phase::Tilt => {
-                    // spec: S-0506 Rocket table (tilt: pitch by F3 each tick)
-                    rs.pitch = tilt_pitch(p.pitch_initial, p.pitch_final, rs.elapsed, p.tilt, mode);
-                    if rs.elapsed >= p.tilt {
+                    // spec: S-0506 Rocket table (tilt: pitch by F3 each tick); claim 14 (r34: F3's pitch from the elapsed ticks, so an update lost in tilt leaves the next one's pitch as without the loss)
+                    rs.pitch = tilt_pitch(p.pitch_initial, p.pitch_final, elapsed, p.tilt, mode);
+                    if elapsed >= p.tilt {
                         end_of_tilt(w, id, &mut rs, &p, mode);
                     }
                 }
                 _ => {
                     set_c_anim(w, &mut rs, t);
-                    if rs.elapsed >= p.tilt {
+                    if elapsed >= p.tilt {
                         // spec: S-0506 claim 24 (raise adds its rate only on updates before expiry: T − 1 increments)
                         end_of_tilt(w, id, &mut rs, &p, mode);
                     } else {
@@ -551,7 +582,6 @@ fn end_of_tilt(w: &mut World, id: ObjectId, rs: &mut RocketState, p: &RocketSet,
     // spec: S-0506 claim 15 (pitch = P_f × π/2; tracked flying object; take-off sound; ascent)
     rs.pitch = quarter_turns(p.pitch_final, mode).to_f32(mode);
     rs.phase = Some(Phase::Ascent);
-    rs.elapsed = 0;
     crate::combat::flying::register(w, id);
     let Some(o) = w.obj(id) else { return };
     let (of, pos) = (

@@ -665,3 +665,28 @@ but the texts of two switches gain a case. No default changes.
 | `aircraft_grounded_enter_stall` | S-0501 claim 24, Edge cases (r146, Q-2677) | admitted (off), unchanged | r146 names one more aircraft that reaches the stay: one that is not pad-bound, slid after its entry report, was taken off by claim 33's *move*, landed again at its docking position and fell back into *enter* in contact on the ground (claim 24, *Not pad-bound*). Condition 1 holds as before: the Edge case states the off position (it is moved on to the docking stage, reports at its next processing and is serviced), built in `air::enter`. Condition 2 holds more strongly: the spec now traces a whole docking flight that ends in the stay, with its ammunition never refilled, the unit stuck that intake 92 judged. Condition 3 holds: the off position gives it the service a pad-bound aircraft in the same state gets, by claim 26's rules unchanged. Tests, both positions on the new case: `claims_s0501_r146::ac31h6_after_a_touchdown_beside_the_docking_position_it_takes_off_and_lands_again` (on: *enter* to the end of the record, no round; off: a second report and a round); the earlier `claims_s0501_r110::claim_24_grounded_in_contact_stall_switch_both_positions` unchanged. |
 
 Intake 108 leaves the layer file unchanged.
+
+## Intake 110 (S-0208 r52, S-0309 r120, S-0508 r13, S-0506 r34): one new switch, not admitted
+
+Ledger: [intake110.md](intake110.md). S-0208 r52 adds one quirk, `enter_keeps_stored_path`
+(Edge cases, *An enter walker keeps its old path*). It is added to `quirks.rs` with the spec's
+default, on (the original), and both positions are tested (`claims_s0208_r52.rs`). S-0309 r120,
+S-0508 r13 and S-0506 r34 add no quirk; S-0506 r34 only rewraps the line of claim 14 that names
+`rocket_aim_at_heading_point`, whose off position now samples the unit's position at the launch,
+where the aim is fixed. That switch is not in the layer and its admission is unchanged.
+
+| Switch or departure | Spec | Verdict | Built |
+|---|---|---|---|
+| `enter_keeps_stored_path` (off: every new destination drops the stored path) | S-0208 claim 6, *A stored path kept under enter*, and Edge cases | not admitted. Condition 1 holds. Condition 2 does not: no play note or request names it as a bug in play (Q-2701 came from reading the spec, not from play), and the Edge case states a late turn (the walker walks on along its old route, up to a whole stored path, before it turns), not a unit stuck, a give-up with an open way, a unit that never moves again or a visible glitch. Revisit if a play note reports infantry walking away from a transport it was ordered into | `walk::keeps_stored_path`, read in `orders` (the assignment), `scatter` (before the request) |
+| No extra locomotion while a locomotion of the unit's own is under way | S-0208 claim 6, *Requests sent from an extra locomotion*, *In our engine* (a departure, no switch) | no switch (the spec's) | `World::locomotion_under_way`, pushed by `walk::tick` and `walk::extra_locomotion` |
+| A holder's target dropped at every owner change, the listed causes also clearing the destination and requesting *guard* | S-0309 claim 30 (the original's; no switch) | not a departure | `econ::events::owner_changed`, `ownership::Cause::clears_orders`, `triggers` action 14 |
+| A rocket's aim and flight fixed at its launch | S-0506 claim 14 (the original's; no switch) | not a departure | `spawn::launch`, `rocket::fix_at_launch` |
+
+The new switch against our own pathing improvements, as intake 106 read them: with it on, a
+walker under *enter* keeps a stored path where it used to drop it. None of the six changes what it
+fixes: `path_through_stalled_blockers`, `deadlock_no_yield` and `harvest_cell_shared` act on
+blocked or yielding units and on harvesters, whose paths a kept path leaves to the same blocked-step
+and empty-path searches (S-0209 claims 7 and 10, S-0212 claim 20) as before;
+`unreachable_move_dropped` and `group_spread_no_detour` act in the computation and at the order,
+before any stored path exists for the new destination; `rally_point_shared` gives released units
+their rally move, which no *enter* precedes. Intake 110 leaves the layer file unchanged.

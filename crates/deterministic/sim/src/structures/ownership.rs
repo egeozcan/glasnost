@@ -38,6 +38,17 @@ impl Cause {
     pub fn announces(self) -> bool {
         matches!(self, Cause::Capture | Cause::Takeover | Cause::MindControl)
     }
+
+    /// Whether the change also clears the building's destination and
+    /// requests *guard* here (S-0309 claim 30: an engineer capture, a
+    /// trigger's change-owner action, a civilian garrison building's
+    /// occupation and return). A mind-control takeover and release do it in
+    /// `mind` (S-0601 claims 6 and 9). The vehicle-like takeover is not
+    /// listed.
+    pub fn clears_orders(self) -> bool {
+        // spec: S-0309 claim 30 (the causes listed: S-0508 claims 7 and 8, S-0509 claim 8, S-0011 claim 24); design: Q-2747 interim (the vehicle-like takeover of S-0509 claim 17 drops the target only)
+        matches!(self, Cause::Capture | Cause::Trigger | Cause::Occupation)
+    }
 }
 
 /// How close, in leptons, a staying contact must be to the building's
@@ -84,6 +95,10 @@ pub fn change_by(
     // spec: S-0518 claim 3 (an ownership change makes the building the new owner's newest acquisition)
     crate::linked::acquire(w, b);
     crate::econ::events::owner_changed(w, b, old);
+    if cause.clears_orders() {
+        // spec: S-0309 claim 30 (for the causes listed, the same change also clears the holder's destination and requests guard as S-0601 claim 9 gives for a release, with its exception for a simple-deployer vehicle in unload; a building being sold ignores the guard request, S-0215 claim 7)
+        crate::mind::release_orders(w, b);
+    }
     if spawner {
         // spec: S-0509 claim 12 and S-0506 claim 13 (a missile silo's spawner clears its slots when the building changes house)
         crate::spawn::owner_changed(w, b);

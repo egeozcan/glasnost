@@ -381,8 +381,11 @@ fn guard_reset(w: &mut World, id: ObjectId) {
 /// What a release's owner change does to orders (claim 9): the target and
 /// destination are cleared and *guard* is requested with the
 /// readiness-dependent immediate start of S-0215 claim 7, except for a
-/// simple-deployer vehicle in *unload*.
-fn release_orders(w: &mut World, id: ObjectId) {
+/// simple-deployer vehicle in *unload*. S-0309 claim 30 gives the same to
+/// the owner changes it lists (an engineer capture, a trigger's change-owner
+/// action, a civilian garrison building's occupation and return), called by
+/// `structures::ownership` and `triggers`.
+pub(crate) fn release_orders(w: &mut World, id: ObjectId) {
     if deploying_in_place(w, id) {
         // spec: S-0601 claim 9 (a simple-deployer vehicle currently in unload skips the guard request)
         return;
@@ -502,7 +505,7 @@ pub fn take(w: &mut World, c: ObjectId, t: ObjectId) -> bool {
     if let Some(r) = w.mind.controllers.get_mut(&c) {
         r.victims.push(t);
     }
-    // spec: S-0601 claim 6 (a guard reset, S-0215 claim 9)
+    // spec: S-0601 claim 6 (a guard reset, S-0215 claim 9); S-0309 claim 30 (the takeover's change has dropped the target inside it; the guard reset it adds clears the destination and forces guard, which covers the claim's destination clear and guard request)
     guard_reset(w, t);
     // spec: S-0601 claim 6 (leaves its team, temporal let-go, open-topped passengers' targets)
     owner_independent(w, t);

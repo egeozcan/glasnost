@@ -1053,6 +1053,15 @@ fn launch(w: &mut World, spawner: ObjectId, i: usize) {
             o.dest = target;
             o.beh.force(crate::rules::Behaviour::Move, t, stale);
         }
+        // spec: S-0506 claim 14 (r34: a destination whose in-the-air answer is false at the launch: the aim point is fixed at that launch, in the launch pass, in the tick of the placement); design: Q-2748 interim (a destination in the air at the launch: the aim is fixed at the missile's first update, as in r20)
+        if let Some(dest) = target
+            && match dest {
+                Target::Cell(_) => true,
+                Target::Object(d) => !crate::combat::weapon::in_air(w, d),
+            }
+        {
+            crate::rocket::fix_at_launch(w, x, dest);
+        }
     } else {
         crate::objects::place(w, x, pos, facing);
         // spec: S-0506 claim 7 (a non-missile slot's object: sent to the step direction 0 neighbour of the spawner's cell)
@@ -1308,16 +1317,7 @@ pub fn killed(w: &mut World, id: ObjectId) {
 /// 13): a spawner clears its slots; a slot object is announced as lost;
 /// controllers whose target it is reset unless a pending target waits.
 pub fn removing(w: &mut World, id: ObjectId) {
-    // Clear requests recorded earlier are settled before the loss rules read pending and controller targets.
-    let waiting: Vec<ObjectId> = w
-        .objects
-        .iter()
-        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.clear_request.is_some()))
-        .map(|(&k, _)| k)
-        .collect();
-    for s in waiting {
-        settle_clear(w, s);
-    }
+    settle_waiting(w);
     if w.obj(id).is_some_and(|o| o.spawn.is_some()) {
         // spec: S-0506 claim 13 (the spawner removed)
         clear_slots(w, id);
@@ -1327,6 +1327,37 @@ pub fn removing(w: &mut World, id: ObjectId) {
     // spec: S-0506 claim 26 (removing an enrolled aircraft keeps the others' relative order)
     w.spawned.kamikaze.retain(|&(k, _)| k != id);
     crate::combat::flying::unregister(w, id);
+    target_gone(w, id);
+}
+
+/// An object leaves play by going inside a building or a transport (S-0506
+/// claim 14, r34): for the controllers, a target leaving play as at a
+/// removal. A pending target that goes inside is cleared (claim 25's loss
+/// notification); a controller whose target goes inside resets unless a
+/// pending target waits (claim 11). The object's own slots and its slot are
+/// not touched: it stays in existence.
+pub fn target_leaves_play(w: &mut World, id: ObjectId) {
+    settle_waiting(w);
+    // spec: S-0506 claim 14 (r34: a destination that goes inside a building or a transport leaves play; when it is the controller target and no pending target is waiting, claim 11's reset follows when it leaves play)
+    target_gone(w, id);
+}
+
+/// Clear requests recorded earlier are settled before the loss rules read
+/// pending and controller targets.
+fn settle_waiting(w: &mut World) {
+    let waiting: Vec<ObjectId> = w
+        .objects
+        .iter()
+        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.clear_request.is_some()))
+        .map(|(&k, _)| k)
+        .collect();
+    for s in waiting {
+        settle_clear(w, s);
+    }
+}
+
+/// The controllers' side of `id` leaving play (S-0506 claims 11 and 25).
+fn target_gone(w: &mut World, id: ObjectId) {
     let gone = Some(Target::Object(id));
     // spec: S-0506 claim 25 (loss notification for the pending target clears it at once, whatever the own target)
     let holders: Vec<ObjectId> = w
@@ -1437,7 +1468,8 @@ pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
 /// ammunition of exactly 1 round, its release cell as target and *attack*
 /// queued without an immediate start. It takes no random draws. A rocket
 /// missile receives the same changes; they do not alter its flight, whose
-/// aim point is fixed by its first move order (claim 14).
+/// aim point is fixed at its launch (claim 14, r34; Q-2748 interim: at its
+/// first update for a destination in the air at the launch).
 pub fn kamikaze_orders(w: &mut World) {
     let t = w.tick;
     // spec: S-0506 claim 26 (the cycle is due on its deadline tick; tick numbers only grow)
