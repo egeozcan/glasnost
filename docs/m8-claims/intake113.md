@@ -128,7 +128,8 @@ target asserted).
 ## Formats and goldens
 
 No hashed state was added, but the change moves what saved games and AI games replay to (7 games
-of the AI quick lane), so the formats go one past main: save 115 and AI game 80. Wire stays at 12. The schema
+of the AI quick lane), so the formats go one past main after intake 112 (main 3ad4749, save 115,
+AI game 80): save 116 and AI game 81. Wire stays at 12. The schema
 gains the switch (`data/schema/ruleset.schema.json`). The goldens are regenerated on the rebased
 tree (`GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate -- --include-ignored`).
 
