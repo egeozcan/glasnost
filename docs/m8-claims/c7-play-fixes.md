@@ -722,3 +722,24 @@ The new switches against our own pathing improvements, as intake 106 read them: 
 a path search, a blocked step or a release. `rally_point_shared` gives a released unit its rally
 move; claim 31 forgets the guard spot that the release saved, which both positions of that switch
 fill the same way. Intake 112 leaves the layer file unchanged.
+
+## A3 intake 113 (S-0011 r29, S-0312 r54, S-0506 r37, S-0208 r53): one new switch, not admitted
+
+Ledger: [intake113.md](intake113.md). S-0011 r29 adds one quirk, `removed_carrier_keeps_tag`
+(Edge cases, *Removed carrier keeps its tag*), which S-0312 r54 claim 29 (*Infantry still showing
+death*) also names. It is added to `quirks.rs` with the spec's default, on (the original), and both
+positions are tested (`claims_s0011_r29.rs`). S-0506 r37 adds no quirk. S-0208 r53 rewrites the
+text of `enter_keeps_stored_path` (an order to garrison gives *capture*, not *enter*, so it drops
+the path of a walker under *move* under either setting); that switch is judged again below.
+
+| Switch or departure | Spec | Verdict | Built |
+|---|---|---|---|
+| `removed_carrier_keeps_tag` (off: an object loses its tag when it is removed, as at a detachment, so the count drops by one and a leftover carries no tag) | S-0011 claim 2 and Edge cases; S-0312 claim 29 | not admitted. Condition 1 holds: the Edge case states the off position, and it is built (`objects::remove_with` detaches the tag only with the switch off). Condition 2 fails. The quirk text gives the on position's effect as an all-carriers tag that does not fire at its last carrier's raise after a carrier was destroyed before the trigger was satisfied: a map trigger that does not fire, not a unit stuck, a give-up with an open way or a visible glitch, and no play note or request names it (Q-2716 came from reading S-0203, not from play). Condition 3 fails too: the maps' triggers were written against the original's count, so the off position changes when mission and multiplayer triggers fire, and it adds S-0312 claim 29's raises to no leftover, a rule change | `objects::remove_with`, `leftover::sweep_hit` (the raises at the sweep's killing hit), `triggers::destruction_raises` |
+| `enter_keeps_stored_path` (text rewritten in r53) | S-0208 claim 6 and Edge cases (r53, Q-2746) | not admitted, unchanged. r53 narrows the on position: a garrison order (*capture*) no longer keeps a path, so the late turn intake 110 judged is left only to orders into a transport. Condition 2 still fails for the reason intake 110 gives | `walk::keeps_stored_path` (unchanged: it tests *enter* only) |
+| A rocket launched at a controller target in the air waits for a destination not in the air | S-0506 claims 7, 14 and 24 (the original's; no switch) | not a departure | `spawn::launch`, `rocket::give_destination` |
+| Which destination that waiting rocket is first given | S-0506 claim 14, Open questions (Q-2748 questions 2 and 3) | our interim, no switch: the release cell at the shared re-order (`spawn::kamikaze_orders`), one of the candidates the Open question names, so no rocket stands without a flight | `spawn::kamikaze_orders` |
+| A controller target lost while a pending target waits | S-0506 claim 11 (Q-2811 filed) | our interim, no switch: the target is not cleared and nothing resets, as r34 was built; the next launch adopts the pending target (claim 3) | `spawn::target_gone` |
+
+The new switch against our own pathing improvements, as intake 106 read them: it moves no unit,
+and none of the six reads a trigger tag or its carrier count. Intake 113 leaves the layer file
+unchanged.

@@ -105,7 +105,7 @@ otherwise. Synthetic data only.
 | S-0208 claim 6, the departure: no extra locomotion while one of the unit's own is under way | tested | `no_extra_locomotion_while_one_of_its_own_is_under_way`; `claims_s0208_r46.rs` `q2702_extra_locomotions_in_a_crowd_end`, `q2702_no_extra_locomotion_inside_its_own` (recited) |
 | S-0208 Edge cases, `enter_keeps_stored_path` off | tested | `w17_f_switch_off_drops_the_path`, `w17_g_…`, `w17_h_…`, `the_keep_condition`, `a_scatter_drops_…` |
 | Q-2750 interim, a standing walker whose path a scatter drops | tested | `a_scatter_drops_the_path_in_contact_or_with_the_switch_off` (no walking target until its next locomotion) |
-| S-0208 claim 6, a garrison order under *enter* (Q-2746) | seam | which orders count as an *enter* for a building to garrison is not given; built as any *enter* |
+| S-0208 claim 6, a garrison order under *enter* (Q-2746) | seam; tested since intake 113 | which orders count as an *enter* for a building to garrison is not given; built as any *enter*. Answered by S-0208 r53: a garrison order gives *capture*, which is no *enter* (`claims_s0208_r53.rs`, [intake113.md](intake113.md)) |
 | S-0309 claim 30, the drop inside the change, no draw, the timer counts on (A19 a, c) | tested | `a_captured_building_drops_its_target_with_no_draw` |
 | S-0309 claim 30, whatever the target; no change, no drop | tested | `the_drop_is_whatever_the_target_and_none_without_a_change` |
 | S-0309 claim 30, the listed causes: destination and *guard* | tested | `listed_causes_request_guard_the_takeover_drops_only`, `a_trigger_owner_change_drops_target_and_destination` (A19 b) |
@@ -120,8 +120,8 @@ otherwise. Synthetic data only.
 | S-0506 claim 14, a destination that leaves play after the launch (R25) | tested | `a_destination_removed_in_the_launch_tick_does_not_stop_the_flight` (the missile makes no update before the removal), `a_destination_that_goes_inside_resets_the_controller_and_the_missile_flies_on` |
 | S-0506 claim 11 through claim 14, no reset with a pending target waiting | tested | `no_reset_when_a_pending_target_waits` |
 | S-0506 claims 14 and 24, the timer on the tick number | tested | `the_flight_timer_runs_on_the_tick_number`, `uninterrupted_boundaries_from_the_launch_tick` |
-| S-0506 claim 14, a destination in the air at the launch (Q-2748) | tested | `q2748_a_flight_not_fixed_at_the_launch_starts_at_the_first_update` (interim: r20's rule) |
-| S-0506 claim 12, the release cell when the controller target has left play (Q-2749) | seam | interim: the cell under the object's position while it exists; not tested on its own |
+| S-0506 claim 14, a destination in the air at the launch (Q-2748) | tested; replaced at intake 113 | `q2748_a_flight_not_fixed_at_the_launch_starts_at_the_first_update` (interim: r20's rule). S-0506 r37 gives no destination and no flight until a destination not in the air; the test is gone, see `claims_s0506_r37.rs` and [intake113.md](intake113.md) |
+| S-0506 claim 12, the release cell when the controller target has left play (Q-2749) | seam; tested since intake 113 | interim: the cell under the object's position while it exists; not tested on its own. Answered by S-0506 r37: the target is cleared before the reset, so the F8 cell (`claims_s0506_r37.rs`) |
 | S-0506 claim 14, a pending target that goes inside | partly | cleared as at a loss notification (claim 25) in `spawn::target_leaves_play`; our reading of "leaves play" for the pending target, not tested on its own |
 
 Older tests changed by these revisions, each with the claim it now cites:

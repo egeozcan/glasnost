@@ -60,6 +60,7 @@ filed (Q-2766 to Q-2775 unused). Part 2 (the rocket commit c040e98 split) is bel
 
 Q-2596, Q-2597, Q-2649, Q-2716 (13 (g) raises), Q-2726 (*sticky*), Q-2746 (a garrison order under
 *enter*), Q-2749 (the release cell after the target left play): 7 rows, left as the brief says.
+Q-2716, Q-2746 and Q-2749 were answered and built at intake 113 ([intake113.md](intake113.md)).
 
 ## Left (no test written)
 

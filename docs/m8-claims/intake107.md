@@ -105,7 +105,7 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
 | 13 (f): two sweeps in a surrender's house update (O18 g) | tested | `claims_s0203_r53::o18_g_two_sweeps_in_a_surrender` (both positions) |
 | 13 (f): three sets of effects for a vehicle removed earlier in that tick | partly | follows from the same walk; no test sets up both at once (the spec leaves it `unmeasured`) |
 | 13 (g): a killing hit for health left, a loss and no kill | tested | `o18_e_the_sweep_hit_raises_no_tag_and_only_a_killing_hit_counts`, `o18_h_a_vessel_whose_descent_ends` |
-| 13 (g): claim 29's raises at that hit | seam (interim Q-2716) | the tag is detached at removal, so none comes |
+| 13 (g): claim 29's raises at that hit | seam (interim Q-2716); tested since intake 113 | the tag is detached at removal, so none comes. Q-2716 answered by S-0011 r29 and S-0312 r54: the leftover keeps its tag and the raises come (`claims_s0011_r29::the_sweep_hit_on_a_tagged_leftover_raises_its_tag`, [intake113.md](intake113.md)) |
 | 13 (g), Sinking: claim 10's branch, the vessel kept (O18 h) | tested | `claims_s0203_r53::o18_h_a_vessel_whose_descent_ends` |
 | 13 (g), Sinking: a crashable vessel removed again, ends with its tick | tested | `claims_s0203_r53::o18_h_a_crashable_vessel_ends_with_its_tick` |
 | 13 (g), Sinking: no health, no sinking; the bomb mark's wake and splash | partly (seam) | no sinking without health is built; S-0312 claim 11's wake and splash is not built in our engine (seam, as at the first death) |
