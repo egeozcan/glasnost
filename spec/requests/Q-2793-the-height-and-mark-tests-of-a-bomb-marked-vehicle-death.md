@@ -1,9 +1,9 @@
 ---
 id: Q-2793
 title: The height and mark tests of a bomb-marked vehicle's death
-status: open
+status: answered
 related: [S-0312, S-0511, S-0503]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
