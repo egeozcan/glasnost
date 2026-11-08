@@ -160,6 +160,17 @@ Main 9a170d0 against the branch, measured before the commit.
     reproduced the branch's three seed 9, map 0 results exactly, the unfinished game included.
     So the tag change is not the cause, and the change comes from the S-0506 r37 side. The
     diagnostic edit was made and reverted with Edit and was never committed.
+  - **Re-taken on main 3ad4749** (intake 112 merged), for the three traced games only, with
+    quick runs of main's binary and of the rebased branch's:
+
+    | Seed, map 0, sides 1,2 | 9a170d0 | branch on 9a170d0 | 3ad4749 | branch on 3ad4749 |
+    |---|---|---|---|---|
+    | 7 | house 1 at 73 972 | house 0 at 47 234 | house 1 at 73 972 | house 0 at 47 234 |
+    | 8 | house 0 at 84 773 | house 1 at 72 912 | house 0 at 78 083 | house 0 at 77 491 |
+    | 9 | house 0 at 45 490 | not over at 120 000 | house 0 at 45 490 | house 0 at 113 455 |
+
+    On 3ad4749 only seed 7's winner changes, and seed 9 ends. The traces below were taken on
+    9a170d0; seeds 7 and 9 give the same results on both bases.
   - **Traced** with the lane's new `GLASNOST_AI_HASH` and `GLASNOST_AI_OBJS`. Main's and the
     branch's binaries were each built with them, the hashes compared every 1000 ticks and then
     every tick, and every object diffed at the first tick that differs. The hashes agree up to
