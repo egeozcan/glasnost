@@ -1140,7 +1140,7 @@ S-0309 r124 claim 31 (Q-2747) is built in `structures::ownership::reset_orders`;
   takeover included; `ownership::contacts` for each contact that follows the building;
   `triggers` (change-owner action, mobile branch); `mind::take` and `mind::release` for a mobile
   object (a building's goes through `change_by`). The takeover's guard reset comes after it.
-  Domination (S-0601 claim 13) makes no reset (Q-2801 question 7).
+  Domination (S-0601 claim 13) made no reset (Q-2801 question 7); since intake 116 it does.
 - **Order.** The two quirk clears (`quirks.owner_change_keeps_override`,
   `quirks.owner_change_keeps_attack_move`, both default on), the change-of-target test, the
   destination clear (only when it has one), the guard spot (kept while deploying or undeploying
@@ -1149,7 +1149,8 @@ S-0309 r124 claim 31 (Q-2747) is built in `structures::ownership::reset_orders`;
   fall-back: `process::fall_back` for a mobile object, the idle-body request and a queued
   *guard* for a building. No fall-back off the map, in contact with a vehicle factory, or for a
   vehicle factory still in *unload*.
-- **Interims.** Q-2801 (seven questions) and, for S-0501 r150's *sticky*, Q-2802 (three).
+- **Interims.** Q-2801 (seven questions; answered by S-0309 r126 and built at intake 116,
+  below) and, for S-0501 r150's *sticky*, Q-2802 (three).
 
 S-0501 r150 (Q-2726) is in `air::guard` (the pad search on the ground too; a processing at
 exactly cruise height returns 1 tick) and `air::guard_move` (its *guard*-only test is now the
@@ -1158,6 +1159,46 @@ spec's); tests `claims_s0501_r150.rs`. S-0207 r85 (Q-2781) is in `scatter::vehic
 seized vehicle refuses the candidate as its destination) and `scatter::vehicle_centre_cell` (a
 gripped unit with the jumpjet stand-in uses `jump::heading_cell`); tests `claims_s0207_r85.rs`.
 Save format 115, AI game format 80.
+
+## Simulation (M8 A3 intake 116: building work at an owner change)
+
+S-0309 r126 claim 31 (Q-2801 answered) extends `structures::ownership::reset_orders`; the
+ledger is [docs/m8-claims/intake116.md](../m8-claims/intake116.md), the tests are
+`claims_s0309_r126.rs`, and two r124 tests now cite the answer.
+
+- **Order.** After the fall-back comes `ownership::opening`, the grand-opening step, for every
+  building, whatever the earlier steps did and with either switch position. A building still in
+  its construction state that has not had an opening gets `Construction::opened` and its ready
+  mark. `Construction::opened` means the opening has happened. The construction behaviour then
+  completes at once without a free unit (`deploy::process_construction`). A first processing
+  still cancels the idle body (`body::leave_idle`). The construction state ends when the idle
+  body is in place and no *construction* is current or queued, at the end of the building's
+  turn (`placement::opened_turn_end`, from `process::tail`). The app shows the slot animations
+  from `opened`. Our naval vehicle factories get no rally point from a grand opening, so the
+  step gives none either (S-0309 Open questions).
+- **Fall-back.** A building requests its idle body also while selling or being built up. With
+  `body::turn`, the body-range rule (S-0215 claim 11) now also reads a turreted building's range
+  while it is in *construction* or *selling*. A *guard* processed with no idle body requests one
+  (`combat::behave::building_process`): this is the third build-up case.
+- **Sale.** The sale's build-down start drops any idle body (`sell::process_selling`, Begun),
+  so a change before it leaves the sale unchanged. During the build-down, a running idle range
+  takes its place. The sale ends at the first processing after that range has set the ready mark
+  while selling (`IdleBody::sale_report`), not at a mark set before the replacement. With delay
+  0 that is the next turn. With *c* ≥ 2 stages it is (*c* − 1) × N(*d*, *s*) later. One stage
+  with a positive delay stalls.
+- **Vehicle factory.** The guard request replaces a queued *unload*, or ends a current one when
+  the factory is ready. The unit not yet sent out stays at its exit point with its contact.
+  `release::ground` gives *failed* while a vehicle of the same house stands there with no
+  destination and no movement (`release::stranded_at`; Q-2841 for the rest of S-0209's entry
+  test). The ground unloading's starting stage no longer moves a door that is already open.
+- **Domination.** `mind::dominate` calls `reset_orders` when the owner actually changes. It
+  adds no guard reset, so a resumed attack move keeps its destination.
+- **Switch.** `quirks.owner_change_interrupts_building_work` (default on). Off: a building
+  selling, a vehicle factory with *unload* current or queued, and a depot with *repair* current
+  get neither the guard request nor the fall-back (`ownership::keeps_work`). The opening still
+  applies. The C7 verdict is in [c7-play-fixes.md](../m8-claims/c7-play-fixes.md).
+- **State.** `Construction::opened` and `IdleBody::sale_report` (both serde default false),
+  hashed.
 
 ## Simulation (M7b: psychic dominator)
 

@@ -782,3 +782,20 @@ The new switches against our own pathing improvements, as intake 106 read them: 
 path search, a blocked step or a release. Intake 114's S-0209 r60 restart of the blockage delay
 changes when a waiting walker's search avoids its blocker; it reads no switch of the layer. Intake
 114 leaves the layer file unchanged.
+
+## A3 intake 116 (S-0309 r126): one new switch, not admitted
+
+Ledger: [intake116.md](intake116.md). S-0309 r126 (Q-2801) adds one quirk to claim 31,
+`owner_change_interrupts_building_work` (Edge cases). It is added to `quirks.rs` with the spec's
+default, on (the original), and both positions are tested for the sale, the vehicle factory and
+the depot (`claims_s0309_r126.rs`).
+
+| Switch | Spec | Verdict | Built |
+|---|---|---|---|
+| `owner_change_interrupts_building_work` (off: a building selling, a vehicle factory with *unload* current or queued and a repair depot with *repair* current get neither the guard request nor the fall-back, so the sale, the unloading and the repair go on under the new owner; the change's other effects, the grand opening among them, still apply) | S-0309 claim 31 and Edge cases | not admitted. Condition 1 holds: the Edge case states the off position, and it is built. Condition 2 is arguable but fails as the rule reads. Claim 31's consequences give the on position two outcomes close to a stuck object. The vehicle factory's unsent unit stays at its exit point until an order moves it, and every release of the factory fails meanwhile. A sold building whose idle range has one stage and a positive delay stalls in *selling*. But the Edge case states only the off position, not the on position as a fault. An order frees the unit, so it is not "never moving again". The stall needs an idle range of one stage with a positive delay, and the spec gives it the outcome of S-0408 claim 17's one-stage build-down, which has no switch. No play note or request names either (Q-2801 came from building claim 31). Condition 3 holds: the off position changes no combat, only when a captured building's sale pays, whether a captured factory's waiting unit leaves, and whether a depot keeps repairing at the new owner's cost. A play note naming a captured factory that stops producing would meet condition 2 | `structures::ownership::keeps_work`, read in `reset_orders` before the guard request and the fall-back; both positions tested: `quirk_interrupts_building_work_off_keeps_the_builddown`, `quirk_interrupts_building_work_off_sends_the_unit_out`, `quirk_interrupts_building_work_off_keeps_the_repair`, against the on tests of the same file |
+
+The new switch against our own pathing improvements, as intake 106 read them. It changes no path
+search and no blocked step. It does change a release: with it on, `release::ground` fails while
+the stranded unit stands at the exit point (`release::stranded_at`). None of the six improvements
+reads that test, and `rally_point_shared` fills a released unit's rally move the same way under
+both positions. Intake 116 leaves the layer file unchanged.

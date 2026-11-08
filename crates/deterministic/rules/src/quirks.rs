@@ -651,6 +651,10 @@ pub struct Quirks {
     // spec: S-0309 claim 31 and Edge cases
     #[serde(default = "on")]
     pub owner_change_keeps_attack_move: bool,
+    /// An owner change's guard request and fall-back reach a building in the middle of its work: a sale in its build-down switches to the idle body, a vehicle factory's unloading ends or never starts, and a repair depot stops repairing; off: a building selling, a vehicle factory with unload current or queued and a repair depot repairing at the change get neither, so that work goes on under the new owner.
+    // spec: S-0309 claim 31 and Edge cases
+    #[serde(default = "on")]
+    pub owner_change_interrupts_building_work: bool,
     /// Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -2436,6 +2440,7 @@ impl Default for Quirks {
             stale_suspended_revert: true,
             owner_change_keeps_override: true,
             owner_change_keeps_attack_move: true,
+            owner_change_interrupts_building_work: true,
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
             berserk_action_cursor: true,
@@ -3191,6 +3196,10 @@ impl Quirks {
             (
                 "owner_change_keeps_attack_move",
                 self.owner_change_keeps_attack_move,
+            ),
+            (
+                "owner_change_interrupts_building_work",
+                self.owner_change_interrupts_building_work,
             ),
             ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
             ("berserk_carrier_tote", self.berserk_carrier_tote),

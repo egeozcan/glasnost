@@ -5,6 +5,9 @@
 //! Only the *idle* state is followed. A building enters it at game set-up
 //! (S-0215 claim 1, S-0009 claim 40) and at its construction handover
 //! (S-0406 claim 15), and leaves it when it enters construction or selling.
+//! An owner change requests it again (S-0309 claim 31), also for a building
+//! that is selling or being built up, where it can take the place of the
+//! build-down or the build-up.
 //! The other body states (*active*, *aux-1*, *aux-2*, *full*) and what
 //! puts a building in them are not modelled: the range keeps running as
 //! *idle* through them (interim, docs/development.md).
@@ -24,6 +27,11 @@ pub struct IdleBody {
     pub since: i32,
     /// The delay in ticks the stage runs with.
     pub delay: i32,
+    /// The range has set the ready mark while the building is selling: an
+    /// idle range that took the place of a sale's build-down at an owner
+    /// change has made its report (S-0309 claim 31, S-0408 claim 17).
+    #[serde(default)]
+    pub sale_report: bool,
 }
 
 /// The *idle* range (*a*, *c*, *d*) of a building type (S-0108 Import
@@ -84,6 +92,7 @@ pub fn enter_idle(w: &mut World, id: ObjectId, immediate: bool) {
             stage: a,
             since: t,
             delay,
+            sale_report: false,
         });
     }
 }
@@ -104,8 +113,10 @@ pub fn leave_idle(w: &mut World, id: ObjectId) {
 pub fn turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let Some(body) = o.econ.idle_body else { return };
-    // spec: S-0215 claim 11 (for a turreted building the body-range rule applies only in construction or selling, so its idle range sets no mark; its stages have no other effect in the simulation)
-    if turreted(w, id) {
+    let selling = o.beh.seen() == Some(crate::rules::Behaviour::Selling);
+    let building_work = selling || o.beh.seen() == Some(crate::rules::Behaviour::Construction);
+    // spec: S-0215 claim 11 (for a turreted building the body-range rule applies only while its behaviour is construction or selling, a queued one seen while none is current included, so its idle range sets no mark otherwise; its stages have no other effect in the simulation)
+    if turreted(w, id) && !building_work {
         return;
     }
     let ([a, c, d], norm) = range(w, o.type_index);
@@ -133,6 +144,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
         }
     }
     if let Some(ob) = w.obj_mut(id) {
+        if mark && selling {
+            // spec: S-0309 claim 31 (the sale ends at the first selling processing that finds the ready mark set, which the idle range sets by S-0215 claim 11's rule)
+            next.sale_report = true;
+        }
         ob.econ.idle_body = Some(next);
         if mark {
             ob.beh.ready_mark = true;

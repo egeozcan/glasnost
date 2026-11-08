@@ -1574,8 +1574,10 @@ impl Live {
                         .collect();
                 let st = slot_play::State {
                     // spec: S-0108 claims 11 and 17 (completed and not in the construction state; a building placed in play, or a code-130 replacement, enters with construction queued and opens at its completion) and S-0406 claim 17 (while none is current, the queued behaviour is the one seen)
+                    // spec: S-0309 claim 31 (an owner change during the build-up makes the grand opening at once, starting the slot animations)
                     completed: glasnost_sim::econ::placement::seen_behaviour(o)
-                        != Some(Behaviour::Construction),
+                        != Some(Behaviour::Construction)
+                        || o.econ.construction.opened,
                     // spec: S-0108 claim 11 (a building of the map was placed during the game's set-up)
                     setup: self.building_ids.values().any(|b| *b == o.id),
                     damaged: super::build::condition_of(&self.rules, o.health, r.strength).0,

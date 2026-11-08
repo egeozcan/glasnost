@@ -10085,6 +10085,11 @@
           "type": "boolean",
           "default": true
         },
+        "owner_change_interrupts_building_work": {
+          "description": "An owner change's guard request and fall-back reach a building in the middle of its work: a sale in its build-down switches to the idle body, a vehicle factory's unloading ends or never starts, and a repair depot stops repairing; off: a building selling, a vehicle factory with unload current or queued and a repair depot repairing at the change get neither, so that work goes on under the new owner.",
+          "type": "boolean",
+          "default": true
+        },
         "owner_change_keeps_attack_move": {
           "description": "An owner change keeps the attack-move memory and its engaged mark, so the change's fall-back can resume the attack move; off: the change removes the memory, its remembered destination and target and the engaged mark before the guard request.",
           "type": "boolean",

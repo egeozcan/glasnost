@@ -319,6 +319,10 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
     let b = &rules.buildings[o.type_index as usize];
     let armed = crate::combat::weapon::slot_weapon(w, id, 0).is_some();
     let cur = o.beh.current;
+    if cur == Some(Behaviour::Guard) && o.beh.expired && o.econ.idle_body.is_none() {
+        // spec: S-0309 claim 31 (a building whose build-up an owner change cut short and whose first construction processing cancelled the change's idle-body request: the idle body follows from the request that guard's first processing makes, S-0108 claim 6)
+        crate::econ::body::enter_idle(w, id, false);
+    }
     // spec: S-0609 claim 7 (the elapsed-tick count c of this processing, read before any behaviour start resets it)
     let c = o.beh.elapsed;
     if cur == Some(Behaviour::Attack) {

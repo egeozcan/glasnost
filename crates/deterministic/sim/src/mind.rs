@@ -811,8 +811,12 @@ pub fn dominate(w: &mut World, id: ObjectId, h: HouseId) -> bool {
     // spec: S-0601 claim 13 (a controlled object is first released by its controller, with all of claim 9's effects)
     release_one(w, id);
     // spec: S-0601 claim 13 (then it belongs to the dominating house; no owner change when it already does)
-    // design: Q-2801 (question 7: domination is not among S-0309 claim 30's listed causes, so claim 31's orders reset is not made; the change drops the target only)
+    let changes = w.obj(id).is_some_and(|o| o.owner != Some(h));
     set_owner(w, id, Some(h));
+    if changes {
+        // spec: S-0309 claims 30 and 31 (a psychic domination is a change of claim 30's list and resets the orders inside it, adding no guard reset; a release before it gave the reset at the release's change too, the domination's only when the dominating house is not then the owner)
+        crate::structures::ownership::reset_orders(w, id);
+    }
     // spec: S-0601 claim 13 and S-0612 claim 14 (it becomes permanently controlled, never cleared; no original owner is recorded; a set, so one ring however often it is taken)
     w.mind.permanent.insert(id);
     true

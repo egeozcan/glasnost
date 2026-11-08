@@ -642,6 +642,8 @@ pub fn tail(w: &mut World, id: ObjectId) {
     if o.health <= 0 || !o.beh.due(t) {
         if kind == Kind::Building {
             second_start(w, id);
+            // spec: S-0309 claim 31 (an opened building's idle body follows at the end of the turn)
+            crate::econ::placement::opened_turn_end(w, id);
         }
         // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing)
         crate::combat::acquire::per_tick(w, id);
@@ -655,6 +657,8 @@ pub fn tail(w: &mut World, id: ObjectId) {
     }
     if kind == Kind::Building {
         second_start(w, id);
+        // spec: S-0309 claim 31 (an opened building's idle body follows at the end of the turn)
+        crate::econ::placement::opened_turn_end(w, id);
     }
     // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
     crate::combat::acquire::per_tick(w, id);

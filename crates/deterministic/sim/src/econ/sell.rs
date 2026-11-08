@@ -666,8 +666,16 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
                     pos: Some(o.pos),
                 });
             }
+            // spec: S-0309 claim 31 (an idle-body request of an owner change before the build-down starts took effect or is cancelled by that start, an immediate change, S-0108 claim 6: either way the build-down runs its whole range)
+            crate::econ::body::leave_idle(w, id);
             // spec: S-0408 claim 6 (build-down begins)
             set_stage(w, id, sale.packs, Stage::BuildDown(tick));
+        }
+        Stage::BuildDown(_) if o.econ.idle_body.is_some() => {
+            // spec: S-0309 claim 31 (with an owner change during the build-down the idle range replaced it: the sale ends at the first selling processing that finds the ready mark set by that range, S-0408 claim 17; an idle range of one stage with a positive delay never sets it, so the sale stalls)
+            if o.econ.idle_body.is_some_and(|b| b.sale_report) {
+                finish(w, id, sale.packs);
+            }
         }
         Stage::BuildDown(since) => {
             // spec: S-0408 claims 6 and 17 (the processing that sees the build-down's completion report pays and removes)

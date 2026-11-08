@@ -127,9 +127,10 @@ pub(crate) fn reset_orders(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let (kind, on_map) = (o.kind, o.on_map);
     let q = &w.rules().quirks;
-    let (keep_override, keep_memory) = (
+    let (keep_override, keep_memory, interrupts) = (
         q.owner_change_keeps_override,
         q.owner_change_keeps_attack_move,
+        q.owner_change_interrupts_building_work,
     );
     let t = w.tick;
     let stale = q.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
@@ -161,23 +162,49 @@ pub(crate) fn reset_orders(w: &mut World, id: ObjectId) {
     }
     // spec: S-0309 claim 31 (a harvester forgets its remembered cell, S-0402 claim 3)
     crate::econ::harvest::forget_remembered(w, id);
+    // spec: S-0309 Edge cases (quirks.owner_change_interrupts_building_work off: a building selling, a vehicle factory with unload current or queued and a repair depot repairing at the change get neither the guard request nor the fall-back)
+    let work_kept = kind == Kind::Building && !interrupts && keeps_work(w, id);
     // spec: S-0309 claim 31 (a simple-deployer vehicle whose current behaviour is unload gets no guard request)
-    if !crate::mind::deploying_in_place(w, id) {
+    if !work_kept && !crate::mind::deploying_in_place(w, id) {
         // spec: S-0309 claim 31 (the readiness is read after the clears above)
         let ready = crate::process::ready(w, id);
         if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0309 claim 31 and S-0215 claim 7 (guard is requested with a readiness-dependent immediate start; selling ignores the request, wait refuses guard)
+            // spec: S-0309 claim 31 and S-0215 claim 7 (guard is requested with a readiness-dependent immediate start, replacing a queued behaviour, a building's queued construction and a vehicle factory's queued unload among them; selling ignores the request, wait refuses guard)
             ob.beh
                 .queue_and_start(Some(Behaviour::Guard), ready, t, stale);
         }
     }
-    // design: Q-2801 (questions 3 and 4: nothing is added for a unit that a vehicle factory whose unloading ended here has not yet sent out, or for a vehicle docked at a captured repair building; S-0417's and S-0314's rules go on as they stand)
     if let Some(ob) = w.obj_mut(id)
         && (ob.beh.current == Some(Behaviour::Rescue) || ob.beh.queued == Some(Behaviour::Rescue))
     {
-        // spec: S-0309 claim 31 (rescue current, or queued after the guard request: guard is made current at once, without the readiness test); design: Q-2801 (question 6: the force of S-0215 claim 9, which wait refuses)
+        // spec: S-0309 claim 31 (rescue current, or queued after the guard request: guard is made current at once, without the readiness test; a force of guard, so S-0215 claim 9 refuses it while wait is current)
         ob.beh.force(Behaviour::Guard, t, stale);
     }
+    if !work_kept {
+        fall_back(w, id, kind, on_map);
+    }
+    // spec: S-0309 claim 31 (last, the grand opening step, for every building whatever the earlier steps did)
+    if kind == Kind::Building {
+        opening(w, id);
+    }
+}
+
+/// Whether a building's work at an owner change is one that
+/// `quirks.owner_change_interrupts_building_work` keeps when off (S-0309
+/// Edge cases): *selling* current, a vehicle factory with *unload* current
+/// or queued, a repair depot with *repair* current.
+fn keeps_work(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let (cur, queued) = (o.beh.current, o.beh.queued);
+    // spec: S-0309 Edge cases (quirks.owner_change_interrupts_building_work: the building's behaviours at the change)
+    cur == Some(Behaviour::Selling)
+        || (crate::econ::release::vehicle_factory(w, id)
+            && (cur == Some(Behaviour::Unload) || queued == Some(Behaviour::Unload)))
+        || (crate::depot::is_depot(w, id) && cur == Some(Behaviour::Repair))
+}
+
+/// The fall-back of the orders reset (S-0309 claim 31).
+fn fall_back(w: &mut World, id: ObjectId, kind: Kind, on_map: bool) {
     // spec: S-0309 claim 31 (an object off the map gets no fall-back)
     if !on_map {
         return;
@@ -196,28 +223,40 @@ pub(crate) fn reset_orders(w: &mut World, id: ObjectId) {
         return;
     }
     if kind.is_mobile() {
-        // spec: S-0309 claim 31 (an infantry unit, vehicle or aircraft falls back to rest in the ordinary way, S-0215 claims 13 to 15, an aircraft with S-0501 claim 18: an override still in effect takes T2's first row)
-        // design: Q-2801 (question 1: an attack resumed here with a target the change made its own side's holds it as any target, S-0309 claims 25 part k and 29)
+        // spec: S-0309 claim 31 (an infantry unit, vehicle or aircraft falls back to rest in the ordinary way, S-0215 claims 13 to 15, an aircraft with S-0501 claim 18: an override still in effect takes T2's first row; a remembered target resumed here that the change made one of the object's own house or of an ally is held like any other target, claims 25 part k and 29)
         crate::process::fall_back(w, id, false);
         return;
     }
     if kind != Kind::Building {
         return;
     }
-    let Some(o) = w.obj(id) else { return };
-    let building_up = o.beh.current == Some(Behaviour::Construction)
-        || o.beh.queued == Some(Behaviour::Construction);
-    // design: Q-2801 (questions 2 and 5: no idle-body request for a building being sold, or while construction is current or queued)
-    let idle_request = current != Some(Behaviour::Selling) && !building_up;
     // spec: S-0108 claim 6 (a deferred request for the idle state leaves a running idle range unchanged)
-    if idle_request && o.econ.idle_body.is_none() {
-        // spec: S-0309 claim 31 (a building requests its idle body state, as at the end of S-0417 claim 2)
+    if w.obj(id).is_some_and(|o| o.econ.idle_body.is_none()) {
+        // spec: S-0309 claim 31 (a building requests its idle body state, as at the end of S-0417 claim 2, also while selling or being built up: a deferred change, which an immediate change requested before it takes effect cancels, S-0108 claim 6)
         crate::econ::body::enter_idle(w, id, false);
     }
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0309 claim 31 (and queues guard without an immediate start, S-0215 claim 7)
+        // spec: S-0309 claim 31 (and queues guard without an immediate start, S-0215 claim 7, which refuses it while selling is current)
         ob.beh.queue(Some(Behaviour::Guard));
     }
+}
+
+/// The grand opening step of the orders reset (S-0309 claim 31): a
+/// building that has not had its grand opening has it inside the change,
+/// with no free unit.
+fn opening(w: &mut World, id: ObjectId) {
+    // spec: S-0309 claim 31 (a naval vehicle factory left with no rally point gets one again at this step); design: S-0309 Open questions (claim 31: where that cell lies is not established, and S-0108 claim 11's grand opening gives our naval factories none yet, so our engine gives none here either)
+    let Some(ob) = w.obj_mut(id) else { return };
+    let c = &mut ob.econ.construction;
+    // spec: S-0309 claim 31 (a building that has already had its grand opening has none again: no slot animation starts and its ready mark is not set); S-0108 claim 11 (a building in its construction state has not had it)
+    if !c.building_up || c.opened {
+        return;
+    }
+    // spec: S-0309 claim 31 (its slot animations start, S-0108 claim 11, shown by the app from this mark; it gets no free unit now or later, S-0402 claim 18)
+    c.opened = true;
+    // spec: S-0309 claim 31 (its ready mark is set, S-0215 claim 11)
+    ob.beh.ready_mark = true;
+    // design: S-0309 Open questions (claim 31: which other effects of the grand opening, owned by other specs, act at such a change is not established; none are made)
 }
 
 /// The docking point of `building` for the contact `v` (S-0314 claim 18,

@@ -602,31 +602,44 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
         return CONSTRUCTION_DELAY;
     };
     let tick = w.tick;
+    let opened = o.econ.construction.opened;
     let Some(c) = o.econ.construction.first else {
         // spec: S-0406 claim 14 (the first processing starts the construction range again at stage 0: C is this tick)
         if let Some(ob) = w.obj_mut(id) {
             ob.econ.construction.first = Some(tick);
         }
+        // spec: S-0309 claim 31 (a building opened at an owner change while construction was current and not yet processed: the restart at the first stage is an immediate change that cancels the change's idle-body request, S-0108 claim 6)
+        crate::econ::body::leave_idle(w, id);
         return CONSTRUCTION_DELAY;
     };
-    let never = w.rules().quirks.single_stage_buildup_never_completes;
-    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); claim 18 (a positive-delay range of one stage or fewer never hands over)
-    let Some(after) = crate::econ::sell::buildup_range(w, o.type_index).report_after(never) else {
-        return CONSTRUCTION_DELAY;
-    };
-    if tick.wrapping_sub(c) < after {
-        return CONSTRUCTION_DELAY;
+    if !opened {
+        let never = w.rules().quirks.single_stage_buildup_never_completes;
+        // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); claim 18 (a positive-delay range of one stage or fewer never hands over)
+        let Some(after) = crate::econ::sell::buildup_range(w, o.type_index).report_after(never)
+        else {
+            return CONSTRUCTION_DELAY;
+        };
+        if tick.wrapping_sub(c) < after {
+            return CONSTRUCTION_DELAY;
+        }
     }
+    // spec: S-0309 claim 31 (with construction current and processed at least once at an owner change, its next processing finds the ready mark that the change's grand opening set and completes the construction at once)
+    let idle = w.obj(id).is_some_and(|o| o.econ.idle_body.is_some());
     if let Some(ob) = w.obj_mut(id) {
-        ob.econ.construction.building_up = false;
-        ob.econ.construction.first = None;
-        ob.econ.construction.entry = None;
+        ob.econ.construction = crate::econ::placement::Construction::default();
         // spec: S-0406 claim 15 (guard queued, current at the second per-tick start of this tick, S-0215 claim 11; the target is kept)
         ob.beh.queue(Some(Behaviour::Guard));
         ob.beh.ready_mark = true;
     }
-    // spec: S-0406 claim 15 and S-0108 claim 6 (the idle body is requested at the handover: a deferred change the building's own behaviour requests, shown on this tick, delay N(d, s))
-    crate::econ::body::enter_idle(w, id, false);
+    // spec: S-0108 claim 6 (a deferred request for the idle state leaves a running idle range unchanged: the idle body requested at an owner change, S-0309 claim 31)
+    if !idle {
+        // spec: S-0406 claim 15 and S-0108 claim 6 (the idle body is requested at the handover: a deferred change the building's own behaviour requests, shown on this tick, delay N(d, s))
+        crate::econ::body::enter_idle(w, id, false);
+    }
+    if opened {
+        // spec: S-0309 claim 31 (without a second grand opening: a building has one at most, so no free unit follows, S-0402 claim 18)
+        return CONSTRUCTION_DELAY;
+    }
     // spec: S-0402 claim 18 (the grand opening, at the end of the build-up in the building's own turn: its free unit)
     crate::econ::harvest::grand_opening(w, id);
     CONSTRUCTION_DELAY
