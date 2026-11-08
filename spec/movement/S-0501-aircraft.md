@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 154
+revision: 167
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -12,7 +12,7 @@ requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-065
 Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905,
 Q-1940, Q-1941, Q-1942, Q-2237, Q-2251, Q-2252, Q-2291, Q-2326, Q-2366, Q-2436, Q-2437, Q-2438,
 Q-2506, Q-2507, Q-2508, Q-2576, Q-2577, Q-2578, Q-2579, Q-2646, Q-2647, Q-2648, Q-2649, Q-2650,
-Q-2676, Q-2677, Q-2726, Q-2792]
+Q-2676, Q-2677, Q-2726, Q-2792, Q-2802]
 supersedes: []
 ---
 
@@ -416,11 +416,13 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    including 512, and 0.75 from 512 up to but not including 768. At 768 leptons or farther, the
    ordinary target remains. Distances are raw planar point distances after any pad-position
    adjustment, not building-adjusted object distances. The next movement tick's ordinary calculation
-   recomputes *τ* before its 0.1 adjustment, so a replacement has no effect when that calculation
-   runs. It governs an adjustment only in a later tick in which the ordinary calculation is skipped
-   and nothing else has set the target, such as a take-off restarted below half its cruise height by
-   a refused touchdown (claim 7, with its `quirks.aircraft_descent_touchdown_untested` off). Landing
-   and take-off set their own targets (claims 7 and 8).
+   recomputes *τ* before its 0.1 adjustment, so a replacement has no effect on the fractions when
+   that calculation runs. Claim 48 (b)'s third case reads it at the start of that tick, before that
+   calculation (claim 6). It governs an adjustment only in a later tick in which the ordinary
+   calculation is skipped and nothing else has set the target, such as a take-off restarted below
+   half its cruise height by a refused touchdown (claim 7, with its
+   `quirks.aircraft_descent_touchdown_untested` off). Landing and take-off set their own targets
+   (claims 7 and 8).
    - Backing: `measurable` for resulting fractions, the stopping distance, the 1-lepton
      hover and the ineffective replacement (AC3 and AC24). The clamp's exact placement among the ordinary halving,
      creep and adjustment is `unmeasured`: with integer distance and fractions in 0 … 1, it
@@ -439,7 +441,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
      destination object is `measurable` (AC24 part c: the destination is cleared within 16
      leptons, the flight point remains, and the logged fraction then falls to 0 by this
      calculation). Claim 6's `unmeasured` rating for that case concerns the landing start, which
-     AC24 part c does not reach.
+     AC24 part c does not reach. The third case's reading of a replacement is `unmeasured`, as
+     claim 6 gives.
    The target is instead fixed at 1 (no slowing down) while the aircraft carries the run lock,
    and while it holds its height (claim 6) and either its type has the fly-by flag or it is a
    strafer or fighter (claim 11) with ammunition left. This fixed-full-speed case does not apply
@@ -448,16 +451,25 @@ the original only; the neutral and special houses retain it (glossary, *AI house
      and the 1-lepton hover); medium (the full-speed conditions and the skipped-calculation cases of the
      replacement; the replacement's height condition, until AC30 part k (4) and (7) and AC31
      part d run, and for other ways to height 0, `unmeasured`; the
-     flight point with no destination object, until AC24 part c runs)
+     flight point with no destination object, until AC24 part c runs); medium (`unmeasured`) for
+     the third case's reading of a replacement
 
 6. **Holding height and the landing trigger.** An aircraft is marked as holding height while any of
 these holds: its destination point is more than 120 leptons above terrain there, it has a target and
 ammunition left; it carries the run lock; its type is not landable. In ordinary flight its held
 height is the cruise height. Below 768 leptons from the destination, guidance instead uses
 destination height minus terrain height there when the holding-height mark is set. This applies to
-every marked approach, not just an originally elevated destination. However, accepting a nonempty
-movement point while the aircraft has a target and ammunition replaces that point's world height
-with terrain height there plus cruise height. Thus an attacker approaching a ground target
+every marked approach, not just an originally elevated destination. Where that difference is 0, as
+for a point at the terrain's surface, it does not last into a movement update that the aircraft
+begins neither landing nor taking off, with a target speed fraction of 1 (claim 5): claim 48 (b)'s
+third case gives it the held height of ordinary flight again before its height changes in that
+update, so it does not descend toward that point's height in such an update. The fraction read is
+the one held from the end of the update before. Above the terrain within 768 leptons, claim 5's
+approach target replacement leaves it below 1, so such a held height of 0 lasts and the aircraft
+descends, unless claim 5 fixes its target at 1 (the run lock, the fly-by flag, or a strafer or
+fighter with ammunition left). However, accepting a
+nonempty movement point while the aircraft has a target and ammunition replaces that point's world
+height with terrain height there plus cruise height. Thus an attacker approaching a ground target
 ordinarily keeps cruise height, rather than descending to the ground. This replacement concerns the
 flight point held for movement, not the destination object's position. An *enter* movement update
 clears that mark. Without the mark, in a tick in which it is alive, neither landing nor taking off,
@@ -575,7 +587,13 @@ one compared.
      sliding after an untested touchdown (Q-2647). That these triggers apply to an aircraft that an
      untested touchdown leaves holding its flight point with no destination is `unmeasured`, as
      claim 7 rates that flight: no scenario here makes such a touchdown with no destination
-     (Q-2647).
+     (Q-2647). That a held height of 0 from the 768-lepton rule gives way to the held height of
+     ordinary flight in a movement update begun with a target fraction of 1 is `unmeasured`: no
+     scenario here sets an expectation for the height of a marked aircraft near a point at the
+     terrain's surface while its target fraction is 1 (AC31 part d's aircraft has a target
+     fraction below 1 there). That the fraction read is the one held from the update before, so
+     that claim 5's replacement keeps such a held height of 0, is `unmeasured`: in AC31 part d the
+     ordinary target is below 1 there too, so no record here tells the replacement's part.
    - Confidence: medium, until AC4's same-cell part runs, for landing where it is over an
      accepted cell (the flight point, the landing start in its cell and the descent that does
      not steer); medium (`unmeasured`) for the replacement search's cell where that cell is
@@ -586,7 +604,9 @@ one compared.
      destination and after a take-off from another cell, for the *attack* cases and for an
      aircraft that is not moving; medium (`unmeasured`) for the take-off of a moving aircraft on
      the ground given no destination and for these triggers applied to one that an untested
-     touchdown leaves holding its flight point with no destination (Q-2647). High (the triggers,
+     touchdown leaves holding its flight point with no destination (Q-2647); medium
+     (`unmeasured`) for a held height of 0 giving way in a movement update begun with a target
+     fraction of 1, and for claim 5's replacement keeping it. High (the triggers,
      for a cell destination), medium (the exact-cell trigger testing the flight point's cell,
      with or without a held destination object, `unmeasured`; that the exact-cell trigger reads
      the same tick's ordinary target, until AC31 part c runs; the 120-lepton rule; the
@@ -748,7 +768,8 @@ in contact on the ground.
      position's cell). That it forgets the flight point with it is `unmeasured`: no record here
      shows the flight point. That a touchdown outside the flight point's cell forgets them when that
      cell holds the contact, or no building for an aircraft with no contact, is `unmeasured`: no
-     set-up here makes the touchdown drift onto such a cell. The flight on the ground after an
+     set-up here is arranged to make the touchdown drift out of that cell (AC33 part c records the
+     cell where its touchdown falls, claim 29). The flight on the ground after an
      untested touchdown that kept the destination, the held height of ordinary flight it then takes,
      its climb and the guidance that steers it back are `unmeasured`: AC31 part h (1) judges nothing
      after such a touchdown. That the check of the flight point's cell during a landing does not end
@@ -1893,17 +1914,73 @@ pad leaves its pad reservation when it takes any destination other than that pad
       processing, 1 tick apart, while it keeps that height. For a landable type that is not
       pad-bound, with a positive slowdown distance and a converted speed *V* of at least 20, which claim 5 lets stall at no
       facing (claim 50), it slows to a stop over the cells it is passing instead of flying on, and
-      lands there by claim 6. With a slowdown distance of 0, or *V* below 20, where it stops and
-      whether it lands are not traced here (Open questions). A type that is not landable
+      lands there by claim 6. Being given its flight point again changes nothing in its speed
+      fraction, whatever its slowdown distance and speed (Q-2802):
+      - With a slowdown distance of 0 it never lands. Its ordinary target fraction
+        is 1 at every distance, so claim 6's exact-cell trigger never applies, and after each
+        tick's adjustment its fraction is at least 0.1 (Formula F4), so the close-approach trigger
+        never applies either. It stays at cruise height, its processings still 1 tick apart, and
+        each tick it turns toward the centre of the cell it is over (S-0206 claim 1) and steps
+        at least ⌊*V* / 10⌋ leptons along its body facing (claim 4). Its path follows from these
+        rules alone. A converted speed *V* of 0 gives a step of 0 at every fraction (Formula F3),
+        so such an aircraft never moves: it stays where it is, at cruise height, for as long as
+        *sticky* lasts, without landing. For a *V* of at least 1, away from that centre its target
+        fraction is 1, so its fraction rises by 0.1
+        in each tick until it is 1 and then stays there (Formula F4). Claim 5's zero step and
+        1-lepton hover need a fraction that has settled below that, as a positive slowdown distance
+        gives near the point, so here a step of 0 or 1 lepton lasts only while the fraction rises,
+        and its step at a fraction of 1 is *V* leptons. The exception is a *V* of 1, whose step at
+        a fraction of 1 is 1 lepton: where the direction to that centre is one of the facings of
+        claim 5's 1-lepton hover, that step changes no coordinate (Formula F3), so once its body
+        has turned to that direction it stands still there, away from the centre, at cruise height
+        for as long as *sticky* lasts, without landing (`quirks.aircraft_unit_step_stall`, claim
+        5). With that switch off, its 1-lepton step at those facings moves it 1 lepton along an
+        axis (Formula F3), so it does not stand still there. Otherwise, with *V* from 1 to 19 it
+        can stand
+        still only exactly over that centre, where its fraction is 0.1 and claim 4's step leaves it
+        in place: always for *V* below 10, and at the facings of claim 5's 1-lepton hover for *V*
+        from 10 to 19. It then stays there at cruise height for as long as *sticky* lasts, without
+        landing.
+      - With a positive slowdown distance and *V* below 20, claim 5's slow-speed cases apply to
+        the centre of the cell it comes to rest over. It lands there by claim 6, as for *V* of at
+        least 20, unless claim 5's 1-lepton hover (*V* from 10 to 19) or its zero step (*V*
+        below 10) holds it short of the halving zone first. Held so, it stays at cruise height
+        over that cell with a positive fraction for as long as *sticky* lasts, and does not land.
+
+      A type that is not landable
       flies to that cell as claim 50's last two bullets give for a flight to a cell: one that claim
-      5 does not hold at full speed descends to height 0 with no landing and no touchdown, and goes
-      on along its body facing; for one that claim 5 holds at full speed, where it flies is not
-      traced (Open questions). A landable type that has landed gets nothing more from its
-      processings on the ground (45 ticks each), so it stays there in *sticky* with its *move*
-      queued. An armed aircraft
-      below cruise height that finds a pad takes off for it if it is on the ground and flies to it,
-      with *enter* queued (claim 21). What it does on reaching the pad without
-      *enter* is open (Open questions).
+      5 does not hold at full speed descends to height 0 with no landing and no touchdown, since
+      within 768 leptons of its flight point claim 5's replacement keeps its target fraction below
+      1 (claim 50), and goes on along its body facing. One that claim 5 holds
+      at full speed (Q-2802) is given the cell it
+      is over at that first processing. Being marked as holding height, within 768 leptons of
+      that cell's flight point, which lies at the terrain's surface, it is given a held height of
+      0 (claims 6 and 50). Its target fraction stays 1, so each of its movement updates that
+      begins with that held height of 0 takes claim 48 (b)'s third case, which gives it the held
+      height of ordinary flight again before its height changes in that update. So it does not
+      descend: it keeps its cruise
+      height, and each later processing, 1 tick apart, gives it the cell it is over again, as
+      above. It never slows, so no landing trigger and no fall-back applies to it (claim 50), and
+      guidance turns it toward the centre of the cell it is over (claim 42) while it steps *V*
+      leptons along its body facing. Where that path takes it is not traced here (Open
+      questions). A
+      landable type that has landed gets nothing more from its processings on the ground (45 ticks
+      each), so it stays there in *sticky* with its *move* queued.
+    - *A pad found below cruise height (Q-2802).* An armed aircraft below its cruise height with
+      less than full ammunition and no contact that finds a pad queues *enter* first and is given
+      the pad as destination after that. So claim 24's contact rule applies: the aircraft asks the
+      pad to be loaded, and the pad, which has a free contact place since the search found it
+      (claim 21), takes it into contact at that processing. So that processing leaves it with
+      the contact, not without one; a refusal can end the contact later (claim 32). The pad then
+      asks whether it has settled,
+      with the destination it held before the pad (claim 24). One that has settled, as one
+      standing landed has, is made to start *enter* at once, although it is not ready to change:
+      *sticky* ends, and it docks, reports and is serviced as any aircraft in *enter* (claims 24
+      and 26). One that has not settled, so one in flight with a destination, keeps *sticky*, with
+      *enter* queued, the contact and the pad as destination, and flies to the pad. Its later
+      processings below cruise height ask no pad, since it holds a contact. Unless it holds height,
+      its held height is its cruise height (claim 6), and a processing at exactly that height is the
+      one of *A contact held at cruise height* below.
     - *Fall-back to rest.* For an armed aircraft outside a team at exactly cruise height, the
       fall-back's own effects take place at each such processing (claim 18 and T2): the destination
       that its row gives or keeps, the contact that a pad grants, the forgotten target, and the
@@ -1912,9 +1989,110 @@ pad leaves its pad reservation when it takes any destination other than that pad
       first processing at that height, and one that a pad grants contact at that processing turns toward that pad, with *enter* queued.
       A pad-bound type with no dock types crashes only with its ammunition spent (claims 45 and
       46), so one placed in *sticky* with full ammunition does not crash at these processings; it
-      keeps its destination by T2's *guard* row, as claim 45's pad-bound exception gives. What the
-      processings in the ticks after it do, with that contact held and *enter* already queued, is
-      open (Open questions).
+      keeps its destination by T2's *guard* row, as claim 45's pad-bound exception gives.
+    - *A contact held at cruise height (Q-2802).* Each later processing at exactly cruise height of
+      an armed aircraft with dock types that holds a pad's contact with *enter* queued is that
+      fall-back again. For one with passengers or one that is visiting, T2's earlier rows for
+      those give the result instead (the in-flight row with passengers, or a visiting row), with
+      their effects, and the rest of this bullet does not apply. For any other, T2's row for an
+      aircraft already flying to its *enter* destination needs *enter* current, so with *sticky*
+      current that row does not apply: with the in-the-air answer
+      *no* T2's *guard* row keeps the pad as destination, and otherwise the in-flight pad row
+      applies again. In that row claim 21's search runs, and the aircraft is given no destination
+      for a moment, which gives its flight claim 6's new flight point around the cell it is over,
+      with claim 40's direction draws when that cell is refused (Q-2507). It then asks the pad
+      found for contact by the in-flight pad row's own request (claim 18), not by a request to be
+      loaded, and, when
+      that pad grants it, gets it as destination. It already holds a contact when that pad becomes
+      its destination, so claim 24's contact rule makes no request to be loaded either: the pad
+      asks no settled question, and *enter* is not started but stays queued.
+      Its own contact place counts as free
+      (claim 22), so the pad it holds stays a candidate. With that pad the only one of its dock
+      types that accepts it, the pad confirms: the aircraft keeps the contact and the pad as
+      destination, with *enter* queued, and the moment with no destination leaves nothing but its
+      draws, except for an aircraft already landing at the pad, whose landing that moment's
+      selection can undo (below). With another such pad, the search can return that one instead,
+      which then takes the aircraft into contact, ending the old one, and becomes its destination
+      (claim 23). For an aircraft that is not pad-bound claim 21 asks no pad first, so its
+      comparison decides, with the held pad among the candidates. A pad-bound one keeps the held pad
+      while it accepts it if that pad is recorded as the pad it was last heading for, which claim 21
+      asks first. Whether it is so recorded when the contact was granted in *sticky* is not traced
+      here (Open
+      questions). A processing that comes while
+      the aircraft is already landing at the pad, still at cruise height, follows claim 6's rule
+      for a landing aircraft given no destination and then claim 8's exception for the pad. When
+      its landing started in the cell of the point it is landing at, the selection gives that cell
+      when F7 and the flight-reservation test accept it (claim 6). In a pad cell whose ground
+      layer holds only the pad, F7 accepts it, since the pad found there is its contact (F7 leaves
+      a cell with several occupants unresolved), and a pad-bound aircraft passes the
+      flight-reservation test (claim 39), so its landing goes on. For one that is not
+      pad-bound, another mobile actor in that cell, or headed for it, can refuse the cell (claim
+      39), and claim 40's replacement search then applies as below. When it
+      started in another cell, which only the close-approach trigger can do, within 128 leptons of
+      a point near that cell's edge, claim 6's selection gives the cell it is over when F7 and the
+      flight-reservation test accept it, and otherwise the cell that claim 40's replacement search
+      gives. When that search gives the flight point's cell, its flight ignores that centre and its
+      landing goes on (claim 6). In every other case it takes off toward the selected cell's centre
+      (claim 6), is given the pad again and flies back toward the pad's point. Each other landing
+      start outside the point's cell is undone in this way, so it lands only once a landing starts
+      in that cell, or once the search gives that cell for a landing started outside it, and, for
+      one that is not pad-bound, only while no other mobile actor is in that cell or headed for it,
+      or while claim 40's replacement search around that cell finds no cell, so that the flight
+      point stays that cell's centre and its landing goes on (claim 6).
+    - *On the pad (Q-2802).* An aircraft that reaches its pad in *sticky* by either path holds the
+      pad's contact. Claim 6's pad-bound rule reads only the building in the cell where a landing
+      starts, whatever the current behaviour: a pad-bound aircraft lands only where that cell lies
+      in its pad's foundation, and one that is not pad-bound has no such test. A pad-bound aircraft
+      whose pad's docking position lies outside the pad's foundation never touches down at that
+      pad. Where no landing of it can start in the foundation there, each landing start is refused
+      and the aircraft falls back to rest (claim 6). With *sticky* current that fall-back is the
+      one of *A contact held at cruise height* above. With that pad the only one of its dock types
+      that accepts it, as in AC33 part f, that fall-back keeps the pad, the contact and the queued
+      *enter*, so the aircraft stays in the air over the docking position in *sticky* and is never
+      serviced, as the armed pad-bound aircraft in *enter* does (claim 24). With another such pad,
+      that fall-back's search can take it into contact with that pad instead and give it that pad
+      as destination, as *A contact held at cruise height* gives, and which pad that search returns
+      then is open (Open questions). Where a landing
+      of it can start in the foundation, the check of its flight point's cell, the docking
+      position's, ends that landing before touchdown as in claim 24: with a take-off toward a free
+      cell near the cell it is over, the pad kept as its destination, or with claim 7's hit where
+      no free cell is found (claim 7). Each later landing start is refused and falls back as above,
+      with *sticky* current, so the rest of claim 24's continuation, which is for *enter*, does not
+      apply. An aircraft that is not
+      pad-bound, and a pad-bound one whose docking position lies in the foundation, land at the
+      pad's heading point (claim 40) as claims 5 and 6 and the bullet above let them. *Sticky* is
+      not *enter*, so claim
+      4's descent move toward the centre of its destination cell, the pad's cell, applies, and with
+      the forward steps after its landing starts it can put the touchdown outside the flight
+      point's cell. Claim 7's forget test decides what the touchdown keeps. Where the docking
+      position lies in the pad's foundation, as it does for every pad-bound aircraft that lands
+      there, the flight point's cell holds its contact, so the touchdown forgets its destination
+      and flight point wherever it is. Where the docking position lies outside the foundation,
+      which only an aircraft that is not pad-bound lands at, a touchdown in the flight point's cell
+      forgets them, and one in any other cell keeps the pad as destination and the flight point.
+      With `quirks.aircraft_descent_touchdown_untested` on (the default) every touchdown is
+      untested, and one that keeps them goes on as after a refusal that kept the destination (claim
+      7): it slides on the ground, climbs, is steered back toward the point and lands again by
+      claim 6's triggers and the bullet above, unless claim 5's hover stops it short of them,
+      until a touchdown in the flight point's cell forgets them. With the switch off the touchdown
+      is tested. F7 accepts a cell where the object it finds is the aircraft's contact (with
+      several occupants, which object it finds is unresolved, as F7 says) and tests any other as
+      claim 7 gives, and
+      an accepted touchdown forgets the destination too. A refusal that forgot them leaves it
+      10 leptons above that cell with nothing to move it, and after one that kept them it goes on
+      as claim 7 gives after a refusal that kept the destination.
+      The exception to the landing is a pad whose heading point
+      lies more than 120 leptons above the terrain there: being marked as holding height, the
+      aircraft then stays above that point without landing (claim 6), as claim 24 gives for an
+      aircraft kept on its pad. It never processes *enter*, so it sends no entered report, and the
+      pad starts no servicing for it (claim 26). Once a touchdown has forgotten its destination it
+      rests where it touched down, in *sticky*, with *enter* queued and the contact, and its
+      processings on the ground ask no pad. When the pad services
+      for another aircraft that has reported, each service step that finds it settled releases it if
+      it has no target, full ammunition and full health: it falls back to rest with *guard* forced,
+      which ends *sticky* (claim 26). Otherwise the step has it queue *sleep*, which replaces the
+      queued *enter* and never becomes current while *sticky* lasts. It then gets no round and no
+      repair and is never released, and the pad's servicing does not end while it stays there.
     - *T2's first three rows.* They do not wait for readiness (claim 18). An overridden behaviour
       is restored in place of *sticky*, and a queued *paradrop approach* or *spy-plane approach*
       starts at once. A restored *move* is the only way that *move* can become current for an
@@ -1924,7 +2102,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       here gives that state.
 
     Apart from these rows, the aircraft keeps *sticky* until a force or an override replaces it
-    (S-0215 claim 25), and no movement update makes *move* current for it (claim 33).
+    (S-0215 claim 25), or until a pad has it start *enter* at once, as above, and no movement
+    update makes *move* current for it (claim 33).
     - Backing: `measurable` (scenario AC10) outside a team, and for the armed aircraft's
       fall-back with a destination (AC19's sale run, AC29 part f (4) to (6)). The team member's
       outcomes are `unmeasured`: no normal input puts an aircraft of a human-controlled house in
@@ -1934,20 +2113,70 @@ pad leaves its pad reservation when it takes any destination other than that pad
       changes no record, so no record here tells a delay of 1 tick from a longer one
     - Backing (*sticky*): `measurable` (scenario AC33: part a for the unarmed landable aircraft's
       own cell and its landing, with *move* staying queued, part b for the crash of a pad-bound
-      aircraft with dock types that obtains no pad, part c for the pad that grants contact).
-      `unmeasured` for the pad found below cruise height: an aircraft placed in *sticky* has full
-      ammunition, and its *attack* never becomes current while *sticky* lasts, so no set-up here
-      brings one in *sticky* below full ammunition. Also `unmeasured`, because no set-up here
-      arranges them: T2's first three rows in *sticky* (no set-up fills the suspended slot or queues
-      an approach while *sticky* is current), a type that is not landable, and a pad-bound type with
-      no dock types
+      aircraft with dock types that obtains no pad, part c for the pad that grants contact, the
+      contact and pad kept at the later processings, the landing at the pad, its touchdown's forget
+      and the stay where it touched down, part f for the stay in the air over a docking position
+      outside the foundation, part d for a slowdown distance of 0 with *V* of at least 20, part e
+      for *V* from 1 to 9 with a positive slowdown distance). `unmeasured` for the pad found below
+      cruise height, with its settled start and its arrival: an aircraft placed in *sticky* has
+      full ammunition, and its *attack* never becomes current while *sticky* lasts, so no set-up
+      here brings one in *sticky* below full ammunition, and no means here puts an aircraft that
+      has spent a round into *sticky*. Also `unmeasured`, because no set-up here arranges them:
+      T2's first three rows in *sticky* (no set-up fills the suspended slot or queues an approach
+      while *sticky* is current), a type that is not landable, a pad-bound type with no dock types,
+      a pad whose heading point lies more than 120 leptons above the terrain and a landing start
+      outside the point's cell (AC33 part c's pad excludes both), a processing that finds the
+      aircraft already landing at its pad (part c's record does not tell it from a landing with
+      none), the service steps of a pad that services another aircraft (AC33 part c has no other
+      aircraft), a second pad of the aircraft's dock types (*P* is the only one in AC33 part c),
+      and a touchdown outside the flight point's cell at a docking position outside the foundation,
+      which keeps the pad (part c's docking position lies in the foundation, and part f's aircraft
+      is pad-bound and never touches down). The pad-bound aircraft whose landing can start in the
+      foundation at a docking position outside it is `unmeasured`: part f's docking position has a
+      cell of open ground between its cell and the foundation, so no landing there can start in the
+      foundation. The forget at a touchdown outside the flight point's cell, where that cell holds
+      the contact, is `unmeasured`: no set-up here is arranged to make the touchdown drift out of
+      that cell (AC33 part c records the cell where its touchdown falls, claim 7). The touchdown at
+      the pad with `quirks.aircraft_descent_touchdown_untested` off is `unmeasured`: it is a design
+      alternative for our engine, not an outcome of the original. The moment with no destination at
+      each processing with a contact held, and its draws, are `unmeasured`: the pad given in the
+      same processing replaces that flight point, so no record here shows it. The standstill
+      exactly over a cell's centre with a slowdown distance of 0 is `unmeasured`: no set-up can
+      bring an aircraft to that exact point. A *V* of 0 is `unmeasured`: no set-up here gives a
+      converted speed of 0. The 1-lepton standstill with `quirks.aircraft_unit_step_stall` off is
+      `unmeasured`: it is a design alternative for our engine. *V* from 10 to 19, and the rest of
+      a slowdown distance of 0 with *V* below 20, with the standstill away from the cell's centre
+      of a *V* of 1, are
+      `unmeasured`: part d runs *V* of at least 20, part e runs *V* from 1 to 9 with a positive
+      slowdown distance only, and claim 5's scenarios for its 1-lepton hover (AC3, AC24) fly to a
+      fixed point that is not given again at each processing, so no record here tells this claim
+      from one in which each new flight point changes the speed fraction. T2's row for an aircraft
+      already flying to its *enter* destination is read with *enter* current, as the original tests
+      the
+      current behaviour. This makes the row's reading explicit and changes no earlier use of it,
+      each of which is of an aircraft with *enter* current. That a queued *enter* does not count is
+      `unmeasured`: in each set-up here both readings keep the same pad and contact, and only the
+      moment with no destination and its draws, which are `unmeasured` (above), would differ
     - Confidence: medium; medium (`unmeasured`) for the team member's outcomes and for the delay of
-      1 tick. For *sticky*: medium for the destinations, the landing with those values and the
-      fall-back's effects, until AC33 runs; medium (`unmeasured`) for the pad found below cruise
-      height, for T2's first three rows, for a type that is not landable that claim 5 does not hold
-      at full speed and for a pad-bound type with no dock types; low for what follows a contact held
-      with *enter* queued, for a slowdown distance of 0 or *V* below 20 and for a type that is not
-      landable that claim 5 holds at full speed (Open questions)
+      1 tick. For *sticky*: medium for the destinations, the landing with those values, the
+      fall-back's effects, the contact and pad kept with a single pad, the landing at the pad, its
+      touchdown's forget and the stay where it touched down, the stay in the air over a docking
+      position outside the foundation, a slowdown distance of 0 with *V* of at least 20 and *V*
+      from 1 to 9 with a positive slowdown distance, until AC33 runs; medium (`unmeasured`) for *V*
+      from 10 to 19 and for the rest of a slowdown distance of 0 with *V* below 20, with the
+      standstill of a *V* of 1, for the pad-bound aircraft whose landing can start in the
+      foundation at a docking position outside it, for the pad found below cruise height with its
+      settled start and its arrival, for T2's row read with *enter* current, for T2's first three
+      rows, for both types that are not landable, for a pad-bound type with no dock types, for the
+      elevated heading point, for a processing while landing, for the service steps, for the moment
+      with no destination and its draws, for the standstill over a cell's centre, for the touchdown
+      at the pad with `quirks.aircraft_descent_touchdown_untested` off, for the touchdown at a
+      docking position outside the foundation that keeps the pad, for the forget at a touchdown
+      outside the flight point's cell, and for claim 21's comparison deciding the pad for an
+      aircraft that is not pad-bound when another pad accepts it; low for the pad that a pad-bound
+      aircraft's search returns when
+      another pad accepts it; medium (`unmeasured`) for a *V* of 0 and for the 1-lepton standstill
+      with `quirks.aircraft_unit_step_stall` off
 
 30. **Pad total and the build limit (free docks).** A house's pad total grows by a helipad
     building's docking-place count *d* when the building is placed, moves with the building
@@ -3637,9 +3866,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
     - **A slowdown distance of 0.** Claim 5's halving zone and the stop in it need a positive
       slowdown distance, so the rest above does not apply. The ordinary calculation gives a
       target fraction of 1 in every tick (claim 5), so the exact-cell trigger is never reached,
-      whatever the replacement, and no landing is refused there. Whether the close-approach
-      trigger is reached, and where the aircraft flies near the spot, are not traced here: this
-      claim makes no other prediction for it.
+      whatever the replacement, and no landing is refused there. After each tick's adjustment
+      its fraction is at least 0.1 (Formula F4), so the close-approach trigger is never reached
+      either (claim 29). Where the aircraft flies near the spot is not traced here: this claim
+      makes no other prediction for it.
     - When that search around its own cell finds no cell, claim 41's own-cell no-result rule
       applies (`quirks.landing_own_cell_no_result`): the aircraft is given the placeholder at
       map cell (0, 0) and discards it at the end of each update. Unless claim 40's replacement
@@ -3683,10 +3913,14 @@ pad leaves its pad reservation when it takes any destination other than that pad
       follows. Within 768
       leptons of its flight point, being marked, its held height is that point's height above
       terrain (claim 6). A cell's flight point is at its surface height (claim 40), and an
-      unarmed aircraft's point is not raised to cruise height, so that held height is 0. It
-      flies at cruise height until it comes within 768 leptons of the point, then descends by
-      claim 3 to height 0, with no landing and no touchdown. At height 0 guidance does not run
-      (claim 42) and claim 4's descent pull has ended, so no new body facing is requested: the
+      unarmed aircraft's point is not raised to cruise height, so that held height is 0. It flies at
+      cruise height until a movement update ends with it within 768 leptons of the point. There
+      claim 5's approach target replacement leaves its target fraction below 1, whatever its
+      slowdown distance, so claim 48 (b)'s third case does not give it the held height of ordinary
+      flight again (claim 6), and from the next movement update it descends by claim 3 toward
+      height 0, with no landing and no touchdown; how far it gets is below. At height 0
+      guidance does not run (claim 42) and claim 4's descent pull has ended, so no new body
+      facing is requested: the
       body completes any turn still under way toward the last facing that guidance requested
       (S-0206 claim 1) and then keeps it, and the aircraft goes on along its body facing by claim
       4's steps at claim 5's fraction. Once a step leaves it in claim 5's halving zone around the
@@ -3697,7 +3931,12 @@ pad leaves its pad reservation when it takes any destination other than that pad
       its approach: the facing it keeps is the point's direction by S-0204 claim 8 as guidance
       last requested it, which is quantised, and claim 4 rounds each step's components down, so
       it can pass beside the zone. It then passes the point and moves away at height 0, and where
-      it goes from there is not traced here. Approaching along map east on the point's cell row
+      it goes from there is not traced here. At height 0 claim 5's replacement does not apply, so
+      once its ordinary target fraction is 1 there (with a slowdown distance of 0, which gives no
+      halving zone, or at its slowdown distance from the point or farther), claim 48 (b)'s third
+      case gives it the held height of ordinary flight again and it climbs. It can also reach the
+      halving zone, or pass the point, while still above height 0, and how its descent ends then is
+      not traced here. Approaching along map east on the point's cell row
       (or along map north on its column) with its body already facing along that axis, no turn is
       under way, its direction is the axis exactly, F3's steps keep that row (or column), and with
       a converted speed of at least 20 it stops in the point's cell, short of the point. This holds
@@ -3712,7 +3951,9 @@ pad leaves its pad reservation when it takes any destination other than that pad
       its target fraction at 1 while it holds its height, so it does not slow toward its flight
       point. The same mark
       rules out both landing triggers, so no landing is started or refused and no fall-back
-      follows. Where it flies once it passes the point is not traced here.
+      follows. It keeps its cruise height near the point: a held height of 0 there gives way to
+      that of ordinary flight at each movement update (claim 6). Where it flies once it passes the
+      point is not traced here.
     This is the original's behaviour. Our engine keeps it by default
     (`quirks.unarmed_pad_bound_hover`, Edge cases).
     - Backing: `measurable` (scenario AC31 part b: the free pad, the occupied pad, the sold pad
@@ -3729,7 +3970,13 @@ pad leaves its pad reservation when it takes any destination other than that pad
       `unmeasured`: no scenario here sets it for this aircraft. The type that is not landable and
       that claim 5 does not hold at full speed is `measurable` for a plain move order's cell (AC31
       part d), approached along map east on its row, where claim 4's steps keep the row and the
-      stop in the halving zone follows. From other directions its line can pass beside the zone,
+      stop in the halving zone follows. Its copy's slowdown distance is above 768 leptons, so the
+      descent within 768 leptons with a smaller slowdown distance or one of 0, where only claim 5's
+      replacement keeps its target fraction below 1, and the climb at height 0 once its ordinary
+      target fraction is 1, are `unmeasured` for this type: no scenario here gives it such a
+      slowdown distance. How a descent that reaches the halving zone or passes the point above
+      height 0 ends is `unmeasured`: part d tests only its staying in the point's cell then. From
+      other directions its line can pass beside the zone,
       and that pass and its later path at height 0 are `unmeasured`: part d fixes the direction
       so that its Expected follows from F3. A turn still under way when it reaches height 0 is
       `unmeasured`: in part d its facing is the axis throughout, so no turn is under way. The
@@ -3748,17 +3995,22 @@ pad leaves its pad reservation when it takes any destination other than that pad
       until AC31 part c runs, for neither landing trigger being reached (the exact-cell trigger's
       same-tick reading is claim 6's medium), medium for *move* staying current while a
       stall lasts, as for the hover lasting; medium for the slowdown distance of 0 (no landing
-      refused; the rest of its flight not traced); medium, until AC31 part d runs, for the type
-      that is not landable and that claim 5 does not hold at full speed (no trigger, no refusal,
+      refused, neither trigger reached; the rest of its flight not traced); medium, until AC31
+      part d runs, for the type that is not landable and that claim 5 does not hold at full
+      speed (no trigger, no refusal,
       *move* staying current with no further
       fall-back, the descent to height 0 within 768 leptons of its flight point, no new facing
       request at height 0, the stop in the halving zone along an axis for a converted speed of at
       least 20, no contact), and medium, unmeasured, for its path while a turn under way at height
-      0 completes; the slow-speed holds short of the zone at claim 5's levels; medium for its F8
+      0 completes, for its descent within 768 leptons with a slowdown distance below 768 leptons
+      or of 0, for its climb at height 0 once its ordinary target fraction is 1, and for how a
+      descent that reaches the halving zone or passes the point above height 0 ends; the
+      slow-speed holds short of the zone at claim 5's levels; medium for its F8
       spot and *move* after a fall-back in flight and for the ground rows at height 0; medium,
       unmeasured, for its pass beside the halving zone from other directions; medium for the type
       that is not landable and that claim 5 holds at full speed (no slowing, no trigger, no
-      fall-back); medium, unmeasured, for the pad-bound type without dock types
+      fall-back, the cruise height kept); medium, unmeasured, for the pad-bound type without dock
+      types
 
 ### The spy plane after its target
 
@@ -3784,19 +4036,26 @@ pad leaves its pad reservation when it takes any destination other than that pad
     - The destination acts on the aircraft only through its height and claim 4's descent step.
       The run lock marks it as holding height (claim 6), so within 768 leptons of the destination
       its held height is the destination's height above the terrain there (claim 6, with that
-      claim's replacement for a flight point accepted while it has a target and ammunition left),
-      and it may climb or descend toward it. In a tick in which it descends, claim 4's 5-lepton
-      step moves it toward the destination cell's centre.
+      claim's replacement for a flight point accepted while it has a target and ammunition left).
+      Its target fraction is fixed at 1, so where that height is 0, as for a cell at the terrain's
+      surface (claim 40), claim 48 (b)'s third case gives it the held height of ordinary flight
+      again at the start of each movement update, before its height changes, so each update
+      changes its height toward that of ordinary flight, although between updates its held height
+      is 0 again. Toward a positive held height it may climb or descend. In a
+      tick in which it descends, claim 4's 5-lepton step moves it toward the destination cell's
+      centre.
     - An absent destination is chosen again (claim 34), with the same lack of effect.
 
     The edge the aircraft meets is where the line of its approach, continued past the target,
     meets the map. Its house's edge matters to the heading only through that line, and its exit
     edge not at all. The exit edge acts on the path only through the destination's held height
     and descent step above.
-    - Backing: `measurable` (AC32)
+    - Backing: `measurable` (AC32). The cruise height kept within 768 leptons of a destination at
+      the terrain's surface is `unmeasured`: AC32 sets no expectation for the plane's height there.
     - Confidence: high (no turn); medium (no slowing and no landing start, at claim 5's level for
       its full-speed conditions; the held height within 768 leptons of the destination, at claim
-      6's level; the descent step in this behaviour, until AC32 variant (6) runs)
+      6's level; the descent step in this behaviour, until AC32 variant (6) runs); medium
+      (`unmeasured`) for the cruise height kept near a destination at the terrain's surface
 
     **Nothing ends *spy-plane overfly*.**
     - Its processing has no timer or count and queues nothing.
@@ -4271,7 +4530,7 @@ else it then finds; its rows below apply after that.
 | in flight, armed, visiting, no ammunition | forgets target and destination; *retreat* |
 | in flight, armed, visiting, ammunition left, not in a team | *hunt* |
 | in flight, armed, and either *attack* is queued, or *attack* is current with ammunition left and a target | *attack* |
-| in flight, armed, and the in-the-air answer is no, or it is already flying to its *enter* destination, or it has no dock types, or it is outside the usable area in a team | destination kept; *guard* (*area guard* for an armed aircraft of a computer-controlled house outside a team) |
+| in flight, armed, and the in-the-air answer is no, or it is already flying to its *enter* destination (*enter* current, with a destination; a queued *enter* does not count), or it has no dock types, or it is outside the usable area in a team | destination kept; *guard* (*area guard* for an armed aircraft of a computer-controlled house outside a team) |
 | in flight, armed, a pad is found and grants contact | destination: the pad; *enter* |
 | in flight, armed, no pad, pad-bound | crash (claim 46) |
 | in flight, otherwise | destination: landing spot F8; *move* |
@@ -6195,11 +6454,13 @@ listed in Open questions are not claimed confirmed by these scenarios.
   **Falsifiers, every case.** A change of body facing after overfly begins (other than finishing
   a turn already under way), a turn toward the exit cell, a slowdown or landing near it, or a
   behaviour change.
-- **AC33 Aircraft in *sticky* (claims 8, 18, 29, 31 and 33; Q-2726).** Skirmish on open flat
-  ground, director and mods off, a human-controlled test house with scripted input and no computer
-  player, measurement harness. Record per tick each test aircraft's current and queued behaviour,
-  destination, target, pad contact, cell, height and existence. Each test aircraft is a map entry
-  of the human-controlled house with *sticky*, on open ground at least 5 cells from any building.
+- **AC33 Aircraft in *sticky* (claims 5, 6, 8, 18, 24, 29, 31 and 33; Q-2726, Q-2802).** Skirmish
+  on open flat ground, director and mods off, a human-controlled test house with scripted input and
+  no computer player, measurement harness. Record per tick each test aircraft's current and queued
+  behaviour, destination, target, pad contact, cell, height and existence, and in parts d and e
+  also its position in leptons and its speed fraction at the end of the tick. Each test aircraft
+  is a map entry of the human-controlled house with *sticky*, on open ground at least 5 cells
+  from any building.
   It is placed on the ground with *sticky* current. *C* is an open cell at least 40 cells away.
   Give each test aircraft a move order to *C* and record until 1000 ticks after it lands, crashes
   or reaches *C*. Control run for each part: the same with the map entry in *guard*. 3 runs per
@@ -6226,14 +6487,61 @@ listed in Open questions are not claimed confirmed by these scenarios.
     climb, that delay or less, as *A* has never fired (S-0215 claim 24). Control: *A* crashes only on reaching *C* (claim 6). Falsified if *A* in
     *sticky* flies on toward *C* at its cruise height for more than the longer of 45 ticks and one
     standard delay of *sticky*.
-  - c. As (b), with a pad *P* of *A*'s dock type, with a free place, built by the house with
-    scripted input before the order, at least 20 cells from the line from *A* to *C*. Expected: at
-    the same processing as in (b), *A* gets *P* as its destination and a contact with *P*, and
-    *enter* is queued, with *sticky* still current. What *A* does after that processing is not
-    predicted (Open questions): record it. Control: *A* reaches *C*, then falls back there (claim
-    6) and turns toward *P* with *enter* current. Falsified if, at the end of that processing's
-    tick, *A* in *sticky* has a destination other than *P*, has no contact with *P*, or has no
-    *enter* queued.
+  - c. As (b), with *A*'s test file also giving it a positive slowdown distance and a converted
+    speed of at least 20 (test values), and with a pad *P* of *A*'s dock type, with a free place,
+    built by the house with scripted input before the order, at least 20 cells from the line from
+    *A* to *C* and at most 30 cells from *A*'s start, and with *A*'s slowdown distance at most 1024
+    leptons (test value), so that its flight to *P* ends well within 3000 ticks. *P* is a named test
+    copy of a stock helipad type with one docking place whose docking displacement puts its docking
+    position at the centre of one of its foundation cells, with a height component of 0 (test
+    values), so that its heading point lies at most 120 leptons above the terrain and no landing of
+    *A* can start outside that cell.
+    *P* is the only building of *A*'s dock types on the map. The record runs 3000 ticks from the
+    order in place of the general end of the record, and on to 600 ticks after *A*'s touchdown when
+    that is later. Expected: at the same
+    processing as in (b), *A* gets *P* as its destination and a contact with *P*, and *enter* is
+    queued, with *sticky* still current. At the end of every later tick before it touches down,
+    *A* still has *P* as destination and the contact, *enter* queued and *sticky* current, and it
+    flies to *P*. It then touches down and stays on the ground where it touched down for the rest
+    of the record, with no destination, *sticky* current, *enter* queued and the contact held
+    (claim 29, *A contact held at cruise height* and *On the pad*). The cell where it touches down
+    is recorded, not predicted. Control:
+    *A* reaches *C*, then falls back there (claim 6) and turns toward *P* with *enter* current.
+    Falsified if, at the end of that processing's tick or of any later tick before it touches
+    down, *A* in *sticky* has a destination other than *P*, has no contact with *P* or has no
+    *enter* queued. It is also falsified if, once it has touched down, *A* has a destination,
+    moves, takes off, has no contact with *P*, *sticky* ends or *enter* is no longer queued, or if
+    it has not touched down within 3000 ticks of the order.
+  - d. As (a), with *U*'s test file giving it a slowdown distance of 0 (test values), and a record
+    of 3000 ticks from the order in place of the general end of the record. Expected: as in (a) up
+    to its first processing at its cruise height. From then on, to the end of the record, *U* stays
+    at its cruise height, its speed fraction at the end of each tick is at least 0.1, its position
+    changes in every tick (its *V* of at least 20, from (a), makes claim 4's step at least 2
+    leptons, so the standstills that a *V* below 20 can give, over a cell's centre or away from it,
+    are not reached here), and it never lands, with *sticky* current and *move* queued. Control:
+    none beyond (a)'s; the control run with this test file is recorded, not predicted. Falsified if
+    *U* lands, if its fraction at the end of a tick after that processing is below 0.1, or if it
+    stands still for a tick at its cruise height.
+  - e. As (a), with *U*'s test file giving it a converted speed *V* from 1 to 9 and a slowdown
+    distance of at least 2560 leptons (test values), so that the halving zone around a cell's centre
+    is the part less than 86 leptons from it (claim 5), and a record of 3000 ticks from the order in
+    place of the general end of the record. Expected: as in (a) up to its first processing at its
+    cruise height. *U* then comes to a standstill at that height. If its distance from the centre of
+    the cell it stands over is 86 leptons or more, it stays there for the rest of the record with a
+    positive fraction and does not land. Otherwise it lands in that cell. *Sticky* stays current and
+    *move* queued. Control: none beyond (a)'s; the control run with this test file is recorded, not
+    predicted. Falsified if *U* lands from a standstill 86 leptons or more from that centre, if it
+    stands still at its cruise height for more than 10 ticks less than 86 leptons from it, or if it
+    moves on without landing after a tick at its cruise height in which neither its position nor
+    its body facing changes (a tick in which only its body turns, S-0206 claim 1, is not such a
+    standstill).
+  - f. As (c), with AC31 part h (1)'s pad, whose docking position lies outside its foundation,
+    as *P* in place of (c)'s pad. Expected: as in (c) until *A* comes over *P*'s docking
+    position. It then stays in the air over that position to the end of the record, never
+    touching down, with *P* as destination, the contact, *enter* queued and *sticky* current at
+    the end of every tick (claim 29, *On the pad*). Control: as in (c). Falsified if *A* touches
+    down, or if at the end of a tick after it first comes over that position it has a destination
+    other than *P*, no contact with *P*, no *enter* queued or another current behaviour.
 - **AC34 Retaliation on the pad (claims 8, 26, 28, 31 and 52; Q-2792).** Skirmish on open flat
   ground, director and mods off, a human-controlled test house with scripted input, a
   computer-controlled test house with no team and no script, measurement harness. Each order that
@@ -6378,7 +6686,9 @@ listed in Open questions are not claimed confirmed by these scenarios.
   stays true as it stands: a processing of *sticky* is one of *guard* (claim 29 here). Its words
   "only a force or an override replaces it" could add, for aircraft, the fall-back's first three
   rows (claim 29 here): a restored overridden behaviour, and a queued *paradrop approach* or
-  *spy-plane approach* starting at once, both without the readiness test.
+  *spy-plane approach* starting at once, both without the readiness test. It could also add a
+  pad's answer to a settled aircraft's request to be loaded, which has it start *enter* at once,
+  without the readiness test (claims 24 and 29 here).
 
 - **S-0009 scenario G (the aircraft).** Its expectation that each object placed in *sticky*
   never leaves its cell after the move order does not hold for the aircraft: the order hands its
@@ -6666,21 +6976,26 @@ destination once that touchdown has made it forget the edge cell and it rests th
     flying on (medium, AC33). Only a restored overridden *move* from the
     fall-back's first row can make *move* current for it, and no set-up here gives that state
     (medium, `unmeasured`).
-32. An armed aircraft in *sticky* that finds a pad below its cruise height flies to it with
-    *enter* queued and no contact (claim 29). What it does on reaching the pad was not traced: the
-    landing rules of claim 6 for a pad-bound aircraft without contact and claim 18's fall-back
-    apply there, but whether it then lands on the pad and is serviced (claim 26) without *enter*
-    current is open. The same holds for an aircraft that AC33 part c sends to a pad. Before it
-    gets there, that aircraft is processed again in each tick it stays at cruise height, now with
-    the pad's contact held and *enter* queued. Whether those processings keep the pad as its
-    destination and keep the contact, or end the contact and give it another destination or
-    queued behaviour, was not traced either (low). AC33 part c records it.
-33. An unarmed landable aircraft in *sticky* outside a team that is given the cell it is over at
-    each processing at cruise height (claim 29), with a slowdown distance of 0 or a converted speed
-    *V* below 20: where it stops and whether it lands were not traced. Claim 50's stall and
-    zero-distance bullets are for a flight to a fixed spot, while here the destination is given
-    again as the aircraft passes from cell to cell. The same holds for an unarmed type that is not
-    landable and that claim 5 holds at full speed: where it flies was not traced (low).
+32. Q-2802 is answered by claim 29 (*Destinations*, *A pad found below cruise height*, *A contact
+    held at cruise height*, *On the pad*). An armed aircraft in *sticky* that finds a pad below
+    its cruise height gets the pad's contact at once, and one that has settled starts *enter*. One
+    that holds a pad's contact with *enter* queued keeps that pad and the contact at its
+    processings at cruise height when that pad is the only one of its dock types that accepts it,
+    lands at it and rests where it touches down, in *sticky*, unserviced, except that a pad-bound
+    one stays in the air over a docking position outside the foundation and that, at such a
+    position, one that is not pad-bound and touches down outside the position's cell lands again
+    (medium). With a slowdown distance of 0 an
+    unarmed landable aircraft never lands; with *V* below 20 it lands unless claim 5's
+    slow-speed hover or its zero step (*V* below 10) holds it at cruise height (medium). When
+    another pad of the aircraft's dock types accepts it at those processings, claim 21's
+    comparison decides for one that is not
+    pad-bound, with the held pad among the candidates (medium, `unmeasured`). A pad-bound one asks
+    first the pad it was last heading for. Not traced: whether the held pad is recorded as that pad
+    when the contact was granted in *sticky*, so which pad a pad-bound aircraft's search returns
+    there stays open (low).
+33. An unarmed type that is not landable and that claim 5 holds at full speed, in *sticky* (claim
+    29): it keeps its cruise height and is given the cell it is over at each processing, but the
+    path that follows, which depends on its speed and turn rate, was not traced (medium).
 34. Q-2792 is answered by claim 52, with claims 26 and 28 and table T3. Not traced tick by tick:
     the path of an aircraft without ammunition from its run's end back to its pad, the restore of
     the destination put aside, and the stage from which a restored *enter* goes on after a run
