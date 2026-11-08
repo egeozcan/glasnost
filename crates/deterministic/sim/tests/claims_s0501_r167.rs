@@ -228,7 +228,12 @@ fn ac33_c_it_lands_at_the_pad_and_rests_in_sticky_with_enter_queued() {
     for untested in [true, false] {
         let mut r = with(rules(), "BOUND", |u| u.slowdown_distance = Some(1000));
         r.globals.quirks.aircraft_descent_touchdown_untested = untested;
-        r.sim.buildings.get_mut("APAD").unwrap().econ.docking_offsets = Some(vec![CELL_PAD]);
+        r.sim
+            .buildings
+            .get_mut("APAD")
+            .unwrap()
+            .econ
+            .docking_offsets = Some(vec![CELL_PAD]);
         let (mut w, a, _, k) = ordered(&r, "BOUND", Behaviour::Sticky, true);
         let k = k.unwrap();
         let (dock, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
@@ -336,7 +341,11 @@ fn ac33_e_a_slow_aircraft_hovers_short_of_the_zone_or_lands_in_its_cell() {
         let ti = w.obj(a).unwrap().type_index;
         let v = w.rules().unit(Kind::Aircraft, ti).unwrap().speed;
         assert!((1..=9).contains(&v), "void: V {v}");
-        assert!(to_own_cell(&mut w, a, c, 3000), "{stall}: {}", describe(&w, a));
+        assert!(
+            to_own_cell(&mut w, a, c, 3000),
+            "{stall}: {}",
+            describe(&w, a)
+        );
         // The first standstill at cruise height: neither position nor body
         // facing changes in a tick.
         let mut prev = (w.obj(a).unwrap().pos, w.obj(a).unwrap().body.value(w.tick));
@@ -411,7 +420,12 @@ fn ac33_e_a_slow_aircraft_hovers_short_of_the_zone_or_lands_in_its_cell() {
 #[test]
 fn ac33_f_over_a_docking_position_outside_the_foundation_it_never_touches_down() {
     let mut r = with(rules(), "BOUND", |u| u.slowdown_distance = Some(1000));
-    r.sim.buildings.get_mut("APAD").unwrap().econ.docking_offsets = Some(vec![OFF_PAD]);
+    r.sim
+        .buildings
+        .get_mut("APAD")
+        .unwrap()
+        .econ
+        .docking_offsets = Some(vec![OFF_PAD]);
     let (mut w, a, _, k) = ordered(&r, "BOUND", Behaviour::Sticky, true);
     let k = k.unwrap();
     let (dock, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
@@ -438,7 +452,11 @@ fn ac33_f_over_a_docking_position_outside_the_foundation_it_never_touches_down()
             );
         }
     }
-    assert!(over, "it comes over the docking position: {}", describe(&w, a));
+    assert!(
+        over,
+        "it comes over the docking position: {}",
+        describe(&w, a)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +493,12 @@ fn claim_29_a_landed_aircraft_that_finds_a_pad_starts_enter_at_once() {
             step(&mut w);
             let o = w.obj(a).unwrap();
             if o.contact == Some(k) {
-                assert_eq!(o.dest, Some(Target::Object(k)), "{beh:?}: {}", describe(&w, a));
+                assert_eq!(
+                    o.dest,
+                    Some(Target::Object(k)),
+                    "{beh:?}: {}",
+                    describe(&w, a)
+                );
                 assert_eq!(
                     o.beh.current,
                     Some(Behaviour::Enter),
@@ -541,7 +564,11 @@ fn claim_29_one_in_flight_with_a_destination_keeps_sticky_with_enter_queued() {
 fn claim_29_a_full_speed_type_that_is_not_landable_keeps_cruise_height() {
     for (name, keeps) in [("NOLAND", true), ("DRIFT", false)] {
         let (mut w, a, c, _) = ordered(&rules(), name, Behaviour::Sticky, false);
-        assert!(to_own_cell(&mut w, a, c, 1500), "{name}: {}", describe(&w, a));
+        assert!(
+            to_own_cell(&mut w, a, c, 1500),
+            "{name}: {}",
+            describe(&w, a)
+        );
         let mut lowest = air::height(&w, a);
         let mut seen = 0;
         for _ in 0..600 {
@@ -553,7 +580,10 @@ fn claim_29_a_full_speed_type_that_is_not_landable_keeps_cruise_height() {
             }
             seen += 1;
             let d = describe(&w, a);
-            assert!(!st(&w, a).landing && !st(&w, a).ground, "{name}: no landing: {d}");
+            assert!(
+                !st(&w, a).landing && !st(&w, a).ground,
+                "{name}: no landing: {d}"
+            );
             lowest = lowest.min(air::height(&w, a));
             if keeps {
                 assert_eq!(air::height(&w, a), cruise(&w, a), "{name}: {d}");
@@ -584,7 +614,14 @@ fn ac35(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId, ObjectId) {
         testkit::mid(SIZE, -10, 8),
         0,
     );
-    let v = testkit::spawn(&mut w, Kind::Vehicle, "TGT", 1, testkit::mid(SIZE, 12, 6), 0);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TGT",
+        1,
+        testkit::mid(SIZE, 12, 6),
+        0,
+    );
     step(&mut w);
     assert!(air::on_ground(&w, a), "void: {}", describe(&w, a));
     assert!(issue(
@@ -618,7 +655,11 @@ fn to_run_end(w: &mut World, a: ObjectId, v: ObjectId) -> bool {
 #[test]
 fn ac35_a_flagged_type_that_is_not_a_rocket_type_takes_the_ground_rows_in_flight() {
     let (mut w, a, k, v) = ac35(&rules(), "FLAG");
-    assert!(to_run_end(&mut w, a, v), "the run ends: {}", describe(&w, a));
+    assert!(
+        to_run_end(&mut w, a, v),
+        "the run ends: {}",
+        describe(&w, a)
+    );
     let o = w.obj(a).unwrap();
     let d = describe(&w, a);
     assert!(air::height(&w, a) > 0, "void: the run ends in flight: {d}");
