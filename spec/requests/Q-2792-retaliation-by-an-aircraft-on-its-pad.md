@@ -1,9 +1,9 @@
 ---
 id: Q-2792
 title: Retaliation by an aircraft that stands on its pad
-status: open
+status: answered
 related: [S-0501, S-0215, S-0309]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
