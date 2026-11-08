@@ -1,9 +1,9 @@
 ---
 id: Q-2811
 title: A controller target lost while a pending target waits
-status: open
+status: answered
 related: [S-0506]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
