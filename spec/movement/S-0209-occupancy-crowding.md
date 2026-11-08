@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 60
+revision: 76
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-08
 measurements: []
-requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560, Q-2396, Q-2750]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560, Q-2396, Q-2750, Q-2822]
 supersedes: []
 ---
 
@@ -1323,20 +1323,75 @@ rank* and *elite weapon*), *n*
       blockage delay has also run out, the search avoids them.
     - A new path that leads on resumes walking.
     - The blockage delay starts afresh only after the walker has taken a walking step again, or when
-      it is given a new destination, by an order, a scatter or any other rule (S-0208 claim 6). A
-      walker whose destination is cleared does not wait, and any later wait of it follows a new
-      destination, which starts the delay afresh. So a walker that waits for a moving blocker and is
-      then given a new destination whose path leads through the same cell waits the whole blockage
-      delay again, counted from that cell's first *moving blocker* answer after the new destination,
-      before its search avoids the blocker. A walker that alternates between short waits and steps
-      never reaches the end of the delay unless one single wait lasts the whole delay.
+      it is given a destination, by an order, a scatter or any other rule (S-0208 claim 6). Every
+      assignment that is made starts it afresh, whether the destination is a different one or the
+      one the walker already has, the same cell or the same object (*A destination given again*
+      below). A walker whose destination is cleared does not wait, and any later wait of it follows
+      a new destination, which starts the delay afresh. So a walker that waits for a moving blocker
+      and is then given a new destination whose path leads through the same cell waits the whole
+      blockage delay again, counted from that cell's first *moving blocker* answer after the new
+      destination, before its search avoids the blocker. A walker that alternates between short
+      waits and steps never reaches the end of the delay unless one single wait lasts the whole
+      delay.
     - A walker whose destination turns out to be unreachable gives up its move (S-0212).
-    - Backing: `measurable` (scenario C5, parts a and b, and part c for the restart at a new
-      destination given by an order; scenario C2, parts c and d). The restart at a scatter's or
-      another rule's new destination is `unmeasured`: no scenario here gives a walker a scatter
-      whose path then leads into a moving blocker, and S-0208 scenario W17 part m reads the end of
-      the retry delay at a scatter, not the blockage delay.
-    - Confidence: medium (the restart at a scatter's or another rule's destination included)
+    - *A destination given again (Q-2822).* The original makes no exception for a destination
+      that the walker already holds, so a destination given again counts as any other:
+      - An order to move to the cell that is already the walker's destination starts the delay
+        afresh, as an order to another cell does. Infantry has no unchanged-destination
+        suppression (S-0213 claim 21), so the order is not dropped for naming the walker's present
+        destination, and its wait counts from the first *moving blocker* answer after the order.
+      - An accepted scatter whose cell is already the walker's destination starts it afresh too
+        (S-0208 claim 6).
+      - *With an object as its destination.* Every assignment that is made starts the delay afresh,
+        the same object included. By case:
+        - *An attack order on its target, given again.* The destination becomes nothing (S-0213
+          table T3, part f), so the wait ends, and a later wait follows the destination that the
+          walker's *attack* gives it.
+        - *A duplicate enter order.* An enter order given again by a walker that is already in
+          *enter* and in contact with the building it enters is ignored by table T3's part (a), so
+          nothing is assigned.
+        - *An enter order given again, by a tethered walker, that is not a duplicate.* The order of
+          a tethered walker in *enter* and in contact with the building it enters is a duplicate
+          (above), which assigns nothing. By the order's table T3 part (b), the walker keeps its
+          link, and with it its contact, unless the object it is in contact with is a building of
+          the unloading kind. A walker that keeps its link has its assignment made, and drops its
+          stored path, as S-0208 claim 6 gives for a walker in contact. At a building of the
+          unloading kind it breaks off the contact and is no longer tethered, and the cases below
+          for a walker with no contact apply.
+        - *An enter order given again, by a walker with no contact after part (b), to an idle
+          transport that has room for it, no destination and no other contact, and stands on land in
+          the walker's reach region.* The assignment is made. Whether the
+          walker's destination then becomes the transport or the transport's own cell is open (Open
+          questions). Either way a destination is assigned.
+        - *Any other enter order given again by such a walker:* to an object that holds a contact
+          with another object, to one that S-0507 claim 5's tests do not let the walker board, or to
+          a vehicle transport with no destination that stands on water or in another reach region
+          from the walker. What the assignment does there is open (Open questions), with the
+          original's results recorded there at low confidence. For an absorbing building, S-0605
+          claim 3 decides whether the assignment is made.
+      - The same assignment also ends a running retry delay of the walker (Cross-spec
+        coordination, for S-0212 claim 21). That end is `unmeasured` here: scenario C5 reads only
+        the blockage delay.
+    - Backing: `measurable` (scenario C5, parts a and b, part c for the restart at a new destination
+      given by an order and part c2 for an order to the walker's present destination; scenario C2,
+      parts c and d). The restart at an enter order's assignment that a transport accepts, and the
+      enter order given again, are `unmeasured`: a walker in *enter* that waits with that transport
+      as its contact may be called to the transport's cell at its later processings of *enter*,
+      where it does not count as moving toward its destination (Open questions), and each such
+      assignment would start the delay afresh too, so no wait read here tells the order's restart
+      from those. The restart at a scatter's or another rule's destination is `unmeasured`: no
+      scenario here gives a walker a scatter whose path then leads into a moving blocker, and S-0208
+      scenario W17 part m reads the end of the retry delay at a scatter, not the blockage delay. A
+      walker that has a destination accepts a scatter only by S-0208 claim 11's third case, and no
+      set-up here arranges one whose cell is that destination. The attack order given again, the
+      duplicate enter order and the tethered walker are `unmeasured`: no scenario here gives the
+      waiting walker a target, a tether or a building it is in contact with.
+    - Confidence, by case:
+      - medium: the restart rule, at a new destination given by an order, a scatter or another rule
+      - medium: the restart at a destination given again by an order or a scatter, and at an enter
+        order's assignment that the object accepts
+      - medium: the attack order given again, the duplicate enter order and the tethered walker
+      - medium: the end of a running retry delay at every assignment that is made.
 
 ### Requests to make room
 
@@ -2095,7 +2150,7 @@ stock infantry type has the destroyer zone.
   - (g) the occupants move away, or the walker gives up or moves away before the blockage delay has
     passed.
 
-**Scenario C5: moving blockers and the blockage delay (claims 4 and 10; Q-2750).**
+**Scenario C5: moving blockers and the blockage delay (claims 4 and 10; Q-2750, Q-2822).**
 - *Setup:* a one-cell-wide corridor, eight cells long. A side passage that only infantry can use runs
   around it: a land type that is impassable for the vehicle and passable for walkers (S-0211). The
   side passage is at least 8 cells longer than the infantry's route through the corridor, so that a
@@ -2115,13 +2170,14 @@ stock infantry type has the destroyer zone.
     At the start of a tick *D*/2 ticks after the infantry's first stop behind *V*₁, while it still
     waits, the user orders it to the cell next to its destination on the second branch, so that its
     route still leads through *V*₁'s cell.
+  - (c2) As (c), but the second order is to the cell that is already the infantry's destination.
 - *Procedure:* record the infantry's position per tick.
 - *Observable:*
   - (a) the ticks between the infantry's first stop behind *V*₁ and the tick on which it starts into
     the side passage.
   - (b) whether the infantry takes the side passage.
-  - (c) the ticks between the second order and the infantry's first step after it, and whether
-    that step leads back towards the side passage.
+  - (c) and (c2) the ticks between the second order and the infantry's first step after it,
+    and whether that step leads back towards the side passage.
 - *Runs:* 3 each.
 - *Expected:*
   - (a) At least the blockage delay of the stock rules, and less than the blockage delay plus the
@@ -2137,14 +2193,16 @@ stock infantry type has the destroyer zone.
     back towards the side passage at most one tick after the search, so at most *D*/2 + *R* + 2
     ticks after the order, which is below *D* since *R* is at most *D*/2 − 3. So the lower bound
     tells the two apart.
+  - (c2) As (c): at least *D* ticks. The destination given again starts the delay afresh as a new
+    one does, and the same bound tells a restart from none.
 - *Falsified if:*
   - (a) the infantry leaves before the blockage delay, or never leaves (with *V*₁ still holding its
     order). If the recorder shows *V*₁ without a destination, or moving, on any tick while the
     infantry waits behind it, the run cannot decide,
   - (b) the infantry takes the side passage,
-  - (c) the infantry's first step after the second order comes less than *D* ticks after it and
-    leads back towards the side passage; a run in which that step leads on through the corridor
-    cannot decide.
+  - (c) and (c2) the infantry's first step after the second order comes less than *D* ticks
+    after it and leads back towards the side passage; a run in which that step leads on through
+    the corridor cannot decide.
 
 **Scenario C6: crates and computer-owned walkers (claim 4, row WO1).** This scenario measures the
 original's computer behaviour. In our engine an AI house's walkers behave as the human-owned unit
@@ -3576,6 +3634,38 @@ That moment is called the *window*. Common setup:
   the new path of claim 7 when it has fewer than four steps, end its walking tick without choosing a
   walking target (low confidence). That belongs to the movement specs of such units. Scenario C19
   uses an ordinary walking type for that reason.
+- *An enter order's assignment to a walker with no contact (claim 10).* For an object other than
+  claim 10's idle transport, what the assignment leaves the walker with is not established. The
+  original appears to give these results (low, `unmeasured`: no scenario here gives the waiting
+  walker such an object):
+  - An object that holds a contact with another object: where it is a vehicle or a building, the
+    walker waits to enter it, with its destination cleared, so its wait ends (S-0605 claim 3 gives
+    this for an absorbing building only). The assignment of any other object is made.
+  - An object that holds no contact and that S-0507 claim 5's tests do not let the walker board: the
+    walker holds no contact with it afterwards, and the assignment is made.
+  - A vehicle transport with no destination that stands on water, or in another reach region from
+    the walker: no destination is assigned. The walker holds a contact with the transport afterwards
+    and keeps the behaviours that the order left it, its destination, its stored path and its
+    running delays, so its wait goes on counting. At its next processing of *enter*, S-0507 claim
+    5's results apply, and any result other than boarding breaks the contact and makes it fall back
+    to rest, which ends the wait. Where a walker meets a transport in that state at a processing of
+    *enter* instead (S-0507 claim 5), it loses the contact and falls back to rest at once.
+  - A walker that holds a contact with the object after the assignment keeps its stored path under
+    *enter*, as one with no contact does. That would read S-0208 claim 6's "at that moment" as the
+    contact the walker held when the order came, the conditional reading in Cross-spec coordination.
+- *The destination at an accepted enter order (claim 10).* For claim 10's idle transport, whether
+  S-0507 claim 5's call of the walker to the transport's own cell comes there, and so whether the
+  walker's destination becomes the transport or that cell, is not established. The call is for a
+  requester not moving toward a destination. A walker that walks to its destination, or waits for a
+  moving blocker with its destination kept, appears to count as moving toward it, so that no call
+  comes and its destination is the transport (medium, `unmeasured`: no scenario here tells the
+  transport from its cell as a destination). Whether a walker that is not moving toward a
+  destination is called there is not established at all. Either way a destination is assigned, so
+  claim 10's restart holds at the assignment. Where the waiting walker does not count as moving
+  toward its destination, its later processings of *enter* may call it to the transport's cell
+  again, each an assignment that starts the delay afresh (claim 10), so a wait read after an
+  accepted enter order cannot tell the order's restart from those. This is why claim 10 rates that
+  restart `unmeasured`.
 
 ## Cross-spec coordination
 
@@ -3612,6 +3702,32 @@ approved text at paired hand-off, rather than treating the earlier approved summ
   cell when its house is not allied with that object, or against the wall when no object is
   listed and the cell holds a wall. S-0309 needs no change: its claims 23 and 29 already give the
   drop and the attack-move resumption that claim 9 relies on.
+- S-0212 claim 21 and its Open questions (Q-2822): for the walk locomotor, a destination given
+  again, the same cell or the same object, ends a running retry delay as a different one does,
+  at every assignment that is made (claim 10 here and its Open questions give the cases in which
+  an enter order's assignment is not made). The Open questions entry on a destination given again
+  can then be limited to the other locomotors. Level and backing: medium (`measurable` through
+  scenario C5 part c2 here only as far as it reads the blockage delay; the retry delay's own end
+  is `unmeasured` here).
+- S-0208 claim 6 (Q-2822): a scatter whose cell is already the walker's destination ends any
+  running retry delay and restarts the blockage delay, as a scatter to a different cell does
+  (claim 10 here). The sentence that leaves this case to S-0212's open case can say so. Level
+  and backing: medium, `unmeasured`, as claim 10 rates the scatter. Its rule for a stored path
+  kept under *enter* stands as written. If the Open questions entry here on an enter order's
+  assignment is settled as it reads, claim 6's "at that moment" would be the contact the walker
+  held when the order came, not one the object grants at that assignment, so a walker that held
+  none would keep its path, and claim 6 could then say so (clarification). Level and backing:
+  low, `unmeasured`, as that entry rates it.
+- S-0507 claim 5, and S-0213 claim 21 with table T3, part f (Q-2822): no change is asked now. The
+  Open questions entry here on an enter order's assignment to a walker with no contact gives the
+  original's results at the assignment (low, `unmeasured`). If it is settled as it reads, S-0507
+  claim 5 would say that its results also decide an enter order's assignment, with a transport on
+  water or in another reach region leaving the walker its contact and its wait there, and S-0213
+  claim 21 and part f would name two more cases in which the enter order assigns no object: a
+  vehicle or a building that holds another contact, and that transport. The entry on the destination
+  at an accepted enter order (medium, `unmeasured`) would let S-0507 claim 5 say that a requester
+  walking, or waiting for a moving blocker with its destination kept, counts as moving toward a
+  destination.
 
 The S-0102 alignment item is satisfied: its claim 3 and layer table agree with
 S-0502 claim 4's two-height predicate and distinguish on-deck surface height
