@@ -63,6 +63,20 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
 | 18: a house counts as allied with itself; no exception for an aircraft on its pad; out of ammunition is not a refusal | no change | text only; `acquire::retaliate` already reads `w.allied` (true for the same house), refuses only *illegal* and *impossible*, and has no pad exception |
 | Q-2802 interims (intake 112) | left, as the brief says | — |
 
+## Formats and lanes
+
+- Save format 117 → 118: `Construction::opened` and `IdleBody::sale_report` are new hashed
+  state. AI game format 83 → 84, past the stalled-harvester fix's 83. Wire 12 is unchanged.
+- Goldens regenerated (hash lines only): combat, duel, duel-diagonal, duel-m6c, duel-m7a,
+  duel-m7b, duel-naval, scripted and skirmish. `data/schema/ruleset.schema.json` gains the
+  quirk.
+- Arena: every M-0001 to M-0021 figure is unchanged, and the CSVs are byte-identical.
+- Sweeps: M6c and M7a are identical. M7b passes with its rows moved: the domination counts, and
+  the counts of the buildings and units around it.
+- AI suite: 264 before and after.
+- Quick lane (seeds 7 to 10, against main 1c88f74): 10 of 36 games change length, each with
+  side 2 in it. Every game ends with a winner, and no winner changes.
+
 ## Intake 114's S-0309 uses
 
 - Claim 18's slave, master and spawner row: r126 adds text only to the alliance line (a house is
