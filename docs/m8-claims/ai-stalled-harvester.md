@@ -12,7 +12,8 @@ The plan's harvester rule (`Script::think_with`, step 4) sends a harvester to ha
 - The harvester rule sends such a harvester to harvest (the same order, with no destination, that it gives a resting harvester), under the same condition that the house owns a refinery.
 - The wait counts from the start of *unload*, the only clock the harvester shows; the docking is never later than the lost contact. A stalled harvester stays for good, so the wait need only pass the few ticks between a lost contact and the next processing, in which a harvester whose contact ended another way (or under the play-fixes layer) moves on by itself. Ten think periods is about what a person takes to notice the harvester and click it; it costs one harvester a short pause, against the tens of thousands of ticks of the lane game.
 - The order is the one a person gives, through `orders::issue`; the AI reads only its own harvester's state (as a person sees it standing), draws no random value and adds no saved state.
-- AI game format 81 → 82 (decisions change). The simulation's save format stays at 116: the brain is saved by `Game::save` beside the world, and no world state changed.
+- AI game format 82 → 83, past intake 114's 82 (decisions change; first 81 → 82 on the earlier base 024af18). The simulation's save format stays at 117: the brain is saved by `Game::save` beside the world, and no world state changed.
+- With the play-fixes layer on (the app's default) the quirk is off, the harvester moves on by itself, and the rule never acts. It matters for the reference ruleset (the box *Pathing and other fixes* unticked, and the lanes without `GLASNOST_PLAY_FIXES`).
 
 ## Tests
 
