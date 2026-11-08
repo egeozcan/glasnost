@@ -3,7 +3,7 @@ id: Q-2791
 title: The tips of the sidebar's build icons
 status: answered
 related: [S-0411, S-0111, S-0004, S-0015]
-answered-by: [S-0411]
+answered-by: [S-0411, S-0111]
 ---
 
 ## Need
