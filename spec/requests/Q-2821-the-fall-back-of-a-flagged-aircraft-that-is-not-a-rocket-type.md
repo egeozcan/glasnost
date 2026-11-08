@@ -1,9 +1,9 @@
 ---
 id: Q-2821
 title: The fall-back of an aircraft of a missile-flagged type that is not a rocket type
-status: open
+status: answered
 related: [S-0501, S-0506]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
