@@ -111,6 +111,7 @@ for a choice the spec leaves to the implementer.
 | 22: the diplomacy button | design | our sidebar has none, so it has no tip |
 | 22: our power-mode button | design | its tip is "Power on/off", the name our earlier hover showed (`sidebar_tip::POWER_MODE_TIP`) |
 | 22: nothing elsewhere on the sidebar (radar, credits, shell, gaps) | tested | `claim_22_the_controls` (radar, credits); `sidebar_tip::tests::claim_22_places` |
+| Terms: slots (only the places shown count) | tested | `hud::tests::s0411_terms_slots_and_tip_area` (also the tip area's rectangle); design: our slots are tiles of the icon cell and its gaps, so a gap between icons is on the slots |
 | Terms: insertion points | tested | `sidebar_tip::tests::terms_insertion_points` |
 | Import mapping: the entries and labels; a missing entry shows the placeholder | tested | `claim_22_the_controls` (sell label, power entry); `claim_20_icon_text` (money format) |
 | Open question 11: other insertion-point layouts | seam | Q-2831 filed; interim in `sidebar_tip::fill` (`design: Q-2831`) |
@@ -126,3 +127,43 @@ for a choice the spec leaves to the implementer.
 | design: the keyboard focus on an icon | design | while the focus shows on a shown icon, no pointer tip shows and no order block holds, that icon's tip shows, placed by its slot (`Session::choose_focus_tip`); `design_the_keyboard_focus_tip` |
 | design: watch mode | design | the watch panel in the sidebar's place shows no sidebar tip |
 | design: no string table (a game built without an install) | design | stand-ins "%s %d" and "%d %d" |
+
+## Records
+
+No measurement record is cited or reached: the intake is app only and the simulation is
+untouched. The arena (below) is run to show that.
+
+## Goldens
+
+Unchanged. `cargo test --release -p glasnost-sim-gate -- --include-ignored`, run without the
+update variable on this branch, passes all 16 tests, and `crates/sim-gate/golden/` has no
+change. No format is bumped: save 115, AI game 80, wire 12.
+
+## Lanes
+
+Before: main 3ad4749 with the lane test only (0c7c5a7). After: this branch on 3ad4749 (main has
+not moved). Local lane; install values and install text are not quoted.
+
+- **Render lane** (`r8_render_lane.rs`, `i115_the_sidebar_tips`, local only). The base deploys,
+  then the scenes run in order:
+  - 1, onto the first icon from the battlefield, then a 1200 ms rest;
+  - 2, onto the second slot, one frame;
+  - 3 to 5, a 1200 ms rest on the power meter, the first tab and the sell button;
+  - 6, the whole screen;
+  - 7 and 8 (added after the first after run), a rest on the first icon with the strip filled,
+    then a one-frame movement within it.
+
+  Before: no tip state in any scene; the old hud tooltip drew the hovered icon's name and price
+  and the controls' names. After:
+  - scenes 3 to 5 show the controls' tips by the pointer (the power meter's two lines);
+  - scene 7 shows the icon tip, three lines overlapping the icon's lower-right corner by 5 pixels;
+  - scene 8 shows it at once, in the same place;
+  - scene 1 shows none. Its wait ended one tick before the deployed base filled the strip, so
+    the rest's one choice found an empty slot (S-0411 claim 20, S-0111 claim 20). The old
+    tooltip, which had no wait, drew the icon as soon as it appeared;
+  - scene 2 shows none: the second slot is empty all game.
+
+  Frames are in `local-lane/m8/i115/render/before/` and `after/`.
+- **Arena** (`--record all`): before and after alike, M-0001 fails 12 of 96, M-0002 2 of 24,
+  M-0003 2 of 35, M-0019 0 of 6, M-0020 1 of 25 and M-0021 11 of 50, as main. The before and
+  after output folders are identical.
