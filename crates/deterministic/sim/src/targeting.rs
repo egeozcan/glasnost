@@ -1324,7 +1324,7 @@ fn infantry_on(
             Action::DamagingEntry
         };
     }
-    // spec: S-0214 table I row I8 (a building this infantry can garrison under S-0508 claim 1; no force-fire); S-0208 claim 6 (r53: its capture behaviour is not an enter order for the path-keeping rule)
+    // spec: S-0214 table I row I8 (a building this infantry can garrison under S-0508 claim 1, the occupation test; no force-fire); S-0208 claim 6 (r58, Q-2746: the order to garrison, S-0508 claim 2, carries capture, which is not an enter order for the path-keeping rule)
     if !mods.force_fire && may_garrison(w, actor, t) {
         return Action::Capture;
     }

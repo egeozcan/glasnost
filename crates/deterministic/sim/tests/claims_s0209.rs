@@ -851,6 +851,78 @@ fn walker_waits_for_moving_blocker() {
     assert_eq!(w.obj(m).unwrap().path.blocked_since, None);
 }
 
+/// The corridor walker waiting behind a moving blocker in (1, 0) on its
+/// way to (6, 0): returns the tick its blockage delay started.
+fn blocked_walker() -> (World, ObjectId, i32) {
+    let (mut w, m) = corridor_scene("Mope", |_| {});
+    order_move(&mut w, m, cell(6, 0));
+    stand_in(&mut w, m, cell(0, 0));
+    w.cells.claim_vehicle(cell(1, 0), Layer::Ground, true);
+    tick::step(&mut w);
+    let first = w.tick - 1;
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    run(&mut w, 10);
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    (w, m, first)
+}
+
+// spec: S-0209 claim 10 (r60: a new destination given by an order starts the blockage delay afresh, counted from the first moving-blocker answer after it, when its path leads through the same cell); scenario C5 part c
+#[test]
+fn c5_c_a_new_destination_restarts_the_blockage_delay() {
+    let (mut w, m, first) = blocked_walker();
+    let pos = w.obj(m).unwrap().pos;
+    order_move(&mut w, m, cell(5, 0));
+    let n = run_until(&mut w, 20, |w| {
+        w.obj(m)
+            .unwrap()
+            .path
+            .blocked_since
+            .is_some_and(|s| s > first)
+    });
+    assert!(n < 20, "it waits again behind the blocker");
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell(5, 0))));
+    assert_eq!(o.pos, pos, "it has not moved");
+    let again = o.path.blocked_since.unwrap();
+    assert_eq!(again, w.tick - 1, "from the first answer after the order");
+}
+
+// spec: S-0209 claim 10 (r60: a new destination by any other rule starts it afresh too, here one written without reaching the locomotor)
+#[test]
+fn a_destination_written_by_another_rule_restarts_the_blockage_delay() {
+    let (mut w, m, first) = blocked_walker();
+    w.obj_mut(m).unwrap().dest = Some(Target::Cell(cell(5, 0)));
+    tick::step(&mut w);
+    let again = w.obj(m).unwrap().path.blocked_since;
+    assert_eq!(again, Some(w.tick - 1), "afresh after {first}");
+}
+
+// spec: S-0209 claim 10 (r60: a walker whose destination is cleared does not wait, and its later wait follows a new destination, which starts the delay afresh)
+#[test]
+fn a_cleared_destination_ends_the_wait() {
+    let (mut w, m, first) = blocked_walker();
+    w.obj_mut(m).unwrap().dest = None;
+    tick::step(&mut w);
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, None, "no wait");
+    order_move(&mut w, m, cell(6, 0));
+    let n = run_until(&mut w, 20, |w| {
+        w.obj(m).unwrap().path.blocked_since.is_some()
+    });
+    assert!(n < 20, "it waits again behind the blocker");
+    let again = w.obj(m).unwrap().path.blocked_since.unwrap();
+    assert!(again > first, "afresh: {again} after {first}");
+    assert_eq!(again, w.tick - 1, "from the first answer after the order");
+}
+
+// design: Q-2822 (interim: the same destination given again by an order leaves a running blockage delay as it was); S-0209 claim 10 (r60)
+#[test]
+fn q2822_interim_the_same_destination_again_keeps_the_blockage_delay() {
+    let (mut w, m, first) = blocked_walker();
+    order_move(&mut w, m, cell(6, 0));
+    tick::step(&mut w);
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+}
+
 // ---------------------------------------------------------------------------
 // Walls (claims 4 and 5), overrides (claim 4) and aircraft (claim 14)
 

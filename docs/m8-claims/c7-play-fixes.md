@@ -763,3 +763,22 @@ position). All are display-only: none reaches the simulation. Each is built as t
 `every_spec_quirk_has_a_switch` and `every_rendering_spec_quirk_has_a_switch` name no switch
 from either spec. The layer file is unchanged, and none of the code this intake changes reads a
 switch of the layer.
+
+## A3 intake 114 (S-0501 r154, S-0312 r66, S-0215 r137, S-0208 r58, S-0209 r60): two new switches, neither admitted
+
+Ledger: [intake114.md](intake114.md). S-0501 r154 (Q-2792) adds `aircraft_pad_sleep_ends_retaliation`
+(Edge cases, *Sleep ends a retaliation on the pad*) and S-0312 r66 (Q-2793) adds
+`bomb_mark_water_death_on_deck` (Edge cases). Both are added to `quirks.rs` with the spec's
+default, on (the original), and both positions are tested (`claims_s0501.rs`,
+`claims_s0312_marked_water.rs`). S-0215 r137, S-0208 r58 and S-0209 r60 add no quirk and no
+departure.
+
+| Switch | Spec | Verdict | Built |
+|---|---|---|---|
+| `aircraft_pad_sleep_ends_retaliation` (off: a service step skips an aircraft whose current behaviour is *attack*, as one in *enter*) | S-0501 claims 26 and 52, T3's last row, Edge cases | not admitted. Condition 1 holds: the Edge case states the off position, and it is built. Condition 2 is arguable: the quirk text gives the on position as an aircraft on its pad that keeps its attacker as target, never fires at it and gets no repair and no release until a revert cause befalls the target. That is a unit held on its pad, though not for good, and no play note or request names it (Q-2792 came from reading S-0215 against S-0501). Condition 3 fails: off, the retaliation's run goes on and the aircraft takes off and attacks its attacker, which the original's never does from the docked *sleep* once a service step has come between. That changes combat at the pads. The off position is also, in the spec's words, a design rule, not an oracle measurement | `air::pad_turn` (`attack_skipped`); both positions tested: `claim_52_ac34_b1_sleep_ends_the_retaliation_on_the_pad`, `claim_52_quirk_off_the_service_step_skips_the_attack` |
+| `bomb_mark_water_death_on_deck` (off: a vehicle on a bridge deck never passes claim 11's water test, so its death takes claims 4 to 6 and 9 as for an unmarked vehicle) | S-0312 claim 11, Edge cases | not admitted. Condition 1 holds, as above. Condition 2 is weak: the on position shows the wake and the last splash on a bridge deck, which can read as a visible glitch, but the Edge case states it as the original's death effects, not as a fault, and no play note or request names it (Q-2793 came from building claim 11). The case needs a vehicle that kept the bomb mark from a fall and later dies on a deck over water. Condition 3 fails: off, such a vehicle fires its death weapon and throws debris, so it deals damage the original's does not and takes random draws the original's does not. Claim 12's passenger rule does not change with the switch | `death::marked_low_over_water`; both positions tested: `d8_marked_deck_variant_a_both_ways`, `d8_marked_deck_death_weapon_both_ways` |
+
+The new switches against our own pathing improvements, as intake 106 read them: neither changes a
+path search, a blocked step or a release. Intake 114's S-0209 r60 restart of the blockage delay
+changes when a waiting walker's search avoids its blocker; it reads no switch of the layer. Intake
+114 leaves the layer file unchanged.

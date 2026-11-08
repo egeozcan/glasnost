@@ -158,9 +158,8 @@ pub enum Retaliation {
     /// claim 3), does not hold.
     MayNot,
     /// It may retaliate but does not retaliate against this hit: F7's
-    /// distance rule holds it back, the override to *attack* is refused
-    /// and keeps its slots, or it is an aircraft on the ground at its pad
-    /// (Q-2792, interim).
+    /// distance rule holds it back, or the override to *attack* is refused
+    /// and keeps its slots.
     Held,
     /// It retaliates: the override installed the attacker as its target.
     Done,
@@ -305,11 +304,7 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
     if held {
         return Held;
     }
-    // spec: S-0501 claim 28 against S-0215 claim 18 (Q-2792, interim: an aircraft on the ground at its pad is not given the attacker; it may retaliate but does not)
-    if o.kind == Kind::Aircraft && crate::air::on_its_pad(w, actor) {
-        return Held;
-    }
-    // spec: S-0215 claims 10 and 18 (an aircraft overrides to attack as any other actor; S-0501 T1 and T2 row 1 own its attack run and the restore at the target's loss)
+    // spec: S-0215 claims 10 and 18 (an aircraft overrides to attack as any other actor; S-0501 T1 and T2 row 1 own its attack run and the restore at the target's loss) and S-0501 claim 52 (r154, Q-2792: on its pad too; standing on a pad, a contact, its height and its ammunition add no condition and remove none)
     if override_attack(w, actor, attacker) {
         Done
     } else {

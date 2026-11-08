@@ -314,6 +314,10 @@ fn standing(w: &mut World, id: ObjectId) {
         if !no_path && let Some(ob) = w.obj_mut(id) {
             ob.path.steps.clear();
         }
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0209 claim 10 (r60: a walker whose destination is cleared does not wait; a later wait follows a new destination, which starts the blockage delay afresh)
+            ob.path.blocked_since = None;
+        }
         stopped(w, id);
         return;
     }
@@ -364,22 +368,21 @@ pub fn keeps_stored_path(w: &World, id: ObjectId) -> bool {
         return false;
     }
     w.obj(id).is_some_and(|o| {
-        // spec: S-0208 claim 6 (r52: current or queued behaviour enter, in contact with nothing, glossary contact; a walking target plays no part; r53, Q-2746: capture, the behaviour of the orders to garrison, capture, infiltrate and hijack, is not enter)
+        // spec: S-0208 claim 6 (r52: current or queued behaviour enter, in contact with nothing, glossary contact; a walking target plays no part; r58, Q-2746: capture, the behaviour of the orders to garrison, S-0214 row I8 and S-0508 claim 2, capture, infiltrate and hijack, is not enter)
         o.walk.is_some()
             && (o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter))
             && o.contact.is_none()
     })
 }
 
-/// Whether `id` stands with no walking target and either no stored path or
-/// one it keeps at the scatter (`keeps`): the walker that S-0208 claim 6
-/// gives an extra locomotion at a scatter whose destination comes from the
-/// nearby-cell search. Read before the request, which drops a stored path
-/// it does not keep (claim 12).
-pub(crate) fn standing_free(w: &World, id: ObjectId, keeps: bool) -> bool {
+/// Whether `id` stands with no walking target: the walker that S-0208
+/// claim 6 gives an extra locomotion at a scatter whose destination comes
+/// from the nearby-cell search, whether it held no stored path, keeps one
+/// at the scatter or has the scatter drop it. Read before the request.
+pub(crate) fn standing_free(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
-        // spec: S-0208 claim 6 (r46: no walking target and no stored path; r52: or a stored path kept at the scatter, which it follows; a stored path dropped there gives none, design: Q-2750 interim)
-        (o.path.steps.is_empty() || keeps) && o.walk.as_ref().is_some_and(|s| s.target.is_none())
+        // spec: S-0208 claim 6 (r46: no walking target and no stored path; r52: or a stored path kept at the scatter, which it follows; r58, Q-2750: or a stored path the scatter drops, which leaves it in the state of one that held none, so it searches in the extra locomotion)
+        o.walk.as_ref().is_some_and(|s| s.target.is_none())
     })
 }
 
@@ -402,12 +405,12 @@ fn walks_now(w: &World, id: ObjectId) -> bool {
         && crate::lift::stand_in(w, id).is_none()
 }
 
-/// S-0208 claim 6 (r46, r52), *Destinations given during a unit's update*:
-/// a walker standing with no walking target and no stored path, or with a
-/// stored path it keeps, that accepts a scatter whose destination comes from
-/// the nearby-cell search has one more locomotion at once, in which it
-/// searches for that destination (or follows the kept path) and chooses its
-/// walking target without moving. The caller has checked the scatter's side
+/// S-0208 claim 6 (r46, r52, r58), *Destinations given during a unit's
+/// update*: a walker standing with no walking target that accepts a scatter
+/// whose destination comes from the nearby-cell search has one more
+/// locomotion at once, in which it searches for that destination (or
+/// follows a stored path it keeps) and chooses its walking target without
+/// moving. The caller has checked the scatter's side
 /// ([`standing_free`] before the request, the destination from the search).
 pub(crate) fn extra_locomotion(w: &mut World, id: ObjectId) {
     // spec: S-0208 claim 6 (r46: a walker, moved by the walk locomotor; a teleporting unit has S-0417 claim 17's jump instead)
@@ -678,10 +681,15 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             }
         }
         Outcome::MovingBlocker => {
-            // spec: S-0209 claim 10 (wait; start the blockage delay on the first such tick)
-            let since = o.path.blocked_since.unwrap_or(t);
+            // spec: S-0209 claim 10 (wait; start the blockage delay on the first such tick; r60: a new destination, by an order, a scatter or any other rule, starts it afresh at the first moving-blocker answer after it)
+            let since = o
+                .path
+                .blocked_since
+                .filter(|_| o.path.blocked_for == o.dest)
+                .unwrap_or(t);
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.blocked_since = Some(since);
+                ob.path.blocked_for = ob.dest;
             }
             let waiting = path::delay_runs(w, id);
             trace::record(w, id, || trace::What::Blocked {

@@ -22,7 +22,7 @@ use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{ObjectId, Pos, World};
+use glasnost_sim::world::{Layer, ObjectId, Pos, World};
 
 const SIZE: i32 = 24;
 const WAKE: &str = "Ripple";
@@ -256,11 +256,11 @@ fn d8_marked_water_variant_wake_and_last_splash_in_place_of_the_ordinary_effects
     assert!(!shown.contains(&WAKE.to_string()), "{shown:?}");
 }
 
-// spec: S-0312 claim 11 (within 10 leptons above the water cell, inclusive: at 10 leptons the wake and splash, at 11 the ordinary effects of claims 4 and 9); Q-2793 (interim: the height above the terrain surface at its position)
+// spec: S-0312 claim 11 (r66, Q-2793, the water test: its height above the surface, from the terrain off any deck, 10 leptons or less, inclusive: at 10 leptons the wake and splash, at 11 the ordinary effects of claims 4 and 9; no lower bound, so a negative height passes)
 #[test]
 fn claim_11_the_10_lepton_boundary() {
     let r = rules();
-    for (dz, low) in [(10, true), (11, false)] {
+    for (dz, low) in [(10, true), (11, false), (-30, true)] {
         let mut w = game(&r);
         let id = put(&mut w, "PLAIN", 0, dz, true);
         let pos = w.obj(id).unwrap().pos;
@@ -285,6 +285,143 @@ fn claim_11_needs_a_water_cell() {
     let shown = names_of(&w);
     assert!(shown.contains(&"Deb".to_string()), "{shown:?}");
     assert!(!shown.contains(&WAKE.to_string()), "{shown:?}");
+}
+
+/// Makes the cell of `id` a high-bridge deck cell and stands `id` on its
+/// deck, 416 leptons above the terrain (S-0307 Constants), at height 0
+/// above the surface.
+fn on_deck(w: &mut World, id: ObjectId) {
+    let c = w.obj(id).unwrap().pos.cell();
+    let i = w.cells.idx(c).unwrap();
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+    w.cells.leave(c, Layer::Ground, id);
+    w.cells.enter(c, Layer::Deck, id, false);
+    let o = w.obj_mut(id).unwrap();
+    o.layer = Layer::Deck;
+    o.pos.z += 416;
+    assert_eq!(w.height_above_surface(id), 0, "on the deck");
+}
+
+/// One ordinary killing hit of the warhead BLAST: defences count and the
+/// passengers may escape (S-0312 claim 12; D8's marked-deck variant and D9
+/// variant h).
+fn ordinary(w: &World) -> Hit {
+    let blast = w
+        .rules()
+        .combat
+        .warheads
+        .iter()
+        .position(|h| h.name == "BLAST")
+        .unwrap() as u32;
+    Hit {
+        warhead: Some(blast),
+        ignore_defences: false,
+        no_escape: false,
+        ..lethal()
+    }
+}
+
+// spec: S-0312 claim 11 (r66, Q-2793, scenario D8's marked-deck variant part a: a marked vehicle that dies on a bridge deck over a water cell, at height 0 above the surface measured from the deck, passes the water test, the cell's land type read whatever cell layer it is on: the wake and the last splash at its position on the deck, no debris, no claim 9 animations, no draws) and Edge cases (quirks.bomb_mark_water_death_on_deck on; off: a vehicle on a bridge deck never passes the water test and takes the ordinary effects of claims 4 and 9)
+#[test]
+fn d8_marked_deck_variant_a_both_ways() {
+    for quirk in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.bomb_mark_water_death_on_deck = quirk;
+        let mut w = game(&r);
+        let id = put(&mut w, "PLAIN", 0, 0, true);
+        on_deck(&mut w, id);
+        let pos = w.obj(id).unwrap().pos;
+        w.effects.clear();
+        let before = w.rng.taken();
+        let h = ordinary(&w);
+        damage::apply(&mut w, id, h);
+        let draws = w.rng.taken() - before;
+        if quirk {
+            assert_eq!(draws, 0, "no draws");
+            assert_eq!(anims(&w), wake_and_splash(pos));
+        } else {
+            assert!(draws >= 3, "debris count, pieces and two picks: {draws}");
+            let shown = names_of(&w);
+            assert!(shown.contains(&"Deb".to_string()), "{shown:?}");
+            assert!(shown.iter().any(|n| n.starts_with("Ex")), "{shown:?}");
+            assert!(!shown.contains(&WAKE.to_string()), "{shown:?}");
+        }
+        assert!(w.obj(id).is_none(), "quirk {quirk}: it leaves play");
+    }
+}
+
+// spec: S-0312 claim 11 (r66, D8's marked-deck variant part a: an exploding marked vehicle on a deck over water fires no death weapon, claims 5 and 6 skipped) and Edge cases (quirks.bomb_mark_water_death_on_deck off: it fires its death weapon as an unmarked one)
+#[test]
+fn d8_marked_deck_death_weapon_both_ways() {
+    for quirk in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.bomb_mark_water_death_on_deck = quirk;
+        let mut w = game(&r);
+        let id = put(&mut w, "BOOMER", 0, 0, true);
+        on_deck(&mut w, id);
+        w.effects.clear();
+        let h = ordinary(&w);
+        damage::apply(&mut w, id, h);
+        assert_eq!(detonations(&w).is_empty(), quirk, "quirk {quirk}");
+    }
+}
+
+// spec: S-0312 claim 12 (r66, Q-2793, D8's marked-deck variant part b: the bomb-mark column tests the mark alone, not claim 11's water test, so a marked transport whose type cannot crash killed on land at height 0 by an ordinary hit loses all its passengers and shows claim 9's animations, no wake or splash; the unmarked control's passengers get out) and Edge cases (quirks.bomb_mark_water_death_on_deck does not touch the column)
+#[test]
+fn d8_marked_deck_variant_b_the_mark_alone_kills_the_passengers() {
+    for quirk in [true, false] {
+        for marked in [true, false] {
+            let mut r = rules();
+            r.globals.quirks.bomb_mark_water_death_on_deck = quirk;
+            let mut w = game(&r);
+            let t = put(&mut w, "FERRY", 6, 0, marked);
+            let riders = board(&mut w, t);
+            w.effects.clear();
+            let h = ordinary(&w);
+            damage::apply(&mut w, t, h);
+            let out = riders
+                .iter()
+                .filter(|&&p| w.obj(p).is_some_and(|o| !damage::dead(o)))
+                .count();
+            let tag = format!("quirk {quirk}, marked {marked}");
+            assert_eq!(out, if marked { 0 } else { 2 }, "{tag}");
+            let shown = names_of(&w);
+            assert!(
+                shown.iter().any(|n| n.starts_with("Ex")),
+                "{tag}: {shown:?}"
+            );
+            assert!(
+                shown.iter().any(|n| n.starts_with("Ds")),
+                "{tag}: {shown:?}"
+            );
+            assert!(!shown.contains(&WAKE.to_string()), "{tag}: {shown:?}");
+        }
+    }
+}
+
+// spec: S-0312 claim 12 (r66, Q-2793, scenario D9 variant h: the height is measured from the deck on a bridge deck, so an unmarked transport whose type cannot crash, standing on a deck 416 leptons above the terrain and at height 0 above the surface, follows the rows for 208 leptons or less: its passengers get out; the control 416 leptons above the terrain off any deck loses them all)
+#[test]
+fn d9_h_passengers_get_out_on_a_deck() {
+    let r = rules();
+    for deck in [true, false] {
+        let mut w = game(&r);
+        let t = put(&mut w, "FERRY", 6, 0, false);
+        if deck {
+            on_deck(&mut w, t);
+        } else {
+            w.obj_mut(t).unwrap().pos.z += 416;
+        }
+        let riders = board(&mut w, t);
+        let h = ordinary(&w);
+        damage::apply(&mut w, t, h);
+        let out = riders
+            .iter()
+            .filter(|&&p| w.obj(p).is_some_and(|o| !damage::dead(o)))
+            .count();
+        assert_eq!(out, if deck { 2 } else { 0 }, "on a deck {deck}");
+    }
 }
 
 // spec: S-0312 claim 11 (claims 5 and 6 skipped: an exploding marked vehicle fires no death weapon) and claim 7 with S-0519 claim 5 (its attached bomb still goes off once, at the end of the shared effects); the unmarked exploding control fires its death weapon and its bomb

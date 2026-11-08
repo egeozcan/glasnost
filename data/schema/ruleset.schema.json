@@ -8650,6 +8650,11 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_pad_sleep_ends_retaliation": {
+          "description": "A pad's service step has an aircraft settled on it with the *attack* of a retaliation current queue *sleep*, which replaces the run: it keeps the attacker as its target and never fires; off: a service step skips an aircraft whose current behaviour is *attack*, as one in *enter*.",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_ready_mark_outlives_enter": {
           "description": "An aircraft whose ready mark enter cleared and that is then forced into another behaviour stays not ready in it until a processing sets the mark again, so a queued behaviour or an order waits, under a forced guard below cruise height for as long as it keeps that height; off: the cleared mark holds it not ready only while enter is current.",
           "type": "boolean",
@@ -8827,6 +8832,11 @@
         },
         "blocked_arrow_events": {
           "description": "View-arrow presses and releases made during an order block are discarded; off: they are accepted (unit orders stay blocked).",
+          "type": "boolean",
+          "default": true
+        },
+        "bomb_mark_water_death_on_deck": {
+          "description": "A bomb-marked vehicle on a bridge deck takes the water test of a death low over water with its height read from the deck, so one that dies on an intact deck over water shows wake and splash; off: a vehicle on a bridge deck never passes that water test.",
           "type": "boolean",
           "default": true
         },

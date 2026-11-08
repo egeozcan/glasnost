@@ -373,23 +373,28 @@ fn claim_18_an_aircraft_with_no_ammunition_retaliates_and_falls_back() {
     assert_eq!(o.target, None, "the target put aside, none");
 }
 
-// Q-2792 (interim: an aircraft on the ground in contact with one of its pads may retaliate but does not, S-0501 claim 28 against S-0215 claim 18); with the player-scatter setting on and the scatter property on guard it is sent case 1 of S-0215 claim 19 and falls back at the hit (S-0501 claims 49 and 18)
+// spec: S-0501 claim 52 (r154, Q-2792 answered: retaliation has no exception for an aircraft; standing on a pad and holding a contact add no condition, so an aircraft in guard on its pad retaliates as the one with no contact: attack current, the attacker its target, guard suspended, no destination, and the empty destination does not end the contact) and S-0215 claims 10 and 18; with the scatter property on guard and the player-scatter setting on, a retaliating aircraft is never sent case 1 of S-0215 claim 19
 #[test]
-fn q2792_interim_an_aircraft_on_its_pad_is_held_back() {
+fn claim_52_an_aircraft_on_its_pad_retaliates() {
     let mut r = rules(true, "6", 0);
     props(&mut r, Behaviour::Guard, true, true);
-    let (mut w, j, a) = scene(&r, 1, 5, Behaviour::Guard);
-    let pad = spawn(&mut w, Kind::Building, "PAD", 1, mid(SIZE, 4, 4), 0);
-    w.obj_mut(j).unwrap().contact = Some(pad);
-    assert_eq!(acquire::retaliate(&mut w.clone(), j, a), Retaliation::Held);
-    let t = w.tick;
-    hit(&mut w, j, a);
-    let o = w.obj(j).unwrap();
-    assert_eq!(o.target, None, "no retaliation");
-    assert_eq!(o.beh.last_common_effects, Some(t), "case 1: the fall-back");
-    // The control: the same aircraft with no contact retaliates.
-    let (mut w, j, a) = scene(&r, 1, 5, Behaviour::Guard);
-    assert_eq!(acquire::retaliate(&mut w, j, a), Retaliation::Done);
+    for on_pad in [true, false] {
+        let (mut w, j, a) = scene(&r, 1, 5, Behaviour::Guard);
+        let pad = spawn(&mut w, Kind::Building, "PAD", 1, mid(SIZE, 4, 4), 0);
+        if on_pad {
+            w.obj_mut(j).unwrap().contact = Some(pad);
+        }
+        let t = w.tick;
+        hit(&mut w, j, a);
+        let o = w.obj(j).unwrap();
+        assert_eq!(o.target, Some(Target::Object(a)), "on its pad {on_pad}");
+        assert_eq!(o.beh.current, Some(Behaviour::Attack));
+        assert_eq!(o.beh.suspended, Some(Behaviour::Guard));
+        assert_eq!(o.dest, None);
+        assert_eq!(o.contact, on_pad.then_some(pad), "the contact held");
+        assert_ne!(o.beh.last_common_effects, Some(t), "no case 1 fall-back");
+        assert!(glasnost_sim::air::on_ground(&w, j), "it does not move");
+    }
 }
 
 // spec: S-0309 claim 18 and Terms (an object of a spawner type never retaliates, even while none of its spawned aircraft is launching or alive); the control without spawned aircraft retaliates

@@ -147,8 +147,8 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool
     let q = r.quirks;
     // spec: S-0208 claim 6 (r52, A stored path kept under enter: a destination given by a rule that is not an order breaks off no contact, so the walker keeps its path when, at the assignment, its current or queued behaviour is enter and it is in contact with nothing)
     let keeps = crate::walk::keeps_stored_path(w, id);
-    // spec: S-0208 claim 6 (r46: the extra locomotion is for a walker standing with no walking target and no stored path at the scatter, read before the request drops the path; r52: or one that keeps its stored path there)
-    let free = crate::walk::standing_free(w, id, keeps);
+    // spec: S-0208 claim 6 (r46: the extra locomotion is for a walker standing with no walking target, read before the request; r52: one that keeps its stored path there included; r58, Q-2750: one whose stored path the scatter drops included)
+    let free = crate::walk::standing_free(w, id);
     // spec: S-0208 claims 12 and 13 (one ranged draw j over 0 … 4)
     let j = w.rng.ranged(0, 4, q.ranged_draw_half_span);
     // spec: S-0208 Terms (scatter centre cell: the cell of the scatter reference point, the walking target while there is one, else the unit's own position; never a farther destination)

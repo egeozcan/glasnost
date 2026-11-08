@@ -91,6 +91,39 @@ fn claim_18_crash_start() {
     );
 }
 
+// spec: S-0312 claim 15 (r66, Q-2793, scenario D11 variant h: a destroyed vehicle whose type can crash starts to crash only at a positive height above the surface, measured from the deck on a bridge deck, so one standing on a deck 416 leptons above the terrain starts no crash, takes no tumbling draws and leaves play; the control, 416 leptons above the terrain off any deck, crashes, as in variant c)
+#[test]
+fn s0312_claim_15_d11_h_no_crash_from_a_deck() {
+    for deck in [true, false] {
+        let mut w = game();
+        let g = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+        let c = pos(&w, g).cell();
+        if deck {
+            let i = w.cells.idx(c).unwrap();
+            w.cells.deck[i] = true;
+            w.cells.deck_entry[i] = true;
+            w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+            w.cells.leave(c, glasnost_sim::world::Layer::Ground, g);
+            w.cells.enter(c, glasnost_sim::world::Layer::Deck, g, false);
+            w.obj_mut(g).unwrap().layer = glasnost_sim::world::Layer::Deck;
+        }
+        w.obj_mut(g).unwrap().pos.z += 416;
+        let above = w.height_above_surface(g);
+        assert_eq!(above, if deck { 0 } else { 416 });
+        let before = w.rng.taken();
+        kill(&mut w, g);
+        if deck {
+            assert!(w.obj(g).is_none(), "it leaves play");
+            assert_eq!(w.rng.taken(), before, "no tumbling draws");
+        } else {
+            assert!(
+                w.obj(g).is_some() && jump::crashing(&w, g),
+                "the control crashes"
+            );
+        }
+    }
+}
+
 // spec: S-0502 claim 18, F4 and scenario J12 (the fall: the update that starts the crash takes the ordinary height step of the old state then the extra drop; from then on, away from the surface, the ordinary descent by c and the extra drop k, each truncated: 11 leptons per tick; the heading's target 11520 ahead; the end below 1 lepton and the impact of S-0312 claim 16)
 #[test]
 fn claim_18_crash_motion() {

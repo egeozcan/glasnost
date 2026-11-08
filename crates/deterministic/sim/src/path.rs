@@ -34,6 +34,12 @@ pub struct PathState {
     pub retry_at: i32,
     /// Tick at which the current blockage began, if any.
     pub blocked_since: Option<i32>,
+    /// A walker's destination when its current blockage began
+    /// (`blocked_since`). A blockage met under another destination starts
+    /// the blockage delay afresh (S-0209 claim 10, r60), also when the
+    /// destination was written without reaching the locomotor.
+    #[serde(default)]
+    pub blocked_for: Option<Target>,
     /// The destination the stored path was computed for.
     pub for_goal: Option<CellXY>,
     /// A walker's destination at the failed search that ended its movement
@@ -3147,6 +3153,15 @@ pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>) 
     let t = w.tick;
     if !ends_at_change(w, id) {
         return;
+    }
+    let walker = crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
+    if walker
+        && let Some(ob) = w.obj_mut(id)
+        && ob.dest != before
+    {
+        // spec: S-0209 claim 10 (r60: a walker given a new destination, by an order, a scatter or any other rule, starts the blockage delay afresh; one whose destination is cleared does not wait) and S-0208 claim 6 (r58: the scatter restarts the blockage delay)
+        // design: Q-2822 (interim: the same destination given again, by an order or a scatter to the cell it already holds, leaves a running blockage delay as it was, as the retry delay below is kept for it; S-0212 claim 21 leaves that case open)
+        ob.path.blocked_since = None;
     }
     if let Some(ob) = w.obj_mut(id)
         && ob.dest != before

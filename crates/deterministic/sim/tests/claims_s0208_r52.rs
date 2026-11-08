@@ -349,7 +349,7 @@ fn a_kept_path_is_followed_in_the_extra_locomotion() {
     );
 }
 
-// spec: S-0208 claim 6 (r52: a destination given by a rule that is not an order breaks off no contact, so a walker under enter in contact with something drops its path at a scatter); Edge cases (quirks.enter_keeps_stored_path off: dropped too); design: Q-2750 interim (the walker held a stored path at the scatter and does not keep it: no extra locomotion, so no walking target until its next locomotion)
+// spec: S-0208 claim 6 (r52: a destination given by a rule that is not an order breaks off no contact, so a walker under enter in contact with something drops its path at a scatter); Edge cases (quirks.enter_keeps_stored_path off: dropped too); claim 6 (r58, Q-2750: a walker standing with no walking target whose stored path the scatter drops is in the state of one that held none: it searches in the extra locomotion for the scatter's destination and chooses its walking target there); scenario W17 part l
 #[test]
 fn a_scatter_drops_the_path_in_contact_or_with_the_switch_off() {
     for (keep, contact) in [(true, true), (false, false)] {
@@ -359,22 +359,19 @@ fn a_scatter_drops_the_path_in_contact_or_with_the_switch_off() {
         }
         assert!(scatter::request(&mut w, id, UNFORCED));
         let o = w.obj(id).unwrap();
-        assert!(
-            matches!(o.dest, Some(Target::Cell(_))),
-            "the scatter's destination"
-        );
-        assert!(o.path.steps.is_empty(), "the stored path is dropped");
-        assert_eq!(
-            walk_target(&w, id),
-            None,
-            "no extra locomotion (Q-2750 interim)"
-        );
-        // Its next locomotion searches for the scatter's destination.
         let Some(Target::Cell(d)) = o.dest else {
-            unreachable!()
+            panic!("the scatter's destination: {:?}", o.dest)
         };
-        tick::step(&mut w);
-        assert_eq!(w.obj(id).unwrap().path.for_goal, Some(d));
+        // The extra locomotion searched for the scatter's destination at
+        // once and chose a walking target without moving.
+        assert_eq!(o.path.for_goal, Some(d), "searched in the extra locomotion");
+        assert_eq!(pos(&w, id).cell(), cell(1, 0), "it has not moved");
+        let t = walk_target(&w, id).expect("a walking target chosen at once (Q-2750)");
+        let here = cell(1, 0);
+        assert!(
+            (t.cell().x - here.x).abs() <= 1 && (t.cell().y - here.y).abs() <= 1,
+            "towards the scatter's destination: {t:?}"
+        );
     }
 }
 

@@ -999,6 +999,10 @@ pub struct Quirks {
     // spec: S-0312 claim 6
     #[serde(default = "on")]
     pub death_weapon_unplaced_projectile: bool,
+    /// A bomb-marked vehicle on a bridge deck takes the water test of a death low over water with its height read from the deck, so one that dies on an intact deck over water shows wake and splash; off: a vehicle on a bridge deck never passes that water test.
+    // spec: S-0312 claim 11, Edge cases
+    #[serde(default = "on")]
+    pub bomb_mark_water_death_on_deck: bool,
     /// Rubble is the overlay type at a fixed registration index.
     // spec: S-0312 claim 20
     #[serde(default = "on")]
@@ -1529,6 +1533,10 @@ pub struct Quirks {
     // spec: S-0501 claim 28, Edge cases
     #[serde(default = "on")]
     pub aircraft_half_reload_with_target: bool,
+    /// A pad's service step has an aircraft settled on it with the *attack* of a retaliation current queue *sleep*, which replaces the run: it keeps the attacker as its target and never fires; off: a service step skips an aircraft whose current behaviour is *attack*, as one in *enter*.
+    // spec: S-0501 claims 26 and 52, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_pad_sleep_ends_retaliation: bool,
     /// An aircraft's damage-smoke chance draws from the scenario stream, including updates that show no smoke; off: no damage-smoke draw and no smoke animation.
     // spec: S-0501 claim 37, Edge cases
     #[serde(default = "on")]
@@ -2515,6 +2523,7 @@ impl Default for Quirks {
             crash_death_weapon_twice: true,
             building_smudge_discarded_draws: true,
             death_weapon_unplaced_projectile: true,
+            bomb_mark_water_death_on_deck: true,
             rubble_overlay_by_index: true,
             barrel_probe_top_left_only: true,
             smudge_footprints_beyond_map_edge: true,
@@ -2641,6 +2650,7 @@ impl Default for Quirks {
             cull_experience_path: true,
             aircraft_endless_refire: true,
             aircraft_half_reload_with_target: true,
+            aircraft_pad_sleep_ends_retaliation: true,
             aircraft_smoke_scenario_draw: true,
             pad_limit_counts_list_only: true,
             pad_distance_overflow: true,
@@ -3416,6 +3426,10 @@ impl Quirks {
                 "death_weapon_unplaced_projectile",
                 self.death_weapon_unplaced_projectile,
             ),
+            (
+                "bomb_mark_water_death_on_deck",
+                self.bomb_mark_water_death_on_deck,
+            ),
             ("rubble_overlay_by_index", self.rubble_overlay_by_index),
             (
                 "barrel_probe_top_left_only",
@@ -3748,6 +3762,10 @@ impl Quirks {
             (
                 "aircraft_half_reload_with_target",
                 self.aircraft_half_reload_with_target,
+            ),
+            (
+                "aircraft_pad_sleep_ends_retaliation",
+                self.aircraft_pad_sleep_ends_retaliation,
             ),
             (
                 "aircraft_smoke_scenario_draw",
