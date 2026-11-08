@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia, name tip)
 topic: rendering
-revision: 49
+revision: 57
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-08
 measurements: []
-requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673, Q-2687, Q-2736]
+requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072, Q-2673, Q-2687, Q-2736, Q-2791]
 supersedes: []
 ---
 
@@ -28,7 +28,8 @@ behaviour is deferred context only, since S-0409 claim 19 forces fog off in skir
 It also gives the name tip (claims 20 to 26): the small text box that the interface shows over the
 battlefield view when the pointer rests on an object, with its timing, the option that turns it
 off, the objects that get one, its text, its placement, its look and when it goes. The display
-names it shows are found as S-0004 claim 17 gives. The sidebar's own tips are not covered here.
+names it shows are found as S-0004 claim 17 gives. The sidebar's own tips are S-0411's (claims
+20 to 22).
 
 ## Terms
 
@@ -618,25 +619,32 @@ S-0108 (Formulas F3).
     - **Wait.** The tip shows once the pointer has rested on the battlefield view for 1000 ms of
       real time. Every pointer movement in the game's window, over the sidebar too, of any distance
       and whether or not the pointer object changes, hides a tip that is showing and starts the wait
-      again. Pressing or releasing the left, right or middle mouse button hides the tip and stops
-      the wait. No tip then shows until the pointer has moved and rested again. The mouse wheel
-      affects neither. The pointer leaving the game's window is not an event of its own: the last
-      movement inside the window restarts the wait as usual, and a wait that ends with the pointer
-      outside the window shows nothing and uses up the rest's choice.
+      again. The one exception is over the sidebar's build-icon slots (S-0411 claim 20): the
+      movement that brings the pointer onto them is an ordinary one, but once one drawn frame has
+      passed with the pointer on a slot (medium, `unmeasured`, Backing), each later movement that
+      ends on a slot shows that slot's sidebar tip at once, and one that ends on an empty slot hides
+      the tip. Pressing or releasing the left, right or middle mouse button hides the tip and stops
+      the wait. No name tip then shows until the pointer has moved and rested again (over the slots,
+      S-0411 claim 20 gives when a sidebar tip shows again). The mouse wheel affects neither. The pointer
+      leaving the game's window is not an event of its own: the last movement inside the window
+      restarts the wait as usual, and a wait that ends with the pointer outside the window shows
+      nothing and uses up the rest's choice.
     - **Real time, not ticks.** The wait and the lifetime below are real time. Game speed does not
       change them. Our engine keeps this real-time timing: the tip feeds no game state.
     - **Where the pointer rests.** When the wait ends, a name tip is chosen only if the pointer is
-      then over the battlefield view. Over the sidebar, the radar included, no name tip shows (a tip
-      of a sidebar control is not this spec's), and outside the game's window nothing shows. Drawing
-      on the battlefield view, such as the status message lines of S-0213 claim 25, is not a place
-      of its own: the tip is chosen for the pointer object under it, as anywhere else on the view.
+      then over the battlefield view. Over the sidebar, the radar included, no name tip shows (the
+      sidebar's own tips are S-0411's, claims 20 to 22), and outside the game's window nothing
+      shows. Drawing on the battlefield view, such as the status message lines of S-0213 claim 25,
+      is not a place of its own: the tip is chosen for the pointer object under it, as anywhere else
+      on the view.
     - **One choice per rest.** When the wait ends, the text is chosen from the state at that moment
       (claims 21 to 23). If there is no text, the text is empty, or the wait ends while the tip is
       blocked (below), nothing shows. Nothing then shows until the pointer moves and rests again,
       even if an object later comes under the resting pointer or the block ends. While the tip
       shows, claim 26 chooses its text again.
-    - **Lifetime.** A tip stays for 10000 ms of real time after it shows, and then hides. It does
-      not show again until the pointer moves and rests again. A text chosen again while the tip
+    - **Lifetime.** A tip stays for 10000 ms of real time after it shows, and then hides. A name tip
+      does not show again until the pointer moves and rests again (over the slots, S-0411 claim 20
+      gives the sidebar tip's lifetime). A text chosen again while the tip
       shows (claim 26) does not start the lifetime again.
     - **Blocked.** The tip is blocked while the mouse cursor is hidden, while the player's input is
       locked, while the battlefield view is moving, as during a scroll, and while a left or right
@@ -659,11 +667,14 @@ S-0108 (Formulas F3).
       the cursor: in a skirmish, the block of a game's first ticks (S-0201 claim 14) and a block
       that the map's trigger actions make, a chrono flash's included (S-0201 claim 11). No other
       ordinary skirmish situation is known to lock the input or hide the cursor while the pointer is
-      over the battlefield view.
+      over the battlefield view. These blocks are the name tip's. Over the sidebar only the hidden
+      cursor blocks the sidebar's own tips (S-0411 claim 20): an order block blocks them through
+      the cursor it hides, and a locked input alone does not.
     - **Options menu.** Opening the in-game options menu (S-0213 claim 23) hides a tip that shows
       and stops the wait. While the menu is open, no wait runs and no tip shows. When it closes, the
-      tooltip option in force applies again, and nothing shows until the pointer moves and rests
-      again: a tip hidden by the menu does not come back.
+      tooltip option in force applies again, and no name tip shows until the pointer moves and
+      rests again: a tip hidden by the menu does not come back (over the slots, S-0411 claim 20
+      gives the sidebar tip's).
     - Backing: `measurable` (scenario NT1 for the wait, its restart, the buttons, the held buttons,
       the wheel, the lifetime, game speed, the one choice per rest; NT2 for the option, its settings
       key, both options menus and the menu's opening; NT8 for a scroll and a held left button; in
@@ -688,10 +699,15 @@ S-0108 (Formulas F3).
       (its scenario O21), whose fixtures this spec does not take over. `unmeasured` for the menu's
       closing bringing no tip back: closing it takes a press on the menu or a key that S-0213 claim
       23 does not give, and a press hides the tip anyway. `unmeasured` for a rest over the sidebar
-      giving no tip and for a movement over the sidebar starting the wait again: the battlefield
-      view does not include the sidebar (glossary), so no run can put an object a tip could be
-      chosen for under a pointer that rests on the sidebar, and a rest there gives no tip with or
-      without the rule, while a movement from the sidebar back onto the view starts the wait anyway.
+      giving no name tip and for a movement over the sidebar, outside its build-icon slots, starting
+      the wait again: the battlefield view does not include the sidebar (glossary), so no run can
+      put an object a tip could be chosen for under a pointer that rests on the sidebar, and a rest
+      there gives no name tip with or without the rule, while a movement from the sidebar back onto
+      the view starts the wait anyway.
+      `measurable` (S-0411 scenario S16 parts a and b) for the exception over the build-icon slots,
+      as S-0411 claim 20's Backing gives it, and `unmeasured` for its one drawn frame, as there. The
+      blocks over the sidebar are backed as S-0411 claim 20's Backing gives them (`unmeasured` for
+      the order block and for the options menu over the sidebar).
       `unmeasured` for a text chosen again not starting the lifetime again: no set-up here changes a
       showing tip's text at a chosen time (claim 26). `unmeasured` for a block that ends while the
       pointer still rests: no NT set-up holds the pointer still through a block that ends without a
@@ -710,13 +726,17 @@ S-0108 (Formulas F3).
       the route mode released over a highlighted or refused point (Open questions), which that
       medium does not cover. Medium, `unmeasured` (Backing), for the hidden cursor, the locked
       input, a block that ends while the pointer rests, a rest over a message line, the pointer
-      outside the window, a rest over the sidebar giving no tip, the window's edge not being a
-      movement, a movement over the sidebar starting the wait again, the lifetime not starting
-      again, the menu's closing bringing no tip back, a held left button whose press is an ordinary
-      click inside a point's click area in the route mode, a held left button that drags a band box
-      in the route mode, a press in the route mode with no object selected that takes an own point
-      and the end of the block at the button's release in the route mode, apart from the low case
-      above
+      outside the window, a rest over the sidebar giving no name tip, the window's edge not being a
+      movement, a movement over the sidebar outside its build-icon slots starting the wait again,
+      the lifetime not starting again, the menu's closing bringing no tip back, a held left button
+      whose press is an ordinary click inside a point's click area in the route mode, a held left
+      button that drags a band box in the route mode, a press in the route mode with no object
+      selected that takes an own point and the end of the block at the button's release in the route
+      mode, apart from the low case above.
+      Medium, `measurable` (S-0411 scenario S16 parts a and b), for the exception of a movement over
+      the build-icon slots. Medium, `unmeasured`, for its one drawn frame. For the blocks over the
+      sidebar, S-0411 claim 20's levels: medium, `unmeasured` for the order block and the options
+      menu there.
 
 21. **Name tip: which pointer objects get one.** When the wait ends, the tip's text is:
     - the shroud label (Import mapping) when the pointer cell is not explored by the local
@@ -895,9 +915,10 @@ S-0108 (Formulas F3).
     text is chosen again in every drawn frame, by claims 21 to 23 for the place where the pointer
     rests and with claim 20's blocking conditions:
     - When that gives no text or an empty text, or the tip is blocked, the tip hides, and nothing
-      shows until the pointer moves and rests again. So it hides when its object dies or leaves the
-      pointer's place and nothing with a text is left there, when an object of another house fully
-      cloaks there unsensed (claim 21), and when the view scrolls under the resting pointer.
+      shows until the pointer moves and rests again (Edge cases for the original). So it hides when
+      its object dies or leaves the pointer's place and nothing with a text is left there, when an
+      object of another house fully cloaks there unsensed (claim 21), and when the view scrolls
+      under the resting pointer.
     - When it gives another text, that text replaces the shown one, and the box is laid out and
       placed again for it (claim 24). So another object left under the pointer when the first one
       dies or leaves gives its own name, and a change of disguise gives the new disguise's name
@@ -1090,14 +1111,16 @@ timing is real time.
 | showing | drawn frame otherwise | idle | tip hidden |
 | showing | lifetime ends | idle | tip hidden |
 
-The state table restates claims 20 and 26. While the in-game options menu is open the state stays
-off, whatever the option: turning the option on in that menu takes effect when the menu closes
-(claim 20). Backing: `measurable` (scenarios NT1, NT2 and NT8), and `unmeasured` where claims 20 and
-26 give a part as `unmeasured`, with their reasons. Confidence: high for the pointer, button and
-lifetime rows, turning the option on, and the 1000 ms wait of the two wait-end rows; medium for the
-blocking conditions, the place of the rest and the one choice per rest that those two rows restate
-from claim 20, for the text and box that the showing rows choose by claims 21 to 24, for the two
-drawn-frame rows (claim 26), for the options menu, and for turning the option off while a tip shows.
+The state table restates claims 20 and 26. Over the sidebar's build-icon slots, S-0411 claim 20's
+sidebar tip applies instead of this table (claim 20's exception). While the in-game options menu is
+open the state stays off, whatever the option: turning the option on in that menu takes effect when
+the menu closes (claim 20). Backing: `measurable` (scenarios NT1, NT2 and NT8), and `unmeasured`
+where claims 20 and 26 give a part as `unmeasured`, with their reasons. Confidence: high for the
+pointer, button and lifetime rows, turning the option on, and the 1000 ms wait of the two wait-end
+rows; medium for the blocking conditions, the place of the rest and the one choice per rest that
+those two rows restate from claim 20, for the text and box that the showing rows choose by claims 21
+to 24, for the two drawn-frame rows (claim 26), for the options menu, and for turning the option off
+while a tip shows.
 
 The overlap order between insignia, health bar and pip scale is `unmeasured`, confidence medium:
 no scenario below isolates their overlapping nontransparent pixels. The visibility table restates
@@ -1191,6 +1214,24 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
   empty modifier or type name, claim 23; NT5 gives such texts but does not wrap them) for the
   fourth; and no set-up here changes a showing tip's text at a chosen time (claim 26) for the fifth.
   Confidence: medium.
+- **A name tip back under a resting pointer** (display-only, no switch; claims 20 and 26). In the
+  original, when a showing name tip has hidden because its text became empty or none, or because
+  the cursor was hidden, the input locked or the view moving (claim 26), and the pointer still
+  rests there when the hidden tip's lifetime would have ended, the text is chosen again at that
+  moment and the tip shows if it then gives one and no block holds, as for S-0411's icon tips
+  (S-0411 Edge cases). A press or release of a mouse button ends that lifetime, so a tip it hid,
+  or one hidden while a button is held, does not come back this way. Our engine shows nothing
+  until the pointer moves and rests again. Backing: `unmeasured` for the name tip, for a reason
+  of set-up: no NT run brings an object with a text under a resting pointer after its tip has
+  hidden, and no NT run ends a block with the pointer still on a known object (a scroll moves the
+  view under it); S-0411 scenario S16 part i arranges the emptied case for an icon tip.
+  Confidence: medium.
+- **The movement that leaves the build-icon slots** (display-only, no switch; claim 20). In the
+  original the first movement off the slots is handled without a wait, so a name tip of an object
+  on the battlefield view where it ends shows at once; S-0411 Edge cases give it. Our engine
+  starts the wait, as for any movement. Backing: `measurable` (S-0411 scenario S16 part i) for a
+  fast movement from an icon onto a vehicle; `unmeasured` for a movement that ends elsewhere,
+  since part i reads no other. Confidence: medium.
 - **Two disguise tests** (no switch; claim 22). The tip uses S-0516 claim 35's test for vehicles
   only. Infantry uses the simpler test of claim 22, as the original does. An enemy spy inside the
   local player's detector coverage therefore still shows its disguise's name.
@@ -1852,7 +1893,9 @@ of capture and timer granularity.
   run let it drive away. Expected: no later than 2 s after the vehicle is destroyed, and in the
   other run by the time the vehicle is 2 cells or more from the pointer's cell, the tip has hidden
   or shows the name of what is then under the pointer (claim 26), and once hidden it does not show
-  again during the rest. (b) Select and deselect another unit with the keyboard while a tip shows.
+  again during the rest, except at the moment the hidden tip's lifetime would have ended (10000 ms
+  after it showed) when an object with a text is then under the pointer (Edge cases, *A name tip
+  back under a resting pointer*). (b) Select and deselect another unit with the keyboard while a tip shows.
   Expected: no change. (c) Hold the left button, drag a selection box and rest, still holding, for 3
   s with an own vehicle under the pointer, then release the button and rest for 3 s more. Expected:
   no tip while the button is held or after its release. (d) Rest with a building placement and then
@@ -1864,9 +1907,11 @@ of capture and timer granularity.
   With S-0516's cloak fixtures, let an own unit that can cloak cloak while its tip shows. Expected:
   no change. (g) While the tip of an own building shows, scroll the view with the keyboard for 1 s
   and then keep the pointer still for 5 s. Expected: the tip hidden within 200 ms after the view
-  first moves, and no tip for the rest of the rest. Falsified by a tip that hides or changes in (b)
+  first moves, and no tip for the rest of the rest, except as in (a) at the moment the hidden tip's
+  lifetime would have ended. Falsified by a tip that hides or changes in (b)
   or (f), a tip that still shows the vehicle's or the building's name after the times given in (a)
-  or (g), a tip that shows again during the same rest after it hid in (a) or (g), a tip in (c) or
+  or (g), a tip that shows again during the same rest after it hid in (a) or (g), other than at the
+  end of the hidden tip's lifetime with an object with a text then under the pointer, a tip in (c) or
   (e), or no tip in (d).
 - **NT9 (claim 22, technician mark).** With a probe string table for the technician label, destroy
   and, in another run, sell an own and then a captured building whose survivors include a type with
@@ -1964,8 +2009,8 @@ of capture and timer granularity.
   including the placeholder for a missing entry. This spec states no lookup rule of its own.
 - Hand off with S-0006 claim 13 and S-0411's Import mapping: S-0006's placeholder for a missing
   label and the missing-entry diagnostic of S-0411's fixed labels are S-0004 claim 17's placeholder,
-  and both should cite it. S-0411 gives no sidebar tip of its own. A spec that takes the sidebar's
-  tips should cite claim 25 here for their look. Neither spec's rules change.
+  and both should cite it. S-0411 claims 20 to 22 give the sidebar's tips and cite claims 20 and
+  24 to 26 here for their timing, layout and look. Neither spec's rules change.
 - Hand off with S-0102's Terms entry *information tip* and its claim 2: a building's name tip
   (claims 20 to 25 here) is not an information tip. It is drawn after the whole battlefield view,
   over the air and top layers, every status extra and any information tip, while the information
