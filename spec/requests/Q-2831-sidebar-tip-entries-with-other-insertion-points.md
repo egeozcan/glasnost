@@ -1,9 +1,9 @@
 ---
 id: Q-2831
 title: What a sidebar tip shows when its entry's insertion points differ
-status: open
+status: answered
 related: [S-0411]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need
