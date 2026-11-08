@@ -2,13 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 54
+revision: 66
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-08
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132, Q-2133, Q-2135, Q-2716]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
+Q-2133, Q-2135, Q-2716, Q-2793]
 supersedes: []
 ---
 
@@ -301,39 +302,71 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       it starts inherits S-0504 claims 4 and 5's confidence
 
 11. **Vehicles with the bomb mark that die low over water.** A vehicle that carries the bomb mark
-    (Terms) and dies within 10 leptons above a water cell skips claims 4 to 6 and 9 (its attached
-    bomb, claim 7, still goes off). Instead it shows the game-wide wake animation and the last entry
-    of the game-wide splash list (S-0303, F5) at its position. Claims 12 to 15 then apply as for any
-    other destroyed vehicle, except that its passengers do not get out: claim 12 kills them, or
-    keeps them inside until the crash when the vehicle's type can crash. The wake and splash animations take the place of claim 9's
-    animations in the order of death effects (State and ordering). Stock sources of the mark
-    include a hovering vehicle whose switch-off spin ends over water less than 104 leptons above
-    the surface (S-0503 claim 11), and a vehicle dropped from a collapsing bridge deck (S-0511
-    claims 9 and 10). The hover's strict 104-lepton fall-start threshold is separate from this
-    claim's inclusive 10-lepton death-effects threshold; receiving the mark alone does not
-    suppress the ordinary death effects at greater heights. Landing does not clear the mark
-    (S-0511 claim 10), so a survivor's later death still takes this claim's effects when its
-    water and height conditions hold, even when it is no longer falling.
+    (Terms) and dies low over water, as the water test below gives it, skips claims 4 to 6 and 9
+    (its attached bomb, claim 7, still goes off). It shows instead the game-wide wake animation
+    and the last entry of the game-wide splash list (S-0303, F5) at its position. Claims 12 to 15
+    then apply as for any other destroyed vehicle, except that its passengers do not get out:
+    claim 12 kills them, or keeps them inside until the crash when the vehicle's type can crash.
+    The wake and splash animations take the place of claim 9's animations in the order of death
+    effects (State and ordering). Stock sources of the mark include a hovering vehicle whose
+    switch-off spin ends over water less than 104 leptons above the surface (S-0503 claim 11), and
+    a vehicle dropped from a collapsing bridge deck (S-0511 claims 9 and 10). The hover's strict
+    104-lepton fall-start threshold is separate from this claim's inclusive 10-lepton
+    death-effects threshold; receiving the mark alone does not suppress the ordinary death effects
+    at greater heights. Landing does not clear the mark (S-0511 claim 10), so a survivor's later
+    death still takes this claim's effects when its water and height conditions hold, even when it
+    is no longer falling.
+
+    **The water test (Q-2793).** The vehicle passes it when, at its death, its height above the
+    surface (glossary) is 10 leptons or less and the land type of the cell at its position is
+    water. Both parts are read at the killing hit, and the same test decides both the skip of
+    claims 4 to 6 and the wake and splash in place of claim 9.
+    - *Height.* For a vehicle on a bridge deck the height is measured from the deck, otherwise
+      from the terrain of its cell. The test has no lower bound: a negative height passes it.
+    - *Cell.* The cell's land type is the one S-0211 claim 5 gives it (the same test as claim
+      10's), whatever cell layer the vehicle is on. A high-bridge cell over water whose overlay
+      types keep the ground's land type is a water cell (S-0211 claim 9), and that holds for a
+      vehicle on its deck as well as for one under it. A low-bridge cell has the land type
+      S-0211 claim 9 gives it.
+    - *On a deck over water.* So a marked vehicle that dies standing on an intact bridge deck over
+      water, at height 0 above the surface, takes this claim's effects in the original: wake and
+      splash at its position on the deck, no debris, no passenger deaths of claim 5, no death
+      weapon and no claim 9 animations, and its passengers do not get out (claim 12).
+      `quirks.bomb_mark_water_death_on_deck` (Edge cases) owns this case.
     - Backing: `measurable` (scenario D8's marked-water variant; S-0503 scenario H7 and S-0511
       scenario B3 for stock falls and water-death animations). H7 does not establish passenger
       loss or the exact fall-start boundary; D8's variant supplies the passenger test.
-      The exact 10-lepton death threshold remains `unmeasured`: these falls end at the surface.
-      A later low-water death after surviving landing is also `unmeasured`: S-0511 claim 10
-      and scenario B3 establish no stock-play fixture guaranteeing that later death without
-      another mark writer.
+      `measurable` by D8's marked-deck variant for a later death after surviving a landing, for
+      the height read from the deck and for the land type of the cell under a high bridge.
+      The exact 10-lepton death threshold remains `unmeasured`: the falls end at the surface and
+      the deck run stands at height 0. A negative height with the mark is `unmeasured`: no setup
+      here holds a marked vehicle below the surface at its death.
     - Confidence: high for retention after landing and the absence of an active-falling
-      requirement; medium for the stock sources; low for the low-water death-effects rule
+      requirement; high for the height reference off any deck and for the cell's land type; medium
+      for the reading from a bridge deck, the one level this spec gives it (claims 12 and 15 use it
+      at the same level): no run has read it, and D8's marked-deck variant, part a, read with the
+      marked-water variant, can fail it (part a's falsifier); medium for the missing lower bound
+      (`unmeasured`, above); medium for the stock sources; low for the low-water death-effects
+      rule, including the effects it gives a marked vehicle that dies on a deck over water
 
 12. **Passengers of a destroyed vehicle.** Passengers that claim 5 has not killed are handled after
     the vehicle's animations. What happens to them depends on the vehicle as follows (the rows
     exclude one another):
 
-    | Vehicle's height above the terrain | Type can crash (claim 15) | Bomb mark (claim 11) | Passengers |
+    | Vehicle's height above the surface | Type can crash (claim 15) | Bomb mark (Terms) | Passengers |
     |---|---|---|---|
     | more than 208 leptons | any | any | all die, credited to the attacker |
     | 208 leptons or less | yes | any | stay inside; they die credited to the attacker when it starts to crash, or without attacker credit at removal when it is on the ground and cannot crash (S-0507 claim 16) |
     | 208 leptons or less | no | yes | all die, credited to the attacker |
     | 208 leptons or less | no | no | get out, as below |
+
+    The height is the vehicle's height above the surface (glossary), as in claim 11: on a bridge
+    deck it is measured from the deck, so a vehicle standing on a deck is at height 0 and its
+    passengers follow the rows for 208 leptons or less. The bomb-mark column tests the mark alone,
+    not claim 11's water test (Q-2793): a marked vehicle whose type cannot crash and which dies
+    at 208 leptons or less above the surface kills all its passengers, credited to the attacker,
+    wherever it dies: on land, or (medium, `unmeasured`, Backing boundaries) on a bridge deck or
+    more than 10 leptons above water.
 
     In the last row each passenger in turn gets out: it appears at the vehicle's horizontal
     position, at the height of the ground surface at the centre of the vehicle's cell (on a bridge
@@ -370,13 +403,20 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     This refines S-0203 claim 6e, which refers to this claim for whether passengers of a destroyed
     object die or get out; S-0203 claim 3 owns the in-play status of passengers of open-topped
     transports.
-    - Backing: `measurable` (scenario D9; variant e for the orders, variant g for the scoped
-      exclusion and ordinary stationary-vehicle comparison; S-0507 scenario T14 for removal cleanup); `unmeasured` for the team join
-      (the original's team system is outside our scope and has no counterpart in our engine, so
-      nothing of ours depends on it, and no test map is planned for it)
-    - Confidence: high for the height rule, the escape, the dying-vehicle exclusion,
-      the conditional stationary-friendly comparison and uncredited removal cleanup; medium for the entry-outcome condition
-      and the facing; medium for the orders; low for the team join
+    - Backing: `measurable` (scenario D9; variant h for the height read from a bridge deck, which
+      it confirms when a passenger gets out and leaves undecided when all five die; D8's
+      marked-deck variant, part b, for the mark-only test on land; variant e for the orders,
+      variant g for the scoped exclusion and ordinary stationary-vehicle comparison; S-0507
+      scenario T14 for removal cleanup); `unmeasured` for the team join (the original's team system
+      is outside our scope and has no counterpart in our engine, so nothing of ours depends on it,
+      and no test map is planned for it)
+    - Confidence: high for the height rule; medium for its height read from a bridge deck,
+      claim 11's reading at claim 11's level (D9 variant h can confirm its use here but not
+      fail it); high for the bomb-mark column's mark-only test on land; medium for that test
+      on a bridge deck and more than 10 leptons above water (`unmeasured`, Backing
+      boundaries); high for the escape, the dying-vehicle exclusion, the conditional
+      stationary-friendly comparison and uncredited removal cleanup; medium for the
+      entry-outcome condition and the facing; medium for the orders; low for the team join
 
 13. **Crew.** After its passengers, a destroyed vehicle may leave a crew infantry unit at its
     position, owned by its house:
@@ -434,8 +474,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Backing: `measurable` (scenario D10, variant c; S-0520 scenario CR3 for contents)
     - Confidence: high for random contents; low for the exact condition on the game settings
 
-15. **Crashing vehicles and removal.** A destroyed vehicle whose type can crash, and which is above
-    the terrain, starts to crash (claim 16) and stays in play until it hits the ground. A vehicle
+15. **Crashing vehicles and removal.** A destroyed vehicle whose type can crash, and whose height
+    above the surface is positive, starts to crash (claim 16) and stays in play until it hits the
+    ground. On a bridge deck that height is measured from the deck (claim 11's reading), so a
+    crashable vehicle standing on a deck cannot start a crash and is removed as below. A vehicle
     already sinking and whose type cannot crash stays in play, including the zero-health
     aftermath of claim 32. For a crashable type, failure to start a crash instead removes it
     immediately, whether sinking started at this killing hit (claim 10) or before it
@@ -444,8 +486,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     after these effects proceeds to S-0504 claim 4's descent. Every other destroyed vehicle
     leaves play at the end of its death effects, in the same moment (S-0203 claim 6a). Types with death image
     frames retain the separate unresolved death path in Open questions.
-    - Backing: `measurable` (scenarios D11 and D8's first-hit crashable variant)
-    - Confidence: high
+    - Backing: `measurable` (scenarios D11, its variant h for a deck, and D8's first-hit crashable
+      variant)
+    - Confidence: high, except for a vehicle on a bridge deck: medium there, claim 11's reading at
+      claim 11's level (D11 variant h, with its control, can fail it)
 
 ### Aircraft and crashing
 
@@ -1121,7 +1165,7 @@ otherwise. No measurement has been completed for this revision.
 | 29 | `unmeasured` for separately supplied attacking-house attribution and interruption by a destruction-trigger action that removes the raising object during these raises: no isolated safe fixture is established here. D20 uses actions that leave the dying object alone. Q-0193's never-placed production items remain outside this claim. |
 | 1, 19(d), 22 | `unmeasured` for resource spilling combined with other building death effects: no skirmish setup fills building storage. D1 and D14 test the effects their setups reach. |
 | 6 | `unmeasured` for multi-turret selection and the unplaced projectile's land-type, height and water tests: D6 tests ordinary/elite primary selection and debris position, not these tests, and no setup isolating them is supplied. |
-| 12 | `unmeasured` for bridge-deck escape height and placement: D9 supplies no bridge run, and its placement point remains for the bridge specs to establish. Bomb-mark rows inherit claim 11's backing. |
+| 12 | `unmeasured` for bridge-deck escape placement: D9 variant h tests only which row applies on a deck, and the placement point remains for the bridge specs to establish. The bomb-mark row is `measurable` on land by D8's marked-deck variant, part b; on a bridge deck and more than 10 leptons above water it is `unmeasured`, since no setup kills a marked transport on a deck or holds a marked vehicle more than 10 leptons above water at its death. |
 | 13 | `unmeasured` for crew trigger-tag inheritance: the kinds of tag that pass on are not established here, so D10 cannot predict a tag outcome. |
 | 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run. |
 | 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
@@ -1217,8 +1261,8 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | Cyborg health after crippling | 0.25 | fraction of type strength, at least 1 point | claim 2 |
-| Height above which passengers die with the vehicle | 208 (exclusive) | leptons above the terrain | claim 12 |
-| Bomb-marked vehicle water height | 10 (inclusive) | leptons above a water cell | claim 11 |
+| Height above which passengers die with the vehicle | 208 (exclusive) | leptons above the surface | claim 12 |
+| Bomb-marked vehicle water height | 10 (inclusive), no lower bound | leptons above the surface, over a water cell | claim 11 |
 | Lowest crew health | 5 | health points | claim 13 |
 | Game-wide death weapon damage | 0.5 | fraction of type strength | F3 |
 | Debris raise | 20 | leptons | F1 |
@@ -1280,7 +1324,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | alive vehicle | killing hit, sinking conditions hold | 1 health point restored, no claim 9 animations or picks; crashable failure to start a crash removes it in this hit, otherwise it remains in play sinking (claims 10 and 15) |
 | living grappling host | cull under S-0614 claim 11 | sinking without a hit or health change, regardless of weight |
 | positive-health sinking vehicle | another killing hit | credit, raises and applicable death effects again; 1 health only under the ordinary reprieve, otherwise claim 32's zero-health/removal outcome |
-| alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
+| alive vehicle or aircraft | killing hit, can crash, positive height above the surface for a vehicle (claim 15), above the terrain for an aircraft (claim 16) | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
 | ordinary non-rocket crashing object within claim 16's scope | reaches the ground, was shot down | death weapon, leaves play |
 | ordinary non-rocket crashing object within claim 16's scope | reaches the ground, was alive | destroyed by its remaining health, detonation |
 | dropped seized unit | fall ends | S-0607 claims 16 to 19 own the outcome; only a crashable vehicle retains claim 16's ordinary crash-end exception, not an aircraft |
@@ -1318,6 +1362,14 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   last entry of the splash list; with an empty list the original takes an entry from before the
   start of the list. Our engine
   shows no splash, and the importer warns about an empty splash list.
+- **`quirks.bomb_mark_water_death_on_deck`** (default: on, the original). Claim 11's water test
+  measures a vehicle's height from the deck when it is on a bridge deck, and reads the land type
+  of the cell under it, so a marked vehicle that dies on an intact bridge deck over water shows
+  wake and splash on the deck, throws no debris, fires no death weapon and loses its passengers as
+  if it had died in the water. Off: a vehicle on a bridge deck never passes claim 11's water test,
+  and its death takes claims 4 to 6 and 9 as for an unmarked vehicle. Claim 12's bomb-mark column
+  tests the mark alone and does not depend on this switch, so its passengers still die when its
+  type cannot crash.
 - **Departure: missing survivor type** (no switch). When a survivor is due but F4 gives no type (a
   side crew, technician or engineer type missing from the data), the original stops when it
   reaches the missing type. Our engine releases no survivor in that cell, takes no creation or
@@ -1626,6 +1678,45 @@ escaped passenger falsifies the passenger rule. This is not a test of where pass
 vehicle destroyed on an intact deck (claim 12); that placement remains open in S-0511. These
 ordinary falls do not discriminate the exact 10-lepton death threshold.
 
+*Marked-deck variant (claims 11 and 12; Q-2793).* A tiny test map with two high bridges: bridge
+A over land and bridge B over deep water, joined by a land route from A's landing cells to B's
+end, at a fixed game speed, stock data, no engine add-on and no mods (the named test files of a
+scenario excepted). Use S-0511 scenario B3's retained-mark variant on bridge A: give each deck
+vehicle there the temporary invulnerability of that variant, then lose A's deck section, so that
+each lands on land, survives its landing hit and keeps the bomb mark. Run with two vehicles of
+the human player: V1, a test copy of a stock ground vehicle with the explodes flag on and a
+positive maximum debris count (claim 4); V2, a stock transport whose type cannot crash and does not
+explode (claim 5), and neither of whose explosion and destruction lists is empty, loaded with five
+infantry (a test copy with crashability or the explodes flag off, or with an entry in an empty
+list, when needed). Wait until the invulnerability
+has run out, and record with the read-only recorder that each still carries the mark, that no
+other writer of the mark has acted on it and that it has positive health.
+- (a) Move V1 onto the deck of bridge B, over a water cell, and stop it there. Kill it there with
+  one ordinary hit (no random impact effects). *Observable:* the recorder's height above the
+  surface and above the terrain, its cell layer and the cell's land type at the hit; the animations
+  created at its position, debris, any death-weapon detonation, and the scenario stream state.
+  *Expected:* height 0 above the surface, 416 above the terrain (the water cells under bridge B are
+  flat), deck layer, water land type; the wake animation and the last entry of the splash list on
+  the deck, no debris, no death weapon, no explosion or destruction animation and neither list
+  pick. *Falsified by:* any ordinary death effect of claims 4 to 6 and 9 or a missing wake and
+  splash with those readings. Such a run falsifies claim 11's reading from the deck when the
+  marked-water variant shows the wake and splash without the ordinary effects; when that variant
+  fails as well, it falsifies only the low-water death-effects rule and says nothing about the
+  reading. In a second run with `quirks.bomb_mark_water_death_on_deck` off, our engine must show
+  the ordinary effects; this second run is a check of the engine, not of the original.
+- (b) Kill V2 on land, at height 0 above the surface, with one ordinary hit. Control: an unmarked
+  V2 of the same type, loaded alike, killed alike on the same cell. *Observable:* how many
+  passengers die and how many get out; the vehicle's animations. *Expected:* the marked V2's
+  five passengers all die, credited to the attacker, and its death shows claim 9's explosion and
+  destruction animations (land: no wake or splash); the control's passengers get out. *Falsified
+  by:* a passenger of the marked V2 getting out, a missing explosion or destruction animation, or
+  wake and splash on land. A run in which a passenger of the control dies voids (b).
+- Note: a landing hit cannot test (b) in place of an ordinary hit. It ignores defences, and under
+  claim 12 a passenger dies whenever the killing damage ignores defences, so the passengers of an
+  unmarked vehicle would die too.
+- A run in which a vehicle loses the mark, gains it again from another writer, or cannot reach
+  bridge B's deck is void, not a falsifier.
+
 **D9. Passengers of destroyed vehicles (claim 12).** *Setup:* a stock transport with five infantry,
 killed (a) on open ground by normal damage, (b) by a train driving into its cell (damage that
 ignores defences, S-0210 claim 10), (c) as a flying transport more than 208 leptons up; variant d: a
@@ -1670,6 +1761,21 @@ setting the random state. A blocker attributed to the dying transport in the emp
 case, failure of the stationary control, or omission of the surviving second vehicle falsifies g.
 This compares reachable original outcomes, not an altered escape test that counts the carrier.
 
+Variant h (Q-2793, the height read from a bridge deck): on a tiny test map with an intact high
+bridge over flat land, at a fixed game speed, stock data, no engine add-on and no mods (the named
+test files of a scenario excepted), stop a stock transport whose type cannot crash (a test copy
+with crashability off when needed), without the bomb mark and loaded with five infantry, on the
+deck, with the deck cells around it empty. Kill it with one ordinary hit. *Observable:* the
+recorder's height above the surface and above the terrain and the cell layer at the hit; how many
+passengers die and how many get out. *Expected:* height 0 above the surface and 416 above the
+terrain, deck layer; the passengers get out (the rows for 208 leptons or less), each surviving
+its entry test. *Falsified by:* nothing in a single run. A passenger getting out confirms the
+height read from the deck, since with a height read above the terrain (416, more than 208) every
+passenger dies without being placed. A run in which all five die does not decide the reading,
+because a passenger whose deck placement fails dies too (claim 12) and that placement is
+`unmeasured` (Backing boundaries, claim 12); it is recorded as undecided. Where each passenger is
+placed is not judged here.
+
 **D10. Crew (claims 13, 14).** *Setup:* a stock crewed vehicle with no passenger capacity, killed 500
 times; crew escape chance from stock data. *Observable:* share with a crew, crew types, crew health.
 *Expected:* share within 3 standard errors of the chance; health between 5 and half the crew type's
@@ -1713,9 +1819,10 @@ its table O row). A different position, row or draw count falsifies f.
 flight above a target vehicle; variant b an aircraft that crashes alive (out of a landing place, if
 a stock situation does this). *Observable:* where the death weapon detonates (impact point or point
 of death), and in variant b the amount. *Expected:* the death weapon goes off at the impact point,
-not where the aircraft died; variant b: a detonation with the aircraft's remaining health.
-Variant c (claim 15): a test vehicle type with the crashable flag, killed while above the terrain
-(for example in jumpjet flight): it stays in play until it reaches the ground.
+not where the aircraft died; variant b: a detonation with the aircraft's remaining health. Variant
+c (claim 15): a test vehicle type with the crashable flag, killed while above the terrain, off any
+deck (for example in jumpjet flight): it stays in play until it reaches the ground.
+
 *Falsified if:* the death weapon goes off in the air for a non-exploding aircraft, the detonation of
 variant b has an amount other than the aircraft's remaining health, or the vehicle of variant c
 leaves play before it reaches the ground. Variant d: repeat the shot-down aircraft with its
@@ -1757,6 +1864,15 @@ which the fall-back crash sets the aircraft's health to 0 and starts its crash. 
 crash start takes the three tumbling draws in the order of claim 16, and no explosion-list
 pick and no debris draws. A missing tumbling draw, an extra list pick or debris
 draw, or a different stream state falsifies g.
+
+Variant h (claim 15, Q-2793): a test copy of a stock ground vehicle with the crashable flag on,
+standing on an intact high-bridge deck over flat land, killed by one ordinary hit. Record its
+height above the surface and the terrain, in-play membership after the hit and the scenario stream
+state. Expected: height 0 above the surface, 416 above the terrain; it leaves play at the end of
+its death effects, takes no crash-start tumbling draws and does not fall. A crash fall from the
+deck, a removal on a later tick, or the three tumbling draws falsifies h. Its control is a run of
+variant c in the same session, with a test type that has the same crashable flag: killed while
+above the terrain off any deck, that vehicle crashes. A control that does not crash voids h.
 
 **D12. Contacts of a destroyed building (claim 17).** *Setup:* a stock building type that produces
 vehicles, destroyed while a vehicle is leaving it; a stock building type that harvesters dock at,
@@ -2236,6 +2352,28 @@ with the crewed flag off" and its falsifier "any passenger from the type with th
 should then be reversed: that type's passengers come out on its first foundation cells in reverse
 entry order, as from the crewed type. Claims 7 and 8 can drop the two sentences or say that the
 no-crew case does not arise at a sale.
+
+S-0511 claim 10's Backing and scenario B3's retained-mark variant: they give the later low-water
+death of a survivor as `unmeasured`, for lack of a legal route from the protected land landing to a
+low-water death without another mark writer. A survivor that drives onto an intact bridge deck over
+water and dies there passes claim 11's water test here (height 0 above the surface, the cell's
+water land type), so S-0312 scenario D8's marked-deck variant, part a, is such a route, in the
+original's behaviour (`quirks.bomb_mark_water_death_on_deck` on; claim 11 rates the effects on a
+deck low). The Backing and B3's later-death comparison can point to it. The later fall without a
+new mark stays `unmeasured` as it is.
+
+S-0203 claim 13 (g): its *Sinking* bullet's "within 10 leptons above a water cell" can point to
+claim 11's water test here (height above the surface, no lower bound). Its *Crashing* bullet's
+"above the terrain" is a height above the surface in claim 15 here, for a killing hit on a vehicle
+that stands on a deck. Its Edge case on a vehicle whose crash ended on a bridge deck is not settled
+here and stays as it is.
+
+S-0203 claim 6 (a): "a vehicle whose type can crash and which is above the terrain when it is
+destroyed starts to crash" reads, for a vehicle, its height above the surface (claim 15 here). A
+crashable vehicle that stands on a bridge deck when it is destroyed is at height 0 above the
+surface: it starts no crash and leaves play at the end of its death effects, with no crash-start
+draws (claim 15, scenario D11 variant h). The claim should say "above the surface" for a vehicle
+and point to claim 15 here; for an aircraft it stays "above the terrain" (claim 16).
 
 ## Questions for the project lead
 
