@@ -19,7 +19,7 @@ verdicts in [c7-play-fixes.md](c7-play-fixes.md); neither is admitted to the pla
 | S-0501 r154 claim 26: servicing ends when no settled aircraft is left after the first-bullet release | built, tested | `air::pad_turn`; `claim_26_r154_servicing_ends_after_the_first_bullet_release` |
 | S-0501 r154 claim 28: the half-reload test with a target comes before the round and the repair; at full ammunition with a target a step neither repairs nor releases | built, tested | `air::pad_turn`; `claim_26_r154_a_target_at_full_ammunition_stops_the_repair_and_release` (half-reload quirk both ways) |
 | S-0501 r154 claim 18, *Missile types*, and T2's note: a missile-type object takes the rows for an aircraft on the ground at any height | built, tested | `air::fall_back_rows`; `claim_18_r154_a_missile_type_takes_the_ground_rows_in_flight` |
-| S-0501 r154 claim 18 against claim 35: a flagged type that is not a rocket type | blocked (Q-2821), interim built and tested | `// design: Q-2821` in `air::fall_back_rows` (the flag decides); the same test |
+| S-0501 r154 claim 18 against claim 35: a flagged type that is not a rocket type | blocked (Q-2821), interim built and tested | `// design: Q-2821` in `air::fall_back_rows` (the flag decides); the same test. S-0506 r40 (on main after this intake started, not built here) keeps Terms' *missile type* as the flag, says S-0501 claim 18 gives such an object the ground rows at any height, and counts a flagged type that is not a rocket type as a non-missile slot for its claim 3; it does not answer claim 35's "missile slot types", so Q-2821 stays open |
 | S-0215 r137 claim 19 case 2 (Q-2782): reaches a free hunting vehicle of a computer-controlled house, B6 f1 | built (already), tested | `damage::damage_scatter_sent` unchanged, cites updated; `claims_s0215_scatter_damage.rs` `claim_19_b6_f1_a_hunting_vehicle_of_a_computer_house_scatters` |
 | S-0215 r137 B6 f3: the control without the scatter property; a human owner | built, tested | `claim_19_b6_f3_control_needs_the_scatter_property` |
 | S-0215 r137 B6 g1 and g2: an own or allied attacker gives case 2 | built, tested | `claim_19_b6_g1_g2_an_own_or_allied_attacker_gives_case_2` (with an enemy control that retaliates) |
@@ -37,6 +37,36 @@ verdicts in [c7-play-fixes.md](c7-play-fixes.md); neither is admitted to the pla
 | S-0312 r66 claim 12, D9 h: passengers get out of an unmarked vehicle on a deck (height from the deck) | built, tested | `d9_h_passengers_get_out_on_a_deck` (with the off-deck control) |
 | S-0312 r66 claim 15, D11 h: no crash starts from a deck | built, tested | `jump::start_crash` reads the height from the deck; `claims_s0502_crash.rs` `s0312_claim_15_d11_h_no_crash_from_a_deck` |
 | Q-2801 and Q-2802 interims (intake 112) | left, as the brief says | — |
+
+## Lanes
+
+Base: main bce62e5 (save 116, AI game 81); its simulation, rules and AI code equal 83fb4e6's, the
+base this branch is rebased onto.
+
+- Oracle arena: the same failing rows as main for every record (M-0001 12 of 96, M-0002 2 of 24,
+  M-0003 2 of 35, M-0019 0 of 6, M-0020 1 of 25, M-0021 11 of 50) and the same winners; 14 M-0001
+  and 8 M-0002 games end at another sample. The rows the scatter from damage build moved still
+  fail ([scatter-damage.md](scatter-damage.md)).
+- Seed sweeps 1–16: M7b identical; M6c smallest minimum 0 on both, three medians move by one or
+  two; M7a smallest minimum 1 on both, six seeds move.
+- `glasnost-ai` with ignored tests, release: 263 pass, as on main.
+- AI quick lane (seeds 7–10, maps 0, 2 and 8, three side pairs, 36 games): three winners change,
+  all at seed 7; seeds 8 to 10 keep every winner.
+- **Traced** with `GLASNOST_AI_HASH` and `GLASNOST_AI_OBJS`. The branch adds hashed state, so the
+  trace used a throwaway build with `PathState::blocked_for` left out of the hash (not committed),
+  and the dumps were compared with that field filtered out.
+
+  | Game | First differing tick | First differing object |
+  |---|---|---|
+  | seed 7, map 0, sides 0 and 1 | 13579 | pad building 1206 (house 0): servicing ends on the branch, goes on on main |
+  | seed 7, map 2, sides 0 and 2 | 10289 | pad building 871 (house 0): the same |
+  | seed 7, map 8, sides 0 and 2 | 9738 | pad building 510 (house 0): the same |
+
+  In each the pad's only aircraft (full health, full load, no target) is released by the service
+  step's first bullet on both builds. Main counted it as settled before that release and kept the
+  servicing running; S-0501 r154 claim 26 ends servicing when no settled aircraft is left after
+  the first-bullet release (`air::pad_turn`). The next aircraft to land is then serviced on
+  arrival, and the games drift from there. The change follows the spec.
 
 ## Formats
 

@@ -139,7 +139,7 @@ search and never gives the extra locomotion.
   (S-0215 Open questions, *Arena records and the scatter from damage*, low), with no rule changed
   for it. Intake 114 changed no code for it and added the B6 f and g tests
   ([intake114.md](intake114.md)). After intake 114 the arena gives the same winners and the
-  same failing rows as main (14 M-0001 and 8 M-0002 games end at another 304-frame sample; no
+  same failing rows as main (14 M-0001 and 8 M-0002 games end at another sample; no
   row's verdict moves; M-0003, M-0020 and M-0021 output is unchanged), so
   none of those rows holds yet: M-0001 LTNK-APOC and LTNK-E1, M-0003 MTNK-APOC, and M-0021 part
   B's *c* ≥ 3, its hits a judged shot owns, its reading-points row and its per-run dead counts all
