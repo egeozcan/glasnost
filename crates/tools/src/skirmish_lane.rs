@@ -823,7 +823,11 @@ fn play_ai(
     // the first tick at which two builds' games part.
     let hash_at: Option<(i32, i32, i32)> = std::env::var("GLASNOST_AI_HASH").ok().and_then(|v| {
         let p: Vec<i32> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
-        Some((*p.first()?, p.get(1).copied().unwrap_or(0), p.get(2).copied().unwrap_or(-1)))
+        Some((
+            *p.first()?,
+            p.get(1).copied().unwrap_or(0),
+            p.get(2).copied().unwrap_or(-1),
+        ))
     });
     // `GLASNOST_AI_OBJS=from,to`: every object's whole state (`Debug`, one
     // line each), the spawned objects, the credits and the random number
