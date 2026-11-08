@@ -33,6 +33,9 @@ leaves the row as claim 18 gives it elsewhere.
 2. If not, which states does it apply in?
 3. When the row's pad refuses the contact (so that the row gives F8's landing spot and *move*, or
    the crash of a pad-bound aircraft), is the moment still taken before that?
+4. When claim 21's search finds no pad at all (for example the held pad no longer accepts the
+   aircraft and no other pad does), is the moment taken, before the row's F8 landing spot and
+   *move* or the crash?
 
 ## Possible observation
 
@@ -45,5 +48,8 @@ for the cell it is landing in) would show the undo: it takes off toward the cell
 
 Our engine gives the moment only where claim 29 states it: in `air::fall_back_rows`, the in-flight
 pad row of an aircraft with *sticky* current that holds a contact with *enter* queued (`// design:
-Q-2867`). Every other use of the row asks the found pad for contact without the moment, as before
-r167.
+Q-2867`). There it is taken only when claim 21's search finds a pad: it is taken before that pad's
+contact request whether the pad then grants or refuses it (a refusal goes on to the row's F8
+landing spot and *move*, or the crash of a pad-bound aircraft), and not at all when the search
+finds none. Every other use of the row asks the found pad for contact without the moment, as
+before r167.
