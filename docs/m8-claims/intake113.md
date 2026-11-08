@@ -170,7 +170,10 @@ Main 9a170d0 against the branch, measured before the commit.
     | 9 | house 0 at 45 490 | not over at 120 000 | house 0 at 45 490 | house 0 at 113 455 |
 
     On 3ad4749 only seed 7's winner changes, and seed 9 ends. The traces below were taken on
-    9a170d0; seeds 7 and 9 give the same results on both bases.
+    9a170d0 and not re-traced on 3ad4749. For seeds 7 and 9, main gives the same results on
+    both bases, so their first differences are likely the same claim 11 events. Seed 7's branch
+    game is the same too, but seed 9's branch game ends differently, so intake 112 does
+    change that game later on.
   - **Traced** with the lane's new `GLASNOST_AI_HASH` and `GLASNOST_AI_OBJS`. Main's and the
     branch's binaries were each built with them, the hashes compared every 1000 ticks and then
     every tick, and every object diffed at the first tick that differs. The hashes agree up to
