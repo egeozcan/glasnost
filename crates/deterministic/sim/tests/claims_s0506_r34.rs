@@ -258,7 +258,7 @@ fn a_destination_that_goes_inside_resets_the_controller_and_the_missile_flies_on
     assert!(near(at.expect("it detonates"), aim));
 }
 
-// spec: S-0506 claim 14 (r34: claim 11 gives no reset when the leaving object is not then the controller target: here a pending target waits, and the controller goes on with it, claim 25); design: Q-2811 interim (the lost controller target is not cleared while a pending target waits)
+// spec: S-0506 claim 14 (r40: with a pending target waiting, the leaving defers to claim 11's next pass) and claim 11 (r40, A loss while a pending target waits: the controller target is cleared at the loss, the loss gives no reset, and the pending target is kept)
 #[test]
 fn no_reset_when_a_pending_target_waits() {
     let r = rules();
@@ -277,11 +277,7 @@ fn no_reset_when_a_pending_target_waits() {
     let c = controller(&w, lnb);
     assert_ne!(c.state, ControllerState::Idle, "no reset");
     assert_eq!(c.slots[0].state, SlotState::Preparing);
-    assert_eq!(
-        c.target,
-        Some(Target::Object(walker)),
-        "Q-2811 interim: not cleared"
-    );
+    assert_eq!(c.target, None, "cleared at the loss");
     assert_eq!(c.pending, Some(Target::Object(other)));
 }
 
