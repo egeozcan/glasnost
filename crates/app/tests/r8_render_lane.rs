@@ -1086,10 +1086,21 @@ fn i115_the_sidebar_tips() {
     };
     // Onto the first icon from the battlefield, then a rest.
     let first = centre(l.cameo(0));
+    // The shown tab's icons and the tick: the strip fills once the base has
+    // deployed, so a rest whose wait ends earlier ends on an empty slot.
+    let icons = |l: &Lane| {
+        let s = l.c.session.as_ref().unwrap();
+        let tab = s.play.shown_tab();
+        let n = glasnost_ui::hud::entries(s.play.world(), s.play.me(), tab).len();
+        (s.play.world().tick, n)
+    };
     lane.c.pointer_moved(first);
     let _ = lane.c.frame();
     println!("1 onto the first icon, at once: {:?}", tag(&lane));
-    rest(&mut lane, 1200);
+    println!("  tick and icons at the movement: {:?}", icons(&lane));
+    rest(&mut lane, 1000);
+    println!("  tick and icons at the wait's end: {:?}", icons(&lane));
+    rest(&mut lane, 200);
     println!("1 after a 1200 ms rest: {:?}", tag(&lane));
     lane.zoom("i115-1-icon-rest", first, (360, 220, 3));
     // Onto the second icon: one frame.
@@ -1113,4 +1124,22 @@ fn i115_the_sidebar_tips() {
         lane.zoom(&format!("i115-{name}"), p, (360, 220, 3));
     }
     lane.save("i115-6-whole-screen");
+    // Scenes 7 and 8, with the strip filled: the first icon after a rest,
+    // then a one-frame movement within it (S-0411 claim 20: at once).
+    println!("  tick and icons: {:?}", icons(&lane));
+    lane.c.pointer_moved(first);
+    let _ = lane.c.frame();
+    rest(&mut lane, 1200);
+    println!(
+        "7 the first icon, strip filled, 1200 ms rest: {:?}",
+        tag(&lane)
+    );
+    lane.zoom("i115-7-icon-strip-filled", first, (360, 220, 3));
+    let within = Point::new(first.x + 3, first.y + 3);
+    lane.c.pointer_moved(within);
+    lane.clock += 16;
+    lane.c.update(lane.clock);
+    let _ = lane.c.frame();
+    println!("8 within the icon, one frame: {:?}", tag(&lane));
+    lane.zoom("i115-8-within-the-icon", within, (360, 220, 3));
 }
