@@ -2,17 +2,17 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 150
+revision: 154
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-08
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654,
 Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905,
 Q-1940, Q-1941, Q-1942, Q-2237, Q-2251, Q-2252, Q-2291, Q-2326, Q-2366, Q-2436, Q-2437, Q-2438,
 Q-2506, Q-2507, Q-2508, Q-2576, Q-2577, Q-2578, Q-2579, Q-2646, Q-2647, Q-2648, Q-2649, Q-2650,
-Q-2676, Q-2677, Q-2726]
+Q-2676, Q-2677, Q-2726, Q-2792]
 supersedes: []
 ---
 
@@ -1116,6 +1116,22 @@ pad leaves its pad reservation when it takes any destination other than that pad
       (the ground rows and the computer house's choice on the ground); low (the in-flight *guard*
       row's *area guard* for a computer-controlled house, `unmeasured`)
 
+    **Missile types.** An object of a missile type (S-0506 Terms, *missile type*) falls back
+    to rest by this claim and T2, with one difference: its type takes the place of the on-the-ground test: at every fall-back that gets
+    past T2's first three rows it takes the rows for an aircraft on the ground, whatever its
+    height. So the row itself gives it no destination. Visiting, it has *unload* with
+    passengers (*guard* in a team), *retreat* with none outside a team, and in a team keeps its
+    target and destination with *guard*; otherwise it forgets its target and destination and has
+    *guard*, or *area guard* when it is armed and of a computer-controlled house outside a team.
+    The after-the-row entries then apply as after any row, and read its height as they do for any
+    aircraft. Forgetting its target or destination changes neither its aim point, once fixed, nor its
+    phases (S-0506 claim 14). This is the fall-back that S-0506's open question on Q-2748 leaves to this
+    spec.
+    - Backing: `unmeasured`: no set-up here or in S-0506 (its scenario R26 records where such a
+      missile goes, not which of its behaviours sent it there) separates a missile's fall-back
+      from its other behaviours
+    - Confidence: medium
+
 19. **Firing check additions.** For an aircraft the firing check of S-0301 claim 9 has two more
     refusals after every general answer has been passed:
     - an aircraft marked as a passenger carrier (claim 1) that now carries none answers *out of
@@ -1786,16 +1802,18 @@ pad leaves its pad reservation when it takes any destination other than that pad
     (Formula F10). In each service step, service outcomes follow contact-place order. For example, if two aircraft need paid repair and the house can afford only one step, the earlier contact place is repaired and charged first; the later aircraft is then handled with the credits that remain:
     - an aircraft that is ready for take-off (no target, full ammunition) and has full health is
       released: it falls back to rest and its *guard* is forced,
-    - an aircraft still flying in (behaviour *enter*) or still moving is skipped,
-    - a settled aircraft whose behaviour is not *sleep* is told to queue *sleep*,
+    - an aircraft still flying in (behaviour *enter*) or still moving is skipped (with
+      `quirks.aircraft_pad_sleep_ends_retaliation` off, also one in *attack*, claim 52),
+    - a settled aircraft whose behaviour is not *sleep* is told to queue *sleep*, one in the
+      *attack* of a retaliation included (claim 52),
     - a settled aircraft in *sleep* gets one round when its ammunition is not full; otherwise it
       gets one repair step (claim 27); when neither applies, it is released as above. A target
     at or above the half-ammunition threshold is an exception: claim 28's acknowledgement
     adds no round but still counts as a successful reload, so that service step neither
     repairs nor releases the aircraft.
 
-    When no aircraft was settled, the pad's servicing ends and the pad returns to *guard* until the
-    next aircraft reports that it has entered (claim 24). One round per step means filling *A*
+    When no aircraft was settled, or the first bullet released every settled one, the pad's
+    servicing ends and the pad returns to *guard* until the next aircraft reports that it has entered (claim 24). One round per step means filling *A*
     missing rounds takes *A* service steps after the one that has a newly reported aircraft queue
     *sleep* (below), followed by a further step to release an undamaged aircraft. The delay before
     the first step depends on when servicing begins; this is not a guaranteed touchdown-to-release
@@ -1815,7 +1833,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
     pad-bound*; medium, the *move* `measurable` by AC31 part h (6) and the skip `unmeasured`, as
     claim 24's Backing rates them).
     - Backing: `measurable` (scenarios AC15 and AC23; AC31 part h (1) for the first step after
-      an entered report)
+      an entered report; AC34 part a for the end of servicing after a release by the first
+      bullet)
     - Confidence: high; medium, until AC15 or AC31 part h (1) runs, for the first step after an
       entered report giving no round or repair
 
@@ -1837,12 +1856,15 @@ pad leaves its pad reservation when it takes any destination other than that pad
     to half its rounds: once its ammunition is at least ⌊*A* / 2⌋ the pad's reload request is
     confirmed without giving a round (`quirks.aircraft_half_reload_with_target`). In *guard* on
     the pad, an aircraft with a target stays while its ammunition is below ⌊*A* / 2⌋ and takes off
-    into *attack* as soon as it reaches that. An aircraft of a human-controlled house gets a
-    target on the pad only from an order.
-    - Backing: `measurable` for the original half-reload rule (scenario AC17).
+    into *attack* as soon as it reaches that. An aircraft of a human-controlled house makes no
+    target search of its own on the pad: it gets a target there only from an order or by
+    retaliation (claim 52).
+    - Backing: `measurable` for the original half-reload rule (scenario AC17), and for the
+      target from a retaliation (AC34 part a).
       The switch-off full-reload alternative is `unmeasured`: it is a design rule for our
       engine, not an outcome of the original
-    - Confidence: high
+    - Confidence: high (the half-reload rule; the target only from an order or by retaliation,
+      at claim 52's high level for the retaliation)
 
 29. **Guard below cruise height.** An armed aircraft in *guard* below its cruise height that has
     less than full ammunition and no contact looks for a pad (claim 21); if it finds one it queues
@@ -2173,7 +2195,7 @@ pad leaves its pad reservation when it takes any destination other than that pad
     (S-0506 claim 2), a slot aircraft is not driven by T4. Whether it is visiting follows the
     Terms' type test, applied at its launch placement. One that is not visiting has claim 17's
     edge cell as destination and falls back to rest by T2's rows for its own type, as any armed
-    aircraft in flight does: the fall-back sets apart missile slot types (S-0506), not other
+    aircraft in flight does: the fall-back sets apart missile slot types (claim 18, *Missile types*), not other
     slot aircraft, so its dock types and pad-bound field decide as for any aircraft (claim 18).
     Unless an earlier row of T2 applies, with no dock types this is T2's *guard* row: *guard*, with
     claim 33's *move* for a human-controlled house, or *area guard* for a computer-controlled
@@ -3827,6 +3849,159 @@ pad leaves its pad reservation when it takes any destination other than that pad
       no relocation); medium (the resulting motion along the edge, and the edge where the bounds
       coincide)
 
+### Retaliation on the pad
+
+52. **Retaliation on the pad (Q-2792).** Retaliation (S-0215 claim 18, S-0309 claim 18) has no
+    exception for an aircraft. Standing on a pad, holding a contact, its height and its
+    ammunition add no condition and remove none, and the docked *sleep* adds none beyond S-0215
+    claim 18's behaviour rule. An aircraft with no rounds left is not held back for that: the
+    *out of ammunition* answer of its firing check (S-0301 claim 9) is neither *illegal* nor
+    *impossible*. For an aircraft of a human-controlled house on its
+    pad, and so in our engine for an aircraft of any player house (S-0215 Terms, *Houses in our
+    engine*):
+    - **In *guard*** with no target it retaliates against an attacker that its weapon reaches or
+      that is within the distance of S-0215 claim 18 (S-0215 Formulas F7). This is the usual
+      case. An aircraft that has docked with full ammunition and full health is released into a
+      forced *guard* by the first service step that finds it settled, and when that step keeps no
+      other aircraft, the pad's servicing ends (claim 26). The aircraft then stays in *guard* with its
+      contact, and no service step comes until an entry report starts servicing again.
+    - **In the docked *sleep*** it retaliates only while the player return-fire setting is on and
+      *sleep* has the retaliate property (S-0215 claim 18).
+    - **With a target**, from an order or, in *guard*, from claim 28's wait for half its
+      ammunition, it never retaliates (S-0215 claim 18).
+
+    The aircraft makes no target search of its own on the pad (claim 28), but a hit can still give
+    it a target, by retaliation. Retaliation is S-0215 claim 10's override: *attack*
+    becomes current with the attacker as target and no destination, and the behaviour it had,
+    *guard* or *sleep*, is suspended. The empty destination does not end the contact, and the
+    aircraft does not move. A hit that it may retaliate against but does not, such as one from
+    beyond that distance, is S-0215 claim 19's case 1. Our engine follows the original here: an
+    aircraft on its pad is not held back from retaliating.
+    - Backing: `measurable` (AC34 parts a and b, and part d for an aircraft without ammunition)
+    - Confidence: high (no exception; the override and its slots); medium (the contact kept at the
+      override; the aircraft without ammunition, until AC34 part d runs)
+
+    **Take-off.** *Attack* is first processed when the processing timer that the suspended
+    behaviour's last processing set runs out: an override does not restart it (S-0215 claim 10).
+    After a hit in the docked *sleep* that can be up to 450 ticks later (S-0215 claim 4). That
+    first processing finds the target and moves the run on; the next, 1 tick later, chooses (T1):
+    - With ammunition left, however little, the firing spot that claim 39 finds becomes its
+      destination. The aircraft takes off at once, since it is on the ground and not landing, and
+      the contact ends in that processing, since it takes a destination other than its pad (claim
+      8). When claim 39 finds no firing spot, the processing gives no destination and the run is
+      *done* (T1); with its target and ammunition left it goes straight into its next run (claim
+      17), whose choosing tries again, so it stays on its pad with its contact until a choice
+      gives a spot (medium, `unmeasured`: no AC34 part surrounds *A* with cells that refuse every
+      candidate). Claim 28's
+      half-ammunition threshold is no condition here: it belongs to the take-off from *guard*, not
+      to *attack*. Its runs go on as any runs do (claims 12 to 17) while it has the target and
+      ammunition.
+    - With no ammunition the choosing processing gives no destination and the run is *done*
+      (T1), so the aircraft stays on its pad until the run ends at the next processing (claim 17).
+      The edge cell that the run end chooses, with its draws (claim 37), ends the contact there.
+
+    **After the last run.** When its runs end (claim 17), an aircraft of a human-controlled house
+    with no ammunition forgets its target, and the edge cell is its destination. The fall-back
+    that follows in the same processing takes T2's first row, not the pad rows: the suspended
+    behaviour comes back, with the target and the destination put aside at the override in place
+    of the edge cell. A docked aircraft normally has no destination (claim 24), so then it has
+    none. Given no destination, it is sent to land where it is (claim 6, *Landing where it
+    is*). So is an aircraft that had no ammunition at the hit, whose run end has just started its take-off
+    toward the edge cell (claim 8): it does not fly to the edge cell. A pad-bound aircraft whose
+    cell holds no building it is in contact with does not land (claim 6): where a trigger would
+    start its landing it falls back to rest instead (claim 18), whatever behaviour came back. That
+    fall-back gets it a pad as its destination with *enter*, the pad it has just left included: in
+    flight through T2's pad search for an armed aircraft with dock types, on the ground through the
+    search after the row that an armed aircraft without ammunition and without a contact makes
+    (claim 18). It then docks again (claim 24). In flight with no pad that grants it a contact, it
+    crashes (claim 46).
+    - A restored *guard* below cruise height also sends it to a pad (claim 29), when a *guard*
+      processing comes before that fall-back.
+    - A restored *sleep* does nothing (S-0215 claim 4), so a pad-bound aircraft goes back to a pad
+      only through that fall-back. An aircraft whose type is not pad-bound lands where it is and
+      stays there in *sleep*, away from any contact, until an order or another rule moves it.
+    - A later hit can make it retaliate again under the same conditions.
+    - Backing: `measurable` (AC34 part a for the take-off with ammunition and the restored
+      *guard*, part b2 for the restored *sleep*, part d for the aircraft without ammunition),
+      and `unmeasured` for a type that is not pad-bound: AC34's *A* is pad-bound, and no part
+      docks another type, and for a take-off with fewer than ⌊*A* / 2⌋ rounds: AC34 docks *A* with
+      full ammunition or none, and that case follows from T1's choosing row, which asks only for
+      ammunition left, and from claim 28's threshold, which applies in *guard* on the pad
+    - Confidence: high (the take-off at the choosing processing with full ammunition, and the
+      contact ending there); medium (the take-off with fewer than ⌊*A* / 2⌋ rounds; the processing times, at S-0215 claim 10's medium
+      level for the timer; T2's first row after the last run, the destination put aside, the
+      landing where it is and the fall-back at the landing start, which were not followed tick by
+      tick; the type that is not pad-bound); low (the path of an aircraft without ammunition from
+      its run's end back to its pad)
+
+    **Service steps before the take-off.** While the aircraft stands on its pad with *attack*
+    current it is still in contact, so the pad's service steps still handle it whenever servicing
+    is running:
+    - it holds a target, so no step releases it (claim 26's first bullet asks for no target),
+    - it has no destination and does not move, so it counts as settled, and as its behaviour is
+      not *sleep* the step has it queue *sleep* (claim 26), with no round and no repair,
+    - it is ready to change (claim 31: no run lock, and its ready mark is set since its entry), so
+      *sleep* becomes current at claim 31's next point: by the end of the step's tick, or at the
+      aircraft's locomotor step in the next tick, as the pad and the aircraft fall in the tick's
+      order. When the step comes at least two ticks before the tick of the processing that ends
+      the contact (the choosing one, or with no ammunition the run's end), *sleep* so replaces
+      *attack* before that processing; for a later step, up to that processing, the outcome was
+      not traced. Its target is kept, the suspended behaviour stays suspended (S-0215 claim 10: a
+      start-next leaves that slot as it is). The start makes *sleep*'s first processing due at
+      once (S-0215 claim 8), so it comes at the aircraft's next processing: claim 31 gives that a
+      start at its last point is first processed on a later tick.
+
+    The aircraft then stays on its pad in *sleep*, holding the attacker as its target, and never
+    fires at it. Each later step treats it as claim 28 gives: a round while it has fewer than
+    ⌊*A* / 2⌋, then a confirmed reload with no round, so no step repairs or releases it. This
+    lasts until one of S-0215 claim 10's revert causes befalls the target (it is destroyed, leaves
+    the map or changes owner, among others). The revert makes the suspended behaviour current
+    with no target, and servicing goes on as for any aircraft
+    (`quirks.aircraft_pad_sleep_ends_retaliation`, Edge cases). Servicing is running at the hit
+    only while the pad still has work, so this follows mostly a hit in the docked *sleep*, whose
+    long delay leaves room for a step, or in the *guard* that an entry report leaves until the
+    first step. After a hit in the released *guard* above no step comes.
+    - Backing: `measurable` (AC34 part b1)
+    - Confidence: medium
+
+    **Computer-controlled owners.** The same holds for an aircraft of a computer-controlled house,
+    in our engine only the neutral and special houses, with S-0215 claim 18's rules for such
+    owners. It retaliates in any behaviour with the retaliate property, the docked *sleep*
+    included, with no distance limit. When it already has a target, as in claim 28's wait on the
+    pad, it retaliates only when the attacker's threat sum is at least that target's (S-0309 claim
+    25, part h); that earlier
+    target is then put aside, and T2's first row restores it at the run's fall-back. The take-off,
+    the contact and the service steps are as above, so such an aircraft can take off with fewer
+    than ⌊*A* / 2⌋ rounds.
+    - Backing: `unmeasured`: the harness gives orders only for the human-controlled house, so no
+      set-up here docks an aircraft of a computer-controlled house without its computer player's
+      orders, which void a record. The original's rule for computer-controlled player houses is
+      context, not an extra rule for our AI houses (S-0215 claim 18).
+    - Confidence: medium; low for the threat-sum comparison, at S-0309 claim 25 part h's level
+
+    **Flying in, or on the pad's cell without a contact.**
+    - An aircraft flying in under *enter* with a contact retaliates only while *enter* has the
+      retaliate property and, for a human-controlled house, the player return-fire setting is on
+      (S-0215 claim 18). The override's empty destination does not end its flight: with *attack*
+      current and a target it keeps its flight point and unfinished flight (claim 6), the ones it
+      had under *enter*, and while it has ammunition it is marked as holding height, so no trigger
+      starts its landing (claim 6). This lasts until the choosing processing gives it the firing
+      spot (claim 8). That
+      destination ends the contact only if the aircraft is then over a cell of its pad, since
+      claim 8's rule reads the cell it is over. Otherwise it keeps the contact and its pad's place
+      through its runs, until a later choosing comes while it is over a cell of its pad (claim 8),
+      which ends the contact; the fall-back after its last run restores *enter* with the pad as
+      destination (T2's first row), so it flies in again.
+    - An aircraft on the ground in its pad's cell without a contact is any landed aircraft: it
+      retaliates under the same conditions as one in open ground, no contact ends, and no
+      service step handles it.
+    - Backing: `measurable` (AC34 part c) for the aircraft flying in; `unmeasured` for the one
+      without a contact, which differs from AC31 part e's landed aircraft only by the pad below
+      it, and no rule here reads that pad for an aircraft without a contact
+    - Confidence: medium (flying in: the override, the kept flight and the restore of *enter*),
+      low (the contact kept through a run that starts away from the pad); medium (on the pad's
+      cell without a contact, `unmeasured`)
+
 ## Formulas
 
 All heights and positions are integers in leptons (S-0204). "⌊ ⌋" on a quotient of integers is
@@ -4107,7 +4282,10 @@ Claim 18 rates the computer-controlled *area guard* that T2's rows name. The aft
 entries follow every row from the fourth on, the visiting rows included. So a pad-bound
 visiting aircraft in flight with no ammunition and no contact crashes when its pad search finds
 no pad, instead of taking the *retreat* that its row names (claims 45 and 46); with a pad found
-it gets that pad and *enter*.
+it gets that pad and *enter*. An object of a missile type takes the rows for an aircraft on the
+ground whatever its height (claim 18, *Missile types*). A *sleep* that the first row restores
+to a pad-bound aircraft in flight with no destination lasts until its landing start, which falls
+back to rest again (claims 6 and 52).
 
 **T3. Pad servicing.** See claim 26. Aircraft events on the pad:
 
@@ -4122,6 +4300,9 @@ it gets that pad and *enter*.
 | settled in *sleep* | service step, target held, ammunition at least ⌊*A*/2⌋ | no round, no repair, no release |
 | settled in *sleep* | service step, nothing to do, or cannot pay | released: fall back to rest, *guard* forced |
 | *guard* on the pad, target, ammunition ≥ ⌊*A*/2⌋ | its processing | *attack*; takes off; the reservation ends |
+| on the pad, *attack* current from a retaliation (claim 52), ammunition left | its processing that chooses (T1) | the firing spot of claim 39 as destination; takes off; the reservation ends. With no spot found: no destination, the contact held, and the next run (claim 52) |
+| on the pad, *attack* current from a retaliation, no ammunition | its processing that chooses | *done*; the run end's edge cell: takes off; the reservation ends; then T2's first row (claim 52) |
+| settled, *attack* current from a retaliation, at least two ticks before that processing | service step | told to queue *sleep*, which becomes current with the target kept (a later step: not traced, claim 52); then as *sleep* with a target (`quirks.aircraft_pad_sleep_ends_retaliation`) |
 
 **T4. Carrier slot aircraft flight.** Events are evaluated at S-0506 claim 2's launch passes.
 The state in the first column is the slot's state entering that pass. Thus the launch row and
@@ -4165,6 +4346,14 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
   on a pad with a target is never reloaded past ⌊*A* / 2⌋ rounds while it keeps the target; the pad
   acknowledges the reload without adding a round, repairing or releasing it in that step. Fixed behaviour: reload to full
   regardless of target, and take off at full ammunition.
+- **Sleep ends a retaliation on the pad** (`quirks.aircraft_pad_sleep_ends_retaliation`, default
+  on = original). A service step that finds an aircraft settled on its pad with the *attack* of a
+  retaliation current, at least two ticks before the processing that ends its contact, has it queue *sleep*, which
+  replaces the run. The aircraft keeps the attacker as its target and never fires at it, and gets
+  no repair and no release, only rounds up to ⌊*A* / 2⌋, until a revert cause befalls the target
+  (claim 52). Off: a service step skips an aircraft whose current behaviour is *attack*, as it
+  skips one in *enter*. This alternative is a design rule, not an
+  oracle measurement.
 - **Queue-capacity test skips the build limit** (`quirks.dock_bound_aircraft_ignores_limit`,
   default on, S-0407 claim 16). For a pad-bound type this queue-time test does not check its own
   build limit. Off: that test applies both limits. Other production-legality checks remain.
@@ -4380,6 +4569,9 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
 | animation type `SGRYSMK1` | fixed animation type name | damage-smoke animation (claim 37) | name, found without regard to letter case (S-0004 claims 2 and 7) | none: no smoke, the chance draw still taken |
 | `PoseDir` | rules, `[AudioVisual]` | landing direction without contact; the facing of a release onto a pad, set in AC30 part k (7)'s named test rules | S-0404 Import mapping | S-0404 |
 | `C4Warhead` | rules, `[CombatDamage]` | demolition warhead of the landing check's hit where no free cell is found (claim 7) | warhead name | S-0302 |
+| `CanRetaliate` | rules, type | retaliate flag, read for an aircraft on its pad as for any actor (claim 52) | S-0309 Import mapping | S-0309 |
+| `Retaliate` | behaviour sections (S-0215 Import mapping) | retaliate property of *guard*, *sleep* and *enter* (claim 52) | S-0215 Import mapping | S-0215 |
+| `PlayerReturnFire` | rules, combat-damage settings section (S-0006) | player return-fire setting (claim 52) | S-0215 Import mapping | S-0215 |
 
 The aircraft-type flags are read only for aircraft types. An aircraft type's `FlightLevel` that is
 absent stays unset (−1), which means "use the game-wide value", not a height of −1.
@@ -6042,6 +6234,117 @@ listed in Open questions are not claimed confirmed by these scenarios.
     6) and turns toward *P* with *enter* current. Falsified if, at the end of that processing's
     tick, *A* in *sticky* has a destination other than *P*, has no contact with *P*, or has no
     *enter* queued.
+- **AC34 Retaliation on the pad (claims 8, 26, 28, 31 and 52; Q-2792).** Skirmish on open flat
+  ground, director and mods off, a human-controlled test house with scripted input, a
+  computer-controlled test house with no team and no script, measurement harness. Each order that
+  house's computer player gives the test vehicle is recorded, and the run is void from that tick.
+  Every part uses a named test map, a named test behaviour file that sets the retaliate property
+  of *guard* and clears the no-threat property of *guard*, *sleep* and *enter* (so that a hit gives *A* no fall-back by S-0215 claim 16 and the
+  vehicle's search may pick it, S-0309 table C, as in AC31 part e), and named test rules that set
+  the game-wide re-approach flag on (claim 14, test setting), so that each run ends and *A* spends
+  its rounds, and the settings each part names.
+  - *P*: a pad of a named test copy of a stock helipad type with the reload flag and one docking
+    place (test values), built by the house with scripted input before the record starts (a
+    skirmish drops a human-controlled house's pre-placed structures, S-0009 claim 27).
+  - *A*: a named test copy of a stock armed, landable, pad-bound aircraft type with *P*'s type as
+    its only dock type, its retaliate flag set, a strength that the record's hits cannot use up,
+    and a weapon that can fire at a vehicle on the ground and whose range reaches *V* from *P*
+    (test values). A map entry of the human-controlled house on open ground; the harness gives it
+    a dock order onto *P* at the start.
+  - *V*: a named test copy of a stock vehicle type with a weapon of positive damage against *A*,
+    whose projectile is not anti-air (part c: can hit aircraft in the air) and whose range reaches
+    *P*'s cell from *V*'s, and a strength that *A*'s rounds cannot use up (test values). A map
+    entry of the human-controlled house in *guard*, within that range of *P* and at least 5 cells
+    from every other object. A test-map trigger gives *V* to the computer-controlled test house
+    at the tick each part names.
+
+  Record per tick *A*'s current, queued and suspended behaviour, target, destination, cell,
+  height, pad contact, ammunition, health and processing ticks; each service step of *P* and what
+  it gave *A*; the human-controlled house's credits; *V*'s owner and target; each hit on *A* and on
+  *V*. 3 runs per part. A run is void if *V*'s first target after the hand-over is not *A*, or if
+  no hit lands on *A*.
+  - a. *Guard* after the release. Test rules turn the player return-fire setting off. *A* docks
+    with full ammunition and full health. The hand-over is at a fixed tick of the test map,
+    chosen from a trial run to come at least 300 ticks after the service step that releases *A*
+    (test value; void if no step has released it by then). Expected: from the release to the first hit,
+    *guard* current, nothing suspended, contact held and no service step. At the end of the first
+    hit's tick: *attack* current, *V* the target, *guard* suspended, no destination, contact held,
+    height 0. No service step until the take-off. At *A*'s second *attack* processing, 1 tick
+    after its first, the firing spot is its destination and the contact ends; its height rises
+    from the next movement update, and it fires at *V*. After its last run (its ammunition spent,
+    since *V* outlasts it) *guard* is current again with no target and nothing suspended; *A*
+    does not land away from *P*: a *guard* processing (claim 29) or the fall-back to rest at its
+    landing start (claim 6) gets it *P* as its destination with *enter*, and it docks again (claim
+    24). Falsified if *A*
+    has no target or a behaviour other than *attack* at the end of the first hit's tick, if its
+    contact ends before its second *attack* processing or is held after it, if it is still on
+    the ground with *attack* current and a target 2 ticks after that processing, or if after its
+    last run it takes another behaviour than *guard* before it gets *P* with *enter*.
+  - b. The docked *sleep*, in two variants. The behaviour file also sets *sleep*'s retaliate
+    property. Test rules turn the player return-fire setting on and set a repair step of 1 (test
+    value); the starting credits cover every repair step of the record (test setting). *A*'s map
+    entry has health well below its strength (test value), so that, docked with full ammunition,
+    it is in *sleep* and repaired one step at each service step for the whole record. Expected in
+    both at the end of the first hit's tick: *attack* current, *V* the target, *sleep* suspended,
+    no destination, contact held, height 0.
+    - b1. Test rules set a reload rate *r* with ⌊*r* × 900⌋ = 1, a service step in every tick
+      (test value). The hand-over is at a fixed tick chosen from a trial run to come after *A*'s
+      first repair step (test value; void if none comes before it), and a second test-map trigger
+      gives *V* back to the human-controlled house 900 ticks after the hand-over. Expected: the
+      step in the tick after the hit's gives no round, no repair and no release, and by the end
+      of the next tick *sleep* is current with *V* still the target, *sleep* still suspended,
+      contact held and height 0. *A* does not fire, and up to the second trigger no step raises
+      its health or charges the house. At the end of the second trigger's tick *sleep* is current,
+      nothing is suspended and *A* has no target; the next step raises its health by one repair
+      step. Not predicted, and recorded only, when *A*'s second *attack* processing comes within
+      2 ticks of the hit. Falsified by any other outcome, in particular a round or a repair step
+      while *A* holds *V*, a take-off before the second trigger, or a release.
+    - b2. Test rules set a reload rate *r* with ⌊*r* × 900⌋ = 600 (test value), more than the
+      450 ticks by which *A*'s first *attack* processing can follow the hit. The hand-over is at
+      a fixed tick chosen from a trial run to come in the tick after a service step (test value:
+      void if a step comes between the hit and *A*'s second *attack* processing). Expected: as in
+      part a from *A*'s second *attack* processing on, up to its last run. After its last run
+      (its ammunition spent) *sleep* is current again with no target, no destination and nothing
+      suspended. *A* does not land away from *P*: where it would start its landing it falls back
+      to rest (claim 6), gets *P* as its destination with *enter* and docks again (claims 18 and
+      24). Falsified if after its last run *A* has *guard* or *enter* before that fall-back, if it
+      touches down in a cell without a building it is in contact with, or if it stays in *sleep*
+      away from *P* with no destination.
+  - c. Flying in with a contact (optional). The behaviour file also sets *enter*'s retaliate
+    property; test rules turn the player return-fire setting on. *A*'s map entry is at least 40
+    cells from *P*, and *V* stands between 10 and 15 cells from *P* on *A*'s line of approach
+    (test values). The hand-over is at a fixed tick chosen from a trial run to come while *A* is
+    in flight with *enter* current, a contact with *P* and at least 10 cells from *P* (test
+    value; void if that does not hold at the first hit).
+    Expected at the end of the first hit's tick: *attack* current, *enter* suspended, *V* the
+    target, no destination and contact held; up to its second *attack* processing it keeps the
+    flight point it had under *enter* and its height, and starts no landing (claim 6). At that *attack* processing the firing spot is its
+    destination and the contact is still held, unless *A* is then over a cell of *P*. At the fall-back
+    after its last run, *enter* is current again with *P* as destination, and *A* flies to *P* and docks (claim 24). Falsified
+    if the contact ends at the override or, away from *P*, at the choosing processing or during
+    the runs, if its flight point changes or its landing starts before its second *attack*
+    processing, or if *enter* and *P* do not come back after the last run.
+  - d. No ammunition. The behaviour file also sets *sleep*'s retaliate property; test rules turn
+    the player return-fire setting on and set a reload rate *r* with ⌊*r* × 900⌋ = 3000 (test
+    value). *A*'s type has a maximum ammunition of 1 (test value). *W*: an own test vehicle of the
+    human-controlled house, a map entry on open ground away from *P* and *V*, with a strength more
+    than twice the damage of *A*'s shot (test value). Procedure: at the start the harness gives *A*
+    an attack order on *W* instead of the dock order; *A* fires its round, its run ends and its
+    fall-back sends it to *P* (claim 18), where it docks and the first step has it queue *sleep*
+    (claim 26). The hand-over is at a fixed tick chosen from a trial run to come at least 100 ticks
+    after *A*'s docking report and at least 1200 ticks before the next service step (test value:
+    void otherwise). Expected at the end of the first hit's tick: *attack* current, *sleep*
+    suspended, *V* the target, no destination, contact held, ammunition 0. At *A*'s second
+    *attack* processing it gets no destination and stays on the ground. At its next processing,
+    the run's end, the contact ends, and by the end of that tick *sleep* is current, nothing is
+    suspended, and *A* has no target and no destination; it does not fly toward the map's edge.
+    Record its cell, height, behaviours, destination and contact for 300 ticks after that; a
+    later hit may start the cycle again: record it. Expected (low): it does not land away from
+    *P*; a fall-back to rest gets it *P* as its destination with *enter*, and it docks again.
+    Falsified if *A* has no target after the first hit, if its contact ends before the
+    run's end or is held after it, if *guard* or *enter* is current at the end of the run's
+    end's tick, if it heads for an edge cell, or if it touches down in a cell without a building
+    it is in contact with.
 
 ## Changes for other specs
 
@@ -6186,6 +6489,18 @@ listed in Open questions are not claimed confirmed by these scenarios.
   7 here): ignores defences yes, no-escape yes, attacker none, attacking house none, with the
   aircraft's current health as the amount, the demolition warhead and a distance of 0 leptons. Level
   and backing: medium (`unmeasured`), as claim 7 here rates that hit (Q-2646).
+- **S-0215 claim 18 and S-0309 claim 18 (clarification).** They could add that an aircraft
+  standing on its pad or holding a pad contact has no exception: the docked *sleep* is under
+  claim 18's behaviour rule like any behaviour, and an aircraft with no rounds left is not refused
+  by S-0309's firing-check condition, since *out of ammunition* is neither *illegal* nor
+  *impossible*. Claim 52 here gives what the override then does on a pad (Q-2792). Level and
+  backing: high, `measurable` (AC34 parts a and b); medium, `measurable` (AC34 part d), for the
+  aircraft with no rounds left.
+- **S-0506 Open questions (Q-2748 question 2).** The candidate "the fall-back behaviour its move
+  behaviour takes when it finds no destination" could point to claim 18 here (*Missile types*):
+  an object of a missile type takes T2's rows for an aircraft on the ground at any height, so the
+  row itself gives it no destination; T2's after-the-row entries then apply as after any row. Level and backing: medium (`unmeasured`), as claim 18
+  here rates it.
 
 ## Open questions
 
@@ -6366,3 +6681,7 @@ destination once that touchdown has made it forget the edge cell and it rests th
     zero-distance bullets are for a flight to a fixed spot, while here the destination is given
     again as the aircraft passes from cell to cell. The same holds for an unarmed type that is not
     landable and that claim 5 holds at full speed: where it flies was not traced (low).
+34. Q-2792 is answered by claim 52, with claims 26 and 28 and table T3. Not traced tick by tick:
+    the path of an aircraft without ammunition from its run's end back to its pad, the restore of
+    the destination put aside, and the stage from which a restored *enter* goes on after a run
+    started away from the pad (medium and low in claim 52).
