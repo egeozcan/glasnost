@@ -2,13 +2,14 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 57
+revision: 60
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-08
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238, Q-2266, Q-2791]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238, Q-2266, Q-2791,
+Q-2831]
 supersedes: []
 ---
 
@@ -118,7 +119,7 @@ last recheck). In addition:
 - **Placement mode.** The input mode in which the mouse carries the outline of a done building and a
   left click on the battlefield gives a place order with that cell.
 - **Sidebar tip.** The text box that the sidebar shows for the build icon or the sidebar control
-  under the pointer (claims 20 to 22). It is drawn like S-0111's name tip and, like it, is
+  under the pointer (claims 20 to 23). It is drawn like S-0111's name tip and, like it, is
   presentation only: it changes no game state.
 - **Slot.** One place of the shown tab's strip at the current scroll position, filled by an icon or
   empty. Only the places that are shown count.
@@ -130,7 +131,8 @@ last recheck). In addition:
   them). In the entry's text a text point is marked by a percent sign followed by the letter s, and
   a number point by a percent sign followed by the letter d; the points are filled in the order
   they stand. A number is written in decimal, with a leading minus sign when it is negative and no
-  digit grouping.
+  digit grouping. These are the stock forms. Claim 23 gives every *mark* (a percent sign and what
+  follows it) that an entry's text can hold, and which value each point takes.
 
 ## Behaviour
 
@@ -923,12 +925,13 @@ last recheck). In addition:
       sidebar tip and stops its wait as S-0111 claim 20 gives for the name tip.
     - **Text.** For an icon of an infantry, vehicle, aircraft or building type, the text is the
       money-format entry's text (Import mapping) with its text point filled by the type's display
-      name (S-0004 claim 17) and its number point by the type's price for the local player's
-      house: S-0404 claim 2's *P*, in its form in parts for a building whose cost pays for units
-      that come with it. Then every space of the whole text, from the display name and from the
-      entry alike, becomes a line feed, so that S-0111 claim 24's layout shows each word on a line
-      of its own. For a superweapon icon the text is the superweapon type's display name alone,
-      with no price and with its spaces kept. An empty slot has no text, and no tip shows there.
+      name (S-0004 claim 17) and its number point by the type's price for the local player's house
+      (claim 23 for an entry with other points): S-0404 claim 2's *P*, in its form in parts for a
+      building whose cost pays for units that come with it. Then every space of the whole text, from
+      the display name and from the entry alike, becomes a line feed, so that S-0111 claim 24's
+      layout shows each word on a line of its own. For a superweapon icon the text is the
+      superweapon type's display name alone, with no price and with its spaces kept. An empty slot
+      has no text, and no tip shows there.
     - **Every state the same.** An icon's state changes neither its text nor whether its tip shows.
       A darkened icon (claim 3), the icon of an item that is building, waiting for money, on hold
       or done, a done building waiting for placement or in placement mode (claim 10), and a
@@ -1029,7 +1032,7 @@ last recheck). In addition:
     | scroll-up button, scroll-down button | the scroll-up label and the scroll-down label; while both buttons are disabled because all of the tab's icons fit (claim 18), followed by the same disabled line |
     | repair button | the repair-mode label |
     | sell button | the sell-mode label |
-    | power meter | the power entry's text with its first number point filled by the local player's house output *O* and its second by its house drain *D* (S-0405 Terms) |
+    | power meter | the power entry's text with its first number point filled by the local player's house output *O* and its second by its house drain *D* (S-0405 Terms; claim 23 for an entry with other points) |
     | options button | the options label |
     | diplomacy button | the diplomacy label |
 
@@ -1050,6 +1053,106 @@ last recheck). In addition:
       engine's for the first movement off the slots, Edge cases) and the wait, the placing by the
       pointer in the tip area and the absence of tips elsewhere on the sidebar; medium, `unmeasured`
       (Backing), for the lifetime, a press or release and the blocks over a control
+
+23. **Values written into a tip entry's text (Q-2831).** The money-format entry of claim 20 has
+    two values, a text value (the display name) and then a number value (the price). The power
+    entry of claim 22 has two number values, the output *O* and then the drain *D*. Each entry's
+    text is shown as it stands, except at its marks, and it is not checked when it is read: any
+    text is shown by the rules below.
+    - **Marks.** A mark starts at a percent sign. After it may come, in this order and each one
+      optional: flags (any of the space, plus, minus, hash and zero characters, in any order and
+      any number of times), a width (a run of decimal digits whose first is not 0, or an asterisk),
+      a precision (a full stop followed by a run of decimal digits, or by an asterisk, or by
+      neither, which counts as 0), and size marks (any number of the letters h, l, w, F, L and N
+      and of the letter I followed by the digits 6 and 4). The next character ends the mark, and
+      decides what it shows:
+      - The letter s makes the mark a text point.
+      - One of the letters d, i, u, o, x, X and p makes it a number point.
+      - A percent sign shows one percent sign, and the mark takes no value.
+      - For the letters c, C, B, e, E, f, g, G, n, S and Z, for s or a number point's letter after
+        size marks that include I64, and for s after size marks that include h, wherever I64 or h
+        stands among them and whatever others come with it, our engine shows the whole mark as it
+        stands, and it takes no value (Edge cases for the original).
+      - Any other character (a letter this list does not name, the letter I not followed by the
+        digits 6 and 4, a digit, flag or full stop out of the order above, or any other sign or
+        character) drops the mark: its percent sign and what follows it are not shown, and that
+        character is shown in their place.
+      - The end of the text drops a mark that has not ended, so a percent sign at the very end is
+        not shown.
+
+      A mark with an asterisk as its width or its precision, whatever character ends it and also
+      at the end of the text, is shown as it stands by our engine and takes no value (Edge cases
+      for the original).
+    - **Which value each point takes.** Each text point takes the entry's next text value that no
+      earlier point has taken, and each number point the next number value, in the order the points
+      stand in the text. A point for which no value of its kind is left writes nothing, and its
+      width and flags add nothing. A value that no point takes is not written. The original instead
+      gives each point the next value in the entry's list above, whatever its kind. Setting aside a
+      mark with an asterisk as its width or precision (shown as it stands by our engine, above,
+      while the original takes that width or precision from the next value), the two agree in
+      every case in which the original gives each point a value of its own kind: for the
+      money-format entry, no point, a text point alone, or a text point and after it one number
+      point; for the power entry, no point or only number points, at most two. In every other case
+      the original's result is undefined (Edge cases), and the rest of this bullet is our engine's
+      own rule. So, in our engine, a money-format entry with only a number point shows the price and
+      no name, one with the number point before the text point the price at the first point and the
+      name at the second, and an extra point of either kind shows nothing. A power entry's third and
+      later number points and any text point show nothing.
+    - **Forms.** A text point writes the text value. With a precision it writes at most that many of
+      its text units (S-0014 Terms). After size marks that do not include h (any number of w, l,
+      F, L and N, in any order), as with none, the letter s gives the same text point. A number
+      point writes the number value in a form given by its letter:
+      - d and i: in decimal, with a minus sign when the value is negative.
+      - u, o, x and X: the value taken as a whole number from 0 to 2³² − 1 (a negative value *v*
+        as *v* + 2³²), written in decimal (u), in octal (o) or in hexadecimal with the digits
+        above 9 as lowercase letters (x) or as capital letters (X).
+      - p: as X, always with a precision of 8.
+      A number point's precision is the least number of digits it writes, with zeros added before
+      them. Without a precision that least number is 1, and with a precision of 0 the value 0 writes
+      no digits. With h among its size marks a number point uses only the value's lowest 16 bits,
+      taken as a signed number from −32768 to 32767 for d and i and as a whole number from 0 to
+      65535 for the others. The size marks l, w, F, L and N change nothing.
+    - **Flags and width.** For d and i, the plus flag writes a plus sign before a value that is not
+      negative, and the space flag (without the plus flag) a space there. For o the hash flag adds a
+      leading 0 when the digits do not start with one, and for x it writes a 0 and then the letter x
+      before the digits, and for X and p a 0 and then the letter X, when the value is not 0. The
+      width is the least number of text units the point writes, sign and prefix included: a shorter
+      result gets spaces before it, or after it with the minus flag. With the zero flag and without
+      the minus flag it gets zeros instead, between any sign or prefix and the digits, except that a
+      number point with a precision gets spaces. The zero flag pads a text point with zeros too.
+    - After the values are written, claim 20 turns every space of a money-format tip's text into a
+      line feed, those that a width adds included. The power meter's tip keeps its spaces (claim
+      22).
+    - Backing: `measurable` (scenario S16 parts d and h for the stock form, part j for the rest) for
+      the stock form, an entry with no point, a money-format entry with only a text point, a power
+      entry with only one number point, a mark ended by a percent sign, a letter that is no part of
+      a mark or the end of the text, and the forms, flags, widths and precision that part j's runs
+      tell apart whatever *O* and *D* are (text precision, and d in decimal and the plus and zero
+      flags with a width on d, since part j fixes *P* from 10 to 9999). `unmeasured` for the
+      digits and letter case of x, X and o, the hash flag on x and o, i and u in decimal, and a
+      width with or without the minus flag on *O* or *D*: part j does not fix *O* and *D*, which
+      come from the buildings the observed house owns, so a run's values need not tell these forms
+      from others (a value with no hexadecimal letter, below 10, of 0, or of five digits or more).
+      `unmeasured` for the rest of the forms and flags (p, the size marks, the space flag, the zero
+      flag on a text point, the hash flag on X and p, other combinations, a negative value under
+      u, o, x and X, s or a number point after several size marks, s after w, l, F, L and N only,
+      and the unit of a text point's precision and of the width, which part j's basic Latin texts
+      cannot tell from another unit): part j's texts do not hold them. `unmeasured` for a mark
+      dropped by a character other than a letter the Marks bullet does not name (the letter I not
+      followed by the digits 6 and 4, a digit, flag or full stop out of the order above, or another
+      sign): part j's texts end a mark by an unnamed letter only. `unmeasured` for our engine's own
+      rules (the values given by kind, a point with no value left, a value left over, and the marks
+      shown as they stand): they are design choices for our engine, the original's result is
+      undefined in most of these cases, and no S16 part holds the others.
+    - Confidence: high for the stock form, the entry with no point, the money-format entry with only
+      a text point, the power entry with only one number point, the mark ended by a percent sign, by
+      a letter that is no part of a mark or by the end of the text, text precision, d in decimal
+      and the plus and zero flags with a width on d. Medium, `unmeasured`, for the digits and
+      letter case of x, X and o, the hash flag on x and o, i and u in decimal, a width on *O* or
+      *D*, the other forms and flags, a negative value under u, o, x and X, the size marks, s or a
+      number point after several size marks, s after w, l, F, L and N only, the unit of the
+      precision and the width, a mark dropped by a character other than an unnamed letter, and our
+      engine's own rules.
 
 ## Formulas
 
@@ -1172,9 +1275,30 @@ Ordering consequences:
   emptied slot; `unmeasured` for the hidden cursor, since no part hides it while a sidebar tip
   shows. Confidence: medium.
 - **Icon-tip text of 66 text units or more** (departure, no switch; claim 20). What the original
-  shows for an icon tip whose text, with the display name and the price written in, is 66 text
-  units or longer is undefined. Our engine shows it as S-0111's name tip shows a long text
-  (S-0111 Edge cases). Backing: `unmeasured`, since the original's result is undefined.
+  shows for an icon tip whose text, with the display name and the price written in, is 66 text units
+  or longer is undefined. Our engine shows it as S-0111's name tip shows a long text (S-0111 Edge
+  cases). The same holds for a power-meter tip text too long for the original to show (claims 22
+  and 23), which only an entry with a long text or a large width gives. Backing: `unmeasured`,
+  since the original's result is undefined. Confidence: medium.
+- **A tip entry's point given a value of another kind** (departure, no switch; claim 23). In the
+  original each point, and each asterisk as a width or precision, takes the next value in the
+  entry's list, whatever its kind. Where a point is given a value of the other kind, or comes after
+  the entry's values have run out, and for a mark ended by one of the letters e, E, f, g, G, n, B
+  and Z or a number point after size marks that include I64, the original's result is undefined:
+  a run can show unrelated characters or numbers, or end the game with a fault. No switch: nothing
+  defined is left to reproduce. Our engine gives each point a value of its own kind (claim 23).
+  Backing: `unmeasured`, since the original's result is undefined and a run can end the game.
+  Confidence: medium.
+- **Marks with a defined result that our engine shows as they stand** (departure, display-only, no
+  switch; claim 23). Where the values are of the right kind, the original writes c and C as the
+  character whose code is the number value's lowest 16 bits (c) or lowest 8 bits (C), except that
+  with h among the size marks both take the lowest 8 bits and with w but not h both the lowest 16
+  bits; takes an asterisk's width or precision from the next value; writes S after size marks that
+  include w but not h, and s after size marks that include I64 but not h, as a text point; and for
+  s after size marks that include h, and S after size marks that include h or do not include w,
+  shows for a display name in basic Latin letters only its first character. Our engine shows each
+  of these marks as it stands. They occur only in an entry that a mod has replaced.
+  Backing: `unmeasured`: it is a design choice for our engine, and no S16 part holds these marks.
   Confidence: medium.
 - **Sidebar-tip boxes placed with a smaller size** (display-only, no switch; claims 21 and 22). The
   original places a sidebar tip with a box 4 pixels narrower and 1 pixel lower than the box it
@@ -1202,8 +1326,8 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `DARKEN.SHP` | unavailable-icon mask | fixed file name, frame 0, zero index transparent, nonzero indices halve destination channels; no rules selector; a missing mask adds no darkening |
 | `TXT_READY` (string table) | ready label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
-| `TXT_MONEY_FORMAT_2` (string table) | money-format entry: the text of a unit's or building's icon tip (claim 20) | fixed entry identifier, not literal game text; its text holds a text point and then a number point, marked as *Insertion point* (Terms) gives; a missing entry shows S-0004 claim 17's placeholder alone, with no name and no price |
-| `TXT_POWER_DRAIN` (string table) | power entry: the power meter's tip (claim 22) | fixed entry identifier, not literal game text; two number points, output then drain, marked as above; missing entry: the placeholder alone |
+| `TXT_MONEY_FORMAT_2` (string table) | money-format entry: the text of a unit's or building's icon tip (claim 20) | fixed entry identifier, not literal game text; its text holds a text point and then a number point, marked as *Insertion point* (Terms) gives; any other text is filled as claim 23 gives; a missing entry shows S-0004 claim 17's placeholder alone, with no name and no price |
+| `TXT_POWER_DRAIN` (string table) | power entry: the power meter's tip (claim 22) | fixed entry identifier, not literal game text; two number points, output then drain, marked as above; any other text is filled as claim 23 gives; missing entry: the placeholder alone |
 | `TXT_REPAIR_MODE`, `TXT_SELL_MODE` (string table) | repair-mode and sell-mode labels (claim 22) | fixed entry identifiers, not literal game text; missing entry: the placeholder |
 | `Tip:Tab1`, `Tip:Tab2`, `Tip:Tab3`, `Tip:Tab4` (string table) | the first to fourth tab labels, in claim 1's tab order (claim 22) | fixed entry identifiers, not literal game text; missing entry: the placeholder |
 | `Tip:ScrollUp`, `Tip:ScrollDown` (string table) | scroll-up and scroll-down labels (claim 22) | as above |
@@ -1223,12 +1347,14 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | No data key | power-mode button image | no install image is imported; our picture is design (claim 19) |
 | `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
 
-The money-format and power entries named above, and what a missing money-format or power entry
-shows, are `unmeasured`: no S16 part replaces or removes an entry, so a run cannot tell the named
-entry from another entry with the same text, or show a missing entry's result. What a missing
-entry of the repair-mode, sell-mode, tab, scroll, disabled, options or diplomacy rows shows (the
-placeholder), and the identity of those rows' entries, are `unmeasured` for the same reasons: no
-S16 part replaces or removes one, and part h reads only the text shown. Confidence: medium.
+The money-format and power entries named above are `measurable` (scenario S16 part j, which
+replaces each of them in the probe string table). What a missing money-format or power entry
+shows is `unmeasured`: no S16 part removes an entry, so no run shows a missing entry's result.
+What a missing entry of the repair-mode, sell-mode, tab, scroll, disabled, options or diplomacy
+rows shows (the placeholder), and the identity of those rows' entries, are `unmeasured`: no S16
+part replaces or removes one, so a run cannot tell the named entry from another entry with the
+same text, and part h reads only the text shown. Confidence: high for the money-format and power
+entries named above; medium for the rest.
 
 These delegated inputs matter to claims 13 and 14:
 
@@ -1943,7 +2069,7 @@ the time the script sent a button event, dates a click.
   capture plus read-only
   image and palette inspection.
 
-**S16. Sidebar tips (claims 20 to 22, Q-2791).**
+**S16. Sidebar tips (claims 20 to 23, Q-2791, Q-2831).**
 - Setup: the common setup with the tooltip option on, at 800 × 600, and again at 1024 × 768 for
   parts g and h. Screen capture at every drawn frame, each frame stamped with its real time, and
   scripted pointer movements. The skirmish's bases setting is on, and the observed house deploys
@@ -1956,7 +2082,7 @@ the time the script sent a button event, dates a click.
   that carry the tag (S-0011 claim 27). The sidebar probe map has: a vehicle test type, a copy of
   a simple stock vehicle that the observed house's country may build, with an invented cost
   field, a prerequisite field that names the vehicle factory type below alone, and a display name
-  of three short words,
+  of three short words, the first of at least three letters,
   taken from a probe entry in a loose probe string table built as S-0004 scenario L builds
   it; the invented country cost factor for vehicles of S-0404 scenario P2 for the observed house's
   country; a building test type that grants an invented cost bonus for vehicles, has no power
@@ -2050,6 +2176,27 @@ the time the script sent a button event, dates a click.
     then a step back 2 s later. Expected: no icon tip in that tab; the vehicle's name tip showing
     in the first frame after the movement; and the slot's tip showing again 10000 ms after it
     first showed, with no movement.
+  - (j) Entry texts (claim 23). One run per text below, each with the probe string table's
+    money-format entry or power entry replaced by that text (the other entry keeps its stock
+    text); rest on the vehicle icon for a money-format text and on the power meter for a power
+    text, and read the tip. The vehicle's invented cost field, country cost factor and cost bonus
+    are chosen so that *P* stays from 10 to 9999 throughout part j. Money-format texts: (1) a text
+    point alone, a percent sign followed by s; (2) a text with no percent sign, of two words; (3)
+    “%s|%%|%q|%d|%”; (4) “%.3s|%+06d”.
+    Power texts: (5) a number point alone, a percent sign followed by d; (6) “%#x|%#o”; (7)
+    “%X|%u”; (8) “%5i|%-5d|”. Expected, with *P* the vehicle's price as in (e) and *O* and *D* as
+    S-0405's recorder gives: (1) the probe name alone, one word on each line, with no price; (2)
+    the text, one word on each line; (3) the probe name, a vertical bar, one percent sign, a bar,
+    the letter q, a bar, *P* in decimal and a bar, with no percent sign at the end; (4) the probe
+    name's first three characters (the first word's first three letters), a bar, and *P* in
+    decimal with a plus sign when it is not negative, padded with zeros after the sign to six
+    characters; (5) *O* in decimal alone; (6) *O* in lowercase hexadecimal, after a 0 and the
+    letter x when *O* is not 0, a bar, and *D* in octal with a leading 0; (7) *O* in hexadecimal
+    with capital letters, a bar, and *D* in decimal; (8) *O* in decimal with spaces before it to
+    five characters, a bar, *D* in decimal with spaces after it to five characters, and a bar.
+    A run of (5) to (8) in which *O* equals *D* is void, since it cannot tell which value a point
+    takes. Falsified by a mark shown as written, a percent sign at the end, a value written at a
+    point other than the one predicted, or a number in another form or width.
 - Observable: each tip's text lines, its box's place and size, and the real times of its showing
   and hiding, from the stamped frames.
 - Falsified by: a wait of 1000 ms between icons, a tip hiding between movements over the slots, a
@@ -2084,8 +2231,8 @@ the time the script sent a button event, dates a click.
 10. Q-2791 question 5, waypoint part: the original's planning-mode (waypoint) button and the other
     command buttons lie on the command bar, outside the sidebar, and show tips of their own.
     Those tips are not claimed here.
-11. An entry of claims 20 and 22 whose insertion points differ from Import mapping's (another
-    count, kind or order): what the original shows then is not claimed here.
+11. Resolved by claim 23 (Q-2831): an entry of claims 20 and 22 whose insertion points differ
+    from Import mapping's (another count, kind or order), and its other marks.
 
 ## Changes for other specs
 
@@ -2118,7 +2265,11 @@ the time the script sent a button event, dates a click.
   of S-0111's name tip too, where spaces stay spaces: in the sidebar tooltip the two-space copy
   shows an empty line between its words rather than a wider box. S-0002 D2's cost read there is
   the price of claim 20. No rule changes.
-- Glossary, *sidebar*: may add that S-0411 gives the sidebar's tips (claims 20 to 22).
+- Glossary, *sidebar*: may add that S-0411 gives the sidebar's tips (claims 20 to 23).
+- S-0111: its Summary (“The sidebar's own tips are S-0411's (claims 20 to 22).”), claim 20's
+  *Where the pointer rests* (“the sidebar's own tips are S-0411's, claims 20 to 22”) and its
+  hand-off with S-0006 claim 13 (“S-0411 claims 20 to 22 give the sidebar's tips”) should read
+  claims 20 to 23, since claim 23 gives the tips' entry texts. No rule changes.
 Earlier correction requests are resolved by the current companion drafts: S-0406 claims 1
 and 20 give placement's appropriate announcement and text/no-text feedback; S-0007 claims
 22 and 25 point to claim 16 for icon content; S-0103 claim 13 owns dedicated icon-palette
