@@ -765,6 +765,29 @@ frames in `local-lane/m8/i111/render/before/` (main at 841f16d: no tip in any sc
 - Q-2736: give a unit one route point (route-mode key, click on the ground), then select a second unit, keep the route-mode key held and press the left button on that point. Keep it down, move onto a unit and hold still: the name box shows after one second. With nothing selected, a press on your own point does the same.
 - Q-2736: with a unit selected and the route-mode key held, press the left button on open ground (or press the right button anywhere on the map), move a little onto a unit and hold still: no box shows while the button is held, as outside the route mode. After you let go, move and rest again: the box shows.
 
+### Round 8e, rendering and UI (answer to Q-2791)
+
+S-0411 r57 claims 20 to 22 and S-0111 r57 claim 20 answer Q-2791, the tips of the sidebar's build
+icons. They replace round 5's design for note 33 (`hud::tooltip`: name and price left of the icon,
+a superweapon's time left). Built in M8 step A3 intake 115 (ledger: [intake115.md](intake115.md));
+lane `crates/app/tests/r8_render_lane.rs` (`i115_the_sidebar_tips`), frames in
+`local-lane/m8/i115/render/before/` (main 3ad4749 with the lane test only, 0c7c5a7: the old
+tooltip) and `after/`. The
+departures the answer names come without a switch: judged in [c7-play-fixes.md](c7-play-fixes.md),
+*A3 intake 115*.
+
+| Request | Notes | Answer | Built | Status |
+|---|---|---|---|---|
+| [Q-2791](../../spec/requests/Q-2791-the-tips-of-the-sidebar-build-icons.md) | 33 | S-0411 r57 claims 20 to 22: with the tooltip option on, a build icon shows a tip after S-0111's 1000 ms wait, and once the pointer is on the strip every further movement over it shows the icon's tip at once; the text is the money-format entry with the display name and the price, each word on a line of its own, or a superweapon's name alone; the box is the name tip's, beside the icon's corner that faces the middle of the sidebar below the radar, cut at the sidebar; the tab, scroll, repair, sell and options buttons and the power meter show their labels (a disabled line for a tab without icons and for scroll buttons while all icons fit) and the power meter its output and drain, after the wait, by the pointer | `game::sidebar_tip`, `game::name_tip` (one tip state for both), `Session::{choose_tip, icon_tip, control_tip, choose_focus_tip}`; the hud tooltip removed | Built. Q-2831 (an entry whose insertion points differ) open, with an interim |
+
+**Try it (round 8e, rendering and UI).**
+- Q-2791: start a skirmish and rest the pointer on a build icon. After one second a black box framed in your side's colour shows beside the icon, overlapping its corner a little, with the unit's name and price, one word per line. Now move the pointer over the other icons: each icon's tip shows at once, with no wait, and stays put while you move within the icon. Move onto an empty slot and it goes; move back onto an icon and it is back at once.
+- Q-2791: click an icon to build it: the tip goes at the click and comes back as soon as you move the pointer a little. The text stays the same while the item builds, waits, is on hold or is done.
+- Q-2791: rest on a superweapon icon: the tip shows its name only. It no longer shows the time left or "Ready".
+- Q-2791: rest one second on the power meter (output and drain), a tab button (its name; "(…)" with the disabled word below it when the tab has nothing to build), a scroll button, the sell or repair button or the options button: each shows its tip by the pointer after the wait. The radar and the credits show none.
+- Q-2791: with a tip showing over the icons, scroll the map with the keyboard or the screen edge: the tip stays. Move from an icon straight onto a unit on the map: no name tip until you rest there one second (the original shows it at once; ours waits, a departure without a switch).
+- Q-2791: move the keyboard focus onto an icon (Page Down): its tip shows by the icon while the pointer shows no tip (our design, kept from round 5).
+
 ## Round 9 (2026-11-06, implementer findings on main)
 
 Findings of the intakes and of round 8b's lanes, not notes of the lead's. Lane outputs are in

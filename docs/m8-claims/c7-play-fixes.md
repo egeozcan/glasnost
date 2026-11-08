@@ -743,3 +743,23 @@ the path of a walker under *move* under either setting); that switch is judged a
 The new switch against our own pathing improvements, as intake 106 read them: it moves no unit,
 and none of the six reads a trigger tag or its carrier count. Intake 113 leaves the layer file
 unchanged.
+
+## A3 intake 115 (S-0411 r57, S-0111 r57): departures without a switch
+
+Ledger: [intake115.md](intake115.md). Neither spec adds a quirk switch. Every departure they name
+states that it has no switch, so none is a layer candidate (condition 1 needs a switch with an off
+position). All are display-only: none reaches the simulation. Each is built as the spec states it.
+
+| Departure | Spec | Verdict | Built |
+|---|---|---|---|
+| Icon tips of a full tab (75 or 76 icons): the original shows none, ours shows them | S-0411 Edge cases (display-only, no switch) | no switch (the spec's) | `Session::icon_tip`, the same path for every tab |
+| The movement that leaves the slots: the original handles it without a wait, ours as an ordinary movement | S-0411 Edge cases (display-only, no switch) | no switch (the spec's) | `name_tip::NameTip::moved` |
+| A slot filled again under a resting pointer: the original chooses again when the hidden tip's lifetime would have ended, ours shows nothing until the pointer moves | S-0411 Edge cases (display-only, no switch) | no switch (the spec's) | `NameTip::update` |
+| Icon-tip text of 66 text units or more: undefined in the original, ours shows it as the name tip shows a long text | S-0411 Edge cases (departure, no switch) | no switch (the spec's) | `name_tip::make` (`cut`) |
+| Sidebar-tip boxes placed with a smaller size: ours places each box with the size it draws and wraps at *A*<sub>w</sub> − 8 | S-0411 Edge cases (display-only, no switch) | no switch (the spec's) | `sidebar_tip::slot_place`, `name_tip::place`, `sidebar_tip::wrap_width` |
+| A name tip back under a resting pointer: the original chooses again when the hidden tip's lifetime would have ended, ours shows nothing until the pointer moves and rests again | S-0111 Edge cases (display-only, no switch) | no switch (the spec's) | `NameTip::update` (unchanged) |
+| The movement that leaves the build-icon slots: the original's name tip then shows at once, ours waits | S-0111 Edge cases (display-only, no switch) | no switch (the spec's) | `NameTip::moved` |
+
+`every_spec_quirk_has_a_switch` and `every_rendering_spec_quirk_has_a_switch` name no switch
+from either spec. The layer file is unchanged, and none of the code this intake changes reads a
+switch of the layer.
