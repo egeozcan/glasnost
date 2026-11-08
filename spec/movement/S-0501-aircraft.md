@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 167
+revision: 172
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -12,7 +12,7 @@ requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-065
 Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905,
 Q-1940, Q-1941, Q-1942, Q-2237, Q-2251, Q-2252, Q-2291, Q-2326, Q-2366, Q-2436, Q-2437, Q-2438,
 Q-2506, Q-2507, Q-2508, Q-2576, Q-2577, Q-2578, Q-2579, Q-2646, Q-2647, Q-2648, Q-2649, Q-2650,
-Q-2676, Q-2677, Q-2726, Q-2792, Q-2802]
+Q-2676, Q-2677, Q-2726, Q-2792, Q-2802, Q-2821]
 supersedes: []
 ---
 
@@ -1053,21 +1053,33 @@ pad leaves its pad reservation when it takes any destination other than that pad
     - wherever table T2 reaches its pad rows (claim 18), the fall-back replaces it with the pad
       or an F8 landing spot, or makes the aircraft crash, so the aircraft does not head for the
       edge,
-    - T2's *guard* row keeps it; for an armed aircraft with no dock types this is claim 45, where
-      the *move* that *guard* queues for a human-controlled house replaces it (claim 40),
-    - a visiting aircraft without ammunition that is not on the ground in a team forgets it (T2), and its *retreat* chooses an edge
+    - T2's *guard* row keeps it, except for an aircraft of a missile type (last bullet); for an
+      armed aircraft with no dock types this is claim 45, where the *move* that *guard* queues for
+      a human-controlled house replaces it (claim 40),
+    - a visiting aircraft without ammunition that is not on the ground in a team (in a team at any
+      height for a missile type, last bullet) forgets it (T2), and its *retreat* chooses an edge
       cell again (claim 34), on its house's arrival edge, which can differ from the computed
       edge of the first choice; a pad-bound one with no pad found crashes instead (claim 45),
     - a visiting aircraft with ammunition left that is not in a team keeps it in *hunt* (T2).
       While its hunt finds no target, the fall-back gives it *hunt* again, so it heads for the
       edge cell, where claim 10 can remove it,
     - a strike aircraft with ammunition left that queues *retreat* keeps it (claim 34),
-    - a carrier slot aircraft that is not visiting falls back by its own type's rows of T2
-      (claim 35). With no dock types it keeps the edge cell itself as destination through that
+    - a carrier slot aircraft that is neither visiting nor of a missile type falls back by its
+      own type's rows of T2 (claim 35). With no dock types it keeps the edge cell itself as
+      destination through that
       fall-back, and its flight follows that cell, or claim 40's replacement for it once the
       *move* that *guard* queues for a human-controlled house has replaced it, until its next
       launch pass, where T4's attacking rows decide what it does next (claim 35); a visiting
-      one takes the visiting rows above until that pass (claim 35).
+      one that is not of a missile type takes the visiting rows above until that pass (claim 35),
+    - an aircraft of a missile type that falls back to rest takes claim 18's *Missile types*
+      rows in place of the rows of T2 that the bullets above name, whatever its height (the
+      strike aircraft's queued *retreat* above is no row of T2): the fall-back forgets the edge
+      cell at once unless the aircraft is visiting and either carries passengers or is in a
+      team, so it does not head for that cell. A visiting one that the rows put in *retreat*
+      takes an edge cell again at a *retreat* processing that finds it with no destination, on
+      its house's arrival edge with that choice's draws (claim 34), as the visiting bullet above
+      gives. This includes a carrier slot aircraft of such a type, until its next launch pass
+      (claim 35; Q-2821).
 
     So each such run end takes S-0522 claim 4's draws, one or two, whether or not the cell is
     then used. Separately, a strike cancellation queues *retreat* for the affected strike aircraft
@@ -1080,7 +1092,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
       slot aircraft heads for the edge before its next launch pass is `unmeasured`: AC21 does
       not record the slot's destination between its run end and that pass (claim 35, Open
       questions). The two visiting
-      bullets are `measurable` through AC29 part g (claim 45's type that is not landable).
+      bullets are `measurable` through AC29 part g (claim 45's type that is not landable). The
+      missile-type bullet is `measurable` through AC35 for an aircraft placed by a map that is
+      not visiting and not a carrier slot aircraft. It is `unmeasured` for a visiting one, one
+      built at a pad and a slot aircraft, as claims 18, 35 and 45 give.
     - Confidence: high, except that the outcomes the bullets take from claims 18, 34, 35, 40 and
       45 and from T2 have those claims' confidence; medium for the carrier slot aircraft's interval and for the strike
       aircraft's kept cell, which claim 34 leaves `unmeasured`; low for ignoring a map-section
@@ -1148,10 +1163,43 @@ pad leaves its pad reservation when it takes any destination other than that pad
     aircraft. Forgetting its target or destination changes neither its aim point, once fixed, nor its
     phases (S-0506 claim 14). This is the fall-back that S-0506's open question on Q-2748 leaves to this
     spec.
-    - Backing: `unmeasured`: no set-up here or in S-0506 (its scenario R26 records where such a
+    The test is the type's missile-spawn flag alone (Q-2821). It does not ask whether the type is
+    one of S-0506's three rocket types, nor whether the object was spawned by a carrier. So an
+    aircraft of a flagged type that is not a rocket type, which flies by this spec's ordinary
+    flight, takes these rows in flight too, and the same holds whether it was spawned by a
+    carrier, built at a pad or placed by a map. A carrier's slot object of such a type is not made
+    attacking at a release (S-0506 claim 8 releases a flagged object instead), but it becomes
+    attacking when, preparing, it turns returning for want of a controller target and then, with
+    ammunition left, gets one (S-0506 Slot table); its run-end fall-backs then take these rows
+    too (claim 35). A flagged object that is released is a kamikaze, which is removed after its
+    first ordinary shot (claim 20), so it has no fall-back after that shot. In flight these rows
+    forget its destination unless it is visiting and either carries passengers or is in a team.
+    Where they forget it, a moving one is given no destination (claim 8), and claim 6's *Landing
+    where it is* applies to it while it has none. A visiting one in *retreat* has none only until
+    a *retreat* processing takes a cell on its house's arrival edge (claim 34). Its dock types and
+    pad-bound field play no part in the row; only the after-the-row entries can give it a pad.
+    So a pad-bound one with ammunition left does not crash at that fall-back, where one of a type
+    without the flag that no pad grants contact would (claim 46). With its ammunition spent and
+    no contact, the after-the-row search decides as for any aircraft: a pad it finds becomes its
+    destination with *enter*, and where it finds none a pad-bound one crashes in flight (claim 46).
+    - Backing: `measurable` (scenario AC35) for the rows that an aircraft of a flagged type that is
+      not a rocket type takes in flight when it is placed by a map and is not visiting.
+      `unmeasured` for one built at a pad, whose placement AC35 does not set up, and for a visiting
+      one, whose *retreat* AC35 does not reach, and for a pad-bound one, which AC35 does not set
+      up. `unmeasured` for
+      a carrier's slot object of such a type: a released one is removed at its first shot (claim
+      20) and no set-up here gives it a fall-back before that shot, and an attacking one needs a
+      preparing slot to turn returning for want of a controller target and then receive one,
+      which no set-up here arranges. `unmeasured` for a rocket type: no set-up here or in S-0506
+      (its scenario R26 records where such a
       missile goes, not which of its behaviours sent it there) separates a missile's fall-back
       from its other behaviours
-    - Confidence: medium
+    - Confidence: medium for the flag as the only test for an aircraft of a flagged type that is
+      not a rocket type, so that it takes the ground rows in flight, whether placed by a map, built
+      at a pad or a carrier's slot object, released or attacking, and for a rocket type; the
+      outcomes of those rows are medium, as the Confidence list above rates the ground rows; what
+      follows from
+      being given no destination has claim 6's levels
 
 19. **Firing check additions.** For an aircraft the firing check of S-0301 claim 9 has two more
     refusals after every general answer has been passed:
@@ -1192,8 +1240,14 @@ pad leaves its pad reservation when it takes any destination other than that pad
     The radius is the game-wide attacking-aircraft sight range; the area reveal follows S-0409
     claim 17. This is not an unconditional reveal for every owner's shot. The exact set of
     nearby samples remains untraced here. A kamikaze slot
-    aircraft (S-0506) is removed after its ordinary shot.
-    - Backing: `measurable` (scenario AC12; S-0522 claim 11, scenario P7)
+    aircraft (S-0506) is removed after its ordinary shot, also when that shot creates no
+    projectile. Every flagged object that a carrier releases is a kamikaze (S-0506 claim 8, Terms
+    *kamikaze*), a flagged type that is not a rocket type included, so such an aircraft makes a
+    single ordinary shot and no run end after it (Q-2821).
+    - Backing: `measurable` (scenario AC12; S-0522 claim 11, scenario P7). The kamikaze's removal,
+      also after a shot that creates no projectile, is `unmeasured` here: S-0506 scenario R21
+      records a released aircraft's orders, not its shot, and no scenario here gives a kamikaze a
+      shot that creates no projectile
     - Confidence: medium; the exact nearby-sample predicate is `unmeasured` because its full
       geometry has not been independently traced
 
@@ -1987,6 +2041,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       crash of a pad-bound aircraft that obtains no pad (claim 46). So a pad-bound aircraft with
       dock types whose in-the-air answer is *yes* (Terms) that no pad grants contact crashes at its
       first processing at that height, and one that a pad grants contact at that processing turns toward that pad, with *enter* queued.
+      An aircraft of a missile type takes the rows for an aircraft on the ground there (claim 18),
+      so it crashes at these processings only as claim 46 gives for it.
       A pad-bound type with no dock types crashes only with its ammunition spent (claims 45 and
       46), so one placed in *sticky* with full ammunition does not crash at these processings; it
       keeps its destination by T2's *guard* row, as claim 45's pad-bound exception gives.
@@ -2255,7 +2311,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
     with it, even one still approaching at a distance; destruction of another building destroys
     contacts only within the distance threshold of S-0312 claim 17. A surviving approaching
     aircraft whose contact or destination is lost falls back to rest, looking for another pad.
-    A pad-bound one crashes if none can be obtained. For an aircraft in *enter*, claim 24 gives
+    A pad-bound one crashes if none can be obtained, in the cases claim 46 gives. For an aircraft
+    in *enter*, claim 24 gives
     when that fall-back comes: at once in flight with no destination, and otherwise at the
     processing claim 24 names. Sale and a refusal during approach must
     not be treated as equivalent to destruction: they destroy no aircraft by themselves; the fall-back that follows is claim 46's. A sale leaves an
@@ -2424,8 +2481,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
     (S-0506 claim 2), a slot aircraft is not driven by T4. Whether it is visiting follows the
     Terms' type test, applied at its launch placement. One that is not visiting has claim 17's
     edge cell as destination and falls back to rest by T2's rows for its own type, as any armed
-    aircraft in flight does: the fall-back sets apart missile slot types (claim 18, *Missile types*), not other
-    slot aircraft, so its dock types and pad-bound field decide as for any aircraft (claim 18).
+    aircraft in flight does, unless its type has the missile-spawn flag (below). So for a type
+    without the flag its dock types and pad-bound field decide as for any aircraft (claim 18).
     Unless an earlier row of T2 applies, with no dock types this is T2's *guard* row: *guard*, with
     claim 33's *move* for a human-controlled house, or *area guard* for a computer-controlled
     one, so it turns toward that cell or toward claim 40's replacement for it, as in claim 45.
@@ -2437,7 +2494,34 @@ pad leaves its pad reservation when it takes any destination other than that pad
     it can land on a replacement cell within that interval is not established (Open questions).
     This interval is `unmeasured`, as claim 17's backing says, and rated medium; the slot type
     with dock types is part of it, since AC21's carrier set-up uses a type without them.
-    A visiting slot aircraft instead takes T2's visiting rows at its run end, as any visiting
+    **Flagged slot types (Q-2821).** A slot object of a flagged type that is not a rocket type is
+    not made attacking at a release: S-0506 claim 8 releases it, and once released it is a
+    kamikaze that is no longer a slot aircraft, whose orders are S-0506 claim 12's and which is
+    removed after its first shot (claim 20). It becomes attacking only from returning, a state
+    it first reaches while preparing, for want of a controller target: a returning slot with
+    ammunition left and a controller target becomes attacking (T4). Its run end in that state
+    falls back by claim 18's *Missile types* rows,
+    whatever its height: claim 17's edge cell is chosen with its draws, and its dock types play no
+    part in the row. A visiting one with passengers, or in a team, takes claim 18's rows for those.
+    Otherwise the edge cell and its target are forgotten at once. Not visiting, it is in *guard* (or
+    *area guard* for a computer-controlled house); visiting, it is in *retreat* outside a team,
+    without passengers, with ammunition left or not, where an unflagged one with ammunition left
+    is in *hunt*. The
+    after-the-row entries still apply: with no ammunition and no contact it looks for a pad, and a
+    pad-bound one that finds none crashes (claims 18 and 46). Unless they give it a pad, it is
+    given no destination in flight, so claim 6's *Landing where it is* applies to it while it has
+    none. One in *guard* is given none by its *guard* processings at exactly its cruise height,
+    which are the same fall-back (claim 29). Below that height, with less than full ammunition
+    and no contact, a *guard* processing can find it a pad (claim 29). Whether one of these comes
+    before the pass, and whether it lands within the interval, is not established, as for the
+    other slot aircraft (Open question 20). One in *retreat* takes a cell on its house's
+    arrival edge as destination, with that choice's draws, at a *retreat* processing that finds it
+    with none (claim 34), and flies toward that cell; as for the visiting slot aircraft below, it
+    takes those draws only if such a processing comes before the pass. At that pass T4's
+    attacking rows decide as for any slot aircraft, and one in *retreat* drops the *move* and
+    *attack* they queue, as below. This is `unmeasured` and medium, for the reason claim 18 gives.
+    A visiting slot aircraft of a type without the flag instead takes T2's visiting rows at its
+    run end, as any visiting
     aircraft does (claims 17 and 45). With its ammunition spent it forgets its target and
     destination and is in *retreat*, unless an earlier row of T2 applies, it is on the ground in a team, or it is pad-bound (T2's after-the-row entry, claim 45). With ammunition left after its target is lost it is in
     *hunt*, and the next pass's *move* or *attack* applies to it as above. An aircraft in
@@ -2461,8 +2545,9 @@ pad leaves its pad reservation when it takes any destination other than that pad
     - Backing: `measurable` (scenario AC21); `unmeasured` for the interval between a run end and
       the next launch pass of a slot aircraft that is not visiting, which AC21 does not record
       (Open question 20); `measurable` for a visiting slot aircraft's run end, its *retreat* and
-      that pass (scenario AC29 part h)
-    - Confidence: high; medium for that interval and for the visiting slot aircraft's rows
+      that pass (scenario AC29 part h); `unmeasured` for a flagged slot type (claim 18)
+    - Confidence: high; medium for that interval, for the visiting slot aircraft's rows and for a
+      flagged slot type
 
 36. **Loss of a slot aircraft.** S-0506 claim 9 owns loss notification and regeneration.
     A notification for a slot aircraft with health below 1 or already released empties its slot
@@ -2530,6 +2615,11 @@ pad leaves its pad reservation when it takes any destination other than that pad
       order. A visiting aircraft that ends its run without ammunition therefore takes these
       draws twice: at the run end, and again when its *retreat* chooses (claim 34), except one on the ground in a team (T2), a pad-bound one, which crashes or gets a pad at the run end's fall-back instead of retreating (claim 45), and a carrier slot aircraft whose next
       launch pass gives it its spawner as destination before a *retreat* processing (claim 35).
+      A visiting aircraft of a missile type that carries no passengers is in *retreat* after its
+      run end with ammunition left as well (claim 18, *Missile types*), so it takes them twice
+      then too, a pad-bound one included, since with ammunition left the after-the-row entry does
+      not apply. One in a team, at any height, keeps its target and destination with *guard*
+      (claim 18) and takes them once.
       Spy-plane arrival uses the same selection (S-0513
       claim 43), as do the spy exit destinations of claim 34 on their computed opposite edge.
       Choosing the edge itself takes no draw (S-0522 claim 5).
@@ -2550,6 +2640,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       through AC19's Q-1755 part a with the same recorder; edge-cell draws are
       `measurable` through AC20, AC22, AC29 and S-0522 scenario P3. Sinking splash draws are
       `unmeasured`: AC5 and AC22 have no established normal-input witness for aircraft sinking.
+      The edge-cell draws of a visiting aircraft of a missile type, twice or once in a team,
+      are `unmeasured`: no scenario here sets up a visiting aircraft of a missile type (claim 17).
       The smoke switch-off alternative is `unmeasured`, a design rule of our engine
       rather than an outcome of the original.
       The smoke animation's type, point, attachment and settings are `measurable` (AC5 parts
@@ -2565,14 +2657,17 @@ pad leaves its pad reservation when it takes any destination other than that pad
       `unmeasured` here. The absent-type
       rule is `unmeasured`: stock data always defines the type, and the original's result is
       undefined.
-    - Confidence: high (the listed draws other than the sinking splashes; the smoke
+    - Confidence: high (the listed draws other than the sinking splashes and a visiting
+      missile type's edge cells; the smoke
       animation's type, point after the tick's movement, attachment and settings, for the
       entries part d varies and the aircraft types parts b and d run; its creation's
       stage-delay draw right after *u*; the image shift's leaving the point unmoved); medium
       (no other rules entry naming the type, and no other aircraft-type field moving or
       attaching the smoke, read from the original but beyond what a run can vary; the
       sinking splash draws, their cadence, axes and height, read from the original but with
-      no witness; the draws of the smoke's start event and their place, whose composition
+      no witness; the edge-cell draws of a visiting aircraft of a missile type, which no
+      scenario sets up; the draws of the smoke's start event and their place,
+      whose composition
       belongs to S-0109 claim 13 and the specs it delegates to; the absent-type rule, an
       engine decision); low
       (the unresolved draw inventory)
@@ -2893,8 +2988,9 @@ pad leaves its pad reservation when it takes any destination other than that pad
 ### After the run
 
 45. **Armed aircraft with no dock types after the run (Q-1756, Q-1776).** An armed aircraft
-    with no dock types that is neither visiting nor a carrier slot aircraft, and carries no
-    passengers (T2's passenger rows come first), keeps claim 17's
+    with no dock types that is neither visiting nor a carrier slot aircraft nor of a missile type
+    (claim 18, *Missile types*, forgets the cell), and carries no passengers (T2's passenger rows
+    come first), keeps claim 17's
     edge destination through its fall-back (table T2's *guard* row). That cell lies outside the
     usable area (S-0522 claim 4), except in that claim's no-acceptable-candidate case, which
     arises only on the north edge when every cell of the local area's top row lies below the
@@ -2907,8 +3003,9 @@ pad leaves its pad reservation when it takes any destination other than that pad
     short, and rests in its T2 resting behaviour, whatever its owner; a pad-bound one does not land, by claim 6's pad-bound rule, and behaves
     as the pad-bound exception below says (this case is `unmeasured` and low, as S-0522 claim
     4's fall-back is: no set-up here makes every cell of that top row lie below that level). In every other case the cell is
-    outside, and the rest of this claim describes that case. A carrier slot aircraft that is not
-    visiting is excluded here only because claim 35 owns its flight; between its run's end and
+    outside, and the rest of this claim describes that case. A carrier slot aircraft that is
+    neither visiting nor of a missile type is excluded here only because claim 35 owns its
+    flight; between its run's end and
     its next launch pass claim 35 applies this claim's rule to it. The aircraft's flight follows the
     cell at once (claim 17). The
     aircraft therefore neither lands at nor holds above its last firing spot or its target after
@@ -2963,8 +3060,14 @@ pad leaves its pad reservation when it takes any destination other than that pad
     - **A visiting aircraft**, such as one of a type that is not both selectable and landable
       (Terms), does not reach the rules above: T2's visiting rows apply to it (Q-1776 questions
       2 and 3). The owner changes neither case below. A visiting carrier slot aircraft takes the
-      same rows; its next launch pass makes its spawner its destination (claim 35).
-      - With its ammunition spent, unless it is on the ground in a team, it forgets its target (claim 17) and its destination and
+      same rows; its next launch pass makes its spawner its destination (claim 35). A visiting
+      aircraft of a missile type takes claim 18's *Missile types* rows instead: outside a team and
+      without passengers it forgets its target and the edge cell and is in *retreat* whether or not
+      it has ammunition left, so the hunt case below does not apply to it. Its *retreat* then
+      chooses an edge cell as in the first case below, and with ammunition left the after-the-row
+      entry does not apply, as the second case gives.
+      - With its ammunition spent, unless it is on the ground in a team (in a team at any height
+        for a missile type, claim 18), it forgets its target (claim 17) and its destination and
         queues *retreat* (T2), whose first processing chooses an edge cell again with S-0522
         claim 4's draws (claims 34 and 37). It flies there and is removed, without dying, as
         soon as its position is outside the usable area (claim 10). Neither flight flag changes
@@ -2974,7 +3077,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
         46) instead of retreating.
       - With ammunition left, the after-the-row entry does not apply (it needs no ammunition),
         so a pad-bound visiting type is treated as any other visiting type here.
-      - With ammunition left after its target is lost, outside a team, it is in *hunt* (T2) and
+      - With ammunition left after its target is lost, outside a team, one that is not of a
+        missile type is in *hunt* (T2) and
         keeps claim 17's edge destination while its hunt finds no target, so it flies toward
         that cell; a target that the hunt finds starts a new run. With neither flight flag it is
         removed, without dying, when its position leaves the usable area on the way, provided
@@ -2992,7 +3096,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       does not (claim 6): it has no target or no ammunition, and its destination point lies at
       the surface. The fly-back flag acts only on an aircraft that may leave the map now (claims
       4 and 10).
-    - A pad-bound type with no dock types that is not visiting is the exception (the visiting
+    - A pad-bound type with no dock types that is neither visiting nor of a missile type is the
+      exception (the visiting
       case is above). With its ammunition spent it crashes at this fall-back, by T2's after-the-row entry, since no pad can be found (claim
       46). With ammunition left it keeps the edge cell in T2's resting behaviour for it (*guard*,
       or *area guard* for a computer-controlled house outside a team) without a *move*, because
@@ -3007,14 +3112,16 @@ pad leaves its pad reservation when it takes any destination other than that pad
       edge cell with its rest there that follows are `unmeasured`, as for T2's other computer rows
       (claim 18). The hunt case of a type that is not landable with a flight flag, beyond the
       border, is `unmeasured`. The height test of the computer owner's *area guard*, above its
-      cruise height included, is `measurable` (scenario AC29 part j, an attempt).
+      cruise height included, is `measurable` (scenario AC29 part j, an attempt). A visiting
+      aircraft of a missile type is `unmeasured`: AC35's aircraft is not visiting.
     - Confidence: medium for the height test of *area guard* and its branch above the cruise
       height; medium for the replacement cell and its draws, the landing there, the pad-bound
       exception and the crash of a pad-bound type without ammunition that it leads to, the crash of
       a pad-bound visiting type without ammunition instead of its retreat, and a type that is not
       landable, until AC29 runs; medium (`unmeasured`) for the computer case's touchdown at the
       edge cell and its rest there (its *area guard* is rated in claim 18); low for the flagged
-      hunt case beyond the border. High for no removal of an aircraft that is not visiting.
+      hunt case beyond the border; medium for a visiting aircraft of a missile type, as claim 18
+      rates the flag test. High for no removal of an aircraft that is not visiting.
 
 46. **Nowhere to land (Q-1775).** An armed aircraft in flight that must return to a pad (pad-bound)
     and that ends its run, or loses its pad, with no pad granting it contact crashes at that
@@ -3026,8 +3133,12 @@ pad leaves its pad reservation when it takes any destination other than that pad
     ammunition spent and no contact, T2's after-the-row entry still makes a new pad search, as
     after every row (claim 18): it then gets a pad it finds as destination, with *enter*, and
     crashes when it finds none, like any other pad-bound aircraft in flight. By the same entry a
-    pad-bound type with no dock types crashes only with its ammunition spent (claim 45). The
-    crash comes:
+    pad-bound type with no dock types crashes only with its ammunition spent (claim 45). An
+    aircraft of a missile type takes the rows for an aircraft on the ground at any height (claim
+    18, *Missile types*), so it is treated the same way at every height: with ammunition left, or
+    while it holds a contact, it does not crash at that fall-back, and with its ammunition spent
+    and no contact the after-the-row search decides, a pad-bound one that finds no pad crashing
+    in flight. The crash comes:
     - when its house has no building of any of its dock types (claims 18 and 21, T2),
     - when every such building has no free contact place or does not accept it (claims 21 and
       22): a pad that frees up later does not matter, since the crash has already begun,
@@ -3107,7 +3218,9 @@ pad leaves its pad reservation when it takes any destination other than that pad
       absence of debris and of the explosion-list animation, each where the type has them).
       `unmeasured` for an aircraft in flight whose in-the-air answer is *no* when it falls back
       with its ammunition spent (a new pad search, and the crash when none is found): no set-up
-      here ends a pad-bound aircraft's run below that height. `unmeasured` for the tag raised at
+      here ends a pad-bound aircraft's run below that height. `unmeasured` for a pad-bound
+      aircraft of a missile type, with ammunition left or spent: no set-up here makes a
+      pad-bound type flagged. `unmeasured` for the tag raised at
       the crash start, which no fixture here records, for a
       refusal that ends the contact without a sale or a
       destruction, since no set-up is known that makes a pad do that during an approach, and for
@@ -3130,7 +3243,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       S-0312 claim 16 rates its non-rocket impact rules, for the take-off and crash after a sale
       while it stands on the pad, with ammunition, and with none, for the
       fall-back after the notice outside *enter*, for the in-flight case whose in-the-air
-      answer is *no* (`unmeasured`), and for the crash with ammunition left after a sale, until
+      answer is *no* (`unmeasured`), for a pad-bound aircraft of a missile type (`unmeasured`),
+      and for the crash with ammunition left after a sale, until
       AC19's sale run runs. Low for the tag raised at the crash start and
       for the crash and the destination cleared at a refusal without a sale (both `unmeasured`).
       Medium for the planted bomb's handling, until AC29 part i runs, and for its timer during
@@ -4542,7 +4656,8 @@ entries follow every row from the fourth on, the visiting rows included. So a pa
 visiting aircraft in flight with no ammunition and no contact crashes when its pad search finds
 no pad, instead of taking the *retreat* that its row names (claims 45 and 46); with a pad found
 it gets that pad and *enter*. An object of a missile type takes the rows for an aircraft on the
-ground whatever its height (claim 18, *Missile types*). A *sleep* that the first row restores
+ground whatever its height, a flagged type that is not a rocket type included (claim 18, *Missile
+types*). A *sleep* that the first row restores
 to a pad-bound aircraft in flight with no destination lasts until its landing start, which falls
 back to rest again (claims 6 and 52).
 
@@ -6654,6 +6769,43 @@ listed in Open questions are not claimed confirmed by these scenarios.
     end's tick, if it heads for an edge cell, or if it touches down in a cell without a building
     it is in contact with.
 
+- **AC35 A flagged aircraft type that is not a rocket type (claims 17, 18 and 29; Q-2821).**
+  Record per tick each test aircraft's current and queued behaviour, target, destination, pad
+  contact, ammunition, cell and height, and the scenario stream's draws. 3 runs. Only the state
+  at the end of a tick counts: claim 17's edge cell is chosen and replaced within the run end's
+  tick, so a destination held only within a tick is not read.
+  - Set-up: skirmish on open flat ground, director and mods off, a human-controlled test
+    house with scripted input, a computer-controlled test house with no team and no script, a
+    named test map and named test rules. Each order that house's computer player gives is
+    recorded, and the run is void from that tick.
+    - *P*: a pad of a named test copy of a stock helipad type with one docking place (test
+      value), built by the human-controlled house with scripted input before the record starts.
+    - *F*: a named test copy of a stock armed, landable and selectable aircraft type that is not
+      pad-bound, with *P*'s type as its only dock type, a maximum ammunition of at least 3, a
+      primary weapon that is not a camera weapon and the missile-spawn flag set (test values), not
+      named as any rocket type, so it is not visiting (Terms). A map entry of the human-controlled
+      house, standing landed on open ground at least 20 cells from *P*.
+    - *T*: a named test copy of a stock unarmed vehicle type whose strength one shot of *F*'s
+      weapon uses up (test value). A map entry of the computer-controlled house in *guard*, at least
+      15 cells from *P* and from *F*, with no other object of that house within 30 cells.
+
+    Procedure: the harness gives *F* an attack order on *T*. *T* dies at *F*'s first hit, so *F*'s
+    run ends in flight with ammunition left (claims 17 and 32). Record for 300 ticks after that.
+    Repeat with a variant *F*′ whose test rules leave the flag absent, otherwise the same.
+    Expected for *F*: at the end of the tick of its run's end, no target, no destination, no
+    contact and *guard* current, with that tick's S-0522 claim 4 draws taken. At the end of no
+    later tick is an edge cell its destination. While its height is exactly its cruise height,
+    each *guard* processing is the same fall-back (claim 29), so it gets no destination; it
+    descends under claim 6's *Landing where it is*. Once
+    below its cruise height, in *guard*, with a round spent and no contact, it may look for a pad
+    and get *P* with *enter* (claim 29); the tick and its height then are recorded. Expected for
+    *F*′: at the end of the tick of its run's end, *P* as its destination with *enter* queued or
+    current and a contact with *P*, and it flies to *P* and docks (claim 18). Falsified if, at the
+    end of the tick of its run's end, *F* holds a target, a destination or a contact, or has
+    *enter* current or queued. Falsified too if *F* has an edge cell as its destination at the end
+    of any tick, if *F* gets *P* as its destination at a tick at whose start its height was exactly
+    its cruise height, or if *F*′ does not have *P* with *enter* at the end of that tick.
+
 ## Changes for other specs
 
 - **S-0303 Terms (*Tracked flying object*).** For aircraft, "an aircraft-kind object in ordinary
@@ -6810,7 +6962,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
   behaviour takes when it finds no destination" could point to claim 18 here (*Missile types*):
   an object of a missile type takes T2's rows for an aircraft on the ground at any height, so the
   row itself gives it no destination; T2's after-the-row entries then apply as after any row. Level and backing: medium (`unmeasured`), as claim 18
-  here rates it.
+  here rates it. Its words "which treats missile slot types apart from other aircraft (S-0501
+  claim 35)" could read "which treats an object of a type with the missile-spawn flag apart
+  from other aircraft, a flagged type that is not a rocket type included (S-0501 claim 18,
+  *Missile types*)" (Q-2821). Level and backing: medium, as claim 18 here rates the flag
+  test.
 
 ## Open questions
 
@@ -6881,8 +7037,8 @@ destination once that touchdown has made it forget the edge cell and it rests th
 20. A carrier slot aircraft that is not visiting, between its attack run's end and the next
     launch pass (claims 17 and 35): whether a slot type with no dock types can reach and land on
     claim 40's replacement cell before that pass (T4), and how a slot type with dock types
-    fares in that interval. The interval is
-    at most 10 ticks, and AC21 does not record the slot's destination in it.
+    fares in that interval, a flagged slot type in *guard* or *retreat* included (claim 35). The
+    interval is at most 10 ticks, and AC21 does not record the slot's destination in it.
 21. A computer-controlled house's armed aircraft with no dock types, outside a team, in *area
     guard* away from its cruise height (claim 45): S-0215 claim 26's search there can give it a
     target, and a later processing away from that height that finds it still holding the target
@@ -7000,3 +7156,11 @@ destination once that touchdown has made it forget the edge cell and it rests th
     the path of an aircraft without ammunition from its run's end back to its pad, the restore of
     the destination put aside, and the stage from which a restored *enter* goes on after a run
     started away from the pad (medium and low in claim 52).
+35. Q-2821 is answered by claim 18 (*Missile types*), with claims 17, 20, 35 and 45 and T2's note.
+    The type's missile-spawn flag alone decides that an aircraft takes the rows for an aircraft
+    on the ground at any height, a flagged type that is not a rocket type included, whether it
+    was placed by a map, built at a pad or spawned by a carrier (medium). A carrier's flagged
+    slot object is released as a kamikaze and removed at its first shot, or becomes attacking
+    from returning, and then takes those rows at its run ends (medium, `unmeasured`). Not
+    traced: whether such a slot aircraft lands within the interval before the next launch pass
+    (Open question 20).
