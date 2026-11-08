@@ -174,3 +174,7 @@ A grep of the 22 `Seam:` comments under `crates/deterministic` (no counter in th
 ## Own AI (M8 Track B)
 
 The sections of steps B1 to B7 (*Own AI (M8 steps B1 and B2)*, *Own AI (M8 step B3: the dominator takes units)*, *Own AI (M8 step B5: tempo after expansion)*, *Own AI (M8 step B4: gate margins)*, *Own AI (M8 step B6: the anti-air count and the tempo misses)*, *Own AI (M8 step B7: the dominator's grant and the think tick)*) are in [own-ai-m8-track-b.md](../own-ai-m8-track-b.md).
+
+## Own AI (M8: a harvester stalled in unload)
+
+With `quirks.unload_without_contact_stalls` on (S-0402 claim 11), a harvester whose refinery is lost while it unloads stays in *unload* until an order comes. The harvester rule (`Script::think_with`, step 4) now also sends a harvester to harvest when `scripted::stalled_unload` holds: its *unload* has lasted more than `UNLOAD_STALL` ticks (150, `// design:`), and it has no contact, no destination, nothing queued and is out of the unloading state. A harvester really unloading holds its refinery as contact, so it is never re-ordered. AI game format 83; the save format (117) is unchanged. In the quick lane (seeds 7 to 10, against main 0383a5b) the rule acted in 5 of 36 games, and changed the winner of one (seed 9, map 0, sides 1 and 2, the intake 113 stall). Details, traces and the list of other units left in a behaviour until an order are in [ai-stalled-harvester.md](../m8-claims/ai-stalled-harvester.md).

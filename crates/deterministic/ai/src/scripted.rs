@@ -26,7 +26,8 @@
 //!    next to the base, the house builds power plants on the legal cells
 //!    nearest the explored water, so that the base grows toward it;
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
-//!    to harvest; a slave miner counts as a harvester (and, deployed, its
+//!    to harvest, and harvesters stalled in *unload* with no refinery
+//!    contact ([`stalled_unload`]); a slave miner counts as a harvester (and, deployed, its
 //!    building too), needs no refinery and stands for one (so a house
 //!    whose slave miners have all packed up to move on orders no new
 //!    refinery building), and is sent to harvest at the
@@ -67,7 +68,9 @@ use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;
 use glasnost_sim::combat::{check, range, weapon};
 use glasnost_sim::econ::TypeRef;
-use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
+use glasnost_sim::econ::{
+    deploy, harvest, placement, production, resource, sell, shroud, slaves, tech,
+};
 use glasnost_sim::orders::Order;
 use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::regions::{self, Reach};
@@ -458,6 +461,43 @@ pub fn idle(w: &World, id: ObjectId) -> bool {
                     | Some(Behaviour::Stop)
                     | Some(Behaviour::Move)
             )
+    })
+}
+
+/// How many ticks a harvester's *unload* must have lasted before
+/// [`stalled_unload`] counts it as stalled.
+// design: (M8 AI stalled harvester) a stalled harvester stays in *unload*
+// for good (S-0402 claim 11), so the wait only has to pass the few ticks
+// between a lost contact and the next processing of *unload*, in which a
+// harvester whose contact ended otherwise (or under the play-fixes layer)
+// moves on by itself. The clock a person reads is the harvester standing
+// still where no refinery is: ten think periods is about what a person
+// takes to notice it and click it, and costs a house one short pause of
+// one harvester's income, not the tens of thousands of ticks the quick
+// lane's stalled harvester stood (intake 113 ledger). The behaviour's start tick is the
+// only clock the harvester shows, so the wait counts from the start of
+// *unload*, the docking, which is never later than the lost contact.
+const UNLOAD_STALL: i32 = 150; // nocite: tuning of our own opponent
+
+/// Whether harvester `id` stands stalled in *unload*: *unload* current for
+/// more than [`UNLOAD_STALL`] ticks, out of the unloading state, with no
+/// contact, no destination and nothing queued. That is S-0402 claim 11's
+/// *Contact lost otherwise while unloading* (its refinery destroyed under
+/// it, `quirks.unload_without_contact_stalls`): the harvester keeps its
+/// load and stays put until an order gives it a behaviour. A person sees
+/// a harvester standing still with no refinery beside it and sends it to
+/// harvest; so does the script. A harvester that really unloads holds its
+/// refinery's contact (every other row of claim 11 needs one), and an
+/// ordered one has a destination or a queued behaviour, so neither counts.
+pub fn stalled_unload(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        // spec: S-0402 claim 11 (row 1, not in contact with anything, and *Contact lost otherwise while unloading*: nothing queued, it stays in unload, out of the unloading state, processed every tick; quirks.unload_without_contact_stalls)
+        o.beh.current == Some(Behaviour::Unload)
+            && o.contact.is_none()
+            && o.dest.is_none()
+            && o.beh.queued.is_none()
+            && !harvest::in_unloading_state(w, id)
+            && w.tick - o.beh.start_tick > UNLOAD_STALL
     })
 }
 
@@ -1768,9 +1808,9 @@ impl Script {
                         dest: Some(Target::Cell(c)),
                     });
                 }
-            } else if !refineries.is_empty() && (resting || idle(w, h)) {
-                // A harvester that rests (whatever destination it kept) or
-                // is idle is sent to harvest.
+            } else if !refineries.is_empty() && (resting || idle(w, h) || stalled_unload(w, h)) {
+                // A harvester that rests (whatever destination it kept), is
+                // idle or stands stalled in *unload* is sent to harvest.
                 out.push(Order::Behaviour {
                     actor: h,
                     behaviour: Behaviour::Harvest,

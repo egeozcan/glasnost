@@ -25,6 +25,8 @@
 //! - M8 step B8: a house whose harvesters wait for a lost refinery clears
 //!   the building line for it (cancels the item there) and orders it before
 //!   power; selling out, it keeps the construction yard that builds it.
+//! - M8 AI stalled harvester: a harvester left in *unload* without contact
+//!   (S-0402 claim 11, its refinery destroyed under it) is sent to harvest.
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
@@ -34,7 +36,7 @@ use glasnost_sim::econ::production::{Hold, LineKind};
 use glasnost_sim::econ::{TypeRef, tech};
 use glasnost_sim::objects;
 use glasnost_sim::orders::{self, Order};
-use glasnost_sim::rules::Kind;
+use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, World};
 
@@ -1346,4 +1348,102 @@ fn a_house_with_no_harvester_rebuilds_the_refinery_that_brings_one() {
         "a refinery and its harvester by tick {}",
         w.tick
     );
+}
+
+/// House 0's orders to `h` among `orders`.
+fn orders_to(orders: &[Order], h: ObjectId) -> Vec<Order> {
+    orders
+        .iter()
+        .filter(|o| o.actor() == Some(h))
+        .cloned()
+        .collect()
+}
+
+/// Runs `w` one tick at a time until house 0's brain thinks with one of
+/// its harvesters unloading at a refinery in contact; returns the harvester
+/// and the refinery.
+fn unloading_at_a_think(w: &mut World, brain: &Brain) -> (ObjectId, ObjectId) {
+    for _ in 0..12_000 {
+        testkit::run(w, 1);
+        if !brain.thinks_at(w.tick) {
+            continue;
+        }
+        for h in of_role(w, Role::Harvester) {
+            if glasnost_sim::econ::harvest::in_unloading_state(w, h)
+                && let Some(r) = w.obj(h).and_then(|o| o.contact)
+            {
+                return (h, r);
+            }
+        }
+    }
+    panic!("no harvester unloading at a think by tick {}", w.tick);
+}
+
+// spec: S-0402 claim 11 (*Contact lost otherwise while unloading*: the refinery destroyed under a harvester that unloads, with nothing queued, leaves it in unload for good with its load, quirks.unload_without_contact_stalls on, the reference default) and PLAN §4.7 (our design, M8 AI stalled harvester): the house sends that harvester to harvest with the order a person gives, once its unload has lasted the wait, and the order frees it; a harvester unloading in contact with its refinery gets no order, however long it has unloaded.
+#[test]
+fn sends_a_harvester_stalled_in_unload_to_harvest() {
+    let map = fixture::map();
+    let mut w = settled(&map, 0);
+    assert!(
+        w.rules().quirks.unload_without_contact_stalls,
+        "the reference ruleset keeps the quirk"
+    );
+    // A second refinery, so that the house still owns one when the first
+    // is destroyed (the plan's harvester rule needs a refinery).
+    testkit::spawn(&mut w, Kind::Building, "PROC", 0, fixture::at(0, 8), 0);
+    let brain = Brain::with_plan(&w, &map, H, plan(2));
+    let (h, r) = unloading_at_a_think(&mut w, &brain);
+
+    // Unloading in contact: no order, even with an unload long past the wait.
+    let mut long = w.clone();
+    long.obj_mut(h).unwrap().beh.start_tick -= 10_000;
+    assert!(!glasnost_ai::scripted::stalled_unload(&long, h));
+    let orders = Brain::with_plan(&long, &map, H, plan(2)).think(&long);
+    assert!(orders_to(&orders, h).is_empty(), "{orders:?}");
+
+    // The refinery is destroyed under it: the harvester survives (it is
+    // beyond the contact kill distance of S-0312 claim 17) and stalls.
+    glasnost_sim::combat::death::kill(
+        &mut w,
+        r,
+        &glasnost_sim::combat::damage::Hit {
+            amount: 100_000,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+    assert!(w.obj(r).is_none_or(|o| o.health <= 0 || !o.on_map));
+    assert!(has_role(&w, Role::Refinery), "the second refinery stands");
+    let load = glasnost_sim::econ::harvest::load(&w, h);
+    assert!(load.iter().any(|&n| n > 0), "it still holds a load");
+    testkit::run(&mut w, 300);
+    let o = w.obj(h).expect("the harvester survives");
+    assert_eq!(o.beh.current, Some(Behaviour::Unload), "stalled in unload");
+    assert_eq!((o.contact, o.dest, o.beh.queued), (None, None, None));
+    assert_eq!(glasnost_sim::econ::harvest::load(&w, h), load, "load kept");
+    assert!(glasnost_ai::scripted::stalled_unload(&w, h));
+
+    // The next think sends it to harvest, the order a person gives.
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    while !brain.thinks_at(w.tick) {
+        testkit::run(&mut w, 1);
+    }
+    let orders = orders_to(&brain.think(&w), h);
+    let harvest = Order::Behaviour {
+        actor: h,
+        behaviour: Behaviour::Harvest,
+        attack_move: false,
+        target: None,
+        dest: None,
+    };
+    assert_eq!(orders, vec![harvest.clone()]);
+    assert!(orders::issue(&mut w, H, harvest), "the order is taken");
+    testkit::run(&mut w, 30);
+    let o = w.obj(h).unwrap();
+    assert_ne!(o.beh.current, Some(Behaviour::Unload), "it left unload");
+    assert!(!glasnost_ai::scripted::stalled_unload(&w, h));
 }
