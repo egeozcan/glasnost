@@ -799,3 +799,18 @@ search and no blocked step. It does change a release: with it on, `release::grou
 the stranded unit stands at the exit point (`release::stranded_at`). None of the six improvements
 reads that test, and `rally_point_shared` fills a released unit's rally move the same way under
 both positions. Intake 116 leaves the layer file unchanged.
+
+## A3 intake 118 (S-0501 r167 and r172): four aircraft switches checked, no new switch
+
+Ledger: [intake118.md](intake118.md). S-0501 r167 (Q-2802) and r172 (Q-2821) add no quirk. The
+brief asks for four switches to be checked against them: each keeps its default, on (the
+original), in `quirks.rs`, and each has tests in both positions. Three verdicts stand as given
+before. `landing_own_cell_no_result` had no C7 verdict at all, so it is judged here for the first
+time. The layer file is unchanged.
+
+| Switch | Spec | Verdict | Reason, tests |
+|---|---|---|---|
+| `aircraft_descent_touchdown_untested` | S-0501 claim 7, Edge cases; r167 claim 29 (*On the pad*) | rejected, as at intakes 102 and 104 | r167 adds the touchdown at a pad in *sticky* in both positions and rates the off position `unmeasured`, a design alternative. Condition 2 still fails for intake 102's reasons. Tests: intake 102's; `claims_s0501_r167::ac33_c_it_lands_at_the_pad_and_rests_in_sticky_with_enter_queued` runs both positions. |
+| `aircraft_unit_step_stall` | S-0501 claims 4 and 5, F3, Edge cases; r167 claim 29 | near miss, not admitted, as in part 3 | r167 adds that a *V* of 1 in *sticky* "stands still there ... for as long as *sticky* lasts" at the hover's facings. That is a stuck unit, but condition 3 is unchanged: the off position changes F3's 1-lepton step for every aircraft at those facings, not only the stalled one. Tests: `claims_s0501::claim_6_unit_step_hover_stops_a_move` (both positions), `claim_5_unit_step_stall_off_advances_and_fires` (off), `f3_unit_step_by_facing`. |
+| `unarmed_pad_bound_hover` | S-0501 claim 50, Edge cases | rejected, as at intake 76 | Neither r167 nor r172 changes its text or the rows it acts on: r172's missile-type rows are for armed rows of T2 and the after-the-row search, and this switch acts on T2's last unarmed row only. Tests: intake 76's (`claims_s0501_r93`). |
+| `landing_own_cell_no_result` | S-0501 claim 41, F8, Edge cases | first verdict: not admitted at this intake; flagged to the lead as a candidate | (1) Holds: the Edge case states the off position (the failed own-cell search is no successful building choice, and the other-object fallback and then the aircraft's own cell follow), built in `air::landing_spot`. (2) Arguable: on, the landing destination is the placeholder at map cell (0, 0), which the aircraft discards and requests again, "possibly heading for that map corner". A flight toward a map corner in place of a landing is close to `aircraft_offmap_stop_start`'s admitted case (an order carried out as a flight away), but the text says "possibly", and no play note or request names it. (3) Holds: off acts only on an aircraft whose own-cell search finds nothing. r167 and r172 do not touch it. Admitting it would change the layered rules hash and is outside this intake's spec scope, so the lead decides. Tests: `claims_s0501::claim_41_own_cell_no_result_gives_the_placeholder` (on) and `claim_41_own_cell_no_result_quirk_off_falls_back` (off). |
