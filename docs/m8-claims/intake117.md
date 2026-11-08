@@ -64,6 +64,7 @@ code equals the rebased branch's.
 ## Formats
 
 Behaviour changes what a saved game and an AI game replay to, and the rules gain a quirk field, so
-the save format goes to 118 and the AI game format to 84. No hashed state is added. The
-determinism gate's goldens were regenerated on the branch and none moved: no gate scenario loses
-a missile spawner's controller target while a pending target waits.
+the save format goes to 119 and the AI game format to 85, one past intake 116's 118 and 84 on
+main bdb91f1. No hashed state is added. The determinism gate's goldens were regenerated on the
+branch rebased onto bdb91f1 and none moved: no gate scenario loses a missile spawner's
+controller target while a pending target waits.
