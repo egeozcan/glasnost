@@ -420,7 +420,8 @@ fn hunt_scene(r: &Ruleset, name: &str, h: u8) -> (World, ObjectId, ObjectId) {
 fn next_cell_destination(w: &World, v: ObjectId) -> bool {
     let c = cell_of(w, v);
     w.obj(v).unwrap().target.is_none()
-        && dest_cell(w, v).is_some_and(|d| d != c && (d.x - c.x).abs() <= 1 && (d.y - c.y).abs() <= 1)
+        && dest_cell(w, v)
+            .is_some_and(|d| d != c && (d.x - c.x).abs() <= 1 && (d.y - c.y).abs() <= 1)
 }
 
 // spec: S-0215 r137 claim 19 case 2, Hunting vehicles in an arena fight, and Q-2782 (scenario B6 part f1: a computer-controlled house's vehicle in hunt with the scatter property and without the retaliate property, standing still and free, is sent the request at a hit by an enemy and at one that names no attacker; isolated on open flat ground it holds a destination in a cell next to its own and no target at the end of the hit's tick, whatever the player-scatter setting); M-0024
@@ -447,7 +448,10 @@ fn claim_19_b6_f3_control_needs_the_scatter_property() {
     let (mut w, v, a) = hunt_scene(&b6_fg(true, false), "BUGGY", 0);
     w.houses[1].human = true;
     hit(&mut w, v, Some(a));
-    assert!(!scattered(&w, v), "a human-controlled owner without the setting");
+    assert!(
+        !scattered(&w, v),
+        "a human-controlled owner without the setting"
+    );
 }
 
 // spec: S-0215 r137 claim 19 case 2 and Q-2782 (scenario B6 parts g1 and g2: with the scatter and the retaliate properties, a hit by an attacker of the actor's own house or of a house allied both ways sends the request, since S-0309 claim 18 refuses retaliation only on the alliance; the control: the same firer of an enemy house within F7's distance is retaliated against, so every other condition of claim 18 holds); M-0025
@@ -473,7 +477,11 @@ fn claim_19_b6_g1_g2_an_own_or_allied_attacker_gives_case_2() {
     let (mut w, v, _) = hunt_scene(&r, "BUGGY", 0);
     let a = attacker(&mut w, 0, -7, 0);
     hit(&mut w, v, Some(a));
-    assert_eq!(w.obj(v).unwrap().target, Some(Target::Object(a)), "an enemy is retaliated against");
+    assert_eq!(
+        w.obj(v).unwrap().target,
+        Some(Target::Object(a)),
+        "an enemy is retaliated against"
+    );
 }
 
 // spec: S-0215 r137 claim 19 case 2 and Q-2782 (scenario B6 part g3: an enemy firer whose armour gives the actor's weapon a versus value of 0 may not be retaliated against, S-0304 claim 3 and S-0309 claim 18, so case 2 sends the request; the actor never takes it as target); M-0025
@@ -482,13 +490,23 @@ fn claim_19_b6_g3_an_enemy_the_weapon_cannot_harm_gives_case_2() {
     let mut r = b6_fg(true, true);
     // CART's weapon (Gun, warhead HE) has a versus value of 0 against
     // CRUSHER's armour (Heavy, the sixth armour class).
-    r.sim.warheads.get_mut("HE").unwrap().verses.as_mut().unwrap()[5] = Decimal("0".into());
+    r.sim
+        .warheads
+        .get_mut("HE")
+        .unwrap()
+        .verses
+        .as_mut()
+        .unwrap()[5] = Decimal("0".into());
     r.sim.vehicles.get_mut("CRUSHER").unwrap().primary = Some("Long".into());
     let (mut w, v, a) = hunt_scene(&r, "CRUSHER", 0);
     hit(&mut w, v, Some(a));
     assert!(next_cell_destination(&w, v), "{:?}", w.obj(v).unwrap().dest);
     testkit::run(&mut w, 30);
-    assert_ne!(w.obj(v).unwrap().target, Some(Target::Object(a)), "never its target");
+    assert_ne!(
+        w.obj(v).unwrap().target,
+        Some(Target::Object(a)),
+        "never its target"
+    );
 }
 
 // spec: S-0215 claim 19 case 2 (refusals: a target, a destination with the locomotor moving, a tether link, each stops the request; the hits enter at damage::apply so that the state set just before stands at the hit)

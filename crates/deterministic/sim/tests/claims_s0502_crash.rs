@@ -116,7 +116,10 @@ fn s0312_claim_15_d11_h_no_crash_from_a_deck() {
             assert!(w.obj(g).is_none(), "it leaves play");
             assert_eq!(w.rng.taken(), before, "no tumbling draws");
         } else {
-            assert!(w.obj(g).is_some() && jump::crashing(&w, g), "the control crashes");
+            assert!(
+                w.obj(g).is_some() && jump::crashing(&w, g),
+                "the control crashes"
+            );
         }
     }
 }

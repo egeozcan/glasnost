@@ -1113,7 +1113,9 @@ fn hit_by(w: &mut World, a: ObjectId, by: ObjectId) {
 }
 
 fn service(w: &World, k: ObjectId) -> Option<i32> {
-    w.obj(k).and_then(|o| o.air.as_ref()).and_then(|s| s.service)
+    w.obj(k)
+        .and_then(|o| o.air.as_ref())
+        .and_then(|s| s.service)
 }
 
 /// The aircraft overrode to attack against `by` on its pad: *attack*
@@ -1265,7 +1267,11 @@ fn claim_26_r154_a_target_at_full_ammunition_stops_the_repair_and_release() {
         testkit::run(&mut w, 40);
         let o = w.obj(a).unwrap();
         assert_eq!(o.health == 100, half, "half {half}: {}", describe(&w, a));
-        assert_eq!(o.beh.current, Some(Behaviour::Sleep), "half {half}: no release");
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::Sleep),
+            "half {half}: no release"
+        );
     }
 }
 
@@ -1281,7 +1287,8 @@ fn claim_18_r154_a_missile_type_takes_the_ground_rows_in_flight() {
         assert!(!air::on_ground(&w, a));
         air::fall_back_rows(&mut w, a);
         let o = w.obj(a).unwrap();
-        let guard = o.beh.queued == Some(Behaviour::Guard) || o.beh.current == Some(Behaviour::Guard);
+        let guard =
+            o.beh.queued == Some(Behaviour::Guard) || o.beh.current == Some(Behaviour::Guard);
         let d = describe(&w, a);
         if flagged {
             assert!(guard, "{d}");

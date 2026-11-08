@@ -873,7 +873,11 @@ fn c5_c_a_new_destination_restarts_the_blockage_delay() {
     let pos = w.obj(m).unwrap().pos;
     order_move(&mut w, m, cell(5, 0));
     let n = run_until(&mut w, 20, |w| {
-        w.obj(m).unwrap().path.blocked_since.is_some_and(|s| s > first)
+        w.obj(m)
+            .unwrap()
+            .path
+            .blocked_since
+            .is_some_and(|s| s > first)
     });
     assert!(n < 20, "it waits again behind the blocker");
     let o = w.obj(m).unwrap();

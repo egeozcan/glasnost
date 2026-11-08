@@ -388,8 +388,14 @@ fn d8_marked_deck_variant_b_the_mark_alone_kills_the_passengers() {
             let tag = format!("quirk {quirk}, marked {marked}");
             assert_eq!(out, if marked { 0 } else { 2 }, "{tag}");
             let shown = names_of(&w);
-            assert!(shown.iter().any(|n| n.starts_with("Ex")), "{tag}: {shown:?}");
-            assert!(shown.iter().any(|n| n.starts_with("Ds")), "{tag}: {shown:?}");
+            assert!(
+                shown.iter().any(|n| n.starts_with("Ex")),
+                "{tag}: {shown:?}"
+            );
+            assert!(
+                shown.iter().any(|n| n.starts_with("Ds")),
+                "{tag}: {shown:?}"
+            );
             assert!(!shown.contains(&WAKE.to_string()), "{tag}: {shown:?}");
         }
     }

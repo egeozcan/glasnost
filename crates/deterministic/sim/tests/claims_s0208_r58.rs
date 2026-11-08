@@ -88,12 +88,26 @@ fn w17_l_a_dropped_path_gives_the_extra_locomotion() {
         let Some(Target::Cell(d)) = o.dest else {
             panic!("control {control}: the scatter's destination {:?}", o.dest)
         };
-        assert!(o.path.steps.is_empty() || control, "the stored path is dropped");
-        assert_eq!(o.path.for_goal, Some(d), "control {control}: searched at once");
-        assert!(walk_target(&w, id).is_some(), "control {control}: chosen at once");
+        assert!(
+            o.path.steps.is_empty() || control,
+            "the stored path is dropped"
+        );
+        assert_eq!(
+            o.path.for_goal,
+            Some(d),
+            "control {control}: searched at once"
+        );
+        assert!(
+            walk_target(&w, id).is_some(),
+            "control {control}: chosen at once"
+        );
         assert_eq!(pos(&w, id), before, "chosen without moving");
         tick::step(&mut w);
-        assert_ne!(pos(&w, id), before, "control {control}: it moves in the tick");
+        assert_ne!(
+            pos(&w, id),
+            before,
+            "control {control}: it moves in the tick"
+        );
     }
 }
 
@@ -142,14 +156,21 @@ fn w17_m_a_scatter_ends_the_retry_delay_of_a_blocked_walker() {
     tick::step(&mut w);
     let first = w.tick - 1;
     let o = w.obj(id).unwrap();
-    assert_eq!(o.path.blocked_since, Some(first), "it waits behind the blocker");
+    assert_eq!(
+        o.path.blocked_since,
+        Some(first),
+        "it waits behind the blocker"
+    );
     assert_eq!(o.path.retry_at, first + 90, "the re-path started the delay");
     common::run(&mut w, 20);
     let before = pos(&w, id);
     assert_eq!(before.cell(), cell(0, 0));
     assert_eq!(walk_target(&w, id), None, "still waiting");
     assert_eq!(w.obj(id).unwrap().path.blocked_since, Some(first));
-    assert!(w.obj(id).unwrap().path.retry_at > w.tick, "the retry delay runs");
+    assert!(
+        w.obj(id).unwrap().path.retry_at > w.tick,
+        "the retry delay runs"
+    );
     assert!(scatter::request(&mut w, id, UNFORCED));
     let o = w.obj(id).unwrap();
     let Some(Target::Cell(d)) = o.dest else {
