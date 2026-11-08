@@ -127,9 +127,10 @@ target asserted).
 
 ## Formats and goldens
 
-No hashed state was added, so the formats stay at save 114, AI game 79 and wire 12. The schema
-gains the switch (`data/schema/ruleset.schema.json`). `glasnost-sim-gate --include-ignored`
-passes with no golden moved.
+No hashed state was added, but the change moves what saved games and AI games replay to (7 games
+of the AI quick lane), so the formats go one past main: save 115 and AI game 80. Wire stays at 12. The schema
+gains the switch (`data/schema/ruleset.schema.json`). The goldens are regenerated on the rebased
+tree (`GLASNOST_UPDATE_GOLDEN=1 cargo test --release -p glasnost-sim-gate -- --include-ignored`).
 
 ## Lanes
 
@@ -149,14 +150,51 @@ Main 9a170d0 against the branch, measured before the commit.
   - Seed 9, map 0, sides 0,1: 41 567 to 48 463 ticks; house 0 wins in both.
   - Seed 9, map 0, sides 1,2: was won by house 0 at 45 490 ticks; is **not over at 120 000**
     (no winner). Both houses end with bases, small armies standing in *guard* or *area guard*,
-    and house 0 at 0 credits. No stuck unit shows in the end-of-game behaviour list. Rocket
-    flights went from 76 to 103 and spawners from 7 to 17 over the longer game.
+    and house 0 at 0 credits. Rocket flights went from 76 to 103 and spawners from 7 to 17 over
+    the longer game.
   - Seed 10, map 0, sides 0,1: 40 519 to 39 055 ticks; house 0 wins in both.
   - Seed 10, map 2, sides 0,1: 55 224 to 47 222 ticks; house 0 wins in both.
   - Median: 44 306.5 to 44 996 ticks (the unfinished game counted as 120 000).
   - **Narrowing.** A diagnostic binary with `removed_carrier_keeps_tag` off by default
     reproduced the branch's three seed 9, map 0 results exactly, the unfinished game included.
-    So the tag change is not the cause, and the change comes from the S-0506 r37 side: the
-    loss at the destroying hit and at cloaking, F8's release cell after it, or rockets launched
-    at aircraft. It has not been traced further. The diagnostic edit was made and reverted with
-    Edit and was never committed.
+    So the tag change is not the cause, and the change comes from the S-0506 r37 side. The
+    diagnostic edit was made and reverted with Edit and was never committed.
+  - **Traced** with the lane's new `GLASNOST_AI_HASH` and `GLASNOST_AI_OBJS`. Main's and the
+    branch's binaries were each built with them, the hashes compared every 1000 ticks and then
+    every tick, and every object diffed at the first tick that differs. The hashes agree up to
+    that tick in every game, so the hash carries nothing that differs between the builds.
+    - **Seed 9, map 0, sides 1,2: tick 28 067.** House 1 infantry 5511 takes its destroying hit
+      and stays in play in its death sequence (health 0, on the map). House 0 spawner 3699 has
+      no controller target and 5511 as its pending target. On the branch the pending target is
+      cleared at that hit (S-0506 claim 11, r37: a pending target is lost at the destroying hit
+      and cleared with no reset, claim 25). On main it is still recorded at the controller's
+      next pass, due at 28 068. Both controllers' recorded clear requests are
+      settled at the loss (`target_lost`, a design placement that `removing` already uses). Their
+      targets were empty, so the settle changed neither pending target. Follows from the spec as
+      built.
+    - **Seed 7, map 0, sides 1,2: tick 27 863.** The same cause: house 1 infantry 8354 takes its
+      destroying hit and stays in play, and house 0 spawner 5552's pending target 8354 is cleared
+      (claim 11 r37, claim 25). Follows from the spec as built.
+    - **Seed 8, map 0, sides 1,2: tick 33 536.** House 1 vehicle 4577, house 0 spawner 5506's
+      controller target, starts to cloak (Uncloaked to Cloaking). No pending target waits. On the
+      branch the controller target is cleared and the controller resets: its preparing missile
+      8221 is released with F8's cell (88,68), and its slot becomes empty with the regeneration
+      countdown (claims 11 r37 and 12). The missile's aim was already fixed at its launch, so its
+      flight does not change. On main the controller keeps launching at 4577. Follows from the
+      spec as built.
+    - Neither interim is reached at any of the three first differences. Q-2811's needs a pending
+      target waiting while the controller target is lost, and Q-2748's needs a rocket still
+      waiting at a release.
+    - **The unfinished game is not a stall of the S-0506 change.** Sampled every 1000 ticks
+      (`GLASNOST_AI_STALE`), no rocket waits without a flight at any sample. The only stale
+      records are an engineer at 42 000 and two missiles in flight at 81 000 whose destination has
+      left play (S-0506 claim 14, Q-2711). One object does stall, by a spec quirk: house 0's
+      harvester 1158 has stood in *unload*, without contact, since tick 79 557. It keeps a load of 3
+      and has no destination, no contact and no dock, and is at (35,85) at 100 000, 110 000 and
+      119 999. That is S-0402 claim 11, *Contact lost otherwise while unloading*, under
+      `quirks.unload_without_contact_stalls` (on): the harvester stays in *unload* for good until
+      an order gives it a behaviour. Our AI gives none. House 0's unload-wait ticks are 48 824,
+      against 1 551 to 5 487 in every other game of seed 9. With one harvester left working and 0
+      credits, house 0 cannot rebuild, and both armies stand in *guard* or *area guard*. So the
+      game is AI passivity: an AI gap (no order for a harvester stalled by that quirk, which a
+      person would click) on an economy starved by the quirk. It is not a stall of this change.
