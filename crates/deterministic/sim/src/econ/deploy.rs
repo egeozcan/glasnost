@@ -615,8 +615,7 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
     if !opened {
         let never = w.rules().quirks.single_stage_buildup_never_completes;
         // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); claim 18 (a positive-delay range of one stage or fewer never hands over)
-        let Some(after) =
-            crate::econ::sell::buildup_range(w, o.type_index).report_after(never)
+        let Some(after) = crate::econ::sell::buildup_range(w, o.type_index).report_after(never)
         else {
             return CONSTRUCTION_DELAY;
         };

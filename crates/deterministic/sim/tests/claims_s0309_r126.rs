@@ -146,11 +146,7 @@ fn changed_in_builddown(r: &Ruleset, name: &str) -> (World, ObjectId, i32, i32) 
     testkit::run(&mut w, 3);
     let t = w.tick;
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
-    assert_eq!(
-        beh(&w, b).0,
-        Some(Behaviour::Selling),
-        "it keeps selling"
-    );
+    assert_eq!(beh(&w, b).0, Some(Behaviour::Selling), "it keeps selling");
     (w, b, d, t)
 }
 
@@ -432,7 +428,11 @@ fn a_queued_unload_is_replaced_and_the_unit_is_stranded() {
     assert_eq!(o.contact, Some(k), "and keeps its contact");
     let jeep = new_unit(&mut w, "JEEP", B);
     assert_eq!(release::release(&mut w, k, jeep), Outcome::Failed);
-    assert_eq!(w.obj(tank).unwrap().contact, Some(k), "kept after a failure");
+    assert_eq!(
+        w.obj(tank).unwrap().contact,
+        Some(k),
+        "kept after a failure"
+    );
 }
 
 // spec: S-0309 claim 31 (a factory ready at the guard request has guard current at once and its unloading ends at the change; the change does not close the door, which stays open until a later unloading's closing stage; an order that moves the stranded unit ends its contact at its clear report, after which the releases work again; the later unloading finds the door open and does not wait for it)
@@ -470,8 +470,7 @@ fn an_ended_unloading_leaves_the_door_open() {
     let mut left = false;
     for _ in 0..600 {
         step(&mut w);
-        if w.obj(tank).unwrap().contact.is_none() && w.obj(tank).unwrap().pos.cell() != p.cell()
-        {
+        if w.obj(tank).unwrap().contact.is_none() && w.obj(tank).unwrap().pos.cell() != p.cell() {
             left = true;
             break;
         }
@@ -511,8 +510,7 @@ fn quirk_interrupts_building_work_off_sends_the_unit_out() {
     let mut sent = false;
     for _ in 0..600 {
         step(&mut w);
-        if w
-            .obj(tank)
+        if w.obj(tank)
             .unwrap()
             .drive
             .as_ref()
@@ -635,7 +633,10 @@ fn a_depot_stops_repairing_and_the_vehicle_stays_docked() {
     // next per-tick start makes it current before any repair step.
     assert!(!w.obj(d).unwrap().beh.ready_mark);
     ownership::change(&mut w, d, Some(B), Cause::Trigger);
-    assert_eq!(beh(&w, d), (Some(Behaviour::Repair), Some(Behaviour::Guard)));
+    assert_eq!(
+        beh(&w, d),
+        (Some(Behaviour::Repair), Some(Behaviour::Guard))
+    );
     assert_eq!(structures_common::owner(&w, v), Some(B), "it follows");
     assert_eq!(beh(&w, v).0, Some(Behaviour::Guard));
     step(&mut w);
@@ -680,9 +681,9 @@ fn quirk_interrupts_building_work_off_keeps_the_repair() {
 fn engaged(w: &mut World) -> ObjectId {
     let v = structures_common::put(w, Kind::Vehicle, "CRUSHER", 0, 0, 0);
     let o = w.obj_mut(v).unwrap();
-    o.attack_move = Some(AttackMoveMemory::Dest(Target::Cell(
-        structures_common::at(8, 0),
-    )));
+    o.attack_move = Some(AttackMoveMemory::Dest(Target::Cell(structures_common::at(
+        8, 0,
+    ))));
     o.combat.engaged = true;
     o.dest = Some(Target::Cell(structures_common::at(4, 4)));
     o.guard_spot = Some(Target::Cell(structures_common::at(6, 6)));
@@ -749,13 +750,8 @@ fn an_infantry_arrival_falls_back_at_the_end_of_its_update() {
             assert!(walking, "in the update that ends the walk");
             assert_eq!(o.dest, None);
             assert!(
-                matches!(
-                    o.beh.queued,
-                    Some(Behaviour::Guard | Behaviour::AreaGuard)
-                ) || matches!(
-                    o.beh.current,
-                    Some(Behaviour::Guard | Behaviour::AreaGuard)
-                ),
+                matches!(o.beh.queued, Some(Behaviour::Guard | Behaviour::AreaGuard))
+                    || matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard)),
                 "the rest behaviour: {:?} {:?}",
                 o.beh.current,
                 o.beh.queued
