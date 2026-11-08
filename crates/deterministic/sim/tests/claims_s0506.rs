@@ -1699,7 +1699,10 @@ fn flagged_non_rocket_slot() {
             now.x + sx,
             now.y + sy,
         )));
-        assert_ne!(resent, first, "the re-send cell differs from the launch cell");
+        assert_ne!(
+            resent, first,
+            "the re-send cell differs from the launch cell"
+        );
         assert_eq!(
             w.obj(x0).unwrap().dest,
             resent,

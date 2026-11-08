@@ -90,7 +90,8 @@ fn rules() -> Ruleset {
     s.vehicles.insert("LNC".into(), launcher("RKB", 4, true));
     s.vehicles.insert("CAR1".into(), launcher("HAWK", 1, false));
     s.vehicles.insert("CAR2".into(), launcher("HAWK", 2, false));
-    s.vehicles.insert("CARF".into(), launcher("HAWKF", 2, false));
+    s.vehicles
+        .insert("CARF".into(), launcher("HAWKF", 2, false));
     s.vehicles.insert(
         "VICTIM".into(),
         UnitType {
@@ -292,7 +293,11 @@ fn r7_f_a_loss_while_a_pending_target_waits_clears_then_the_next_pass_resets() {
         assert_eq!(c.state, ControllerState::Idle, "{what}: the reset");
         assert_eq!(c.target, None, "{what}");
         assert_eq!(c.pending, None, "{what}: the pending target cleared");
-        assert_eq!(c.slots[0].state, SlotState::Empty, "{what}: not on the rail");
+        assert_eq!(
+            c.slots[0].state,
+            SlotState::Empty,
+            "{what}: not on the rail"
+        );
         assert_eq!(c.slots[0].until, w.tick + 50, "{what}: regeneration");
         assert_eq!(
             release_cell(&w, x),
@@ -372,7 +377,8 @@ fn quirk_off_the_launching_controller_adopts_the_pending_target() {
     assert_eq!(c.slots[0].state, SlotState::Preparing, "still preparing");
     assert_eq!(release_cell(&w, x), None);
     // The later slots launch at it, and claim 8 releases the salvo with it.
-    assert!(run_until(&mut w, 200, |w| controller(w, lnc).slots[0].state
+    assert!(run_until(&mut w, 200, |w| controller(w, lnc).slots[0]
+        .state
         != SlotState::Preparing));
     let at = w.obj(second).unwrap().pos.cell();
     assert_eq!(release_cell(&w, x), Some(at), "released with that target");
@@ -384,15 +390,16 @@ fn quirk_off_the_launching_controller_adopts_the_pending_target() {
 // spec: S-0506 Edge cases (`quirks.launching_spawner_resets_after_target_loss` on, the default, as the original)
 #[test]
 fn the_switch_defaults_on() {
-    assert!(
-        glasnost_rules::quirks::Quirks::default().launching_spawner_resets_after_target_loss
-    );
+    assert!(glasnost_rules::quirks::Quirks::default().launching_spawner_resets_after_target_loss);
 }
 
 /// A carrier `name` with its slot 0 object launched and preparing at a
 /// VICTIM (`first`), its other slots docked, and a shot at a second VICTIM
 /// (`second`) waiting as the pending target.
-fn carrier_with_pending(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId, ObjectId, ObjectId) {
+fn carrier_with_pending(
+    r: &Ruleset,
+    name: &str,
+) -> (World, ObjectId, ObjectId, ObjectId, ObjectId) {
     let mut w = testkit::game_with(r, SIZE, 7);
     let car = put(&mut w, Kind::Vehicle, name, 0, 0, 0);
     let first = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
@@ -447,7 +454,11 @@ fn r7_f_a_preparing_non_missile_slot_adopts_and_the_controller_goes_on() {
         assert_eq!(c.state, ControllerState::Launching, "{what}: no reset");
         assert_eq!(c.target, Some(Target::Object(second)), "{what}: adopted");
         assert_eq!(c.pending, None, "{what}");
-        assert_eq!(c.slots[0].state, SlotState::Preparing, "{what}: not returning");
+        assert_eq!(
+            c.slots[0].state,
+            SlotState::Preparing,
+            "{what}: not returning"
+        );
         assert_eq!(w.obj(x).unwrap().dest, step_4(&w, car), "{what}: re-sent");
         assert!(!spawn::kamikaze(&w, x), "{what}: not released");
     }
@@ -468,7 +479,11 @@ fn both_lost_a_flagged_non_rocket_object_returns_and_is_not_released() {
     assert_eq!(c.slots[0].state, SlotState::Returning, "returning");
     assert!(!spawn::kamikaze(&w, x), "not released");
     assert!(w.obj(x).is_some_and(|o| o.health > 0));
-    assert_eq!(w.obj(x).unwrap().dest, Some(Target::Object(car)), "flies back");
+    assert_eq!(
+        w.obj(x).unwrap().dest,
+        Some(Target::Object(car)),
+        "flies back"
+    );
 }
 
 // spec: S-0506 Terms (r40, Missile type: the Slot table's preparing rows for a non-missile slot move its preparing object, re-sent, or returning when there is no controller target, flagged or not) and the Slot table (r40: preparing, non-missile slot, flagged or not); unmeasured for the flagged slot
@@ -542,7 +557,11 @@ fn a_cooling_down_controller_keeps_the_pending_target_for_an_attacking_slot() {
     assert_eq!(c.pending, Some(Target::Object(second)), "kept");
     spawn::pass(&mut w, car);
     let c = controller(&w, car);
-    assert_eq!(c.target, Some(Target::Object(second)), "adopted by the attacking slot");
+    assert_eq!(
+        c.target,
+        Some(Target::Object(second)),
+        "adopted by the attacking slot"
+    );
     assert_eq!(c.slots[0].state, SlotState::Attacking);
     assert_eq!(w.obj(x).unwrap().target, Some(Target::Object(second)));
     assert_eq!(c.state, ControllerState::CoolingDown);

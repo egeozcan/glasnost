@@ -273,7 +273,9 @@ fn read_mark(entry: &[u16], i: usize) -> (Mark, usize) {
                 j += 1;
             }
             Some(b'l' | b'w' | b'F' | b'L' | b'N') => j += 1,
-            Some(b'I') if at(j + 1) == Some(u16::from(b'6')) && at(j + 2) == Some(u16::from(b'4')) => {
+            Some(b'I')
+                if at(j + 1) == Some(u16::from(b'6')) && at(j + 2) == Some(u16::from(b'4')) =>
+            {
                 m.i64 = true;
                 j += 3;
             }
@@ -355,7 +357,11 @@ fn number_point(out: &mut Out, m: &Mark, letter: u8, v: i32) {
         _ => magnitude.to_string(),
     };
     // spec: S-0411 claim 23 (Forms: p always with a precision of 8)
-    let precision = if letter == b'p' { Some(8) } else { m.precision() };
+    let precision = if letter == b'p' {
+        Some(8)
+    } else {
+        m.precision()
+    };
     // spec: S-0411 claim 23 (Forms: the precision is the least number of digits, zeros added before them; without one, 1; with a precision of 0 the value 0 writes no digits)
     let shown = if precision == Some(0) && magnitude == 0 {
         0
@@ -629,7 +635,11 @@ mod tests {
         assert_eq!(f("%h5d"), u("5d"), "a digit after a size mark");
         assert_eq!(f("%.3.d"), u(".d"), "a second full stop");
         assert_eq!(f("%5*d"), u("*d"), "an asterisk after a width of digits");
-        assert_eq!(f("%\u{e9}x"), u("\u{e9}x"), "a character outside basic Latin");
+        assert_eq!(
+            f("%\u{e9}x"),
+            u("\u{e9}x"),
+            "a character outside basic Latin"
+        );
         // The end of the text drops an unended mark.
         assert_eq!(f("ab%"), u("ab"));
         assert_eq!(f("ab%-05.3hl"), u("ab"));
@@ -649,8 +659,16 @@ mod tests {
         let icon = |e: &str| icon_text(Looked::Text(u(e)), &name, 900);
         let power = |e: &str| power_text(Looked::Text(u(e)), (300, -20));
         assert_eq!(icon("%d"), u("900"), "the price and no name");
-        assert_eq!(icon("%d %s"), u("900\nBig\nTank"), "price first, then the name");
-        assert_eq!(icon("%s%s|%d%d"), u("Big\nTank|900"), "extra points: nothing");
+        assert_eq!(
+            icon("%d %s"),
+            u("900\nBig\nTank"),
+            "price first, then the name"
+        );
+        assert_eq!(
+            icon("%s%s|%d%d"),
+            u("Big\nTank|900"),
+            "extra points: nothing"
+        );
         assert_eq!(
             icon("%s|%-9s|%09d|%09d|"),
             u("Big\nTank||000000900||"),
@@ -736,8 +754,16 @@ mod tests {
         assert_eq!(n("%2d", 12345), u("12345"), "no cut to the width");
         assert_eq!(t("%05s", "ab"), u("000ab"));
         assert_eq!(t("%-05s|", "ab"), u("ab   |"));
-        assert_eq!(t("%05.1s", "ab"), u("0000a"), "a text precision keeps the zeros");
-        assert_eq!(t("%+ #3s", "ab"), u(" ab"), "other flags add nothing to a text");
+        assert_eq!(
+            t("%05.1s", "ab"),
+            u("0000a"),
+            "a text precision keeps the zeros"
+        );
+        assert_eq!(
+            t("%+ #3s", "ab"),
+            u(" ab"),
+            "other flags add nothing to a text"
+        );
         // The money-format tip: a width's spaces become line feeds; the power tip keeps them.
         assert_eq!(
             icon_text(Looked::Text(u("%-4s|%5d")), &u("ab"), 12),
