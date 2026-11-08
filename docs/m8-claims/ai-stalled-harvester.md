@@ -36,9 +36,29 @@ Searched: `grep -n 'until an order'` and the like over `spec/`, and the quirk li
 
 ## Lanes
 
-Base: main at 024af18 (save format 116, AI game format 81). After: 9162f71 on that base (AI game format 82). Raw outputs git-ignored under `local-lane/m8/aih/`.
+Base: main at 0383a5b, after intake 114 (save format 117, AI game format 82). After: this branch rebased onto it (AI game format 83). Raw outputs git-ignored under `local-lane/m8/aih/`. An earlier set on main 024af18 follows.
 
-**AI quick lane** (`GLASNOST_AI_QUICK=1 glasnost-headless ai-sides 120000 <seed> 0 2 8`, seeds 7 to 10, 36 games): every game ends with a winner, before and after. 32 games are identical. Four change, each first at a think that sends a harvester stalled in *unload* to harvest:
+**AI quick lane** (`GLASNOST_AI_QUICK=1 glasnost-headless ai-sides 120000 <seed> 0 2 8`, seeds 7 to 10, 36 games): every game ends with a winner, before and after. 31 games are identical. Five change, each first at a think that sends a harvester stalled in *unload* to harvest:
+
+| Seed, map, sides | Before | After | First differing tick and object (`GLASNOST_AI_HASH`, `GLASNOST_AI_OBJS`) |
+| --- | --- | --- | --- |
+| 7, 0, 0 and 1 | house 0, 53 455 | house 0, 53 024 | 52 553: house 1's harvester 2805, in *unload* since 52 391 with no contact, gets *harvest* queued |
+| 7, 8, 1 and 2 | house 1, 57 469 | house 1, 57 244 | 49 486: house 0's harvester 13914, in *unload* since 49 326 with no contact |
+| 9, 0, 1 and 2 | house 0, 113 455 | **house 1**, 106 239 | 79 711: house 0's harvester 1158, in *unload* since 79 557 with no contact (the intake 113 stall; the same tick and figures as on 024af18) |
+| 10, 0, 0 and 2 | house 0, 57 453 | house 0, 55 641 | 40 381: house 0's harvester 15745, in *unload* since 40 225 with no contact |
+| 10, 2, 0 and 2 | house 1, 46 824 | house 1, 47 791 | 23 281: house 0's harvester 774 (the other harvester type), in *unload* since 23 115 with no contact |
+
+Each first difference is the rule of this change acting on claim 11's stall, 154 to 166 ticks after the docking (the first think past `UNLOAD_STALL`); the harvester's queued *harvest* is the only difference at that tick. The one changed winner (seed 9, map 0, sides 1 and 2) follows from it: in the base game house 0's harvester stands loaded at (35,85) for the last 34 000 ticks while house 0 sits near 0 credits. No game was tuned toward.
+
+Stalls left: in the after dumps (every 10 000 ticks) no harvester stands in *unload* at the same cell at two samples. Two harvesters appear in *unload* at two samples, but at different cells (seed 8) or with harvesting between (seed 10), so these are separate dockings. One non-harvester vehicle (seed 8, map 0, sides 0 and 1, the same in both builds) stands in *unload* at the same cell at two samples. An in-place deploying vehicle keeps *unload* while deployed (S-0517), which fits; not traced further.
+
+**Seed sweeps** (`GLASNOST_SWEEP=1-16`, M6c, M7a and M7b `seed_sweep`): output identical at 0383a5b and on the rebased head apart from timings, so the rule never acted there. Smallest minimum: M6c 0 (seeds 1 and 11), M7a 1, M7b drain 3; all three pass.
+
+**`glasnost-ai` with ignored tests** (release): 263 pass at 0383a5b (intake 114 ledger), 264 pass on the rebased head (the new test), none fails.
+
+### Earlier set, on main 024af18
+
+Base: main at 024af18 (save format 116, AI game format 81). After: 9162f71 on that base (AI game format 82). Quick lane: every game ends with a winner, before and after. 32 games are identical; four change:
 
 | Seed, map, sides | Before | After | First differing tick and object (`GLASNOST_AI_HASH`, `GLASNOST_AI_OBJS`) |
 | --- | --- | --- | --- |
@@ -47,10 +67,6 @@ Base: main at 024af18 (save format 116, AI game format 81). After: 9162f71 on th
 | 9, 0, 1 and 2 | house 0, 113 455 | **house 1**, 106 239 | 79 711: house 0's harvester 1158, in *unload* since 79 557 with no contact (the stall found by intake 113). In the base game it stands there to the end. |
 | 10, 2, 0 and 2 | house 1, 69 105 | house 1, 47 791 | 23 281: house 0's harvester 774 (the other harvester type), in *unload* since 23 115 with no contact. In the base game it is gone before the 30 000 sample. |
 
-Each first difference is the rule of this change acting on claim 11's stall, 154 to 166 ticks after the docking (the first think past `UNLOAD_STALL`); nothing else differs at that tick. The one changed winner (seed 9, map 0, sides 1 and 2) follows from it: in the base game house 0's harvester stood loaded for the last 34 000 ticks while house 0 sat near 0 credits. No game was tuned toward.
+Each first difference was again the rule acting on claim 11's stall, the only difference at that tick. In the after dumps no harvester stood in *unload* at the same cell at two samples; in the base dumps only the seed 9 stall showed so, and the traces found the other three. Seed sweeps: output identical before and after apart from timings (smallest minimum M6c 0, M7a 1, M7b drain 3). `glasnost-ai` with ignored tests: 263 before, 264 after. One non-harvester vehicle (seed 8, map 2, sides 1 and 2, both builds) stood in *unload* at one cell at two samples, as above.
 
-Stalls left: in the after dumps (every 10 000 ticks), no harvester stands in *unload* at the same cell at two samples, and none of the four stalls above recurs. In the base dumps only the seed 9 stall showed at two samples; the other three were found by the traces.
-
-**Seed sweeps** (`GLASNOST_SWEEP=1-16`, M6c, M7a and M7b `seed_sweep`): output identical before and after, apart from timings, so the rule never acted there. Smallest minimum: M6c 0, M7a 1, M7b drain 3.
-
-Other units in *unload* in the dumps (for the list above): besides harvesters at refineries and factories releasing units, non-harvester vehicles stand in *unload* at single samples. One object (seed 8, map 2, sides 1 and 2, the same in both builds) stands in *unload* at the same cell at two samples. An in-place deploying vehicle keeps *unload* while deployed (S-0517), which fits. It was not traced further, so the hover landing request (S-0503 claim 19) is not ruled out for it.
+Other units in *unload* in the dumps (for the list above): besides harvesters at refineries and factories releasing units, non-harvester vehicles stand in *unload* at single samples, and on each base one object stands at the same cell at two samples (above). Neither was traced, so the hover landing request (S-0503 claim 19) is not ruled out for them.
