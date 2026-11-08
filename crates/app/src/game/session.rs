@@ -44,6 +44,7 @@ use super::paint::Painter;
 use super::play::{Button, GROUPS, Play, Reach, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
 use super::sidebar_art::{self, SidebarArt};
+use super::sidebar_tip::{self, Control, Looked};
 use super::status_font;
 use super::strings;
 use crate::mapview::build::{self, GameMode, Inputs, Options};
@@ -135,8 +136,13 @@ pub struct Session {
     /// The button images the sidebar draws and lays out (S-0411 claim 19).
     buttons: hud::ButtonArt,
     pointer: Option<Point>,
-    /// The name tip's rest and the tip that shows (S-0111 claims 20 to 26).
+    /// The tips' rest and the tip that shows: the name tip (S-0111 claims
+    /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
+    /// The tip of the build icon the keyboard focus is on, while it is
+    /// shown and no pointer tip shows (our design, after the focus tooltip
+    /// of our earlier sidebar).
+    focus_tip: Option<name_tip::Shown>,
     /// The player's tooltip option (S-0111 claim 20), as the client's
     /// settings give it.
     pub tool_tips: bool,
@@ -530,6 +536,7 @@ impl Session {
             buttons: hud::ButtonArt::default(),
             pointer: None,
             name_tip: name_tip::NameTip::default(),
+            focus_tip: None,
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
             tool_tips: true,
             // spec: S-0015 State and ordering (the table is read once, at start-up, by the install: `install::prepare`; the client hands it to the game)
@@ -1181,13 +1188,40 @@ impl Session {
     }
 
     /// The pointer is at `p`: a change of place is a movement, which hides
-    /// a name tip and starts its wait again (S-0111 claim 20).
+    /// a tip and starts its wait again (S-0111 claim 20), or over the
+    /// build-icon slots shows the slot's tip at once (S-0411 claim 20).
     fn pointer_at(&mut self, p: Point) {
         if self.pointer != Some(p) {
-            // spec: S-0111 claim 20 (every pointer movement, of any distance, hides a showing tip and starts the wait again)
-            self.name_tip.moved(self.clock_ms);
+            // spec: S-0111 claim 20 (every pointer movement, of any distance, hides a showing tip and starts the wait again; the one exception over the build-icon slots) and S-0411 claim 20 (Over the slots, no wait)
+            let on_slot = self.slot_at(p).is_some();
+            self.name_tip.moved(self.clock_ms, on_slot);
         }
         self.pointer = Some(p);
+    }
+
+    /// What screen pixel `p` lies on for the tips: the battlefield view, a
+    /// place of the sidebar (S-0411 claims 20 to 22) or neither.
+    fn tip_place(&self, p: Point) -> TipPlace {
+        if self.map_rect().contains(p) {
+            return TipPlace::View;
+        }
+        if self.play.watching() {
+            // design: watch mode (lead request 2026-11-02, an extra not in the original): the watch panel in the sidebar's place shows no sidebar tip
+            return TipPlace::Off;
+        }
+        match sidebar_tip::place_at(&self.layout(), self.ui.to_ui(p)) {
+            Some(place) => TipPlace::Bar(place),
+            None => TipPlace::Off,
+        }
+    }
+
+    /// The shown slot of the strip under screen pixel `p`, filled or empty
+    /// (S-0411 Terms).
+    fn slot_at(&self, p: Point) -> Option<usize> {
+        match self.tip_place(p) {
+            TipPlace::Bar(sidebar_tip::Place::Slot(k)) => Some(k),
+            _ => None,
+        }
     }
 
     /// The pointer left the window.
@@ -2326,13 +2360,13 @@ impl Session {
         Some((offer, shrouded))
     }
 
-    /// Registers the game-font glyphs the status lines and the name tip
-    /// draw with the painter ([`status_font::register`],
+    /// Registers the game-font glyphs the status lines and the tips draw
+    /// with the painter ([`status_font::register`],
     /// [`name_tip::register`]).
     pub fn update_status_glyphs(&mut self, painter: &mut Painter) {
         if let Some(font) = self.play.status_font.as_ref() {
             status_font::register(painter, font, &self.play.messages, &mut self.status_row);
-            if let Some(s) = self.name_tip.shown.as_ref() {
+            for s in self.name_tip.shown.iter().chain(&self.focus_tip) {
                 name_tip::register(painter, font, s, &mut self.tip_rows);
             }
         }
@@ -2431,45 +2465,67 @@ impl Session {
         });
     }
 
-    /// One frame of the name tip (S-0111 claims 20 and 26): the option, the
-    /// view's movement, and the rest's one choice when the wait ends.
+    /// One frame of the tips (S-0111 claims 20 and 26, S-0411 claims 20 and
+    /// 22): the option, the blocks of the pointer's place, a movement over
+    /// the slots shown at once, and the rest's one choice when the wait ends.
     fn update_name_tip(&mut self) {
         let moving = self.centre != self.tip_centre;
         self.tip_centre = self.centre;
-        // spec: S-0111 claim 20 (Options menu: opening the in-game options menu hides a tip and stops the wait; while it is open no wait runs and no tip shows; when it closes nothing shows until the pointer moves and rests again) and claim 20 (the tooltip option off)
+        self.focus_tip = None;
+        // spec: S-0111 claim 20 (Options menu: opening the in-game options menu hides a tip and stops the wait; while it is open no wait runs and no tip shows; when it closes nothing shows until the pointer moves and rests again) and claim 20 (the tooltip option off); S-0411 claim 20 (with the option off no sidebar tip ever shows; the options menu as for the name tip)
         if !self.tool_tips || self.paused {
             self.name_tip.off();
             return;
         }
-        // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame
-        // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the view and held)
         // spec: S-0111 claim 20 (Blocked: a hidden cursor or locked input; an order block locks the input and hides the cursor, S-0201 claims 11 and 14): the ticks up to the world's last blocked tick
         let w = &self.play.game.world;
         let order_block = w.tick <= w.orders_blocked_through;
-        let blocked = moving || self.view_button_held || order_block;
+        let place = self.pointer.map_or(TipPlace::Off, |p| self.tip_place(p));
+        let blocked = match place {
+            // spec: S-0411 claim 20 (Buttons and blocks: of S-0111 claim 20's blocks only the hidden mouse cursor applies to sidebar tips, so an order block blocks them; a moving battlefield view blocks none, and a held button does not stop a movement over the slots) and claim 22 (the controls: claim 20's blocks here, the hidden cursor and the options menu)
+            TipPlace::Bar(_) => order_block,
+            // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame
+            // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the view and held)
+            _ => moving || self.view_button_held || order_block,
+        };
+        let on_slot = matches!(place, TipPlace::Bar(sidebar_tip::Place::Slot(_)));
         let now = self.clock_ms;
         let mut tip = std::mem::take(&mut self.name_tip);
-        tip.update(now, blocked, |_| self.choose_name_tip(now));
+        tip.update(now, on_slot, blocked, |_| self.choose_tip(place, now));
         self.name_tip = tip;
+        if self.name_tip.shown.is_none() && !order_block {
+            self.focus_tip = self.choose_focus_tip(now);
+        }
     }
 
-    /// The tip for the pointer's place at real time `now` (S-0111 claims 21
-    /// to 25): `None` when it rests off the battlefield view or the text is
-    /// empty. Used for the rest's choice and again in every drawn frame
-    /// while the tip shows (claim 26).
-    fn choose_name_tip(&mut self, now: i64) -> Option<name_tip::Shown> {
+    /// The tip for the pointer's place `place` at real time `now`: the name
+    /// tip over the battlefield view (S-0111 claims 21 to 25), a sidebar tip
+    /// over the sidebar (S-0411 claims 20 to 22); `None` elsewhere or for
+    /// an empty text. Used for the rest's choice, for a movement over the
+    /// slots, and again in every drawn frame while the tip shows (S-0111
+    /// claim 26, S-0411 claim 20).
+    fn choose_tip(&mut self, place: TipPlace, now: i64) -> Option<name_tip::Shown> {
         let p = self.pointer?;
+        match place {
+            TipPlace::View => self.choose_name_tip(p, now),
+            TipPlace::Bar(sidebar_tip::Place::Slot(k)) => self.icon_tip(k, now),
+            TipPlace::Bar(sidebar_tip::Place::Control(c)) => self.control_tip(c, p, now),
+            // spec: S-0411 claim 22 (no other part of the sidebar shows a tip) and S-0111 claim 20 (outside the game's window nothing shows)
+            TipPlace::Bar(sidebar_tip::Place::Nothing) | TipPlace::Off => None,
+        }
+    }
+
+    /// The name tip for the pointer at `p` on the battlefield view at real
+    /// time `now` (S-0111 claims 21 to 25): `None` when the text is empty.
+    fn choose_name_tip(&mut self, p: Point, now: i64) -> Option<name_tip::Shown> {
         let m = self.map_rect();
-        // spec: S-0111 claim 20 (Where the pointer rests: over the battlefield view; over the sidebar, the radar included, no tip; outside the window nothing; the status message lines drawn on the view are not a place of their own)
+        // spec: S-0111 claim 20 (Where the pointer rests: over the battlefield view; over the sidebar, the radar included, no name tip, the sidebar's own tips being S-0411's; outside the window nothing; the status message lines drawn on the view are not a place of their own)
         if !m.contains(p) || self.hud_at(p) != Some(HudHit::Map) {
             return None;
         }
         let (cell, id) = self.under(p);
         let text = self.name_tip_text(cell, id);
-        // spec: S-0111 claim 25 (the tip colour by the local player's side index, S-0005 claim 13a); design: with no side index, the other colour
-        let ink = self
-            .local_side(self.play.watching())
-            .map_or(name_tip::INK_OTHER, name_tip::ink);
+        let ink = self.tip_ink();
         // design: S-0213 Import mapping (without the game font no text is drawn: no tip shows)
         let font = self.play.status_font.as_ref()?;
         let pitch = i32::try_from(font.line_pitch()).unwrap_or(i32::MAX);
@@ -2477,9 +2533,181 @@ impl Session {
         name_tip::tip(&text, (p.x, p.y), m, (&width, pitch), ink, now)
     }
 
-    /// The name tip that shows, if any: its lines and its box, for checks.
+    /// The tip colour (S-0111 claim 25, S-0411 claim 21).
+    fn tip_ink(&self) -> [u8; 3] {
+        // spec: S-0111 claim 25 (the tip colour by the local player's side index, S-0005 claim 13a); design: with no side index, the other colour
+        self.local_side(self.play.watching())
+            .map_or(name_tip::INK_OTHER, name_tip::ink)
+    }
+
+    /// The sidebar's screen rectangle and its tip area (S-0411 Terms), in
+    /// screen pixels.
+    fn sidebar_screen(&self) -> (Rect, Rect) {
+        let m = self.map_rect();
+        let bar = Rect::new(m.right(), 0, self.screen.0 - m.right(), self.screen.1);
+        // design: S-0411 claim 21 (the tip area in screen pixels: our logical tip area at the interface scale, inside the sidebar)
+        let area = self.ui.rect(self.layout().tip_area()).intersect(&bar);
+        (bar, area)
+    }
+
+    /// A sidebar tip of `text` at real time `now`, its box placed by `at`
+    /// from its size and the tip area (S-0411 claim 21): laid out and drawn
+    /// as the name tip, wrapped at the tip area's width less 8, cut at the
+    /// sidebar.
+    fn sidebar_tip(
+        &self,
+        text: &[u16],
+        now: i64,
+        at: impl FnOnce((i32, i32), Rect) -> (i32, i32),
+    ) -> Option<name_tip::Shown> {
+        let (bar, area) = self.sidebar_screen();
+        // design: S-0213 Import mapping (without the game font no text is drawn: no tip shows)
+        let font = self.play.status_font.as_ref()?;
+        let pitch = i32::try_from(font.line_pitch()).unwrap_or(i32::MAX);
+        let width = |c: u16| font.width(c);
+        let wrap = sidebar_tip::wrap_width(area);
+        // spec: S-0411 claim 21 (laid out, sized and drawn as S-0111 claims 24 and 25 give, in the tip colour; drawn over the sidebar and cut at its edges)
+        name_tip::make(
+            text,
+            wrap,
+            (&width, pitch),
+            self.tip_ink(),
+            now,
+            bar,
+            |size| at(size, area),
+        )
+    }
+
+    /// The local house's icons of the shown tab in the shown slots: the
+    /// first shown icon's position and the tab's icons (S-0411 claim 18:
+    /// the scroll position held within the settled end).
+    fn shown_icons(&self) -> Option<(usize, Vec<hud::Entry>)> {
+        let local = self.play.local?;
+        let w = &self.play.game.world;
+        let es = hud::entries(w, local, self.play.shown_tab());
+        let rows = self.layout().rows();
+        let first = self.play.scroll.min(hud::max_scroll(es.len(), rows)) * 2;
+        Some((first, es))
+    }
+
+    /// The tip of the icon in shown slot `k` at real time `now` (S-0411
+    /// claims 20 and 21): `None` for an empty slot.
+    fn icon_tip(&self, k: usize, now: i64) -> Option<name_tip::Shown> {
+        let (first, es) = self.shown_icons()?;
+        // spec: S-0411 claim 20 (Text: an empty slot has no text, and no tip shows there)
+        let e = *es.get(first + k)?;
+        let text = self.icon_text(e)?;
+        let slot = self.ui.rect(self.layout().cameo(k));
+        // spec: S-0411 claim 21 (an icon's tip is placed by its slot, not by the pointer)
+        self.sidebar_tip(&text, now, |size, area| {
+            sidebar_tip::slot_place(slot, size, area)
+        })
+    }
+
+    /// The text of icon `e`'s tip (S-0411 claim 20): the same in every
+    /// state of the icon.
+    fn icon_text(&self, e: hud::Entry) -> Option<Vec<u16>> {
+        let local = self.play.local?;
+        let w = &self.play.game.world;
+        match e {
+            hud::Entry::Type(t) => {
+                let kind = live::import_kind(t.kind)?;
+                let name = self.display_name(kind, &live::type_name(w.rules(), t.kind, t.index));
+                // spec: S-0411 claim 20 (the type's price for the local player's house: S-0404 claim 2's P, in its form in parts for a building whose cost pays for units that come with it; Every state the same: the whole price)
+                let price = glasnost_sim::econ::production::price(w, local, t);
+                let entry = self.entry(sidebar_tip::MONEY_FORMAT, sidebar_tip::MONEY_STAND_IN);
+                Some(sidebar_tip::icon_text(entry, &name, price))
+            }
+            hud::Entry::Superweapon(i) => {
+                let ty = w.rules().superweapons.types.get(i as usize)?;
+                // spec: S-0411 claim 20 (Text: for a superweapon icon the superweapon type's display name alone, with no price and with its spaces kept)
+                Some(self.display_name(Kind::Superweapons, &ty.name))
+            }
+        }
+    }
+
+    /// The tip of control `c` for the pointer at `p` at real time `now`
+    /// (S-0411 claim 22).
+    fn control_tip(&self, c: Control, p: Point, now: i64) -> Option<name_tip::Shown> {
+        let local = self.play.local?;
+        let w = &self.play.game.world;
+        let disabled = || self.fixed_label(sidebar_tip::DISABLED);
+        // spec: S-0411 claim 22 (the table: each control's text; the spaces kept)
+        let text = match c {
+            // spec: S-0411 claim 22 (a tab button: its tab's label; while its tab has no icons, claim 19 frame 2, the disabled line)
+            Control::Tab(i) => sidebar_tip::with_disabled(
+                self.fixed_label(sidebar_tip::TAB_LABELS[i]),
+                hud::entries(w, local, i).is_empty(),
+                &disabled(),
+            ),
+            Control::Scroll(k) => {
+                let (_, es) = self.shown_icons()?;
+                // spec: S-0411 claim 22 (the scroll labels; while both buttons are disabled because all of the tab's icons fit, claim 18, the disabled line)
+                sidebar_tip::with_disabled(
+                    self.fixed_label(sidebar_tip::SCROLL_LABELS[k]),
+                    !hud::overflows(es.len(), self.layout().rows()),
+                    &disabled(),
+                )
+            }
+            Control::Repair => self.fixed_label(sidebar_tip::REPAIR_MODE),
+            Control::Sell => self.fixed_label(sidebar_tip::SELL_MODE),
+            Control::PowerMeter => {
+                // spec: S-0411 claim 22 (the power meter: the house output O and drain D, S-0405 Terms)
+                let totals = glasnost_sim::econ::power::totals(w, local);
+                let entry = self.entry(sidebar_tip::POWER_DRAIN, sidebar_tip::POWER_STAND_IN);
+                sidebar_tip::power_text(entry, totals)
+            }
+            Control::Options => self.fixed_label(sidebar_tip::OPTIONS),
+            Control::PowerMode => sidebar_tip::POWER_MODE_TIP.encode_utf16().collect(),
+        };
+        // spec: S-0411 claim 22 (placed as S-0111 claim 24 places the name tip, by the pointer, with the tip area in place of the battlefield view)
+        self.sidebar_tip(&text, now, |size, area| {
+            name_tip::place((p.x, p.y), size, (area.right(), area.bottom()))
+        })
+    }
+
+    /// The tip of the icon the keyboard focus is on, at real time `now`.
+    ///
+    /// design: our keyboard focus on the strip keeps the icon tip our
+    /// earlier sidebar showed for it: while the focus is shown on a shown
+    /// icon and no pointer tip shows, that icon's sidebar tip, placed by its
+    /// slot, without the pointer's timing.
+    fn choose_focus_tip(&self, now: i64) -> Option<name_tip::Shown> {
+        let n = match self.hud_focus.at {
+            Some(HudHit::Cameo(n)) if self.hud_focus.shown && !self.play.watching() => n,
+            _ => return None,
+        };
+        let (first, _) = self.shown_icons()?;
+        let k = n
+            .checked_sub(first)
+            .filter(|&k| k < self.layout().rows() * 2)?;
+        self.icon_tip(k, now)
+    }
+
+    /// The text of string-table entry `label` that has insertion points
+    /// (S-0411 Import mapping): its text, the placeholder when it is
+    /// missing, our `stand_in` without a table.
+    fn entry(&self, label: &str, stand_in: &str) -> Looked {
+        match self.strings.as_ref().map(|t| t.find(label.as_bytes())) {
+            Some(strings::Found::Text(t)) => Looked::Text(t),
+            // spec: S-0411 Import mapping (a missing money-format or power entry shows S-0004 claim 17's placeholder alone)
+            Some(strings::Found::Missing) => {
+                Looked::Missing(strings::placeholder(label.as_bytes()))
+            }
+            // design: S-0015 claim 1 (only a game built without an install has no table: our stand-in)
+            None => Looked::Text(stand_in.encode_utf16().collect()),
+        }
+    }
+
+    /// The tip that shows, if any (the name tip or a sidebar tip): its
+    /// lines and its box, for checks.
     pub fn name_tip_shown(&self) -> Option<&name_tip::Shown> {
         self.name_tip.shown.as_ref()
+    }
+
+    /// The keyboard focus's icon tip that shows, if any, for checks.
+    pub fn focus_tip_shown(&self) -> Option<&name_tip::Shown> {
+        self.focus_tip.as_ref()
     }
 
     /// The name tip's text for pointer cell `cell` and pointer object `id`
@@ -3005,10 +3233,6 @@ impl Session {
             model.buttons = self.buttons;
             model.scroll_pressed = self.scroll_pressed();
             model.view_box = self.radar_view_box();
-            model.focus_cameo = match self.hud_focus.at {
-                Some(HudHit::Cameo(n)) if self.hud_focus.shown => Some(n),
-                _ => None,
-            };
             hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover)
         };
         ui.extend(hud_list);
@@ -3025,13 +3249,11 @@ impl Session {
         }
         ui.extend(overlay);
         d.scaled(self.ui, ui);
-        // spec: S-0111 claim 25 (the name tip on top of everything else on the battlefield view, never over the sidebar: kept inside the view) and claim 20 (Options menu: no tip shows while the menu is open)
-        if let (Some(s), Some(font), false) = (
-            self.name_tip.shown.as_ref(),
-            self.play.status_font.as_ref(),
-            self.paused,
-        ) {
-            name_tip::draw(&mut d, font, s, m);
+        // spec: S-0111 claim 25 (the name tip on top of everything else on the battlefield view, never over the sidebar: kept inside the view) and claim 20 (Options menu: no tip shows while the menu is open); S-0411 claim 21 (a sidebar tip drawn over the sidebar, on top of everything drawn there, cut at the sidebar's edges)
+        if let (Some(font), false) = (self.play.status_font.as_ref(), self.paused) {
+            for s in self.name_tip.shown.iter().chain(&self.focus_tip) {
+                name_tip::draw(&mut d, font, s);
+            }
         }
         if let (Some((frame, (hx, hy))), Some(p)) = (self.cursor_shown, pointer) {
             // spec: S-0214 claim 22 (the hot spot coincides with the pointer's input pixel)
@@ -3123,6 +3345,18 @@ const TIP_LABEL_C: &str = "Tip:Repair"; // spec: S-0111 Import mapping (string t
 /// The group repeat interval: a *select group* press less than this after
 /// the last one that selected the group can be a repeat, milliseconds.
 pub const GROUP_REPEAT_MS: i64 = 800; // spec: S-0214 Constants (group repeat interval: 800 milliseconds of real time, less than counts)
+
+/// Where the pointer is for the tips: the battlefield view (S-0111's name
+/// tip), a place of the sidebar (S-0411 claims 20 to 22), or neither.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TipPlace {
+    /// The battlefield view.
+    View,
+    /// A place of the sidebar.
+    Bar(sidebar_tip::Place),
+    /// Outside the window's game screen, or the watch panel: no tip.
+    Off,
+}
 
 /// The type-select role's key (S-0214 claim 32): whether it is held, the
 /// time of the press that holds it, and the reach the last tap left.

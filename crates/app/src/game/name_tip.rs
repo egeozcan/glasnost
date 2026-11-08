@@ -1,7 +1,10 @@
-//! The name tip over the battlefield (S-0111 claims 20 to 26): its
-//! real-time wait and lifetime, what hides it, its layout in the game font,
-//! its placement and its look. What text it shows is the session's
-//! (`Session::name_tip_text`); nothing here reaches the simulation.
+//! The name tip over the battlefield (S-0111 claims 20 to 26) and the
+//! sidebar's tips that share its timing, layout and look (S-0411 claims 20
+//! to 22): the real-time wait and lifetime, the build-icon slots' tips
+//! shown at once, what hides a tip, its layout in the game font, its
+//! placement and its look. What text a tip shows is the session's
+//! (`Session::name_tip_text`, [`super::sidebar_tip`]); nothing here reaches
+//! the simulation.
 
 use glasnost_ui::draw::DrawList;
 use glasnost_ui::geom::Rect;
@@ -56,6 +59,9 @@ pub struct Shown {
     pub until: i64,
     /// The tip colour.
     pub ink: [u8; 3],
+    /// The screen rectangle the tip is cut at: the battlefield view for a
+    /// name tip, the sidebar for a sidebar tip.
+    pub clip: Rect,
 }
 
 /// The tip's state: the rest the pointer is in and the tip that shows.
@@ -65,30 +71,52 @@ pub struct NameTip {
     rest: Option<i64>,
     /// The tip that shows.
     pub shown: Option<Shown>,
+    /// Whether a drawn frame has passed with the pointer on a build-icon
+    /// slot since its last movement that ended off the slots.
+    armed: bool,
+    /// The real time of a movement over the slots whose tip shows at once,
+    /// until the next drawn frame shows it.
+    at_once: Option<i64>,
 }
 
 impl NameTip {
-    /// The pointer moved, by any distance: a showing tip hides and the
-    /// wait starts again.
-    pub fn moved(&mut self, now: i64) {
-        // spec: S-0111 claim 20 (every pointer movement, of any distance and whether or not the pointer object changes, hides a tip that is showing and starts the wait again) and claim 26
+    /// The pointer moved, by any distance, ending on a build-icon slot of
+    /// the sidebar when `on_slot`. Over the slots, once a drawn frame has
+    /// passed with the pointer on one, the movement shows the slot's tip at
+    /// once (at the next drawn frame); any other movement hides a showing
+    /// tip and starts the wait again.
+    pub fn moved(&mut self, now: i64, on_slot: bool) {
         self.shown = None;
+        if on_slot && self.armed {
+            // spec: S-0411 claim 20 (Over the slots, no wait: once one drawn frame has passed with the pointer on a slot, every later movement that ends on a slot shows the tip of that slot's icon at once; one that ends on an empty slot hides it) and S-0111 claim 20 (the one exception over the build-icon slots)
+            self.rest = None;
+            self.at_once = Some(now);
+            return;
+        }
+        // spec: S-0111 claim 20 (every pointer movement, of any distance and whether or not the pointer object changes, hides a tip that is showing and starts the wait again) and claim 26; S-0411 claim 20 (a movement that brings the pointer onto the slots from anywhere else, or that ends off them, is an ordinary one)
         self.rest = Some(now);
+        self.at_once = None;
+        if !on_slot {
+            self.armed = false;
+        }
     }
 
     /// A left, right or middle button went down or up: the tip hides and
     /// the wait stops until the pointer moves.
     pub fn button(&mut self) {
-        // spec: S-0111 claim 20 (pressing or releasing the left, right or middle mouse button hides the tip and stops the wait; no tip until the pointer has moved and rested again) and claim 26
+        // spec: S-0111 claim 20 (pressing or releasing the left, right or middle mouse button hides the tip and stops the wait; no tip until the pointer has moved and rested again) and claim 26; S-0411 claim 20 (Buttons and blocks: over the slots the next movement shows it again at once)
         self.shown = None;
         self.rest = None;
+        self.at_once = None;
     }
 
-    /// The tooltip option is off: no tip shows, and one that shows hides.
+    /// The tooltip option is off, or the options menu is open: no tip
+    /// shows, and one that shows hides.
     pub fn off(&mut self) {
-        // spec: S-0111 claim 20 (with the option off no name tip ever shows) and claim 26 (turning it off hides a tip)
+        // spec: S-0111 claim 20 (with the option off no name tip ever shows; the options menu hides a tip and stops the wait) and claim 26 (turning it off hides a tip); S-0411 claim 20 (with the option off no sidebar tip ever shows; the options menu hides a sidebar tip and stops its wait as for the name tip)
         self.shown = None;
         self.rest = None;
+        self.at_once = None;
     }
 
     /// Whether the wait has ended at `now` without a choice made yet.
@@ -97,20 +125,42 @@ impl NameTip {
         self.rest.is_some_and(|s| now - s >= WAIT_MS)
     }
 
-    /// One drawn frame at real time `now`. A tip whose lifetime is over
-    /// hides. A tip that shows has its text chosen again: `choose(Some(tip))`
-    /// gives the tip for the pointer's place now; none, or `blocked`, hides
+    /// One drawn frame at real time `now`, the pointer on a build-icon slot
+    /// when `on_slot`. A tip whose lifetime is over hides. A tip that shows
+    /// has its text chosen again: `choose(Some(tip))` gives the tip for the
+    /// place of the pointer's last movement now; none, or `blocked`, hides
     /// it, a different text replaces it with the lifetime unchanged, the same
-    /// text leaves it. When the wait ends, the rest's one choice is made: no
-    /// tip while `blocked`, else `choose(None)` gives the tip, if any.
+    /// text leaves it. A movement over the slots since the last frame shows
+    /// its tip now, its lifetime from that movement. When the wait ends, the
+    /// rest's one choice is made. In both, no tip while `blocked`, else
+    /// `choose(None)` gives the tip, if any, with its lifetime from now.
     pub fn update(
         &mut self,
         now: i64,
+        on_slot: bool,
         blocked: bool,
         choose: impl FnOnce(Option<&Shown>) -> Option<Shown>,
     ) {
+        // spec: S-0411 claim 20 (Over the slots, no wait: once one drawn frame has passed with the pointer on a slot, every later movement that ends on a slot shows its tip at once)
+        self.armed = on_slot;
+        if let Some(t) = self.at_once.take() {
+            self.shown = None;
+            if blocked {
+                // spec: S-0411 claim 20 (Buttons and blocks: the hidden mouse cursor, so an order block, blocks sidebar tips; the options menu hides them)
+                return;
+            }
+            // spec: S-0411 claim 20 (Lifetime: the lifetime starts at the movement for a tip that a movement shows at once; every movement over the slots that shows a tip, the same tip included, starts it again)
+            self.shown = choose(None).map(|mut s| {
+                s.until = t + LIFETIME_MS;
+                s
+            });
+            if self.shown.as_ref().is_some_and(|s| now >= s.until) {
+                self.shown = None;
+            }
+            return;
+        }
         if self.shown.as_ref().is_some_and(|s| now >= s.until) {
-            // spec: S-0111 claim 20 (Lifetime: it hides after 10000 ms and does not show again until the pointer moves and rests again)
+            // spec: S-0111 claim 20 (Lifetime: it hides after 10000 ms and does not show again until the pointer moves and rests again); S-0411 claim 20 (Lifetime: over the slots the next movement shows it again at once)
             self.shown = None;
         }
         if let Some(old) = self.shown.take() {
@@ -263,14 +313,16 @@ pub fn register(painter: &mut Painter, font: &StatusFont, s: &Shown, rows: &mut 
     status_font::register_glyphs(painter, font, units, sprite(s.ink), row);
 }
 
-/// Draws tip `s` in the battlefield view `view`: its box (`draw_box`),
-/// then its lines in the game font, inset by [`INSET`] and one line pitch
-/// apart, each glyph's first min(*H*, *P*) rows painted, inside the frame.
-pub fn draw(d: &mut DrawList, font: &StatusFont, s: &Shown, view: Rect) {
-    draw_box(d, s, view);
+/// Draws tip `s`, cut at its clip rectangle: its box (`draw_box`), then its
+/// lines in the game font, inset by [`INSET`] and one line pitch apart,
+/// each glyph's first min(*H*, *P*) rows painted, inside the frame.
+pub fn draw(d: &mut DrawList, font: &StatusFont, s: &Shown) {
+    draw_box(d, s);
     let r = s.rect;
-    // spec: S-0111 claim 25 (the text sits inside the frame)
-    let inside = view.intersect(&Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2));
+    // spec: S-0111 claim 25 (the text sits inside the frame); S-0411 claim 21 (laid out and drawn as S-0111 claims 24 and 25 give)
+    let inside = s
+        .clip
+        .intersect(&Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2));
     // spec: S-0111 claim 24 (h_t is the number of lines times the line pitch P_f: a line per pitch)
     let pitch = font.line_pitch() as i32;
     // spec: S-0213 claim 25 (the game font's rows 0 ≤ r < min(H, P) of a line are painted), as the status text the tip shares its font with
@@ -305,35 +357,54 @@ pub fn tip(
     ink: [u8; 3],
     now: i64,
 ) -> Option<Shown> {
+    // spec: S-0111 claim 24 (r40: lines wrap to the wrap width W − 8, W the view's width)
+    let wrap_w = view.w - WRAP_ALLOWANCE;
+    // spec: S-0111 claim 24 (the box is placed once, from the pointer's position when the tip shows; it does not move while it shows)
+    let at = |size| place(p, size, (view.right(), view.bottom()));
+    make(units, wrap_w, font, ink, now, view, at)
+}
+
+/// A tip for `units` (cut to the text limit) laid out in the game font
+/// (`font`: glyph widths and line pitch) with wrap width `wrap_w`, its box
+/// placed by `at` from its size, cut at the screen rectangle `clip`, shown
+/// at `now`: `None` for an empty text.
+pub fn make(
+    units: &[u16],
+    wrap_w: i32,
+    font: (&impl Fn(u16) -> i32, i32),
+    ink: [u8; 3],
+    now: i64,
+    clip: Rect,
+    at: impl FnOnce((i32, i32)) -> (i32, i32),
+) -> Option<Shown> {
     let units = cut(units);
     if units.is_empty() {
-        // spec: S-0111 claim 20 (if there is no text, or it is empty, nothing shows)
+        // spec: S-0111 claim 20 (if there is no text, or it is empty, nothing shows); S-0411 claim 20 (an empty slot has no text, and no tip shows there)
         return None;
     }
     let (glyph_width, pitch) = font;
-    // spec: S-0111 claim 24 (r40: lines wrap to the wrap width W − 8, W the view's width)
-    let lines = lines(units, glyph_width, view.w - WRAP_ALLOWANCE);
+    let lines = lines(units, glyph_width, wrap_w);
     let (w, h) = size(&lines, glyph_width, pitch);
-    // spec: S-0111 claim 24 (the box is placed once, from the pointer's position when the tip shows; it does not move while it shows)
-    let (l, m) = place(p, (w, h), (view.right(), view.bottom()));
+    let (l, m) = at((w, h));
     Some(Shown {
         text: units.to_vec(),
         lines,
         rect: Rect::new(l, m, w, h),
-        // spec: S-0111 claim 20 (Lifetime: 10000 ms after it shows)
+        // spec: S-0111 claim 20 (Lifetime: 10000 ms after it shows); S-0411 claim 20 (Lifetime: at the end of the wait for a tip that shows after a rest)
         until: now + LIFETIME_MS,
         ink,
+        clip,
     })
 }
 
 /// Draws the box of `s`: opaque black, framed by a 1-pixel line in the tip
-/// colour, clipped to `view`. The text is the caller's (the game font's
-/// sprites in the tip colour).
-pub fn draw_box(d: &mut DrawList, s: &Shown, view: Rect) {
+/// colour, cut at the tip's clip rectangle. The text is the caller's (the
+/// game font's sprites in the tip colour).
+pub fn draw_box(d: &mut DrawList, s: &Shown) {
     let r = s.rect;
     let [cr, cg, cb] = s.ink;
-    // spec: S-0111 claim 25 (filled with opaque black and framed by a line one pixel wide along its four edges in the tip colour; drawn as it is, with no shade table)
-    let clip = |x: Rect| view.intersect(&x);
+    // spec: S-0111 claim 25 (filled with opaque black and framed by a line one pixel wide along its four edges in the tip colour; drawn as it is, with no shade table); S-0411 claim 21 (drawn over the sidebar and cut at its edges: it never covers the battlefield view)
+    let clip = |x: Rect| s.clip.intersect(&x);
     d.fill(clip(r), [0, 0, 0, 255]);
     let ink = [cr, cg, cb, 255];
     for e in [
@@ -359,6 +430,11 @@ mod tests {
         if c == u16::from(b'W') { 9 } else { 4 }
     }
 
+    /// A movement that ends off the build-icon slots.
+    fn off_slots(t: &mut NameTip, now: i64) {
+        t.moved(now, false);
+    }
+
     fn shown(now: i64) -> Option<Shown> {
         tip(
             &u("ab"),
@@ -375,33 +451,35 @@ mod tests {
     #[test]
     fn claim_20_wait_lifetime_and_one_choice() {
         let mut t = NameTip::default();
-        t.update(5000, false, |_| panic!("no rest yet"));
-        t.moved(1000);
-        t.update(1999, false, |_| panic!("the wait runs"));
+        t.update(5000, false, false, |_| panic!("no rest yet"));
+        off_slots(&mut t, 1000);
+        t.update(1999, false, false, |_| panic!("the wait runs"));
         assert!(t.shown.is_none());
-        t.moved(1500);
-        t.update(2400, false, |_| panic!("the wait started again"));
+        off_slots(&mut t, 1500);
+        t.update(2400, false, false, |_| panic!("the wait started again"));
         let mut asked = 0;
-        t.update(2500, false, |_| {
+        t.update(2500, false, false, |_| {
             asked += 1;
             shown(2500)
         });
         assert_eq!(asked, 1);
         assert_eq!(t.shown.as_ref().unwrap().until, 12_500);
         // While it shows, the text is chosen again (claim 26): the same text stays.
-        t.update(6000, false, |old| {
+        t.update(6000, false, false, |old| {
             assert!(old.is_some(), "chosen again while it shows");
             shown(6000)
         });
         assert!(t.shown.is_some());
-        t.update(12_499, false, |_| shown(12_499));
+        t.update(12_499, false, false, |_| shown(12_499));
         assert_eq!(t.shown.as_ref().unwrap().until, 12_500);
-        t.update(12_500, false, |_| panic!("no second tip in the same rest"));
+        t.update(12_500, false, false, |_| {
+            panic!("no second tip in the same rest")
+        });
         assert!(t.shown.is_none(), "the lifetime ended");
         // An empty choice shows nothing, and nothing until the pointer moves.
-        t.moved(20_000);
-        t.update(21_000, false, |_| None);
-        t.update(22_000, false, |_| panic!("one choice per rest"));
+        off_slots(&mut t, 20_000);
+        t.update(21_000, false, false, |_| None);
+        t.update(22_000, false, false, |_| panic!("one choice per rest"));
         assert!(t.shown.is_none());
     }
 
@@ -411,27 +489,27 @@ mod tests {
     #[test]
     fn claims_20_and_26_what_hides_it() {
         let mut t = NameTip::default();
-        t.moved(0);
-        t.update(1000, false, |_| shown(1000));
+        off_slots(&mut t, 0);
+        t.update(1000, false, false, |_| shown(1000));
         assert!(t.shown.is_some());
         t.button();
         assert!(t.shown.is_none());
-        t.update(5000, false, |_| panic!("the wait stopped"));
-        t.moved(5000);
+        t.update(5000, false, false, |_| panic!("the wait stopped"));
+        off_slots(&mut t, 5000);
         t.button();
-        t.update(7000, false, |_| panic!("the wait stopped"));
-        t.moved(7000);
-        t.update(8000, false, |_| shown(8000));
-        t.moved(8100);
+        t.update(7000, false, false, |_| panic!("the wait stopped"));
+        off_slots(&mut t, 7000);
+        t.update(8000, false, false, |_| shown(8000));
+        off_slots(&mut t, 8100);
         assert!(t.shown.is_none(), "a movement hides it");
-        t.update(9100, true, |_| panic!("blocked: no choice"));
+        t.update(9100, false, true, |_| panic!("blocked: no choice"));
         assert!(t.shown.is_none());
-        t.update(9200, false, |_| panic!("the rest's choice is spent"));
-        t.moved(10_000);
-        t.update(11_000, false, |_| shown(11_000));
+        t.update(9200, false, false, |_| panic!("the rest's choice is spent"));
+        off_slots(&mut t, 10_000);
+        t.update(11_000, false, false, |_| shown(11_000));
         t.off();
         assert!(t.shown.is_none());
-        t.update(13_000, false, |_| panic!("off: no wait"));
+        t.update(13_000, false, false, |_| panic!("off: no wait"));
     }
 
     /// spec: S-0111 claim 26 (a text chosen again while it shows: no text or blocked hides it with
@@ -451,37 +529,37 @@ mod tests {
             )
         };
         let mut t = NameTip::default();
-        t.moved(0);
-        t.update(1000, false, |_| shown(1000));
+        off_slots(&mut t, 0);
+        t.update(1000, false, false, |_| shown(1000));
         let first = t.shown.clone().unwrap();
         // Another text: replaced, laid out again, the lifetime not started again.
-        t.update(3000, false, |_| other(3000));
+        t.update(3000, false, false, |_| other(3000));
         let s = t.shown.as_ref().unwrap();
         assert_eq!(s.lines, vec![u("abc")]);
         assert_eq!(s.until, first.until, "the lifetime does not start again");
         assert_ne!(s.rect, first.rect);
         // The same text: as it is.
         let before = t.shown.clone();
-        t.update(4000, false, |_| other(4000));
+        t.update(4000, false, false, |_| other(4000));
         assert_eq!(t.shown, before);
         // No text hides it, and nothing shows again until a movement and a rest.
-        t.update(5000, false, |_| None);
+        t.update(5000, false, false, |_| None);
         assert!(t.shown.is_none());
-        t.update(6000, false, |_| panic!("one choice per rest"));
-        t.update(20_000, false, |_| panic!("one choice per rest"));
+        t.update(6000, false, false, |_| panic!("one choice per rest"));
+        t.update(20_000, false, false, |_| panic!("one choice per rest"));
         // Blocked while it shows: hides.
-        t.moved(30_000);
-        t.update(31_000, false, |_| shown(31_000));
-        t.update(31_100, true, |_| panic!("blocked: no choice"));
+        off_slots(&mut t, 30_000);
+        t.update(31_000, false, false, |_| shown(31_000));
+        t.update(31_100, false, true, |_| panic!("blocked: no choice"));
         assert!(t.shown.is_none());
-        t.update(31_200, false, |_| {
+        t.update(31_200, false, false, |_| {
             panic!("the block ending brings nothing back")
         });
         assert!(t.shown.is_none());
         // A wait that ends blocked uses up the rest's choice.
-        t.moved(40_000);
-        t.update(41_000, true, |_| panic!("blocked"));
-        t.update(42_000, false, |_| panic!("the choice is spent"));
+        off_slots(&mut t, 40_000);
+        t.update(41_000, false, true, |_| panic!("blocked"));
+        t.update(42_000, false, false, |_| panic!("the choice is spent"));
         assert!(t.shown.is_none());
     }
 
@@ -585,7 +663,7 @@ mod tests {
         );
         let s = shown(0).unwrap();
         let mut d = DrawList::new();
-        draw_box(&mut d, &s, Rect::new(0, 0, 640, 400));
+        draw_box(&mut d, &s);
         let fills: Vec<(Rect, [u8; 4])> = d
             .prims
             .iter()
@@ -616,7 +694,7 @@ mod tests {
         register(&mut painter, &font, &s, &mut rows);
         assert!(rows[1].is_some() && rows[0].is_none());
         let mut d = DrawList::new();
-        draw(&mut d, &font, &s, view);
+        draw(&mut d, &font, &s);
         let quads = painter.quads(&d);
         let size = (120, 80);
         let px = painter.reference(&quads, &Default::default(), size);
@@ -640,5 +718,146 @@ mod tests {
             .filter(|&(x, y)| !r.contains(glasnost_ui::geom::Point::new(x, y)))
             .any(|(x, y)| at(x, y) != [0, 0, 0]);
         assert!(!outside);
+    }
+
+    /// spec: S-0411 claim 20 (Over the slots, no wait: the movement onto the slots is an ordinary
+    /// one; once one drawn frame has passed with the pointer on a slot, every later movement that
+    /// ends on a slot shows its tip at once; Lifetime: from the movement, started again by every
+    /// such movement, the same tip included; a movement off the slots is an ordinary one) and
+    /// S-0111 claim 20 (the one exception over the build-icon slots)
+    #[test]
+    fn s0411_claim_20_over_the_slots_no_wait() {
+        let mut t = NameTip::default();
+        // The movement onto the slots: the ordinary wait.
+        t.moved(1000, true);
+        t.update(1016, true, false, |_| panic!("the wait runs"));
+        // A drawn frame has passed on a slot: the next movement shows at once.
+        t.moved(1020, true);
+        assert!(t.shown.is_none(), "shown at the next drawn frame");
+        let mut asked = 0;
+        t.update(1032, true, false, |old| {
+            assert!(old.is_none(), "a new tip, not a text chosen again");
+            asked += 1;
+            shown(1032)
+        });
+        assert_eq!(asked, 1);
+        assert_eq!(
+            t.shown.as_ref().unwrap().until,
+            1020 + 10_000,
+            "from the movement"
+        );
+        // The same tip again, by a movement: the lifetime starts again.
+        t.moved(5000, true);
+        t.update(5016, true, false, |_| shown(5016));
+        assert_eq!(t.shown.as_ref().unwrap().until, 15_000);
+        // A text chosen again does not start it again.
+        t.update(9000, true, false, |_| shown(9000));
+        assert_eq!(t.shown.as_ref().unwrap().until, 15_000);
+        // The lifetime ends; the next movement there shows it again at once.
+        t.update(15_000, true, false, |_| shown(15_000));
+        assert!(t.shown.is_none());
+        t.update(16_000, true, false, |_| panic!("no wait runs"));
+        t.moved(16_100, true);
+        t.update(16_116, true, false, |_| shown(16_116));
+        assert_eq!(t.shown.as_ref().unwrap().until, 26_100);
+        // A movement onto an empty slot: no text, hidden; still on the slots.
+        t.moved(17_000, true);
+        t.update(17_016, true, false, |_| None);
+        assert!(t.shown.is_none());
+        t.update(19_000, true, false, |_| {
+            panic!("no wait over an empty slot")
+        });
+        t.moved(19_100, true);
+        t.update(19_116, true, false, |_| shown(19_116));
+        assert!(t.shown.is_some());
+        // A movement off the slots is an ordinary one, and so is the next one back on.
+        t.moved(20_000, false);
+        assert!(t.shown.is_none());
+        t.update(20_016, false, false, |_| panic!("the wait runs"));
+        t.moved(20_100, true);
+        t.update(20_116, true, false, |_| panic!("the wait runs again"));
+        t.update(21_100, true, false, |_| shown(21_100));
+        assert_eq!(
+            t.shown.as_ref().unwrap().until,
+            31_100,
+            "from the end of the wait"
+        );
+    }
+
+    /// spec: S-0411 claim 20 (no drawn frame between the movement onto the slots and the next
+    /// one: that one is ordinary too; the one drawn frame that must pass first)
+    #[test]
+    fn s0411_claim_20_one_drawn_frame_first() {
+        let mut t = NameTip::default();
+        t.moved(0, true);
+        t.moved(5, true);
+        t.update(16, true, false, |_| panic!("the wait runs"));
+        t.update(1004, true, false, |_| panic!("the wait started at 5"));
+        t.update(1005, true, false, |_| shown(1005));
+        assert!(t.shown.is_some());
+    }
+
+    /// spec: S-0411 claim 20 (Buttons and blocks: a press or release hides the tip, and over the
+    /// slots the next movement shows it again at once, also while a button is held; the hidden
+    /// cursor, so an order block, blocks sidebar tips; the options menu hides it and stops the
+    /// wait)
+    #[test]
+    fn s0411_claim_20_buttons_and_blocks() {
+        let mut t = NameTip::default();
+        t.moved(0, true);
+        t.update(16, true, false, |_| panic!("the wait runs"));
+        t.moved(20, true);
+        t.update(32, true, false, |_| shown(32));
+        // A press hides it; the next movement over the slots shows it again at once.
+        t.button();
+        assert!(t.shown.is_none());
+        t.update(48, true, false, |_| {
+            panic!("hidden until the pointer moves")
+        });
+        t.moved(60, true);
+        t.update(64, true, false, |_| shown(64));
+        assert!(t.shown.is_some(), "a held button does not stop it");
+        // Blocked (the hidden cursor): the movement shows nothing.
+        t.moved(100, true);
+        t.update(116, true, true, |_| panic!("blocked: no choice"));
+        assert!(t.shown.is_none());
+        t.update(132, true, false, |_| {
+            panic!("nothing until the pointer moves")
+        });
+        t.moved(140, true);
+        t.update(148, true, false, |_| shown(148));
+        assert!(t.shown.is_some());
+        // Blocked while it shows: hidden.
+        t.update(160, true, true, |_| panic!("blocked: no choice"));
+        assert!(t.shown.is_none());
+        // The options menu (or the option off): hidden, no movement pending.
+        t.moved(200, true);
+        t.off();
+        t.update(216, true, false, |_| panic!("off: nothing pending"));
+        assert!(t.shown.is_none());
+    }
+
+    /// spec: S-0411 claim 21 (laid out and drawn as S-0111 claims 24 and 25 give; drawn over the
+    /// sidebar and cut at its edges: it never covers the battlefield view)
+    #[test]
+    fn s0411_claim_21_cut_at_the_sidebar() {
+        let side = Rect::new(100, 0, 60, 80);
+        let s = make(&u("aaaa"), 52, (&gw, 12), INK_SIDE_0, 0, side, |_| (90, 10)).unwrap();
+        assert_eq!(s.rect, Rect::new(90, 10, 20 + 8, 12 + 4));
+        let mut d = DrawList::new();
+        draw_box(&mut d, &s);
+        let fills: Vec<Rect> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                glasnost_ui::draw::Prim::Fill { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            fills.iter().all(|r| r.is_empty() || r.x >= 100),
+            "{fills:?}"
+        );
+        assert_eq!(fills[0], Rect::new(100, 10, 18, 16));
     }
 }

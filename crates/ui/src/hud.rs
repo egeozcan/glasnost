@@ -115,9 +115,6 @@ pub struct CameoView {
     /// A drain-mode superweapon's *charging* or *active* label (S-0512
     /// claim 16).
     pub state: Option<&'static str>,
-    /// A superweapon's time left in game seconds, *s* of S-0512 F6, while
-    /// it is not ready (for the tooltip).
-    pub seconds: Option<i32>,
 }
 
 /// One tab button.
@@ -208,9 +205,6 @@ pub struct HudModel {
     pub flash_extra: bool,
     /// The battlefield view's outline on the radar (S-0410 claim 11).
     pub view_box: Option<ViewBox>,
-    /// The icon the keyboard focus is on, whose tooltip shows when the
-    /// pointer is on no icon.
-    pub focus_cameo: Option<usize>,
     /// The install's button images the client draws (S-0411 claim 19).
     pub buttons: ButtonArt,
     /// The scroll button (0 up, 1 down) whose press is in progress with the
@@ -423,7 +417,6 @@ pub fn model(
                     art: art(e),
                     charge: None,
                     state: None,
-                    seconds: None,
                 }
             }
             Entry::Superweapon(k) => {
@@ -448,10 +441,6 @@ pub fn model(
                         Label::Active => Some("Active"),
                         _ => None,
                     },
-                    // spec: S-0512 F6 (s = ⌊remaining / 15⌋ game seconds)
-                    seconds: charge::get(w, house, k)
-                        .filter(|r| !r.ready)
-                        .map(|r| r.remaining(w.tick).div_euclid(15)),
                 }
             }
         })
@@ -687,6 +676,34 @@ impl Layout {
         (self.grid.h / (CAMEO.1 + 4)) as usize
     }
 
+    /// The slot (S-0411 Terms: one place of the shown strip, filled or
+    /// empty) under logical pixel `p`: the n-th shown place, counted as
+    /// [`Layout::cameo`] counts them.
+    ///
+    /// design: S-0411 claim 20 (the slots): each slot takes its icon's cell
+    /// and the gaps right of and below it, so the slots tile the strip and a
+    /// movement from one icon to the next never leaves them.
+    pub fn slot_at(&self, p: Point) -> Option<usize> {
+        if !self.grid.contains(p) {
+            return None;
+        }
+        let col = ((p.x - self.grid.x) / (CAMEO.0 + 4)).min(1);
+        let row = ((p.y - self.grid.y) / (CAMEO.1 + 4)) as usize;
+        // spec: S-0411 Terms (Slot: only the places that are shown count)
+        (row < self.rows()).then_some(row * 2 + col as usize)
+    }
+
+    /// The tip area (S-0411 Terms): the sidebar's whole width, from below
+    /// the radar's frame to the sidebar's bottom edge.
+    ///
+    /// design: S-0411 Terms (in our layout the matching part of our sidebar):
+    /// below our radar's 1-pixel frame, so it holds the credits, the power
+    /// meter, the mode buttons, the tabs, the strip and its buttons.
+    pub fn tip_area(&self) -> Rect {
+        let top = self.radar.bottom() + 1;
+        Rect::new(self.bar.x, top, self.bar.w, self.bar.bottom() - top)
+    }
+
     /// The cell of the n-th shown icon (after scrolling).
     pub fn cameo(&self, n: usize) -> Rect {
         let col = (n % 2) as i32;
@@ -799,18 +816,19 @@ const VEHICLES_SYMBOL: Symbol = [
     "............",
 ];
 
-/// Each tab's symbol and name (shown on hover).
-const TAB_BUTTONS: [(Symbol, &str); TABS] = [
-    (BUILDINGS_SYMBOL, "Buildings"),
-    (DEFENCES_SYMBOL, "Defences"),
-    (INFANTRY_SYMBOL, "Infantry"),
-    (VEHICLES_SYMBOL, "Vehicles"),
+/// Each tab's symbol (its tip is the client's, S-0411 claim 22).
+const TAB_BUTTONS: [Symbol; TABS] = [
+    BUILDINGS_SYMBOL,
+    DEFENCES_SYMBOL,
+    INFANTRY_SYMBOL,
+    VEHICLES_SYMBOL,
 ];
-/// Each command button's mode, symbol and name (shown on hover).
-const MODE_BUTTONS: [(Mode, Symbol, &str); 3] = [
-    (Mode::Sell, SELL_SYMBOL, "Sell"),
-    (Mode::Repair, REPAIR_SYMBOL, "Repair"),
-    (Mode::Power, POWER_SYMBOL, "Power on/off"),
+/// Each command button's mode and symbol (its tip is the client's, S-0411
+/// claim 22).
+const MODE_BUTTONS: [(Mode, Symbol); 3] = [
+    (Mode::Sell, SELL_SYMBOL),
+    (Mode::Repair, REPAIR_SYMBOL),
+    (Mode::Power, POWER_SYMBOL),
 ];
 
 /// Draws `s` centred in `r`, one fill per run of drawn pixels in a row.
@@ -950,22 +968,16 @@ pub fn view(
         );
     }
     d.frame(l.power, colour::EDGE);
-    // The button or bar under the pointer, with its tooltip lines.
-    let mut named: Option<(Rect, Vec<String>)> = None;
-    if hot(l.power) {
-        named = Some((l.power, power_lines(m.power)));
-    }
+    // The sidebar's tips are the client's (S-0411 claims 20 to 22): drawn
+    // in the game font over the sidebar, after it.
 
-    for (r, (mode, sym, name)) in l.modes.iter().zip(MODE_BUTTONS) {
+    for (r, (mode, sym)) in l.modes.iter().zip(MODE_BUTTONS) {
         let active = m.mode == Some(mode);
         if !image(&mut d, *r, m.buttons.mode(mode), mode_frame(active)) {
             // design: S-0411 claim 19 (a file or frame that cannot be resolved, and the power button: our own symbol)
             symbol_button(&mut d, *r, &sym, hot(*r) || active, true);
         }
         t.push(*r, HudHit::Mode(mode));
-        if hot(*r) {
-            named = Some((*r, vec![name.to_string()]));
-        }
     }
     for (i, r) in l.tabs.iter().enumerate() {
         let tv = m.tabs[i];
@@ -975,7 +987,7 @@ pub fn view(
                 .flash_start
                 .is_some_and(|t| tab_lit(t, m.tick, m.flash_extra));
         let active = i == m.shown;
-        let (sym, name) = TAB_BUTTONS[i];
+        let sym = TAB_BUTTONS[i];
         let frame = tab_frame(tv.count == 0, lit, active);
         if !image(&mut d, *r, m.buttons.tabs[i], frame) {
             // design: S-0411 claim 19 (a file or frame that cannot be resolved: our own symbol; claim 11's lit look is then ours)
@@ -983,9 +995,6 @@ pub fn view(
             if active {
                 d.fill(Rect::new(r.x, r.bottom() - 2, r.w, 2), colour::ACCENT);
             }
-        }
-        if hot(*r) {
-            named = Some((*r, vec![name.to_string()]));
         }
         if tv.count > 0 {
             t.push(*r, HudHit::Tab(i));
@@ -995,14 +1004,10 @@ pub fn view(
     d.fill(l.grid, colour::BACKDROP);
     let rows = l.rows();
     let first = m.scroll.min(max_scroll(m.cameos.len(), rows)) * 2;
-    let mut tip = None;
     for (n, c) in m.cameos.iter().enumerate().skip(first).take(rows * 2) {
         let r = l.cameo(n - first);
         cameo(&mut d, r, c, hot(r));
         t.push(r, HudHit::Cameo(n));
-        if hot(r) || (tip.is_none() && m.focus_cameo == Some(n)) {
-            tip = Some((r, c));
-        }
     }
     // spec: S-0411 claim 18 (both page buttons disabled when all icons fit)
     let enabled = overflows(m.cameos.len(), rows);
@@ -1016,12 +1021,6 @@ pub fn view(
             t.push(*r, HudHit::Scroll(if k == 0 { -1 } else { 1 }));
         }
     }
-    // The pointer's icon wins over the keyboard's.
-    if let Some((r, c)) = tip {
-        tooltip(&mut d, r, tooltip_lines(c), size);
-    } else if let Some((r, lines)) = named {
-        tooltip(&mut d, r, lines, size);
-    }
     (d, t)
 }
 
@@ -1032,57 +1031,6 @@ pub fn view(
 // design: M8 A4 round 7 note 43 (our mark of the drain within the supplied part; the three parts' extents are F4's, unchanged)
 pub fn drain_mark((o, d): (i32, i32), supplied: i32) -> Option<i32> {
     (d > 0 && d < o).then(|| (i64::from(supplied) * i64::from(d) / i64::from(o)) as i32)
-}
-
-/// The power bar's tooltip: the totals it represents (S-0405 claim 4).
-// design: M8 A4 round 7 note 43 (the output and drain shown as numbers on hover)
-pub fn power_lines((o, d): (i32, i32)) -> Vec<String> {
-    vec![
-        "Power".to_string(),
-        format!("Output {o}"),
-        format!("Drain {d}"),
-    ]
-}
-
-/// The lines of an icon's tooltip: its name, then a build type's price
-/// (S-0404) or a superweapon's state and time left (S-0512 claim 16, F6).
-///
-/// design: M8 A4 round 5 note 33 asks for prices on the icons; no spec
-/// covers a tooltip, so its content and look are ours.
-pub fn tooltip_lines(c: &CameoView) -> Vec<String> {
-    let mut v = vec![c.name.clone()];
-    match c.entry {
-        // spec: S-0404 (the price to the house)
-        Entry::Type(_) => v.push(format!("$ {}", c.price)),
-        Entry::Superweapon(_) => {
-            if c.on_hold {
-                v.push("On hold".into());
-            } else if c.ready {
-                v.push("Ready".into());
-            } else if let Some(s) = c.seconds {
-                let state = c.state.unwrap_or("Charging");
-                v.push(format!("{state}: {}", countdown_time(s)));
-            }
-        }
-    }
-    v
-}
-
-/// Draws a tooltip of `lines` (the first one a name) beside the hovered
-/// rectangle `r`, on the battlefield side of the sidebar, kept on the
-/// screen.
-fn tooltip(d: &mut DrawList, r: Rect, lines: Vec<String>, size: (i32, i32)) {
-    let w = lines.iter().map(|s| font::text_width(s)).max().unwrap_or(0) + 8;
-    let h = lines.len() as i32 * (font::LINE_HEIGHT + 2) + 4;
-    let x = (r.x - w - 4).max(0);
-    let y = r.y.min(size.1 - h).max(0);
-    let b = Rect::new(x, y, w, h);
-    d.fill(b, [0, 0, 0, 210]);
-    d.frame(b, colour::EDGE);
-    for (i, s) in lines.into_iter().enumerate() {
-        let ink = if i == 0 { colour::TEXT } else { colour::ACCENT };
-        d.text(x + 4, y + 3 + i as i32 * (font::LINE_HEIGHT + 2), s, ink, b);
-    }
 }
 
 fn cameo(d: &mut DrawList, r: Rect, c: &CameoView, hot: bool) {
@@ -1261,7 +1209,6 @@ mod tests {
             art: None,
             charge: None,
             state: None,
-            seconds: None,
         }
     }
 
@@ -1466,24 +1413,11 @@ mod tests {
         assert_eq!(lines(&m), 4);
     }
 
+    /// spec: S-0411 claims 20 and 21 (the icon tips are the client's, in the game font over the
+    /// sidebar): the sidebar draws no tip of its own over a hovered icon
     #[test]
-    fn an_icon_tooltip_shows_the_price_or_the_time_left() {
-        // spec: S-0404 (the price to the house)
-        assert_eq!(tooltip_lines(&cameo_view(3)), ["T3", "$ 100"]);
-        let sw = |ready, seconds| CameoView {
-            entry: Entry::Superweapon(0),
-            ready,
-            seconds,
-            ..cameo_view(0)
-        };
-        // spec: S-0512 F6 (the time left in game seconds)
-        assert_eq!(
-            tooltip_lines(&sw(false, Some(75))),
-            ["T0", "Charging: 1:15"]
-        );
-        assert_eq!(tooltip_lines(&sw(true, None)), ["T0", "Ready"]);
-        // Shown for the hovered icon, or else the keyboard's.
-        let mut m = HudModel {
+    fn a_hovered_icon_draws_no_tip_here() {
+        let m = HudModel {
             cameos: vec![cameo_view(0), cameo_view(1)],
             ..HudModel::default()
         };
@@ -1495,21 +1429,48 @@ mod tests {
                 .map(String::from)
                 .collect::<Vec<_>>()
         };
-        assert!(!texts(&m, None).contains(&"$ 100".to_string()));
-        m.focus_cameo = Some(1);
-        let t = texts(&m, None);
-        assert!(t.contains(&"T1".to_string()) && t.contains(&"$ 100".to_string()));
         let l = Layout::new((800, 600));
         let over = l.cameo(0);
         let t = texts(&m, Some(Point::new(over.x + 2, over.y + 2)));
-        // The pointer's icon: T0's name shows twice (the placeholder card and the tooltip).
-        assert_eq!(t.iter().filter(|s| *s == "T0").count(), 2);
-        assert_eq!(t.iter().filter(|s| *s == "T1").count(), 1);
+        // Only the placeholder cards' names.
+        assert_eq!(t.iter().filter(|s| *s == "T0").count(), 1);
+        assert_eq!(t, texts(&m, None));
     }
 
-    // design: M8 A4 round 7 note 41 (symbols of our own on the command and tab buttons, their names on hover; Q-2238)
+    /// spec: S-0411 Terms (Slot: the shown places of the strip, filled or empty; Tip area: the
+    /// sidebar's whole width from below the radar panel to the bottom edge); design: the slots
+    /// tile the strip with the gaps, and our tip area starts below the radar's frame
     #[test]
-    fn command_and_tab_buttons_show_symbols_and_name_on_hover() {
+    fn s0411_terms_slots_and_tip_area() {
+        for size in [(800, 600), (1024, 768), (640, 480)] {
+            let l = Layout::new(size);
+            let n = l.rows() * 2;
+            for k in 0..n {
+                let r = l.cameo(k);
+                assert_eq!(l.slot_at(r.centre()), Some(k));
+                assert_eq!(l.slot_at(Point::new(r.x, r.y)), Some(k));
+                // The gap below a cell, and between the columns, is its slot's.
+                assert_eq!(l.slot_at(Point::new(r.x, r.bottom() + 1)), Some(k));
+                if k % 2 == 0 {
+                    assert_eq!(l.slot_at(Point::new(r.right() + 1, r.y)), Some(k));
+                }
+            }
+            // Below the last shown row, or off the strip: no slot.
+            let last = l.cameo(n - 1);
+            assert_eq!(l.slot_at(Point::new(last.x, last.y + CAMEO.1 + 4)), None);
+            assert_eq!(l.slot_at(Point::new(l.grid.x - 1, l.grid.y)), None);
+            let a = l.tip_area();
+            assert_eq!((a.x, a.w), (l.bar.x, l.bar.w));
+            assert_eq!(a.y, l.radar.bottom() + 1);
+            assert_eq!(a.bottom(), l.bar.bottom());
+            assert!(a.contains(l.grid.centre()) && a.contains(l.power.centre()));
+            assert!(!a.contains(l.radar.centre()));
+        }
+    }
+
+    // design: M8 A4 round 7 note 41 (symbols of our own on the command and tab buttons; Q-2238); S-0411 claim 22 (their tips: the client's)
+    #[test]
+    fn command_and_tab_buttons_show_symbols() {
         for s in [
             SELL_SYMBOL,
             REPAIR_SYMBOL,
@@ -1566,9 +1527,9 @@ mod tests {
         let (_, t) = view(&m, size, None, None);
         assert_eq!(t.hit(l.modes[1].centre()), Some(HudHit::Mode(Mode::Repair)));
         assert_eq!(t.hit(l.tabs[0].centre()), Some(HudHit::Tab(0)));
-        // Hover names the button.
-        assert!(texts(&m, Some(l.modes[1].centre())).contains(&"Repair".to_string()));
-        assert!(texts(&m, Some(l.tabs[3].centre())).contains(&"Vehicles".to_string()));
+        // A rest on a button draws no name here: its tip is the client's (S-0411 claim 22).
+        assert_eq!(texts(&m, Some(l.modes[1].centre())), plain);
+        assert_eq!(texts(&m, Some(l.tabs[3].centre())), plain);
     }
 
     // spec: S-0411 claim 19 (the frame tables: the first matching row, top to bottom)
@@ -1779,9 +1740,9 @@ mod tests {
             let (d, _) = view(&m, size, None, Some(r.centre()));
             assert_eq!(sprites(&d), plain, "hover over {r:?}");
         }
-        // Hover still names the button.
+        // The button's tip is the client's (S-0411 claim 22): hover draws no name here.
         let (d, _) = view(&m, size, None, Some(l.modes[0].centre()));
-        assert!(d.texts().contains(&"Sell"));
+        assert_eq!(d.texts(), view(&m, size, None, None).0.texts());
     }
 
     // spec: S-0411 claim 19 (a file or frame that cannot be resolved: our own symbol, for that state only)
@@ -1823,9 +1784,9 @@ mod tests {
         assert!(sprites(&d).is_empty());
     }
 
-    // spec: S-0405 claim 19 and F4 (the three parts' extents are unchanged); design: M8 A4 round 7 note 43 (a drain mark within the supplied part while 0 < D < O, the totals on hover)
+    // spec: S-0405 claim 19 and F4 (the three parts' extents are unchanged); design: M8 A4 round 7 note 43 (a drain mark within the supplied part while 0 < D < O); S-0411 claim 22 (the totals: the power meter's tip)
     #[test]
-    fn the_power_bar_marks_the_drain_and_names_the_totals() {
+    fn the_power_bar_marks_the_drain() {
         assert_eq!(drain_mark((100, 50), 120), Some(60));
         assert_eq!(drain_mark((300, 25), 120), Some(10));
         assert_eq!(drain_mark((100, 0), 120), None, "no drain");
@@ -1856,10 +1817,9 @@ mod tests {
             parts,
             [Rect::new(l.power.x + 1, l.power.y + 1, 100, l.power.h - 2)]
         );
-        let tip = view(&m, size, None, Some(l.power.centre())).0;
-        let t = tip.texts();
-        assert!(t.contains(&"Output 200") && t.contains(&"Drain 50"));
-        assert!(!d.texts().contains(&"Output 200"));
+        // The totals are the power meter's tip (S-0411 claim 22), the client's: none here.
+        let hovered = view(&m, size, None, Some(l.power.centre())).0;
+        assert_eq!(hovered.texts(), d.texts());
     }
 
     #[test]
