@@ -1276,7 +1276,7 @@ fn claim_26_r154_a_target_at_full_ammunition_stops_the_repair_and_release() {
 }
 
 // spec: S-0501 claim 18, Missile types (r154: an object of a missile type, the missile-spawn flag of S-0506 Terms, takes T2's rows for an aircraft on the ground whatever its height: it forgets its target and destination and gets guard) and T2's note; the unflagged control in flight takes the in-flight rows
-// design: Q-2821 (interim: the flag decides for a flagged type that is not a rocket type, against claim 35's "missile slot types")
+// spec: S-0501 claim 18, Missile types (r172, Q-2821: the flag alone decides, so a flagged type that is not a rocket type takes these rows in flight too)
 #[test]
 fn claim_18_r154_a_missile_type_takes_the_ground_rows_in_flight() {
     for flagged in [true, false] {
