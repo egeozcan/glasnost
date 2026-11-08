@@ -648,6 +648,10 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         let tl = Pos::centre(b.pos.cell(), b.pos.z);
         Pos::new(tl.x + d[0], tl.y + d[1], tl.z + d[2])
     };
+    if stranded_at(w, p.cell(), b.owner, unit) {
+        // spec: S-0309 claim 31 (while a unit that K released and did not send out stands at its exit point, a vehicle of the same house standing still there with no destination, every release by K gives failed, S-0404 claims 7 and 13); design: Q-2841 (only that case is built: which entry test the exit point's cell answers, and how K itself answers it, is asked)
+        return Outcome::Failed;
+    }
     // spec: S-0404 claim 13 and Constants (it appears inside K facing 16384)
     crate::objects::place(w, unit, p, VEHICLE_FACING);
     // spec: S-0417 claim 1 (K queues unloading; claim 2 governs when it becomes current)
@@ -683,6 +687,22 @@ fn holds_object(w: &World, c: CellXY) -> bool {
                 )
             })
         })
+}
+
+/// Whether cell `c`'s ground layer lists a vehicle of house `owner`, other
+/// than `unit`, standing still with no destination: the unit that a
+/// factory whose unloading an owner change ended has left at its exit
+/// point (S-0309 claim 31; Q-2841 for the rest of that cell's entry test).
+fn stranded_at(w: &World, c: CellXY, owner: Option<crate::world::HouseId>, unit: ObjectId) -> bool {
+    w.cells.list(c, Layer::Ground).iter().any(|&x| {
+        x != unit
+            && w.obj(x).is_some_and(|o| {
+                o.kind == Kind::Vehicle
+                    && o.owner == owner
+                    && o.dest.is_none()
+                    && !crate::occupancy::in_progress(w, x)
+            })
+    })
 }
 
 /// The naval vehicle factory row of S-0404 claim 13.
@@ -1329,8 +1349,11 @@ pub(crate) fn process_unload(w: &mut World, k: ObjectId) -> i32 {
                 // spec: S-0417 claim 2 (the contacted unit starts guard without the ordinary readiness test)
                 o.beh.force(Behaviour::Guard, tick, stale);
             }
-            // spec: S-0417 claim 2 (the door starts opening)
-            move_door(w, k, true);
+            // spec: S-0309 claim 31 (a door left open by an unloading that an owner change ended stays open until a later unloading reaches its closing stage: that unloading's letting-out stage finds it open and stationary and goes on without waiting for it)
+            if door != Door::Open {
+                // spec: S-0417 claim 2 (the door starts opening)
+                move_door(w, k, true);
+            }
             set(w, stage::APRON);
         }
         stage::APRON => {

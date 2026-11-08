@@ -75,6 +75,11 @@ pub struct Construction {
     /// not enter play under construction.
     #[serde(default)]
     pub entry: Option<i32>,
+    /// The building has had its grand opening at an owner change during
+    /// its build-up (S-0309 claim 31): the construction completes at its
+    /// next processing with no second opening.
+    #[serde(default)]
+    pub opened: bool,
 }
 
 /// The placement fields of a building type (S-0406 Import mapping), with
@@ -959,6 +964,7 @@ pub fn begin_construction(w: &mut World, id: ObjectId, deployed: bool) {
         o.econ.construction.building_up = true;
         o.econ.construction.first = None;
         o.econ.construction.entry = Some(t);
+        o.econ.construction.opened = false;
         if mark {
             // spec: S-0406 claim 17 (a deploy sets the ready mark when the building enters play)
             o.beh.ready_mark = true;
@@ -1002,6 +1008,23 @@ pub fn construction_turn(w: &mut World, id: ObjectId) {
     if due && let Some(ob) = w.obj_mut(id) {
         ob.beh.ready_mark = true;
     }
+}
+
+/// The end of a building turn for a building that had its grand opening at
+/// an owner change during its build-up (S-0309 claim 31): once
+/// *construction* is neither current nor queued and the idle body has been
+/// requested, the idle body takes the build-up's place at the end of the
+/// turn, and the construction state ends with it.
+pub fn opened_turn_end(w: &mut World, id: ObjectId) {
+    let Some(ob) = w.obj_mut(id) else { return };
+    let c = &ob.econ.construction;
+    let construction = ob.beh.current == Some(Behaviour::Construction)
+        || ob.beh.queued == Some(Behaviour::Construction);
+    // spec: S-0309 claim 31 (a building being built up: the idle body follows by S-0108 claim 6 from the idle-body request of the change, or from the one that guard's first processing makes, at the end of that turn; the first start of the turn makes nothing current while the construction state lasts)
+    if !c.building_up || !c.opened || construction || ob.econ.idle_body.is_none() {
+        return;
+    }
+    ob.econ.construction = Construction::default();
 }
 
 /// Puts a wall overlay in a cell for its owner (S-0406 claim 10; S-0112

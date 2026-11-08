@@ -154,7 +154,7 @@ fn a_captured_building_requests_its_idle_body() {
     assert_eq!(w.obj(tower).unwrap().econ.idle_body, before);
 }
 
-// spec: S-0309 claim 31 (an object whose current behaviour is selling gets no guard request and keeps selling); design: Q-2801 question 2 (interim: no idle-body request for a building in selling)
+// spec: S-0309 claim 31 (r126, Q-2801 answered: an object whose current behaviour is selling gets no guard request and keeps selling; the fall-back still requests the building's idle body, and S-0215 claim 7 refuses its queued guard while selling is current)
 #[test]
 fn a_building_being_sold_keeps_selling() {
     let mut w = game();
@@ -167,7 +167,7 @@ fn a_building_being_sold_keeps_selling() {
     }
     ownership::change(&mut w, tower, Some(B), Cause::Capture);
     assert_eq!(beh(&w, tower), (Some(Behaviour::Selling), None));
-    assert_eq!(w.obj(tower).unwrap().econ.idle_body, None);
+    assert!(w.obj(tower).unwrap().econ.idle_body.is_some());
 }
 
 // spec: S-0309 claim 31 (a vehicle: the destination cleared, the guard spot forgotten, guard requested; a harvester forgets its remembered cell, S-0402 claim 3); scenario A19 part e
@@ -224,7 +224,7 @@ fn rescue_current_is_replaced_by_guard() {
     assert_eq!(beh(&w, v).0, Some(Behaviour::Guard));
 }
 
-// spec: S-0309 claim 31 (S-0215 claim 7 refuses the guard request of an object in wait); design: Q-2801 question 6 (interim: the rescue rule's force is refused under wait, S-0215 claim 9, so wait stays current and rescue queued)
+// spec: S-0309 claim 31 (r126, Q-2801 answered: S-0215 claim 7 refuses the guard request of an object in wait, and the rescue rule's force of guard is refused while wait is current, S-0215 claim 9, so wait stays current and rescue queued)
 #[test]
 fn wait_with_rescue_queued_keeps_both() {
     let (mut w, v) = tagged(&ruleset(), Kind::Vehicle, "CRUSHER");
