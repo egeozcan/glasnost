@@ -2,13 +2,14 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 37
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-08
 measurements: []
-requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159, Q-2711, Q-2748, Q-2749]
+requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159, Q-2711, Q-2748,
+Q-2749, Q-2811]
 supersedes: []
 ---
 
@@ -62,7 +63,9 @@ above the terrain*.
   other slot is a *non-missile slot*, including a slot of a flagged type that is not a rocket
   type. Such a slot has the launch conditions and destination of a non-missile slot (claims 3, 6
   and 7).
-  Its preparing object is released by claim 8 and is not moved by the preparing rows of the Slot table.
+  The Slot table's preparing rows for a non-missile slot move its preparing object (re-sent, or
+  returning when there is no controller target). While that object is still preparing, claim 8's
+  release and a reset (claim 11) release it, as they release any flagged object.
 - **Spawn slot, slot object, slot state.** Each slot holds at most one *slot object* (an object of
   the spawned type) and is in one of the states of claim 4: *docked*, *on the rail*, *preparing*,
   *attacking*, *returning*, *reloading*, *empty*. A slot object is *alive* while its slot is not
@@ -150,7 +153,8 @@ above the terrain*.
    claim 6 hold; a missile slot's object then waits as *preparing* until claim 8 releases it, after
    which a flagged rocket's slot is *on the rail* until the rail time ends and then *empty*; an empty slot gets a
    new object when its regeneration time ends. A non-missile slot goes from preparing to attacking,
-   returning and reloading, and back to docked (the flight itself belongs to S-0501).
+   returning and reloading, and back to docked (the flight itself belongs to S-0501), except that
+   claim 8's release detaches the object of a flagged one (Terms).
    - Backing: `measurable` (scenarios R2, R3, R5 and R14)
    - Confidence: high
 
@@ -161,7 +165,9 @@ above the terrain*.
      there is a controller target the controller then checks whether the spawner could attack it
      from where it stands (the weapon range test of S-0307 for the spawner weapon). If not, the
      controller *resets* (claim 11); otherwise it becomes *launching*.
-   - *launching*: without a controller target it resets. It does not repeat the range test.
+   - *launching*: without a controller target it resets, even while a pending target waits, unless
+     a non-missile slot has adopted that pending target earlier in the same pass (claims 3 and 11,
+     `quirks.launching_spawner_resets_after_target_loss`). It does not repeat the range test.
      Otherwise it waits until every slot is preparing or empty. Then it releases (claim 8)
      and becomes *cooling down*.
    - *cooling down*: once no slot is attacking or returning, it becomes *idle*.
@@ -170,8 +176,15 @@ above the terrain*.
    shot's target is adopted: with claim 6's conditions satisfied, a shot between two passes is
    adopted in the next pass and its first object launches in the pass after. This is not an extra
    delay for pending-target changes during an existing launch cycle (claim 3).
-   - Backing: `measurable` (scenario R2)
-   - Confidence: high
+   - Backing: `measurable` (scenario R2; R7 part f for the launching state's reset while a pending
+     target waits, after a loss at the destroying hit or on going inside, and for the adoption by a
+     non-missile slot without the flag before it). `unmeasured` for that reset after a loss at
+     removal, cloaking or going underground, for the adoption by a flagged slot that is not a rocket
+     slot before it, and for the switch's off setting, for claim 11's reasons.
+   - Confidence: high; for the launching state's reset while a pending target waits, high after a
+     loss at the destroying hit or on going inside, medium for the adoption by a non-missile slot
+     without the flag before it, and medium (`unmeasured`) after a loss at removal, cloaking or
+     going underground, for that adoption by a flagged slot and for the switch's off setting
 
 6. **Launch conditions and launch spacing.** A docked slot launches its object in a pass when all
    of these hold:
@@ -284,16 +297,71 @@ above the terrain*.
     when it releases (claim 12). A pending target is lost at the same events, and is then cleared
     with no reset (claim 25). A reset releases every preparing object of a missile type with the current
     controller target (claim 12), makes each such slot empty with a regeneration countdown, clears
-    the controller target and the pending target, and makes the controller idle. A non-missile
-    preparing object is not affected by a reset.
+    the controller target and the pending target, and makes the controller idle. A preparing
+    object without the missile-spawn flag is not affected by a reset.
+
+    **A loss while a pending target waits** (Q-2811). The controller target is cleared at the loss
+    then too, at each loss event above alike, and the loss itself gives no reset. A pending target
+    replaces the controller target only at the moments of claim 3, so what follows depends on the
+    controller's next pass. A launching controller adopts it in that pass only when a non-missile
+    slot (Terms, including one of a flagged type that is not a rocket type) whose object is
+    preparing, attacking or returning adopts it (claim 3): such a slot adopts it before the
+    controller's check of the same pass, and the controller goes on launching with it. Otherwise no
+    slot adopts it, since a docked slot launches only with a controller target (claim 6) and a
+    rocket slot's preparing object takes no target, and the controller resets for having no
+    controller target (claim 5). That reset releases each preparing object of a missile
+    type with no target, so with claim 12's cell for no target, and clears the pending target. A
+    rocket missile so released that has an aim point flies on to it (claim 14). For a spawner of
+    rocket missiles the salvo therefore ends at the next pass after the loss, and its next launch
+    needs a later shot of its spawner weapon to supply a pending target again (claim 3) and an idle
+    pass to adopt it (claim 5). A controller that is cooling down keeps the pending target until a
+    slot attacking or returning adopts it, or until its first idle pass (claims 3 and 5). When the
+    pending target is lost as well before it is adopted, it is cleared with no reset (claim 25), and
+    a launching controller resets at its next pass as above. A preparing object of a flagged slot
+    that is not a rocket slot has then turned returning earlier in that pass, for want of a
+    controller target (Slot table), so that reset does not release it, and it flies back to the
+    spawner. So at each loss event above, neither a
+    lost controller target nor a lost pending target leads to a launch at its object: a launch needs
+    a controller target (claim 6), and each loss clears the record that held it
+    (`quirks.launching_spawner_resets_after_target_loss`, Edge cases). The Backing gives which
+    events a scenario here runs.
     - Backing: `measurable` (scenario R7) for its named events and reset effects, including the
       reset at the destroying hit (part c), at cloaking (part d) and on going underground (part e).
-      `unmeasured` for an impossible firing answer as an independent reset cause: no scenario
-      here separates that answer's reset from the disabling event's own reset.
+      `unmeasured` for an impossible firing answer as an independent reset cause: no scenario here
+      separates that answer's reset from the disabling event's own reset. For a loss while a pending
+      target waits: `measurable` (scenario R7 part f) for the clear and no reset at the loss, the
+      reset at the next pass of a launching controller with the pending target's clear and no launch
+      at the pending target in that pass, at the destroying hit and on going inside a transport,
+      with the pending target lost as well, and no launch at the lost object then (its first three
+      runs), for the release of a preparing missile at that reset (its fourth run), and for the
+      adoption by a carrier's aircraft (its fifth run). The adoption by a preparing object of a
+      flagged slot that is not a rocket slot is `measurable` as such (scenario R3's flagged
+      variant, claim 3). `unmeasured` for its adoption counting for the controller's check after a
+      loss, and for its turn to returning before the reset after a double loss: part f's fifth run
+      uses an ordinary carrier, and no part here loses a target while such an object prepares.
+      `unmeasured` for a reset's release of such a preparing object, for the same reason.
+      `unmeasured` for part f's first four runs' items at removal,
+      cloaking and going underground: no part here runs those events with a pending target waiting.
+      `unmeasured` for a controller cooling down at the loss: no part here loses a controller target
+      while its controller cools down. `unmeasured` for the switch's off setting: it is a design
+      alternative for our engine. `unmeasured` for the moment of the clear with a pending target
+      waiting (at the loss rather than at the next pass): part f does not record the controller
+      target, and no event between the loss and the next pass reads it, so both moments give the
+      same record. Part f tells only that the next pass finds no controller target.
     - Confidence: high for the reset's effect, for the loss at the destroying hit, at going inside
       and at removal, and for the target being cleared before the reset; medium for the loss at
-      cloaking or going underground and its disregard of house and sensors; medium for the
-      complete list of events that cause a reset
+      cloaking or going underground and its disregard of house and sensors; medium for the complete
+      list of events that cause a reset. For a loss while a pending target waits: high for the
+      clear, no reset at the loss, the reset at the next pass of a launching controller, the pending
+      target's clear and no launch at it in that pass, at the destroying hit and on going inside,
+      and with the pending target lost as well, and for no launch at the lost object then; medium
+      for the release of a preparing missile at that reset and for the adoption by a non-missile
+      slot before the controller's check; medium (`unmeasured`) for removal, cloaking and going
+      underground with a pending target waiting, for a flagged slot that is not a rocket slot (its
+      adoption counting for that check, its turn to returning after a double loss, a reset's
+      release of its preparing object), for a
+      controller cooling down at the loss, for the
+      moment of the clear with a pending target waiting and for the switch's off setting
 
 12. **What a release fixes.** A released missile, from claim 8 or 11 (or the spawner events of claim
     13), gets a *release cell*: the cell under the target's position when there is a target, and
@@ -405,7 +473,10 @@ above the terrain*.
     for a slot on the rail does not apply to it: when claim 13's events later clear the spawner's
     slots, it flies on, whereas a missile that claim 8 released onto the rail vanishes when they
     come during its slot's rail time. When a pending target is waiting, the controller does not
-    reset and goes on with that target (claim 25), and claims 8 and 13 apply to the salvo as usual.
+    reset at the leaving, and claim 11 gives what follows at the controller's next pass: for a
+    launching spawner of rocket missiles, a reset at that pass, which releases a still-preparing
+    missile of a missile type as above. A controller that is cooling down gets no reset then
+    (claim 11).
     When the leaving object is not the controller target at that moment, claim 11 gives no reset:
     claims 8 and 13 apply to the missile and its salvo as they would with the destination still in
     play. This holds for a destination whose in-the-air answer is false at the launch.
@@ -432,7 +503,10 @@ above the terrain*.
       death sequence, by its removal or by sinking, early or late in the flight, and (scenario R7
       part b) for the flight on, after a later death of the spawner, of a missile of a missile type
       still preparing when the destination is lost (claim 11), and (scenario R7 part c) for the reset at
-      the destroying hit of a destination that stays in play after it, and (scenario R21, its
+      the destroying hit of a destination that stays in play after it, and (scenario R7
+      part f) for the reset at the next pass with a pending target waiting, at the destroying hit
+      and on going inside (`unmeasured` at removal and for a controller cooling down, as claim 11
+      gives), and (scenario R21, its
       lost-target variant) for claim 12's cell for no target after the reset, and (scenario R26)
       for a controller target in the air at the launch, the fixing by a later destination in the
       runs that record one. `unmeasured` for a later destination in the
@@ -457,10 +531,14 @@ above the terrain*.
       phase's end, one step fewer in a phase other than pause and tilt) and for the leaving changing
       the timer and the path in no other way. High for the reset's timing (at the destroying hit
       for a destination that stays in play after it, otherwise at the leaving) and for claim 12's
-      cell for no target after it. Medium for no reset when the leaving object is not then the
-      controller target, as claim 11 rates its list of events. Medium for a preparing rocket
-      missile without the flag being unaffected by the reset, and for the building docking cases
-      and the tunnel case. For a controller target in the air at the launch: high for no
+      cell for no target after it. With a pending target waiting, as claim 11 rates them (scenario
+      R7 part f): high for the reset at the next pass at the destroying hit and on going inside,
+      medium for its release of a still-preparing missile, and medium (`unmeasured`) for both when
+      the destination leaves play by its removal and for no reset of a controller that is cooling
+      down. Medium for no reset when the leaving object is
+      not then the controller target, as claim 11 rates its list of events. Medium for a preparing
+      rocket missile without the flag being unaffected by the reset, and for the building docking
+      cases and the tunnel case. For a controller target in the air at the launch: high for no
       destination, no flight and no phase while the missile has none, for the missile not
       following the target, and for the fixing by the first later destination not in the air
       from its heading point at that moment; medium for claim 24's ticks counting from the tick
@@ -708,13 +786,24 @@ above the terrain*.
 
     Loss notification for the pending target itself clears it immediately, regardless of the
     own target. Loss of the controller target clears that target and resets only when no pending
-    replacement exists (claim 11). Explicit resets clear both records. Finding no candidate in
-    a search is not an additional pending-clear event. An actual target-loss notification is
-    distinct from merely observing a targetless spawner at a pass.
-    - Backing: `measurable` (scenario R19), except a shot supplied with no own target ever set:
-      `unmeasured`, because no normal-input setup establishing that independent shot is known.
-      Its adoption rule is nevertheless fully specified above.
-    - Confidence: high
+    replacement exists (claim 11). With a pending target waiting, a launching controller resets at
+    its next pass unless a non-missile slot adopts that pending target first (claim 11). Explicit
+    resets clear both records. Finding no candidate in a search is not an additional pending-clear
+    event. An actual target-loss notification is distinct from merely observing a targetless
+    spawner at a pass.
+    - Backing: `measurable` (scenario R19; R7 part f for the reset at the next pass at the
+      destroying hit and on going inside, and for the adoption by a non-missile slot without the
+      flag), except a
+      shot supplied with no own target ever set: `unmeasured`, because no normal-input setup
+      establishing that independent shot is known. Its adoption rule is nevertheless fully
+      specified above. The next pass after a loss at removal, cloaking or going underground with a
+      pending target waiting, and that adoption by a flagged slot that is not a rocket slot, are
+      `unmeasured`, as claim 11 gives.
+    - Confidence: high; medium for the adoption by a non-missile slot before the reset at the next
+      pass, as claim 11 rates it; medium (`unmeasured`) for the next pass after a loss at removal,
+      cloaking or going underground with a pending target waiting and for that adoption by a
+      flagged slot that is not a rocket slot, as claim 11 rates them, and for a shot supplied with
+      no own target ever set
 
 26. **Shared kamikaze re-orders (Q-0645).** The shared cycle is checked once per tick,
     outside object turns, before diving-aircraft steering and the turn pass (S-0203 claim 1).
@@ -984,7 +1073,9 @@ divided by 256, truncated toward zero.
 **Slot table** (claim 4; ordinary transitions at launch passes, loss notifications immediately
 as in claim 9). A transition to docked does not produce
 an appearance until a later pass; becoming empty starts regeneration but cannot refill the slot
-in that same pass, even with a zero regeneration time. These are timing constraints, not a
+in that same pass, even with a zero regeneration time. A non-missile slot's adoption of a pending
+target in a pass counts for the controller's launching check of that same pass (claim 11; observable
+in scenario R7 part f's fifth run as no reset at that pass). These are timing constraints, not a
 required order of internal processing.
 
 | Slot state | Event in the pass | Result |
@@ -993,9 +1084,9 @@ required order of internal processing.
 | any occupied non-rocket slot | loss notification or removal from play, object alive and not a kamikaze | slot unchanged (claim 9) |
 | docked | claim 6 conditions hold | launch (claim 7); spacing restarts; preparing |
 | docked | otherwise | none |
-| preparing, object of a missile type (rocket or flagged) | | none (claim 8 releases it) |
-| preparing, object not of a missile type | no controller target | returning |
-| preparing, object not of a missile type | controller target | re-sent to the step direction 4 neighbour of the spawner's cell (S-0501) |
+| preparing, rocket slot | | none (claim 8 releases it) |
+| preparing, non-missile slot (flagged or not) | no controller target, after claim 3's adoption | returning |
+| preparing, non-missile slot (flagged or not) | controller target, after claim 3's adoption | re-sent to the step direction 4 neighbour of the spawner's cell (S-0501) |
 | on the rail | rail time over | empty, regeneration countdown starts |
 | attacking | object out of ammunition, or no controller target | returning |
 | attacking | otherwise | object keeps attacking the controller target |
@@ -1012,7 +1103,7 @@ required order of internal processing.
 | idle | pending target present | it becomes the controller target |
 | idle | controller target not attackable from here | reset (claim 11) |
 | idle | controller target attackable | launching |
-| launching | no controller target | reset |
+| launching | no controller target, none adopted by a non-missile slot earlier in this pass (claim 11) | reset |
 | launching | some slot neither preparing nor empty (including a slot on the rail) | wait |
 | launching | all slots preparing or empty | release (claim 8); reset if a missile was released; cooling down |
 | cooling down | no slot attacking or returning | idle |
@@ -1062,6 +1153,13 @@ Ordering consequences:
   clear can leave pending alive when the controller target is empty, permitting a later launch
   despite cancellation of the own target. Off: every explicit own-target clear empties pending.
   Neither setting adds a per-pass sweep of targetless spawners.
+- **`quirks.launching_spawner_resets_after_target_loss`** (default on). Claim 11: when the
+  controller target is lost while a pending target waits, a launching controller none of whose
+  slots adopts the pending target at its next pass resets then for having no target. It releases
+  its preparing missiles with no target and drops the pending target, so the salvo ends there.
+  Off: a launching controller with no controller target and a pending target waiting adopts the
+  pending target at that check, with no range test, as a launch does (claim 3), and goes on
+  launching. Its preparing missiles stay preparing until claim 8 releases them with that target.
 - **`quirks.rocket_aim_at_heading_point`** (default on). Claim 14.
 - **A destination that leaves play after the launch.** Claim 14, for a destination whose in-the-air
   answer is false at the launch: the missile flies on toward the aim point fixed at its launch and
@@ -1239,7 +1337,7 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   vanishing falsifies claim 14's account of the reset. Part (c) tells the tick of the reset. Also move the target out of range after adoption: this alone does not reset a
   launching controller. Use a named pulse test weapon to disable the spawner during preparation:
   preparing missiles are released, the target clears and replacement countdowns start. Repeat target
-  loss with a pending replacement target to distinguish reset from pending-target adoption. Repeat a
+  loss with a pending replacement target in part (f). Repeat a
   carrier reset during preparation: those unflagged aircraft remain linked rather than crashing or
   regenerating. (c) Reset at the destroying hit (claims 11 and 14): a named test launcher type
   with two or more rocket slots fires at an infantry unit that has a death sequence, and in a second variant at a
@@ -1258,7 +1356,31 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   tunnelling movement, given a move order far enough that it digs in and goes underground while a
   missile is preparing; one run without a sensor, and one in which a sensor of the spawner's
   house covers the cell where it goes underground. Record the tick it goes underground (the tick it is no longer drawn above the ground). Expected:
-  the reset and release in that tick; falsified by no reset. Five runs per variant.
+  the reset and release in that tick; falsified by no reset. (f) Loss while a pending target
+  waits (claim 11, Q-2811): a named test launcher vehicle type with two or more rocket slots and a
+  named test spawner weapon that can fire again within one pass interval fires at a first target,
+  an infantry unit with a death sequence. After the pass that adopts that target and before the
+  next pass, the launcher is ordered to attack a second target in range and fires at it, and a
+  second unit's weapon then destroys the first target, still before that next pass. Runs in which
+  these events come in another order, or a missile launches before the destroying hit, are void.
+  Record per tick the spawner's shot ticks, the destroying hit, the controller state, each slot's
+  state, each launch with its missile's destination, and each release tick and release cell.
+  Expected: the controller idle after that next pass with no launch in it, and no launch at the
+  second target until a later shot of the launcher at it has been adopted by a pass of the idle
+  controller. Falsified by a launch at
+  the second target in that next pass. Second run: as the first, but the first target boards a
+  transport instead of being destroyed; expected the same. Third run: as the first, and the second
+  target is destroyed too before that next pass; expected no launch in that pass and none at the
+  second target. Fourth run: a named test infantry type with the same weapon and slots (claim 10's
+  *busy* answer is a vehicle's only) fires at the second target while a missile launched at the
+  first is preparing, and the first target is destroyed before the next pass. Expected: that
+  missile released in that next pass, its slot empty with a regeneration countdown and not on the
+  rail, its release cell claim 12's cell for no target, and no launch in that pass. Runs in which
+  that type launches no missile are void. Fifth run: an ordinary carrier fires at the second target
+  while one of its aircraft is preparing, and the first target is destroyed before the next pass.
+  Expected: that aircraft does not return at that pass, and the carrier's aircraft attack the
+  second target after the release (claim 8). Falsified by the preparing aircraft returning at that
+  pass. Five runs per variant.
 - **R8. Spawner death and capture.** Kill the spawner (a) while a missile's slot is on the rail,
   independently of the missile's own flight phase: expected the missile vanishes, no detonation; (b) after the rail interval has ended:
   expected the missile flies on. Mind-control while docked: replacements appear at the next pass.
@@ -1374,7 +1496,8 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   clear. Restore own target without another shot: pending is not restored. Direct nonempty
   own-target replacement without a clear or another shot leaves pending alone. Destroy pending's
   target: its loss notification clears pending immediately. Lose the controller target with
-  and without pending replacement: reset only without replacement. A failed search leaving an
+  and without pending replacement: reset at the loss only without replacement (R7 part (f) gives
+  the next pass with a replacement). A failed search leaving an
   already empty own target unchanged does not cancel pending. Add attack-move variants under
   S-0309 claim 23 that search as for an object with no target: expected pending unchanged on
   replacement, no result and restoration of the remembered target, with either quirk setting.
@@ -1632,7 +1755,9 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   been traced. The candidates are the fall-back behaviour its move behaviour takes when it finds no
   destination, which treats missile slot types apart from other aircraft (S-0501 claim 35) and
   is not given here, the shared re-order cycle's attack on its
-  release cell after its release (claims 12 and 26), and other orders. Nor is it traced whether
+  release cell after its release (claims 12 and 26), and other orders. For the first, S-0501
+  claim 18 (*Missile types*) gives an object of a missile type the rows for an aircraft on the
+  ground at any height, so that row itself gives it no destination. Nor is it traced whether
   every such missile is given one, so whether such a missile can stand on the map without a flight
   until claim 13 or 20 ends it is not given. Scenario R26 records what the original does.
 - Which behaviours a rocket missile takes after its launch, with or without its destination, and the
