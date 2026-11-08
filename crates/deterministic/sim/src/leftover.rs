@@ -145,14 +145,17 @@ pub fn sweep_hit(w: &mut World, id: ObjectId, h: HouseId) {
             crate::combat::damage::credit(w, id, &hit);
             crate::combat::death::mark_killed(w, id);
         });
-        // Q-2716 (interim: removal detached its tag, triggers::detach_object, so a leftover carries none and claim 13 (g)'s raises of S-0312 claim 29 come for no tag)
+        // spec: S-0203 claim 13 (g) and S-0011 claim 2 (the raises S-0312 claim 29 gives a killing hit with no attacker and no attacking house come again for a tag the leftover still carries; out of the world, so the actions they fire find nothing of it)
+        crate::combat::death::leftover_destruction_raises(w, id);
     }
-    let o = w.leftovers[&id].object.clone();
+    let Some(o) = w.leftovers.get(&id).map(|l| l.object.clone()) else {
+        return;
+    };
     let plan = read_restored(w, o, |w| {
         crate::combat::death::repeat_plan(w, id, health_left)
     });
     let Some(plan) = plan else { return };
-    // spec: S-0203 claim 13 (c) and (g) and S-0312 entry of Changes for other specs (the death effects of S-0312 once more, as the vehicle's state where it left play allows, with their draws and the sweep's markers, with no tag raise)
+    // spec: S-0203 claim 13 (c) and (g) and S-0312 entry of Changes for other specs (the death effects of S-0312 once more, as the vehicle's state where it left play allows, with their draws and the sweep's markers, after the raises)
     crate::combat::death::repeat(w, id, &plan);
     if plan.kept() {
         // spec: S-0203 claim 13 (g), Sinking (marked as sinking, out of play and off the map; it never descends, and a type that cannot crash is never removed: kept to the end of the game); S-0504 Terms (sinking)

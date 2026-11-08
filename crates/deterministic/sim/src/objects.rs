@@ -664,8 +664,10 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
     crate::econ::events::leaving_map(w, id, true);
     // spec: S-0609 claims 11 and 13 (leaving the map ends the spin sound's loop and clears the playing mark)
     crate::gattling::leaving_map(w, id);
-    // spec: S-0011 claim 2 (detaching a carrier removes one from its tag's count)
-    crate::triggers::detach_object(w, id);
+    // spec: S-0011 claim 2 and Edge cases (a removed object keeps its tag and its place in the tag's carrier count, not given back when it stops existing; quirks.removed_carrier_keeps_tag off: the removal detaches the tag, one fewer carrier)
+    if !w.rules().quirks.removed_carrier_keeps_tag {
+        crate::triggers::detach_object(w, id);
+    }
     let skip = w.rules().quirks.update_order_removal_skip;
     w.update.leave(id, skip);
     let q = occ_quirks(w);

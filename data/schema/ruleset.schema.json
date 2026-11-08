@@ -10450,6 +10450,11 @@
           "type": "boolean",
           "default": true
         },
+        "removed_carrier_keeps_tag": {
+          "description": "An object keeps its tag, and its place in the tag's carrier count, when it is destroyed, leaves play or is removed, and the place is not given back when it stops existing; off: an object loses its tag when it is removed, as at a detachment, so the count drops by one and a leftover carries no tag.",
+          "type": "boolean",
+          "default": true
+        },
         "repair_consumes_engineer_always": {
           "description": "An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry.",
           "type": "boolean",

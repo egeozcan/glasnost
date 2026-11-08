@@ -387,7 +387,9 @@ pub fn object_tag(w: &mut World, id: ObjectId, field: Option<&[u8]>) {
     }
 }
 
-/// Detaches an object's tag when it leaves the game.
+/// Detaches an object's tag at its removal, with
+/// `quirks.removed_carrier_keeps_tag` off (S-0011 Edge cases): the tag's
+/// carrier count drops by one. With the switch on, nothing detaches it.
 pub fn detach_object(w: &mut World, id: ObjectId) {
     if let Some(tag) = w.triggers.objects.remove(&id)
         && let Some(t) = w.triggers.tags.get_mut(&tag)
@@ -694,13 +696,16 @@ pub fn destruction_raises(w: &mut World, victim: ObjectId, attacker: bool, extra
         (29, false),
     ];
     let extra: &[(i32, bool)] = if extra_group { &EXTRA } else { &[] };
+    // A leftover (S-0203 claim 13 (g)) is out of the world before its first
+    // raise, so no preceding action removed it.
+    let present = w.obj(victim).is_some();
     for (common, group) in [(false, extra), (true, &COMMON[..])] {
         for &(code, needs_attacker) in group {
             if needs_attacker && !attacker {
                 continue;
             }
             // spec: S-0312 Import mapping (each raise requires the tag still attached and, for the common group, the object not removed by a preceding action)
-            if common && w.obj(victim).is_none() {
+            if common && present && w.obj(victim).is_none() {
                 return;
             }
             let Some(&tag) = w.triggers.objects.get(&victim) else {

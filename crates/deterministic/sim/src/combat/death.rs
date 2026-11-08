@@ -290,6 +290,18 @@ pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::triggers::destruction_raises(w, id, known, extra);
 }
 
+/// The destruction raises of the sweep's killing hit on a leftover vehicle
+/// with health left (S-0203 claim 13 (g); S-0312 claim 29), as for a
+/// killing hit with no attacker and no attacking house. The leftover still
+/// carries its tag (S-0011 claim 2) and is out of the world; the caller
+/// makes them after the registration and before the repeated death
+/// effects.
+pub(crate) fn leftover_destruction_raises(w: &mut World, id: ObjectId) {
+    // spec: S-0312 claim 29 and Edge cases (a vehicle's extra earlier group, quirks.vehicle_destruction_extra_raises; no attacker, so only the raises that need none)
+    let extra = w.rules().quirks.vehicle_destruction_extra_raises;
+    crate::triggers::destruction_raises(w, id, false, extra);
+}
+
 /// A killed vehicle's explosion and destruction animations (S-0312 claim
 /// 9), shown at `o`'s position: also a crushed vehicle's (S-0210 claim 4).
 pub(crate) fn vehicle_animations(w: &mut World, id: ObjectId, o: &crate::world::Object) {
@@ -569,8 +581,9 @@ pub(crate) fn repeat_plan(w: &World, id: ObjectId, health_left: bool) -> Option<
 /// The death effects a leftover vehicle repeats (S-0203 claim 13 (c) and
 /// (g); the S-0312 entry of its Changes for other specs), in claim 1's
 /// order and with their draws, as at a further killing hit of claim 32, at
-/// the sweep's place in the tick. No destruction raise comes (Q-2716); the
-/// caller registers the destruction of a leftover with health left. The
+/// the sweep's place in the tick. The caller registers the destruction of a
+/// leftover with health left and makes its destruction raises
+/// (`leftover_destruction_raises`) before these effects. The
 /// effects whose subject is gone do nothing again: its passengers were
 /// dealt with when it left play (`leave_play`, S-0312 claim 12) and its
 /// bomb went off then. `source` is the leftover itself, which nothing in

@@ -159,6 +159,8 @@ fn start(w: &mut World, id: ObjectId) {
     // spec: S-0615 claim 14 (an object that begins to cloak is lost to its disc lasers)
     crate::disc::object_lost(w, id);
     sound(w, id);
+    // spec: S-0506 claim 11 (r37: the start of cloaking loses the object as a controller target or pending target, whatever the spawner's house and whatever sensors cover it: no exception, unlike claim 14's drop below)
+    crate::spawn::target_lost(w, id);
     // spec: S-0516 claim 14 (the start of cloaking: attackers drop the target)
     drop_attackers(w, id);
     // spec: S-0516 claim 26 (an object that starts cloaking leaves non-owners' selections)

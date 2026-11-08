@@ -818,6 +818,25 @@ fn play_ai(
     let watch_vs: Option<u32> = std::env::var("GLASNOST_AI_WATCH_VS")
         .ok()
         .and_then(|v| v.trim().parse().ok());
+    // `GLASNOST_AI_HASH=n,from,to`: the world's state hash (the AI's state
+    // left out) every n ticks, and every tick from `from` to `to`; to find
+    // the first tick at which two builds' games part.
+    let hash_at: Option<(i32, i32, i32)> = std::env::var("GLASNOST_AI_HASH").ok().and_then(|v| {
+        let p: Vec<i32> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        Some((
+            *p.first()?,
+            p.get(1).copied().unwrap_or(0),
+            p.get(2).copied().unwrap_or(-1),
+        ))
+    });
+    // `GLASNOST_AI_OBJS=from,to`: every object's whole state (`Debug`, one
+    // line each), the spawned objects, the credits and the random number
+    // generator, every tick from
+    // `from` to `to`; to diff two builds' games at the tick they part.
+    let objs_at: Option<(i32, i32)> = std::env::var("GLASNOST_AI_OBJS").ok().and_then(|v| {
+        let p: Vec<i32> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        Some((*p.first()?, *p.get(1)?))
+    });
     // `GLASNOST_AI_LINES=h`: every item house h starts or loses on its
     // production lines (tick, line kind, unit class or building, cost,
     // credits), and every 300 ticks a still item's progress.
@@ -1047,6 +1066,22 @@ fn play_ai(
         }
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
+        }
+        if let Some((every, from, to)) = hash_at
+            && ((every > 0 && w.tick % every == 0) || (from..=to).contains(&w.tick))
+        {
+            println!("hash tick {} {}", w.tick, save::state_hash(w));
+        }
+        if let Some((from, to)) = objs_at
+            && (from..=to).contains(&w.tick)
+        {
+            for o in w.objects.values() {
+                println!("objs tick {} {o:?}", w.tick);
+            }
+            println!("objs tick {} spawned {:?}", w.tick, w.spawned);
+            let credits: Vec<i32> = w.houses.iter().map(|h| h.credits).collect();
+            println!("objs tick {} credits {credits:?}", w.tick);
+            println!("objs tick {} rng {:?}", w.tick, w.rng);
         }
         if let Some((id, from, to)) = watch_obj
             && (from..=to).contains(&w.tick)

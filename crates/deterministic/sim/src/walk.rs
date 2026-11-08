@@ -364,7 +364,7 @@ pub fn keeps_stored_path(w: &World, id: ObjectId) -> bool {
         return false;
     }
     w.obj(id).is_some_and(|o| {
-        // spec: S-0208 claim 6 (r52: current or queued behaviour enter, in contact with nothing, glossary contact; a walking target plays no part)
+        // spec: S-0208 claim 6 (r52: current or queued behaviour enter, in contact with nothing, glossary contact; a walking target plays no part; r53, Q-2746: capture, the behaviour of the orders to garrison, capture, infiltrate and hijack, is not enter)
         o.walk.is_some()
             && (o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter))
             && o.contact.is_none()
