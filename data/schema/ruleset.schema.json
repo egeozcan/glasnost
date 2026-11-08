@@ -10075,6 +10075,16 @@
           "type": "boolean",
           "default": true
         },
+        "owner_change_keeps_attack_move": {
+          "description": "An owner change keeps the attack-move memory and its engaged mark, so the change's fall-back can resume the attack move; off: the change removes the memory, its remembered destination and target and the engaged mark before the guard request.",
+          "type": "boolean",
+          "default": true
+        },
+        "owner_change_keeps_override": {
+          "description": "An owner change does not empty the suspended slot, so an override in effect at the change is still in effect at its fall-back (an aircraft reverts there to what the override put aside); off: the change empties the slot and forgets the put-aside target and destination before the guard request.",
+          "type": "boolean",
+          "default": true
+        },
         "ownership_gain_counts_as_kill": {
           "description": "An ownership change gives the gaining house a kill on the result screen; off: only destructions add kills.",
           "type": "boolean",

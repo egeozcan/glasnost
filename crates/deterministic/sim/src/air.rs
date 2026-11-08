@@ -4063,7 +4063,7 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
 fn guard_move(w: &mut World, id: ObjectId, t: &Ty) {
     let Some(o) = w.obj(id) else { return };
     // spec: S-0501 claim 33 (r146, Q-2677: a living aircraft that is not pad-bound and not crashing, claim 9, in guard with a destination and nothing queued at a movement update: that update queues move for it, at any height, on the ground included; the test comes after claim 31's first point in that update)
-    // design: S-0501 claim 33 and S-0215 claim 5 (Q-2726, interim: guard only, as the claim names it; S-0215 claim 5 processes sticky as guard, and a movement update is no processing, so sticky gets no such move)
+    // spec: S-0501 claim 33 (r150, Q-2726: the test is for guard itself as the current behaviour; an aircraft in sticky, processed as guard by S-0215 claim 5, gets no move at a movement update and keeps sticky with its destination; any queued behaviour stops the test, a guard that a row of T2 queued included)
     let applies = o.health > 0
         && !t.bound
         && o.beh.current == Some(Behaviour::Guard)
@@ -4182,9 +4182,9 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
             return 1;
         }
     }
-    // spec: S-0501 claim 29 (an armed aircraft below cruise height, not full and without contact: a pad search; enter, target forgotten) and claim 48 (d) (guard compares the height with the cruise height for equality only: every other height, above it as well as below it, takes the same rules)
+    // spec: S-0501 claim 29 (an armed aircraft below cruise height, not full and without contact: a pad search; enter, target forgotten; r150: on the ground too, where it takes off for the pad, claim 8) and claim 48 (d) (guard compares the height with the cruise height for equality only: every other height, above it as well as below it, takes the same rules)
+    // design: Q-2802 (question 1: what an aircraft in sticky does on reaching the pad without enter is open; nothing is added, its processings go on by these rules)
     if armed
-        && !ground
         && h != t.cruise
         && !full_ammo(w, id)
         && o.contact.is_none()
@@ -4203,14 +4203,18 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
     if !ground && h == t.cruise {
         if armed {
             // spec: S-0501 claim 29 (r110: outside a team, an armed aircraft falls back to rest, claim 18, whatever its destination) and claim 31 (r110, Q-2438: this processing sets the ready mark)
+            // design: Q-2802 (question 2: in sticky, each processing at that height runs this fall-back again, keeping a contact it holds and the pad as its destination, with enter queued)
             set_ready_mark(w, id);
             fall_back(w, id);
         } else {
             // spec: S-0501 claim 29 (unarmed, outside a team: its own cell and move, so it lands, whatever its destination) and claim 31 (r110: this processing leaves the ready mark as it is)
+            // design: Q-2802 (question 3: with a slowdown distance of 0 or a converted speed below 20, the flight takes each new cell as any destination and lands where claim 6 lets it)
             let c = o.pos.cell();
             set_dest(w, id, Some(Target::Cell(c)));
             queue(w, id, Behaviour::Move);
         }
+        // spec: S-0501 claim 29 (r150, Q-2726: outside a team, a processing at exactly cruise height ends with a delay of 1 tick)
+        return 1;
     }
     // spec: S-0501 claim 29 (r146: apart from these processings, claim 33 queues move for an aircraft in guard that is not pad-bound, with a destination and nothing queued, at any height: at a movement update, [`guard_move`], not at this processing)
     // spec: S-0501 claim 29 (45 ticks for an unarmed aircraft and an aircraft on the ground with no contact; otherwise the standard delay)

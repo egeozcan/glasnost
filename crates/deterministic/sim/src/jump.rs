@@ -191,6 +191,13 @@ fn st(w: &World, id: ObjectId) -> Option<&JumpState> {
     w.obj(id).and_then(|o| o.jump.as_ref())
 }
 
+/// The cell of the unit's heading point, its movement point (claim 2):
+/// for a gripped unit with the jumpjet stand-in, the point that the seize
+/// fixed (S-0607 claim 7). None without one.
+pub fn heading_cell(w: &World, id: ObjectId) -> Option<glasnost_map::CellXY> {
+    st(w, id).and_then(|j| j.dest).map(|p| p.cell())
+}
+
 fn upd(w: &mut World, id: ObjectId, f: impl FnOnce(&mut JumpState)) {
     if let Some(j) = w.obj_mut(id).and_then(|o| o.jump.as_mut()) {
         f(j);

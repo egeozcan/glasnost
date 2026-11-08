@@ -1125,6 +1125,36 @@ M7b step 3.4 builds S-0611 (revision 1; revision 2 taken in at M7b step 1d; revi
 - **Gate.** `duel-m7b` gains the mutator by setup only (`glasnost_ai::fixture_m7b`): Alpha's GENEB (cost 300, no prerequisite) gives GENE (cell mode, charge 0.2 minutes, needs no power); the cell warhead MUTATE has kind 9; MUTANIM makes a MADMAN. Beta starts with four crowds of three unarmed CROWD walkers around its start, because Beta builds no barracks within the run and its six start riflemen alone are too few for three launches. The run saves and loads at the first tick a mutation animation exists and asserts at least 3 mutator launches and 3 infantry mutated, besides the drain counters. Seed 11, 8 000 ticks: 4 launches, 12 mutated. Over seeds 1–16 (min / median): drain orders 4 / 7, links 3 / 5, credits drained 7 280 / 7 320, drained-building ticks 16 702 / 16 962, mutator launches 3 / 4, infantry mutated 9 / 12. The drain medians moved (they were 8, 5, 7 920 and 17 929) because the crowds change the game; every minimum stays at 3 or more. The `duel-m7a` sweep over seeds 1–16 is unchanged. The goldens changed because the state hash covers the new state.
 - **Stock data and lane.** `side-audit 2 8 7`: the stock mutator building is offered, built and placed for the Yuri side, with superweapon kind `geneticconverter`. Lane scene `mutator` (`crates/app/tests/m7b_lane.rs`) places the giving building for the local house, cuts the charge short and turns its power need off in the lane's own copy of the rules, and fires at five enemy human infantry. All five converted at once, and five units of the local house appeared 56 ticks later (`local-lane/m7b/mutator-*.png`).
 
+## Simulation (M8 A3 intake 112: orders at an owner change)
+
+S-0309 r124 claim 31 (Q-2747) is built in `structures::ownership::reset_orders`; the ledger is
+[docs/m8-claims/intake112.md](../m8-claims/intake112.md), the tests are `claims_s0309_r124.rs`.
+`mind::release_orders` and `ownership::Cause::clears_orders` are gone.
+
+- **Where it runs.** Inside the change, after the owner is set and claim 30's target drop
+  (`econ::events::owner_changed`): `ownership::change_by` for every cause, the vehicle-like
+  takeover included; `ownership::contacts` for each contact that follows the building;
+  `triggers` (change-owner action, mobile branch); `mind::take` and `mind::release` for a mobile
+  object (a building's goes through `change_by`). The takeover's guard reset comes after it.
+  Domination (S-0601 claim 13) makes no reset (Q-2801 question 7).
+- **Order.** The two quirk clears (`quirks.owner_change_keeps_override`,
+  `quirks.owner_change_keeps_attack_move`, both default on), the change-of-target test, the
+  destination clear (only when it has one), the guard spot (kept while deploying or undeploying
+  in place), the harvester's remembered cell, the guard request (none for a simple-deployer in
+  *unload*; *selling* and *wait* refuse it in `Behaviours::queue`), the *rescue* force, then the
+  fall-back: `process::fall_back` for a mobile object, the idle-body request and a queued
+  *guard* for a building. No fall-back off the map, in contact with a vehicle factory, or for a
+  vehicle factory still in *unload*.
+- **Interims.** Q-2801 (seven questions) and, for S-0501 r150's *sticky*, Q-2802 (three).
+
+S-0501 r150 (Q-2726) is in `air::guard` (the pad search on the ground too; a processing at
+exactly cruise height returns 1 tick) and `air::guard_move` (its *guard*-only test is now the
+spec's); tests `claims_s0501_r150.rs`. S-0207 r85 (Q-2781) is in `scatter::vehicle_request`
+(cases b and g read `lift::current_locomotor`; with a threat point, *move* is queued first and a
+seized vehicle refuses the candidate as its destination) and `scatter::vehicle_centre_cell` (a
+gripped unit with the jumpjet stand-in uses `jump::heading_cell`); tests `claims_s0207_r85.rs`.
+Save format 115, AI game format 80.
+
 ## Simulation (M7b: psychic dominator)
 
 M7b step 3.5 builds S-0612 (revision 2): the psychic dominator's launch, phases, area damage and takeover sweep, with the S-0104 global lighting it times. The ledger is [docs/m7-claims/S-0612.md](../m7-claims/S-0612.md). The tests are `claims_s0612.rs` (30), three pairs in `pairs_m7b.rs` ([pairs-m7b.md](../m7-claims/pairs-m7b.md)), the importer tests `dominator_keys` and `absent_dominator_keys`, the audio test `dominator_sounds`, eight AI tests (`crates/deterministic/ai/tests/dominator.rs`) and a tally test.

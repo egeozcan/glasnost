@@ -91,32 +91,23 @@ fn the_drop_is_whatever_the_target_and_none_without_a_change() {
     assert_eq!(w.obj(tower).unwrap().target, None);
 }
 
-// spec: S-0309 claim 30 (the causes the claim lists, S-0508 claims 7 and 8, S-0509 claim 8 and S-0011 claim 24, clear the destination and request guard; the vehicle-like takeover of S-0509 claim 17 is not listed: drop only, design: Q-2747 interim)
+// spec: S-0309 claim 30 (the causes the claim lists, S-0508 claims 7 and 8, S-0509 claim 8 and S-0011 claim 24, drop the target) and claim 31 (r124, Q-2747: they and the vehicle-like takeover of S-0509 claim 17 also reset the orders, with the guard request)
 #[test]
-fn listed_causes_request_guard_the_takeover_drops_only() {
-    for (cause, listed) in [
-        (Cause::Capture, true),
-        (Cause::Trigger, true),
-        (Cause::Occupation, true),
-        (Cause::Takeover, false),
+fn listed_causes_and_the_takeover_request_guard() {
+    for cause in [
+        Cause::Capture,
+        Cause::Trigger,
+        Cause::Occupation,
+        Cause::Takeover,
     ] {
         let mut w = game();
         let tower = put(&mut w, Kind::Building, "TOWER", 0, 0, 0);
         let foe = put(&mut w, Kind::Infantry, "WALKER", 1, 3, 0);
         arm(&mut w, tower, foe);
-        let before = left(&w, tower);
         ownership::change(&mut w, tower, Some(B), cause);
         let l = left(&w, tower);
         assert_eq!(l.0, None, "{cause:?}: dropped");
-        if listed {
-            assert!(guarded(&l), "{cause:?}: guard requested");
-        } else {
-            assert_eq!(
-                (l.2, l.3),
-                (before.2, before.3),
-                "{cause:?}: behaviours kept"
-            );
-        }
+        assert!(guarded(&l), "{cause:?}: guard requested");
     }
 }
 

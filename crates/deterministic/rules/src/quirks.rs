@@ -639,6 +639,14 @@ pub struct Quirks {
     // spec: S-0215 claims 8 to 10 and Edge cases
     #[serde(default = "on")]
     pub stale_suspended_revert: bool,
+    /// An owner change does not empty the suspended slot, so an override in effect at the change is still in effect at its fall-back (an aircraft reverts there to what the override put aside); off: the change empties the slot and forgets the put-aside target and destination before the guard request.
+    // spec: S-0309 claim 31 and Edge cases
+    #[serde(default = "on")]
+    pub owner_change_keeps_override: bool,
+    /// An owner change keeps the attack-move memory and its engaged mark, so the change's fall-back can resume the attack move; off: the change removes the memory, its remembered destination and target and the engaged mark before the guard request.
+    // spec: S-0309 claim 31 and Edge cases
+    #[serde(default = "on")]
+    pub owner_change_keeps_attack_move: bool,
     /// Disarm bomb gives its attack order only to an actor able to fire; off: it needs only that the actor is movable.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -2413,6 +2421,8 @@ impl Default for Quirks {
             turret_snap_bound_wraps: true,
             upgrade_attack_weapon_gate: true,
             stale_suspended_revert: true,
+            owner_change_keeps_override: true,
+            owner_change_keeps_attack_move: true,
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
             berserk_action_cursor: true,
@@ -3158,6 +3168,14 @@ impl Quirks {
                 self.upgrade_attack_weapon_gate,
             ),
             ("stale_suspended_revert", self.stale_suspended_revert),
+            (
+                "owner_change_keeps_override",
+                self.owner_change_keeps_override,
+            ),
+            (
+                "owner_change_keeps_attack_move",
+                self.owner_change_keeps_attack_move,
+            ),
             ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
             ("berserk_carrier_tote", self.berserk_carrier_tote),
             ("berserk_action_cursor", self.berserk_action_cursor),

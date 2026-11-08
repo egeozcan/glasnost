@@ -325,7 +325,7 @@ fn d(s: impl Into<String>) -> Decimal {
 /// A copy of `base` as a test warhead (measure: M-0021, Setup, Test types:
 /// every armour class at 100 %, no cell spread, no explosion animation, no
 /// wall or wood damage).
-fn test_warhead(base: &WarheadType) -> WarheadType {
+pub(crate) fn test_warhead(base: &WarheadType) -> WarheadType {
     WarheadType {
         // measure: M-0021 (every armour class at 100 %: eleven versus items of 1, S-0305 claim 1)
         verses: Some(vec![d("1"); 11]),
@@ -342,7 +342,10 @@ fn test_warhead(base: &WarheadType) -> WarheadType {
 
 /// A copy of `base` as a test projectile, naming `fragments` (the fragment
 /// weapon and count) or none.
-fn test_projectile(base: &ProjectileType, fragments: Option<(&str, i32)>) -> ProjectileType {
+pub(crate) fn test_projectile(
+    base: &ProjectileType,
+    fragments: Option<(&str, i32)>,
+) -> ProjectileType {
     ProjectileType {
         // measure: M-0021 (F's projectile names the fragment weapon with a fragment count of 3; every other projectile, and F's in part A0, names none)
         shrapnel_weapon: fragments.map(|(w, _)| w.to_owned()),
@@ -354,7 +357,7 @@ fn test_projectile(base: &ProjectileType, fragments: Option<(&str, i32)>) -> Pro
 /// A copy of `base` as a test weapon: damage, rate of fire, range in
 /// cells, projectile and warhead set, weapon speed [`WEAPON_SPEED`] and no
 /// fire animation (measure: M-0021, Setup, Test types).
-fn test_weapon(
+pub(crate) fn test_weapon(
     base: &WeaponType,
     (damage, rof, range): (i32, Option<i32>, i32),
     projectile: &str,
@@ -378,7 +381,7 @@ fn test_weapon(
 /// share (measure: M-0021, Setup, Test types: strength, speed 6, turn rate
 /// 8, no acceleration, sight 8 cells, opportunity fire off, no veteran or
 /// elite abilities, no debris).
-fn test_vehicle(base: &UnitType, strength: i32) -> UnitType {
+pub(crate) fn test_vehicle(base: &UnitType, strength: i32) -> UnitType {
     let mut u = base.clone();
     u.strength = Some(strength);
     u.speed = Some(SPEED);
@@ -405,7 +408,7 @@ fn test_vehicle(base: &UnitType, strength: i32) -> UnitType {
 /// invisible projectile type, S-0306 claim 9; which one is our choice, as
 /// the record keeps its own `local`). `GLASNOST_M0021_PROJECTILE` names
 /// another.
-fn invisible_projectile(r: &Ruleset) -> Option<(&String, &ProjectileType)> {
+pub(crate) fn invisible_projectile(r: &Ruleset) -> Option<(&String, &ProjectileType)> {
     if let Ok(name) = std::env::var("GLASNOST_M0021_PROJECTILE") {
         return r.sim.projectiles.get_key_value(&name);
     }

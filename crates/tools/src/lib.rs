@@ -26,6 +26,8 @@ pub mod oracle;
 pub mod oracle_m0020;
 pub mod oracle_m0021;
 pub mod oracle_m0023;
+pub mod oracle_m0024;
+pub mod oracle_m0025;
 pub mod oracle_trace;
 pub mod path_report;
 pub mod side_audit;

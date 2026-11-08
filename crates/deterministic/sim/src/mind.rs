@@ -309,7 +309,7 @@ pub fn created(w: &mut World, id: ObjectId) {
 
 /// Whether an object is a simple-deployer vehicle whose current behaviour
 /// is *unload* (claims 6 and 9).
-fn deploying_in_place(w: &World, id: ObjectId) -> bool {
+pub(crate) fn deploying_in_place(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0601 claims 6 and 9 and S-0517 claim 1 (a vehicle that deploys in place with unload current)
     o.kind == Kind::Vehicle
@@ -376,39 +376,6 @@ fn guard_reset(w: &mut World, id: ObjectId) {
     }
     // spec: S-0601 claim 6 and S-0215 claim 9 (target, destination and guard spot cleared, guard forced; wait refuses it)
     crate::econ::power::guard_reset(w, id);
-}
-
-/// What a release's owner change does to orders (claim 9): the target and
-/// destination are cleared and then *guard* is requested with the
-/// readiness-dependent immediate start of S-0215 claim 7, the readiness
-/// read after both clears, except for a simple-deployer vehicle in
-/// *unload*. S-0309 claim 30 gives the same to the owner changes it lists
-/// (an engineer capture, a trigger's change-owner action, a civilian
-/// garrison building's occupation and return), called by
-/// `structures::ownership` and `triggers`.
-pub(crate) fn release_orders(w: &mut World, id: ObjectId) {
-    if deploying_in_place(w, id) {
-        // spec: S-0601 claim 9 (a simple-deployer vehicle currently in unload skips the guard request)
-        return;
-    }
-    let t = w.tick;
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0601 claim 9 (the ownership change clears the target)
-        crate::spawn::clear_own_target(ob);
-        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-    }
-    // spec: S-0601 r23 claim 9 and S-0107 r46 claim 11, Changes of target (the clear of an infantry victim's target is a change of target: an attack state ends at the clear, with its request for stand, prone or deployed; a victim in the attack state with no target has no change and keeps the state)
-    crate::infantry::watch_test(w, id);
-    // spec: S-0601 claim 9 (the ownership change clears the destination)
-    crate::econ::assign_destination(w, id, None);
-    // spec: S-0601 r23 claim 9 (Q-2717 answered: the readiness that the guard request reads is the victim's after both clears; every other readiness condition of S-0215 claim 11 applies as usual)
-    let ready = crate::process::ready(w, id);
-    if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0601 claim 9 and S-0215 claim 7 (then guard is requested, with a readiness-dependent immediate start)
-        ob.beh
-            .queue_and_start(Some(Behaviour::Guard), ready, t, stale);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +473,11 @@ pub fn take(w: &mut World, c: ObjectId, t: ObjectId) -> bool {
     if let Some(r) = w.mind.controllers.get_mut(&c) {
         r.victims.push(t);
     }
-    // spec: S-0601 claim 6 (a guard reset, S-0215 claim 9); S-0309 claim 30 (the takeover's change has dropped the target inside it; the guard reset it adds clears the destination and forces guard, which covers the claim's destination clear and guard request)
+    if w.obj(t).is_some_and(|o| o.kind != Kind::Building) {
+        // spec: S-0309 claim 31 (the takeover's change resets the orders inside it, after claim 30's target drop; a building's change does it in S-0509's ownership change)
+        crate::structures::ownership::reset_orders(w, t);
+    }
+    // spec: S-0601 claim 6 (a guard reset, S-0215 claim 9, after the change); S-0309 claim 31 (it clears the destination and target that a resumption or an aircraft's revert gave, and keeps the attack-move memory)
     guard_reset(w, t);
     // spec: S-0601 claim 6 (leaves its team, temporal let-go, open-topped passengers' targets)
     owner_independent(w, t);
@@ -674,9 +645,9 @@ pub fn release(w: &mut World, c: ObjectId, v: ObjectId) {
     let changes = w.obj(v).is_some_and(|o| o.owner != rec.original_owner);
     // spec: S-0601 claim 9 (V changes owner back to its recorded original owner, with every consumer)
     set_owner_by(w, v, rec.original_owner, Some(c));
-    if changes {
-        // spec: S-0601 claim 9 (the ownership change clears target and destination and requests guard)
-        release_orders(w, v);
+    if changes && w.obj(v).is_some_and(|o| o.kind != Kind::Building) {
+        // spec: S-0601 claim 9 and S-0309 claim 31 (the ownership change clears target and destination and requests guard: the orders reset of claim 31; a building's change does it in S-0509's ownership change)
+        crate::structures::ownership::reset_orders(w, v);
     }
     // spec: S-0601 claim 9 (the owner-independent effects of claim 6 also apply)
     owner_independent(w, v);
@@ -840,6 +811,7 @@ pub fn dominate(w: &mut World, id: ObjectId, h: HouseId) -> bool {
     // spec: S-0601 claim 13 (a controlled object is first released by its controller, with all of claim 9's effects)
     release_one(w, id);
     // spec: S-0601 claim 13 (then it belongs to the dominating house; no owner change when it already does)
+    // design: Q-2801 (question 7: domination is not among S-0309 claim 30's listed causes, so claim 31's orders reset is not made; the change drops the target only)
     set_owner(w, id, Some(h));
     // spec: S-0601 claim 13 and S-0612 claim 14 (it becomes permanently controlled, never cleared; no original owner is recorded; a set, so one ring however often it is taken)
     w.mind.permanent.insert(id);

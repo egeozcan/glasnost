@@ -703,3 +703,22 @@ and `every_rendering_spec_quirk_has_a_switch` pass on this branch, rebased onto 
 code this intake changes (`mind::release_orders`, `Session::pointer_down`, `Session::route_press`)
 reads a switch of the layer. Intake 110's S-0309 claim 30 causes now reach
 `mind::release_orders` too; they take the same r23 order and read no switch.
+
+## A3 intake 112 (S-0309 r124, S-0501 r150, S-0207 r85): two new switches, both rejected
+
+Ledger: [intake112.md](intake112.md). S-0309 r124 (Q-2747) adds claim 31, the orders reset at
+an owner change, and with it two quirks: `owner_change_keeps_override` and
+`owner_change_keeps_attack_move` (Edge cases, *An owner change keeps an override in effect* and
+*An owner change keeps the attack-move memory*). Both are added to `quirks.rs` with the spec's
+default, on (the original), and both positions are tested (`claims_s0309_r124.rs`). S-0501 r150
+(Q-2726) and S-0207 r85 (Q-2781) add no quirk and no departure.
+
+| Switch | Spec | Verdict | Built |
+|---|---|---|---|
+| `owner_change_keeps_override` (off: the change empties the suspended slot and forgets the target and destination that the override put aside) | S-0309 claim 31, *Override in effect*, and Edge cases | rejected (not in the layer). Condition 1 is met: the Edge case states the off position, and it is built. Condition 2 fails. The quirk text states an aircraft that gets back, at the change's fall-back, the behaviour, target and destination that an override put aside under its old owner, and a target that may now be its own house's or an ally's, held like any other target (claim 31). That is a unit carrying on an order of its old owner, not a stuck unit, a give-up or a glitch, and no play note or request names it. Condition 3 fails too: the off position changes what an aircraft does after a capture, trigger change or mind-control change that finds an override in effect, the usual case being retaliation (S-0215 claim 18), so it changes combat after those changes | `structures::ownership::reset_orders`, before the guard request; both positions tested in `claims_s0309_r124.rs` |
+| `owner_change_keeps_attack_move` (off: the change removes the memory with its remembered destination and target and its engaged mark) | S-0309 claim 31, *Attack-move memory*, and Edge cases | rejected (not in the layer). Condition 1 is met, as above. Condition 2 fails: the quirk text states a unit that takes up an attack move its old owner ordered, toward the remembered destination or against the remembered target, which may now be its own side's (whether *attack* fires on such a target is Q-2801 question 1). A resumed move is an order carried on, not a stuck unit or a glitch, and no play note or request names it. Condition 3 fails: with mind control the original's unit carries its attack move on through the takeover's guard reset (claim 23), and the off position takes that away at every such change, which changes how controlled and captured units fight | `structures::ownership::reset_orders`, before the guard request; both positions tested in `claims_s0309_r124.rs` |
+
+The new switches against our own pathing improvements, as intake 106 read them: neither changes
+a path search, a blocked step or a release. `rally_point_shared` gives a released unit its rally
+move; claim 31 forgets the guard spot that the release saved, which both positions of that switch
+fill the same way. Intake 112 leaves the layer file unchanged.
