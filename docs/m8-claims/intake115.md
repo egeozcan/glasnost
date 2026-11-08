@@ -137,12 +137,18 @@ untouched. The arena (below) is run to show that.
 
 Unchanged. `cargo test --release -p glasnost-sim-gate -- --include-ignored`, run without the
 update variable on this branch, passes all 16 tests, and `crates/sim-gate/golden/` has no
-change. No format is bumped: save 115, AI game 80, wire 12.
+change; so on the first base (3ad4749) and again after the rebase onto main 8c2096f (intake
+113). No format is bumped: this intake keeps main's formats, save 116, AI game 81 (both from
+intake 113) and wire 12. As the simulation does not change, the brief takes the goldens in
+place of the M6c, M7a and M7b seed sweeps; that run includes their sweep tests (`m6c_seed_sweep`,
+`m7a_seed_sweep`, `m7b_seed_sweep`) without `GLASNOST_SWEEP`, all passing.
 
 ## Lanes
 
-Before: main 3ad4749 with the lane test only (0c7c5a7). After: this branch on 3ad4749 (main has
-not moved). Local lane; install values and install text are not quoted.
+Before: main 3ad4749 with the lane test only (0c7c5a7). After: this branch on 3ad4749. Every
+lane figure below comes from that base; the branch was then rebased onto main 8c2096f (intake
+113, a simulation change whose notes give the arena as identical), and the lanes were not run
+again on it. Local lane; install values and install text are not quoted.
 
 - **Render lane** (`r8_render_lane.rs`, `i115_the_sidebar_tips`, local only). The base deploys,
   then the scenes run in order:
