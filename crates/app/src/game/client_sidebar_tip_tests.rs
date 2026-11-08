@@ -533,12 +533,21 @@ fn design_the_keyboard_focus_tip() {
         .cloned()
         .expect("the focus tip");
     assert_eq!(f.text, icon_text(&c, t0));
-    // A pointer tip shows instead.
+    // The pointer moves but no pointer tip shows yet: the focus tip stays.
     let m = session(&c).map_rect();
     c.pointer_moved(Point::new(m.x + 40, m.y + m.h / 2));
     frame_at(&mut c, &mut t, 16);
     assert!(
         session(&c).focus_tip_shown().is_some(),
         "no pointer tip yet"
+    );
+    // A pointer tip shows instead.
+    let l = session(&c).layout();
+    c.pointer_moved(mid(&c, l.cameo(0)));
+    frame_at(&mut c, &mut t, 1000);
+    assert!(shown(&c).is_some(), "the pointer tip after the wait");
+    assert!(
+        session(&c).focus_tip_shown().is_none(),
+        "no focus tip while a pointer tip shows"
     );
 }
