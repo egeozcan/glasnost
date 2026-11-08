@@ -1026,3 +1026,120 @@ fn i111_the_name_tip_with_a_button_held_in_the_route_mode() {
     }
     lane.c.key(Key::Char('z'), false);
 }
+
+/// Intake 115 (S-0411 r57 claims 20 to 22, S-0111 r57 claim 20): the
+/// sidebar's tips. The local base unit deploys, so that the first tab has
+/// icons; the pointer then comes onto the first icon from the battlefield
+/// and rests 1200 ms, moves onto the second icon (one frame), and rests
+/// 1200 ms on the power meter, the first tab button and the sell button.
+/// Screens go under the tag (`GLASNOST_R8_TAG`: `before` on main, `after`
+/// here), with `GLASNOST_LANE_OUT` naming the folder. It prints boxes,
+/// line counts and booleans only, never a tip's text.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn i115_the_sidebar_tips() {
+    let Some(mut lane) = Lane::start() else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let local = lane.local();
+    let base = lane
+        .world()
+        .objects
+        .values()
+        .find(|o| o.on_map && o.owner == Some(local) && o.kind == Kind::Vehicle)
+        .map(|o| o.id);
+    let Some(base) = base else {
+        println!("no base unit");
+        return;
+    };
+    let s = lane.c.session.as_mut().unwrap();
+    let n = s
+        .play
+        .issue(vec![glasnost_sim::orders::Order::Deploy { actor: base }]);
+    println!("deploy orders issued: {n}");
+    lane.ticks(20);
+    let s = lane.c.session.as_ref().unwrap();
+    let l = s.layout();
+    let ui = s.ui_scale();
+    let screen = |r: Rect| ui.rect(r);
+    let centre = |r: Rect| {
+        let r = screen(r);
+        Point::new(r.x + r.w / 2, r.y + r.h / 2)
+    };
+    let tag = |l: &Lane| {
+        l.c.session
+            .as_ref()
+            .and_then(|s| s.name_tip_shown())
+            .map(|t| (t.rect, t.lines.len()))
+    };
+    let map = s.map_rect();
+    let start = Point::new(map.x + map.w / 2, map.y + map.h / 2);
+    lane.c.pointer_moved(start);
+    let _ = lane.c.frame();
+    let rest = |lane: &mut Lane, ms: i64| {
+        for _ in 0..ms / 100 {
+            lane.clock += 100;
+            lane.c.update(lane.clock);
+            let _ = lane.c.frame();
+        }
+    };
+    // Onto the first icon from the battlefield, then a rest.
+    let first = centre(l.cameo(0));
+    // The shown tab's icons and the tick: the strip fills once the base has
+    // deployed, so a rest whose wait ends earlier ends on an empty slot.
+    let icons = |l: &Lane| {
+        let s = l.c.session.as_ref().unwrap();
+        let tab = s.play.shown_tab();
+        let n = glasnost_ui::hud::entries(s.play.world(), s.play.me(), tab).len();
+        (s.play.world().tick, n)
+    };
+    lane.c.pointer_moved(first);
+    let _ = lane.c.frame();
+    println!("1 onto the first icon, at once: {:?}", tag(&lane));
+    println!("  tick and icons at the movement: {:?}", icons(&lane));
+    rest(&mut lane, 1000);
+    println!("  tick and icons at the wait's end: {:?}", icons(&lane));
+    rest(&mut lane, 200);
+    println!("1 after a 1200 ms rest: {:?}", tag(&lane));
+    lane.zoom("i115-1-icon-rest", first, (360, 220, 3));
+    // Onto the second icon: one frame.
+    let second = centre(l.cameo(1));
+    lane.c.pointer_moved(second);
+    lane.clock += 16;
+    lane.c.update(lane.clock);
+    let _ = lane.c.frame();
+    println!("2 onto the second icon, one frame: {:?}", tag(&lane));
+    lane.zoom("i115-2-next-icon", second, (360, 220, 3));
+    for (name, r) in [
+        ("3-power-meter", l.power),
+        ("4-first-tab", l.tabs[0]),
+        ("5-sell", l.modes[0]),
+    ] {
+        let p = centre(r);
+        lane.c.pointer_moved(p);
+        let _ = lane.c.frame();
+        rest(&mut lane, 1200);
+        println!("{name}: after a 1200 ms rest: {:?}", tag(&lane));
+        lane.zoom(&format!("i115-{name}"), p, (360, 220, 3));
+    }
+    lane.save("i115-6-whole-screen");
+    // Scenes 7 and 8, with the strip filled: the first icon after a rest,
+    // then a one-frame movement within it (S-0411 claim 20: at once).
+    println!("  tick and icons: {:?}", icons(&lane));
+    lane.c.pointer_moved(first);
+    let _ = lane.c.frame();
+    rest(&mut lane, 1200);
+    println!(
+        "7 the first icon, strip filled, 1200 ms rest: {:?}",
+        tag(&lane)
+    );
+    lane.zoom("i115-7-icon-strip-filled", first, (360, 220, 3));
+    let within = Point::new(first.x + 3, first.y + 3);
+    lane.c.pointer_moved(within);
+    lane.clock += 16;
+    lane.c.update(lane.clock);
+    let _ = lane.c.frame();
+    println!("8 within the icon, one frame: {:?}", tag(&lane));
+    lane.zoom("i115-8-within-the-icon", within, (360, 220, 3));
+}

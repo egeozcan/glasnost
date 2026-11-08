@@ -12,7 +12,10 @@
 //! - [`link`]: the connection to a relay (M9 N3), native or from the web shell.
 //! - [`pump`]: a network game's updates while its window draws no frames.
 //! - [`report`]: where a desync report goes (M9 N4), a file or a download.
-//! - [`name_tip`]: the name tip over the battlefield (S-0111 claims 20 to 26).
+//! - [`name_tip`]: the name tip over the battlefield (S-0111 claims 20 to 26)
+//!   and the timing, layout and look the sidebar's tips share with it.
+//! - [`sidebar_tip`]: the sidebar's tips, their places and texts (S-0411
+//!   claims 20 to 22).
 //! - [`status_font`]: the game bitmap font for status text.
 //! - [`strings`]: display texts from the string table (S-0004 claim 17).
 //! - [`captions`]: captions for announcements (M8 step C3).
@@ -38,6 +41,7 @@ pub mod report;
 pub mod scroll;
 pub mod session;
 pub mod sidebar_art;
+pub mod sidebar_tip;
 pub mod status_font;
 pub mod strings;
 pub mod window;

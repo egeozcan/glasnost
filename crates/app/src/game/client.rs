@@ -1531,3 +1531,7 @@ mod watch_tests;
 #[cfg(test)]
 #[path = "client_name_tip_tests.rs"]
 mod name_tip_tests;
+
+#[cfg(test)]
+#[path = "client_sidebar_tip_tests.rs"]
+mod sidebar_tip_tests;
