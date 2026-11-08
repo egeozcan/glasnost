@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 49
+revision: 57
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-08
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238, Q-2266]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339, Q-2238, Q-2266, Q-2791]
 supersedes: []
 ---
 
@@ -39,6 +39,12 @@ The icon-file content rules of claim 16 answer Q-0275 separately from shell layo
 Drawing the install's command-button and tab images is optional. When the client
 draws them, claim 19 fixes the file, frame and palette for each state (Q-2238), and its
 *Pixels* part how those images show their pixels on every side (Q-2266).
+
+**Tips (Q-2791).** Claims 20 to 22 give the sidebar's tips: the tip of a build icon (the type's
+display name and price, or a superweapon's name, shown at once while the pointer moves over the
+strip), its place beside the icon and its look (S-0111's name-tip box), and the tips of the tab,
+scroll, repair, sell, options and diplomacy buttons and of the power meter. Where the controls
+themselves lie stays the implementer's design (above): a tip's place is given relative to them.
 
 **Paired revisions.** S-0404 revision 13 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
@@ -88,7 +94,7 @@ last recheck). In addition:
   can already show immediate changes (S-0203 claim 7).
 
 - **Build icon (cameo).** The glossary term, narrowed: a superweapon icon is also an entry of a tab
-  (S-0004, claim 11), outside this spec.
+  (S-0004, claim 11), outside this spec except for its tip (claim 20).
 - **Recorder.** The glossary term, narrowed: one that also logs every order given, with the tick in
   which it was given and the tick in which it was applied, and the sounds played and announcement
   requests (used where a scenario says so). It still never gives orders.
@@ -111,6 +117,20 @@ last recheck). In addition:
   the item (claim 4, row 5).
 - **Placement mode.** The input mode in which the mouse carries the outline of a done building and a
   left click on the battlefield gives a place order with that cell.
+- **Sidebar tip.** The text box that the sidebar shows for the build icon or the sidebar control
+  under the pointer (claims 20 to 22). It is drawn like S-0111's name tip and, like it, is
+  presentation only: it changes no game state.
+- **Slot.** One place of the shown tab's strip at the current scroll position, filled by an icon or
+  empty. Only the places that are shown count.
+- **Tip area.** The rectangle of the sidebar that sidebar tips are placed in: the sidebar's whole
+  width, from the lower edge of its radar panel to the sidebar's bottom edge. In our layout, the
+  matching part of our sidebar, which holds the tabs, the strip and their buttons.
+- **Insertion point.** A place in a string-table entry's text where a value is written in: a *text
+  point* takes a text, a *number point* a whole number (Import mapping gives the entries that have
+  them). In the entry's text a text point is marked by a percent sign followed by the letter s, and
+  a number point by a percent sign followed by the letter d; the points are filled in the order
+  they stand. A number is written in decimal, with a leading minus sign when it is negative and no
+  digit grouping.
 
 ## Behaviour
 
@@ -874,6 +894,163 @@ last recheck). In addition:
       shows exactly what lies beneath the button (the transparent drawing the icons
       use, S-0103 claim 13; run c0d's all-index-0 copies rest on that same drawing)
 
+20. **Build-icon tips: when they show and what they say (Q-2791 questions 1, 2, 4 and 6).** While
+    the tooltip option of S-0111 claim 20 is on, the sidebar shows a sidebar tip for the build icon
+    under the pointer. With the option off, no sidebar tip ever shows.
+    - **Over the slots, no wait.** A movement that brings the pointer onto the strip's slots from
+      anywhere else hides any tip that shows and starts S-0111 claim 20's ordinary wait of 1000 ms
+      of real time. Once one drawn frame has passed with the pointer on a slot, every later movement
+      that ends on a slot, of any distance, shows the tip of that slot's icon at once, with no wait.
+      A movement within one icon keeps its tip showing, with its text chosen again, and a movement
+      onto another icon replaces the tip with that icon's tip at once. A movement that ends on an
+      empty slot hides the tip. If the pointer rests from the movement that brought it onto the
+      slots, the tip shows when that wait ends. A movement that ends off the slots is S-0111 claim
+      20's ordinary movement: it hides the tip and starts the wait, and what shows after the rest
+      is the tip of the place where the pointer rests (claim 22 here, or S-0111's name tip on the
+      battlefield view).
+    - **Lifetime.** A tip shown over the slots hides when its lifetime of 10000 ms of real time
+      ends, and the next movement there shows it again at once. The lifetime starts when the tip
+      shows: at the end of the wait for a tip that shows after a rest, and at the movement for one
+      that a movement shows at once. Unlike S-0111 claim 20's lifetime, every movement over the
+      slots that shows a tip, the same tip included, starts the lifetime again. A text chosen again
+      in a drawn frame (below), another icon's included, does not start it again.
+    - **Buttons and blocks.** Pressing or releasing the left, right or middle mouse button hides the
+      tip, as S-0111 claim 20 gives. Over the slots the next movement shows it again at once, so a
+      click on an icon hides its tip only until the pointer moves. A held button does not stop a
+      movement over the slots from showing the tip at once. Of S-0111 claim 20's blocks only the
+      hidden mouse cursor applies to sidebar tips, so an order block, which hides the cursor,
+      blocks them too. A moving battlefield view blocks no sidebar tip. The options menu hides a
+      sidebar tip and stops its wait as S-0111 claim 20 gives for the name tip.
+    - **Text.** For an icon of an infantry, vehicle, aircraft or building type, the text is the
+      money-format entry's text (Import mapping) with its text point filled by the type's display
+      name (S-0004 claim 17) and its number point by the type's price for the local player's
+      house: S-0404 claim 2's *P*, in its form in parts for a building whose cost pays for units
+      that come with it. Then every space of the whole text, from the display name and from the
+      entry alike, becomes a line feed, so that S-0111 claim 24's layout shows each word on a line
+      of its own. For a superweapon icon the text is the superweapon type's display name alone,
+      with no price and with its spaces kept. An empty slot has no text, and no tip shows there.
+    - **Every state the same.** An icon's state changes neither its text nor whether its tip shows.
+      A darkened icon (claim 3), the icon of an item that is building, waiting for money, on hold
+      or done, a done building waiting for placement or in placement mode (claim 10), and a
+      superweapon icon charging, ready or suspended all show the text above. The price is always
+      the type's whole price, not what is left to pay or what has been paid.
+    - **Chosen again in every drawn frame.** While a sidebar tip shows, its text is chosen again in
+      every drawn frame for the slot or control (claim 22) on which the pointer's last movement
+      ended, as S-0111 claim 26 does for the name tip. So the price follows the local player's
+      cost factor and bonuses as they stand: gaining or losing a building that grants a cost bonus
+      changes the price shown. When a wheel scroll (claim 18) or a change of the tab's icons brings
+      another icon into that slot, the tip shows that icon's text, and when the slot becomes empty
+      the tip hides, and nothing shows until the pointer moves again (Edge cases for the
+      original). A change of an icon's state alone changes nothing.
+    - Backing: `measurable` (scenario S16 parts a to f, part c for the held button, part e for the
+      price changing under a showing tip, part f for a text chosen again not starting the lifetime
+      again; part i for the original's own handling of the movement
+      that leaves the slots, Edge cases). `unmeasured` for the price in parts: no S16 building
+      type pays for a unit that comes with it, and the tip writes in the same *P* that S-0404's
+      scenario P2 measures. `unmeasured` for the order block: the block
+      of a game's first ticks lasts 4 ticks, into which no part times a movement over the slots,
+      and no part sets up a trigger's block. `unmeasured` for the one drawn frame after the movement
+      onto the slots: no part times a second movement within one drawn frame of the first, so S16
+      tells "at once after one drawn frame" from "at once" only through the first movement's wait.
+      `unmeasured` for the moving battlefield view blocking no sidebar tip: no part scrolls the view
+      while a sidebar tip shows. `unmeasured` for the option off: S16 runs with the option on, and
+      no part turns it off. `unmeasured` for the options menu: no part opens it while a sidebar tip
+      shows or waits. `unmeasured` for the middle button: part c presses only the left and right
+      buttons. `unmeasured` for a done item other than a building: no S16 fixture keeps a done unit
+      item on the strip, and part d reads a done building only. `unmeasured` for an item waiting
+      for money: no S16 fixture empties the observed house's credits. `unmeasured` for the choice in
+      every drawn frame, as against a slower cadence: parts e and f read that the price or the text
+      changes under a showing tip, but no part names the frame in which the change must appear, as
+      S-0111 claim 26 gives for the name tip.
+    - Confidence: high for the tip of a unit or building icon, its text with the display name and
+      the local player's price for a unit icon and for the icon of a building whose cost field pays
+      for no unit that comes with it, the line feeds, the superweapon icon's text, the empty slot
+      and the same text in every state that parts c and d read. Medium, `measurable`, for the timing
+      over the slots (the ordinary wait for the movement that brings the pointer onto them, no wait
+      for a later movement that ends on a slot, the lifetime started again at every movement), the
+      left and right buttons, the held button, and the price and the text following a change while
+      the tip shows. Medium, `unmeasured` (Backing), for the price in parts of a building whose cost
+      field pays for units that come with it, whose pad term S-0404 claim 2 rates medium, the order
+      block, the one drawn frame that must pass first, a done item other than a building, an item
+      waiting for money, the choice in every drawn frame, the moving battlefield view, the option
+      off, the options menu and the middle button.
+
+21. **Build-icon tips: place and look (Q-2791 question 3).** A sidebar tip is laid out, sized and
+    drawn as S-0111 claims 24 and 25 give for the name tip: in the game font, with claim 24's line
+    breaks and wrapping, in a box *w* = *w*<sub>t</sub> + 8 pixels wide and *h* = *h*<sub>t</sub>
+    + 4 pixels high, filled with opaque black and framed one pixel wide, its frame and text in the
+    tip colour, the text's origin 4 pixels right of and 2 pixels below the box's top-left corner.
+    Its wrap width is *A*<sub>w</sub> − 8, where the tip area (Terms) spans *A*<sub>x</sub> to
+    *A*<sub>x</sub> + *A*<sub>w</sub> horizontally and *A*<sub>y</sub> to *A*<sub>y</sub> +
+    *A*<sub>h</sub> vertically, in screen pixels, its right and bottom edges exclusive.
+
+    An icon's tip is placed by its slot, not by the pointer. For a slot whose top-left pixel is
+    (*x*<sub>s</sub>, *y*<sub>s</sub>), *w*<sub>s</sub> pixels wide and *h*<sub>s</sub> pixels high,
+    the box's top-left corner is (*l*, *m*):
+    - *l*₀ = *x*<sub>s</sub> + *w*<sub>s</sub> − 5 when *x*<sub>s</sub> < *A*<sub>x</sub> +
+      ⌊*A*<sub>w</sub> / 2⌋, and *l*₀ = *x*<sub>s</sub> − *w* + 5 otherwise. Then *l*₁ =
+      max(*l*₀, *A*<sub>x</sub>), and *l* = *A*<sub>x</sub> + *A*<sub>w</sub> − *w* when *l*₁ + *w*
+      > *A*<sub>x</sub> + *A*<sub>w</sub>, *l* = *l*₁ otherwise.
+    - *m*₀ = *y*<sub>s</sub> + *h*<sub>s</sub> − 5 when *y*<sub>s</sub> < *A*<sub>y</sub> +
+      ⌊*A*<sub>h</sub> / 2⌋, and *m*₀ = *y*<sub>s</sub> − *h* + 5 otherwise. Then *m* = max(*m*₀,
+      *A*<sub>y</sub>).
+
+    All values are integers, and ⌊ ⌋ rounds the quotient down. So the box overlaps the 5 by 5
+    pixels of the icon's corner that faces the middle of the tip area and reaches from there toward
+    that middle: right of and below an icon in the area's upper left part, left of and above one
+    in its lower right part. It keeps its place while the pointer moves within the icon, and is
+    placed again for each text chosen again (claim 20). There is no correction at the area's
+    bottom edge. A sidebar tip is drawn over the sidebar, on top of everything drawn there, and is
+    cut at the sidebar's edges: it never covers the battlefield view.
+    - Backing: `measurable` (scenario S16 part g for the place, part h for the look of a control's
+      tip). `unmeasured` for the look of an icon's tip, which is drawn by the same rule as a
+      control's tip: part h reads the look on control tips only. `unmeasured` for the cut at the
+      sidebar's edges: part g reads icons in the top and bottom shown rows, whose boxes reach
+      toward the middle of the tip area, and no part brings a box against an edge.
+    - Confidence: high for the game font, the black fill, the frame and the one colour of frame
+      and text of a control's tip, as S-0111 claim 25 rates them; medium for the same look of an
+      icon's tip; medium for the box's margins and the text's origin,
+      as S-0111 claims 24 and 25 rate them, the tip colour's side mapping, as S-0111 claim 25
+      rates it, the wrap width, the placing by the slot and its corrections, the tip area and the
+      cut at the sidebar's edges
+
+22. **Tips of the sidebar's other controls (Q-2791 question 5).** The controls of the table show a
+    sidebar tip with its text. Its timing is S-0111 claim 20's (the 1000 ms wait after the last
+    movement, the 10000 ms lifetime, a press or release hiding it) with claim 20's blocks here (the
+    hidden cursor and the options menu). For the first movement off the build-icon slots this is our
+    engine's timing; the original's is in Edge cases. It is placed as S-0111 claim 24 places the
+    name tip, by the pointer, with the tip area in place of the battlefield view (the original's
+    differences: Edge cases), and is laid out and drawn as claim 21 gives. Its text is chosen again
+    in every drawn frame (claim 20). The spaces of these texts are kept: none becomes a line feed.
+
+    | Control | Text |
+    |---|---|
+    | each of the four tab buttons | its tab's label (Import mapping, numbered in claim 1's tab order); while its tab has no icons (claim 19, frame 2), followed by a line feed, an opening parenthesis, the disabled label and a closing parenthesis |
+    | scroll-up button, scroll-down button | the scroll-up label and the scroll-down label; while both buttons are disabled because all of the tab's icons fit (claim 18), followed by the same disabled line |
+    | repair button | the repair-mode label |
+    | sell button | the sell-mode label |
+    | power meter | the power entry's text with its first number point filled by the local player's house output *O* and its second by its house drain *D* (S-0405 Terms) |
+    | options button | the options label |
+    | diplomacy button | the diplomacy label |
+
+    No other part of the sidebar shows a tip: a rest on the radar panel, the credits counter, the
+    shell art, a gap between controls or any control the table does not name shows nothing, and
+    S-0111 claim 20 gives no name tip there. The planning-mode (waypoint) button lies on the
+    command bar, outside the sidebar (Open question 10). Our engine's power-mode button (claim 19)
+    has a tip only if its design gives one. Whether our sidebar has an options or a diplomacy button,
+    and where, is the implementer's design (Summary); where it has one, that button shows the
+    table's tip.
+    - Backing: `measurable` (scenario S16 part h) for the table's controls and for the radar panel,
+      the credits counter and a gap between controls, and for the wait. `unmeasured` for any other
+      place, since S16 rests on no other part of the sidebar. `unmeasured` for the lifetime, a press
+      or release and the blocks over a control: part h reads only the wait, and S-0111's NT
+      scenarios read that timing on the name tip.
+    - Confidence: high for the controls that have a tip and their texts, the disabled line's form
+      and the power meter's two numbers; medium for the disabled line's conditions, the timing (our
+      engine's for the first movement off the slots, Edge cases) and the wait, the placing by the
+      pointer in the tip area and the absence of tips elsewhere on the sidebar; medium, `unmeasured`
+      (Backing), for the lifetime, a press or release and the blocks over a control
+
 ## Formulas
 
 - **Clock stage** = progress + 1 (claim 8). Integers: progress is S-0403's integer from 0 to 54, so
@@ -911,6 +1088,8 @@ last recheck). In addition:
 |---|---|---|---|
 | Tab flash period | 10 | ticks | claim 11: spacing after the first toggle |
 | Clock stages | 55 | stages | progress 0 … 54 plus 1 |
+| Icon-tip overlap | 5 | pixels | claim 21: the box's overlap with the icon's corner, each way |
+| Sidebar-tip wrap margin | 8 | pixels | claim 21: wrap width *A*<sub>w</sub> − 8 |
 
 ## State and ordering
 
@@ -972,6 +1151,45 @@ Ordering consequences:
   local player; in our engine for every player house (S-0404, claim 9). This is a rule of our
   engine (glossary, *AI house* and *local player*: game state may not depend on the local player),
   not a quirk, so it has no switch.
+- **Icon tips of a full tab** (display-only, no switch; claim 20). In the original, a tab that
+  holds 75 icons, or 76, S-0004 claim 11's cap, shows no icon tip at all. Our engine shows them.
+  Backing: `measurable` (scenario S16 part i) for a tab of 76 icons. `unmeasured` for a tab of
+  exactly 75: part i uses S-0004 scenario F4's map, whose tab holds 76, and no S16 part fills a
+  tab with exactly 75. Confidence: medium.
+- **The movement that leaves the slots** (display-only, no switch; claim 20). In the original the
+  first movement off the slots is still handled without a wait: the tip of the place where it
+  ends, a control's tip or the name tip of an object on the battlefield view, shows at once. Our
+  engine handles it as an ordinary movement. Backing: `measurable` (scenario S16 part i) for a
+  fast movement from an icon onto a vehicle; `unmeasured` for a movement that ends elsewhere, a
+  control or an empty place included, since part i reads no other. Confidence: medium.
+- **A slot filled again under a resting pointer** (display-only, no switch; claim 20). In the
+  original, when a tip over the slots has hidden because its slot became empty or because the
+  mouse cursor was hidden, and the pointer still rests there when the hidden tip's lifetime would
+  have ended, the slot's tip is chosen again at that moment and shows if the slot then holds an
+  icon and the cursor is shown. A press or release of a mouse button ends that lifetime, so a tip
+  it hid does not come back this way. The name tip does the same (S-0111 Edge cases). Our engine
+  shows nothing until the pointer moves. Backing: `measurable` (scenario S16 part i) for the
+  emptied slot; `unmeasured` for the hidden cursor, since no part hides it while a sidebar tip
+  shows. Confidence: medium.
+- **Icon-tip text of 66 text units or more** (departure, no switch; claim 20). What the original
+  shows for an icon tip whose text, with the display name and the price written in, is 66 text
+  units or longer is undefined. Our engine shows it as S-0111's name tip shows a long text
+  (S-0111 Edge cases). Backing: `unmeasured`, since the original's result is undefined.
+  Confidence: medium.
+- **Sidebar-tip boxes placed with a smaller size** (display-only, no switch; claims 21 and 22). The
+  original places a sidebar tip with a box 4 pixels narrower and 1 pixel lower than the box it
+  draws, and wraps the drawn text at the tip area's width. So an icon tip in the right half of
+  the area stands 4 pixels further right, and one in its lower half 1 pixel lower, than claim 21
+  gives. These shifts are of icon tips only. A control's tip stands where claim 22 places it,
+  except in the cases of S-0111's name-tip Edge cases (the box at the bottom edge, the box wider
+  than the view, the two wraps and the box after a smaller text), which the original shows here
+  with the tip area in place of the battlefield view. A box that would start left of the sidebar
+  is not drawn at all. Our engine places each box with the size it draws and wraps at
+  *A*<sub>w</sub> − 8. Backing: `measurable` (scenario S16 part g) for the 4-pixel and 1-pixel
+  shifts, and (scenario S16 part h) for a control's tip standing where claim 22 places it.
+  `unmeasured` for the rest: no S16 text has a line wider than *A*<sub>w</sub> − 8, so none wraps,
+  no part changes a control's tip to a smaller text while it shows, and no part aims a rest at the
+  one pointer row of the bottom-edge case. Confidence: medium.
 
 ## Import mapping
 
@@ -984,6 +1202,14 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `DARKEN.SHP` | unavailable-icon mask | fixed file name, frame 0, zero index transparent, nonzero indices halve destination channels; no rules selector; a missing mask adds no darkening |
 | `TXT_READY` (string table) | ready label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
+| `TXT_MONEY_FORMAT_2` (string table) | money-format entry: the text of a unit's or building's icon tip (claim 20) | fixed entry identifier, not literal game text; its text holds a text point and then a number point, marked as *Insertion point* (Terms) gives; a missing entry shows S-0004 claim 17's placeholder alone, with no name and no price |
+| `TXT_POWER_DRAIN` (string table) | power entry: the power meter's tip (claim 22) | fixed entry identifier, not literal game text; two number points, output then drain, marked as above; missing entry: the placeholder alone |
+| `TXT_REPAIR_MODE`, `TXT_SELL_MODE` (string table) | repair-mode and sell-mode labels (claim 22) | fixed entry identifiers, not literal game text; missing entry: the placeholder |
+| `Tip:Tab1`, `Tip:Tab2`, `Tip:Tab3`, `Tip:Tab4` (string table) | the first to fourth tab labels, in claim 1's tab order (claim 22) | fixed entry identifiers, not literal game text; missing entry: the placeholder |
+| `Tip:ScrollUp`, `Tip:ScrollDown` (string table) | scroll-up and scroll-down labels (claim 22) | as above |
+| `Tip:Disabled` (string table) | disabled label (claim 22) | as above |
+| `Tip:OptionsButton`, `Tip:DiplomacyButton` (string table) | options and diplomacy labels (claim 22) | as above |
+| settings file `[Options]`, `ToolTips` | tooltip option (claims 20 and 22) | S-0111 Import mapping |
 | No data key | queue count format and label lifetime | decimal integer count; labels are state-bound, not timed messages; claims 7, 8 and 17 |
 | No data key | tab flash cadence | initial parity/countdown and later 10-tick periods are engine constants, claim 11 |
 | `FlashSidebarTabFrames` (rules, superweapon) | superweapon flash-window eligibility | integer ticks; initially −1, unlimited; 0 disables the window; positive values limit it from the reference tick; S-0512 claim 17 owns the full rule |
@@ -996,6 +1222,13 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `SIDE1.SHP`, `SIDE2.SHP`, `SIDE3.SHP`, `ADDON.SHP` | the sidebar's shell images (claim 19 *Shell images*) | fixed file names, resolved as the button files; drawn beneath the buttons with the sidebar palette above (some shell file beneath a button in that palette: medium, high once S15 run c0d shows a checkerboard position in black and white; the four files, one each, and each file's own palette: medium, since the four test files share one checkerboard); what each draws and where is not claimed; S15 runs c1d, c0d and c1b replace them as test inputs; our engine need not draw them |
 | No data key | power-mode button image | no install image is imported; our picture is design (claim 19) |
 | `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
+
+The money-format and power entries named above, and what a missing money-format or power entry
+shows, are `unmeasured`: no S16 part replaces or removes an entry, so a run cannot tell the named
+entry from another entry with the same text, or show a missing entry's result. What a missing
+entry of the repair-mode, sell-mode, tab, scroll, disabled, options or diplomacy rows shows (the
+placeholder), and the identity of those rows' entries, are `unmeasured` for the same reasons: no
+S16 part replaces or removes one, and part h reads only the text shown. Confidence: medium.
 
 These delegated inputs matter to claims 13 and 14:
 
@@ -1710,6 +1943,118 @@ the time the script sent a button event, dates a click.
   capture plus read-only
   image and palette inspection.
 
+**S16. Sidebar tips (claims 20 to 22, Q-2791).**
+- Setup: the common setup with the tooltip option on, at 800 × 600, and again at 1024 × 768 for
+  parts g and h. Screen capture at every drawn frame, each frame stamped with its real time, and
+  scripted pointer movements. The skirmish's bases setting is on, and the observed house deploys
+  its base unit (S-0009 Terms) into its construction yard at the start of the run; it has
+  credits. A structure that the map's building list gives the observed house is dropped
+  (S-0009 claim 27), so every building that S16 hands to it is pre-placed for a donor house, as
+  in S-0405's measurement setup (a computer house with nothing else on the map), and carries a
+  test-map tag whose triggers' elapsed-time events (S-0011 claim 13) change its owner to the
+  house at the observed house's start position (S-0011 claims 23 and 24) or destroy the objects
+  that carry the tag (S-0011 claim 27). The sidebar probe map has: a vehicle test type, a copy of
+  a simple stock vehicle that the observed house's country may build, with an invented cost
+  field, a prerequisite field that names the vehicle factory type below alone, and a display name
+  of three short words,
+  taken from a probe entry in a loose probe string table built as S-0004 scenario L builds
+  it; the invented country cost factor for vehicles of S-0404 scenario P2 for the observed house's
+  country; a building test type that grants an invented cost bonus for vehicles, has no power
+  output and needs only the construction yard, with one building of it pre-placed for the donor
+  house, whose tag hands it to the observed house at a game time *t*<sub>1</sub> and destroys it
+  at a later game time *t*<sub>2</sub>, both chosen for part e; power plants pre-placed for the
+  donor house, enough for the observed house to have full power until they go, whose tag hands
+  them to the observed house within the first ticks and destroys
+  them at a game time *t*<sub>3</sub> chosen for part d; a stock vehicle factory building type of
+  the observed house's side, with one building of it pre-placed for the donor house, whose tag
+  hands it to the observed house within the first ticks, so that the vehicle test type is
+  buildable (Terms) and its icon is shown from then on; and a building test type of the same
+  line (claim 1) that grants a superweapon test type, needs only the construction yard and has
+  a base drain above the output of every building the observed house owns other than the power
+  plants (S-0405 Terms), so that while either of the two builds the other's icon is darkened
+  (claim 3, a building line with an item). The superweapon test type is power-dependent (S-0512
+  Terms) and has a display name of three short words, taken from a second probe entry of the
+  same table. The bonus building's test type and the superweapon building's test type each have a
+  display name of two short words, taken from a third and a fourth probe entry of that table. The field values and the triggers' times chosen are recorded with the measurement.
+  A run is void for a part when a handed-over building is not the observed house's after its
+  hand-over time, when a trigger's event falls outside the rest that the part names for it, or
+  when, in part d, the house does not have low power after *t*<sub>3</sub>.
+- Procedure and expected results:
+  - (a) Move the pointer in one movement from the battlefield view onto the vehicle icon and rest
+    12 s, then move it by one pixel within the icon and rest 12 s. Expected: the tip shows 1000 ms
+    after the first movement and hides 10000 ms after it showed. The one-pixel movement shows it
+    again in the first frame after the movement, with the same text and place, and it hides 10000
+    ms after that movement.
+  - (b) With the tip showing, move onto the neighbouring icon in one movement, then keep moving
+    between icons every 2 s for 30 s, then rest. Expected: each icon's tip shows in the first
+    frame after the movement that reaches it, the tip never hides between movements, and it hides
+    10000 ms after the last one. A movement onto an empty slot hides it.
+  - (c) With the vehicle tip showing, left-click the icon and move the pointer by one pixel 1 s
+    later. Then right-click the icon, which puts its item on hold (claim 5), with the tip
+    showing, and again move the pointer by one pixel 1 s later.
+    Expected: the tip hides at the press and shows again at the movement, at
+    once, with the same text and price each time. Then press the left button on the icon, move the
+    pointer by one pixel within the icon with the button held, and release it 1 s later. Expected:
+    the tip hides at the press, shows again at once at the movement with the button held, and hides
+    at the release.
+  - (d) While the superweapon building builds, rest on the bonus building's darkened icon. Rest on
+    the superweapon building's icon while it builds, when it is done and waiting for placement and
+    in placement mode, and on the superweapon icon while it charges, when it is ready, and after
+    the power plants' tag has destroyed them at *t*<sub>3</sub>, chosen after the superweapon is
+    ready, so that the house has low power (S-0405 Terms) and the superweapon is suspended (S-0512
+    claim 6; its icon shows the on-hold label). Expected: each building icon shows its type's probe
+    name, one word on each line, and the price S-0404 claim 2 gives for its recorded cost field,
+    written as in (e). The superweapon icon shows its type's display name alone, the three words on one line
+    with the spaces between them, with no price, in each of the three states. Falsified by a price,
+    a line break between the words, or a text that differs between the states.
+  - (e) Before *t*<sub>1</sub>, while the observed house owns no bonus building, rest on the
+    vehicle icon and read its tip. Expected: the
+    money-format entry's text with the probe name and the price written in, every space a line
+    break, so the three words on three lines and the price on the line where the entry places it.
+    The price is S-0404 claim 2's *P* for the recorded cost field and factor, with no bonus. Keep
+    the tip showing so that *t*<sub>1</sub> falls within its lifetime. Expected: with no movement,
+    the price shown changes to *P* with the handed-over building's bonus once the building is the
+    observed house's, and the tip stays. Then move the pointer by one pixel within the icon, so
+    that the tip's lifetime starts again (claim 20), with *t*<sub>2</sub> within that lifetime.
+    Expected: with no movement after that, the price shown changes back to *P* without the bonus
+    once the building is destroyed, and the tip stays. Then build and place a bonus building and
+    move the pointer back onto the vehicle icon. Expected: the price is *P* with the bonus again.
+    Falsified by the cost field shown as it is, by any space kept, by a price without the factor,
+    or by a showing tip's price that does not follow the gain or the loss.
+  - (f) With enough icons in the tab that one wheel step downward brings an icon into a filled slot
+    of the last shown row, rest on that slot until its tip shows, then, within 5 s, turn the mouse
+    wheel by one step downward without moving the pointer. Rest until the tip hides. Then move the
+    pointer by one pixel within that slot and, while its tip shows,
+    turn the wheel step by step until that slot is empty. Expected: after the first step the tip
+    shows the icon now in that slot, its box placed by claim 21, with the original's shifts of Edge
+    cases as in (g), for that slot and the new text's size (the same place when the two texts give
+    boxes of the same size), and it hides 10000 ms
+    after it first showed: the step does not start the lifetime again. When the slot becomes empty
+    the tip hides, and nothing shows until the pointer moves.
+  - (g) At each resolution rest on an icon of each column in the top and the bottom shown row,
+    and read the box's place against the slot's rectangle and the tip area. Expected: claim 21's
+    corner, with the original's 4-pixel and 1-pixel shifts of Edge cases for an icon in the right
+    or the lower half of the area. Falsified by a box placed by the pointer, or by any other
+    overlap with the icon.
+  - (h) Rest on each tab button, one of them while its tab has no icons; on each scroll button with
+    all icons fitting and with more than fit; on the repair and sell buttons, the power meter, the
+    options button and the diplomacy button; and on the radar panel, the credits counter and a gap
+    between two controls. Expected: claim 22's text, 1000 ms after the last movement, placed as
+    claim 22 gives (16 pixels below the pointer, or above it near the area's bottom edge, kept
+    inside the area at its right edge), or, in the original, as Edge cases give in their cases, in
+    the name tip's look (S-0111 scenario NT7). The power numbers equal the house output and drain
+    that S-0405's recorder gives. No tip on the radar panel, the credits counter or the gap.
+  - (i) For the original only, the Edge cases: a tab holding 76 icons (S-0004 scenario
+    F4's map); a fast movement from an icon onto a vehicle on the battlefield view; and, as in
+    (f), a wheel step that empties the slot under the resting pointer 2 s after its tip shows,
+    then a step back 2 s later. Expected: no icon tip in that tab; the vehicle's name tip showing
+    in the first frame after the movement; and the slot's tip showing again 10000 ms after it
+    first showed, with no movement.
+- Observable: each tip's text lines, its box's place and size, and the real times of its showing
+  and hiding, from the stamped frames.
+- Falsified by: a wait of 1000 ms between icons, a tip hiding between movements over the slots, a
+  text other than the one predicted, a box placed otherwise, or a tip where none is expected.
+
 ## Open questions
 
 1. Battlefield right-click exit without item cancellation is resolved by claim 10 and
@@ -1733,9 +2078,14 @@ the time the script sent a button event, dates a click.
    belong to S-0417's open questions. Specialised docking combinations remain outside the
    verified pad-position rule. This spec adds no rules for those outcomes and does not
    claim to answer the whole request. Q-0196's four questions are answered by claim 15.
-9. Q-2238 question 1, power-mode part: whether the original offers a power-mode button or an
-   image for one is not claimed here. Our engine's power-mode button and its picture are
-   design (claim 19).
+9. Q-2238 question 1 and Q-2791 question 5, power-mode part: whether the original offers a
+   power-mode button or an image for one is not claimed here. Our engine's power-mode button and its
+   picture are design (claim 19).
+10. Q-2791 question 5, waypoint part: the original's planning-mode (waypoint) button and the other
+    command buttons lie on the command bar, outside the sidebar, and show tips of their own.
+    Those tips are not claimed here.
+11. An entry of claims 20 and 22 whose insertion points differ from Import mapping's (another
+    count, kind or order): what the original shows then is not claimed here.
 
 ## Changes for other specs
 
@@ -1759,6 +2109,16 @@ the time the script sent a button event, dates a click.
   retain the pointer to claim 16 here. No behavioural change required.
 - S-0103: Q-0275 palette conversion, lifetime and missing-file behaviour are already
   claim 13; retain that ownership. No behavioural change required.
+- S-0005: its scenarios that read a unit's cost on the sidebar tooltip read the local player's
+  price (claim 20, S-0404 claim 2), which equals the cost field only while the house's cost
+  factor and bonuses for that kind are 1. Their set-ups should keep both at 1. No rule changes.
+- S-0002 scenario D2, S-0004 scenarios H and L and S-0015 scenario C read display names on the
+  sidebar tooltip: there each space of a name shows as a line break (claim 20), and S-0004 L2's box
+  widths are those of S-0111's name tip, not of the sidebar tip. S-0015 C1 (g) compares the boxes
+  of S-0111's name tip too, where spaces stay spaces: in the sidebar tooltip the two-space copy
+  shows an empty line between its words rather than a wider box. S-0002 D2's cost read there is
+  the price of claim 20. No rule changes.
+- Glossary, *sidebar*: may add that S-0411 gives the sidebar's tips (claims 20 to 22).
 Earlier correction requests are resolved by the current companion drafts: S-0406 claims 1
 and 20 give placement's appropriate announcement and text/no-text feedback; S-0007 claims
 22 and 25 point to claim 16 for icon content; S-0103 claim 13 owns dedicated icon-palette
