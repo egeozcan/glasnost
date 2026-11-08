@@ -49,6 +49,10 @@ pub struct Quirks {
     // spec: S-0011 claim 10 and Edge cases
     #[serde(default = "on")]
     pub all_carriers_without_carrier: bool,
+    /// An object keeps its tag, and its place in the tag's carrier count, when it is destroyed, leaves play or is removed, and the place is not given back when it stops existing; off: an object loses its tag when it is removed, as at a detachment, so the count drops by one and a leftover carries no tag.
+    // spec: S-0011 claim 2 and Edge cases; S-0312 claim 29 (Infantry still showing death)
+    #[serde(default = "on")]
+    pub removed_carrier_keeps_tag: bool,
     /// The entered-by value is read only as a country index, so player-position values never match; off: it is resolved like an action's house value.
     // spec: S-0011 claim 18 and Edge cases
     #[serde(default = "on")]
@@ -2288,6 +2292,7 @@ impl Default for Quirks {
             persistent_event_latch: true,
             event_latch_aliasing: true,
             all_carriers_without_carrier: true,
+            removed_carrier_keeps_tag: true,
             entered_by_country_only: true,
             none_owner_is_first_country: true,
             exact_trigger_type_names: true,
@@ -2853,6 +2858,7 @@ impl Quirks {
                 "all_carriers_without_carrier",
                 self.all_carriers_without_carrier,
             ),
+            ("removed_carrier_keeps_tag", self.removed_carrier_keeps_tag),
             ("entered_by_country_only", self.entered_by_country_only),
             (
                 "none_owner_is_first_country",

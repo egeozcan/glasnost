@@ -362,7 +362,8 @@ fn start_flight(rs: &mut RocketState, aim: Pos, p: &RocketSet, t: i32, mode: Rou
 /// Fixes a launched rocket missile's aim point at its launch (S-0506
 /// claim 14, r34), from the heading point of `dest` at that moment, and
 /// starts its flight in the launch tick (claim 24). For a destination whose
-/// in-the-air answer is false at the launch; the caller decides that. No
+/// in-the-air answer is false at the launch; the caller decides that.
+/// [`give_destination`] uses it for a later fixing (r37), in its own tick. No
 /// effect on an object that is not a rocket missile, on one whose aim is
 /// already fixed, or when `dest` gives no heading point.
 pub fn fix_at_launch(w: &mut World, id: ObjectId, dest: Target) {
@@ -381,6 +382,37 @@ pub fn fix_at_launch(w: &mut World, id: ObjectId, dest: Target) {
         // spec: S-0506 claim 14 (r34: the aim point is fixed at the launch, in the launch pass, in the tick of the placement; it does not change whatever the destination does afterwards)
         start_flight(rs, aim, &p, t, mode);
     }
+}
+
+/// A destination given to a launched rocket missile after its launch
+/// (S-0506 claim 14, r37). One whose in-the-air answer is true is ignored,
+/// so it never fixes an aim point. The first one whose answer is false
+/// becomes the missile's destination and fixes its aim point from its
+/// heading point at that moment, starting claim 24's timer in this tick. A
+/// missile whose aim is already fixed ignores it, as any later move order.
+/// No effect on an object that is not a rocket missile.
+pub fn give_destination(w: &mut World, id: ObjectId, dest: Target) {
+    let Some(rs) = w.obj(id).and_then(|o| o.rocket.as_ref()) else {
+        return;
+    };
+    // spec: S-0506 claim 14 (r37: later move orders are ignored once the aim point is fixed)
+    if rs.phase.is_some() {
+        return;
+    }
+    // spec: S-0506 claim 14 (r37: a destination whose in-the-air answer is true leaves it without a destination; a destination in the air never fixes an aim point)
+    if let Target::Object(d) = dest
+        && crate::combat::weapon::in_air(w, d)
+    {
+        return;
+    }
+    if heading_point(w, dest).is_none() {
+        return;
+    }
+    if let Some(o) = w.obj_mut(id) {
+        o.dest = Some(dest);
+    }
+    // spec: S-0506 claim 14 (r37: the first destination not in the air fixes the aim point from its heading point at that moment); claim 24 (t₀ the tick of that fixing)
+    fix_at_launch(w, id, dest);
 }
 
 /// A rocket missile's turn (S-0506 claims 14 to 21); whether it moved.
@@ -403,14 +435,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let cap = u.speed;
     let omega = u.turn_rate;
     let trailer = u.raw.trailer.clone();
-    if rs.phase.is_none() {
-        // design: Q-2748 interim (a destination whose in-the-air answer was true at the launch: S-0506 r20's rule, the aim point fixed at the missile's first update from its destination's heading point, claim 24's timer started then; a destination gone by then leaves it without a flight)
-        let Some(dest) = o.dest else { return false };
-        let Some(aim) = heading_point(w, dest) else {
-            return false;
-        };
-        start_flight(&mut rs, aim, &p, t, mode);
-    }
+    // spec: S-0506 claim 14 (r37: a missile with no aim point makes no flight; it stays at its placement point, in none of claim 15's phases, with speed 0 and pitch 0, until give_destination fixes its aim)
     let Some(phase) = rs.phase else {
         return false;
     };

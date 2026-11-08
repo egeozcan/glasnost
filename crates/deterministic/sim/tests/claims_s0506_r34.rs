@@ -258,7 +258,7 @@ fn a_destination_that_goes_inside_resets_the_controller_and_the_missile_flies_on
     assert!(near(at.expect("it detonates"), aim));
 }
 
-// spec: S-0506 claim 14 (r34: claim 11 gives no reset when the leaving object is not then the controller target: here a pending target waits, and the controller goes on with it, claim 25)
+// spec: S-0506 claim 14 (r34: claim 11 gives no reset when the leaving object is not then the controller target: here a pending target waits, and the controller goes on with it, claim 25); design: Q-2811 interim (the lost controller target is not cleared while a pending target waits)
 #[test]
 fn no_reset_when_a_pending_target_waits() {
     let r = rules();
@@ -277,6 +277,12 @@ fn no_reset_when_a_pending_target_waits() {
     let c = controller(&w, lnb);
     assert_ne!(c.state, ControllerState::Idle, "no reset");
     assert_eq!(c.slots[0].state, SlotState::Preparing);
+    assert_eq!(
+        c.target,
+        Some(Target::Object(walker)),
+        "Q-2811 interim: not cleared"
+    );
+    assert_eq!(c.pending, Some(Target::Object(other)));
 }
 
 // spec: S-0506 claim 14 (r34: a leaving by going inside a building or a transport is itself a removal) and claim 25 (the loss notification for the pending target clears it at once, whatever the own target); claim 11 (the leaving object is not the controller target, so no reset: the controller goes on with its target) (seam sweep 6: intake 110's row, a pending target that goes inside)
@@ -360,35 +366,6 @@ fn uninterrupted_boundaries_from_the_launch_tick() {
     // spec: S-0506 claim 24 (P = 4: the pause ends at the update of t₀ + 4; T = 10: the tilt ends 10 ticks after it began)
     assert_eq!(tilt, Some(t0 + 4));
     assert_eq!(ascent, Some(t0 + 4 + 10));
-}
-
-// design: Q-2748 interim (a missile whose destination's in-the-air answer was true at the launch has no flight fixed then: its aim point is fixed at its first update from its destination's heading point, and claim 24's timer starts at that update, as in r20; with no destination by then it has no flight)
-#[test]
-fn q2748_a_flight_not_fixed_at_the_launch_starts_at_the_first_update() {
-    let r = rules();
-    let mut w = testkit::game_with(&r, SIZE, 7);
-    let lna = put(&mut w, Kind::Vehicle, "LNA", 0, 0, 0);
-    let victim = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
-    let (x, _) = launch(&mut w, lna, victim);
-    // As if not fixed at the launch.
-    let o = w.obj_mut(x).unwrap();
-    let rs = o.rocket.as_mut().unwrap();
-    rs.phase = None;
-    rs.aim = None;
-    let mut gone = w.clone();
-    let t = w.tick;
-    rocket::tick(&mut w, x);
-    let rs = state(&w, x);
-    assert_eq!(rs.aim, Some(w.obj(victim).unwrap().pos));
-    assert_eq!(rs.phase, Some(Phase::Pause));
-    assert_eq!(rs.started, t);
-    gone.obj_mut(x).unwrap().dest = None;
-    assert!(!rocket::tick(&mut gone, x));
-    assert_eq!(
-        state(&gone, x).phase,
-        None,
-        "no flight without a destination"
-    );
 }
 
 /// [`rules`] with two ordinary animations of one pass and no follow-up

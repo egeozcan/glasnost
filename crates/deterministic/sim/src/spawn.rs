@@ -1048,18 +1048,18 @@ fn launch(w: &mut World, spawner: ObjectId, i: usize) {
     if missile {
         crate::rocket::place(w, x, pos, facing, spawner);
         let stale = rules.quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+        // spec: S-0506 claim 7 (r37: a controller target whose in-the-air answer is true gives the missile no destination at all, neither that target nor any point of its own)
+        let dest = target.filter(|&d| match d {
+            Target::Cell(_) => true,
+            Target::Object(d) => !crate::combat::weapon::in_air(w, d),
+        });
         if let Some(o) = w.obj_mut(x) {
             // spec: S-0506 claim 7 (a missile slot's object: the controller target as destination and the move behaviour)
-            o.dest = target;
+            o.dest = dest;
             o.beh.force(crate::rules::Behaviour::Move, t, stale);
         }
-        // spec: S-0506 claim 14 (r34: a destination whose in-the-air answer is false at the launch: the aim point is fixed at that launch, in the launch pass, in the tick of the placement); design: Q-2748 interim (a destination in the air at the launch: the aim is fixed at the missile's first update, as in r20)
-        if let Some(dest) = target
-            && match dest {
-                Target::Cell(_) => true,
-                Target::Object(d) => !crate::combat::weapon::in_air(w, d),
-            }
-        {
+        // spec: S-0506 claim 14 (r34: a destination whose in-the-air answer is false at the launch: the aim point is fixed at that launch, in the launch pass, in the tick of the placement; r37: with no destination the missile waits with no flight)
+        if let Some(dest) = dest {
             crate::rocket::fix_at_launch(w, x, dest);
         }
     } else {
@@ -1302,15 +1302,17 @@ pub fn owner_changed(w: &mut World, spawner: ObjectId) {
     clear_slots(w, spawner);
 }
 
-/// A killing hit on an object (S-0506 claims 9 and 13; S-0312): a slot
+/// A killing hit on an object (S-0506 claims 9, 11 and 13; S-0312): a slot
 /// object is announced as lost; a spawner clears its slots unless it is
-/// seized (S-0607 claims 5 and 20).
+/// seized (S-0607 claims 5 and 20); the object is lost as a target.
 pub fn killed(w: &mut World, id: ObjectId) {
     lost(w, id);
     if w.obj(id).is_some_and(|o| o.spawn.is_some()) && !magnet_held(w, id) {
         // spec: S-0506 claim 13 (the spawner destroyed or starting to crash, unless it is seized)
         clear_slots(w, id);
     }
+    // spec: S-0506 claim 11 (r37: the controller target and a pending target are lost at the hit that destroys them, even while the target then stays in play: a death sequence, a sinking or crashing object)
+    target_lost(w, id);
 }
 
 /// An object is about to be removed from play (S-0506 claims 9, 11 and
@@ -1356,7 +1358,19 @@ fn settle_waiting(w: &mut World) {
     }
 }
 
-/// The controllers' side of `id` leaving play (S-0506 claims 11 and 25).
+/// The loss of `id` as a target (S-0506 claims 11 and 25, r37) at an event
+/// that keeps it in existence: the destroying hit (also of a target that
+/// then stays in play: a death sequence, a sinking, a crash) and the start
+/// of cloaking, whatever the spawner's house and sensors. Clear requests
+/// recorded earlier are settled first. Going inside and removal have their
+/// own hooks ([`target_leaves_play`], [`removing`]).
+pub fn target_lost(w: &mut World, id: ObjectId) {
+    // design: the clear requests recorded earlier (S-0506 claim 25) are settled before the loss reads the pending and controller targets, as `removing` and `target_leaves_play` place it; no spec orders a settle at the other loss events
+    settle_waiting(w);
+    target_gone(w, id);
+}
+
+/// The controllers' side of the loss of `id` (S-0506 claims 11 and 25).
 fn target_gone(w: &mut World, id: ObjectId) {
     let gone = Some(Target::Object(id));
     // spec: S-0506 claim 25 (loss notification for the pending target clears it at once, whatever the own target)
@@ -1371,7 +1385,7 @@ fn target_gone(w: &mut World, id: ObjectId) {
             c.pending = None;
         }
     }
-    // spec: S-0506 claim 11 (the controller target leaves play and no pending target is waiting: reset)
+    // spec: S-0506 claim 11 (r37: the controller target is lost and no pending target is waiting: reset); design: Q-2811 interim (with a pending target waiting, the controller target is left as it is and nothing resets)
     let resets: Vec<ObjectId> = w
         .objects
         .iter()
@@ -1383,6 +1397,10 @@ fn target_gone(w: &mut World, id: ObjectId) {
         .map(|(&k, _)| k)
         .collect();
     for s in resets {
+        // spec: S-0506 claims 11 and 12 (r37: the controller target is cleared as it is lost, before the reset, so the reset releases with no target and its missiles get F8's cell)
+        if let Some(c) = controller_mut(w, s) {
+            c.target = None;
+        }
         reset(w, s);
     }
 }
@@ -1467,9 +1485,10 @@ pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
 /// kamikaze), then gives every enrolled aircraft, in enrollment order,
 /// ammunition of exactly 1 round, its release cell as target and *attack*
 /// queued without an immediate start. It takes no random draws. A rocket
-/// missile receives the same changes; they do not alter its flight, whose
-/// aim point is fixed at its launch (claim 14, r34; Q-2748 interim: at its
-/// first update for a destination in the air at the launch).
+/// missile receives the same changes; they do not alter a flight whose aim
+/// point is already fixed (claim 14). A released rocket still waiting with
+/// no flight (a controller target in the air at its launch, claim 14 r37)
+/// is given its release cell as a destination (Q-2748 interim).
 pub fn kamikaze_orders(w: &mut World) {
     let t = w.tick;
     // spec: S-0506 claim 26 (the cycle is due on its deadline tick; tick numbers only grow)
@@ -1488,8 +1507,13 @@ pub fn kamikaze_orders(w: &mut World) {
         o.target = Some(Target::Cell(cell));
         // spec: S-0506 claim 26 (attack queued, without forcing an immediate behaviour start; no draws)
         o.beh.queue(Some(crate::rules::Behaviour::Attack));
+        let waiting = o.rocket.as_ref().is_some_and(|rs| rs.phase.is_none());
         // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
         crate::emitters::retarget_let_go(w, x);
+        if waiting {
+            // design: Q-2748 interim (questions 2 and 3 still open: a released rocket waiting with no flight is given its release cell, at this attack on it, as the first destination not in the air; S-0506 claim 14 r37 then fixes its aim)
+            crate::rocket::give_destination(w, x, Target::Cell(cell));
+        }
     }
 }
 
