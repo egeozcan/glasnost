@@ -8,7 +8,7 @@ use crate::infantry::{self, Seq};
 use crate::occupancy::{self, Outcome};
 use crate::path::{self, NearbyUse};
 use crate::regions::STEPS;
-use crate::rules::{Behaviour, Kind};
+use crate::rules::{Behaviour, Kind, Locomotor};
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// A scatter request (S-0208 Terms).
@@ -304,6 +304,13 @@ pub fn infantry_centre_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 /// else its own.
 pub fn vehicle_centre_cell(w: &World, id: ObjectId) -> Option<CellXY> {
     let o = w.obj(id)?;
+    let gripped_jump = crate::lift::seized(w, id)
+        && crate::lift::stand_in(w, id).is_none()
+        && crate::lift::lifter_of(w, id).is_some_and(|l| crate::lift::grips(w, l, id));
+    if gripped_jump && let Some(c) = crate::jump::heading_cell(w, id) {
+        // spec: S-0207 claim 16 (r85, Q-2781: a gripped unit with the jumpjet stand-in judges its candidates around the cell of its heading point, the movement point that the seize fixed, S-0607 claim 7, not the cell it is flying over)
+        return Some(c);
+    }
     // spec: S-0207 Terms (vehicle scatter centre cell: the heading point's cell, else its own) and claim 16 (a drive vehicle's heading point is its track's target from the tick the track begins until it ends; never the move destination as such). The heading point of other locomotors and the tunnel exit have no state in M3.
     Some(
         o.drive
@@ -334,8 +341,9 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         slot,
         Some(Behaviour::Sleep | Behaviour::Sticky | Behaviour::Unload)
     ) || u.train;
-    // spec: S-0207 claim 16 (b): the teleporting locomotor, read as the current one (scenario D17 d, the active movement kind; claim 28, a chrono miner driving on the docking cell accepts a sale's request)
-    let b = crate::teleport::is_teleporter(w, id);
+    // spec: S-0207 claim 16 (b): the teleporting locomotor, read as the current one (scenario D17 d, the active movement kind; claim 28, a chrono miner driving on the docking cell accepts a sale's request; r85, Q-2781: a seized vehicle's is the locomotor it has at the request, the seize's stand-in while it has one, else its own)
+    let loco = crate::lift::current_locomotor(w, id);
+    let b = loco == Some(Locomotor::Teleport);
     // spec: S-0207 claim 16 (c): not forced and the current behaviour lacks the scatter property (S-0215 claim 19)
     let c = !req.forced && !o.beh.seen().is_some_and(|x| r.behaviour(x).scatter);
     // spec: S-0207 claim 16 (d): its body is turning
@@ -345,7 +353,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     // spec: S-0207 claim 16 (f): deployed, deploying or undeploying have no state yet
     let f = false;
     // spec: S-0207 claim 16 (g): a locomotor switched off. A hovering vehicle's only while it is not powered in S-0503's sense, switched off and down at a hover height of 0 (S-0405 claim 20 and Changes for other specs, revision 36; S-0503 Terms and claim 10). Any other vehicle's locomotor is switched off by the disabling of S-0405 claims 13 and 20 and switched on again at enabling; no other switch-off of a vehicle locomotor has state here.
-    let g = if crate::hover::is_hover(w, id) {
+    // spec: S-0207 claim 16 (r85, Q-2781: case g reads the locomotor the vehicle has at the request, so a seized hovering type with the jumpjet stand-in is judged by that locomotor's switch, not by the hover's power)
+    let g = if loco == Some(Locomotor::Hover) && crate::hover::is_hover(w, id) {
         !crate::hover::powered(w, id)
     } else {
         crate::econ::power::unit_disabled(w, id)
@@ -427,17 +436,22 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         }
         first_q.get_or_insert(cell);
     }
-    if let Some(cell) = chosen.or(first_q)
-        && let Some(ob) = w.obj_mut(id)
-    {
-        // spec: S-0207 claim 16 (it queues move and takes that destination)
-        ob.dest = Some(Target::Cell(cell));
-        ob.path.steps.clear();
-        ob.beh.queue(Some(Behaviour::Move));
-        // spec: S-0314 claim 22 (the destination of a scatter request ends a settled vehicle's being settled while a depot occupies its cell)
-        crate::depot::destination_given(w, id, o.dest != Some(Target::Cell(cell)));
-        // spec: S-0207 claim 28 (the request's destination is an assignment: claim 27's dock test and claim 28's rule act on it)
-        crate::refresh::adopted(w, id, o.dest);
+    if let Some(cell) = chosen.or(first_q) {
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0207 claim 16 (r85, Q-2781: it queues move without an immediate start, S-0215 claim 7, and then takes that destination)
+            ob.beh.queue(Some(Behaviour::Move));
+        }
+        // spec: S-0207 claim 16 (r85, Q-2781: a seized vehicle does not take the candidate as its destination, S-0607 claim 9; its destination, or its lack of one, is unchanged)
+        if !crate::lift::refuses_destination(w, id, Some(Target::Cell(cell)))
+            && let Some(ob) = w.obj_mut(id)
+        {
+            ob.dest = Some(Target::Cell(cell));
+            ob.path.steps.clear();
+            // spec: S-0314 claim 22 (the destination of a scatter request ends a settled vehicle's being settled while a depot occupies its cell)
+            crate::depot::destination_given(w, id, o.dest != Some(Target::Cell(cell)));
+            // spec: S-0207 claim 28 (the request's destination is an assignment: claim 27's dock test and claim 28's rule act on it)
+            crate::refresh::adopted(w, id, o.dest);
+        }
     }
     true
 }

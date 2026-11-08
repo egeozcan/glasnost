@@ -1164,8 +1164,8 @@ fn action(
                             ob.owner = Some(h);
                         }
                         crate::econ::events::owner_changed(w, id, old);
-                        // spec: S-0309 claim 30 (a trigger's change-owner action, a listed cause: the destination cleared and guard requested as S-0601 claim 9 gives)
-                        crate::mind::release_orders(w, id);
+                        // spec: S-0309 claim 31 (a trigger's change-owner action, a listed cause of claim 30: the orders reset inside the change)
+                        crate::structures::ownership::reset_orders(w, id);
                     }
                 }
             }

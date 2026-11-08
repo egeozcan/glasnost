@@ -845,6 +845,63 @@ fn m0023_rows_hold_in_our_engine() {
     assert!(failing.is_empty(), "rows of M-0023 fail: {failing:?}");
 }
 
+/// The stock ground of M-0001's map with its rules and hash, for the
+/// records whose games play on it, or why it is skipped.
+fn stock_inputs_m0001() -> Option<(oracle::Ground, glasnost_rules::schema::Ruleset, String)> {
+    let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+        println!("skipped: {GAME_DIR_VAR} is not set (local-only lane)");
+        return None;
+    };
+    let records = oracle::load_records(&measurements()).unwrap();
+    let map = oracle::find_record(&records, "M-0001").expect("M-0001's record");
+    Some(oracle::stock_inputs(Path::new(&dir), &map.map_file, &map.map_sha256).unwrap())
+}
+
+/// M-0024 (S-0215 claim 19 case 2 for hunting vehicles of computer houses)
+/// on our engine: M-0021 part B's fight with the record's *hunt* section
+/// (`glasnost_tools::oracle_m0024`). Local lane only. Prints each Result
+/// row's verdict; the report with the counts goes to the git-ignored
+/// `local-lane/m7b/arena/oracle-M-0024.txt`. Fails while any row marked
+/// exact fails.
+#[test]
+fn m0024_rows_hold_in_our_engine() {
+    use glasnost_tools::{oracle_m0021 as m21, oracle_m0024 as m24};
+    let Some((ground, base, hash)) = stock_inputs_m0001() else {
+        return;
+    };
+    let from = m21::base_from_env(m21::DEFAULT_BASE);
+    let (summary, full) = m24::run(&ground, &base, &hash, &from).unwrap();
+    println!("{summary}");
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7b/arena");
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("oracle-M-0024.txt"), &full).unwrap();
+    // measure: M-0024 (every Result row marked exact holds)
+    let failing: Vec<&str> = summary.lines().filter(|l| l.ends_with("| no |")).collect();
+    assert!(failing.is_empty(), "rows of M-0024 fail: {failing:?}");
+}
+
+/// M-0025 (S-0215 claim 19 case 2 for a hunting vehicle hit by its own
+/// house, an allied house or an enemy it cannot harm) on our engine
+/// (`glasnost_tools::oracle_m0025`). Local lane only. Prints each Result
+/// row's verdict; the report with the counts goes to the git-ignored
+/// `local-lane/m7b/arena/oracle-M-0025.txt`. Fails while any row fails.
+#[test]
+fn m0025_rows_hold_in_our_engine() {
+    use glasnost_tools::{oracle_m0021 as m21, oracle_m0025 as m25};
+    let Some((ground, base, hash)) = stock_inputs_m0001() else {
+        return;
+    };
+    let from = m21::base_from_env(m21::DEFAULT_BASE);
+    let (summary, full) = m25::run(&ground, &base, &hash, &from).unwrap();
+    println!("{summary}");
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7b/arena");
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("oracle-M-0025.txt"), &full).unwrap();
+    // measure: M-0025 (every Result row holds)
+    let failing: Vec<&str> = summary.lines().filter(|l| l.ends_with("| no |")).collect();
+    assert!(failing.is_empty(), "rows of M-0025 fail: {failing:?}");
+}
+
 /// The oracle comparison end to end on the synthetic ground: a record made
 /// in a temporary folder from our own games passes; the same record with
 /// the winners swapped fails. Invented test data, not measurements.

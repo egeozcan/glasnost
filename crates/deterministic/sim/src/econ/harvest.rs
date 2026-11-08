@@ -521,6 +521,16 @@ pub fn state_of(w: &World, id: ObjectId) -> HarvestState {
     st(w, id)
 }
 
+/// A harvester forgets its remembered cell (claim 3), as an owner change
+/// makes it (S-0309 claim 31). An object with no harvest state is left
+/// without one.
+pub(crate) fn forget_remembered(w: &mut World, id: ObjectId) {
+    if let Some(s) = w.obj_mut(id).and_then(|o| o.econ.harvest.as_mut()) {
+        // spec: S-0309 claim 31 (a harvester forgets its remembered cell, S-0402 claim 3)
+        s.remembered = None;
+    }
+}
+
 fn st(w: &World, id: ObjectId) -> HarvestState {
     w.obj(id)
         .and_then(|o| o.econ.harvest.clone())

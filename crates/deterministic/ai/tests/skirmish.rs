@@ -12,8 +12,12 @@ use glasnost_sim::rules::Kind;
 use glasnost_sim::save;
 use glasnost_sim::world::{HouseId, World};
 
-/// Ticks the synthetic game may take at most.
-const LIMIT: i32 = 40_000;
+/// Ticks the synthetic game may take at most. A test budget, not a rule:
+/// since S-0501 r150 claim 29 (an aircraft outside a team at exactly cruise
+/// height is processed again after 1 tick), the synthetic game ends at tick
+/// 43 618 with house 1 the winner (before: 26 793, house 0), its last fights
+/// being jet sorties between the pad and the target.
+const LIMIT: i32 = 60_000; // nocite: a test budget with margin over the measured end, not a behaviour
 
 /// The seed of the synthetic game.
 const SEED: u32 = 5;

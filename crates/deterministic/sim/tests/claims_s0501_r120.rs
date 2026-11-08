@@ -807,7 +807,7 @@ fn ac31h5_the_run_away_spots_do_not_depend_on_each_other() {
 // ---------------------------------------------------------------------------
 // Claim 29: the unarmed aircraft at cruise height (intake 92's seam)
 
-// spec: S-0501 claim 29 (r110, Q-2437: at exactly cruise height, outside a team, an unarmed aircraft in guard takes its own cell as destination and move, so it lands, whatever its destination; the next processing comes after 45 ticks) and claim 31 (r110, Q-2438: this processing leaves the ready mark as it is)
+// spec: S-0501 claim 29 (r110, Q-2437: at exactly cruise height, outside a team, an unarmed aircraft in guard takes its own cell as destination and move, so it lands, whatever its destination; r150, Q-2726: outside a team the processing at exactly cruise height ends with a delay of 1 tick, the 45 ticks being for outcomes on the ground) and claim 31 (r110, Q-2438: this processing leaves the ready mark as it is)
 #[test]
 fn claim_29_an_unarmed_aircraft_at_cruise_height_lands_in_its_own_cell() {
     for mark_cleared in [false, true] {
@@ -839,7 +839,10 @@ fn claim_29_an_unarmed_aircraft_at_cruise_height_lands_in_its_own_cell() {
         let (_, d) = next_processing(&mut w, a);
         assert_eq!(air::height(&w, a), h, "at cruise height");
         let o = w.obj(a).unwrap();
-        assert_eq!(d, 45, "an unarmed aircraft: 45 ticks");
+        assert_eq!(
+            d, 1,
+            "at exactly cruise height outside a team: 1 tick (r150)"
+        );
         assert!(
             o.beh.current == Some(Behaviour::Move) || o.beh.queued == Some(Behaviour::Move),
             "move: {}",
