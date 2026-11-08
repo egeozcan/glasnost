@@ -353,21 +353,25 @@ fn show_animations(w: &mut World, p: &AnimationPlan) {
 }
 
 /// Whether a dying object takes S-0312 claim 11's effects: a vehicle that
-/// carries the bomb mark (Terms) and dies within 10 leptons above a water
-/// cell. Reads only.
+/// carries the bomb mark (Terms) and dies in a water cell at most 10 leptons
+/// above its surface, a bridge deck included (the water test). Reads only.
 fn marked_low_over_water(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0312 claim 11 (a vehicle that carries the bomb mark, Terms; landing does not clear it, S-0511 claim 10)
     if o.kind != Kind::Vehicle || !crate::transport::bomb_marked(w, id) {
         return false;
     }
-    // spec: S-0312 claim 11 (over a water cell: claim 10's test of the cell at its position)
+    // spec: S-0312 Edge cases (quirks.bomb_mark_water_death_on_deck off: a vehicle on a bridge deck never passes the water test)
+    if o.layer == crate::world::Layer::Deck && !w.rules().quirks.bomb_mark_water_death_on_deck {
+        return false;
+    }
+    // spec: S-0312 claim 11 (r66, Q-2793, the water test: the land type S-0211 claim 5 gives the cell at its position, claim 10's test, whatever cell layer it is on, a high-bridge cell over water included)
     let water = w
         .cells
         .cell(o.pos.cell())
         .is_some_and(|c| c.land == glasnost_map::terrain::land::WATER);
-    // spec: S-0312 claim 11 (within 10 leptons above it, inclusive); Q-2793 (interim: the height above the terrain surface at its position, not the deck; a negative height counts)
-    water && o.pos.z - w.surface_at(o.pos.x, o.pos.y) <= 10
+    // spec: S-0312 claim 11 (r66, Q-2793: its height above the surface, glossary, from the deck on a bridge deck and from the terrain otherwise, 10 leptons or less, inclusive; no lower bound)
+    water && w.height_above_surface(id) <= 10
 }
 
 /// S-0312 claim 11's animations in claim 9's place: the game-wide wake
@@ -473,7 +477,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 // spec: S-0312 claims 15 and 32 table row 2 (a vessel already sinking that fails claim 10's conditions ends at 0 health after claim 9's animations and draws; a type that cannot crash stays in play, still sinking: S-0504 claim 4 goes on, tick::object_turn)
                 return;
             }
-            // spec: S-0312 claims 15 and 16 (a destroyed vehicle whose type can crash, above the terrain, starts to crash and stays in play until it hits the ground; a crashable vehicle using jumpjet movement uses S-0502 claim 18's motion)
+            // spec: S-0312 claims 15 and 16 (a destroyed vehicle whose type can crash, at a positive height above the surface, starts to crash and stays in play until it hits the ground; r66: measured from the deck on a bridge deck, jump::start_crash, so none starts on a deck; a crashable vehicle using jumpjet movement uses S-0502 claim 18's motion)
             if crashable && !already_sinking && crate::jump::start_crash(w, id, Some(hit)) {
                 return;
             }
@@ -539,8 +543,9 @@ impl Repeat {
     }
 
     /// It would start a crash after its other death effects (S-0203 claim
-    /// 13 (g), *Crashing*; S-0312 claim 15): a type that can crash, above
-    /// the terrain, not sinking.
+    /// 13 (g), *Crashing*; S-0312 claim 15): a type that can crash, at a
+    /// positive height above its surface (the deck on a bridge deck), not
+    /// sinking.
     fn crash_start(&self) -> bool {
         !self.sinks && self.crashable && self.above
     }
@@ -572,7 +577,7 @@ pub(crate) fn repeat_plan(w: &World, id: ObjectId, health_left: bool) -> Option<
         crate_drop: crate::crates::death_crate_plan(w, id),
         sinks,
         crashable,
-        // spec: S-0203 claim 13 (g), Crashing (S-0312 claim 15: a type that can crash starts a crash above the terrain)
+        // spec: S-0203 claim 13 (g), Crashing (S-0312 claim 15, r66: a type that can crash starts a crash at a positive height above the surface, measured from the deck on a bridge deck, so none on a deck)
         above: w.height_above_surface(id) > 0,
         marked_water,
     })
@@ -631,10 +636,10 @@ fn passengers_of_destroyed_vehicle(w: &mut World, id: ObjectId, hit: &Hit, crash
     if crate::transport::count(w, id) == 0 {
         return;
     }
-    // spec: S-0312 claim 12 (more than 208 leptons above the terrain: all die, credited to the attacker)
+    // spec: S-0312 claim 12 (r66: more than 208 leptons above the surface, glossary, measured from the deck on a bridge deck as in claim 11: all die, credited to the attacker)
     let high = w.height_above_surface(id) > 208;
     if high || (!crashable && crate::transport::bomb_marked(w, id)) {
-        // spec: S-0312 claim 12 (high, or a bomb mark on a type that cannot crash: all die)
+        // spec: S-0312 claim 12 (high, or a bomb mark on a type that cannot crash: all die; r66, Q-2793: the bomb-mark column tests the mark alone, not claim 11's water test, wherever it dies, and quirks.bomb_mark_water_death_on_deck does not touch it)
         crate::transport::kill_passengers(w, id, hit);
     } else if crashable {
         // spec: S-0312 claim 12 (a type that can crash: they stay inside, and die when it starts to crash or leaves play, death::leave_play)

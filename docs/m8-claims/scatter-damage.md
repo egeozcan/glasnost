@@ -27,8 +27,8 @@ and no C7 verdict is owed. Save format 113, AI game format 78. No golden moved.
 3. Retaliation: S-0215 claim 18, S-0309 claims 18 and 25 part h. Its answer:
    - `MayNot`: a condition other than F7's distance rule fails (S-0208 Terms *may retaliate*),
    - `Held`: it may retaliate but does not: F7 holds back a player-house actor that cannot reach
-     the attacker, or the override is refused and keeps its slots, or it is an aircraft on the
-     ground at its pad (Q-2792 interim, since the aircraft-retaliation build; seam below),
+     the attacker, or the override is refused and keeps its slots (an aircraft on the ground at
+     its pad was also `Held` under the Q-2792 interim until intake 114 built S-0501 r154 claim 52),
    - `Done`: the override installed the attacker as target.
 4. The scatter from damage (S-0215 claim 19 for a vehicle or an aircraft, request A of S-0208
    claim 15 for infantry): one forced request with no threat point, not move-anywhere, through
@@ -76,13 +76,13 @@ fall-back and before the fear, and request A does not. Built so.
 
 ## Q-2750
 
-Q-2750 (open) asks about the extra locomotion of a walker standing with no walking target whose
-stored path a scatter drops. Request A reaches only a unit with no destination (both cases), and
-case 2 only one whose locomotor is not moving. A walker in the middle of a walk has a destination,
-so request A does not reach the Q-2750 walker of the request's examples. If a walker with no
-destination still held a stored path, `scatter::request` would apply its current workaround (the
-state read before the request, no extra locomotion); this build does not change it. Request B has
-a threat point, never uses the nearby-cell search and never gives the extra locomotion.
+Q-2750 asked about the extra locomotion of a walker standing with no walking target whose stored
+path a scatter drops. S-0208 r58 answers it, and intake 114 built the answer
+(`walk::standing_free`, used by `scatter::request`; tests in `claims_s0208_r58.rs`). Request A
+reaches only a unit with no destination (both cases), and case 2 only one whose locomotor is not
+moving. A walker in the middle of a walk has a destination, so request A does not reach the
+Q-2750 walker of the request's examples. Request B has a threat point, never uses the nearby-cell
+search and never gives the extra locomotion.
 
 ## Lanes (main ea9d5f5 against the branch)
 
@@ -129,14 +129,26 @@ a threat point, never uses the nearby-cell search and never gives the extra loco
 
 ## Seams
 
-- **The arena records (Q-2782).** Under the claims as built, case 2 reaches the test-only
-  computer-controlled arena houses' free units in *hunt*. As a result M-0021 part B (*c* ≥ 3, the
-  hits a judged shot owns, a reading-points row, one G-dead count), M-0001 LTNK-APOC and LTNK-E1,
-  and M-0003 MTNK-APOC now fail. Q-2782 asks which reading is right; the build stands meanwhile.
+- **The arena records (Q-2782, answered).** Under the claims as built, case 2 reaches the
+  test-only computer-controlled arena houses' free units in *hunt*. As a result M-0021 part B
+  (*c* ≥ 3, the hits a judged shot owns, a reading-points row, one G-dead count), M-0001 LTNK-APOC
+  and LTNK-E1, and M-0003 MTNK-APOC failed. S-0215 r137 (scenario B6 parts f and g, backed by
+  M-0024 and M-0025) and S-0208 r58 answer Q-2782 with that reading: case 2 does reach a free
+  hunting vehicle of a computer-controlled house, for a hit naming no attacker and for one whose
+  attacker it may not retaliate against. What else makes those rows differ is left open there
+  (S-0215 Open questions, *Arena records and the scatter from damage*, low), with no rule changed
+  for it. Intake 114 changed no code for it and added the B6 f and g tests
+  ([intake114.md](intake114.md)). After intake 114 the arena gives the same winners and the
+  same failing rows as main (14 M-0001 and 8 M-0002 games end at another 304-frame sample; no
+  row's verdict moves; M-0003, M-0020 and M-0021 output is unchanged), so
+  none of those rows holds yet: M-0001 LTNK-APOC and LTNK-E1, M-0003 MTNK-APOC, and M-0021 part
+  B's *c* ≥ 3, its hits a judged shot owns, its reading-points row and its per-run dead counts all
+  still fail.
 - **Aircraft retaliation.** Closed by the aircraft-retaliation build
   ([air-retaliate.md](air-retaliate.md)). An aircraft that may retaliate now overrides to
-  *attack* like any other actor (`Done`), so case 1 no longer reaches it. The one exception is an
-  aircraft on the ground at its pad, which is still answered `Held` (the Q-2792 interim).
+  *attack* like any other actor (`Done`), so case 1 no longer reaches it. The one exception was an
+  aircraft on the ground at its pad (the Q-2792 interim); intake 114 removed it (S-0501 r154
+  claim 52).
 - **A refused override.** `quirks.refused_override_retargets` off makes a refused override change
   nothing, so the actor does not retaliate (`Held`) and case 1 can follow. An override to *attack*
   is refused only for an actor in *selling*, which no mobile actor is, so the case never reaches

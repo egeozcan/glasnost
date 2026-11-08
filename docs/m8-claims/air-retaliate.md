@@ -10,9 +10,9 @@ and **Q-2793** (the height and mark tests of claim 11).
 - `acquire::retaliate` now overrides an aircraft that may retaliate to *attack* through the same
   `override_attack` as every other actor (S-0215 claims 10 and 18). S-0501 owns what follows:
   T1 runs the attack, and T2 row 1 restores the suspended behaviour at the target's loss.
-- The aircraft seam of the scatter-damage build is closed. The one exception is an aircraft on
-  the ground at its pad: S-0501 claim 28 contradicts S-0215 claim 18 there (Q-2792), so it is
-  still answered `Held`.
+- The aircraft seam of the scatter-damage build is closed. The one exception was an aircraft on
+  the ground at its pad (Q-2792), answered `Held` until intake 114 built S-0501 r154 claim 52:
+  it now retaliates like any other aircraft.
 - S-0309 claim 18's row for harvesting slaves, slave masters and spawner types was missing for
   every kind of actor, and is now built.
 - In S-0312, a bomb-marked vehicle that dies within 10 leptons above water now takes claim 11's
@@ -46,8 +46,8 @@ vehicle, which then takes claim 11's effects when it lands on water.
 | S-0501 T1: an aircraft with no ammunition that is overridden to *attack* finishes the run at once and falls back (claim 17) | built (existing), tested | `claim_18_an_aircraft_with_no_ammunition_retaliates_and_falls_back` |
 | S-0215 claim 19 case 1: no longer reaches an aircraft that retaliates (`damage_scatter_sent`, `Done` gives false) | built, tested | `claim_19_case_1_no_longer_reaches_an_aircraft_that_retaliates` (with the far control) |
 | S-0215 claim 16: the order within a hit (retaliation before the scatter from damage) for an aircraft | built (existing order), tested | the same test, and the scatter-damage ledger |
-| S-0501 claim 28 against S-0215 claim 18: an aircraft on its pad | blocked (Q-2792), interim built and tested | `air::on_its_pad`; `q2792_interim_an_aircraft_on_its_pad_is_held_back` |
-| S-0501 T3 for an aircraft overridden to *attack* on its pad (take-off, contact, service) | blocked (Q-2792) | not reached under the interim |
+| S-0501 claim 28 against S-0215 claim 18: an aircraft on its pad | built, tested (intake 114: Q-2792 answered by S-0501 r154 claim 52; the interim and `air::on_its_pad` are gone) | `claims_s0215_air_retaliate.rs` `claim_52_an_aircraft_on_its_pad_retaliates` |
+| S-0501 T3 for an aircraft overridden to *attack* on its pad (take-off, contact, service) | built, tested (intake 114) | see `docs/m8-claims/intake114.md`, scenario AC34 |
 | S-0309 claim 18: not of a spawner type | built, tested | `claim_18_a_spawner_type_never_retaliates` |
 | S-0309 claim 18: neither a harvesting slave nor a slave master | built, tested (slave master) | `claim_18_a_slave_master_never_retaliates`; the harvesting-slave half is the same one-line test, `seams::is_harvesting_slave`, not tested separately |
 | S-0312 claim 11: a marked vehicle within 10 leptons above water skips claims 4 (debris) and 9 and shows the wake, then the last splash entry, with no draws | built, tested | `death::marked_low_over_water`, `death::wake_and_splash`; `d8_marked_water_variant_wake_and_last_splash_in_place_of_the_ordinary_effects` |
@@ -60,8 +60,8 @@ vehicle, which then takes claim 11's effects when it lands on water.
 | S-0312 Edge cases: an empty splash list shows no splash (departure, no switch); no wake defined | built, tested | `claim_11_without_a_splash_list_or_a_wake` |
 | S-0312 claim 11 through the real path: a fall with the mark ends in the landing hit over water | built, tested | `d8_marked_water_variant_through_the_landing_hit` |
 | S-0203 claim 13 (g) with S-0312 claim 11: the defeat sweep's repeat for a marked leftover | built, tested | `Repeat::marked_water`; `claims_s0203_r53.rs` `a_bomb_marked_leftover_low_over_water_repeats_the_wake_and_splash` |
-| S-0312 claim 11: where the height is measured (terrain or deck), negative heights | blocked (Q-2793 questions 1 and 2), interim built | terrain surface at its position, negatives count |
-| S-0312 claim 12 row 3: a marked vehicle outside claim 11's conditions | blocked (Q-2793 question 3) | left as before: every marked vehicle that cannot crash loses its passengers |
+| S-0312 claim 11: where the height is measured (terrain or deck), negative heights | built, tested (intake 114: Q-2793 answered by S-0312 r66; above the deck on a deck, no lower bound, quirk `bomb_mark_water_death_on_deck`) | see `docs/m8-claims/intake114.md` |
+| S-0312 claim 12 row 3: a marked vehicle outside claim 11's conditions | built, tested (intake 114: the mark alone decides) | see `docs/m8-claims/intake114.md` |
 
 ## Seams
 

@@ -409,21 +409,6 @@ pub fn on_ground(w: &World, id: ObjectId) -> bool {
     listing_height(w, id) <= 0
 }
 
-/// An aircraft on the ground (Terms) that holds a contact with a pad, a
-/// building of one of its type's dock types (Terms, *pad* and *pad
-/// reservation*): the case of Q-2792's interim, which `acquire::retaliate`
-/// holds back.
-pub fn on_its_pad(w: &World, id: ObjectId) -> bool {
-    let Some(k) = w.obj(id).and_then(|o| o.contact) else {
-        return false;
-    };
-    // spec: S-0501 Terms (a pad: a building whose type is one of the aircraft type's dock types; on the ground) and Q-2792 (interim)
-    on_ground(w, id)
-        && w.obj(k).is_some_and(|b| {
-            b.kind == Kind::Building && ty(w, id).is_some_and(|t| t.docks.contains(&b.type_index))
-        })
-}
-
 /// Claim 48 (c)'s low release while it stays at height 0 (*At height 0*):
 /// released above its pad and not yet climbing. It is on the ground by its
 /// height (Terms), so claim 8's landing of an aircraft in flight that has
@@ -3630,8 +3615,13 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
         }
         let Some(o) = w.obj(x).cloned() else { continue };
         // spec: S-0501 claim 26 (an aircraft still flying in, in enter, or still moving is skipped) and claim 24 (r110, Q-2436: neither the report nor the pad tests where it touched down, so one settled off the foundation is serviced there)
-        let skipped = o.beh.current == Some(Behaviour::Enter) || moving(w, x) || !st(w, x).ground;
-        settled |= !skipped;
+        // spec: S-0501 claims 26 and 52 and Edge cases (r154, quirks.aircraft_pad_sleep_ends_retaliation off: one whose current behaviour is attack is skipped too, as one in enter)
+        let attack_skipped = !w.rules().quirks.aircraft_pad_sleep_ends_retaliation
+            && o.beh.current == Some(Behaviour::Attack);
+        let skipped = o.beh.current == Some(Behaviour::Enter)
+            || attack_skipped
+            || moving(w, x)
+            || !st(w, x).ground;
         let release = |w: &mut World| {
             // spec: S-0501 claim 26 (released: it falls back to rest and its guard is forced)
             fall_back(w, x);
@@ -3648,20 +3638,22 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
         if skipped {
             continue;
         }
-        // spec: S-0501 claim 26 (a settled aircraft not in sleep is told to queue sleep)
+        // spec: S-0501 claim 26 (r154: servicing goes on while a settled aircraft is left that the first bullet has not released)
+        settled = true;
+        // spec: S-0501 claim 26 (a settled aircraft not in sleep is told to queue sleep; r154: one in the attack of a retaliation included, claim 52, quirks.aircraft_pad_sleep_ends_retaliation)
         if o.beh.current != Some(Behaviour::Sleep) {
             queue(w, x, Behaviour::Sleep);
             continue;
         }
+        let a = max_ammo(w, x);
+        // spec: S-0501 claim 28 and claim 26 (r154: with a target at or above ⌊A / 2⌋ the reload is confirmed without a round, and that step neither repairs nor releases it, full ammunition included; T3, target held; quirks.aircraft_half_reload_with_target)
+        if w.rules().quirks.aircraft_half_reload_with_target
+            && o.target.is_some()
+            && o.combat.ammo >= a / 2
+        {
+            continue;
+        }
         if !full_ammo(w, x) {
-            let a = max_ammo(w, x);
-            // spec: S-0501 claim 28 (with a target, served only up to ⌊A / 2⌋: the reload is confirmed without a round; quirks.aircraft_half_reload_with_target)
-            if w.rules().quirks.aircraft_half_reload_with_target
-                && o.target.is_some()
-                && o.combat.ammo >= a / 2
-            {
-                continue;
-            }
             if let Some(ob) = w.obj_mut(x) {
                 // spec: S-0501 claim 26 (one round per service step)
                 ob.combat.ammo += 1;
@@ -3675,7 +3667,7 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
         }
     }
     if let Some(a) = st_mut(w, k) {
-        // spec: S-0501 claim 26 (with no aircraft settled, servicing ends; otherwise every P ticks)
+        // spec: S-0501 claim 26 (r154: when no aircraft was settled, or the first bullet released every settled one, servicing ends; otherwise every P ticks)
         a.service = settled.then(|| t.wrapping_add(p.max(1)));
     }
 }
@@ -3817,6 +3809,9 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
     let armed = armed(w, id);
     let ammo = ammo_left(w, id);
     let ground = on_ground(w, id);
+    // spec: S-0501 claim 18, Missile types (r154: an object of a missile type, S-0506 Terms, the missile-spawn flag, takes the rows for an aircraft on the ground whatever its height; the after-the-row entries read its height as for any aircraft) and T2's note
+    // design: Q-2821 (interim: the flag decides, as claim 18 and T2's note say, against claim 35's "missile slot types" for a flagged type that is not a rocket type)
+    let ground_rows = ground || crate::spawn::missile_type(w, id);
     // spec: S-0501 T2 (guard; area guard for an armed aircraft of a computer-controlled house outside a team; our engine has no teams, claim 18)
     let resting = if armed && !human(w, id) {
         Behaviour::AreaGuard
@@ -3824,7 +3819,7 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
         Behaviour::Guard
     };
     // The row's next behaviour, queued after the after-the-row entries.
-    let chosen = if ground {
+    let chosen = if ground_rows {
         if a.visiting && carrying {
             // spec: S-0501 T2 (on the ground, visiting, with passengers: unload)
             Some(Behaviour::Unload)

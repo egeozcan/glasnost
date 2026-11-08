@@ -1083,6 +1083,216 @@ fn claim_27_repair_on_pad() {
     assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
 }
 
+// ---------------------------------------------------------------------------
+// S-0501 r154: claims 26 and 52, T3, Edge cases (Q-2792 answered), after
+// scenario AC34. Ledger: docs/m8-claims/intake114.md.
+
+/// The behaviour file of AC34: the retaliate property on each of `bs`.
+fn retaliating(r: &mut Ruleset, bs: &[Behaviour]) {
+    for b in bs {
+        r.sim.behaviours.insert(
+            b.key().into(),
+            glasnost_rules::sim::BehaviourProps {
+                retaliate: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+}
+
+/// A hit on `a` that names `by` as its attacker, entering at
+/// `damage::apply`.
+fn hit_by(w: &mut World, a: ObjectId, by: ObjectId) {
+    let h0 = w.obj(a).unwrap().health;
+    let mut h = hit(20);
+    h.attacker = Some(by);
+    h.house = w.obj(by).and_then(|o| o.owner);
+    glasnost_sim::combat::damage::apply(w, a, h);
+    let h1 = w.obj(a).unwrap().health;
+    assert!(h1 < h0 && h1 > 0, "a hit it survives: {h0} to {h1}");
+}
+
+fn service(w: &World, k: ObjectId) -> Option<i32> {
+    w.obj(k).and_then(|o| o.air.as_ref()).and_then(|s| s.service)
+}
+
+/// The aircraft overrode to attack against `by` on its pad: *attack*
+/// current, `was` suspended, `by` the target, no destination, the contact
+/// with `k` held, on the ground (S-0501 claim 52, AC34 parts a and b).
+fn overrode_on_the_pad(w: &World, a: ObjectId, k: ObjectId, by: ObjectId, was: Behaviour) {
+    let o = w.obj(a).unwrap();
+    let d = describe(w, a);
+    assert_eq!(o.beh.current, Some(Behaviour::Attack), "{d}");
+    assert_eq!(o.beh.suspended, Some(was), "{d}");
+    assert_eq!(o.target, Some(Target::Object(by)), "{d}");
+    assert_eq!(o.dest, None, "{d}");
+    assert_eq!(o.contact, Some(k), "the contact held: {d}");
+    assert_eq!(air::height(w, a), 0, "{d}");
+}
+
+// spec: S-0501 claim 26 (r154: the first service step releases an aircraft docked at full ammunition and full health into a forced guard, and when that step keeps no other aircraft the pad's servicing ends; the aircraft stays in guard with its contact) and claim 52 (AC34 part a: from the release to the first hit, guard current, nothing suspended, contact held and no service step)
+#[test]
+fn claim_26_r154_servicing_ends_after_the_first_bullet_release() {
+    let (mut w, k, a) = serviced(&rules(), 2);
+    testkit::run(&mut w, 1);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "{}", describe(&w, a));
+    assert_eq!(service(&w, k), None, "servicing ends");
+    testkit::run(&mut w, 300);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "{}", describe(&w, a));
+    assert_eq!(o.beh.suspended, None);
+    assert_eq!(o.contact, Some(k), "contact held");
+    assert_eq!(service(&w, k), None, "no service step");
+}
+
+// spec: S-0501 claim 52 (r154, Q-2792; AC34 part a: in guard on its pad with no target an aircraft of a player house retaliates against an attacker its weapon reaches: attack current, the attacker its target, guard suspended, no destination, the contact held, height 0; at its choosing processing the firing spot of claim 39 is its destination and it takes off, the contact ending) and S-0215 claims 10 and 18
+#[test]
+fn claim_52_ac34_a_guard_on_the_pad_retaliates() {
+    let mut r = rules();
+    retaliating(&mut r, &[Behaviour::Guard]);
+    let (mut w, k, a) = serviced(&r, 2);
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 4, 2);
+    testkit::run(&mut w, 2);
+    hit_by(&mut w, a, v);
+    overrode_on_the_pad(&w, a, k, v, Behaviour::Guard);
+    assert_eq!(service(&w, k), None, "no service step until the take-off");
+    let left = run_until(&mut w, 600, |w| w.obj(a).unwrap().contact.is_none());
+    assert!(left, "{}", describe(&w, a));
+    let o = w.obj(a).unwrap();
+    assert!(o.dest.is_some(), "the firing spot: {}", describe(&w, a));
+    assert_eq!(o.target, Some(Target::Object(v)));
+    let up = run_until(&mut w, 60, |w| air::height(w, a) > 0);
+    assert!(up, "it takes off: {}", describe(&w, a));
+}
+
+// spec: S-0501 claim 52 (r154; AC34 part b: in the docked sleep it retaliates only while the player return-fire setting is on and sleep has the retaliate property, S-0215 claim 18; the override suspends sleep and holds the contact)
+#[test]
+fn claim_52_ac34_b_the_docked_sleep_retaliates_with_return_fire() {
+    for return_fire in [true, false] {
+        let mut r = rules();
+        retaliating(&mut r, &[Behaviour::Guard, Behaviour::Sleep]);
+        r.sim.general.player_return_fire = Some(return_fire);
+        let (mut w, k, a) = serviced(&r, 2);
+        set_credits(&mut w, 0, 100_000);
+        w.obj_mut(a).unwrap().health = 100;
+        let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 4, 2);
+        testkit::run(&mut w, 2);
+        assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Sleep));
+        hit_by(&mut w, a, v);
+        if return_fire {
+            overrode_on_the_pad(&w, a, k, v, Behaviour::Sleep);
+        } else {
+            let o = w.obj(a).unwrap();
+            assert_eq!(o.target, None, "{}", describe(&w, a));
+            assert_eq!(o.beh.current, Some(Behaviour::Sleep));
+        }
+    }
+}
+
+/// AC34 part b1's set-up: a JET docked in sleep with full ammunition and
+/// health 100, a repair step to pay for, the return-fire setting on and
+/// sleep's retaliate property, hit by VICTIM so that it overrides to
+/// attack; `quirk` the switch of S-0501 Edge cases. Returns (world, pad,
+/// aircraft, attacker).
+fn ac34_b1(quirk: bool) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut r = rules();
+    retaliating(&mut r, &[Behaviour::Guard, Behaviour::Sleep]);
+    r.sim.general.player_return_fire = Some(true);
+    r.globals.quirks.aircraft_pad_sleep_ends_retaliation = quirk;
+    let (mut w, k, a) = serviced(&r, 2);
+    set_credits(&mut w, 0, 100_000);
+    w.obj_mut(a).unwrap().health = 100;
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 4, 2);
+    testkit::run(&mut w, 2);
+    hit_by(&mut w, a, v);
+    overrode_on_the_pad(&w, a, k, v, Behaviour::Sleep);
+    (w, k, a, v)
+}
+
+// spec: S-0501 Edge cases, quirks.aircraft_pad_sleep_ends_retaliation on (r154, claim 52, T3 last row; AC34 part b1: a service step that finds the aircraft settled with the attack of a retaliation current tells it to queue sleep, which becomes current with the target kept; then, as sleep with a target at or above ⌊A / 2⌋ rounds, no round, no repair and no release, and it never fires or takes off while it holds the attacker)
+#[test]
+fn claim_52_ac34_b1_sleep_ends_the_retaliation_on_the_pad() {
+    let (mut w, k, a, v) = ac34_b1(true);
+    let h = w.obj(a).unwrap().health;
+    let credits = w.houses[0].credits;
+    let slept = run_until(&mut w, 40, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Sleep)
+    });
+    assert!(slept, "sleep current again: {}", describe(&w, a));
+    testkit::run(&mut w, 600);
+    let o = w.obj(a).unwrap();
+    let d = describe(&w, a);
+    assert_eq!(o.beh.current, Some(Behaviour::Sleep), "{d}");
+    assert_eq!(o.target, Some(Target::Object(v)), "the target kept: {d}");
+    assert_eq!(o.contact, Some(k), "{d}");
+    assert_eq!(air::height(&w, a), 0, "no take-off: {d}");
+    assert_eq!(o.health, h, "no repair: {d}");
+    assert_eq!(w.houses[0].credits, credits, "nothing charged");
+    assert_eq!(o.combat.ammo, 2, "it never fires: {d}");
+    assert!(service(&w, k).is_some(), "servicing goes on, settled");
+}
+
+// spec: S-0501 Edge cases, quirks.aircraft_pad_sleep_ends_retaliation off (r154: a service step skips an aircraft whose current behaviour is attack, as one in enter, so the retaliation's run goes on: it takes off with the attacker as its target; claim 52's take-off, T3)
+#[test]
+fn claim_52_quirk_off_the_service_step_skips_the_attack() {
+    let (mut w, k, a, v) = ac34_b1(false);
+    let left = run_until(&mut w, 600, |w| {
+        let o = w.obj(a).unwrap();
+        assert_ne!(o.beh.current, Some(Behaviour::Sleep), "{}", describe(w, a));
+        o.contact.is_none()
+    });
+    assert!(left, "{}", describe(&w, a));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, Some(Target::Object(v)), "{}", describe(&w, a));
+    assert!(o.dest.is_some(), "{}", describe(&w, a));
+    let _ = k;
+}
+
+// spec: S-0501 claim 26 and T3 (r154: settled in sleep with a target held and ammunition at least ⌊A / 2⌋, full ammunition included, a service step gives no round, no repair and no release; quirks.aircraft_half_reload_with_target, off: the repair step as without a target)
+#[test]
+fn claim_26_r154_a_target_at_full_ammunition_stops_the_repair_and_release() {
+    for half in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.aircraft_half_reload_with_target = half;
+        let (mut w, _k, a) = serviced(&r, 2);
+        set_credits(&mut w, 0, 100_000);
+        w.obj_mut(a).unwrap().health = 100;
+        let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 9, 9);
+        w.obj_mut(a).unwrap().target = Some(Target::Object(v));
+        testkit::run(&mut w, 40);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.health == 100, half, "half {half}: {}", describe(&w, a));
+        assert_eq!(o.beh.current, Some(Behaviour::Sleep), "half {half}: no release");
+    }
+}
+
+// spec: S-0501 claim 18, Missile types (r154: an object of a missile type, the missile-spawn flag of S-0506 Terms, takes T2's rows for an aircraft on the ground whatever its height: it forgets its target and destination and gets guard) and T2's note; the unflagged control in flight takes the in-flight rows
+// design: Q-2821 (interim: the flag decides for a flagged type that is not a rocket type, against claim 35's "missile slot types")
+#[test]
+fn claim_18_r154_a_missile_type_takes_the_ground_rows_in_flight() {
+    for flagged in [true, false] {
+        let mut r = rules();
+        r.sim.aircraft.get_mut("JET").unwrap().missile_spawn = Some(flagged);
+        let mut w = game(&r);
+        let a = lifted(&mut w, "JET", 0, 0);
+        assert!(!air::on_ground(&w, a));
+        air::fall_back_rows(&mut w, a);
+        let o = w.obj(a).unwrap();
+        let guard = o.beh.queued == Some(Behaviour::Guard) || o.beh.current == Some(Behaviour::Guard);
+        let d = describe(&w, a);
+        if flagged {
+            assert!(guard, "{d}");
+            assert_eq!(o.dest, None, "{d}");
+            assert_eq!(o.target, None, "{d}");
+        } else {
+            assert!(!(guard && o.dest.is_none()), "{d}");
+        }
+    }
+}
+
 // spec: S-0501 Edge cases (a pad with no docking-place key, or with the key set to 0, has one contact place: an aircraft built there docks in it)
 #[test]
 fn pad_without_docking_places_has_one_place() {
