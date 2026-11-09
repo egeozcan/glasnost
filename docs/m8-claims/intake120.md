@@ -43,8 +43,8 @@ Status words as in intake 76's ledger: **tested**, **partly**, **seam**, **no ch
 
 A release that the interim failed (with a refund) now succeeds, so a saved game or an AI game
 replays differently: save format 120 → 122 and AI game format 86 → 88 (the numbers the brief
-reserves). The sim-gate goldens were regenerated and came out byte-identical: the golden runs
-never release a ground vehicle onto a unit still holding its factory's contact.
+reserves). The sim-gate goldens were regenerated and came out byte-identical, as the sweeps
+did.
 
 ## Lanes
 
