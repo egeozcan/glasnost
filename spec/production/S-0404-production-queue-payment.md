@@ -2,13 +2,13 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 23
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-03
+approved-on: 2026-11-09
 measurements: []
-requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226]
+requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226, Q-2841]
 supersedes: []
 ---
 
@@ -495,7 +495,7 @@ addition:
 
     | Kind of *K* | Result and where the unit appears |
     |---|---|
-    | Ground vehicle factory (vehicle factory flag, not naval) | When *K*'s current behaviour is *unloading* (it is still letting out an earlier vehicle), the release passes to the first other building of the house, in acquisition order, of the same building type whose current behaviour is guard; that building releases the unit by this row and its result is the result. Its power switch and claim 7's conditions are not judged. With no such building the result is *busy*. Otherwise the unit appears inside *K* at its *exit point*: *K*'s position (the centre of its top-left cell) plus the type's exit displacement (three integers in leptons), or *c* when the displacement is (0, 0, 0). It faces 16384 (map east). *K* then queues unloading under S-0417 claims 2 to 8, without starting it synchronously; the unit saves *K*'s rally point (S-0213, claim 20) as its guard spot, with the ordinary arrival-report destination governed by S-0417 claim 8. For jumpjet ascent, S-0417 claim 15 instead governs contact and tether release and the subsequent destination; the factory does not wait for touchdown. Result *released*. |
+    | Ground vehicle factory (vehicle factory flag, not naval) | When *K*'s current behaviour is *unloading* (it is still letting out an earlier vehicle), the release passes to the first other building of the house, in acquisition order, of the same building type whose current behaviour is guard; that building releases the unit by this row and its result is the result. Its power switch and claim 7's conditions are not judged. With no such building the result is *busy*. Otherwise the unit appears inside *K* at its *exit point*: *K*'s position (the centre of its top-left cell) plus the type's exit displacement (three integers in leptons), or *c* when the displacement is (0, 0, 0). It faces 16384 (map east). The unit is put there without an entry test of that cell: neither *K* itself, listed in the cell as a building of its foundation, nor any other occupant of the cell, of any house and moving or not, nor its terrain or overlay keeps it out, so the cell never makes this row give *failed*. Whether an exit point off the map gives *failed* by the table's general sentence is an Open question. The unit then shares the cell with whatever stands there. *K*'s max(*d*, 1) contact places are numbered from 1, *d* being the imported docking-place count (S-0417 claim 14), and the new unit's contact with *K* takes the free place with the lowest number. When no place is free, the unit that holds place 1 loses its contact and tether link with *K* at this release, and the new unit takes that place (medium for a *K* with one place, low for a *K* with more than one: backing below). *K* then queues unloading under S-0417 claims 2 to 8, without starting it synchronously; the unit saves *K*'s rally point (S-0213, claim 20) as its guard spot, with the ordinary arrival-report destination governed by S-0417 claim 8. For jumpjet ascent, S-0417 claim 15 instead governs contact and tether release and the subsequent destination; the factory does not wait for touchdown. Result *released*. |
     | Naval vehicle factory | When *K* has no unit in contact, *K* queues unloading under S-0417 claim 9, which commands no exit movement on the released ship. With a rally point, take the 8-direction *e* = the direction from *c* to the rally point rounded to 8 steps, and step from *c*'s cell in direction *e* (S-0204, claim 9) until the first cell not covered by *K*. That cell is the exit cell when it is water (S-0211), holds no unit, infantry, aircraft or building, and is usable (S-0009, claim 4). Otherwise, or with no rally point, the exit cell is the nearby-cell search of S-0212 (claim 25) around *c*'s cell for the unit's movement kind. The unit appears at the exit cell's centre facing 16384 and, with a rally point, gets a move order to it. Result *released*. |
     | Infantry factory, and cloning building (claim 14) | *K* has max(*d*, 1) contact places, where *d* is the imported docking-place count (S-0417 claim 14). When none is free, the result is *busy*. Otherwise the exit cell is the first candidate below that passes S-0417 claim 14's legal-cell and free-entry-result test; with none, *failed*. Candidates: first, for a type with a barracks door kind, its door cell: (*x*₀ + 1, *y*₀ + 2) for the first kind, (*x*₀ + 2, *y*₀ + 2) for the second, (*x*₀ + 2, *y*₀ + 1) for the third, tried in that order when a type has several kinds; then the cells of the foundation's exit list (Constants), each (*x*₀ + *a*, *y*₀ + *b*), in list order. No other cell is tried: a foundation with an empty list (0 × 0) and no legal door candidate gives *failed*, and no cell toward the rally point is preferred. The unit appears at the centre of the cell obtained by adjusting each exit-cell coordinate one cell toward the foundation rectangle: an x coordinate at or above *x*₀ + *W* is reduced by 1, one below *x*₀ is raised by 1, and otherwise it is unchanged; y uses *y*₀ and *H* in the same way. These are integer cell operations with no rounding. For a nonempty foundation this is the neighbouring foundation cell; the same adjustment defines a door release for the 0 × 0 word without presuming a foundation cell exists. When the exit cell is the door cell of a door kind the type has, the type's exit displacement is added. Its facing is the direction from *c* to the exit cell's centre, rounded to 256 steps. It saves *K*'s rally point as guard spot; contact, tether and subsequent destinations follow S-0417 claim 10, with jumpjet ascent reports governed by S-0417 claim 15. With a rally point outside the unit's own cell, ordinary infantry walks first to the exit cell and then to the rally point. Infantry of a jumpjet type and types marked as teleporting head straight to the rally point. With no rally point, or one in the unit's own cell, the release gives no destination; any later walk-out remains S-0417 Open question 3. Result *released*. |
     | Aircraft factory | When *K* has a docking place that is empty or already in contact with this aircraft, the aircraft appears docked at the position of claim 15, facing the game-wide pose direction (Import mapping) × 256 units. With a rally point, a type that need not return to a dock gets a move order to it. That move order is the release's own: the release gives the aircraft the rally point as its destination and queues *move*, and it is not a behaviour order of S-0213 claim 5 (S-0501 claim 48 (d)). Result *released*. Otherwise a type that must return to a dock (S-0407, Import mapping) gives *failed*. Any other aircraft enters from the edge of the local area (S-0009, claim 4: (*L*ₓ, *L*ᵧ, *L*w, *L*h) and map width *M*). Let *Q* = (*L*ₓ + *L*ᵧ + 1, *M* − *L*ₓ + *L*ᵧ), and let (*b*ₓ, *b*ᵧ) be *c*'s cell. Define the start cell *S* by these cases:
@@ -537,26 +537,37 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
     build planning (claim 12); our engine has no such draw.
     - Backing: `measurable` (scenario P12, parts a to h; the aircraft edge draw with the
       random-state recorder for the edge-row value, not its isolated draw count). The exact
-      edge-entry draw count is `unmeasured` here: unresolved placement draws prevent P12 h
-      from separating that count from the rest of the release. Repeated identical exit-list
-      entries are `unmeasured`: rejecting a candidate and immediately trying that same cell
-      again has no distinct observable in
-      P12's static blocking setup. The computer-only extra release draw is `unmeasured`:
-      P12 uses only the human house, not a predicted computer build-planning action.
+      edge-entry draw count is `unmeasured` here: unresolved placement draws prevent P12 h from
+      separating that count from the rest of the release. Repeated identical exit-list entries are
+      `unmeasured`: rejecting a candidate and immediately trying that same cell again has no
+      distinct observable in P12's static blocking setup. The computer-only extra release draw is
+      `unmeasured`: P12 uses only the human house, not a predicted computer build-planning action.
       Unloading, initial infantry destinations and post-contact rules inherit S-0417's backing
-      (claims 10 to 12, scenarios U10 and U12); jumpjet ascent release and destination
-      effects inherit S-0417 claim 15's backing and limitations (U14).
-      The contact count, exit-candidate entry test and nearby-aircraft destination inherit claim
-      14's backing and U13 scenarios. That the aircraft factory row's rally move is the release's
-      own assignment and not a behaviour order has S-0501 claim 48's backing: `unmeasured`, since no
-      part of S-0501 scenario AC30 sets up a type that need not return to a dock released with a
-      rally point.
+      (claims 10 to 12, scenarios U10 and U12); jumpjet ascent release and destination effects
+      inherit S-0417 claim 15's backing and limitations (U14). The contact count, exit-candidate
+      entry test and nearby-aircraft destination inherit claim 14's backing and U13 scenarios. That
+      the aircraft factory row's rally move is the release's own assignment and not a behaviour
+      order has S-0501 claim 48's backing: `unmeasured`, since no part of S-0501 scenario AC30 sets
+      up a type that need not return to a dock released with a rally point. That the ground vehicle
+      factory row makes no entry test is `measurable` for *K* itself through P12 part a, whose
+      second run puts the unit at the foundation centre, a cell of *K*, and for an earlier unit of
+      *K* still standing at the exit point through S-0309 scenario A19 part k, which also shows, for
+      a *K* with one contact place, the contact and tether link moving to the new unit. For every
+      other occupant it is `unmeasured`: no scenario part here has one in the exit point's cell at a
+      release. For the terrain and overlay of that cell it is `unmeasured` too: no scenario part
+      here puts the exit point on terrain or overlay that a vehicle may not enter. The places of a
+      factory with more than one, the free place with the lowest number taken and place 1 taken from
+      its holder when none is free, are `unmeasured`: no scenario part here gives a vehicle factory
+      more than one contact place.
     - Confidence: medium (the results, the hand-off between vehicle factories, the appearance
       points and facings, the exit lists, the aircraft edge entry and its draw); low (the door
       cells); contact count, entry test and nearby destination inherit S-0417 claim 14's confidence.
       The jumpjet ascent consequences inherit S-0417 claim 15's confidence. Medium for the aircraft
       factory row's rally move being the release's own assignment and not a behaviour order, as
-      S-0501 claim 48 rates that routing.
+      S-0501 claim 48 rates that routing. Medium that the ground vehicle factory row makes no entry
+      test, for *K* itself, for every occupant and for the cell's terrain and overlay, and that a
+      release with *K*'s one place held takes that place; low for which place is taken when *K*
+      has more than one, free or all held.
 
 14. **Cloning buildings copy released infantry.** When an infantry factory building that is not
     itself a cloning building releases a unit by claim 13 and has found its exit cell, each
@@ -1379,3 +1390,8 @@ selection's no-draw rule. No predicted total draw count is asserted for this rel
    defeat-count consequence; claims 3, 6 and 7 here describe ordinary production and do not
    establish killed-item behaviour. No answer for these parts is inferred from a hit being
    eligible or from its count remaining unchanged.
+
+4. Claim 13, ground vehicle factory row: whether a release whose exit point lies off the map, with
+   an exit displacement that puts it there, gives *failed* by the table's general sentence is not
+   established (low). The row's no-entry-test rule covers the occupants, terrain and overlay of an
+   exit point's cell on the map only.
