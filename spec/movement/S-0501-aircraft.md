@@ -2,17 +2,17 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 172
+revision: 176
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-08
+approved-on: 2026-11-09
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654,
 Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905,
 Q-1940, Q-1941, Q-1942, Q-2237, Q-2251, Q-2252, Q-2291, Q-2326, Q-2366, Q-2436, Q-2437, Q-2438,
 Q-2506, Q-2507, Q-2508, Q-2576, Q-2577, Q-2578, Q-2579, Q-2646, Q-2647, Q-2648, Q-2649, Q-2650,
-Q-2676, Q-2677, Q-2726, Q-2792, Q-2802, Q-2821]
+Q-2676, Q-2677, Q-2726, Q-2792, Q-2802, Q-2821, Q-2866, Q-2867]
 supersedes: []
 ---
 
@@ -1102,7 +1102,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       edge, as S-0522 claim 5 rates whether a player house reads one
 
 18. **Falling back to rest (aircraft).** When one of the first three situations in table T2 (State and ordering) applies, the aircraft has that row's stated outcome and S-0215 claim 13's common effects do not occur. In all other cases the common effects apply, and the aircraft's next behaviour is the result specified by the applicable remaining situation in table T2. In flight, an armed aircraft
-    with dock types looks for a pad (claim 21) and asks it for contact. When the pad grants it, it
+    with dock types looks for a pad (claim 21), is given no destination for a moment (below) and
+    asks the pad found for contact. When the pad grants it, it
     gets the pad as destination and queues *enter*. Otherwise an armed pad-bound aircraft crashes
     (claim 46 gives how that crash starts, claim 9 its fall), and any other aircraft, an unarmed
     pad-bound one included (claim 50), gets a landing spot near its house's buildings (Formula F8)
@@ -1201,6 +1202,50 @@ pad leaves its pad reservation when it takes any destination other than that pad
       follows from
       being given no destination has claim 6's levels
 
+    **The moment with no destination (Q-2867).** Every fall-back that reaches T2's in-flight pad
+    search, the rows after the *guard* row for an armed aircraft in flight, gives the aircraft no
+    destination for a moment, after that search and before what follows it. The current behaviour
+    does not matter: *guard*, *area guard*, *sticky*, *move*, an *attack* that T2's *attack* row
+    does not keep, and *enter* with no destination all take it. *Enter* current with a destination
+    takes the *guard* row instead, with or without a contact, and has no such moment. The moment
+    comes whether the search finds a pad or none, and whether the pad found grants or refuses the
+    contact. So it comes before the pad is given as destination, before F8's landing spot and *move*
+    of an aircraft that is not pad-bound, and before the crash of a pad-bound one (claim 46), which
+    so begins with no destination. The search comes first, so the pad it finds and records (claim
+    21) does not depend on the moment. Being given no destination has claim 6's effects for an
+    aircraft in flight, by its state:
+    - *attack* current and a target: it keeps its flight point and unfinished flight, landing or
+      not.
+    - *attack* current and no target: its flight gets an F8 landing spot as its flight point. One
+      that is landing compares that spot's cell with its flight point's cell (*Given no destination
+      while landing*): when they differ, it takes off toward the spot, so the moment undoes its
+      landing.
+    - any other state, moving and not landing: claim 6's new flight point around the cell it is over
+      (*Landing where it is*), with claim 40's direction draws when that cell is refused (Q-2507).
+    - any other state, landing: claim 6's selection around the cell it is over, which can undo its
+      landing (*Given no destination while landing*; claim 29 gives that case at a pad).
+    - not moving (claim 6: held 10 leptons above a refused cell, which comes only with
+      `quirks.aircraft_descent_touchdown_untested` off): it is left as it was.
+
+    A pad or F8's landing spot given as destination right after the moment is handed to its flight
+    as any destination is (claim 8) and replaces the flight point that the moment gave, but does not
+    give back a landing that the moment undid. A pad-bound aircraft that crashes is given no
+    destination after the moment, so its crash (claim 46) begins with the flight point and
+    unfinished flight that the moment left it. So, when a destination follows, the moment leaves
+    claim 40's draws and an undone landing in the states that give them, and nothing for an aircraft
+    with *attack* current and a target; before a crash it also leaves its flight point. No other row
+    of T2 has the moment, nor has the after-the-row search: the rows with passengers, the visiting,
+    *attack* and unarmed rows, the *guard* row and the rows on the ground give their destination, or
+    none, at once. This is the default; `quirks.unarmed_pad_bound_hover` off gives an unarmed
+    pad-bound aircraft in flight a pad search with this moment too (Edge cases).
+    - Backing (*The moment with no destination*): `unmeasured`: the destination given in the same
+      fall-back replaces the moment's flight point, except before a crash, so only its draws, the
+      undo of a landing and a crashing aircraft's flight point could show it. No set-up here makes
+      the cell under a falling-back aircraft refused, brings a fall-back to an aircraft that is
+      already landing, or records the flight point at the start of a pad-bound aircraft's crash
+      (AC33 part c's record does not tell such a processing from one with none, claim 29)
+    - Confidence (*The moment with no destination*): medium
+
 19. **Firing check additions.** For an aircraft the firing check of S-0301 claim 9 has two more
     refusals after every general answer has been passed:
     - an aircraft marked as a passenger carrier (claim 1) that now carries none answers *out of
@@ -1264,12 +1309,34 @@ pad leaves its pad reservation when it takes any destination other than that pad
     of all buildings: a nearer building discarded in its own type's primary comparison does
     not compete against another type. A saved distance of −1 is treated as no choice on the
     next comparison, including when overflow produced that value. No random draw is taken.
+
+    *The pad last heading for* (Q-2866). Every search records its result as the pad the aircraft was
+    last heading for: the pad it keeps, the pad it chooses, or no pad when it finds none. A
+    pad-bound aircraft whose recorded pad no longer accepts it loses that record, and the result
+    replaces it. The search records its result in every behaviour and at every use: T2's in-flight
+    pad search, the after-the-row search (claim 18), claim 29's search below cruise height and any
+    other. An aircraft that is not pad-bound records it too, although only a pad-bound one asks that
+    pad first. The record is the search's and is made whatever follows: a pad that grants or refuses
+    a contact after the search, a contact that claim 24's contact rule makes, and a contact that
+    claim 18's in-flight pad row asks for change no record. Besides the search, the record changes
+    only by claim 24's record rules at processings of *enter* (one on the ground, one in flight), by
+    a factory release of the aircraft at a pad's docking position (S-0404 claim 13, aircraft factory
+    row, and S-0404 claim 15), which records that pad whatever its height there, and when the
+    recorded building is destroyed or removed from the game, which leaves no pad recorded.
     - Backing: `measurable` for candidate choice and draw absence (AC13 and AC22). The
       saved-distance −1 condition is `unmeasured`: no legal-coordinate example yielding that
       sentinel has been established; AC13's overflow comparison does not establish it.
       The overflow switch-off exact-distance comparison is `unmeasured`: it is a design
       alternative for our engine, not an outcome of the original.
-    - Confidence: high (nearest, full pads skipped); medium (primary override and ties)
+    - Backing (*The pad last heading for*): `measurable` for a pad-bound aircraft that keeps the pad
+      its search found while a nearer pad becomes free (AC13's last check, which reads that keep,
+      not whether the search or the contact wrote the record). `unmeasured` for the other writers of
+      the record, for the record that an aircraft that is not pad-bound makes, and for a search that
+      finds no pad: no set-up here reads the record of a search after one of those, with another pad
+      of the aircraft's dock types that accepts it
+    - Confidence: high (nearest, full pads skipped); medium (primary override and ties); medium for
+      the search keeping its recorded pad (AC13, not yet run) and, `unmeasured`, for the other
+      parts of *The pad last heading for*
 
 22. **When a pad accepts an aircraft.** A pad accepts an aircraft only when all of these hold:
     the pad's house is allied with the aircraft's house; the pad is not being built up or sold
@@ -1333,7 +1400,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
     it has several places or none (S-0404 claim 15, S-0506 claim 14). If that point lies more than
     120 leptons above the terrain there, the aircraft kept on the pad is marked as holding height
     (claim 6): neither landing trigger applies, its *move* never reports stopped (claim 40), and it
-    stays above the point without that fall-back. A second rule comes next, also at every
+    stays above the point without that fall-back. At every processing of *enter*, its first
+    included, an aircraft in flight, pad-bound or not, whose destination is a building other than
+    the pad it was last heading for records that building as that pad (claim 21); this record
+    changes nothing else in the processing. Then comes a rule that also applies at every
     processing, its first included, and in either stage: an aircraft in flight with no destination
     asks its contact to be loaded (above). Unless that request is confirmed, it falls back to rest
     at once (claim 18), whatever is queued, and the processing returns 1 tick and does nothing else.
@@ -1714,7 +1784,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
       the destination of a waiting aircraft. That a processing without a contact moves an aircraft
       landing anywhere on to the docking stage is `unmeasured`, as the docking stage without a
       contact is. The record of no pad for a destination that is not a building is `unmeasured` with
-      the rest of the pad-bound rule. The move on to the docking stage of a pad-bound aircraft in
+      the rest of the pad-bound rule. The record that a processing in flight makes of a building
+      destination is `unmeasured`: no set-up here gives an aircraft in *enter* a building other than
+      the pad its last search found and then reads which pad a later search asks first. The move
+      on to the docking stage of a pad-bound aircraft in
       contact on the ground and the stay of one that is not pad-bound are `unmeasured`: they need a
       touchdown between two processings of the approaching stage, or *enter* given to an aircraft in
       contact on the ground, and no set-up here makes either. The touchdown near a docking position
@@ -1820,7 +1893,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       (`unmeasured`) for the two cases of the load request, the settled test and the pad's answer,
       for the fall-back in flight with no destination, for the processing without a contact's lack
       of a destination test, for the move on to the docking stage wherever the aircraft lands, for
-      the record of no pad, for the move on to the docking stage on the ground and the stay, and
+      the record of no pad, for the record of a building destination in flight, for the move on to
+      the docking stage on the ground and the stay, and
       for the docking stage's fall-back with the destination it has. Medium, until AC31 part h
       runs, for the touchdown near the docking position within the bound *D* of an aircraft that is
       not pad-bound, the report and the servicing after a touchdown in the docking position's cell
@@ -2055,7 +2129,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
       current that row does not apply: with the in-the-air answer
       *no* T2's *guard* row keeps the pad as destination, and otherwise the in-flight pad row
       applies again. In that row claim 21's search runs, and the aircraft is given no destination
-      for a moment, which gives its flight claim 6's new flight point around the cell it is over,
+      for a moment, as at every use of that row (claim 18), which gives its flight claim 6's new
+      flight point around the cell it is over,
       with claim 40's direction draws when that cell is refused (Q-2507). It then asks the pad
       found for contact by the in-flight pad row's own request (claim 18), not by a request to be
       loaded, and, when
@@ -2067,14 +2142,17 @@ pad leaves its pad reservation when it takes any destination other than that pad
       types that accepts it, the pad confirms: the aircraft keeps the contact and the pad as
       destination, with *enter* queued, and the moment with no destination leaves nothing but its
       draws, except for an aircraft already landing at the pad, whose landing that moment's
-      selection can undo (below). With another such pad, the search can return that one instead,
-      which then takes the aircraft into contact, ending the old one, and becomes its destination
-      (claim 23). For an aircraft that is not pad-bound claim 21 asks no pad first, so its
-      comparison decides, with the held pad among the candidates. A pad-bound one keeps the held pad
-      while it accepts it if that pad is recorded as the pad it was last heading for, which claim 21
-      asks first. Whether it is so recorded when the contact was granted in *sticky* is not traced
-      here (Open
-      questions). A processing that comes while
+      selection can undo (below). With another such pad, a pad-bound aircraft still keeps the held
+      pad while that pad accepts it. The search that found the held pad recorded it as the pad the
+      aircraft was last heading for, as claim 21 says, whether that search was the one whose
+      in-flight pad row was granted the contact at cruise height or the one below cruise height
+      (*A pad found below cruise height*), and the contact that followed changed no record. Each
+      later search asks that pad first and, while it accepts the aircraft, returns it, however near
+      another pad is. For an aircraft that is not pad-bound claim 21 asks no pad first, so its
+      comparison decides, with the held pad among the candidates, and a nearer pad that accepts it
+      can be returned instead. So can any other pad for a pad-bound one once the held pad no
+      longer accepts it. That pad then takes the aircraft into contact, ending the old one, and
+      becomes its destination (claim 23). A processing that comes while
       the aircraft is already landing at the pad, still at cruise height, follows claim 6's rule
       for a landing aircraft given no destination and then claim 8's exception for the pad. When
       its landing started in the cell of the point it is landing at, the selection gives that cell
@@ -2105,10 +2183,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
       one of *A contact held at cruise height* above. With that pad the only one of its dock types
       that accepts it, as in AC33 part f, that fall-back keeps the pad, the contact and the queued
       *enter*, so the aircraft stays in the air over the docking position in *sticky* and is never
-      serviced, as the armed pad-bound aircraft in *enter* does (claim 24). With another such pad,
-      that fall-back's search can take it into contact with that pad instead and give it that pad
-      as destination, as *A contact held at cruise height* gives, and which pad that search returns
-      then is open (Open questions). Where a landing
+      serviced, as the armed pad-bound aircraft in *enter* does (claim 24). Another such pad
+      changes nothing while the held pad accepts it, since that fall-back's search returns the pad
+      it was last heading for, the held one, as *A contact held at cruise height* gives. Where a
+      landing
       of it can start in the foundation, the check of its flight point's cell, the docking
       position's, ends that landing before touchdown as in claim 24: with a take-off toward a free
       cell near the cell it is over, the pad kept as its destination, or with claim 7's hit where
@@ -2229,9 +2307,10 @@ pad leaves its pad reservation when it takes any destination other than that pad
       at the pad with `quirks.aircraft_descent_touchdown_untested` off, for the touchdown at a
       docking position outside the foundation that keeps the pad, for the forget at a touchdown
       outside the flight point's cell, and for claim 21's comparison deciding the pad for an
-      aircraft that is not pad-bound when another pad accepts it; low for the pad that a pad-bound
-      aircraft's search returns when
-      another pad accepts it; medium (`unmeasured`) for a *V* of 0 and for the 1-lepton standstill
+      aircraft that is not pad-bound when another pad accepts it, and for the held pad that a
+      pad-bound aircraft's search returns while it accepts the aircraft when another pad accepts
+      it too, at cruise height and over a docking position outside the foundation; medium
+      (`unmeasured`) for a *V* of 0 and for the 1-lepton standstill
       with `quirks.aircraft_unit_step_stall` off
 
 30. **Pad total and the build limit (free docks).** A house's pad total grows by a helipad
@@ -4645,8 +4724,9 @@ else it then finds; its rows below apply after that.
 | in flight, armed, visiting, ammunition left, not in a team | *hunt* |
 | in flight, armed, and either *attack* is queued, or *attack* is current with ammunition left and a target | *attack* |
 | in flight, armed, and the in-the-air answer is no, or it is already flying to its *enter* destination (*enter* current, with a destination; a queued *enter* does not count), or it has no dock types, or it is outside the usable area in a team | destination kept; *guard* (*area guard* for an armed aircraft of a computer-controlled house outside a team) |
-| in flight, armed, a pad is found and grants contact | destination: the pad; *enter* |
-| in flight, armed, no pad, pad-bound | crash (claim 46) |
+| in flight, armed, pad found, contact granted | destination: none, then the pad (claim 18); *enter* |
+| in flight, armed, no pad grants contact, pad-bound | destination: none (claim 18); crash, claim 46 |
+| in flight, armed, no pad grants contact, not pad-bound | destination: none, then F8 spot; *move* |
 | in flight, otherwise | destination: landing spot F8; *move* |
 | after the row: no ammunition, armed, no contact | a new pad search; found: destination the pad, target forgotten, *enter*; none and pad-bound: the row's next behaviour is not given and the current behaviour stays (target and destination stay as the row left them); in flight the aircraft crashes (claim 46), on the ground it does not (claim 9) |
 | after the row: holds a contact | *enter* |
@@ -4821,8 +4901,9 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
   with no contact makes no pad search: it takes an F8 landing spot and *move*, and hovers there
   (claim 50). Off: only T2's last in-flight row changes for it. When that row (in flight,
   otherwise: F8 landing spot and *move*) is the one T2 reaches, it first looks for a pad (claim
-  21) and asks it for contact, as T2's in-flight pad row does for an armed aircraft (not the
-  search after the row, which asks for none). When the pad grants
+  21) and asks it for contact, as T2's in-flight pad row does for an armed aircraft, with that
+  row's moment with no destination (claim 18), not as the search after the row, which asks for
+  none. When the pad grants
   it, it gets the pad as destination and *enter*, and docks (claim 24). Otherwise it takes that
   row's F8 landing spot and *move*, and does not crash. Every earlier row of T2 keeps its
   precedence, as in the original: a restored overridden behaviour, the unchanged and started
@@ -7145,10 +7226,9 @@ destination once that touchdown has made it forget the edge cell and it rests th
     slow-speed hover or its zero step (*V* below 10) holds it at cruise height (medium). When
     another pad of the aircraft's dock types accepts it at those processings, claim 21's
     comparison decides for one that is not
-    pad-bound, with the held pad among the candidates (medium, `unmeasured`). A pad-bound one asks
-    first the pad it was last heading for. Not traced: whether the held pad is recorded as that pad
-    when the contact was granted in *sticky*, so which pad a pad-bound aircraft's search returns
-    there stays open (low).
+    pad-bound, with the held pad among the candidates (medium, `unmeasured`). A pad-bound one keeps
+    the held pad while it accepts it, since the search that found that pad recorded it as the pad
+    it was last heading for: Q-2866, claims 21 and 29 (medium, `unmeasured`).
 33. An unarmed type that is not landable and that claim 5 holds at full speed, in *sticky* (claim
     29): it keeps its cruise height and is given the cell it is over at each processing, but the
     path that follows, which depends on its speed and turn rate, was not traced (medium).
@@ -7164,3 +7244,17 @@ destination once that touchdown has made it forget the edge cell and it rests th
     from returning, and then takes those rows at its run ends (medium, `unmeasured`). Not
     traced: whether such a slot aircraft lands within the interval before the next launch pass
     (Open question 20).
+36. Q-2866 is answered by claims 21, 24 and 29. Every pad search records the pad it returns, or no
+    pad, as the pad the aircraft was last heading for, in every behaviour; a contact that a pad
+    grants after it, in *sticky* or outside it, records nothing. So a pad-bound aircraft in
+    *sticky* that holds a pad's contact, granted by T2's in-flight pad row at its cruise height or
+    after a pad found below that height, keeps that pad at its later processings at cruise height
+    while the pad accepts it, even with a nearer free pad of its dock types (medium,
+    `unmeasured`). Claim 24's processings of *enter* and a release onto a pad (claim 48) also
+    change the record.
+37. Q-2867 is answered by claim 18 (*The moment with no destination*) and table T2. Every
+    fall-back that reaches T2's in-flight pad search gives the aircraft no destination for a
+    moment after the search, whatever its current behaviour, whether the search finds a pad or
+    none and whether that pad grants or refuses the contact, so before the pad, before F8's
+    landing spot and *move*, and before the crash of a pad-bound aircraft. No other row has it
+    (medium, `unmeasured`).
