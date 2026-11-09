@@ -2,13 +2,14 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 97
+revision: 98
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-09
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771, Q-1870, Q-1975]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771,
+Q-1870, Q-1975, Q-2896]
 supersedes: []
 ---
 
@@ -1614,7 +1615,10 @@ of claim 20 and immediate fresh searches of S-0207 claim 15 (driving locomotor),
 its leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
 obstacle (S-0209 claim 7, walk locomotor). For the driving and walk locomotors, a running retry
 delay ends when the unit's destination is changed to a different one or cleared, a delay started
-earlier in the same tick included. So the first search for a new destination is not held back, and
+earlier in the same tick included. For the walk locomotor it also ends when the walker is given
+the destination it already holds, the same cell or the same object, by an order, a scatter or any
+other rule, at every assignment that S-0209 claim 10 says is made, a delay started earlier in the
+same tick included (Q-2896). So the first search for a new destination is not held back, and
 no delay remains after a failure that clears the destination (claim 23). The offers of a refinery's
 docking cell that S-0402 claim 10a gives a harvester are left to that claim (Open questions). For
 the hovering locomotor, a person's stop, which clears the order-level destination, makes the timer
@@ -1644,7 +1648,8 @@ locomotors:
     (claim 23). After a re-path for a moving blocker the delay *R* starts again whether it found a
     path or its search failed, unless the failure clears the destination. A failed gate clears it
     there too, so no delay remains. A walker that keeps its destination after a failed search (claim
-    23, third row) waits for *R* before it searches for that destination again. For the hovering
+    23, third row) waits for *R* before it searches for that destination again, unless an
+    assignment ends the delay first (above). For the hovering
     locomotor, a fresh search with no stored steps left waits for *R* to expire. Every such fresh
     search starts *R* again from its tick, whether it finds a path, fails in the search or fails at
     the gate. In particular, a successful fresh search does not remove the delay as it does for the
@@ -1669,19 +1674,29 @@ locomotors:
       re-path whose gate fails it is `unmeasured`, as claim 23 rates that re-path. S-0417 scenario
       U10 part g gives its walker an order at its release that fails the gate, but its run does not
       compare the walk to the walker's next destination with the stock retry delay, so the walk
-      without a wait is `unmeasured` there (S-0417 claim 17). That clearing or changing the
-      destination ends a delay still running from an earlier tick, a driving follower car's included
-      (claim 26), is `unmeasured` for both locomotors: in U10 g no delay runs when the new
-      destination is given, and no scenario here clears or changes a unit's destination while such a
-      delay runs. P25(a, b) additionally reads the retry timer immediately after a walker's failed
-      search/gate and a follower car's computation. It does not infer that timer from a later search
-      decided by another reaction. S-0504 N11 tests the ship's successful fresh-search clearing,
-      failed-search delay, moving-blocker restart and first-check timer exceptions.
+      without a wait is `unmeasured` there (S-0417 claim 17). That changing a walker's destination
+      to a different cell ends a delay still running from an earlier tick is `measurable` by P25(e)
+      run 2 and by S-0208 scenario W17 part m, whose scatter order to a walker waiting for a moving
+      blocker, with a delay from its last re-path still running, is followed by a change of position
+      in the tick of the order only when the new destination ends that delay (S-0208 claim 6). That
+      giving a walker the cell it already holds as its destination, by an order in a later tick than
+      the search that started the delay, ends that delay is `measurable` by P25(e) run 1. The same
+      end for the same object, by a scatter or another rule, and for a delay started earlier in the
+      same tick, is `unmeasured`: P25(e) gives only a move order to a cell, in a later tick. That
+      clearing the destination, or changing a driving unit's, ends a delay still running from an
+      earlier tick, a driving follower car's included (claim 26), is `unmeasured`: in U10 g no delay
+      runs when the new destination is given, and no scenario here clears a unit's destination, or
+      changes a driving unit's, while such a delay runs. P25(a, b) additionally reads the retry
+      timer immediately after a walker's failed search/gate and a follower car's computation. It
+      does not infer that timer from a later search decided by another reaction. S-0504 N11 tests
+      the ship's successful fresh-search clearing, failed-search delay, moving-blocker restart and
+      first-check timer exceptions.
     - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated, low
       for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4). No delay
       after a walker's failed gate: medium, until P25(a) is run (`unmeasured` after a re-path). The
-      end of a running delay at a cleared or changed destination: medium (`unmeasured`) for the
-      driving and walk locomotors, a driving follower car's included. The carve-outs: low
+      end of a running delay at a cleared or changed destination: medium for the driving and walk
+      locomotors, a driving follower car's included. The end of a walker's running delay at the
+      destination it already holds given again (Q-2896): medium. The carve-outs: low
       (`unmeasured`) for the ship locomotor and the locomotors other than the driving, walk and
       hovering locomotors waiting at a changed destination; a harvester's docking offers as S-0402
       claim 10a rates them, and the hovering locomotor's as S-0503 rates it
@@ -2645,7 +2660,7 @@ south and west.
 | stored path, driving or ship locomotor | next step *moving blocker* | blockage timer starts if not running. When the retry delay is over, re-path in mode 1, or 2 once the blockage timer has run out |
 | stored path, driving or ship locomotor | first check of the track's first cell: outcome *blocked* | stored path cleared, fresh search on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 22) |
 | stored path, walk locomotor | next step of any outcome other than *clear* | reacts as S-0209 claims 7 to 10 say, with the delays of claim 21 |
-| any | destination changes | stored path cleared, fresh search. For the driving and walk locomotors, a change to a different destination ends a running retry delay, so the search is not held back (claim 21), except for a harvester's offer of its docking cell (S-0402 claim 10a). For the ship locomotor and the locomotors other than the driving, walk and hovering locomotors, the search waits for a running delay like any fresh search (claims 20 and 21; a follower car sent by its leader computes at once instead, claim 26), at low confidence (`unmeasured`, Open questions). For the hovering locomotor, S-0503 gives whether it waits |
+| any | destination changes | stored path cleared, fresh search. For the driving and walk locomotors, a change to a different destination ends a running retry delay, so the search is not held back (claim 21); for the walk locomotor the destination it already holds, given again, ends it too (claim 21), except for a harvester's offer of its docking cell (S-0402 claim 10a). For the ship locomotor and the locomotors other than the driving, walk and hovering locomotors, the search waits for a running delay like any fresh search (claims 20 and 21; a follower car sent by its leader computes at once instead, claim 26), at low confidence (`unmeasured`, Open questions). For the hovering locomotor, S-0503 gives whether it waits |
 
 Ordering consequences:
 - A search made after the only enabled bridge connection is destroyed, even later in the same
@@ -4182,6 +4197,18 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   rather than inheriting the previous remainder. A carried-over remainder falsifies the
   corresponding ending condition of claim 22. One qualifying run each. A successful intervening
   step in the replacement-only run, or no such step in the step-only run, voids the contrast.
+- (e) A destination given while the walker's delay runs (claim 21; Q-2896). Part (a)'s
+  passed-gate walker, with its retry delay of 90 ticks, and a second tile like the first next to
+  the walker. Let *c* be the tick of the walker's failed search, after which it keeps its
+  destination. In tick *c* + 10 give it a move order by the same means as in part (a): in run 1
+  to the cell it already holds as its destination, in run 2 to the second tile. One qualifying run
+  each. Record the timer at the end of every tick and every path computation from *c* to *c* + 100.
+  Expected in both runs: at the end of tick *c* + 10 the timer has run out, or reads 90 ticks from
+  a path computation made in that tick, and the walker's next path computation after *c* comes
+  before tick *c* + 90. A timer still counting from tick *c* at the end of tick *c* + 10 (its
+  reading 10 ticks below its reading at the end of *c*), or no path computation between *c* + 10
+  and *c* + 89, falsifies the end of the delay for that run. No
+  computation at *c*, a targeting substitution, or a walker that leaves its cell voids the run.
 
 **P26. Neutral and special give-up (claim 23a; Q-0238).**
 - Setup: purpose-made skirmish map, game-speed index 2, 800 × 600, 
@@ -4658,8 +4685,9 @@ proposed recorder runs, not completed measurements.
   meant is the order-level one, and a person's stop is excepted (S-0503 claim 16). This spec keeps
   the delay running for them, and for the hovering locomotor leaves it to S-0503. Whether a
   harvester's offer of its docking cell ends a running delay is not established either, and S-0402
-  claim 10a keeps the delay running. For every locomotor, whether giving a unit the destination it
-  already holds ends the delay is not established; this spec keeps the delay running.
+  claim 10a keeps the delay running. For every locomotor other than the walk locomotor, whether
+  giving a unit the destination it already holds ends the delay is not established; this spec
+  keeps the delay running. For the walk locomotor claim 21 states that it ends it (Q-2896).
 - Which alignments of a straight strip of ground the unit cannot enter fail, and whether lengths
   3, 5, 7 and 9 of such a strip, and of a ledge, behave as P12 run T expects (see the strip entry in
   Edge cases and quirks): not established until run T is run. That lines of buildings (P12 run S,
@@ -4712,6 +4740,23 @@ proposed recorder runs, not completed measurements.
   whether the house's threat records count its allies' vehicles, infantry and aircraft, an AI
   house counts as computer-controlled. The entry should name this exception and point to
   claim 16a; Departure D5, for the units' own coefficient, is unchanged.
+
+- **S-0208, claim 6.** Its "what that does to a running retry delay is S-0212 claim 21's case of
+  a destination given again, which that spec leaves open (its Open questions)" can read that the
+  scatter, whose cell is already the walker's destination, ends a running retry delay as one to a
+  different cell does (S-0212 claim 21), so the search in the extra locomotion is not held back
+  either. Level and backing: medium, `unmeasured` for a scatter (S-0212 claim 21).
+- **S-0417, claim 17 (*No path*) and Open question 16.** "Whether giving it the destination it
+  already holds ends the delay is left open, as S-0212 leaves it" (claim 17, and its summary
+  sentence) can read that it ends it (S-0212 claim 21), so a delay that runs when a walking unit
+  is given a destination, the one it holds included, never holds that destination unsearched. Open question 16's premise ("takes it as not
+  ending it") no longer holds, and the case can close with that pointer. Level and backing:
+  medium, `measurable` by S-0212 scenario P25(e) run 1 for an order to the same cell, as S-0212
+  claim 21 rates it.
+- **S-0209, claim 10.** "That end is `unmeasured` here: scenario C5 reads only the blockage
+  delay" can add that S-0212 scenario P25(e) run 1 reads the end of the retry delay for an order
+  to the walker's present destination cell. Level and backing: medium, `measurable` (S-0212
+  P25(e) run 1).
 
 ## Questions for the project lead
 
