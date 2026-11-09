@@ -39,7 +39,7 @@ C7 verdicts in [c7-play-fixes.md](c7-play-fixes.md); none is admitted to the pla
 | Quirk | Default | Tests on and off | C7 |
 |---|---|---|---|
 | `aircraft_descent_touchdown_untested` | on | `claims_s0501_r132.rs` `claim_7_…` (on), `claims_s0501.rs` `claim_7_refused_touchdown` (off, through `tested_touchdowns`); `claims_s0501_r167.rs` `ac33_c_…` (both) | rejected, as before |
-| `aircraft_unit_step_stall` | on | `claims_s0501.rs` `claim_6_unit_step_hover_stops_a_move` (on), `claim_5_unit_step_stall_off_advances_and_fires` (off) | near miss, not admitted |
+| `aircraft_unit_step_stall` | on | `claims_s0501.rs` `claim_6_unit_step_hover_stops_a_move` (both positions: on, no landing; off, it lands), `claim_5_unit_step_stall_off_advances_and_fires` (off) | near miss, not admitted |
 | `landing_own_cell_no_result` | on | `claims_s0501.rs` `claim_41_own_cell_no_result_gives_the_placeholder` (on), `claim_41_own_cell_no_result_quirk_off_falls_back` (off) | first verdict: not admitted at this intake, flagged to the lead as a candidate |
 | `unarmed_pad_bound_hover` | on | `claims_s0501_r93.rs` `claim_50_an_unarmed_pad_bound_aircraft_hovers_near_its_pad` (on), `quirk_unarmed_pad_bound_hover_off_docks_at_a_free_pad_and_hovers_at_a_taken_one` and `quirk_unarmed_pad_bound_hover_changes_nothing_for_a_type_that_is_not_landable` (off) | rejected, as at intake 76 |
 
