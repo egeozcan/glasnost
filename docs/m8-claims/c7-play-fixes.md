@@ -834,3 +834,21 @@ the long-text departure of intake 115's table to a power-meter text; none is a l
 The new switch against our own pathing improvements, as intake 106 read them: it moves no unit
 on the ground, changes no path search, blocked step or release of the pathing layer, and none of
 the six reads a spawn controller. Intake 117 leaves the layer file unchanged.
+
+## A3 intake 120 (S-0309 r129, S-0404 r26): one switch re-read, no new switch
+
+Ledger: [intake120.md](intake120.md). Neither delta adds a quirk. S-0309 r129 (Q-2841) rewrites
+the Edge case of `owner_change_interrupts_building_work`: the on position's effects no longer
+include a factory whose later releases fail. The unit that the factory has not yet sent out still
+stays at its exit point, but the factory's next release puts its new unit there all the same and
+takes its contact (S-0404 r26 claim 13). The default (on), the doc string in `quirks.rs` (which
+never named the failed releases) and the off position are unchanged. Both positions' tests in
+`claims_s0309_r126.rs` still hold, the on test now asserting the release.
+
+| Switch | Spec | Verdict | Reason |
+|---|---|---|---|
+| `owner_change_interrupts_building_work` | S-0309 claim 31 and Edge cases (r129) | not admitted, as at intake 116, on a weaker case for condition 2 | Intake 116 found condition 2 arguable partly because a captured factory's every release failed. That outcome is gone in r129: the captured factory goes on producing, and only the one unit it had not sent out waits at the exit point for an order, now without its contact. The stalled sale is unchanged. Conditions 1 and 3 hold as before. A play note naming a unit left inside a captured factory would reopen condition 2. |
+
+Against our own pathing improvements, as intake 106 read them: intake 116's paragraph above names
+`release::stranded_at`, which is removed. A ground factory's release now makes no cell test at
+all, and none of the six improvements reads one. Intake 120 leaves the layer file unchanged.
