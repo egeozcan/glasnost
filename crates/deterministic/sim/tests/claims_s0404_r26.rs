@@ -53,10 +53,13 @@ fn place_of(w: &World, u: ObjectId) -> Option<u32> {
     w.obj(u).unwrap().econ.exit.map(|e| e.place)
 }
 
+/// One occupant setup of the exit point's cell, put there before the release.
+type Occupy = fn(&mut World, Pos);
+
 // spec: S-0404 claim 13 (ground vehicle factory row: the unit is put at the exit point without an entry test; neither K itself, listed in the cell, nor any other occupant of any house, moving or not, nor the cell's terrain keeps it out, so the cell never gives failed; the unit shares the cell); scenario P12 part a and S-0309 scenario A19 part k
 #[test]
 fn claim_13_no_entry_test_at_the_exit_point() {
-    let cases: [(&str, fn(&mut World, Pos)); 6] = [
+    let cases: [(&str, Occupy); 6] = [
         ("K itself only", |_, _| {}),
         ("an enemy vehicle", |w, p| {
             testkit::spawn(w, Kind::Vehicle, "TANK", 1, p.cell(), 0);

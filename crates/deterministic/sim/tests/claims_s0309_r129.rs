@@ -68,6 +68,9 @@ fn check_door(w: &World, k: ObjectId, was_open: &mut bool) {
 
 // spec: S-0309 claim 31 (the factory's releases go on while the unit it has not sent out stands at its exit point: the new unit appears in that cell, its price is not refunded, its contact takes the factory's one place, and the unit standing there loses its contact and tether link, keeps its behaviours and stays until an order moves it; the door stays open until an unloading reaches its closing stage) and S-0404 claim 13; scenario A19 part k
 #[test]
+// The test prints its Open-question observation (a test harness line, not
+// simulation output).
+#[allow(clippy::disallowed_macros)]
 fn a_later_release_takes_the_stranded_units_contact() {
     let r = vf_rules();
     let mut w = econ_common::game(&r);
