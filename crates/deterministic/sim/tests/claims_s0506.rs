@@ -1638,7 +1638,7 @@ fn carrier2(flagged: bool) -> (World, ObjectId, ObjectId, ObjectId) {
     (w, car, victim, other)
 }
 
-// spec: S-0506 Terms (missile slot: the flag does not make a slot a missile slot), claims 3, 6, 7 and 8 and the Slot table (a flagged type that is not a rocket type has a non-missile slot: it launches while the carrier moves, is sent to the step direction 0 neighbour of the spawner's cell, is not re-sent by the preparing rows, a pending target adopted while it is preparing replaces the controller target, and claim 8 releases it); scenario variant of the flag/type distinction
+// spec: S-0506 Terms (missile slot: the flag does not make a slot a missile slot), claims 3, 6, 7 and 8 and the Slot table (a flagged type that is not a rocket type has a non-missile slot: it launches while the carrier moves, is sent to the step direction 0 neighbour of the spawner's cell, is re-sent by the preparing rows like an unflagged one (r40 Terms and Slot table: preparing, non-missile slot, flagged or not), a pending target adopted while it is preparing replaces the controller target, and claim 8 releases it); scenario variant of the flag/type distinction
 #[test]
 fn flagged_non_rocket_slot() {
     for flagged in [true, false] {
@@ -1699,19 +1699,15 @@ fn flagged_non_rocket_slot() {
             now.x + sx,
             now.y + sy,
         )));
-        if flagged {
-            assert_eq!(
-                w.obj(x0).unwrap().dest,
-                first,
-                "the preparing rows do not move it"
-            );
-        } else {
-            assert_eq!(
-                w.obj(x0).unwrap().dest,
-                resent,
-                "an unflagged object is re-sent"
-            );
-        }
+        assert_ne!(
+            resent, first,
+            "the re-send cell differs from the launch cell"
+        );
+        assert_eq!(
+            w.obj(x0).unwrap().dest,
+            resent,
+            "r40: the preparing rows re-send it, flagged {flagged} or not"
+        );
         // Claim 8: once every slot is preparing, a flagged one is detached (its slot empty), an unflagged one attacks.
         // A few passes later slot 1 launches and every slot is preparing.
         assert!(testkit_run_until(&mut w, 200, |w| controller(w, car).slots

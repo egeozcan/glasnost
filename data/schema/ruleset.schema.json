@@ -9855,6 +9855,11 @@
           "type": "boolean",
           "default": true
         },
+        "launching_spawner_resets_after_target_loss": {
+          "description": "A launching controller whose target was lost while a pending target waits resets at its next pass unless a non-missile slot adopts the pending target first, so its salvo ends there; off: it adopts the pending target at that check, with no range test, and goes on launching.",
+          "type": "boolean",
+          "default": true
+        },
         "lift_deck_impact_reads_ground": {
           "description": "When a dropped unit's fall ends on a bridge deck, the objects listed in the ground layer under the bridge decide what lies underneath, not those on the deck; off: the layer the unit landed in decides.",
           "type": "boolean",

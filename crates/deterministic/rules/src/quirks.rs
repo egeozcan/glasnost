@@ -1485,6 +1485,10 @@ pub struct Quirks {
     // spec: S-0506 claim 25, Edge cases
     #[serde(default = "on")]
     pub spawner_pending_target_survives_idle_clear: bool,
+    /// A launching controller whose target was lost while a pending target waits resets at its next pass unless a non-missile slot adopts the pending target first, so its salvo ends there; off: it adopts the pending target at that check, with no range test, and goes on launching.
+    // spec: S-0506 claim 11, Edge cases
+    #[serde(default = "on")]
+    pub launching_spawner_resets_after_target_loss: bool,
     /// A rocket missile's aim point is fixed at the heading point of claim 14.
     // spec: S-0506 claim 14, Edge cases
     #[serde(default = "on")]
@@ -2642,6 +2646,7 @@ impl Default for Quirks {
             raised_missile_rail_time_from_set_b: true,
             rail_missile_vanishes_with_spawner: true,
             spawner_pending_target_survives_idle_clear: true,
+            launching_spawner_resets_after_target_loss: true,
             rocket_aim_at_heading_point: true,
             destroyed_rocket_still_detonates: true,
             rocket_stalls_at_map_edge: true,
@@ -3728,6 +3733,10 @@ impl Quirks {
             (
                 "spawner_pending_target_survives_idle_clear",
                 self.spawner_pending_target_survives_idle_clear,
+            ),
+            (
+                "launching_spawner_resets_after_target_loss",
+                self.launching_spawner_resets_after_target_loss,
             ),
             (
                 "rocket_aim_at_heading_point",

@@ -1,5 +1,6 @@
-//! The sidebar's tips (S-0411 claims 20 to 22): the places of the sidebar
-//! that show one, their texts and their boxes' places. Their timing, layout
+//! The sidebar's tips (S-0411 claims 20 to 23): the places of the sidebar
+//! that show one, their texts (with the values written into an entry's
+//! marks) and their boxes' places. Their timing, layout
 //! and look are the name tip's ([`super::name_tip`]); the session gives
 //! the display names, prices and totals. Nothing here reaches the
 //! simulation.
@@ -40,8 +41,6 @@ pub const POWER_STAND_IN: &str = "%d %d";
 pub const POWER_MODE_TIP: &str = "Power on/off";
 
 const PERCENT: u16 = b'%' as u16;
-const S: u16 = b's' as u16;
-const D: u16 = b'd' as u16;
 const SPACE: u16 = b' ' as u16;
 const LF: u16 = 10;
 
@@ -112,41 +111,366 @@ pub fn place_at(l: &Layout, p: Point) -> Option<Place> {
     Some(Place::Nothing)
 }
 
-/// An entry's text with its insertion points filled: each text point
-/// (`%s`) takes the next of `texts` and each number point (`%d`) the next
-/// of `numbers`, in the order they stand, a number in decimal with a minus
-/// sign when negative and no digit grouping.
-///
-/// design: Q-2831 (an entry whose insertion points differ from Import
-/// mapping's, S-0411 Open question 11) interim: a point with no value left
-/// writes nothing, values left over are not written, and a percent sign
-/// followed by anything else is kept as it stands.
-pub fn fill(entry: &[u16], texts: &[&[u16]], numbers: &[i64]) -> Vec<u16> {
-    let mut out = Vec::with_capacity(entry.len());
+/// The most text units [`fill`] writes. A tip shows only the first
+/// [`super::name_tip::TEXT_LIMIT`] units of its text (`name_tip::cut`),
+/// and neither [`spaces_to_lines`] nor anything else before the cut
+/// changes a text's length, so the units after them are not written: a
+/// large width or precision then costs nothing.
+// spec: S-0411 Edge cases (Icon-tip text of 66 text units or more, and a power-meter tip text too long for the original, an entry with a long text or a large width: shown as S-0111's name tip shows a long text) and S-0111 Edge cases (our engine shows the first 256 text units)
+const FILL_LIMIT: usize = super::name_tip::TEXT_LIMIT;
+
+/// A mark's width or precision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Count {
+    /// A run of decimal digits (saturating).
+    Number(usize),
+    /// An asterisk.
+    Star,
+}
+
+/// One mark of an entry's text (S-0411 claim 23, *Marks*): its flags,
+/// width, precision and size marks, read up to the character that ends it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Mark {
+    minus: bool,
+    plus: bool,
+    space: bool,
+    hash: bool,
+    zero: bool,
+    width: Option<Count>,
+    precision: Option<Count>,
+    /// The size mark h is among its size marks.
+    h: bool,
+    /// The size mark I64 is among its size marks.
+    i64: bool,
+}
+
+impl Mark {
+    fn star(&self) -> bool {
+        self.width == Some(Count::Star) || self.precision == Some(Count::Star)
+    }
+
+    fn width(&self) -> usize {
+        match self.width {
+            Some(Count::Number(n)) => n,
+            _ => 0,
+        }
+    }
+
+    fn precision(&self) -> Option<usize> {
+        match self.precision {
+            Some(Count::Number(n)) => Some(n),
+            _ => None,
+        }
+    }
+}
+
+/// An entry's filled text, written no further than [`FILL_LIMIT`] units.
+struct Out(Vec<u16>);
+
+impl Out {
+    fn push(&mut self, c: u16) {
+        if self.0.len() < FILL_LIMIT {
+            self.0.push(c);
+        }
+    }
+
+    fn push_n(&mut self, c: u16, n: usize) {
+        let n = n.min(FILL_LIMIT.saturating_sub(self.0.len()));
+        self.0.extend(std::iter::repeat_n(c, n));
+    }
+
+    fn extend(&mut self, s: &[u16]) {
+        let n = s.len().min(FILL_LIMIT.saturating_sub(self.0.len()));
+        self.0.extend_from_slice(&s[..n]);
+    }
+
+    /// `body` (`len` units, written by `write`) padded to `width` units:
+    /// spaces after it with the minus flag, else `fill` before it.
+    fn padded(&mut self, m: &Mark, len: usize, fill: u16, write: impl FnOnce(&mut Self)) {
+        let pad = m.width().saturating_sub(len);
+        if m.minus {
+            write(self);
+            self.push_n(SPACE, pad);
+        } else {
+            self.push_n(fill, pad);
+            write(self);
+        }
+    }
+}
+
+const PLUS: u16 = b'+' as u16;
+const MINUS: u16 = b'-' as u16;
+const HASH: u16 = b'#' as u16;
+const ZERO: u16 = b'0' as u16;
+const STAR: u16 = b'*' as u16;
+const DOT: u16 = b'.' as u16;
+
+fn digit(c: u16) -> Option<usize> {
+    (u16::from(b'0')..=u16::from(b'9'))
+        .contains(&c)
+        .then(|| usize::from(c - u16::from(b'0')))
+}
+
+/// A run of decimal digits from `j`, saturating; the index after it.
+fn digits(entry: &[u16], mut j: usize) -> (usize, usize) {
+    let mut n = 0usize;
+    while let Some(d) = entry.get(j).copied().and_then(digit) {
+        n = n.saturating_mul(10).saturating_add(d);
+        j += 1;
+    }
+    (n, j)
+}
+
+/// Reads a mark whose percent sign stands at `i`: the mark and the index
+/// of the character that ends it (`entry.len()` at the end of the text).
+fn read_mark(entry: &[u16], i: usize) -> (Mark, usize) {
+    let mut m = Mark::default();
+    let mut j = i + 1;
+    let at = |j: usize| entry.get(j).copied();
+    // spec: S-0411 claim 23 (Marks: flags, any of the space, plus, minus, hash and zero characters, in any order and any number of times)
+    while let Some(c) = at(j) {
+        match c {
+            SPACE => m.space = true,
+            PLUS => m.plus = true,
+            MINUS => m.minus = true,
+            HASH => m.hash = true,
+            ZERO => m.zero = true,
+            _ => break,
+        }
+        j += 1;
+    }
+    // spec: S-0411 claim 23 (Marks: a width, a run of decimal digits whose first is not 0, or an asterisk)
+    match at(j) {
+        Some(STAR) => {
+            m.width = Some(Count::Star);
+            j += 1;
+        }
+        Some(c) if digit(c).is_some_and(|d| d != 0) => {
+            let (n, k) = digits(entry, j);
+            m.width = Some(Count::Number(n));
+            j = k;
+        }
+        _ => {}
+    }
+    // spec: S-0411 claim 23 (Marks: a precision, a full stop followed by a run of decimal digits, or by an asterisk, or by neither, which counts as 0)
+    if at(j) == Some(DOT) {
+        j += 1;
+        if at(j) == Some(STAR) {
+            m.precision = Some(Count::Star);
+            j += 1;
+        } else {
+            let (n, k) = digits(entry, j);
+            m.precision = Some(Count::Number(n));
+            j = k;
+        }
+    }
+    // spec: S-0411 claim 23 (Marks: size marks, any number of the letters h, l, w, F, L and N and of the letter I followed by the digits 6 and 4)
+    loop {
+        match at(j).and_then(|c| u8::try_from(c).ok()) {
+            Some(b'h') => {
+                m.h = true;
+                j += 1;
+            }
+            Some(b'l' | b'w' | b'F' | b'L' | b'N') => j += 1,
+            Some(b'I')
+                if at(j + 1) == Some(u16::from(b'6')) && at(j + 2) == Some(u16::from(b'4')) =>
+            {
+                m.i64 = true;
+                j += 3;
+            }
+            _ => break,
+        }
+    }
+    (m, j)
+}
+
+/// What the character that ends a mark makes of it (S-0411 claim 23).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum End {
+    /// A text point.
+    Text,
+    /// A number point of this letter.
+    Number(u8),
+    /// One percent sign, no value.
+    Percent,
+    /// The whole mark as it stands, no value.
+    AsItStands,
+    /// The mark dropped, the ending character shown in its place.
+    Dropped,
+}
+
+fn end_of(m: &Mark, c: u16) -> End {
+    let Ok(b) = u8::try_from(c) else {
+        // spec: S-0411 claim 23 (Marks: any other character, here one outside basic Latin, drops the mark and is shown in its place)
+        return End::Dropped;
+    };
+    match b {
+        // spec: S-0411 claim 23 (Marks: s after size marks that include I64 or h is shown as it stands, our engine's rule; Edge cases for the original)
+        b's' if m.i64 || m.h => End::AsItStands,
+        // spec: S-0411 claim 23 (Marks: the letter s makes the mark a text point)
+        b's' => End::Text,
+        // spec: S-0411 claim 23 (Marks: a number point's letter after size marks that include I64 is shown as it stands, our engine's rule)
+        b'd' | b'i' | b'u' | b'o' | b'x' | b'X' | b'p' if m.i64 => End::AsItStands,
+        // spec: S-0411 claim 23 (Marks: one of the letters d, i, u, o, x, X and p makes it a number point)
+        b'd' | b'i' | b'u' | b'o' | b'x' | b'X' | b'p' => End::Number(b),
+        // spec: S-0411 claim 23 (Marks: a percent sign shows one percent sign, and the mark takes no value)
+        b'%' => End::Percent,
+        // spec: S-0411 claim 23 (Marks: the letters c, C, B, e, E, f, g, G, n, S and Z: our engine shows the whole mark as it stands, no value) and Edge cases (Marks with a defined result that our engine shows as they stand; A tip entry's point given a value of another kind: departures, no switch)
+        b'c' | b'C' | b'B' | b'e' | b'E' | b'f' | b'g' | b'G' | b'n' | b'S' | b'Z' => {
+            End::AsItStands
+        }
+        // spec: S-0411 claim 23 (Marks: any other character, a letter the list does not name, the letter I not followed by 6 and 4, a digit, flag or full stop out of order, or another sign, drops the mark and is shown in its place)
+        _ => End::Dropped,
+    }
+}
+
+/// Writes text point `m` with value `v` (S-0411 claim 23, *Forms* and
+/// *Flags and width*).
+fn text_point(out: &mut Out, m: &Mark, v: &[u16]) {
+    // spec: S-0411 claim 23 (Forms: with a precision a text point writes at most that many of its text units)
+    let v = &v[..m.precision().map_or(v.len(), |p| p.min(v.len()))];
+    // spec: S-0411 claim 23 (Flags and width: spaces before, or after with the minus flag; the zero flag pads a text point with zeros too)
+    let fill = if m.zero { ZERO } else { SPACE };
+    out.padded(m, v.len(), fill, |o| o.extend(v));
+}
+
+/// Writes number point `m` of letter `letter` with value `v` (S-0411
+/// claim 23, *Forms* and *Flags and width*).
+fn number_point(out: &mut Out, m: &Mark, letter: u8, v: i32) {
+    let signed = matches!(letter, b'd' | b'i');
+    // spec: S-0411 claim 23 (Forms: with h a number point uses only the value's lowest 16 bits, signed from −32768 to 32767 for d and i, a whole number from 0 to 65535 for the others; u, o, x and X take a negative value v as v + 2³²; l, w, F, L and N change nothing)
+    let (negative, magnitude): (bool, u64) = match (signed, m.h) {
+        (true, true) => {
+            let n = v as i16;
+            (n < 0, u64::from(n.unsigned_abs()))
+        }
+        (true, false) => (v < 0, u64::from(v.unsigned_abs())),
+        (false, true) => (false, u64::from(v as u16)),
+        (false, false) => (false, u64::from(v as u32)),
+    };
+    // spec: S-0411 claim 23 (Forms: d, i and u in decimal; o in octal; x in hexadecimal with lowercase letters, X with capitals; p as X)
+    let text = match letter {
+        b'o' => format!("{magnitude:o}"),
+        b'x' => format!("{magnitude:x}"),
+        b'X' | b'p' => format!("{magnitude:X}"),
+        _ => magnitude.to_string(),
+    };
+    // spec: S-0411 claim 23 (Forms: p always with a precision of 8)
+    let precision = if letter == b'p' {
+        Some(8)
+    } else {
+        m.precision()
+    };
+    // spec: S-0411 claim 23 (Forms: the precision is the least number of digits, zeros added before them; without one, 1; with a precision of 0 the value 0 writes no digits)
+    let shown = if precision == Some(0) && magnitude == 0 {
+        0
+    } else {
+        text.len()
+    };
+    let least = precision.unwrap_or(1);
+    let mut lead = least.saturating_sub(shown);
+    // spec: S-0411 claim 23 (Flags and width: for o the hash flag adds a leading 0 when the digits do not start with one)
+    if letter == b'o' && m.hash && lead == 0 && (shown == 0 || !text.starts_with('0')) {
+        lead = 1;
+    }
+    // spec: S-0411 claim 23 (Flags and width: for d and i the plus flag writes a plus sign before a value that is not negative, the space flag without the plus flag a space; a minus sign when negative)
+    let sign = match (signed, negative) {
+        (true, true) => Some(MINUS),
+        (true, false) if m.plus => Some(PLUS),
+        (true, false) if m.space => Some(SPACE),
+        _ => None,
+    };
+    // spec: S-0411 claim 23 (Flags and width: the hash flag writes 0x before the digits of x, 0X before those of X and p, when the value is not 0)
+    let prefix: &[u8] = match letter {
+        b'x' if m.hash && magnitude != 0 => b"0x",
+        b'X' | b'p' if m.hash && magnitude != 0 => b"0X",
+        _ => b"",
+    };
+    let head = usize::from(sign.is_some()) + prefix.len();
+    let len = head.saturating_add(lead).saturating_add(shown);
+    let body = |o: &mut Out| {
+        if let Some(s) = sign {
+            o.push(s);
+        }
+        for &c in prefix {
+            o.push(u16::from(c));
+        }
+        o.push_n(ZERO, lead);
+        for c in text.bytes().take(shown) {
+            o.push(u16::from(c));
+        }
+    };
+    // spec: S-0411 claim 23 (Flags and width: the width counts sign and prefix; with the zero flag and without the minus flag zeros between any sign or prefix and the digits, except that a number point with a precision gets spaces; p has a precision, Forms)
+    if m.zero && !m.minus && precision.is_none() {
+        let pad = m.width().saturating_sub(len);
+        if let Some(s) = sign {
+            out.push(s);
+        }
+        for &c in prefix {
+            out.push(u16::from(c));
+        }
+        out.push_n(ZERO, pad.saturating_add(lead));
+        for c in text.bytes().take(shown) {
+            out.push(u16::from(c));
+        }
+    } else {
+        out.padded(m, len, SPACE, body);
+    }
+}
+
+/// An entry's text with its values written in (S-0411 claim 23): each
+/// text point takes the next of `texts` and each number point the next of
+/// `numbers`, in the order the points stand; a point with no value of its
+/// kind left writes nothing; values no point takes are not written; the
+/// rest of the text is shown as it stands, except at its marks.
+pub fn fill(entry: &[u16], texts: &[&[u16]], numbers: &[i32]) -> Vec<u16> {
+    let mut out = Out(Vec::with_capacity(entry.len().min(FILL_LIMIT)));
     let (mut ts, mut ns) = (texts.iter(), numbers.iter());
     let mut i = 0;
     while i < entry.len() {
         let c = entry[i];
-        match (c, entry.get(i + 1)) {
-            // spec: S-0411 Terms (Insertion point: a percent sign followed by s is a text point, filled in the order they stand)
-            (PERCENT, Some(&S)) => {
-                out.extend_from_slice(ts.next().copied().unwrap_or_default());
-                i += 2;
+        if c != PERCENT {
+            // spec: S-0411 claim 23 (each entry's text is shown as it stands, except at its marks)
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let (m, j) = read_mark(entry, i);
+        let Some(&end) = entry.get(j) else {
+            if m.star() {
+                // spec: S-0411 claim 23 (a mark with an asterisk as its width or precision, also at the end of the text, is shown as it stands by our engine and takes no value)
+                out.extend(&entry[i..]);
             }
-            // spec: S-0411 Terms (Insertion point: a percent sign followed by d is a number point; decimal, a leading minus sign when negative, no digit grouping)
-            (PERCENT, Some(&D)) => {
-                if let Some(n) = ns.next() {
-                    out.extend(n.to_string().encode_utf16());
+            // spec: S-0411 claim 23 (Marks: the end of the text drops a mark that has not ended, so a percent sign at the very end is not shown)
+            break;
+        };
+        let mark = &entry[i..=j];
+        i = j + 1;
+        if m.star() {
+            // spec: S-0411 claim 23 (a mark with an asterisk as its width or its precision, whatever character ends it, is shown as it stands by our engine and takes no value) and Edge cases (Marks with a defined result that our engine shows as they stand)
+            out.extend(mark);
+            continue;
+        }
+        match end_of(&m, end) {
+            End::Text => {
+                // spec: S-0411 claim 23 (Which value each point takes: each text point the entry's next text value; with none left it writes nothing, its width and flags adding nothing)
+                if let Some(v) = ts.next() {
+                    text_point(&mut out, &m, v);
                 }
-                i += 2;
             }
-            _ => {
-                out.push(c);
-                i += 1;
+            End::Number(letter) => {
+                // spec: S-0411 claim 23 (Which value each point takes: each number point the next number value; with none left it writes nothing, its width and flags adding nothing)
+                if let Some(&v) = ns.next() {
+                    number_point(&mut out, &m, letter, v);
+                }
             }
+            End::Percent => out.push(PERCENT),
+            End::AsItStands => out.extend(mark),
+            End::Dropped => out.push(end),
         }
     }
-    out
+    out.0
 }
 
 /// `text` with every space a line feed.
@@ -173,7 +497,8 @@ pub enum Looked {
 pub fn icon_text(entry: Looked, name: &[u16], price: i32) -> Vec<u16> {
     match entry {
         // spec: S-0411 claim 20 (Text: the money-format entry with its text point filled by the display name and its number point by the price P for the local player's house; then every space a line feed)
-        Looked::Text(e) => spaces_to_lines(&fill(&e, &[name], &[i64::from(price)])),
+        // spec: S-0411 claim 23 (the money-format entry has a text value, the display name, and then a number value, the price; every space a line feed after the values are written, those a width adds included)
+        Looked::Text(e) => spaces_to_lines(&fill(&e, &[name], &[price])),
         // spec: S-0411 Import mapping (TXT_MONEY_FORMAT_2: a missing entry shows S-0004 claim 17's placeholder alone, with no name and no price)
         Looked::Missing(p) => p,
     }
@@ -184,7 +509,8 @@ pub fn icon_text(entry: Looked, name: &[u16], price: i32) -> Vec<u16> {
 pub fn power_text(entry: Looked, (o, d): (i32, i32)) -> Vec<u16> {
     match entry {
         // spec: S-0411 claim 22 (power meter: the power entry's text with its first number point filled by the house output O and its second by its drain D; the spaces kept)
-        Looked::Text(e) => fill(&e, &[], &[i64::from(o), i64::from(d)]),
+        // spec: S-0411 claim 23 (the power entry has two number values, the output O and then the drain D; the power meter's tip keeps its spaces)
+        Looked::Text(e) => fill(&e, &[], &[o, d]),
         // spec: S-0411 Import mapping (TXT_POWER_DRAIN: missing entry: the placeholder alone)
         Looked::Missing(p) => p,
     }
@@ -243,8 +569,8 @@ mod tests {
     }
 
     /// spec: S-0411 Terms (Insertion point: %s a text point, %d a number point, filled in the
-    /// order they stand; decimal, a leading minus sign, no grouping) and claim 20 (Text) and
-    /// claim 22 (power meter); design: Q-2831 interim (other counts and kinds)
+    /// order they stand; decimal, a leading minus sign, no grouping), claim 20 (Text), claim 22
+    /// (power meter) and claim 23 (Which value each point takes)
     #[test]
     fn terms_insertion_points() {
         assert_eq!(
@@ -252,10 +578,222 @@ mod tests {
             u("<Tank X|1500>")
         );
         assert_eq!(fill(&u("%d/%d"), &[], &[-25, 1234567]), u("-25/1234567"));
-        // Q-2831 interim: a point with no value writes nothing; other percent signs stay.
         assert_eq!(fill(&u("a%sb%dc"), &[], &[]), u("abc"));
-        assert_eq!(fill(&u("%d%%x%"), &[], &[7]), u("7%%x%"));
+        assert_eq!(fill(&u("%d%%x%"), &[], &[7]), u("7%x"));
         assert_eq!(fill(&u("%d %s"), &[&u("n")], &[1]), u("1 n"));
+    }
+
+    /// spec: S-0411 claim 23 and scenario S16 part j, its eight texts with invented names and
+    /// values (Backing: measurable): (1) a text point alone; (2) a text of two words; (3)
+    /// "%s|%%|%q|%d|%"; (4) "%.3s|%+06d"; (5) a number point alone; (6) "%#x|%#o"; (7)
+    /// "%X|%u"; (8) "%5i|%-5d|"
+    #[test]
+    fn claim_23_s16_part_j_texts() {
+        let name = u("Probe Tank");
+        let icon = |e: &str, p: i32| icon_text(Looked::Text(u(e)), &name, p);
+        let power = |e: &str, od: (i32, i32)| power_text(Looked::Text(u(e)), od);
+        assert_eq!(icon("%s", 1234), u("Probe\nTank"), "(1) the name, no price");
+        assert_eq!(icon("Two words", 1234), u("Two\nwords"), "(2)");
+        assert_eq!(icon("%s|%%|%q|%d|%", 777), u("Probe\nTank|%|q|777|"), "(3)");
+        assert_eq!(icon("%.3s|%+06d", 42), u("Pro|+00042"), "(4)");
+        assert_eq!(icon("%.3s|%+06d", 9999), u("Pro|+09999"), "(4)");
+        assert_eq!(power("%d", (300, -20)), u("300"), "(5)");
+        assert_eq!(power("%#x|%#o", (255, 8)), u("0xff|010"), "(6)");
+        assert_eq!(power("%#x|%#o", (0, 0)), u("0|0"), "(6) O = 0: no 0x");
+        assert_eq!(power("%#x|%#o", (-1, 7)), u("0xffffffff|07"), "(6)");
+        assert_eq!(power("%X|%u", (255, -1)), u("FF|4294967295"), "(7)");
+        assert_eq!(power("%5i|%-5d|", (42, -7)), u("   42|-7   |"), "(8)");
+    }
+
+    /// spec: S-0411 claim 23 (Marks: flags, width, precision and size marks in this order; the
+    /// ending character decides; a percent sign shows one; the listed letters, s or a number
+    /// letter after I64 and s after h show the whole mark as it stands with no value; any other
+    /// character drops the mark and is shown in its place; the end of the text drops an unended
+    /// mark; an asterisk as width or precision shows the mark as it stands) and Edge cases (Marks
+    /// with a defined result that our engine shows as they stand)
+    #[test]
+    fn claim_23_marks() {
+        let f = |e: &str| fill(&u(e), &[&u("nm")], &[7]);
+        // Shown as they stand, taking no value: the number point after them takes 7.
+        for m in [
+            "%c", "%5C", "%B", "%e", "%E", "%-f", "%g", "%G", "%n", "%S", "%Z", "%I64d", "%I64s",
+            "%lI64x", "%I64hu", "%hs", "%lhs", "%hls", "%*d", "%.*d", "%-*.*s", "%*q",
+        ] {
+            assert_eq!(f(&format!("{m}%d")), u(&format!("{m}7")), "{m}");
+        }
+        // An asterisk mark also at the end of the text.
+        assert_eq!(f("a%*"), u("a%*"));
+        assert_eq!(f("a%5.*"), u("a%5.*"));
+        // s after size marks without h, as with none: a text point.
+        assert_eq!(f("%ls|%wFLNs"), u("nm|"));
+        // Dropped: the ending character shown in the mark's place.
+        assert_eq!(f("%q%d"), u("q7"));
+        assert_eq!(f("%I6d"), u("I6d"), "I not followed by 6 and 4");
+        assert_eq!(f("%Ix"), u("Ix"));
+        assert_eq!(f("%.3-d"), u("-d"), "a flag after the precision");
+        assert_eq!(f("%5 d"), u(" d"), "a flag after the width");
+        assert_eq!(f("%h5d"), u("5d"), "a digit after a size mark");
+        assert_eq!(f("%.3.d"), u(".d"), "a second full stop");
+        assert_eq!(f("%5*d"), u("*d"), "an asterisk after a width of digits");
+        assert_eq!(
+            f("%\u{e9}x"),
+            u("\u{e9}x"),
+            "a character outside basic Latin"
+        );
+        // The end of the text drops an unended mark.
+        assert_eq!(f("ab%"), u("ab"));
+        assert_eq!(f("ab%-05.3hl"), u("ab"));
+        // Flags in any order and number; a width's first digit is not 0 (a 0 is a flag).
+        assert_eq!(f("%0-0-3d|"), u("7  |"));
+        assert_eq!(f("%+ +d"), u("+7"));
+        assert_eq!(f("%%%d%%"), u("%7%"));
+    }
+
+    /// spec: S-0411 claim 23 (Which value each point takes: each point the next value of its own
+    /// kind in the order the points stand; a point with none left writes nothing, its width and
+    /// flags adding nothing; a value no point takes is not written) and Edge cases (A tip entry's
+    /// point given a value of another kind: departure, no switch)
+    #[test]
+    fn claim_23_values() {
+        let name = u("Big Tank");
+        let icon = |e: &str| icon_text(Looked::Text(u(e)), &name, 900);
+        let power = |e: &str| power_text(Looked::Text(u(e)), (300, -20));
+        assert_eq!(icon("%d"), u("900"), "the price and no name");
+        assert_eq!(
+            icon("%d %s"),
+            u("900\nBig\nTank"),
+            "price first, then the name"
+        );
+        assert_eq!(
+            icon("%s%s|%d%d"),
+            u("Big\nTank|900"),
+            "extra points: nothing"
+        );
+        assert_eq!(
+            icon("%s|%-9s|%09d|%09d|"),
+            u("Big\nTank||000000900||"),
+            "no value: no width either"
+        );
+        assert_eq!(power("%d|%d|%d|%s|%5d|%-5s"), u("300|-20||||"));
+        assert_eq!(power("%s"), u(""));
+        assert_eq!(power("x"), u("x"), "values left over are not written");
+    }
+
+    /// spec: S-0411 claim 23 (Forms: a text precision is at most that many text units; d and i
+    /// decimal with a minus sign; u, o, x and X take v + 2³² for a negative v; p as X with a
+    /// precision of 8; a precision is the least number of digits, 1 without one, and 0 writes
+    /// no digits for the value 0; h the lowest 16 bits, signed for d and i; l, w, F, L and N
+    /// change nothing)
+    #[test]
+    fn claim_23_forms() {
+        let t = |e: &str, v: &str| fill(&u(e), &[&u(v)], &[]);
+        let n = |e: &str, v: i32| fill(&u(e), &[], &[v]);
+        assert_eq!(t("%.0s|", "abc"), u("|"));
+        assert_eq!(t("%.2s|", "abc"), u("ab|"));
+        assert_eq!(t("%.9s|", "abc"), u("abc|"));
+        assert_eq!(t("%.s|", "abc"), u("|"), "a full stop alone counts as 0");
+        assert_eq!(n("%i", i32::MIN), u("-2147483648"));
+        assert_eq!(n("%u", -2), u("4294967294"));
+        assert_eq!(n("%o", -1), u("37777777777"));
+        assert_eq!(n("%x|", -1), u("ffffffff|"));
+        assert_eq!(n("%X", 0xBEEF), u("BEEF"));
+        assert_eq!(n("%p", 255), u("000000FF"));
+        assert_eq!(n("%p", -1), u("FFFFFFFF"));
+        assert_eq!(n("%.5d", -42), u("-00042"));
+        assert_eq!(n("%.5x", 255), u("000ff"));
+        assert_eq!(n("%.0d|", 0), u("|"));
+        assert_eq!(n("%.d|", 0), u("|"));
+        assert_eq!(n("%.0x|", 0), u("|"));
+        assert_eq!(n("%.0d", 3), u("3"));
+        assert_eq!(n("%d", 0), u("0"));
+        assert_eq!(n("%hd", 65535), u("-1"));
+        assert_eq!(n("%hi", 0x0001_8000), u("-32768"));
+        assert_eq!(n("%hu", -1), u("65535"));
+        assert_eq!(n("%hx", 0x0012_3456), u("3456"));
+        assert_eq!(n("%lhX", 0x0012_ABCD), u("ABCD"));
+        assert_eq!(n("%ld|%wFLNu", -3), u("-3|"));
+        assert_eq!(fill(&u("%ld|%wFLNu"), &[], &[-3, -3]), u("-3|4294967293"));
+    }
+
+    /// spec: S-0411 claim 23 (Flags and width: plus and space for d and i; hash for o, x, X and
+    /// p; the width counts sign and prefix; spaces before, after with minus; zeros with the zero
+    /// flag between sign or prefix and the digits, spaces for a number point with a precision;
+    /// the zero flag pads a text point; claim 20 turns a width's spaces into line feeds for the
+    /// money-format tip, the power tip keeps them)
+    #[test]
+    fn claim_23_flags_and_width() {
+        let n = |e: &str, v: i32| fill(&u(e), &[], &[v]);
+        let t = |e: &str, v: &str| fill(&u(e), &[&u(v)], &[]);
+        assert_eq!(n("%+d", 5), u("+5"));
+        assert_eq!(n("%+d", 0), u("+0"));
+        assert_eq!(n("%+d", -5), u("-5"));
+        assert_eq!(n("% d", 5), u(" 5"));
+        assert_eq!(n("% +d", 5), u("+5"), "plus wins over space");
+        assert_eq!(n("%+u", 5), u("5"), "no sign for u");
+        assert_eq!(n("% x", 5), u("5"));
+        assert_eq!(n("%#o", 8), u("010"));
+        assert_eq!(n("%#o", 0), u("0"));
+        assert_eq!(n("%#.3o", 8), u("010"), "the digits already start with 0");
+        assert_eq!(n("%#.0o", 0), u("0"));
+        assert_eq!(n("%#x", 0), u("0"));
+        assert_eq!(n("%#X", 171), u("0XAB"));
+        assert_eq!(n("%#p", 171), u("0X000000AB"));
+        assert_eq!(n("%#p", 0), u("00000000"));
+        assert_eq!(n("%#u", 9), u("9"));
+        assert_eq!(n("%6d|", -42), u("   -42|"));
+        assert_eq!(n("%-6d|", -42), u("-42   |"));
+        assert_eq!(n("%06d", -42), u("-00042"));
+        assert_eq!(n("%+06d", 42), u("+00042"));
+        assert_eq!(n("% 06d", 42), u(" 00042"));
+        assert_eq!(n("%#08x", 255), u("0x0000ff"));
+        assert_eq!(n("%#8x", 255), u("    0xff"));
+        assert_eq!(n("%-#8X|", 255), u("0XFF    |"));
+        assert_eq!(n("%-06d|", 42), u("42    |"), "minus wins over zero");
+        assert_eq!(n("%08.3d", 7), u("     007"), "a precision: spaces");
+        assert_eq!(n("%012p", 255), u("    000000FF"), "p has a precision");
+        assert_eq!(n("%2d", 12345), u("12345"), "no cut to the width");
+        assert_eq!(t("%05s", "ab"), u("000ab"));
+        assert_eq!(t("%-05s|", "ab"), u("ab   |"));
+        assert_eq!(
+            t("%05.1s", "ab"),
+            u("0000a"),
+            "a text precision keeps the zeros"
+        );
+        assert_eq!(
+            t("%+ #3s", "ab"),
+            u(" ab"),
+            "other flags add nothing to a text"
+        );
+        // The money-format tip: a width's spaces become line feeds; the power tip keeps them.
+        assert_eq!(
+            icon_text(Looked::Text(u("%-4s|%5d")), &u("ab"), 12),
+            u("ab\n\n|\n\n\n12")
+        );
+        assert_eq!(
+            power_text(Looked::Text(u("%4d|%-4d|")), (1, 2)),
+            u("   1|2   |")
+        );
+    }
+
+    /// spec: S-0411 Edge cases (Icon-tip text of 66 text units or more, and a power-meter text
+    /// with a large width: shown as S-0111's name tip shows a long text) and S-0111 Edge cases
+    /// (the first 256 text units)
+    #[test]
+    fn claim_23_a_large_width_is_cut_as_a_long_text() {
+        let n = |e: &str, v: i32| fill(&u(e), &[], &[v]);
+        let long = n("%300d", 1);
+        assert_eq!(long.len(), super::super::name_tip::TEXT_LIMIT);
+        assert!(long.iter().all(|&c| c == SPACE));
+        let left = n("%-300d", 1);
+        assert_eq!(left.len(), super::super::name_tip::TEXT_LIMIT);
+        assert_eq!(left[0], u16::from(b'1'));
+        let digits = n("%.999999999999999999999999d", 1);
+        assert_eq!(digits.len(), super::super::name_tip::TEXT_LIMIT);
+        assert!(digits.iter().all(|&c| c == ZERO));
+        assert_eq!(
+            fill(&u("%99999999999999999999999s"), &[&u("a")], &[]).len(),
+            super::super::name_tip::TEXT_LIMIT
+        );
     }
 
     /// spec: S-0411 claim 20 (Text: every space, from the display name and from the entry alike, a

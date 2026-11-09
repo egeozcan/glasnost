@@ -759,10 +759,20 @@ fn controller_step(w: &mut World, spawner: ObjectId) {
         }
         ControllerState::Launching => {
             if c.target.is_none() {
-                // spec: S-0506 claim 5 (launching without a controller target: reset)
-                reset(w, spawner);
-                return;
+                // spec: S-0506 Edge cases (quirks.launching_spawner_resets_after_target_loss off: a launching controller with no controller target and a pending target waiting adopts the pending target at that check, with no range test, as a launch does, and goes on launching)
+                if !w.rules().quirks.launching_spawner_resets_after_target_loss
+                    && c.pending.is_some()
+                {
+                    adopt_pending(w, spawner);
+                } else {
+                    // spec: S-0506 claim 5 (launching without a controller target: reset, even while a pending target waits, unless a non-missile slot adopted it earlier in the same pass, which leaves a controller target) and claim 11 (A loss while a pending target waits)
+                    reset(w, spawner);
+                    return;
+                }
             }
+            let Some(c) = controller(w, spawner).cloned() else {
+                return;
+            };
             // spec: S-0506 claim 5 (wait until every slot is preparing or empty)
             let ready = c
                 .slots
@@ -834,14 +844,12 @@ fn slot_step(w: &mut World, spawner: ObjectId, i: usize) {
             adopt_pending(w, spawner);
             let target = controller(w, spawner).and_then(|c| c.target);
             let Some(x) = slot.object else { return };
-            if missile_type(w, x) {
-                // spec: S-0506 Terms (missile type) and Slot table (preparing, object of a missile type, here a flagged type in a non-missile slot: none; claim 8 releases it)
-            } else if target.is_none() {
-                // spec: S-0506 Slot table (preparing, object not of a missile type, no controller target: returning)
+            if target.is_none() {
+                // spec: S-0506 Terms (a non-missile slot's preparing rows move its object, flagged or not) and Slot table (preparing, non-missile slot, flagged or not, no controller target after claim 3's adoption: returning)
                 set_slot(w, spawner, i, SlotState::Returning, slot.until);
                 aircraft_return(w, x, spawner);
             } else if let Some(s) = w.obj(spawner) {
-                // spec: S-0506 Slot table (re-sent to the step direction 4 neighbour of the spawner's cell)
+                // spec: S-0506 Slot table (preparing, non-missile slot, flagged or not, controller target: re-sent to the step direction 4 neighbour of the spawner's cell)
                 let (dx, dy) = crate::regions::STEPS[4]; // spec: S-0204 Constants (step direction 4)
                 let cell = s.pos.cell();
                 aircraft_launched(w, x, CellXY::new(cell.x + dx, cell.y + dy));
@@ -1317,7 +1325,8 @@ pub fn killed(w: &mut World, id: ObjectId) {
 
 /// An object is about to be removed from play (S-0506 claims 9, 11 and
 /// 13): a spawner clears its slots; a slot object is announced as lost;
-/// controllers whose target it is reset unless a pending target waits.
+/// controllers whose target it is clear it, and reset unless a pending
+/// target waits (then their next pass decides, claims 5 and 11).
 pub fn removing(w: &mut World, id: ObjectId) {
     settle_waiting(w);
     if w.obj(id).is_some_and(|o| o.spawn.is_some()) {
@@ -1335,12 +1344,13 @@ pub fn removing(w: &mut World, id: ObjectId) {
 /// An object leaves play by going inside a building or a transport (S-0506
 /// claim 14, r34): for the controllers, a target leaving play as at a
 /// removal. A pending target that goes inside is cleared (claim 25's loss
-/// notification); a controller whose target goes inside resets unless a
-/// pending target waits (claim 11). The object's own slots and its slot are
+/// notification); a controller whose target goes inside clears it, and
+/// resets unless a pending target waits (claim 11; with one waiting, its
+/// next pass decides, claims 5 and 14). The object's own slots and its slot are
 /// not touched: it stays in existence.
 pub fn target_leaves_play(w: &mut World, id: ObjectId) {
     settle_waiting(w);
-    // spec: S-0506 claim 14 (r34: a destination that goes inside a building or a transport leaves play; when it is the controller target and no pending target is waiting, claim 11's reset follows when it leaves play)
+    // spec: S-0506 claim 14 (a destination that goes inside a building or a transport leaves play; when it is the controller target and no pending target is waiting, claim 11's reset follows when it leaves play; with a pending target waiting, the leaving defers to claim 11's next pass)
     target_gone(w, id);
 }
 
@@ -1385,23 +1395,22 @@ fn target_gone(w: &mut World, id: ObjectId) {
             c.pending = None;
         }
     }
-    // spec: S-0506 claim 11 (r37: the controller target is lost and no pending target is waiting: reset); design: Q-2811 interim (with a pending target waiting, the controller target is left as it is and nothing resets)
-    let resets: Vec<ObjectId> = w
+    let losers: Vec<ObjectId> = w
         .objects
         .iter()
-        .filter(|(_, o)| {
-            o.spawn
-                .as_ref()
-                .is_some_and(|c| c.target == gone && c.pending.is_none())
-        })
+        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.target == gone))
         .map(|(&k, _)| k)
         .collect();
-    for s in resets {
-        // spec: S-0506 claims 11 and 12 (r37: the controller target is cleared as it is lost, before the reset, so the reset releases with no target and its missiles get F8's cell)
-        if let Some(c) = controller_mut(w, s) {
+    for s in losers {
+        // spec: S-0506 claims 11 and 12 (the controller target is cleared as it is lost, before any reset, so a reset releases with no target and its missiles get F8's cell; cleared too while a pending target waits, at each loss event alike)
+        let waits = controller_mut(w, s).is_some_and(|c| {
             c.target = None;
+            c.pending.is_some()
+        });
+        if !waits {
+            // spec: S-0506 claim 11 (the controller target lost and no pending target waiting: reset; with one waiting the loss itself gives no reset, and the controller's next pass decides, claims 5 and 14)
+            reset(w, s);
         }
-        reset(w, s);
     }
 }
 
