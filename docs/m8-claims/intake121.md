@@ -47,7 +47,8 @@ game replays differently: save format 123 → 124 and AI game format 89 → 90 (
 ## Lanes
 
 Base 16df36f (main before intake 119), against this intake's code on that base (before the
-rebase onto f66fd39). Every lane is identical: no game in them gives a walker its destination
+rebase onto f66fd39), except the AI tests, run again on the rebased tree. The sim-gate goldens,
+regenerated on the rebased tree, did not change. Every lane is identical: no game in them gives a walker its destination
 again while it waits behind a moving blocker in a way that changes the outcome.
 
 | Lane | Base | After |
@@ -56,5 +57,5 @@ again while it waits behind a moving blocker in a way that changes the outcome.
 | M6c sweep, seeds 1–16 | smallest minimum 0 (seed 1) | the same, every line |
 | M7a sweep, seeds 1–16 | smallest minimum 1 (seed 2) | the same, every line |
 | M7b sweep, seeds 1–16 | smallest drain minimum 3 | the same, every line |
-| `glasnost-ai --include-ignored` | 264 pass | see the hand-back report (run on the rebased tree) |
+| `glasnost-ai --include-ignored` | 264 pass | 264 pass (run on the tree rebased onto f66fd39) |
 | AI quick lane, seeds 7–10, maps 0, 2, 8 | 36 games | the same winner at the same tick in all 36 |
