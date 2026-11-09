@@ -1,9 +1,9 @@
 ---
 id: Q-2867
 title: The moment with no destination in the in-flight pad row
-status: open
+status: answered
 related: [S-0501, S-0215]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
