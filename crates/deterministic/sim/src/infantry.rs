@@ -282,11 +282,12 @@ pub(crate) fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 /// make no request. The request is not saved when refused.
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0417 claim 17 (No path: a destination accepted after a failed search reaches the walk locomotor, which then has movement in progress until it is searched for; the destination it kept, given again, keeps the delay running, S-0212 claim 21, and its movement in progress is our design, S-0417 Open question 16)
+        // spec: S-0417 claim 17 (No path: a destination accepted after a failed search reaches the walk locomotor, which then has movement in progress until it is searched for; the destination it kept, given again, keeps the retry delay running, S-0212 claim 21 and Q-2896's interim, and its movement in progress is our design, S-0417 Open question 16)
         ob.path.failed_for = None;
     }
     // spec: S-0212 claim 21 (for the driving and walk locomotors a destination changed to a different one or cleared ends a running retry delay, so the first search for it is not held back)
-    crate::path::destination_changed(w, id, before);
+    // spec: S-0209 claim 10 (r76, Q-2822: every assignment that is made starts a walker's blockage delay afresh, the destination it already has included)
+    crate::path::destination_changed(w, id, before, true);
     // spec: S-0207 claim 27 (an assignment takes effect when it changes the order-level destination or a destination-refresh state is present)
     let effective = w.obj(id).is_some_and(|o| o.dest != before) || crate::refresh::pending(w, id);
     // spec: S-0207 claim 27 (a vehicle's effective assignment runs the dock test before the locomotors take the destination)

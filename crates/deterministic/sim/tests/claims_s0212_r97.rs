@@ -181,6 +181,7 @@ fn claim_21_walker_different_destination_ends_the_delay() {
 }
 
 // spec: S-0212 claim 21 and Open questions (for every locomotor, giving a unit the destination it already holds keeps the delay running: this spec keeps it)
+// design: Q-2896 (interim for the walk locomotor: S-0209 r76 claim 10 ends the delay at this assignment, S-0212 r97 keeps it; the S-0212 text is followed until the request is answered)
 #[test]
 fn claim_21_the_same_destination_again_keeps_the_delay() {
     let (mut w, g) = one(Kind::Infantry, "WALKER");

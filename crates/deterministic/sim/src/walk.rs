@@ -681,7 +681,7 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             }
         }
         Outcome::MovingBlocker => {
-            // spec: S-0209 claim 10 (wait; start the blockage delay on the first such tick; r60: a new destination, by an order, a scatter or any other rule, starts it afresh at the first moving-blocker answer after it)
+            // spec: S-0209 claim 10 (wait; start the blockage delay on the first such tick; r60: a new destination, by an order, a scatter or any other rule, starts it afresh at the first moving-blocker answer after it; r76: so does every assignment of the destination it already has, path::destination_changed)
             let since = o
                 .path
                 .blocked_since

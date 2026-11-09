@@ -13,6 +13,7 @@ use glasnost_rules::sim::{
 };
 use glasnost_sim::cells::position;
 use glasnost_sim::occupancy::{self, Outcome};
+use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 use glasnost_sim::{crush, objects, path, scatter, tick, trace};
@@ -914,13 +915,227 @@ fn a_cleared_destination_ends_the_wait() {
     assert_eq!(again, w.tick - 1, "from the first answer after the order");
 }
 
-// design: Q-2822 (interim: the same destination given again by an order leaves a running blockage delay as it was); S-0209 claim 10 (r60)
+/// Runs the walker (with the trace on) at most `max` ticks until it makes
+/// its first path computation that avoids moving blockers (search mode 2,
+/// S-0212 Terms), and returns that tick.
+fn avoids_at(w: &mut World, m: ObjectId, max: i32) -> Option<i32> {
+    for _ in 0..max {
+        tick::step(w);
+        let hit = trace::take(w).iter().find_map(|e| match e.what {
+            trace::What::Search {
+                asked: path::Mode::Avoid,
+                ..
+            } if e.unit == m => Some(e.tick),
+            _ => None,
+        });
+        if hit.is_some() {
+            return hit;
+        }
+    }
+    None
+}
+
+// spec: S-0209 claim 10 (r76, Q-2822: an order to the cell that is already the walker's destination starts the blockage delay afresh, as an order to another cell does; infantry has no unchanged-destination suppression, S-0213 claim 21, and the wait counts from the first moving-blocker answer after the order; the search that avoids the blocker comes no earlier than the blockage delay after that answer); scenario C5 part c2
 #[test]
-fn q2822_interim_the_same_destination_again_keeps_the_blockage_delay() {
+fn c5_c2_the_same_destination_again_restarts_the_blockage_delay() {
     let (mut w, m, first) = blocked_walker();
-    order_move(&mut w, m, cell(6, 0));
-    tick::step(&mut w);
+    let d = w.rules().general.blockage_delay;
+    let r = w.rules().general.retry_delay;
+    assert!(r <= d / 2 - 3, "C5's set-up: R = {r}, D = {d}");
+    // C5 part c2: the order comes D/2 ticks after the first stop.
+    let wait = first + d / 2 - w.tick;
+    run(&mut w, wait);
     assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    let mut control = w.clone();
+    trace::switch_on(&mut w);
+    let pos = w.obj(m).unwrap().pos;
+    order_move(&mut w, m, cell(6, 0));
+    let ordered = w.tick;
+    let n = run_until(&mut w, 20, |w| {
+        w.obj(m)
+            .unwrap()
+            .path
+            .blocked_since
+            .is_some_and(|s| s > first)
+    });
+    assert!(n < 20, "it waits again behind the blocker");
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell(6, 0))));
+    assert_eq!(o.pos, pos, "it has not moved");
+    let again = o.path.blocked_since.unwrap();
+    assert_eq!(again, w.tick - 1, "from the first answer after the order");
+    // The trace is not carried by a copy of the game: switched on in each.
+    trace::switch_on(&mut control);
+    let g0 = avoids_at(&mut control, m, 4 * d).expect("the control avoids");
+    assert!(g0 >= first + d, "the control waits the delay: {g0}");
+    assert!(g0 < ordered + d, "the control is not restarted: {g0}");
+    let g1 = avoids_at(&mut w, m, 4 * d).expect("it avoids");
+    assert!(g1 >= again + d, "a whole delay after the restart: {g1}");
+    assert!(g1 > g0, "later than the control: {g1} against {g0}");
+}
+
+// spec: S-0209 claim 10 (r76: the restart holds at every assignment that is made, here one of the destination the walker already has by another rule, through the assignment hook)
+#[test]
+fn r76_another_rules_assignment_of_the_same_destination_restarts_it() {
+    let (mut w, m, first) = blocked_walker();
+    let before = w.obj(m).unwrap().dest;
+    glasnost_sim::econ::assign_destination(&mut w, m, before);
+    assert_eq!(w.obj(m).unwrap().dest, before);
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, None, "restarted");
+    tick::step(&mut w);
+    let again = w.obj(m).unwrap().path.blocked_since;
+    assert_eq!(again, Some(w.tick - 1), "afresh after {first}");
+}
+
+// design: Q-2896 (interim: the destination the walker already has, given again, keeps a running retry delay, as S-0212 r97's Open questions keep it; S-0209 r76 claim 10 would end it)
+#[test]
+fn q2896_interim_the_same_destination_again_keeps_the_retry_delay() {
+    let (mut w, m, _) = blocked_walker();
+    let t = w.tick;
+    let r = w.rules().general.retry_delay;
+    path::start_delay(w.obj_mut(m).unwrap(), t, r);
+    let before = w.obj(m).unwrap().dest;
+    glasnost_sim::econ::assign_destination(&mut w, m, before);
+    assert_eq!(w.obj(m).unwrap().path.retry_at, t + r);
+    assert!(path::delay_runs(&w, m), "the retry delay runs on");
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, None);
+}
+
+/// The corridor walker of [`blocked_walker`], of type `ty`, with an idle
+/// enemy vehicle "Cart" outside the corridor at (3, 4), an own shed K at
+/// (-1, 4) and an own transport "Wagon" (room for two) at (6, 3), outside
+/// the corridor too. Returns the walker, the tick its blockage delay
+/// started, the cart, K and the wagon.
+fn blocked_with_objects(ty: &str) -> (World, ObjectId, i32, [ObjectId; 3]) {
+    let (mut w, m) = corridor_scene(ty, |s| {
+        s.vehicle(
+            "Wagon",
+            UnitType {
+                passengers: Some(2),
+                ..vehicle(false, false)
+            },
+        );
+        s.place_unit(1, "Cart", cell(3, 4), 0);
+        s.place_structure(0, "Shed", cell(-1, 4));
+        s.place_unit(0, "Wagon", cell(6, 3), 0);
+    });
+    let cart = at(&w, Kind::Vehicle, cell(3, 4));
+    let shed = at(&w, Kind::Building, cell(-1, 4));
+    let wagon = at(&w, Kind::Vehicle, cell(6, 3));
+    order_move(&mut w, m, cell(6, 0));
+    stand_in(&mut w, m, cell(0, 0));
+    w.cells.claim_vehicle(cell(1, 0), Layer::Ground, true);
+    tick::step(&mut w);
+    let first = w.tick - 1;
+    run(&mut w, 10);
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    (w, m, first, [cart, shed, wagon])
+}
+
+/// Applies `order` of house 0 at once, without the rest of the tick.
+fn apply(w: &mut World, order: Order) {
+    assert!(orders::issue(w, HouseId(0), order), "order refused");
+    orders::apply_pending(w);
+}
+
+fn behaviour_order(
+    actor: ObjectId,
+    b: Behaviour,
+    target: Option<Target>,
+    dest: Option<Target>,
+) -> Order {
+    Order::Behaviour {
+        actor,
+        behaviour: b,
+        attack_move: false,
+        target,
+        dest,
+    }
+}
+
+/// Makes the waiting walker hold `dest` as the destination its wait was met
+/// under, with behaviour `b` current.
+fn waits_for(w: &mut World, m: ObjectId, b: Behaviour, dest: Target) {
+    let ob = w.obj_mut(m).unwrap();
+    ob.beh.current = Some(b);
+    ob.dest = Some(dest);
+    ob.path.blocked_for = Some(dest);
+}
+
+// spec: S-0209 claim 10 (r76: an attack order on the walker's target, given again, makes its destination nothing, S-0213 table T3 part f, so its wait ends)
+#[test]
+fn r76_an_attack_order_given_again_ends_the_wait() {
+    let (mut w, m, first, [cart, ..]) = blocked_with_objects("Pike");
+    w.obj_mut(m).unwrap().target = Some(Target::Object(cart));
+    apply(
+        &mut w,
+        behaviour_order(m, Behaviour::Attack, Some(Target::Object(cart)), None),
+    );
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.target, Some(Target::Object(cart)));
+    assert_eq!(o.dest, None, "the destination becomes nothing");
+    assert_eq!(o.path.blocked_since, None, "the wait ends");
+    tick::step(&mut w);
+    let o = w.obj(m).unwrap();
+    assert_ne!(o.path.blocked_since, Some(first), "no wait counts on");
+}
+
+// spec: S-0209 claim 10 (r76: a duplicate enter order, given by a walker already in enter and in contact with the building it enters, is ignored by S-0213 table T3 part a, so nothing is assigned and the wait counts on)
+#[test]
+fn r76_a_duplicate_enter_order_assigns_nothing() {
+    let (mut w, m, first, [_, shed, _]) = blocked_with_objects("Mope");
+    waits_for(&mut w, m, Behaviour::Enter, Target::Object(shed));
+    w.obj_mut(m).unwrap().contact = Some(shed);
+    apply(
+        &mut w,
+        behaviour_order(m, Behaviour::Enter, None, Some(Target::Object(shed))),
+    );
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.dest, Some(Target::Object(shed)));
+    assert_eq!(o.contact, Some(shed));
+    assert_eq!(o.path.blocked_since, Some(first), "the wait counts on");
+}
+
+// spec: S-0209 claim 10 (r76: an enter order given again by a tethered walker that is not a duplicate: by S-0213 table T3 part b it keeps its link, and with it its contact, since K is not a building of the unloading kind; the assignment is made, starting the blockage delay afresh, and drops its stored path, S-0208 claim 6 for a walker in contact)
+#[test]
+fn r76_a_tethered_walkers_enter_order_given_again_restarts_it() {
+    let (mut w, m, _, [_, shed, wagon]) = blocked_with_objects("Mope");
+    waits_for(&mut w, m, Behaviour::Enter, Target::Object(wagon));
+    {
+        let ob = w.obj_mut(m).unwrap();
+        ob.contact = Some(shed);
+        ob.econ.exit = Some(glasnost_sim::econ::release::Exit {
+            factory: shed,
+            tethered: true,
+            place: 0,
+        });
+        ob.path.steps = vec![2, 2, 2];
+    }
+    assert!(glasnost_sim::econ::tethered(&w, m));
+    apply(
+        &mut w,
+        behaviour_order(m, Behaviour::Enter, None, Some(Target::Object(wagon))),
+    );
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.dest, Some(Target::Object(wagon)), "assigned");
+    assert_eq!(o.contact, Some(shed), "the link and its contact kept");
+    assert!(glasnost_sim::econ::tethered(&w, m));
+    assert_eq!(o.path.blocked_since, None, "the blockage delay restarts");
+    assert!(o.path.steps.is_empty(), "the stored path is dropped");
+}
+
+// spec: S-0209 claim 10 (r76: an enter order given again by a walker with no contact, to an idle transport that has room for it, no destination and no other contact, on land in its reach region: the assignment is made and starts the blockage delay afresh; whether the destination is the transport or its cell is open, Open questions, and our engine gives the transport)
+#[test]
+fn r76_an_enter_order_given_again_to_an_idle_transport_restarts_it() {
+    let (mut w, m, _, [_, _, wagon]) = blocked_with_objects("Mope");
+    waits_for(&mut w, m, Behaviour::Enter, Target::Object(wagon));
+    apply(
+        &mut w,
+        behaviour_order(m, Behaviour::Enter, None, Some(Target::Object(wagon))),
+    );
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.dest, Some(Target::Object(wagon)));
+    assert_eq!(o.path.blocked_since, None, "the blockage delay restarts");
 }
 
 // ---------------------------------------------------------------------------
