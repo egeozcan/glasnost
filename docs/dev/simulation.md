@@ -1189,9 +1189,9 @@ ledger is [docs/m8-claims/intake116.md](../m8-claims/intake116.md), the tests ar
   with a positive delay stalls.
 - **Vehicle factory.** The guard request replaces a queued *unload*, or ends a current one when
   the factory is ready. The unit not yet sent out stays at its exit point with its contact.
-  `release::ground` gives *failed* while a vehicle of the same house stands there with no
-  destination and no movement (`release::stranded_at`; Q-2841 for the rest of S-0209's entry
-  test). The ground unloading's starting stage no longer moves a door that is already open.
+  Intake 116's interim, a release that gave *failed* while that unit stood there
+  (`release::stranded_at`, Q-2841), is replaced by intake 120 (below). The ground unloading's
+  starting stage no longer moves a door that is already open.
 - **Domination.** `mind::dominate` calls `reset_orders` when the owner actually changes. It
   adds no guard reset, so a resumed attack move keeps its destination.
 - **Switch.** `quirks.owner_change_interrupts_building_work` (default on). Off: a building
@@ -1200,6 +1200,25 @@ ledger is [docs/m8-claims/intake116.md](../m8-claims/intake116.md), the tests ar
   applies. The C7 verdict is in [c7-play-fixes.md](../m8-claims/c7-play-fixes.md).
 - **State.** `Construction::opened` and `IdleBody::sale_report` (both serde default false),
   hashed.
+
+## Simulation (M8 A3 intake 120: a ground vehicle factory's exit point)
+
+S-0309 r129 and S-0404 r26 answer Q-2841; the ledger is
+[docs/m8-claims/intake120.md](../m8-claims/intake120.md).
+
+- **No entry test.** `release::ground` puts the new unit at the exit point without testing that
+  cell (S-0404 claim 13). Neither the factory, nor any occupant of any house, moving or not, nor
+  the terrain or overlay keeps it out, and the unit shares the cell with whatever stands there.
+- **Contact places.** The new unit's contact takes the lowest free place of the factory's
+  max(*d*, 1) (`first_free_place` over `contact_places`, numbered from 0 here, from 1 in the
+  spec), and `Exit::place` records it. With every place held, `release::drop_place` takes
+  place 1 from its holder: its contact and `econ.exit` (the tether link) end, and nothing else
+  about it changes.
+- **The unit left at the exit point** by an owner change (S-0309 claim 31) therefore loses its
+  contact and tether link at the factory's next release, and that release's unloading starts as
+  S-0417 claim 2 gives. Whether that unit holds up the new unit's exit track, and which unit a
+  factory with several places sends out first, are S-0309 Open questions. Our engine keeps what
+  its exit track and `contacted` already do; the ledger records what the A19 part k test shows.
 
 ## Simulation (M8 A3 intake 118: S-0501 r167 and r172)
 
