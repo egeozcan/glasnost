@@ -3,7 +3,8 @@
 //! being sold requests its idle body, which can cut its build-down short;
 //! a building being built up has its grand opening at the change, with no
 //! free unit; a vehicle factory's unloading ends with its unit left at the
-//! exit point, its later releases failing and its door left open; a repair
+//! exit point and its door left open (r129: a later release takes the
+//! unit's contact, `claims_s0309_r129.rs`); a repair
 //! depot stops repairing and its vehicle stays docked in *guard*; switch
 //! `quirks.owner_change_interrupts_building_work` keeps the sale, the
 //! unloading and the repair. Also a psychic domination's reset and claim
@@ -411,7 +412,7 @@ fn door(w: &World, k: ObjectId) -> Door {
     w.obj(k).unwrap().beh.gate.door
 }
 
-// spec: S-0309 claim 31 (a vehicle factory's queued unload is replaced by the guard request, so that unloading never starts; the unit it has released and not yet sent out follows the factory, keeps its contact and stays at its exit point; every later release gives failed while it stands there, Q-2841 for the rest of the entry test); scenario A19 part k
+// spec: S-0309 claim 31 (a vehicle factory's queued unload is replaced by the guard request, so that unloading never starts; the unit it has released and not yet sent out follows the factory, keeps its contact and tether link and stays at its exit point; r129: a later release by the factory puts its new unit there all the same and takes the contact place, S-0404 claim 13); scenario A19 part k
 #[test]
 fn a_queued_unload_is_replaced_and_the_unit_is_stranded() {
     let (mut w, k, tank) = factory_released(&vf_rules());
@@ -426,16 +427,16 @@ fn a_queued_unload_is_replaced_and_the_unit_is_stranded() {
     let o = w.obj(tank).unwrap();
     assert_eq!(o.pos, p, "it stays at its exit point");
     assert_eq!(o.contact, Some(k), "and keeps its contact");
+    assert!(release::tethered(&w, tank), "and its tether link");
     let jeep = new_unit(&mut w, "JEEP", B);
-    assert_eq!(release::release(&mut w, k, jeep), Outcome::Failed);
-    assert_eq!(
-        w.obj(tank).unwrap().contact,
-        Some(k),
-        "kept after a failure"
-    );
+    assert_eq!(release::release(&mut w, k, jeep), Outcome::Released);
+    assert_eq!(w.obj(jeep).unwrap().pos, p, "the new unit shares the cell");
+    assert_eq!(w.obj(tank).unwrap().contact, None, "the contact is taken");
+    assert!(!release::tethered(&w, tank));
+    assert_eq!(w.obj(tank).unwrap().pos, p, "the unit stays");
 }
 
-// spec: S-0309 claim 31 (a factory ready at the guard request has guard current at once and its unloading ends at the change; the change does not close the door, which stays open until a later unloading's closing stage; an order that moves the stranded unit ends its contact at its clear report, after which the releases work again; the later unloading finds the door open and does not wait for it)
+// spec: S-0309 claim 31 (a factory ready at the guard request has guard current at once and its unloading ends at the change; the change does not close the door, which stays open until a later unloading's closing stage; an order that moves the stranded unit while it still holds the contact ends its contact at its clear report, r129; the later unloading finds the door open and does not wait for it)
 #[test]
 fn an_ended_unloading_leaves_the_door_open() {
     let (mut w, k, tank) = factory_released(&vf_rules());

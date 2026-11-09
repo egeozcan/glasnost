@@ -648,12 +648,17 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         let tl = Pos::centre(b.pos.cell(), b.pos.z);
         Pos::new(tl.x + d[0], tl.y + d[1], tl.z + d[2])
     };
-    if stranded_at(w, p.cell(), b.owner, unit) {
-        // spec: S-0309 claim 31 (while a unit that K released and did not send out stands at its exit point, a vehicle of the same house standing still there with no destination, every release by K gives failed, S-0404 claims 7 and 13); design: Q-2841 (only that case is built: which entry test the exit point's cell answers, and how K itself answers it, is asked)
-        return Outcome::Failed;
-    }
+    // spec: S-0404 claim 13 (no entry test of the exit point's cell: neither K, nor any other occupant of any house, moving or not, nor its terrain or overlay keeps the unit out, so the cell never gives failed; the unit shares the cell with whatever stands there) and S-0309 claim 31 (Q-2841 answered)
     // spec: S-0404 claim 13 and Constants (it appears inside K facing 16384)
     crate::objects::place(w, unit, p, VEHICLE_FACING);
+    // spec: S-0404 claim 13 (the new unit's contact takes the free place of K's max(d, 1) with the lowest number; places are numbered from 1 there and from 0 here)
+    let places = contact_places(w, k);
+    let mut place = first_free_place(w, k, places);
+    if place >= places {
+        // spec: S-0404 claim 13 and S-0309 claim 31 (no place free: the unit that holds place 1 loses its contact and tether link with K at this release, and the new unit takes that place)
+        place = 0;
+        drop_place(w, k, place);
+    }
     // spec: S-0417 claim 1 (K queues unloading; claim 2 governs when it becomes current)
     queue_unload(w, k);
     // design: C7-P5 rally spread (quirks.rally_point_shared off: the saved guard spot is a cell of the unit's own round the rally point)
@@ -667,10 +672,31 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         o.econ.exit = Some(Exit {
             factory: k,
             tethered: true,
-            place: 0,
+            place,
         });
     }
     Outcome::Released
+}
+
+/// The unit that holds K's contact place `place` loses its contact and
+/// tether link with K; it keeps its behaviours, destination and position
+/// (S-0404 claim 13, S-0309 claim 31).
+fn drop_place(w: &mut World, k: ObjectId, place: u32) {
+    let holder = w
+        .objects
+        .values()
+        .find(|o| {
+            o.contact == Some(k)
+                && o.econ
+                    .exit
+                    .is_some_and(|e| e.factory == k && e.place == place)
+        })
+        .map(|o| o.id);
+    if let Some(o) = holder.and_then(|h| w.obj_mut(h)) {
+        // spec: S-0404 claim 13 (the holder loses its contact and tether link with K at this release) and S-0309 claim 31 (it keeps its behaviour and stays where it is)
+        o.contact = None;
+        o.econ.exit = None;
+    }
 }
 
 /// Whether cell `c` holds a unit, infantry, aircraft or building (S-0404
@@ -687,22 +713,6 @@ fn holds_object(w: &World, c: CellXY) -> bool {
                 )
             })
         })
-}
-
-/// Whether cell `c`'s ground layer lists a vehicle of house `owner`, other
-/// than `unit`, standing still with no destination: the unit that a
-/// factory whose unloading an owner change ended has left at its exit
-/// point (S-0309 claim 31; Q-2841 for the rest of that cell's entry test).
-fn stranded_at(w: &World, c: CellXY, owner: Option<crate::world::HouseId>, unit: ObjectId) -> bool {
-    w.cells.list(c, Layer::Ground).iter().any(|&x| {
-        x != unit
-            && w.obj(x).is_some_and(|o| {
-                o.kind == Kind::Vehicle
-                    && o.owner == owner
-                    && o.dest.is_none()
-                    && !crate::occupancy::in_progress(w, x)
-            })
-    })
 }
 
 /// The naval vehicle factory row of S-0404 claim 13.
