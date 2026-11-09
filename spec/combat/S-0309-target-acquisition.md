@@ -2,14 +2,14 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 126
+revision: 129
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-08
+approved-on: 2026-11-09
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
-Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801]
+Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841]
 supersedes: []
 ---
 
@@ -2077,15 +2077,16 @@ index 1. This is a design rule, not an additional claim about the original.
       apron cell is free nothing sends it out: it has no rally destination, and the factory's
       *guard* sends requests only when the apron cell is blocked (S-0417 claim 13; what such a
       request does to this unit is an Open question). It stays there until an order moves it.
-      While it stands there, every release that S-0404 claim 7 gives to the factory gives
-      *failed* (S-0404 claim 13). The new unit is put on the map only when the cell of its exit
-      point answers *clear* to S-0209 claim 4's entry test for it, and the stranded unit, a
-      vehicle of the same house standing still there with no destination, makes that answer
-      *stationary friendly* (S-0209 claim 4). A release that fails makes no contact, so the
-      stranded unit keeps its contact. An order that moves it ends its contact and tether link
-      with the factory at its clear report (S-0417 claim 7), at the first cell it reaches outside
-      the factory or at its destination, and once it has left the exit point's cell the
-      factory's releases work again.
+      While it stands there, the factory's releases go on: a ground vehicle factory puts the new
+      unit at its exit point without testing that cell (S-0404 claim 13), so the new unit appears in
+      the cell of the unit that stands there. The new unit's contact takes the factory's contact
+      place: with one place, the unit standing there loses its contact and tether link with the
+      factory at that release, keeps its behaviour and stays where it is, and the factory's
+      unloading of the new unit starts as S-0417 claim 2 gives. Whether that unit, still standing at
+      the exit point, holds up the new unit's exit track is an Open question. An order that moves it
+      while it still holds the contact ends its contact and tether link with the factory at its
+      clear report (S-0417 claim 7), at the first cell it reaches outside the factory or at its
+      destination.
     - *The factory's door.* The change does not close the door. An unloading that ends at the
       change leaves it open, or opening until it is open, and it stays open until a later
       unloading of the factory reaches its closing stage (S-0417 table S1). That later unloading's
@@ -2154,7 +2155,7 @@ index 1. This is a design rule, not an additional claim about the original.
       that resumes its attack move to a remembered destination, part i for a remembered target
       resumed after the change has made it one of the holder's own house, part j for a building
       whose owner changes during its sale's build-down, part k for a unit that a vehicle factory
-      has not yet sent out, the factory's failed releases and its door, part l for a vehicle
+      has not yet sent out, the factory's next release and its door, part l for a vehicle
       docked at a repair depot, part m for a building being built up, its grand opening and its
       free unit, part n for a psychic domination, part o for a naval vehicle factory's rally
       point; S-0215 scenario B3 part f for a
@@ -2205,15 +2206,15 @@ index 1. This is a design rule, not an additional claim about the original.
       S-0417 claim 2's readiness rules; the remembered target resumed after the change has made it
       an own or allied one; the sale whose owner changes, the end of its build-down by an idle
       range with delay 0 or of at least two stages, and the sale left unchanged by a change before
-      its build-down; the queued *unload* replaced, the unit left at its exit point, the failed
-      releases and the door left open; the depot's repair ended and the vehicle kept docked in
-      *guard*; the grand opening at the change, the cut build-up and the missing free unit; the
-      effects at a psychic domination; the naval vehicle factory's rally point given again; the
-      *rescue* rule with *wait* current. Low for the stalled sale under an idle range of one stage
-      with a positive delay, for the depot that is not ready at the change, which goes on
-      repairing, and for the two cases left to the Open questions: where the naval vehicle
-      factory's new rally point lies and what the factory's apron requests do to a unit that it has
-      not yet sent out
+      its build-down; the queued *unload* replaced, the unit left at its exit point, the next
+      release taking its contact and the door left open; the depot's repair ended and the vehicle
+      kept docked in *guard*; the grand opening at the change, the cut build-up and the missing free
+      unit; the effects at a psychic domination; the naval vehicle factory's rally point given
+      again; the *rescue* rule with *wait* current. Low for the stalled sale under an idle range of
+      one stage with a positive delay, for the depot that is not ready at the change, which goes on
+      repairing, and for the cases left to the Open questions: where the naval vehicle factory's new
+      rally point lies, and what the factory's apron requests and its next unloading do with a unit
+      that it has not yet sent out
 
 ## Formulas
 
@@ -2617,18 +2618,17 @@ between the wall target *W*, the best candidate and no target.
   aircraft's fall-back takes the rows of S-0501 table T2 after the first, and no revert of the
   object follows until a new override. With it on and S-0215's `quirks.stale_suspended_revert` off, the
   first start-next or force at or after the change empties the slot (claim 31).
-- **An owner change interrupts a building's work** (claim 31). In the original the change's
-  *guard* request and fall-back reach a building in the middle of its work. A building whose
-  sale is in its build-down switches to its idle body, which can end the sale early or stall it.
-  A vehicle factory's unloading ends or never starts, its door is left open, and a unit it has not
-  yet sent out stays at its exit point, where it makes each later release of the factory fail. A
-  repair depot stops repairing its docked vehicle, which keeps the depot's contact place. Switch
-  `quirks.owner_change_interrupts_building_work` (default on = original). Off: a building whose
-  current behaviour at the change is *selling*, a vehicle factory with *unload* current or queued,
-  and a repair depot whose current behaviour is *repair* get neither the *guard* request nor the
-  fall-back of the change. The sale, the unloading and the repair then go on under the new owner
-  by S-0408, S-0417 and S-0314, and the vehicle factory sends its unit out. The change's other
-  effects apply to them as with the switch on.
+- **An owner change interrupts a building's work** (claim 31). In the original the change's *guard*
+  request and fall-back reach a building in the middle of its work. A building whose sale is in its
+  build-down switches to its idle body, which can end the sale early or stall it. A vehicle
+  factory's unloading ends or never starts, its door is left open, and a unit it has not yet sent
+  out stays at its exit point. A repair depot stops repairing its docked vehicle, which keeps the
+  depot's contact place. Switch `quirks.owner_change_interrupts_building_work` (default on =
+  original). Off: a building whose current behaviour at the change is *selling*, a vehicle factory
+  with *unload* current or queued, and a repair depot whose current behaviour is *repair* get
+  neither the *guard* request nor the fall-back of the change. The sale, the unloading and the
+  repair then go on under the new owner by S-0408, S-0417 and S-0314, and the vehicle factory sends
+  its unit out. The change's other effects apply to them as with the switch on.
 
 ## Import mapping
 
@@ -4422,17 +4422,23 @@ Each part runs 5 times from a fresh game.
   removed.
 - *Part k (a unit that a vehicle factory has not yet sent out, claim 31):* part f, with *K*'s
   running body range of delay 0 during unloading (named test art files give it the idle range with
-  no keys if needed), and triggers 1 and 2 timed after *V*1 appears at *K*'s exit point and
-  before it is put on the exit track (S-0417 claim 5); a run decides something only if both
-  changes come in that window. Record also *K*'s door state and behaviours, and *H*'s credits.
-  After the second change the player orders a vehicle *V*2 and, once *V*2's release is over, moves
-  *V*1 to a cell several cells away and orders a vehicle *V*3. Run k0 is the same without
-  triggers 1 and 2. *Expected:* *V*1 follows *K* at both changes and stays at the exit point,
-  with *K* as its contact, until the order moves it; *K* has *guard* current from the first
-  change; the door stays open from then until *V*3's unloading closes it; *V*2 does not appear
-  and its price is refunded as S-0404 claim 7 gives for *failed*; *V*3 appears and is sent out.
-  In k0, *V*1 is sent out and the door closes after it. *Falsified if:* *V*1 leaves the exit
-  point before the order, the door closes before *V*3's unloading, *V*2 appears, or *V*3 does not.
+  no keys if needed), named test rules setting *K*'s type's docking-place count to 1, so that *K*
+  has one contact place (S-0404 claim 13), and triggers 1 and 2 timed after *V*1 appears at *K*'s
+  exit point and before it is put on the exit track (S-0417 claim 5); a run decides something only
+  if both changes come in that window. Record also *K*'s door state and behaviours, *H*'s credits,
+  and each tick the position, behaviours, contact and tether link of *V*1 and *V*2. After the second
+  change the player orders a vehicle *V*2, and 300 ticks after *V*2 appears moves *V*1 to a cell
+  several cells away. Run k0 is the same without triggers 1 and 2. *Expected:* *V*1 follows *K* at
+  both changes, holds *K*'s contact and tether link until *V*2 appears and stays at the exit point
+  until the order moves it; *K* has *guard* current from the first change; the door stays open from
+  then until an unloading of *K* reaches its closing stage. *V*2 appears at *K*'s exit point while
+  *V*1 stands there, its price is not refunded, and from that tick *V*2 holds *K*'s contact and *V*1
+  holds neither a contact nor a tether link with *K*, while *V*1 keeps the behaviours it had before.
+  Whether *V*2 is sent out before *V*1 has left is recorded for the Open question. In k0, *V*1 is
+  sent out and the door closes after it. *Falsified if:* *V*1 leaves the exit point before the
+  order, *V*1 keeps *K*'s contact or its tether link with *K* after *V*2 appears, *V*1's behaviours
+  change when *V*2 appears, *V*2 does not appear or is refunded, or the door closes other than at an
+  unloading's closing stage.
 - *Part l (a vehicle docked at a repair depot, claim 31):* the map places a repair depot *Y*
   for the passive neutral house, with a tag whose chain holds the three triggers of part e, and
   named test art files give *Y*'s type the idle range with no keys. *H*'s damaged vehicle *D*
@@ -4494,6 +4500,12 @@ Each part runs 5 times from a fresh game.
   the factory has not yet sent out when its unloading ends at an owner change, in contact and
   tethered at its exit point, while the apron cell is blocked, is not established (low).
   Scenario A19 part k with a vehicle left on the apron cell would decide it.
+- Claim 31: when a later release puts a new unit at the exit point of a ground vehicle factory while
+  a unit that the factory has not yet sent out stands there (S-0404 claim 13), whether that unit
+  holds up the new unit on its exit track (S-0417 claims 5 and 6), so that the factory stays in its
+  unloading, is not established (low). Scenario A19 part k records it. Which unit a factory with
+  more than one contact place sends out first in that case is not established either (low): no
+  scenario part gives a vehicle factory more than one place.
 - Claim 31: which effects of the grand opening that other specs own, beyond those claim 31 names,
   act again when a building that has already had its grand opening changes owner (an announcement
   heard by the local player among them) is not established (low). A capture of each kind of
@@ -4984,16 +4996,22 @@ unloading).
 S-0417 claim 2: after "Unloading ends when *guard* starts." it gains "An owner change of K requests
 *guard* with a readiness-dependent immediate start, so when K is ready its unloading ends at the
 change (S-0309 claim 31). A queued *unload* is replaced by that request, so it never starts. The
-change does not close the door: it stays open until a later unloading reaches its closing stage,
-and that unloading's letting-out stage finds it open. A unit that K has released and not yet sent
-out stays at its exit point in contact with K until an order moves it, and while it stands there
-every release by K gives *failed* (S-0404 claims 7 and 13)." Claim 8, third row: after "not re-read
-from K at the clear report" it gains "An owner change of u forgets it (S-0309 claim 31), including
-the change that u makes when it follows K (S-0509 claim 14), so after such a change this row does
-not apply; K's own owner change forgets K's rally point but not the spot that u saved." Level and
-backing: as S-0309 claim 31 gives (medium; `measurable`, S-0309 scenario A19 part f, for claim 8,
-and part k for claim 2's additions on the queued or ended unloading, the door, the unit left at its
-exit point and the failed releases).
+change does not close the door: it stays open until a later unloading reaches its closing stage, and
+that unloading's letting-out stage finds it open. A unit that K has released and not yet sent out
+stays at its exit point until an order moves it. A later release by K puts its new unit at the exit
+point without testing that cell (S-0404 claim 13); with K's one contact place held by the unit
+standing there, that unit loses its contact and tether link at the release, and K's unloading of the
+new unit follows this claim. Whether the unit standing there holds up the new unit's exit track is
+open (S-0309 Open questions)." Its sentence "the released vehicle stays at its appear point in
+contact with K" gains, after "in contact with K", the words "until a later release by K takes its
+contact place (S-0404 claim 13)". Claim 8, third row: after "not re-read from K at the clear report"
+it gains "An owner change of u forgets it (S-0309 claim 31), including the change that u makes when
+it follows K (S-0509 claim 14), so after such a change this row does not apply; K's own owner change
+forgets K's rally point but not the spot that u saved." Level and backing: as S-0309 claim 31 gives
+(medium; `measurable`, S-0309 scenario A19 part f, for claim 8, and part k for claim 2's additions
+on the queued or ended unloading, the door, the unit left at its exit point and the release that
+takes its contact; `unmeasured`, as S-0417 claim 2 gives that case, for the words added to its
+sentence on a queued *unload* that never becomes current).
 
 S-0213 claim 20: after "the place toward which its new units head (production specs)" it gains "An
 owner change of the building forgets it (S-0309 claim 31). A naval vehicle factory left without
