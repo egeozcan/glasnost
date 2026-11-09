@@ -1303,7 +1303,8 @@ fn selection(w: &mut World, t: ObjectId) {
     let Some(d) = o.dest else {
         if h > 0 && dropship {
             // spec: S-0507 claim 13 (above ground, no destination, a dropship type: an own usable dock by S-0501 claim 21's pad selection, else S-0501 claim 41's landing spot, as destination; selection stays)
-            let to = match crate::air::find_pad(w, t) {
+            // spec: S-0501 claim 21 (r176, Q-2866: every use of the search records its result as the pad last heading for, this one included)
+            let to = match crate::air::pad_search(w, t) {
                 Some(k) => Some(Target::Object(k)),
                 None => crate::air::landing_spot(w, t).map(Target::Cell),
             };

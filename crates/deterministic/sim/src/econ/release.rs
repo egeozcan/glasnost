@@ -976,6 +976,8 @@ pub fn aircraft(w: &mut World, k: ObjectId, unit: ObjectId, dock_free: bool) -> 
         }
         // spec: S-0501 claim 1 and S-0404 claim 15 (it stands docked on the ground at its pad position; the tether ends at take-off, S-0501 claim 8)
         crate::air::released_docked(w, unit, p);
+        // spec: S-0501 claim 21 (r176, Q-2866: a factory release of the aircraft at a pad's docking position, S-0404 claims 13 and 15, records that pad as the pad it was last heading for, whatever its height there)
+        crate::air::record_heading(w, unit, Some(k));
         if !bound && let Some(t) = goal {
             // spec: S-0404 claim 13 (with a rally point, a type that need not return to a dock gets a move order to it) and S-0501 claim 48 (d) (that move is not a behaviour order: the release gives the aircraft the rally point as its destination and queues move, with none of S-0213 table T3's effects; it becomes current at claim 31's first point)
             crate::air::queue(w, unit, Behaviour::Move);

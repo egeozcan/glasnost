@@ -226,6 +226,10 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
     }
     // spec: S-0309 claim 27 (every holder drops it at the killing hit, also when it stays in play; the timer draws come with the hit, before the death effects, S-0309 Open questions) and S-0215 claim 10 (the revert at the killing hit)
     crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Destroyed);
+    if o.kind == Kind::Building {
+        // spec: S-0501 claim 21 (r176, Q-2866: the recorded building destroyed leaves no pad recorded)
+        crate::air::heading_pad_gone(w, id);
+    }
     w.effects.push(Effect::Killed { id, pos: o.pos });
 }
 
