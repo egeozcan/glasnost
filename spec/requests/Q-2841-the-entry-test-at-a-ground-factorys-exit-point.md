@@ -1,9 +1,9 @@
 ---
 id: Q-2841
 title: The entry test at a ground vehicle factory's exit point
-status: open
+status: answered
 related: [S-0309, S-0404, S-0209, S-0417]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
