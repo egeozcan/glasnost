@@ -1,9 +1,9 @@
 ---
 id: Q-2866
 title: The pad last heading for, after a contact granted in sticky
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
