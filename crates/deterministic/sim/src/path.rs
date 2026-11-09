@@ -37,7 +37,9 @@ pub struct PathState {
     /// A walker's destination when its current blockage began
     /// (`blocked_since`). A blockage met under another destination starts
     /// the blockage delay afresh (S-0209 claim 10, r60), also when the
-    /// destination was written without reaching the locomotor.
+    /// destination was written without reaching the locomotor. An
+    /// assignment of the same destination restarts it at the assignment
+    /// itself (r76, [`destination_changed`]).
     #[serde(default)]
     pub blocked_for: Option<Target>,
     /// The destination the stored path was computed for.
@@ -3141,15 +3143,22 @@ pub fn waits(w: &mut World, id: ObjectId) -> bool {
     runs
 }
 
-/// What a change of `id`'s destination from `before` does to a running
-/// retry delay (S-0212 claim 21 and its state table, row *destination
-/// changes*): for the driving and walk locomotors a different destination,
-/// or none, ends it, a delay started earlier in the same tick included;
-/// the same destination given again keeps it (claim 21's Open questions).
-/// The other locomotors keep it. Called where a destination reaches the
-/// locomotor ([`crate::infantry::destination_assigned`]); [`waits`] ends it
-/// too for a destination written elsewhere.
-pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>) {
+/// What a change of `id`'s destination from `before` does to its running
+/// delays. The retry delay (S-0212 claim 21 and its state table, row
+/// *destination changes*): for the driving and walk locomotors a different
+/// destination, or none, ends it, a delay started earlier in the same tick
+/// included; the same destination given again keeps it (claim 21's Open
+/// questions; for the walk locomotor Q-2896's interim). The other
+/// locomotors keep it. The blockage delay of a walker (S-0209 claim 10):
+/// `given` (an assignment was made) starts it afresh, the destination the
+/// walker already holds included; without `given` only a destination that
+/// differs from `before` does. Called with `given` where a destination
+/// reaches the locomotor ([`crate::infantry::destination_assigned`]), and
+/// without it after a failed search that may keep the destination
+/// ([`failed`]); [`waits`] ends the retry delay too for a destination
+/// written elsewhere, and the walker's wait compares
+/// [`PathState::blocked_for`].
+pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>, given: bool) {
     let t = w.tick;
     if !ends_at_change(w, id) {
         return;
@@ -3157,10 +3166,9 @@ pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>) 
     let walker = crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
     if walker
         && let Some(ob) = w.obj_mut(id)
-        && ob.dest != before
+        && (given || ob.dest != before)
     {
-        // spec: S-0209 claim 10 (r60: a walker given a new destination, by an order, a scatter or any other rule, starts the blockage delay afresh; one whose destination is cleared does not wait) and S-0208 claim 6 (r58: the scatter restarts the blockage delay)
-        // design: Q-2822 (interim: the same destination given again, by an order or a scatter to the cell it already holds, leaves a running blockage delay as it was, as the retry delay below is kept for it; S-0212 claim 21 leaves that case open)
+        // spec: S-0209 claim 10 (r76, Q-2822: a walker given a destination, by an order, a scatter or any other rule, starts the blockage delay afresh at every assignment that is made, whether the destination is a different one or the one it already has, the same cell or the same object; one whose destination is cleared does not wait) and S-0208 claim 6 (the scatter restarts the blockage delay; S-0209 claim 10 r76: a scatter whose cell is already the walker's destination too)
         ob.path.blocked_since = None;
     }
     if let Some(ob) = w.obj_mut(id)
@@ -3168,6 +3176,7 @@ pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>) 
         && ob.path.retry_at > t
     {
         // spec: S-0212 claim 21 (a destination changed to a different one or cleared ends a running retry delay for the driving and walk locomotors)
+        // design: Q-2896 (interim: the destination the unit already holds, given again, keeps a running retry delay for every locomotor, the walk locomotor included, as S-0212 r97's Open questions keep it; S-0209 r76 claim 10 ends it for the walk locomotor at every assignment that is made)
         ob.path.retry_at = t;
     }
 }
@@ -3206,6 +3215,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
     // spec: S-0212 claim 23 (the same clearing ends every failed search of a unit with the driving, ship or hovering locomotor)
     let drive = o.drive.is_some() || o.hover.is_some();
     let mut gave_up = false;
+    let mut house_given = false;
     match res {
         Search::Found => {}
         Search::GateFailed => {
@@ -3265,13 +3275,15 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     let dest = give_up_destination(w, id, c);
                     if let Some(ob) = w.obj_mut(id) {
                         ob.dest = dest.map(Target::Cell);
+                        house_given = dest.is_some();
                     }
                 }
             }
         }
     }
     // spec: S-0212 claims 21 and 23 (for the driving and walk locomotors the failure's clearing, or the new destination of claim 23a, ends the delay it started: no delay remains after a failed gate or a failure that clears the destination; a walker that keeps its destination, row 3, waits for R)
-    destination_changed(w, id, o.dest);
+    // spec: S-0209 claim 10 (r76: only claim 23a's destination is an assignment here; a walker that keeps its destination, row 3, is given none, so its blockage delay runs on)
+    destination_changed(w, id, o.dest, house_given);
     // spec: S-0309 claim 22 (a route failure of a vehicle with the driving locomotor that does not give the move up, the vehicle standing still after it, S-0212 claim 23: a held target not within reach, claim 23, is dropped and the limited-scan mark set; the hovering and ship locomotors' conditions were not examined, Open questions, so they set none here)
     if res != Search::Found
         && !gave_up

@@ -1251,6 +1251,40 @@ ledger is [docs/m8-claims/intake119.md](../m8-claims/intake119.md).
   and 88). Tests `claims_s0501_r176.rs` (claims 18, 21 and 24, `quirks.unarmed_pad_bound_hover`
   in both positions) and `claims_s0501_r178.rs` (AC36 parts a to c).
 
+## Simulation (M8 A3 intake 121: a destination given again)
+
+S-0209 r76 answers Q-2822; the ledger is [docs/m8-claims/intake121.md](../m8-claims/intake121.md).
+
+- **The blockage delay restarts at every assignment (claim 10).** `path::destination_changed`
+  takes a `given` flag. `infantry::destination_assigned`, the hook that every order, scatter and
+  other rule that assigns a destination calls, passes it, and a walker's `blocked_since` is then
+  cleared whatever the destination was before: the cell or object it already held included.
+  The wait counts again from the first *moving blocker* answer after the assignment. The intake
+  114 interim (no restart for the same destination, `design: Q-2822`) is gone.
+- **Not an assignment.** `path::failed` passes `given` only for claim 23a's house-selected
+  destination. A walker whose failed re-path keeps its destination (S-0212 claim 23 row 3) is
+  given nothing, so its blockage delay runs on and it still reaches the search that avoids the
+  blocker. A destination written without the hook still restarts the delay through
+  `PathState::blocked_for`, but only when it differs from the one the wait was met under.
+- **Object destinations.** A duplicate enter order (S-0213 T3 part a) returns before any
+  assignment, so the wait counts on. An attack order clears the destination (part f), which
+  ends the wait. A tethered walker's enter order that is not a duplicate keeps its link and
+  contact (part b), and the assignment restarts the delay and drops its stored path. Every other
+  enter order in our engine assigns the object it names, so it restarts the delay too. The cases
+  that claim 10 leaves to its Open questions keep that behaviour (seams in the ledger).
+- **The retry delay waits on Q-2896.** r76 also ends a walker's running retry delay at an
+  assignment of the destination it already holds. S-0212 r97, which owns that delay, keeps it for
+  every locomotor. Until the request is answered, the S-0212 text holds (`design: Q-2896` in
+  `path::destination_changed`): only a different destination, or none, ends the delay for the
+  driving and walk locomotors.
+- **Play-fixes position.** C7-P4's `stalled` test reads `blocked_since`, and C7-P5's yield gives a
+  refuge cell and later the resumed destination through `econ::assign_destination`. With the
+  layer on, a walker given its destination again is no longer stalled until the delay has run
+  again from its next wait. The yield already cleared `blocked_since` itself, and its resumed
+  destination differs from the refuge cell it replaces, so the yield is unchanged. No design
+  switch decides claim 10's restart: in both positions it follows r76, and each switch's
+  default (on, the original) is r76 as written.
+
 ## Simulation (M8 A3 intake 118: S-0501 r167 and r172)
 
 Q-2802 and Q-2821 answered; the ledger is [docs/m8-claims/intake118.md](../m8-claims/intake118.md).

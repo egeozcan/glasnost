@@ -868,3 +868,22 @@ and they pass on this tree. The layer file is unchanged.
 |---|---|---|---|
 | `unarmed_pad_bound_hover` | S-0501 claim 50, Edge cases (r176: the off position's pad search has T2's in-flight pad row's moment with no destination) | rejected, as at intakes 76 and 118 | The moment changes only how the off position's search reaches the pad: a flight point around the cell the aircraft is over, replaced by the pad when the pad grants. Condition 2 still fails for intake 76's reasons: on, the aircraft hovers near its F8 spot until an order, which is not a stuck unit, and no play note or request names it. Condition 3 still fails: off, it lands and docks at a pad. Tests: intake 76's (`claims_s0501_r93`), and `claims_s0501_r176::quirk_unarmed_pad_bound_hover_off_has_the_moment` (both positions: off, the pad, the record and the moment's draws over a refused cell; on, no search, no pad, no record). |
 | `aircraft_descent_touchdown_untested` | S-0501 claim 7, Edge cases; r176 claim 18 (the moment leaves an aircraft held above a refused cell, which comes only with the switch off, as it was) | rejected, as at intakes 102, 104 and 118 | r176 adds no new state for either position: an aircraft that is not moving is left as it was by every clear of its destination, which `air::given_no_destination` already gives. Condition 2 still fails for intake 102's reasons. Tests: as listed at intake 118, unchanged. |
+
+## A3 intake 121 (S-0209 r76): no new switch; the own pathing improvements re-read
+
+Ledger: [intake121.md](intake121.md). S-0209 r76 (Q-2822) adds no quirk and rewrites no Edge
+case, so the S-0209 switches keep their defaults, their tests in both positions and their
+verdicts. r76's claim 10 restarts a walker's blockage delay at every assignment of a destination,
+the one it already holds included (intake 114 restarted it only for a different one). Whether that
+changes what each of our own pathing improvements fixes:
+
+| Switch (off) | Changed by r76? | Reason |
+|---|---|---|
+| `path_through_stalled_blockers` | when a walker counts as stalled, not what the switch fixes | `stalled` reads `blocked_since`. With the switch off, a walker given its destination again by an order, a scatter or another rule is not stalled until the blockage delay has run again from its next wait, as it is not in the on position's own wait before mode 2. Units still stalled are kept off as before. |
+| `unreachable_move_dropped` | no | Its try runs inside the failed computation (`path::compute_untraced`). A failed search that keeps the destination is no assignment, so it restarts nothing. |
+| `group_spread_no_detour` | no | It chooses each member's cell at the order; the order restarts each member's delay in both positions. |
+| `rally_point_shared` | no | Released units get their rally move at the release, with no wait running. |
+| `deadlock_no_yield` | no | The yield clears `blocked_since` itself as it gives the refuge cell, and the destination it resumes differs from that cell, so r60 already restarted the delay there. |
+| `harvest_cell_shared` | no | Harvesters are vehicles; the restart of claim 10 is a walker's. |
+
+Intake 121 leaves the layer file unchanged.

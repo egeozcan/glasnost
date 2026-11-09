@@ -269,6 +269,7 @@ fn claim_17_kept_destination_request_ends_the_delay() {
 }
 
 // spec: S-0212 Open questions (for every locomotor, the destination a unit already holds, given again, keeps a running delay running)
+// design: Q-2896 (interim for the walk locomotor: S-0209 r76 claim 10 ends the retry delay at this assignment, S-0212 r97 keeps it)
 // design: S-0417 Open question 16 (whether later requests are refused where a request gives the kept destination is not established; here that destination reaches the walk locomotor, which has movement in progress while it waits, S-0107 Terms, so later requests are refused until its search)
 #[test]
 fn open_question_16_the_kept_destination_given_again() {

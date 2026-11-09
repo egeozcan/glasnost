@@ -188,3 +188,34 @@ fn w17_m_a_scatter_ends_the_retry_delay_of_a_blocked_walker() {
     tick::step(&mut w);
     assert_ne!(pos(&w, id), before, "it moves in the tick of the scatter");
 }
+
+// spec: S-0209 claim 10 (r76, Q-2822: an accepted scatter whose cell is already the walker's destination starts the blockage delay afresh too, S-0208 claim 6)
+// design: Q-2896 (interim: that destination given again keeps the running retry delay, as S-0212 r97's Open questions keep it; S-0209 r76 claim 10 would end it)
+#[test]
+fn s0209_r76_a_scatter_to_the_walkers_own_destination_restarts_the_blockage_delay() {
+    let (mut w, id) = corridor();
+    order_move(&mut w, id, cell(3, 0));
+    stand_in(&mut w, id, cell(0, 0));
+    w.cells.claim_vehicle(cell(1, 0), Layer::Ground, true);
+    tick::step(&mut w);
+    let first = w.tick - 1;
+    common::run(&mut w, 20);
+    // The cell this scatter gives, read on a copy of the game.
+    let mut copy = w.clone();
+    assert!(scatter::request(&mut copy, id, UNFORCED));
+    let d = copy.obj(id).unwrap().dest.expect("a scatter destination");
+    // The walker waits with that cell as its destination, under which the
+    // wait was met and its retry delay started.
+    let ob = w.obj_mut(id).unwrap();
+    ob.dest = Some(d);
+    ob.path.blocked_for = Some(d);
+    ob.path.retry_for = Some(d);
+    let retry = ob.path.retry_at;
+    assert_eq!(ob.path.blocked_since, Some(first));
+    assert!(retry > w.tick, "the retry delay runs");
+    assert!(scatter::request(&mut w, id, UNFORCED));
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, Some(d), "the scatter gives that destination again");
+    assert_eq!(o.path.blocked_since, None, "the blockage delay restarts");
+    assert_eq!(o.path.retry_at, retry, "the retry delay runs on");
+}
