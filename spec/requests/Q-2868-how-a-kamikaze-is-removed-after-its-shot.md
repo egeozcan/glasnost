@@ -1,9 +1,9 @@
 ---
 id: Q-2868
 title: How a kamikaze aircraft is removed after its ordinary shot
-status: open
+status: answered
 related: [S-0501, S-0506]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
