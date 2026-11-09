@@ -7,7 +7,8 @@ claim 11: a controller target lost while a pending target waits) and **Q-2831** 
 verdict in [c7-play-fixes.md](c7-play-fixes.md): not admitted to the play-fixes layer. S-0411 r60
 adds two display-only departures without a switch. Both interims (`design: Q-2811` in
 `spawn::target_gone`, `design: Q-2831` in `sidebar_tip::fill`) are gone. S-0506's Open question on
-Q-2821 (S-0501 claim 18's missile-type rows) stays open, as the brief says.
+Q-2821 (S-0501 claim 18's missile-type rows) was left alone here, as the brief says; S-0501 r172
+answered Q-2821 and intake 118 built it ([intake118.md](intake118.md)).
 
 ## Ledger
 
@@ -82,6 +83,7 @@ On base 1c88f74, against the branch before its rebase:
 Behaviour changes what a saved game and an AI game replay to, and the rules gain a quirk field, so
 the save format goes to 120 and the AI game format to 86, past intake 118's 119 and 85 on main
 a4284a4 (the wire version stays 12). No hashed state is added. The determinism gate's goldens
-were regenerated on the branch rebased onto bdb91f1 and none moved: no gate scenario loses a
-missile spawner's controller target while a pending target waits. (Earlier bases: 119 and 85 on
+were regenerated on the branch moved onto a4284a4 (all sim-gate tests pass with ignored ones)
+and none moved, as on bdb91f1 before: no gate scenario loses a missile spawner's controller
+target while a pending target waits, also with intake 118's aircraft changes beside it. (Earlier bases: 119 and 85 on
 bdb91f1, past intake 116's 118 and 84; 118 and 84 on 1c88f74.)
