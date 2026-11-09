@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 176
+revision: 178
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -12,7 +12,7 @@ requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-065
 Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905,
 Q-1940, Q-1941, Q-1942, Q-2237, Q-2251, Q-2252, Q-2291, Q-2326, Q-2366, Q-2436, Q-2437, Q-2438,
 Q-2506, Q-2507, Q-2508, Q-2576, Q-2577, Q-2578, Q-2579, Q-2646, Q-2647, Q-2648, Q-2649, Q-2650,
-Q-2676, Q-2677, Q-2726, Q-2792, Q-2802, Q-2821, Q-2866, Q-2867]
+Q-2676, Q-2677, Q-2726, Q-2792, Q-2802, Q-2821, Q-2866, Q-2867, Q-2868]
 supersedes: []
 ---
 
@@ -1172,8 +1172,9 @@ pad leaves its pad reservation when it takes any destination other than that pad
     attacking at a release (S-0506 claim 8 releases a flagged object instead), but it becomes
     attacking when, preparing, it turns returning for want of a controller target and then, with
     ammunition left, gets one (S-0506 Slot table); its run-end fall-backs then take these rows
-    too (claim 35). A flagged object that is released is a kamikaze, which is removed after its
-    first ordinary shot (claim 20), so it has no fall-back after that shot. In flight these rows
+    too (claim 35). A flagged object that is released is a kamikaze, which is removed at the end
+    of its first firing pass with an ordinary shot (claim 20), so it has no fall-back after
+    that pass. In flight these rows
     forget its destination unless it is visiting and either carries passengers or is in a team.
     Where they forget it, a moving one is given no destination (claim 8), and claim 6's *Landing
     where it is* applies to it while it has none. A visiting one in *retreat* has none only until
@@ -1284,17 +1285,72 @@ pad leaves its pad reservation when it takes any destination other than that pad
     the aircraft when the aircraft, certain nearby samples or the target are under shroud.
     The radius is the game-wide attacking-aircraft sight range; the area reveal follows S-0409
     claim 17. This is not an unconditional reveal for every owner's shot. The exact set of
-    nearby samples remains untraced here. A kamikaze slot
-    aircraft (S-0506) is removed after its ordinary shot, also when that shot creates no
-    projectile. Every flagged object that a carrier releases is a kamikaze (S-0506 claim 8, Terms
-    *kamikaze*), a flagged type that is not a rocket type included, so such an aircraft makes a
-    single ordinary shot and no run end after it (Q-2821).
-    - Backing: `measurable` (scenario AC12; S-0522 claim 11, scenario P7). The kamikaze's removal,
-      also after a shot that creates no projectile, is `unmeasured` here: S-0506 scenario R21
-      records a released aircraft's orders, not its shot, and no scenario here gives a kamikaze a
-      shot that creates no projectile
+    nearby samples remains untraced here.
+
+    **Kamikaze removal (Q-2821, Q-2868).** Every flagged object that a carrier releases is a
+    kamikaze (S-0506 claim 8, Terms *kamikaze*), a flagged type that is not a rocket type
+    included. A kamikaze is removed from the game, without dying, at the end of the first firing
+    pass in which it makes an ordinary shot (an attempt on the ordinary shot path above, with or
+    without a projectile): after the last attempt of that pass and the pass's other effects,
+    its scatter request included (T1), in the same processing and tick. So it makes no later
+    pass and has no run end.
+
+    Every ordinary shot counts, whatever it makes: a projectile, or none, as when its weapon has
+    no projectile or its projectile cannot be created. A drain attempt counts too: claim 12's
+    *Drain continuation* applies first, with no scatter request, and the removal follows. A
+    suicide attempt's own hit (S-0519 claim 11) comes before the removal; what that hit does to
+    a kamikaze is open question 24's. A drop attempt does not count. A firing check that refuses
+    makes no attempt, so the kamikaze stays in play and S-0506 claim 26's orders go on.
+
+    The removal neither cuts the pass short nor adds to it: the pass makes the attempts that
+    claim 12 and S-0301 give any aircraft's pass, each with the effects those claims give it,
+    and the removal comes after the last of them. So an attempt whose projectile cannot be
+    created keeps S-0301 claim 15's effects, and a drain attempt claim 12's *Drain
+    continuation*. With a weapon whose every attempt makes a projectile, all *B* attempts are
+    made, from the place where the aircraft is, each with the projectile and its launch changes
+    above and S-0301's burst counter, rearm countdown, report, shot animations and firing
+    reveal. What a suicide attempt's own hit and the later attempts of its burst do is open
+    question 24's. Where a burst releases the last passenger, the removal follows the ordinary
+    shots after that release.
+
+    The removal itself is not a death (glossary, *destroyed*). It deals no hit: no explosion,
+    debris, death weapon or crash (S-0312 claim 16), and no kill or loss for any house (S-0414
+    claim 21). It makes none of S-0011's destruction raises (claim 19), and a tag the kamikaze
+    carries stays attached (S-0011 claim 2). No round is spent: claim 15's pending round is never
+    spent. The kamikaze leaves the map and play as any removed object does, so it leaves S-0414
+    claim 4's on-map aircraft count and S-0506 claim 26's group, and is a leftover for the rest
+    of the tick (S-0203 claim 13). A bomb planted on it is removed with no detonation (S-0519
+    claim 7).
+
+    Every projectile of that pass has no firer when it detonates (S-0306 Terms *no firer*). Its
+    detonation carries neither attacker nor attacking house (S-0302 claim 1), so a target it kills
+    gives no house a kill and gives the target's house a loss (S-0414 claim 21).
+
+    A kamikaze that is not of a rocket type left its slot when it was enrolled (S-0506 claims
+    8, 11 and 13), and the slot's countdown is the one those claims give. No slot holds it when
+    it is removed, so the removal's loss notification (S-0506 claim 9) changes no slot and starts
+    no countdown.
+    - Backing: `measurable` (scenario AC12; S-0522 claim 11, scenario P7). Kamikaze removal:
+      `measurable` (scenario AC36: part a for the removal at the end of the first pass, the
+      kamikaze's health and ammunition, the missing death effects, the target's damage and the kill
+      totals; part b for the whole burst of a weapon whose attempts make projectiles; part c for the
+      projectile's kill credited to no house). `unmeasured` for an attempt that makes no projectile,
+      for a drain or suicide attempt and for a drop attempt by a kamikaze: no scenario here gives a
+      released flagged aircraft such a weapon or passengers. `unmeasured` for a refused attempt: a
+      refusal shows only as a missing shot, and claim 18's run-end rows, not this rule, then decide
+      what the aircraft does. `unmeasured` for the scatter request's place in the pass: it comes in
+      the same processing as the removal, so no per-tick record can order the two. `unmeasured` for
+      S-0011's raises, the tag, the bomb and the slot: no scenario here records a trigger or gives a
+      released aircraft a tag or a planted bomb, and a slot's countdown shows only at a later
+      launch, which no scenario here times against the removal. The consequences named from S-0203
+      claim 13, S-0414 claim 4 and S-0506 claim 26 take those claims' backing
     - Confidence: medium; the exact nearby-sample predicate is `unmeasured` because its full
-      geometry has not been independently traced
+      geometry has not been independently traced. Kamikaze removal: medium for every part of it,
+      the removal at the end of the first pass, the attempts of the pass, the missing death effects,
+      kills and losses, the round not spent, the attempts that count and those that do not, the
+      scatter request before the removal, the projectiles' missing firer and kill credit, the
+      S-0011 raises and the tag, the bomb, the slot, and the consequences named from S-0203,
+      S-0414 and S-0506
 
 ### Pads
 
@@ -2576,7 +2632,8 @@ pad leaves its pad reservation when it takes any destination other than that pad
     **Flagged slot types (Q-2821).** A slot object of a flagged type that is not a rocket type is
     not made attacking at a release: S-0506 claim 8 releases it, and once released it is a
     kamikaze that is no longer a slot aircraft, whose orders are S-0506 claim 12's and which is
-    removed after its first shot (claim 20). It becomes attacking only from returning, a state
+    removed at the end of its first firing pass with an ordinary shot (claim 20). It becomes
+    attacking only from returning, a state
     it first reaches while preparing, for want of a controller target: a returning slot with
     ammunition left and a controller target becomes attacking (T4). Its run end in that state
     falls back by claim 18's *Missile types* rows,
@@ -5301,8 +5358,8 @@ listed in Open questions are not claimed confirmed by these scenarios.
   spending only on successful drops, and separate pending spending even after an all-refused
   run. A named burst variant carries fewer passengers than its burst count: remaining attempts
   after the last release use ordinary-shot effects without a new firing check. Contradictory
-  effects, countdowns, draws or spending falsify these rules. An ordinary kamikaze shot removes
-  its aircraft; a drop attempt does not. Those type variants use the named launch-test override.
+  effects, countdowns, draws or spending falsify these rules. Those type variants use the named
+  launch-test override. Claim 20's kamikaze removal is AC36's.
 - **AC13 Pad choice, acceptance and reservation (claims 21 to 23).** Give a returning aircraft
   two compatible pads; fill one, then free it. Expected: only an eligible free pad is selected,
   and the contact reserves the place before arrival so a second aircraft cannot claim it.
@@ -6886,6 +6943,44 @@ listed in Open questions are not claimed confirmed by these scenarios.
     *enter* current or queued. Falsified too if *F* has an edge cell as its destination at the end
     of any tick, if *F* gets *P* as its destination at a tick at whose start its height was exactly
     its cruise height, or if *F*′ does not have *P* with *enter* at the end of that tick.
+- **AC36 Kamikaze removal (claim 20; Q-2868).** Record per tick the test kamikaze's
+  existence, whether it is on the map and in play, its place, health, ammunition and current
+  behaviour; every projectile made (tick and start place); every animation made within 3
+  cells of the kamikaze; the target's health; and each house's kill and loss totals (S-0414
+  claim 21). Record from the release to 300 ticks after the kamikaze's first projectile.
+  - Set-up: S-0506 scenario R21's common set-up and named ordinary-flight release test map,
+    with these named test rules (test values):
+    - *C*: R21's carrier, given one slot.
+    - *K*: R21's flagged slot type, not named as any rocket type, with an ordinary test weapon
+      *W* in its primary slot and no secondary weapon (S-0308 table P, row 3). *W* is not a
+      suicide, drain or spawner weapon, has a burst of 1 and a projectile that flies for at
+      least 3 ticks, and its warhead damages *T*. *K* has a test death weapon, a test explosion
+      animation list and a test debris type, and its type is not marked not scored (S-0414
+      claim 21).
+    - *T*: a named test copy of a stock unarmed vehicle type, strength above three hits of
+      *W*. A map entry of the computer-controlled house in *guard* on open ground, at least 15
+      cells from *C*. Its type is not marked not scored.
+
+    Procedure: the harness gives *C* an attack order on *T*. Only the first released *K* and
+    its projectiles are read; later releases are ignored. Void: a run in which anything damages
+    *K*, or *T* moves.
+  - Part a. Expected: *K*'s first firing pass falls in tick *s* and makes one projectile. At the
+    end of *s*, *K* is off the map and out of play, its health as before *s* and its
+    ammunition 1. *K* does not exist in *s* + 1. In *s* no explosion, debris or crash
+    animation and no death-weapon detonation appears at *K*'s place. *T*'s health is unchanged
+    until that projectile's detonation and first falls then. No kill or loss total changes in
+    *s*.
+  - Part b. *W* with a burst of 3 (test value). Expected: three projectiles in *s*, all from
+    one start place, none after *s*; *K* as in part a.
+  - Part c. *T* with strength 1 (test value). Expected: *T* dies at the detonation of *K*'s
+    projectile; no house's kill total grows and the computer-controlled house's loss total
+    grows by 1.
+
+  Falsified if *K* is on the map or in play at the end of *s*, or exists in *s* + 1; its health
+  falls; a death animation, debris, a crash or a death-weapon detonation appears; a kill or loss
+  total changes in *s*; *K* makes a
+  second firing pass; part b makes fewer than three projectiles in *s*, or one after *s*; part c
+  gives a house a kill for *T*.
 
 ## Changes for other specs
 
@@ -7048,6 +7143,32 @@ listed in Open questions are not claimed confirmed by these scenarios.
   from other aircraft, a flagged type that is not a rocket type included (S-0501 claim 18,
   *Missile types*)" (Q-2821). Level and backing: medium, as claim 18 here rates the flag
   test.
+- **S-0506 Terms (*Kamikaze*) and claim 12.** They could add that a kamikaze is removed from
+  the game, without dying, at the end of its first firing pass with an ordinary shot
+  (S-0501 claim 20, *Kamikaze removal*), and that this removal also takes it out of claim 26's
+  group. Level and backing: medium, `measurable` (S-0501 scenario AC36), as S-0501 claim 20
+  rates the removal.
+- **S-0506 scenario R21.** Its released aircraft has an ordinary weapon, so it is removed at
+  the end of its first firing pass (S-0501 claim 20). The expectation "then every 30 ticks" and
+  "enough health to survive the observation" hold only until that pass: later cycles can be
+  read on other enrolled aircraft, or the aircraft kept from firing. Its "remove a middle
+  enrolled aircraft normally" can use this removal. Level and backing: medium, `measurable`
+  (S-0501 scenario AC36 part a).
+- **S-0308 Terms (*Kamikaze aircraft*) and Open questions.** Table P row 12 reads the kamikaze
+  mark of S-0506 Terms *Kamikaze*, which an aircraft gets when it is enrolled for S-0506 claim
+  12's orders (claims 8, 11 and 13 there), not a dive into its target. The term could point to
+  S-0506 Terms *Kamikaze*, and the open question "which states make an aircraft a kamikaze
+  aircraft" could cite those claims, with S-0501 claim 20 for its removal. Level and backing:
+  medium, `unmeasured`: that row 12 reads this mark is not backed by any scenario, and no
+  scenario here sets up the weapon choice of a kamikaze with two weapons.
+- **S-0302 claim 1 (backing).** Its `unmeasured` part "a firer removed from the game in flight
+  by some means other than a killing hit or a cloak: no such means is identified" has one:
+  a kamikaze's removal at the end of its firing pass (S-0501 claim 20), which S-0501 scenario
+  AC36 part c can observe as a kill credited to no house. Level and backing: medium,
+  `measurable` (S-0501 AC36 part c).
+- **S-0414 claim 21 (clarification).** Its list of events that are not destructions for these
+  totals ("selling, cancellation, map exit, ...") could add a kamikaze's removal after its
+  firing pass (S-0501 claim 20). Level and backing: medium, `measurable` (S-0501 AC36 part a).
 
 ## Open questions
 
@@ -7135,8 +7256,9 @@ destination once that touchdown has made it forget the edge cell and it rests th
 24. An aircraft whose weapon has the suicide flag takes its own hit at the first shot of its
     burst, and dies of it unless S-0519's edge case of a suicide firer that survives its own hit
     applies (claim 32). What its further burst attempts and the scatter then do, and whether
-    its death's detonation can reach the target before the burst ends, was not traced. No
-    scenario here gives an aircraft a suicide weapon.
+    its death's detonation can reach the target before the burst ends, was not traced. For a
+    kamikaze, claim 20's removal follows that hit at the end of the pass, whatever the hit did.
+    No scenario here gives an aircraft a suicide weapon.
 25. An aircraft released above its pad (claim 48) at a height exactly equal to its cruise
     height takes claim 29's *guard* outcomes at cruise height: outside a team an armed one falls
     back to rest, an unarmed one is given its own cell and *move*; in *area guard* it falls
@@ -7240,8 +7362,9 @@ destination once that touchdown has made it forget the edge cell and it rests th
     The type's missile-spawn flag alone decides that an aircraft takes the rows for an aircraft
     on the ground at any height, a flagged type that is not a rocket type included, whether it
     was placed by a map, built at a pad or spawned by a carrier (medium). A carrier's flagged
-    slot object is released as a kamikaze and removed at its first shot, or becomes attacking
-    from returning, and then takes those rows at its run ends (medium, `unmeasured`). Not
+    slot object is released as a kamikaze and removed at the end of its first firing pass with
+    an ordinary shot (claim 20), or becomes attacking from returning, and then takes those
+    rows at its run ends (medium, `unmeasured`). Not
     traced: whether such a slot aircraft lands within the interval before the next launch pass
     (Open question 20).
 36. Q-2866 is answered by claims 21, 24 and 29. Every pad search records the pad it returns, or no
@@ -7258,3 +7381,10 @@ destination once that touchdown has made it forget the edge cell and it rests th
     none and whether that pad grants or refuses the contact, so before the pad, before F8's
     landing spot and *move*, and before the crash of a pad-bound aircraft. No other row has it
     (medium, `unmeasured`).
+38. Q-2868 is answered by claim 20 (*Kamikaze removal*) and scenario AC36. A kamikaze is
+    removed without dying at the end of its first firing pass with an ordinary shot, with no
+    death effects, kill or loss (medium, `measurable`, AC36 part a), after that pass's last
+    attempt (medium, `measurable`, AC36 part b). Its projectiles carry no attacker (medium,
+    `measurable`, AC36 part c). A kamikaze not of a rocket type left its slot when enrolled, so
+    the removal changes no slot (medium, `unmeasured`). Not traced: what a suicide attempt's own
+    hit does to a kamikaze before its removal (open question 24).
