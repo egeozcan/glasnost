@@ -46,13 +46,38 @@ row is added.
 
 ## Lanes
 
-Two bases. The first lanes ran on base 1c88f74 (save 117, AI game 83), whose code equals
+Three bases. The first lanes ran on base 1c88f74 (save 117, AI game 83), whose code equals
 7006a96's (S-0501 r172, spec only, under the same S-0402 merge), against this branch before its
 rebase. Main then took intake 116 (bdb91f1, save 118, AI game 84), and the branch was rebased onto
-it. The lanes below were re-run on base bdb91f1 against the rebased branch where the second list
-says so.
+it; some lanes were re-run there. Main then took intake 118 (a4284a4, save 119, AI game 85), and
+the branch's commits were cherry-picked onto it. The final lanes ran on base a4284a4, whose code
+under `crates/` and `data/` equals ca3e54c's (main after seven spec-only commits).
 
-On base bdb91f1, against the branch rebased onto it:
+On base a4284a4 (code equal to ca3e54c's), against the branch moved onto it, every lane run on
+both binaries (`local-lane/m8/i117/bin/base118` and `bin/new118`):
+
+- Seed sweeps 1–16: M6c, M7a and M7b print the same lines on the base and the branch (only the
+  build and timing lines differ). Smallest minimum: M6c 0 (seed 1, at 9605 ticks), M7a 1, M7b's
+  drain counters 3. M6c seed 11 now runs the full 12000 ticks (9473 on bdb91f1), on the base as on
+  the branch: an effect of intake 118, not of this branch.
+- `glasnost-ai` with ignored tests, release: 264 pass on the base and on the branch, the same
+  count in every test binary.
+- Oracle arena (`--record all --threads 2`): `diff -r` of the two output folders is empty
+  (byte-identical). Failing rows: M-0001 12 of 96, M-0002 2 of 24, M-0003 2 of 35, M-0019 0 of 6,
+  M-0020 1 of 25, M-0021 11 of 50. The base's output is also byte-identical to the 1c88f74 base's.
+- AI quick lane (seeds 7–10, maps 0, 2 and 8, all three side pairs, 36 games): the logs are
+  identical apart from timing lines; every game ends at the same tick with the same winner, so no
+  winner changes and nothing needed tracing. End ticks and winners (sides 0-1, 0-2, 1-2 per map,
+  maps 0, 2, 8):
+  - s7: 53024 h0, 40346 h0, 45356 h0, 34837 h0, 34502 h1, 75729 h1, 51198 h0, 48069 h0, 63923 h1
+  - s8: 51339 h1, 63388 h1, 79628 h0, 25610 h0, 34130 h0, 65122 h1, 73750 h0, 41817 h1, 58853 h0
+  - s9: 44160 h0, 41530 h1, 106239 h1, 36747 h0, 28341 h1, 44459 h1, 37515 h0, 34138 h0, 37884 h0
+  - s10: 28800 h0, 51085 h0, 45844 h1, 30366 h0, 54437 h1, 39390 h0, 36343 h0, 39460 h1, 73575 h0
+
+  Against the 1c88f74 base some games end differently (on the base as on the branch): the effect
+  of intakes 116 and 118.
+
+On base bdb91f1, against the branch rebased onto it (history):
 
 - Seed sweeps 1–16: M7b, M7a and M6c print the same lines on the base and the branch (only the
   build and timing lines differ). M7b's per-seed lines differ from the 1c88f74 base's, the effect
