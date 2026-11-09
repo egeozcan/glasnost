@@ -1220,6 +1220,37 @@ S-0309 r129 and S-0404 r26 answer Q-2841; the ledger is
   factory with several places sends out first, are S-0309 Open questions. Our engine keeps what
   its exit track and `contacted` already do; the ledger records what the A19 part k test shows.
 
+## Simulation (M8 A3 intake 119: S-0501 r176 and r178)
+
+Intake 119 builds S-0501 r176 (Q-2866 and Q-2867 answered) and r178 (Q-2868 answered). The
+ledger is [docs/m8-claims/intake119.md](../m8-claims/intake119.md).
+
+- **The pad last heading for (claim 21, Q-2866).** `air::find_pad` stays a pure choice.
+  `air::pad_search` is the search the simulation makes: it records the result (the pad kept, the
+  pad chosen, or none) in `AirState::heading_pad`, for every aircraft and at every use: T2's
+  in-flight pad row, the after-the-row search, claim 29's search below cruise height, and S-0507's
+  drop-off search (`transport`). A granted contact records nothing (`air::request_contact`). The
+  other writers are claim 24's two record rules at *enter* (on the ground, `bound_away`; in
+  flight, a destination building other than the record), a factory release at a pad's docking
+  position (`econ::release::aircraft`), and the destruction or removal of the recorded building
+  (`air::heading_pad_gone`, from `death::mark_killed` and `objects::remove_with`).
+- **The moment with no destination (claim 18, Q-2867).** `air::seek_pad` is T2's in-flight pad
+  row: the search, then `set_dest(None)` with claim 6's effects by state, then the contact
+  request. Every use of the row has it, in any behaviour, whether a pad is found or not and
+  whether it grants. A pad-bound aircraft with no grant crashes from the flight point the moment
+  left. With `quirks.unarmed_pad_bound_hover` off, the unarmed row's search goes through
+  `seek_pad` too. The after-the-row search has no moment.
+- **Kamikaze removal (claim 20, Q-2868).** In `air::attack_stage`, a firing pass notes whether
+  any attempt was ordinary (`not_a_drop`: a suicide, a drain or any weapon that is not a drop;
+  decided before each attempt, so a refused check is no attempt). At the end of the pass,
+  `kamikaze_removal` clears the attacker and house of every projectile the aircraft fired and
+  removes it with `objects::remove`: no hit, death effects, kill, loss or round. The
+  removal comes after the drain continuation and after the burst's last attempt, and the
+  processing then ends.
+- **Left.** No quirk name is added. Save format 123, AI game format 89 (one past intake 120's 122
+  and 88). Tests `claims_s0501_r176.rs` (claims 18, 21 and 24, `quirks.unarmed_pad_bound_hover`
+  in both positions) and `claims_s0501_r178.rs` (AC36 parts a to c).
+
 ## Simulation (M8 A3 intake 118: S-0501 r167 and r172)
 
 Q-2802 and Q-2821 answered; the ledger is [docs/m8-claims/intake118.md](../m8-claims/intake118.md).
@@ -1238,16 +1269,15 @@ Q-2802 and Q-2821 answered; the ledger is [docs/m8-claims/intake118.md](../m8-cl
   row for an aircraft in *sticky* with a contact and *enter* queued. That row runs claim 21's
   search, gives no destination for a moment (claim 6's new flight point around the cell it is
   over, with claim 40's draws), asks the pad found for contact by its own request and gives it as
-  destination; *enter* stays queued. Interim **Q-2867**: the moment only in claim 29's case and
-  only when a pad is found. Interim **Q-2866**: `air::request_contact` records the pad last
-  heading for on every granted contact, in *sticky* too.
+  destination; *enter* stays queued. The Q-2867 and Q-2866 interims built here are replaced at
+  intake 119 (r176, below).
 - **The third case (claim 6, claim 48 (b)).** `air::tick_flight`: a held height of 0 with a target
   fraction of 1, in an update begun neither landing nor taking off, becomes the held height of
   ordinary flight. A fly-by type that is not landable keeps its cruise height over the cell it is
   given; one claim 5 does not hold at full speed descends to height 0 with no landing (claim 50).
 - **Missile types (claim 18, r172).** The missile-spawn flag alone decides the ground rows in
   `air::fall_back_rows`; the Q-2821 interim cite is replaced. Claim 20's kamikaze removal after
-  its first shot is not built: **Q-2868**.
+  its first shot was not built here (Q-2868); intake 119 builds it (r178, below).
 - **Left.** The settled question in claim 24's contact rule outside claim 29 (`pad_accepted`
   asks none elsewhere). No quirk name is added. Save format 119, AI game format 85 (one past
   intake 116's 118 and 84). Tests `claims_s0501_r167.rs` (AC33 c to f, claim 29, AC35), with

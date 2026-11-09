@@ -852,3 +852,19 @@ never named the failed releases) and the off position are unchanged. Both positi
 Against our own pathing improvements, as intake 106 read them: intake 116's paragraph above names
 `release::stranded_at`, which is removed. A ground factory's release now makes no cell test at
 all, and none of the six improvements reads one. Intake 120 leaves the layer file unchanged.
+
+## A3 intake 119 (S-0501 r176 and r178): every aircraft switch checked, no new switch
+
+Ledger: [intake119.md](intake119.md). S-0501 r176 (Q-2866, Q-2867) and r178 (Q-2868) add no quirk.
+The spec names 23 switches. Each keeps its default, on (the original), in `quirks.rs`, as the spec
+gives it. The delta's changed lines name two of them: `unarmed_pad_bound_hover`, whose Edge case
+gains claim 18's moment with no destination, and `aircraft_descent_touchdown_untested`, which the
+moment's text names for an aircraft that is not moving. Both are judged again below. The other
+21 switches' text and the rows they act on are unchanged in the delta, so their verdicts stand as
+the earlier sections give them. Their tests in both positions are the ones those sections name,
+and they pass on this tree. The layer file is unchanged.
+
+| Switch | Spec | Verdict | Reason, tests |
+|---|---|---|---|
+| `unarmed_pad_bound_hover` | S-0501 claim 50, Edge cases (r176: the off position's pad search has T2's in-flight pad row's moment with no destination) | rejected, as at intakes 76 and 118 | The moment changes only how the off position's search reaches the pad: a flight point around the cell the aircraft is over, replaced by the pad when the pad grants. Condition 2 still fails for intake 76's reasons: on, the aircraft hovers near its F8 spot until an order, which is not a stuck unit, and no play note or request names it. Condition 3 still fails: off, it lands and docks at a pad. Tests: intake 76's (`claims_s0501_r93`), and `claims_s0501_r176::quirk_unarmed_pad_bound_hover_off_has_the_moment` (both positions: off, the pad, the record and the moment's draws over a refused cell; on, no search, no pad, no record). |
+| `aircraft_descent_touchdown_untested` | S-0501 claim 7, Edge cases; r176 claim 18 (the moment leaves an aircraft held above a refused cell, which comes only with the switch off, as it was) | rejected, as at intakes 102, 104 and 118 | r176 adds no new state for either position: an aircraft that is not moving is left as it was by every clear of its destination, which `air::given_no_destination` already gives. Condition 2 still fails for intake 102's reasons. Tests: as listed at intake 118, unchanged. |

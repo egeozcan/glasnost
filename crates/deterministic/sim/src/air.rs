@@ -3201,6 +3201,36 @@ pub fn find_pad(w: &World, id: ObjectId) -> Option<ObjectId> {
     prefer(&bests)
 }
 
+/// Claim 21's pad search as the simulation makes it: [`find_pad`]'s
+/// choice, recorded as the pad the aircraft was last heading for.
+pub fn pad_search(w: &mut World, id: ObjectId) -> Option<ObjectId> {
+    let k = find_pad(w, id);
+    // spec: S-0501 claim 21 (r176, Q-2866: every search records its result as the pad the aircraft was last heading for, the pad it keeps, the pad it chooses or no pad when it finds none, in every behaviour and at every use, pad-bound or not; a pad-bound aircraft whose recorded pad no longer accepts it loses that record and the result replaces it)
+    record_heading(w, id, k);
+    k
+}
+
+/// Records `k` as the pad aircraft `id` was last heading for (claim 21).
+pub(crate) fn record_heading(w: &mut World, id: ObjectId, k: Option<ObjectId>) {
+    if let Some(a) = st_mut(w, id) {
+        a.heading_pad = k;
+    }
+}
+
+/// Building `k` is destroyed or removed from the game (claim 21): every
+/// aircraft that recorded it as the pad it was last heading for is left
+/// with no pad recorded.
+pub(crate) fn heading_pad_gone(w: &mut World, k: ObjectId) {
+    for o in w.objects.values_mut() {
+        if let Some(a) = o.air.as_mut()
+            && a.heading_pad == Some(k)
+        {
+            // spec: S-0501 claim 21 (r176, Q-2866: the record changes when the recorded building is destroyed or removed from the game, which leaves no pad recorded)
+            a.heading_pad = None;
+        }
+    }
+}
+
 /// Asks pad `k` for contact (claim 23); whether it was granted.
 pub fn request_contact(w: &mut World, id: ObjectId, k: ObjectId) -> bool {
     let (Some(b), Some(o)) = (w.obj(k), w.obj(id)) else {
@@ -3233,16 +3263,20 @@ pub fn request_contact(w: &mut World, id: ObjectId, k: ObjectId) -> bool {
             place,
         });
     }
-    // design: Q-2866 (S-0501 claim 21's pad last heading for: a granted contact records the pad, in sticky too, which r167 claim 29 leaves open; the same pad with one pad of the dock types)
-    if let Some(a) = st_mut(w, id) {
-        a.heading_pad = Some(k);
-    }
+    // spec: S-0501 claim 21 (r176, Q-2866: the record of the pad last heading for is the search's; a contact granted after it, in sticky or not, by claim 18's in-flight pad row or claim 24's contact rule, records nothing)
     true
 }
 
-/// A pad search and contact request (claims 18 and 29); the pad on success.
+/// T2's in-flight pad row (claim 18, r176, Q-2867): claim 21's search,
+/// then the moment with no destination, then the contact request to the pad
+/// found; the pad when it granted contact.
 fn seek_pad(w: &mut World, id: ObjectId) -> Option<ObjectId> {
-    let k = find_pad(w, id)?;
+    // spec: S-0501 claim 18 (r176, Q-2867: the search comes first, so the pad it finds and records does not depend on the moment)
+    let k = pad_search(w, id);
+    // spec: S-0501 claim 18, The moment with no destination (r176, Q-2867: every fall-back that reaches the in-flight pad search gives the aircraft no destination for a moment after that search, whatever its current behaviour, whether the search finds a pad or none and whether the pad grants or refuses the contact; claim 6's effects by its state)
+    set_dest(w, id, None);
+    let k = k?;
+    // spec: S-0501 claim 18 (asks the pad found for contact by the row's own request) and claim 23
     request_contact(w, id, k).then_some(k)
 }
 
@@ -3874,27 +3908,12 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
         // spec: S-0501 T2 and claim 45 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: the destination kept; guard, area guard for a computer-controlled house) and claims 24 and 46 (r110, Q-2437: the row of an aircraft already flying to its enter destination needs that destination, not a contact: in enter's docking stage without a contact it keeps the pad, or the landing spot the run-away notice gave, and gives guard) and claim 29 (r167, Q-2802: that row needs enter current; an enter only queued, as in sticky, does not make it apply)
         Some(resting)
     } else if armed {
-        // spec: S-0501 claim 29 (r167, Q-2802: for an aircraft in sticky that holds a pad's contact with enter queued, at cruise height, the in-flight pad row runs claim 21's search, then gives it no destination for a moment, claim 6's new flight point around the cell it is over with claim 40's draws, which can undo a landing at the pad, then asks the pad found for contact by the row's own request and, granted, gives it as destination; it already holds a contact then, so claim 24's contact rule asks nothing and enter stays queued)
-        // design: Q-2867 (the moment is given only where claim 29 states it, sticky current with a contact held and enter queued, and only when the search finds a pad; every other use of the row asks the pad found for contact without it, as claim 18 and T2 give the row)
-        let moment = o.beh.current == Some(Behaviour::Sticky)
-            && o.contact.is_some()
-            && o.beh.queued == Some(Behaviour::Enter);
-        let found = if moment {
-            match find_pad(w, id) {
-                Some(k) => {
-                    set_dest(w, id, None);
-                    request_contact(w, id, k).then_some(k)
-                }
-                None => None,
-            }
-        } else {
-            seek_pad(w, id)
-        };
+        // spec: S-0501 claim 18 and T2 (r176, Q-2867: the in-flight pad row, the rows after the guard row for an armed aircraft in flight: claim 21's search, then the moment with no destination whatever the current behaviour, guard, area guard, sticky, move, an attack the attack row does not keep and enter with no destination alike, then the contact request to the pad found) and claim 29 (r167, Q-2802: for an aircraft in sticky that holds a pad's contact with enter queued at cruise height too; it already holds a contact then, so claim 24's contact rule asks nothing and enter stays queued)
+        let found = seek_pad(w, id);
         if let Some(k) = found {
-            // spec: S-0501 T2 (a pad found that grants contact: the pad as destination; enter)
+            // spec: S-0501 T2 (r176: pad found, contact granted: destination none, then the pad; enter) and claim 18 (r176: the pad given right after the moment is handed to its flight as any destination is, claim 8, and replaces the flight point the moment gave, but does not give back a landing the moment undid)
             set_dest(w, id, Some(Target::Object(k)));
-            if moment
-                && let Some(s) = st_mut(w, id)
+            if let Some(s) = st_mut(w, id)
                 && s.flying_to == Some(Target::Object(k))
             {
                 // spec: S-0501 claim 6 (r132, Q-2576: a landing aircraft given no destination over its flight point's cell keeps that flight point) and claim 29 (r167: the pad it then gets as destination is that flight point's destination object again, so the point is no longer its own)
@@ -3902,17 +3921,17 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
             }
             Some(Behaviour::Enter)
         } else if t.bound {
-            // spec: S-0501 T2 and claim 46 (in flight, armed, no pad, pad-bound: it crashes at this fall-back)
+            // spec: S-0501 T2 and claim 46 (r176: in flight, armed, no pad grants contact, pad-bound: destination none, then it crashes at this fall-back; claim 18: its crash begins with the flight point and unfinished flight that the moment left it)
             crash_fall_back(w, id);
             return;
         } else {
-            // spec: S-0501 T2 (in flight, armed, no pad, not pad-bound: the landing spot of F8; move)
+            // spec: S-0501 T2 (r176: in flight, armed, no pad grants contact, not pad-bound: destination none, then the landing spot of F8; move)
             let s = landing_spot(w, id);
             set_dest(w, id, s.map(Target::Cell));
             Some(Behaviour::Move)
         }
     } else {
-        // spec: S-0501 Edge cases (quirks.unarmed_pad_bound_hover off: for an unarmed aircraft of a landable pad-bound type with dock types, falling back in flight with no contact, only this last in-flight row changes: it first looks for a pad, claim 21, and asks it for contact as T2's in-flight pad row does; granted: the pad as destination and enter; otherwise the row's landing spot and move, with no crash. A type that is not landable is unchanged)
+        // spec: S-0501 Edge cases (quirks.unarmed_pad_bound_hover off: for an unarmed aircraft of a landable pad-bound type with dock types, falling back in flight with no contact, only this last in-flight row changes: it first looks for a pad, claim 21, and asks it for contact as T2's in-flight pad row does, with that row's moment with no destination, r176, claim 18; granted: the pad as destination and enter; otherwise the row's landing spot and move, with no crash. A type that is not landable is unchanged)
         let pad = if !w.rules().quirks.unarmed_pad_bound_hover
             && t.bound
             && t.landable
@@ -3925,6 +3944,12 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
         };
         if let Some(k) = pad {
             set_dest(w, id, Some(Target::Object(k)));
+            if let Some(s) = st_mut(w, id)
+                && s.flying_to == Some(Target::Object(k))
+            {
+                // spec: S-0501 claim 6 (r132, Q-2576) and claim 18 (r176: as in the armed row, the pad given after the moment over the landing flight point's cell is that point's destination object again)
+                s.own_point = false;
+            }
             Some(Behaviour::Enter)
         } else {
             // spec: S-0501 T2 (in flight otherwise: the landing spot; move) and claim 50 (r93, Q-2252: an unarmed aircraft, pad-bound with dock types included, makes no pad search and never crashes for want of a pad: T2's pad rows and its after-the-row search are for armed aircraft only, so it hovers at its F8 spot)
@@ -3936,8 +3961,8 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
     let mut chosen = chosen;
     // spec: S-0501 T2 and its note (after every row from the fourth on, the visiting rows included: no ammunition, armed, no contact: a new pad search, which needs neither height test, claim 18)
     if armed && !ammo_left(w, id) && w.obj(id).is_some_and(|x| x.contact.is_none()) {
-        // spec: S-0501 claim 18 (r93, Q-2251: this search asks the pad for no contact: it only finds a pad that accepts the aircraft, claims 21 and 22)
-        if let Some(k) = find_pad(w, id) {
+        // spec: S-0501 claim 18 (r93, Q-2251: this search asks the pad for no contact: it only finds a pad that accepts the aircraft, claims 21 and 22) and claim 21 (r176, Q-2866: it records its result, a pad or none) and claim 18 (r176, Q-2867: no moment with no destination here)
+        if let Some(k) = pad_search(w, id) {
             // spec: S-0501 claim 18 and T2 (found: the pad as destination, the target forgotten, enter) and claim 24 (r93: that acceptance makes a contact only when enter is already current or queued, destination_taken)
             set_dest(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
@@ -4217,7 +4242,8 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
         && h != t.cruise
         && !full_ammo(w, id)
         && o.contact.is_none()
-        && let Some(k) = find_pad(w, id)
+        // spec: S-0501 claim 21 (r176, Q-2866: claim 29's search below cruise height records its result, a pad or none)
+        && let Some(k) = pad_search(w, id)
     {
         // spec: S-0501 claim 29 (r167, Q-2802: a pad found below cruise height: the aircraft queues enter first and is given the pad as destination after that, so claim 24's contact rule applies: it asks the pad to be loaded and the pad, which has a free contact place since the search found it, claim 21, takes it into contact at that processing, destination_taken)
         let before = destination(w, id);
@@ -4303,6 +4329,14 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
     let Some(t) = ty(w, id) else {
         return NO_RULE_DELAY;
     };
+    if !on_ground(w, id)
+        && let Some(Target::Object(b)) = destination(w, id)
+        && w.obj(b).is_some_and(|x| x.kind == Kind::Building)
+        && st(w, id).heading_pad != Some(b)
+    {
+        // spec: S-0501 claim 24 (r176, Q-2866: at every processing of enter, its first included, an aircraft in flight, pad-bound or not, whose destination is a building other than the pad it was last heading for records that building as that pad, claim 21; this record changes nothing else in the processing; it comes after the pad-bound rule on the ground and before the rule for an aircraft in flight with no destination)
+        record_heading(w, id, Some(b));
+    }
     // spec: S-0501 claim 24 (r110, Q-2437: a second rule comes next, at every processing, its first included, and in either stage: an aircraft in flight with no destination asks its contact to be loaded; unless that request is confirmed it falls back to rest at once, claim 18, whatever is queued, and the processing returns 1 tick and does nothing else; an aircraft without a contact has nobody to confirm it, so this is what any aircraft in flight whose destination is gone does) and claim 31 (that fall-back leaves the ready mark as it is)
     let in_flight = !on_ground(w, id);
     let asked = in_flight && destination(w, id).is_none();
@@ -4642,17 +4676,53 @@ pub(crate) fn set_lock(w: &mut World, id: ObjectId, on: bool) {
 }
 
 /// A full burst: *B* shots in the same tick with no firing check between
-/// them (claim 12).
+/// them (claim 12). Returns whether one of its attempts was not a drop
+/// (claim 20's kamikaze removal).
 fn full_burst(w: &mut World, id: ObjectId, tg: Target) -> bool {
     let b = primary(w, id).map_or(1, |wp| w.rules().combat.weapon(wp).burst.max(1));
-    let mut any = false;
+    let mut ordinary = false;
     for _ in 0..b {
+        ordinary |= not_a_drop(w, id);
         if !crate::combat::fire::shot(w, id, 0, tg) {
             break;
         }
-        any = true;
     }
-    any
+    ordinary
+}
+
+/// Whether the attempt aircraft `id` is about to make is one that counts
+/// for claim 20's kamikaze removal: any attempt with its weapon other than
+/// a drop attempt, in the order `combat::fire::shot` takes its paths (a
+/// suicide or drain attempt first, then the drop of a carrying aircraft).
+fn not_a_drop(w: &World, id: ObjectId) -> bool {
+    let Some(wp) = crate::combat::weapon::slot_weapon(w, id, 0) else {
+        return false;
+    };
+    let wt = w.rules().combat.weapon(wp);
+    // spec: S-0501 claim 20 (r178, Q-2868: every ordinary shot counts, with a projectile or none; a drain attempt counts, and a suicide attempt, whose own hit comes first; a drop attempt does not count)
+    wt.suicide || wt.drain || !crate::paradrop::shot_drops(w, id)
+}
+
+/// Claim 20's kamikaze removal (r178, Q-2868), at the end of a firing pass
+/// of aircraft `id` in which `ordinary` says an attempt counted: a
+/// kamikaze (S-0506 Terms) is removed from the game without dying, after
+/// the pass's last attempt and its other effects, the scatter request
+/// included. Returns whether it was removed.
+fn kamikaze_removal(w: &mut World, id: ObjectId, ordinary: bool) -> bool {
+    // spec: S-0501 claim 20 (r178, Q-2868: every flagged object that a carrier releases is a kamikaze, a flagged type that is not a rocket type included; removed at the end of the first firing pass in which it makes an ordinary shot; a refused firing check makes no attempt, so it stays in play)
+    if !ordinary || !crate::spawn::kamikaze(w, id) || w.obj(id).is_none_or(|o| !o.on_map) {
+        return false;
+    }
+    for p in w.projectiles.values_mut() {
+        if p.attacker == Some(id) {
+            // spec: S-0501 claim 20 (r178: every projectile of that pass has no firer when it detonates, S-0306 Terms no firer; its detonation carries neither attacker nor attacking house, S-0302 claim 1, so a target it kills gives no house a kill)
+            p.attacker = None;
+            p.house = None;
+        }
+    }
+    // spec: S-0501 claim 20 (r178: the removal is not a death: no hit, explosion, debris, death weapon or crash, no kill or loss for any house, none of S-0011's destruction raises, a tag stays attached, S-0011 claim 2; no round spent, claim 15's pending round never spent; it leaves the map and play as any removed object does, S-0414 claim 4's count and S-0506 claim 26's group, and is a leftover for the rest of the tick, S-0203 claim 13; a planted bomb removed with no detonation, S-0519 claim 7; the loss notification changes no slot, S-0506 claim 9, since the kamikaze left its slot when enrolled)
+    crate::objects::remove(w, id);
+    true
 }
 
 /// The scatter request of a firing pass (claim 16).
@@ -4860,15 +4930,22 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             let ans = crate::combat::check::check(w, id, Some(tgv), 0, true);
             match ans {
                 Answer::CanFire => {
-                    full_burst(w, id, tgv);
+                    let ordinary = full_burst(w, id, tgv);
                     if drain_cleared(w, id, tgv) {
                         if let Some(a) = st_mut(w, id) {
                             // spec: S-0501 claim 15 and S-0608 claim 16 (an admitted initial pass with a draining weapon makes its run's round pending, though its attempts make no ordinary shot; target clearing does not roll it back)
                             a.pending = true;
                         }
-                        return drain_departure(w, id);
+                        let d = drain_departure(w, id);
+                        // spec: S-0501 claim 20 (r178, Q-2868: a drain attempt counts: claim 12's Drain continuation applies first, with no scatter request, and the removal follows)
+                        kamikaze_removal(w, id, ordinary);
+                        return d;
                     }
                     fired(w, id, tgv);
+                    // spec: S-0501 claim 20 (r178, Q-2868: the removal neither cuts the pass short nor adds to it: it comes after the last attempt and the scatter request, in the same processing and tick)
+                    if kamikaze_removal(w, id, ordinary) {
+                        return Some(1);
+                    }
                     if is_strafer {
                         // spec: S-0501 T1 (strafer: strafe pass 2, run lock on, one rate of fire)
                         set_lock(w, id, true);
@@ -4934,11 +5011,19 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             match ans {
                 Answer::CanFire => {
                     // spec: S-0501 T1 (refiring, ready: one shot, scatter); a drain attempt at a cell is a pass like any other (claim 12)
+                    let ordinary = not_a_drop(w, id);
                     if crate::combat::fire::shot(w, id, 0, tgv) || drains(w, id) {
                         if drain_cleared(w, id, tgv) {
-                            return drain_departure(w, id);
+                            let d = drain_departure(w, id);
+                            // spec: S-0501 claim 20 (r178, Q-2868: a drain attempt counts; the removal follows the Drain continuation)
+                            kamikaze_removal(w, id, ordinary);
+                            return d;
                         }
                         fired(w, id, tgv);
+                    }
+                    // spec: S-0501 claim 20 (r178, Q-2868: an ordinary shot counts with or without a projectile; the removal follows the pass's attempt and scatter request)
+                    if kamikaze_removal(w, id, ordinary) {
+                        return Some(1);
                     }
                     let next = if !ammo_left(w, id) {
                         Stage::Done
@@ -4985,13 +5070,21 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                 Answer::CanFire | Answer::NotFacing | Answer::Cloaked | Answer::OutOfRange
             ) {
                 // spec: S-0501 claim 13 and T1 (later passes fire even when not facing, cloaked or out of range; one shot, scatter, the target becomes the destination); a drain attempt at a cell is a pass like any other (claim 12)
+                let ordinary = not_a_drop(w, id);
                 if crate::combat::fire::shot(w, id, 0, tgv) || drains(w, id) {
                     if drain_cleared(w, id, tgv) {
-                        return drain_departure(w, id);
+                        let d = drain_departure(w, id);
+                        // spec: S-0501 claim 20 (r178, Q-2868: a drain attempt counts; the removal follows the Drain continuation)
+                        kamikaze_removal(w, id, ordinary);
+                        return d;
                     }
                     fired(w, id, tgv);
                 }
                 set_dest(w, id, Some(tgv));
+                // spec: S-0501 claim 20 (r178, Q-2868: the removal follows the pass's attempt, scatter request and its other effects)
+                if kamikaze_removal(w, id, ordinary) {
+                    return Some(1);
+                }
                 if n >= LAST_PASS {
                     // spec: S-0501 T1 (strafe pass 5: approaching; F6 ticks)
                     set_stage(w, id, Stage::Approaching);

@@ -659,6 +659,10 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)
     crate::spawn::removing(w, id);
+    if o.kind == Kind::Building {
+        // spec: S-0501 claim 21 (r176, Q-2866: the recorded building removed from the game leaves no pad recorded)
+        crate::air::heading_pad_gone(w, id);
+    }
     // spec: S-0616 claim 4 (every particle system whose owner object is removed loses it and is marked)
     crate::particles::owner_removed(w, id);
     crate::econ::events::leaving_map(w, id, true);
