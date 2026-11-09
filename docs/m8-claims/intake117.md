@@ -45,10 +45,26 @@ row is added.
 
 ## Lanes
 
-Base: 1c88f74 (save 117, AI game 83). Main moved to 7006a96 during the intake: S-0501 r172 (spec
-only) under the same S-0402 merge, so 7006a96's code equals 1c88f74's (they differ only in `spec/`
-and `docs/`), and the base figures hold for it. "After" is this branch before the rebase, whose
-code equals the rebased branch's.
+Two bases. The first lanes ran on base 1c88f74 (save 117, AI game 83), whose code equals
+7006a96's (S-0501 r172, spec only, under the same S-0402 merge), against this branch before its
+rebase. Main then took intake 116 (bdb91f1, save 118, AI game 84), and the branch was rebased onto
+it. The lanes below were re-run on base bdb91f1 against the rebased branch where the second list
+says so.
+
+On base bdb91f1, against the branch rebased onto it:
+
+- Seed sweeps 1–16: M7b, M7a and M6c print the same lines on the base and the branch (only the
+  build and timing lines differ). M7b's per-seed lines differ from the 1c88f74 base's, the effect
+  of intake 116; its smallest drain minimum is still 3. M7a's smallest minimum is 1 and M6c's 0,
+  as before.
+- `glasnost-ai` with ignored tests, release: 264 pass on the base and on the branch, the same
+  count in every test binary.
+- Oracle arena, base bdb91f1 only: failing rows M-0001 12 of 96, M-0002 2 of 24, M-0003 2 of 35,
+  M-0019 0 of 6, M-0020 1 of 25, M-0021 11 of 50, the same counts as the 1c88f74 base (read from
+  the log, not compared byte by byte). The branch's arena was not run on this base.
+- AI quick lane: not run on this base.
+
+On base 1c88f74, against the branch before its rebase:
 
 - Oracle arena (`--record all --threads 2`): the output files are byte-identical before and after.
   Failing rows as main: M-0001 12 of 96, M-0002 2 of 24, M-0003 2 of 35, M-0019 0 of 6, M-0020 1 of
