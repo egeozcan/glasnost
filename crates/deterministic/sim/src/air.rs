@@ -2456,19 +2456,30 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
             t.cruise
         }
     };
+    // spec: S-0501 claim 48 (b)'s third case and claim 6 (r167, Q-2802: a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, the fraction held from the end of the update before, gives the held height of ordinary flight before its height changes in that update)
+    let third_case =
+        |a: &AirState| !a.taking_off && a.held == 0 && a.tgt.eq_num(F64::from_i64(1, mode));
+    // spec: S-0501 claim 6 (r167: a 768-lepton held height of 0, as for a point at the terrain's surface, does not last into such an update: it gives way to that of ordinary flight, the cruise height, so the aircraft does not descend toward that point's height in that update)
+    let flight_held = |a: &AirState| match ordinary_held(a) {
+        0 => t.cruise,
+        z => z,
+    };
     if alive && !a.landing && !a.ground {
         if a.sliding {
             // spec: S-0501 claim 7 (r132, Q-2578: at the start of the movement update after the first one that leaves its target speed fraction at 1, it takes the held height of ordinary flight, claim 48 (b)'s third case, and climbs in that update; until then the held height 0)
-            if !slide_began && !a.taking_off && a.held == 0 && a.tgt.eq_num(F64::from_i64(1, mode))
-            {
-                a.held = ordinary_held(&a);
+            if !slide_began && third_case(&a) {
+                a.held = flight_held(&a);
                 a.sliding = false;
             }
         } else if !a.released {
+            // spec: S-0501 claim 6 (r167, Q-2802: the held height of 0 from the 768-lepton rule, which it holds between updates, gives way to the held height of ordinary flight in an update begun with the third case's other conditions; above the terrain within 768 leptons claim 5's replacement keeps the fraction below 1, so it lasts unless claim 5 fixes the target at 1) and claim 51 (r167: the spy plane's held height is 0 again between updates, and each update changes its height toward that of ordinary flight)
             a.held = ordinary_held(&a);
-        } else if !a.taking_off && a.held == 0 && a.tgt.eq_num(F64::from_i64(1, mode)) {
+            if third_case(&a) {
+                a.held = t.cruise;
+            }
+        } else if third_case(&a) {
             // spec: S-0501 claim 48 (b) (a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, gives the held height of ordinary flight: it climbs in that same update)
-            a.held = ordinary_held(&a);
+            a.held = flight_held(&a);
             a.released = false;
         }
     }
@@ -3222,6 +3233,7 @@ pub fn request_contact(w: &mut World, id: ObjectId, k: ObjectId) -> bool {
             place,
         });
     }
+    // design: Q-2866 (S-0501 claim 21's pad last heading for: a granted contact records the pad, in sticky too, which r167 claim 29 leaves open; the same pad with one pad of the dock types)
     if let Some(a) = st_mut(w, id) {
         a.heading_pad = Some(k);
     }
@@ -3810,7 +3822,7 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
     let ammo = ammo_left(w, id);
     let ground = on_ground(w, id);
     // spec: S-0501 claim 18, Missile types (r154: an object of a missile type, S-0506 Terms, the missile-spawn flag, takes the rows for an aircraft on the ground whatever its height; the after-the-row entries read its height as for any aircraft) and T2's note
-    // design: Q-2821 (interim: the flag decides, as claim 18 and T2's note say, against claim 35's "missile slot types" for a flagged type that is not a rocket type)
+    // spec: S-0501 claim 18, Missile types (r172, Q-2821: the type's missile-spawn flag alone decides, not whether it is one of S-0506's rocket types nor whether a carrier spawned it, so a flagged type that is not a rocket type takes these rows in flight too, placed by a map, built at a pad or a carrier's slot object; its dock types and pad-bound field play no part in the row) and claim 35 (r172: a flagged slot type's run end falls back by these rows)
     let ground_rows = ground || crate::spawn::missile_type(w, id);
     // spec: S-0501 T2 (guard; area guard for an armed aircraft of a computer-controlled house outside a team; our engine has no teams, claim 18)
     let resting = if armed && !human(w, id) {
@@ -3859,12 +3871,35 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
             || (o.beh.current == Some(Behaviour::Enter) && o.dest.is_some())
             || t.docks.is_empty())
     {
-        // spec: S-0501 T2 and claim 45 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: the destination kept; guard, area guard for a computer-controlled house) and claims 24 and 46 (r110, Q-2437: the row of an aircraft already flying to its enter destination needs that destination, not a contact: in enter's docking stage without a contact it keeps the pad, or the landing spot the run-away notice gave, and gives guard)
+        // spec: S-0501 T2 and claim 45 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: the destination kept; guard, area guard for a computer-controlled house) and claims 24 and 46 (r110, Q-2437: the row of an aircraft already flying to its enter destination needs that destination, not a contact: in enter's docking stage without a contact it keeps the pad, or the landing spot the run-away notice gave, and gives guard) and claim 29 (r167, Q-2802: that row needs enter current; an enter only queued, as in sticky, does not make it apply)
         Some(resting)
     } else if armed {
-        if let Some(k) = seek_pad(w, id) {
+        // spec: S-0501 claim 29 (r167, Q-2802: for an aircraft in sticky that holds a pad's contact with enter queued, at cruise height, the in-flight pad row runs claim 21's search, then gives it no destination for a moment, claim 6's new flight point around the cell it is over with claim 40's draws, which can undo a landing at the pad, then asks the pad found for contact by the row's own request and, granted, gives it as destination; it already holds a contact then, so claim 24's contact rule asks nothing and enter stays queued)
+        // design: Q-2867 (the moment is given only where claim 29 states it, sticky current with a contact held and enter queued, and only when the search finds a pad; every other use of the row asks the pad found for contact without it, as claim 18 and T2 give the row)
+        let moment = o.beh.current == Some(Behaviour::Sticky)
+            && o.contact.is_some()
+            && o.beh.queued == Some(Behaviour::Enter);
+        let found = if moment {
+            match find_pad(w, id) {
+                Some(k) => {
+                    set_dest(w, id, None);
+                    request_contact(w, id, k).then_some(k)
+                }
+                None => None,
+            }
+        } else {
+            seek_pad(w, id)
+        };
+        if let Some(k) = found {
             // spec: S-0501 T2 (a pad found that grants contact: the pad as destination; enter)
             set_dest(w, id, Some(Target::Object(k)));
+            if moment
+                && let Some(s) = st_mut(w, id)
+                && s.flying_to == Some(Target::Object(k))
+            {
+                // spec: S-0501 claim 6 (r132, Q-2576: a landing aircraft given no destination over its flight point's cell keeps that flight point) and claim 29 (r167: the pad it then gets as destination is that flight point's destination object again, so the point is no longer its own)
+                s.own_point = false;
+            }
             Some(Behaviour::Enter)
         } else if t.bound {
             // spec: S-0501 T2 and claim 46 (in flight, armed, no pad, pad-bound: it crashes at this fall-back)
@@ -4178,19 +4213,26 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
         }
     }
     // spec: S-0501 claim 29 (an armed aircraft below cruise height, not full and without contact: a pad search; enter, target forgotten; r150: on the ground too, where it takes off for the pad, claim 8) and claim 48 (d) (guard compares the height with the cruise height for equality only: every other height, above it as well as below it, takes the same rules)
-    // design: Q-2802 (question 1: what an aircraft in sticky does on reaching the pad without enter is open; nothing is added, its processings go on by these rules)
     if armed
         && h != t.cruise
         && !full_ammo(w, id)
         && o.contact.is_none()
-        && let Some(k) = seek_pad(w, id)
+        && let Some(k) = find_pad(w, id)
     {
+        // spec: S-0501 claim 29 (r167, Q-2802: a pad found below cruise height: the aircraft queues enter first and is given the pad as destination after that, so claim 24's contact rule applies: it asks the pad to be loaded and the pad, which has a free contact place since the search found it, claim 21, takes it into contact at that processing, destination_taken)
+        let before = destination(w, id);
+        queue(w, id, Behaviour::Enter);
         set_dest(w, id, Some(Target::Object(k)));
         if let Some(ob) = w.obj_mut(id) {
             crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         }
-        queue(w, id, Behaviour::Enter);
+        // spec: S-0501 claim 29 (r167: the pad then asks whether it has settled, with the destination it held before the pad, claim 24; one that has settled, as one standing landed has, is made to start enter at once although it is not ready to change, so sticky ends; one that has not keeps sticky with enter queued, the contact and the pad as destination, and flies to the pad)
+        let confirmed = w.obj(id).is_some_and(|x| x.contact == Some(k))
+            && w.obj(k).is_some_and(|b| !b.econ.building.switched_off);
+        if confirmed && settled(w, id, &t, before) && accepts(w, k, id) {
+            start_enter_at_once(w, id);
+        }
         return standard(w, id);
     }
     // spec: S-0501 claims 29 and 48 (d) (the cruise-height outcomes at exactly the cruise height only)
@@ -4198,12 +4240,12 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
     if !ground && h == t.cruise {
         if armed {
             // spec: S-0501 claim 29 (r110: outside a team, an armed aircraft falls back to rest, claim 18, whatever its destination) and claim 31 (r110, Q-2438: this processing sets the ready mark)
-            // design: Q-2802 (question 2: in sticky, each processing at that height runs this fall-back again, keeping a contact it holds and the pad as its destination, with enter queued)
+            // spec: S-0501 claim 29 (r167, Q-2802: a contact held at cruise height: each later processing at exactly that height of an armed aircraft with dock types that holds a pad's contact with enter queued is that fall-back again; with sticky current T2's row for an aircraft already flying to its enter destination does not apply, so the in-air answer no keeps the pad by T2's guard row and otherwise the in-flight pad row applies again, fall_back_rows)
             set_ready_mark(w, id);
             fall_back(w, id);
         } else {
             // spec: S-0501 claim 29 (unarmed, outside a team: its own cell and move, so it lands, whatever its destination) and claim 31 (r110: this processing leaves the ready mark as it is)
-            // design: Q-2802 (question 3: with a slowdown distance of 0 or a converted speed below 20, the flight takes each new cell as any destination and lands where claim 6 lets it)
+            // spec: S-0501 claim 29 (r167, Q-2802: being given its flight point again changes nothing in its speed fraction, whatever its slowdown distance and speed, give_point; with a slowdown distance of 0 it never lands, and with V below 20 it lands unless claim 5's 1-lepton hover or zero step holds it at cruise height; a type that is not landable that claim 5 holds at full speed keeps its cruise height by claim 48 (b)'s third case, tick_flight)
             let c = o.pos.cell();
             set_dest(w, id, Some(Target::Cell(c)));
             queue(w, id, Behaviour::Move);
@@ -4403,22 +4445,33 @@ fn load_request(w: &mut World, id: ObjectId, t: &Ty) -> bool {
         }
         return false;
     };
-    // spec: S-0501 claim 24 (r110: before it confirms, the pad asks whether the aircraft has settled: its locomotor reports stopped, claim 40, it has no destination, or it is pad-bound and its destination is the cell it stands in)
     let dest = destination(w, id);
-    let settled =
-        stopped(w, id) || dest.is_none() || (t.bound && dest == Some(Target::Cell(o.pos.cell())));
-    // spec: S-0501 claim 24 (r110: when it has, and the pad accepts it, claim 22, the pad gives itself as destination and has it queue enter and start its queued behaviour at once, whether or not it is ready; with enter current and nothing queued that changes only the destination, S-0215 claim 7; a queued behaviour is replaced and lost, and entry starts again; an aircraft that has not settled keeps its destination: the answer changes nothing for it)
-    if settled && accepts(w, k, id) {
+    if settled(w, id, t, dest) && accepts(w, k, id) {
         set_dest(w, id, Some(Target::Object(k)));
-        // spec: S-0501 claim 34 (a request that claim ignores is ignored entirely)
-        if !queue_ignored(w, id, Behaviour::Enter) {
-            let (tick, s) = (w.tick, stale(w));
-            if let Some(ob) = w.obj_mut(id) {
-                ob.beh.queue_and_start_at_once(Behaviour::Enter, tick, s);
-            }
-        }
+        start_enter_at_once(w, id);
     }
     true
+}
+
+/// Claim 24's settled question, which a pad asks before it confirms a
+/// request to be loaded, with `dest` as the aircraft's destination.
+fn settled(w: &World, id: ObjectId, t: &Ty, dest: Option<Target>) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0501 claim 24 (r110: before it confirms, the pad asks whether the aircraft has settled: its locomotor reports stopped, claim 40, it has no destination, or it is pad-bound and its destination is the cell it stands in)
+    stopped(w, id) || dest.is_none() || (t.bound && dest == Some(Target::Cell(o.pos.cell())))
+}
+
+/// The pad's answer to a settled aircraft (claim 24): it has the aircraft
+/// queue *enter* and start its queued behaviour at once.
+fn start_enter_at_once(w: &mut World, id: ObjectId) {
+    // spec: S-0501 claim 24 (r110: when it has, and the pad accepts it, claim 22, the pad gives itself as destination and has it queue enter and start its queued behaviour at once, whether or not it is ready; with enter current and nothing queued that changes only the destination, S-0215 claim 7; a queued behaviour is replaced and lost, and entry starts again; an aircraft that has not settled keeps its destination: the answer changes nothing for it)
+    // spec: S-0501 claim 34 (a request that claim ignores is ignored entirely)
+    if !queue_ignored(w, id, Behaviour::Enter) {
+        let (tick, s) = (w.tick, stale(w));
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.queue_and_start_at_once(Behaviour::Enter, tick, s);
+        }
+    }
 }
 
 /// Claim 24's rule before every other (r103, Q-2366): a pad-bound aircraft

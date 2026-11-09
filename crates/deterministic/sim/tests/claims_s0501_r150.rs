@@ -278,7 +278,7 @@ fn ac33_b_a_pad_bound_aircraft_in_sticky_with_no_pad_crashes() {
     assert!(g - f <= 45, "within 45 ticks of cruise height: {f} {g}");
 }
 
-// spec: S-0501 claim 29 (r150: one that a pad grants contact at that processing turns toward that pad, with enter queued, sticky still current); scenario AC33 part c; design: Q-2802 question 2 (interim: what follows that processing is our engine's rules as they stand)
+// spec: S-0501 claim 29 (r150: one that a pad grants contact at that processing turns toward that pad, with enter queued, sticky still current); scenario AC33 part c; claim 29 (r167, Q-2802: a contact held at cruise height, each later processing at that height is the fall-back again, which keeps the contact and the pad as destination with enter queued)
 #[test]
 fn ac33_c_with_a_pad_it_gets_the_pad_and_its_contact() {
     let (mut w, a, _, k) = ordered("BOUND", Behaviour::Sticky, true);
@@ -304,7 +304,7 @@ fn ac33_c_with_a_pad_it_gets_the_pad_and_its_contact() {
     }
     assert!(done, "a contact with the pad: {}", describe(&w, a));
     assert!(!air::crashing(&w, a), "no crash");
-    // design: Q-2802 (question 2, interim: the processings that follow at cruise height run the fall-back again, which keeps the contact, the pad as its destination and enter queued)
+    // spec: S-0501 claim 29 (r167, Q-2802: with that pad the only one of its dock types that accepts it, the pad confirms: the aircraft keeps the contact and the pad as destination, with enter queued; the moment with no destination leaves nothing but its draws)
     let mut later = 0;
     for _ in 0..20 {
         step(&mut w);
