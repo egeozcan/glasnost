@@ -1,9 +1,9 @@
 ---
 id: Q-2896
 title: The retry delay of a walker given the destination it already holds
-status: open
+status: answered
 related: [S-0209, S-0212, S-0208, S-0417]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need
