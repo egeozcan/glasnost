@@ -2391,18 +2391,19 @@ fn stalled_ring(w: &World, id: ObjectId) -> BTreeMap<ObjectId, CellXY> {
     for (&u, &c) in &units {
         by_cell.entry(c).or_default().push(u);
     }
-    // design: C7-P6 hold (quirks.jammed_move_dropped off: a held unit has no stored path and waits, like `id`, on every neighbour of its cell)
+    // design: C7-P6 hold (quirks.jammed_move_dropped off: a unit as the hold keeps it, blocked on a move to a cell with no stored path, waits, like `id`, on every neighbour of its cell)
     let hold = !w.rules().quirks.jammed_move_dropped;
+    let held = |u: ObjectId| hold && blocked_mover(w, u);
     let waits: BTreeMap<ObjectId, Vec<ObjectId>> = units
         .keys()
         .map(|&u| {
             // The cells it waits for: the one it heads for; for `id` with no
             // stored path (a blocked step discards it before the search),
-            // and with the hold for any unit with none, every neighbour of
-            // its cell.
+            // and with the hold for a unit as it keeps one, every neighbour
+            // of its cell.
             let cells: Vec<CellXY> = match heading_cell(w, u) {
                 Some(h) => vec![h],
-                None if u == id || hold => STEPS
+                None if u == id || held(u) => STEPS
                     .iter()
                     .map(|&(dx, dy)| CellXY::new(units[&u].x + dx, units[&u].y + dy))
                     .collect(),
@@ -2816,11 +2817,21 @@ pub fn order_given(w: &mut World, id: ObjectId) {
 // nocite: design: C7-P6 hold (our choice: the yield's longest wait, so a unit held behind a group that gives way and passes is not given up before that group has passed)
 pub const HOLD_WAIT: i32 = YIELD_WAIT;
 
-/// Whether only units stand in the way of `id`'s move (our design, C7 part
-/// 6, hold): a vehicle or infantry unit on the ground layer, on a move to a
-/// cell, for which [`shut`] finds the destination cell reached from the
-/// unit's cell when only cells holding a building, a terrain object or
-/// another object that is not a unit, or a wall overlay, are walls. False
+/// The longest a unit holds a move whose search failed for units in its
+/// way while no unit near it gives way, counted from the start of its
+/// blockage, in ticks.
+// nocite: design: C7-P6 hold (our choice: about twenty seconds of game time, time for the units in the way to stall and a deadlock's yield to start; a hold that sees no yield start by then gives up as the original does)
+pub const HOLD_FIRST: i32 = 300;
+
+/// Whether only moving units stand in the way of `id`'s move (our design,
+/// C7 part 6, hold): a vehicle or infantry unit on the ground layer, on a
+/// move to a cell, for which [`shut`] finds the destination cell reached
+/// from the unit's cell when only cells holding a building, a terrain
+/// object or another object that is not a unit, a unit with no destination
+/// (one standing, which will not move off by itself), or a wall overlay,
+/// are walls. A unit in a crowd of standing units so gives up as the
+/// original does. False when the destination cell itself holds another
+/// unit that stands or is blocked (two units that would swap cells), and
 /// when the fills cannot say ([`shut`]'s None), so the unit then gives up
 /// as the original does.
 fn jammed(w: &World, id: ObjectId) -> bool {
@@ -2839,33 +2850,63 @@ fn jammed(w: &World, id: ObjectId) -> bool {
     let Some(u) = r.unit(o.kind, o.type_index) else {
         return false;
     };
-    // design: C7-P6 hold (only units in the way: a fill that passes every unit and stops at buildings, terrain objects and walls reaches the destination cell)
+    // design: C7-P6 hold (not when the destination cell itself holds another unit that stands or is blocked: two units that would swap cells, or one whose cell is taken by a unit that will not leave, gain nothing by waiting where there is a way round, and give up as the original does)
+    if w.cells.list(goal, Layer::Ground).iter().any(|&x| {
+        x != id
+            && w.obj(x)
+                .is_some_and(|p| p.kind.is_mobile() && (p.dest.is_none() || blocked_mover(w, x)))
+    }) {
+        return false;
+    }
+    // design: C7-P6 hold (only moving units in the way: a fill that passes every unit with a destination and stops at buildings, terrain objects, standing units and walls reaches the destination cell)
     let wall = |c: CellXY| {
-        w.cells
-            .list(c, Layer::Ground)
-            .iter()
-            .any(|&x| w.obj(x).is_some_and(|p| !p.kind.is_mobile()))
-            || w.cells.cell(c).is_some_and(|cell| {
-                cell.overlay != glasnost_map::NO_OVERLAY
-                    && r.overlays
-                        .get(usize::from(cell.overlay))
-                        .is_some_and(|v| v.wall)
-            })
+        w.cells.list(c, Layer::Ground).iter().any(|&x| {
+            x != id
+                && w.obj(x)
+                    .is_some_and(|p| !p.kind.is_mobile() || p.dest.is_none())
+        }) || w.cells.cell(c).is_some_and(|cell| {
+            cell.overlay != glasnost_map::NO_OVERLAY
+                && r.overlays
+                    .get(usize::from(cell.overlay))
+                    .is_some_and(|v| v.wall)
+        })
     };
     shut(w, id, u, &wall, goal) == Some(false)
 }
 
+/// Whether unit `x` is on a move to a cell and blocked: its blockage has
+/// begun (S-0212 claim 22). Our design, C7 part 6, hold.
+fn blocked_mover(w: &World, x: ObjectId) -> bool {
+    w.obj(x).is_some_and(|o| {
+        o.beh.current == Some(Behaviour::Move)
+            && matches!(o.dest, Some(Target::Cell(_)))
+            && o.path.blocked_since.is_some()
+    })
+}
+
 /// Whether `id`'s failed search is held instead of given up (our design,
-/// C7 part 6, hold; `quirks.jammed_move_dropped` off): only units stand in
-/// its way ([`jammed`]) and its blockage has not lasted [`HOLD_WAIT`].
+/// C7 part 6, hold; `quirks.jammed_move_dropped` off): only moving units
+/// stand in its way ([`jammed`]), the failure would give the move up
+/// ([`search_gives_up`]) and its blockage has not lasted [`HOLD_FIRST`],
+/// or, while a unit within [`YIELD_RADIUS`] of it gives way, [`HOLD_WAIT`].
 fn holds(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    // design: C7-P6 hold (held while blocked for less than the longest hold)
-    !w.rules().quirks.jammed_move_dropped
-        && o.path
-            .blocked_since
-            .is_none_or(|b| w.tick.wrapping_sub(b) < HOLD_WAIT)
-        && jammed(w, id)
+    // design: C7-P6 hold (only a failure that gives the move up: one that does not takes the original's way, the nearest reachable cell of C7-P4 among it)
+    if w.rules().quirks.jammed_move_dropped || !search_gives_up(w, id) {
+        return false;
+    }
+    let blocked = o.path.blocked_since.map_or(0, |b| w.tick.wrapping_sub(b));
+    // design: C7-P6 hold (held while blocked for less than the first hold; after it, up to the longest hold, only while a unit within the yield's reach gives way, so a unit waiting behind a yield is not given up before the other side has passed, and one in a crowd no yield settles gives up as the original does)
+    let here = o.pos.cell();
+    let yield_near = || {
+        w.objects.values().any(|p| {
+            p.path.yielding.is_some() && p.on_map && {
+                let c = p.pos.cell();
+                (c.x - here.x).abs().max((c.y - here.y).abs()) <= YIELD_RADIUS
+            }
+        })
+    };
+    (blocked < HOLD_FIRST || (blocked < HOLD_WAIT && yield_near())) && jammed(w, id)
 }
 
 /// One path computation of [`compute_untraced`].
@@ -3288,6 +3329,22 @@ pub fn keep_delay(w: &mut World, id: ObjectId, held: Option<i32>) {
     }
 }
 
+/// Whether a failed search of unit `id` gives its move up (S-0212 claim 23
+/// row 2): its destination is not within one cell of it, or it is not on a
+/// bridge deck while the destination is a bridge cell.
+fn search_gives_up(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let goal = goal_cell(w, id);
+    let near = goal.is_some_and(|g| {
+        let c = o.pos.cell();
+        (g.x - c.x).abs().max((g.y - c.y).abs()) <= 1
+    });
+    // spec: S-0212 claim 23 row 2 (or not on a bridge deck while the destination is a bridge cell)
+    let off_deck = o.layer != Layer::Deck && goal.is_some_and(|g| w.high_bridge(g));
+    // spec: S-0212 claim 23 row 2 (a unit gives up when its destination is not within one cell of it)
+    !near || off_deck
+}
+
 /// What follows a failed path computation (S-0212 claims 21 and 23).
 /// `repath`: the computation was a re-path for a blocked step.
 pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
@@ -3316,13 +3373,6 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             }
         }
         Search::SearchFailed => {
-            let goal = goal_cell(w, id);
-            let near = goal.is_some_and(|g| {
-                let c = o.pos.cell();
-                (g.x - c.x).abs().max((g.y - c.y).abs()) <= 1
-            });
-            // spec: S-0212 claim 23 row 2 (or not on a bridge deck while the destination is a bridge cell)
-            let off_deck = o.layer != Layer::Deck && goal.is_some_and(|g| w.high_bridge(g));
             // spec: S-0212 claim 23 row 2 and Departure D5 (guard for a human-controlled owner, AI houses included; the neutral and special houses keep area guard)
             let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
             let give_up = if human {
@@ -3330,7 +3380,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             } else {
                 Behaviour::AreaGuard
             };
-            let gives_up = !near || off_deck;
+            let gives_up = search_gives_up(w, id);
             // design: C7-P6 hold (quirks.jammed_move_dropped off: a move that would be given up while only units stand in its way is kept; the unit stops, counts as blocked from now if it was not, and searches again after the retry delay)
             if gives_up && holds(w, id) {
                 if let Some(ob) = w.obj_mut(id) {

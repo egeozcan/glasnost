@@ -166,10 +166,9 @@ fn diag() {
                 What::GaveWay { .. } | What::Resumed | What::GaveUp | What::Failed { .. }
             ) {
                 let i = ids.iter().position(|&x| x == e.unit);
-                let at = s
-                    .w
-                    .obj(e.unit)
-                    .map(|o| (o.pos.cell(), o.dest, o.beh.current));
+                let at =
+                    s.w.obj(e.unit)
+                        .map(|o| (o.pos.cell(), o.dest, o.beh.current));
                 println!("{} unit {i:?} {:?} at {at:?}", e.tick, e.what);
             }
             if e.unit == watch && t < 1200 {
@@ -361,10 +360,10 @@ fn hold_off_clears_passages_one_cell_wide() {
     }
 }
 
-// design: C7-P6 hold (the hold is bounded: without the yield a held unit gives its move up as the original does once blocked for the longest hold)
+// design: C7-P6 hold (the hold is bounded: without the yield no unit near gives way, and a held unit gives its move up as the original does once blocked for the first hold)
 #[test]
-fn hold_off_alone_gives_up_after_the_longest_hold() {
-    use glasnost_sim::path::HOLD_WAIT;
+fn hold_off_alone_gives_up_after_the_first_hold() {
+    use glasnost_sim::path::HOLD_FIRST;
     use glasnost_sim::trace::{self, What};
     let mut s = narrow_rooms(off(&["jammed_move_dropped"]), 3, false, 7);
     trace::switch_on(&mut s.w);
@@ -387,7 +386,10 @@ fn hold_off_alone_gives_up_after_the_longest_hold() {
     }
     assert!(!held.is_empty(), "a move is held");
     for (u, (first, last)) in held {
-        assert!(last < first + HOLD_WAIT, "{u:?} held from {first} to {last}");
+        assert!(
+            last < first + HOLD_FIRST,
+            "{u:?} held from {first} to {last}"
+        );
     }
     assert!(gave_up > 0, "the held moves are given up in the end");
 }
