@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 13
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
+approved-on: 2026-11-10
 measurements: []
-requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990, Q-2712]
+requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990, Q-2712, Q-2926, Q-2927]
 supersedes: []
 ---
 
@@ -89,14 +89,41 @@ Neighbouring specs own the rest:
    destruction normally prevents such an arrival.
    This test is the "can garrison" test of S-0214 row I8 and the occupiable-building test that
    S-0215 names in its Terms.
-   - Backing: `measurable` (scenarios G1 and G2) for owner, type, capacity, damage, sale and
-     mind control. The build-up, unusable-centre and erasure gates are `unmeasured`: no data-only
-     fixture is established that delivers an already ordered entrant during those states, rather
-     than merely having the cursor reject its order. Over-capacity and non-positive-health
-     arrivals are also `unmeasured`: no validated fixture establishes either arrival state.
-     G1's negative-capacity variant distinguishes equality from an upper-bound test.
+
+   **Units on their way count for nothing.** The count compared is that of the occupants inside.
+   No place is held for a unit that has the building as target or destination, so any number of
+   units may hold the same building at once, and those that arrive after it is full are refused
+   (claim 4). This holds wherever another spec applies this test: S-0309 claim 25 part (e), and
+   S-0215 claims 23 and 27.
+
+   **"May occupy" in other specs.** Where S-0215 claims 23 and 27 ask whether an infantry unit
+   "may occupy" a building, the test is this claim's for a unit of an occupier type, and claim
+   14's assault eligibility for a unit of an assaulter type that is not an occupier type. It is
+   never met by a type with neither mark. The condition belongs to the occupier and assaulter
+   alternatives of those claims: an infiltrator type takes the target as destination and is forced
+   into *capture* whatever this test gives. S-0309 claim 25 part (e) asks it only of a searcher of
+   an occupier type, so an assaulter type that is not an occupier type never passes that
+   alternative. Part (e) has no behaviour condition: whichever of S-0309's searches runs first, in
+   whatever behaviour, may pick the building as target. A queued behaviour runs no search, so for
+   a unit whose *hunt* is queued and not yet current, the search that picks the building is one of
+   its current behaviour. In *area guard* that is area guard's own search in its processing
+   (S-0215 claim 26), or the attack-move search when the unit carries that memory (S-0215 claim
+   33); the opportunity search of S-0215 claim 33 does not run in *area guard*.
+   - Backing: `measurable` (scenarios G1 and G2) for owner, type, capacity, damage, sale and mind
+     control, and (scenario G21) for units on their way. The meaning of "may occupy" for an
+     assaulter type and the infiltrator alternative are `unmeasured`: no scenario here gives a
+     computer-controlled assaulter or infiltrator an attack or hunt on a building that fails this
+     test. Which search picks the building for a unit with a queued *hunt* is `unmeasured` here: no
+     scenario of this spec gives a unit in *area guard* a queued *hunt*, and S-0215 claims 26 and 33
+     carry their own backing for the searches they name. The build-up, unusable-centre and erasure
+     gates are `unmeasured`: no data-only fixture is established that delivers an already ordered
+     entrant during those states, rather than merely having the cursor reject its order.
+     Over-capacity and non-positive-health arrivals are also `unmeasured`: no validated fixture
+     establishes either arrival state. G1's negative-capacity variant distinguishes equality from an
+     upper-bound test.
    - Confidence: high (owner, capacity, badly damaged, sale, mind control); medium (built up,
-     usable area, being erased)
+     usable area, being erased, units on their way, "may occupy" in other specs, the search for a
+     unit with a queued *hunt*)
 
 2. **When an entry is attempted.** An infantry unit of an occupier type or an assaulter type tries
    to enter when it arrives at the end of a walking step (S-0208 claim 22) in a cell that holds a
@@ -124,9 +151,27 @@ Neighbouring specs own the rest:
 
 4. **Refusal.** When the attempt fails the test, the unit has its destination cleared and receives a
    scatter request whose threat point is the building's centre, forced and move-anywhere (S-0208
-   claims 11 to 13), as an engineer refusal does (S-0509 claim 4). It stays on the map.
-   - Backing: `measurable` (scenarios G1 and G2)
-   - Confidence: high
+   claims 11 to 13), as an engineer refusal does (S-0509 claim 4). It stays on the map. The
+   refusal does not change its target.
+
+   **No hunt after a refusal (original only).** For a unit of a computer-controlled owner, a
+   *hunt* current or queued when *capture* was forced on it was removed by that force (S-0215
+   claim 9). Capture's hunt rule (S-0215 claim 28) leaves out every unit of an occupier type by
+   its type alone, whether it was refused, lost its target on the way or never set out.
+   An assaulter type that is not an occupier type is not left out. None of S-0215's rules for
+   *capture*, *attack* and the fall-back to rest (claims 14, 23 and 28) gives an occupier-type unit
+   *hunt*, so a refused occupier-type unit does not go back to *hunt* by any of them. The force does
+   not touch a suspended *hunt* (S-0215 claims 9 and 10): a unit whose *hunt* an override such as
+   a retaliation had suspended can have it made current again by a later revert. A new order, a
+   map action or another spec's rule (a berserk hit, S-0610 claim 4, for example) can also give
+   *hunt*. What a refused unit does after the scatter request is not
+   given here (Open questions).
+   - Backing: `measurable` (scenarios G1 and G2) for the destination, the scatter request and the
+     unit staying on the map, and (scenario G21) for the absence of *hunt*. The unchanged target is
+     `unmeasured`: in a computer-controlled owner's run other rules can change the target in the
+     refusal tick (S-0309 claim 25), and no setup here separates them from the refusal.
+   - Confidence: high (destination, scatter request, staying on the map); medium (unchanged
+     target, no *hunt*)
 
 5. **Going inside.** An occupier type that passes the test leaves the map at once, in the same tick,
    and is added at the end of the building's occupant list. It is not used up: it keeps its owner,
@@ -1110,6 +1155,35 @@ search, made for *A*, take the enemy vehicle and leave *B* holding it then. Fals
 *B* at any of the three units, or by *B* holding a target at the end of the turn of its owner
 change.
 
+**G21. Refused computer-controlled occupiers (claims 1 and 4, Q-2926).** Setup: a tiny skirmish map
+with one empty civilian building of imported capacity *c* and two test-only computer-controlled
+player houses *C* and *D*, enemies of each other, in place of the bystander *B*; *A* only watches,
+far from both. *C* has *c* + 2 armed units of one stock occupier type, side by side a few cells from
+the building, and *D* a single armed unit of its own several cells beyond it, on the far side from
+*C*, whose weapons have no berserk effect. Procedure: a map trigger gives *C* the house-wide hunt
+action (claim 13) once, at a fixed early tick. Record, each tick and for each unit of *C*: its
+current, queued and suspended behaviours, target, destination, position, every order or map action
+it receives, every hit it takes, every override and revert (S-0215 claim 10), and its entry or
+refusal tick; record the occupant count and the building's health. A run is valid when at least *c*
++ 1 of *C*'s units have *capture* forced with the building as destination. A valid run is a race run
+when it has a tick at which the units of *C* on the map with the building as destination outnumber
+its free places (*c* minus the count inside); occupants are not counted, whatever destination they
+still record. A run is void when any unit of *C* receives an order or map action other than the one
+hunt action (from *C*'s own computer player, for example), when a unit of *C* takes a berserk hit,
+or when the building's health falls below its value at the start. *C*'s computer player may void
+many runs: repeat until 10 runs are valid, and on until 3 are race runs or 30 runs are valid.
+M-0001's arena set-up (side *B*), as Q-2926 proposes, may stand in for this map when its record
+gives the same quantities under the same void conditions. Expected: an arrival is refused only while
+the count inside is *c*. A race run is the outcome for units on their way: more units are bound for
+the building than it has free places, which a place held for each unit on its way would not allow.
+Race runs alone test that part; with no race run, it is inconclusive, not falsified. From the tick
+at which *capture* is forced on a unit, that unit has *hunt* current or queued again only when a
+revert makes a suspended *hunt* current, whether it was refused, lost its target on the way or never
+arrived. Falsified by a refusal while fewer than *c* units are inside, or by *hunt* current or
+queued for a unit of *C* on the map after *capture* was forced on that unit other than by such a
+revert. The behaviours after each refusal are recorded for the open question on them; after a
+refusal only the falsifier on *hunt* above is tested.
+
 ## Open questions
 
 - Q-0660's original index questions are answered by claims 18 and 19; the corresponding
@@ -1127,8 +1201,17 @@ change.
   without a configured-point-count modulus or participation by the firing index for supported
   original positions. Q-0990 is answered by claim 25's engine-only point i mod 10 for positions
   10 or later. The unsafe original result stays unmeasured; no lead decision is pending.
+- Q-2926 is answered by claims 1 and 4 (units on their way, the searches of S-0309 claim 25 part
+  (e), the unchanged target and no *hunt* after a refusal), and Q-2927 by claim 1 ("may occupy"
+  in other specs).
 - Whether any skirmish cause other than map action code 6 and the original's computer player
   sends the house-wide hunt order of claim 13.
+- What a refused unit does after claim 4's scatter request while it keeps the building as target.
+  While an accepted request's destination is held, S-0215 claim 28's third row changes nothing. When
+  the unit refuses the request, or the request gives it no destination (S-0208 claims 11 to 13), the
+  first row gives it the building as destination again at its next *capture* processing. What
+  follows once a scatter destination is reached, and whether and how often the unit walks back to
+  the building, is not established here. G21 records it.
 
 ## Cross-spec changes required
 
