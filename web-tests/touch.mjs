@@ -153,7 +153,10 @@ try {
     `a pixel wheel over the battlefield pans with the content: ${before} -> ${after}`);
 
   // A one-finger drag: from the middle 80 left and 50 up; the content
-  // follows the finger, so the centre moves right 80 and down 50.
+  // follows the finger, so the centre moves right 80 and down 50. The
+  // canvas is blurred first, as after the folder picker: the touch itself
+  // must give the game the focus its pans need.
+  await page.evaluate(() => document.querySelector("canvas").blur());
   await page.waitForTimeout(600);
   before = await view();
   const s = { x: middle.x, y: middle.y, id: 4 };
