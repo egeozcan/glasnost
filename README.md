@@ -64,7 +64,7 @@ Sound starts with your first click or key press, since browsers only allow sound
 
 `--game-dir` is needed on the desktop. Without it, the **Game folder** button on the menu only tells you to start again with it.
 
-**What is tested.** The desktop version is built and played on Linux, with sound and music on the system's default output device. Windows and macOS builds are untested. They should work, sound included, but nobody has tried them yet. If no sound device can be opened, the game runs silent, says why in its log, and marks the volume rows in **Settings** "(no sound)". To build without sound, and without the sound library, add `--no-default-features` after `-p glasnost-platform-native`.
+**What is tested.** The desktop version is built and played on Linux, with sound and music on the system's default output device. Windows and macOS builds are untested. They should work, sound included, but nobody has tried them yet. If no sound device can be opened, the game runs silent, says why in its log, and, once a game has started, marks the volume rows in **Settings** "(no sound)". To build without sound, and without the sound library, add `--no-default-features` after `-p glasnost-platform-native`.
 
 ## Playing
 
