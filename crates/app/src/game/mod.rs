@@ -21,6 +21,7 @@
 //! - [`captions`]: captions for announcements (M8 step C3).
 //! - [`bot`]: a person played by our AI over the relay (M9 N6, the soak).
 //! - [`bench`]: the performance benchmark (M8 step C4).
+//! - [`touch`]: touch gestures and touchpad swipes (our own addition).
 
 pub mod band;
 pub mod bench;
@@ -44,6 +45,7 @@ pub mod sidebar_art;
 pub mod sidebar_tip;
 pub mod status_font;
 pub mod strings;
+pub mod touch;
 pub mod window;
 
 pub use glasnost_net::desync::Perturb;
