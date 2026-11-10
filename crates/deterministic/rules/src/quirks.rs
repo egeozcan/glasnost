@@ -448,13 +448,16 @@ pub struct Quirks {
     #[serde(default = "on")]
     pub deadlock_no_yield: bool,
     /// A move whose search fails gives up (the original). Off (our design,
-    /// C7 part 6, hold): when only units stand in the way (a fill from the
-    /// unit to its destination cell through its own reach region, past
-    /// units and stopped only by buildings, terrain objects and walls,
-    /// reaches it), the unit keeps its destination, counts as blocked and
-    /// searches again after the retry delay, so a deadlock in a passage with
-    /// no way round can form and give way (`deadlock_no_yield` off); after a
-    /// longest hold it gives up as the original does.
+    /// C7 part 6, hold): when the failure would give the move up and only
+    /// moving units stand in the way (a fill from the unit to its
+    /// destination cell through its own reach region, past units with a
+    /// destination and stopped by buildings, terrain objects, standing
+    /// units and walls, reaches it, and the destination cell holds no
+    /// standing or blocked unit), the unit keeps its destination, counts as
+    /// blocked and searches again after the retry delay, so a deadlock in a
+    /// passage with no way round can form and give way (`deadlock_no_yield`
+    /// off). It gives up as the original does once blocked for a first hold
+    /// with no unit near it giving way, or for a longest hold.
     // spec: S-0212 claim 23 (the failed search's give-up; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub jammed_move_dropped: bool,

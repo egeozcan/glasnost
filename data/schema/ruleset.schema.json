@@ -9811,7 +9811,7 @@
           "default": true
         },
         "jammed_move_dropped": {
-          "description": "A move whose search fails gives up (the original). Off (our design,\nC7 part 6, hold): when only units stand in the way (a fill from the\nunit to its destination cell through its own reach region, past\nunits and stopped only by buildings, terrain objects and walls,\nreaches it), the unit keeps its destination, counts as blocked and\nsearches again after the retry delay, so a deadlock in a passage with\nno way round can form and give way (`deadlock_no_yield` off); after a\nlongest hold it gives up as the original does.",
+          "description": "A move whose search fails gives up (the original). Off (our design,\nC7 part 6, hold): when the failure would give the move up and only\nmoving units stand in the way (a fill from the unit to its\ndestination cell through its own reach region, past units with a\ndestination and stopped by buildings, terrain objects, standing\nunits and walls, reaches it, and the destination cell holds no\nstanding or blocked unit), the unit keeps its destination, counts as\nblocked and searches again after the retry delay, so a deadlock in a\npassage with no way round can form and give way (`deadlock_no_yield`\noff). It gives up as the original does once blocked for a first hold\nwith no unit near it giving way, or for a longest hold.",
           "type": "boolean",
           "default": true
         },
