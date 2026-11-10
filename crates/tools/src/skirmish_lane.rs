@@ -3059,7 +3059,8 @@ const TEMPO_AT: [i32; 3] = [10_000, 20_000, 30_000];
 /// The diagnostic of `GLASNOST_AI_TEMPO` (M8 step C7 part 6): per house,
 /// the income and army at [`TEMPO_AT`] and at the end, and what movement
 /// cost. Per class of unit (harvesters, army units, and army units on their
-/// first trip from the factory, until they first stand with no destination)
+/// first trip from the factory, until they first stand with no destination
+/// after having one)
 /// the unit-ticks with a destination and the stuck ones among them (on the
 /// same cell for the blockage delay or longer); the give-ups, failed
 /// computations, searches and give-ways of the movement trace; the
@@ -3074,7 +3075,10 @@ struct Tempo {
     /// Army units released during the game: the tick each was first seen
     /// on the map, until its first rest.
     trip: BTreeMap<glasnost_sim::world::ObjectId, i32>,
-    /// Army units that have rested since their release.
+    /// Army units on their first trip that have had a destination.
+    sent: BTreeSet<glasnost_sim::world::ObjectId>,
+    /// Army units that have rested since their release, after a
+    /// destination.
     rested: BTreeSet<glasnost_sim::world::ObjectId>,
     to_rest: [Vec<i32>; PLAYERS],
     earned_at: [Vec<i64>; PLAYERS],
@@ -3184,12 +3188,15 @@ impl Tempo {
                 } else {
                     o.beh.current == Some(glasnost_sim::rules::Behaviour::Move)
                 };
+            if k == 2 && o.dest.is_some() {
+                self.sent.insert(o.id);
+            }
             if going {
                 self.moving[h][k] += 1;
                 if w.tick.wrapping_sub(since) >= delay {
                     self.stuck[h][k] += 1;
                 }
-            } else if k == 2 && o.dest.is_none() {
+            } else if k == 2 && o.dest.is_none() && self.sent.contains(&o.id) {
                 self.rested.insert(o.id);
                 if let Some(&t0) = self.trip.get(&o.id) {
                     self.to_rest[h].push(w.tick - t0);
