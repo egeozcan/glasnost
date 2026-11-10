@@ -425,6 +425,8 @@ struct Game {
     /// AI's games): per house its objects by kind, the resource left on the
     /// map and the brain's own diagnostic.
     diagnosis: Vec<String>,
+    /// The lines of `GLASNOST_AI_TEMPO` (M8 step C7 part 6), one per house.
+    tempo: Vec<String>,
     replay_ms: u128,
     replay_matches: bool,
     save_matches: bool,
@@ -890,6 +892,14 @@ fn play_ai(
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
     let starting: BTreeSet<u32> = game.world.objects.keys().map(|id| id.0).collect();
+    // `GLASNOST_AI_TEMPO=1` (M8 step C7 part 6): per house, income and army
+    // at fixed ticks and what movement cost (stuck unit-ticks, give-ups,
+    // the time from a unit's release to its first rest). It switches the
+    // movement trace on, which never changes the game (`glasnost_sim::trace`).
+    let mut tempo = std::env::var_os("GLASNOST_AI_TEMPO").map(|_| Tempo::default());
+    if tempo.is_some() {
+        glasnost_sim::trace::switch_on(&mut game.world);
+    }
     // The house of a sweep seen in this tick's effects, and the objects of
     // other houses the last launch's preview would take.
     let mut swept_by: Option<HouseId> = None;
@@ -967,6 +977,9 @@ fn play_ai(
         tally.observe(w);
         occasions(w, &mut g.occasions);
         features(w, &mut g.features);
+        if let Some(t) = tempo.as_mut() {
+            t.observe(w, &starting);
+        }
         if econ_every > 0 {
             econ.observe(w);
             if w.tick % econ_every == 0 {
@@ -1259,6 +1272,9 @@ fn play_ai(
     }
     if !g.over {
         g.diagnosis = diagnosis(&game);
+    }
+    if let Some(t) = &tempo {
+        g.tempo = t.report();
     }
     let end = game.state_hash();
     if std::env::var_os("GLASNOST_AI_QUICK").is_some() {
@@ -3036,6 +3052,195 @@ impl EconTrace {
     }
 }
 
+/// The ticks at which `GLASNOST_AI_TEMPO` notes each house's income and
+/// army (our own diagnostic, M8 step C7 part 6).
+const TEMPO_AT: [i32; 3] = [10_000, 20_000, 30_000];
+
+/// The diagnostic of `GLASNOST_AI_TEMPO` (M8 step C7 part 6): per house,
+/// the income and army at [`TEMPO_AT`] and at the end, and what movement
+/// cost. Per class of unit (harvesters, army units, and army units on their
+/// first trip from the factory, until they first stand with no destination)
+/// the unit-ticks with a destination and the stuck ones among them (on the
+/// same cell for the blockage delay or longer); the give-ups, failed
+/// computations, searches and give-ways of the movement trace; the
+/// harvesters' give-ups within 4 cells of a refinery of their house that
+/// another object is in contact with (a busy dock); and the ticks from a
+/// unit's release to its first rest. Counts only.
+#[derive(Default)]
+struct Tempo {
+    econ: EconTrace,
+    /// Per unit: its cell and the tick it entered it.
+    cells: BTreeMap<glasnost_sim::world::ObjectId, (glasnost_map::CellXY, i32)>,
+    /// Army units released during the game: the tick each was first seen
+    /// on the map, until its first rest.
+    trip: BTreeMap<glasnost_sim::world::ObjectId, i32>,
+    /// Army units that have rested since their release.
+    rested: BTreeSet<glasnost_sim::world::ObjectId>,
+    to_rest: [Vec<i32>; PLAYERS],
+    earned_at: [Vec<i64>; PLAYERS],
+    army_at: [Vec<usize>; PLAYERS],
+    moving: [[u64; 3]; PLAYERS],
+    stuck: [[u64; 3]; PLAYERS],
+    give_ups: [[u32; 3]; PLAYERS],
+    dock_give_ups: [u32; PLAYERS],
+    failed: [u32; PLAYERS],
+    searches: [u32; PLAYERS],
+    gave_way: [u32; PLAYERS],
+    tick: i32,
+}
+
+impl Tempo {
+    /// The class of `o`: 0 harvester, 1 army, 2 army on its first trip.
+    fn class(&self, w: &World, o: &glasnost_sim::world::Object) -> Option<usize> {
+        if o.econ.harvest.is_some() {
+            return Some(0);
+        }
+        (role_of(w, tech::type_of(o)) == Some(Role::Army)).then(|| {
+            if self.trip.contains_key(&o.id) && !self.rested.contains(&o.id) {
+                2
+            } else {
+                1
+            }
+        })
+    }
+
+    fn house(o: &glasnost_sim::world::Object) -> Option<usize> {
+        o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS)
+    }
+
+    /// Whether harvester `id` stands within 4 cells of a refinery of its
+    /// house that another object is in contact with.
+    fn at_busy_dock(w: &World, id: glasnost_sim::world::ObjectId) -> bool {
+        let Some(o) = w.obj(id) else { return false };
+        let c = o.pos.cell();
+        w.objects.values().any(|r| {
+            r.kind == Kind::Building
+                && r.owner == o.owner
+                && role_of(w, tech::type_of(r)) == Some(Role::Refinery)
+                && {
+                    let rc = r.pos.cell();
+                    (rc.x - c.x).abs().max((rc.y - c.y).abs()) <= 4
+                }
+                && w
+                    .objects
+                    .values()
+                    .any(|x| x.id != id && x.contact == Some(r.id))
+        })
+    }
+
+    fn observe(&mut self, w: &World, starting: &BTreeSet<u32>) {
+        use glasnost_sim::trace::What;
+        self.econ.observe(w);
+        self.tick = w.tick;
+        for e in glasnost_sim::trace::take(w) {
+            let Some(o) = w.obj(e.unit) else { continue };
+            let (Some(h), Some(k)) = (Self::house(o), self.class(w, o)) else {
+                continue;
+            };
+            let gave_up = match e.what {
+                What::Search { .. } => {
+                    self.searches[h] += 1;
+                    false
+                }
+                What::Failed { gave_up, .. } => {
+                    self.failed[h] += 1;
+                    gave_up
+                }
+                What::GaveUp => true,
+                What::GaveWay { .. } => {
+                    self.gave_way[h] += 1;
+                    false
+                }
+                _ => false,
+            };
+            if gave_up {
+                self.give_ups[h][k] += 1;
+                if k == 0 && Self::at_busy_dock(w, e.unit) {
+                    self.dock_give_ups[h] += 1;
+                }
+            }
+        }
+        let delay = w.rules().general.blockage_delay;
+        let mut cells = BTreeMap::new();
+        let mut army = [0usize; PLAYERS];
+        for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
+            let Some(h) = Self::house(o) else { continue };
+            if !starting.contains(&o.id.0) && role_of(w, tech::type_of(o)) == Some(Role::Army) {
+                self.trip.entry(o.id).or_insert(w.tick);
+            }
+            let Some(k) = self.class(w, o) else { continue };
+            if k > 0 {
+                army[h] += 1;
+            }
+            let c = o.pos.cell();
+            let since = match self.cells.get(&o.id) {
+                Some(&(p, t)) if p == c => t,
+                _ => w.tick,
+            };
+            cells.insert(o.id, (c, since));
+            let going = o.dest.is_some()
+                && if k == 0 {
+                    o.contact.is_none()
+                } else {
+                    o.beh.current == Some(glasnost_sim::rules::Behaviour::Move)
+                };
+            if going {
+                self.moving[h][k] += 1;
+                if w.tick.wrapping_sub(since) >= delay {
+                    self.stuck[h][k] += 1;
+                }
+            } else if k == 2 && o.dest.is_none() {
+                self.rested.insert(o.id);
+                if let Some(&t0) = self.trip.get(&o.id) {
+                    self.to_rest[h].push(w.tick - t0);
+                }
+            }
+        }
+        self.cells = cells;
+        if TEMPO_AT.contains(&w.tick) {
+            for (h, n) in army.iter().enumerate() {
+                self.earned_at[h].push(self.econ.earned[h]);
+                self.army_at[h].push(*n);
+            }
+        }
+    }
+
+    fn report(&self) -> Vec<String> {
+        (0..PLAYERS)
+            .map(|h| {
+                let mut rest = self.to_rest[h].clone();
+                rest.sort_unstable();
+                let per_mille = |k: usize| self.stuck[h][k] * 1000 / self.moving[h][k].max(1);
+                format!(
+                    "house {h}: earned at {TEMPO_AT:?} {:?}, at the end (tick {}) {}; army on the map at {TEMPO_AT:?} {:?}; unit-ticks moving and stuck (per mille): harvesters {} {} ({}), army {} {} ({}), first trip {} {} ({}); release to first rest: {} units, median {}; give-ups: harvesters {} (at a busy dock {}), army {}, first trip {}; failed {}, searches {}, gave way {}",
+                    self.earned_at[h],
+                    self.tick,
+                    self.econ.earned[h],
+                    self.army_at[h],
+                    self.moving[h][0],
+                    self.stuck[h][0],
+                    per_mille(0),
+                    self.moving[h][1],
+                    self.stuck[h][1],
+                    per_mille(1),
+                    self.moving[h][2],
+                    self.stuck[h][2],
+                    per_mille(2),
+                    rest.len(),
+                    rest.get(rest.len() / 2).map_or("-".to_string(), |v| v.to_string()),
+                    self.give_ups[h][0],
+                    self.dock_give_ups[h],
+                    self.give_ups[h][1],
+                    self.give_ups[h][2],
+                    self.failed[h],
+                    self.searches[h],
+                    self.gave_way[h],
+                )
+            })
+            .collect()
+    }
+}
+
 fn line_changes(
     w: &World,
     h: HouseId,
@@ -3727,6 +3932,9 @@ fn report(
         }
         for line in &g.diagnosis {
             let _ = writeln!(s, "  diagnosis: {line}");
+        }
+        for line in &g.tempo {
+            let _ = writeln!(s, "  tempo: {line}");
         }
         if g.checks_skipped {
             let _ = writeln!(s, "  replay and save checks skipped (GLASNOST_AI_QUICK)");
