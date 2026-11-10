@@ -19,10 +19,11 @@ mod pathing_common;
 
 use pathing_common::*;
 
-/// Our switches (C7 parts 4 and 5), each defaulting to the original.
-const DESIGN: [&str; 6] = [
+/// Our switches (C7 parts 4 to 6), each defaulting to the original.
+const DESIGN: [&str; 7] = [
     "path_through_stalled_blockers",
     "deadlock_no_yield",
+    "jammed_move_dropped",
     "unreachable_move_dropped",
     "group_spread_no_detour",
     "rally_point_shared",
@@ -48,6 +49,8 @@ fn cost() {
             "layer, stalled blockers on",
             layer_without(&["path_through_stalled_blockers", "deadlock_no_yield"]),
         ),
+        // design: C7-P6 hold (the layer without the hold, for its tick cost)
+        ("layer, no hold", layer_without(&["jammed_move_dropped"])),
     ];
     println!(
         "| Scenario | {} ns/tick |",
@@ -55,7 +58,7 @@ fn cost() {
     );
     let names: Vec<&str> = all(Rules::Reference, 7).iter().map(|s| s.name).collect();
     for (i, name) in names.iter().enumerate() {
-        let mut best = [u128::MAX; 4];
+        let mut best = [u128::MAX; 5];
         for _ in 0..rounds {
             for (k, (_, r)) in sets.iter().enumerate() {
                 let s = all(*r, 7).swap_remove(i);
@@ -66,8 +69,8 @@ fn cost() {
             }
         }
         println!(
-            "| {name} | {} | {} | {} | {} |",
-            best[0], best[1], best[2], best[3]
+            "| {name} | {} | {} | {} | {} | {} |",
+            best[0], best[1], best[2], best[3], best[4]
         );
     }
 }
@@ -163,7 +166,11 @@ fn diag() {
                 What::GaveWay { .. } | What::Resumed | What::GaveUp | What::Failed { .. }
             ) {
                 let i = ids.iter().position(|&x| x == e.unit);
-                println!("{} unit {i:?} {:?}", e.tick, e.what);
+                let at = s
+                    .w
+                    .obj(e.unit)
+                    .map(|o| (o.pos.cell(), o.dest, o.beh.current));
+                println!("{} unit {i:?} {:?} at {at:?}", e.tick, e.what);
             }
             if e.unit == watch && t < 1200 {
                 match &e.what {
@@ -334,6 +341,77 @@ fn yield_off_leaves_queues_and_the_reference_alone() {
     }
 }
 
+// spec: S-0212 claim 23 (the original: units that meet nose to nose in a passage one cell wide fail their searches and give their moves up, and the layer of parts 4 and 5 finds no deadlock among units with no destination); design: C7-P6 hold and three ways (off: the moves are held, the deadlock forms and gives way, and every unit arrives, three groups at one crossing among them)
+#[test]
+fn hold_off_clears_passages_one_cell_wide() {
+    let held = layer_without(&["jammed_move_dropped"]);
+    for scene in [
+        |r, s| three_ways(r, 3, s),
+        |r, s| narrow_rooms(r, 3, false, s),
+        |r, s| narrow_rooms(r, 3, true, s),
+    ] as [fn(Rules, u32) -> Scene; 3]
+    {
+        let on = play(scene(held, 7));
+        let off = play(scene(Rules::Layer, 7));
+        assert_eq!(on.missing, on.units, "on: none arrives {on:?}");
+        assert!(on.open_give_ups > 0, "on: they give up {on:?}");
+        assert_eq!(off.missing, 0, "off: every unit arrives {off:?}");
+        assert_eq!(off.open_give_ups, 0, "{off:?}");
+        assert_eq!(off.unsettled, 0, "{off:?}");
+    }
+}
+
+// design: C7-P6 hold (the hold is bounded: without the yield a held unit gives its move up as the original does once blocked for the longest hold)
+#[test]
+fn hold_off_alone_gives_up_after_the_longest_hold() {
+    use glasnost_sim::path::HOLD_WAIT;
+    use glasnost_sim::trace::{self, What};
+    let mut s = narrow_rooms(off(&["jammed_move_dropped"]), 3, false, 7);
+    trace::switch_on(&mut s.w);
+    // Each unit's first and last held failure.
+    let mut held = std::collections::BTreeMap::new();
+    let mut gave_up = 0;
+    for _ in 0..s.bound {
+        glasnost_sim::tick::step(&mut s.w);
+        for e in trace::take(&s.w) {
+            match e.what {
+                What::Failed {
+                    gave_up: false,
+                    dest_cleared: false,
+                    ..
+                } => held.entry(e.unit).or_insert((e.tick, e.tick)).1 = e.tick,
+                What::Failed { gave_up: true, .. } => gave_up += 1,
+                _ => {}
+            }
+        }
+    }
+    assert!(!held.is_empty(), "a move is held");
+    for (u, (first, last)) in held {
+        assert!(last < first + HOLD_WAIT, "{u:?} held from {first} to {last}");
+    }
+    assert!(gave_up > 0, "the held moves are given up in the end");
+}
+
+// design: C7-P6 hold (only a move with units alone in its way is held: a move into a ring of buildings or onto rock fails and is given up or redirected as before)
+#[test]
+fn hold_off_leaves_unreachable_moves_alone() {
+    let held = layer_without(&["jammed_move_dropped"]);
+    for scene in [
+        |r, s| walled_in(r, 8, s),
+        |r, s| unreachable(r, 8, s),
+        |r, s| rooms(r, 6, s),
+        |r, s| corridor(r, 2, 6, s),
+    ] as [fn(Rules, u32) -> Scene; 4]
+    {
+        assert_eq!(
+            moves(&play(scene(held, 7))),
+            moves(&play(scene(Rules::Layer, 7)))
+        );
+    }
+    let (on, off) = both("jammed_move_dropped", |r, s| walled_in(r, 8, s));
+    assert_eq!(moves(&on), moves(&off));
+}
+
 // design: C7-P5 yield (the giving-way state is game state: saved, loaded and hashed)
 #[test]
 fn a_unit_giving_way_survives_save_and_load() {
@@ -375,7 +453,7 @@ fn the_giving_way_state_is_hashed() {
     assert_ne!(state_hash(&s.w), state_hash(&b));
 }
 
-// design: C7-P4 and C7-P5 (the play-fixes layer turns each of our switches off)
+// design: C7-P4, C7-P5 and C7-P6 (the play-fixes layer turns each of our switches off)
 #[test]
 fn the_layer_turns_our_switches_off() {
     let q = pathing_common::ruleset(Rules::Layer).globals.quirks;
