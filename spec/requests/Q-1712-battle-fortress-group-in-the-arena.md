@@ -1,7 +1,7 @@
 ---
 id: Q-1712
 title: What an empty BFRT group does in the arena
-status: open
+status: answered
 related: [S-0309, S-0215, S-0507, S-0210, S-0607, S-0610]
 answered-by: [M-0011, M-0015]
 ---

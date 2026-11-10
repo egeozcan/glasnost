@@ -1,7 +1,7 @@
 ---
 id: Q-1773
 title: What a deploy order leaves of a moving hover vehicle's destination point and stored path
-status: open
+status: answered
 related: [S-0213, S-0415, S-0503, S-0207]
 answered-by: [S-0503]
 ---

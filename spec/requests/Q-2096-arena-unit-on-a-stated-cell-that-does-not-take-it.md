@@ -1,7 +1,7 @@
 ---
 id: Q-2096
 title: Where the arena records' harness puts a unit that its stated cell does not take
-status: open
+status: answered
 related: [S-0216, S-0009, S-0209, S-0212, M-0001, M-0002, M-0003, M-0011, M-0015, M-0017]
 answered-by: [S-0216]
 ---

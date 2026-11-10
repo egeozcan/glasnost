@@ -1,7 +1,7 @@
 ---
 id: Q-2158
 title: What is a hunter that makes a fire attempt every tick and no projectile doing?
-status: open
+status: answered
 related: [S-0301, S-0310, S-0309, S-0215]
 answered-by: [S-0306]
 ---

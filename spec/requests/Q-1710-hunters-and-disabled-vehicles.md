@@ -1,7 +1,7 @@
 ---
 id: Q-1710
 title: Which disabled vehicles a hunting group leaves alone
-status: open
+status: answered
 related: [S-0405, S-0309, S-0215]
 answered-by: [M-0005, S-0405]
 ---

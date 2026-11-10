@@ -1,7 +1,7 @@
 ---
 id: Q-1711
 title: What varies from seed to seed before two placed groups first meet
-status: open
+status: answered
 related: [S-0202, S-0009, S-0215, S-0301, S-0208, S-0207]
 answered-by: [S-0216, M-0006]
 ---

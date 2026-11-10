@@ -1,7 +1,7 @@
 ---
 id: Q-2802
 title: An aircraft in sticky that reaches a pad, and one with no slowdown distance
-status: open
+status: answered
 related: [S-0501, S-0215]
 answered-by: [S-0501]
 ---

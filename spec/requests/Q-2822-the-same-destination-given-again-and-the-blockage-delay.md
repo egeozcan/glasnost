@@ -1,7 +1,7 @@
 ---
 id: Q-2822
 title: The same destination given again to a walker waiting for a moving blocker
-status: open
+status: answered
 related: [S-0209, S-0208, S-0212]
 answered-by: [S-0209]
 ---

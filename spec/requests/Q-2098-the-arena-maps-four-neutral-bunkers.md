@@ -1,7 +1,7 @@
 ---
 id: Q-2098
 title: Which objects are the four neutral bunkers of the arena records' map
-status: open
+status: answered
 related: [S-0009, S-0606, S-0508, M-0001, M-0002, M-0003, M-0011, M-0015, M-0017]
 answered-by: [S-0216]
 ---

@@ -1,7 +1,7 @@
 ---
 id: Q-1621
 title: What a marked building shows when the laser-target selector names no table position
-status: open
+status: answered
 related: [S-0519, S-0102, S-0513, S-0610]
 answered-by: [S-0519]
 ---

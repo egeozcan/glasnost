@@ -1,7 +1,7 @@
 ---
 id: Q-2113
 title: A lifter whose gripped unit comes inside its weapon's minimum range
-status: open
+status: answered
 related: [S-0607, S-0215, S-0307, M-0015, M-0001]
 answered-by: [S-0607, S-0215]
 ---

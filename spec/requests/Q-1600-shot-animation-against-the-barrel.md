@@ -1,7 +1,7 @@
 ---
 id: Q-1600
 title: Where a turreted voxel vehicle's shot animation sits against its drawn barrel
-status: open
+status: answered
 related: [S-0301, S-0313, S-0105, S-0109, S-0101]
 answered-by: [S-0313]
 ---

@@ -1,7 +1,7 @@
 ---
 id: Q-1850
 title: The lead's play report against S-0417 claims 10 and 14: infantry released with no rally point never block the factory's exit
-status: open
+status: answered
 related: [S-0417, S-0404, S-0215, Q-1757]
 answered-by: [S-0417]
 ---

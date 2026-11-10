@@ -1,7 +1,7 @@
 ---
 id: Q-2212
 title: Where does a projectile fly whose target object is a superweapon warp member that has departed?
-status: open
+status: answered
 related: [S-0513, S-0306, S-0309]
 answered-by: [S-0306]
 ---

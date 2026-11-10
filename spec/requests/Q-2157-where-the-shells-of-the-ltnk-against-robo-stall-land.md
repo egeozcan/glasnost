@@ -1,7 +1,7 @@
 ---
 id: Q-2157
 title: Why do the hunters' shells in the LTNK against ROBO stall land outside every robot tank's damage reach?
-status: open
+status: answered
 related: [S-0306, S-0301, S-0309, S-0405, S-0503]
 answered-by: [S-0306]
 ---

@@ -1,7 +1,7 @@
 ---
 id: Q-2160
 title: How do the V3 launchers beat the Magnetrons in TELE against V3 when the Magnetrons start on side A?
-status: open
+status: answered
 related: [S-0607, S-0215, S-0309, S-0506]
 answered-by: [S-0607]
 ---

@@ -1,7 +1,7 @@
 ---
 id: Q-1700
 title: How the game picks, plays and changes music tracks
-status: open
+status: answered
 related: [S-0005, S-0701]
 answered-by: [S-0703]
 ---

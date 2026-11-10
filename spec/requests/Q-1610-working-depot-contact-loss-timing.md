@@ -1,7 +1,7 @@
 ---
 id: Q-1610
 title: When a working repair depot reacts to losing its vehicle's contact
-status: open
+status: answered
 related: [S-0314, S-0108, S-0504]
 answered-by: [S-0314, S-0108, M-0007]
 ---

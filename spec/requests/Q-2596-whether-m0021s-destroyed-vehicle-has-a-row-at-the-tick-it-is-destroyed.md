@@ -1,7 +1,7 @@
 ---
 id: Q-2596
 title: Whether M-0021's destroyed vehicle still has a per-tick row at the tick it is destroyed
-status: open
+status: answered
 related: [S-0203, S-0312, S-0302]
 answered-by: [M-0021]
 ---

@@ -1,7 +1,7 @@
 ---
 id: Q-2111
 title: A steering projectile fired from a muzzle position at the surface, and absent muzzle positions
-status: open
+status: answered
 related: [S-0306, S-0313, S-0308, M-0001]
 answered-by: [S-0306, S-0313]
 ---
