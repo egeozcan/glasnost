@@ -187,9 +187,15 @@ pub struct Settings {
     pub music: u8,
     /// Scroll-speed index, [`SCROLL_RANGE`].
     pub scroll_index: i32,
-    /// Interface scale, percent, one of [`SCALES`] (lowered where the
-    /// window is too small for it: `glasnost_ui::geom::Scale::fit`).
+    /// Interface size, percent of view pixels, one of [`SCALES`] (lowered
+    /// where the view is too small for it: `glasnost_ui::geom::Scale::fit`).
+    /// It enlarges the sidebar and the menus only; the display scale
+    /// enlarges the whole picture.
     pub ui_scale: u16,
+    /// Display scale: screen pixels per view pixel for the whole game
+    /// picture, one of `game::display::CHOICES` (0 Auto, from the
+    /// display's scale factor; 1, 2 or 3 fixed).
+    pub display_scale: u8,
     /// Whether announcements are shown as captions.
     pub captions: bool,
     /// Whether house colours use our colour-blind palette (from the next
@@ -278,6 +284,8 @@ impl Default for Settings {
             scroll_index: 3,
             // nocite: our own client setting (no scaling)
             ui_scale: 100,
+            // design: readable text and display scale (lead's request 2026-11-10): Auto by default
+            display_scale: crate::game::display::AUTO,
             // nocite: our own client setting (captions shown by default)
             captions: true,
             // nocite: our own client setting (the colour-blind palette is off by default)
@@ -312,6 +320,8 @@ impl Settings {
             self.sound, self.voices, self.music
         );
         s += &format!("scroll={}\nscale={}\n", self.scroll_index, self.ui_scale);
+        // design: readable text and display scale (lead's request 2026-11-10): `display=auto`, `1`, `2` or `3`; a file without it reads as Auto
+        s += &format!("display={}\n", self.display_label());
         s += &format!(
             "captions={}\ncolour_blind={}\n",
             u8::from(self.captions),
@@ -368,6 +378,16 @@ impl Settings {
                     if let Some(n) = num().filter(|n| SCALES.iter().any(|x| i64::from(*x) == *n)) {
                         s.ui_scale = n as u16;
                     }
+                }
+                "display" => {
+                    let d = match v.trim() {
+                        "auto" => Some(crate::game::display::AUTO),
+                        n => n
+                            .parse::<u8>()
+                            .ok()
+                            .filter(|n| *n != 0 && crate::game::display::CHOICES.contains(n)),
+                    };
+                    s.display_scale = d.unwrap_or(s.display_scale);
                 }
                 "captions" => s.captions = flag().unwrap_or(s.captions),
                 "colour_blind" => s.colour_blind = flag().unwrap_or(s.colour_blind),
@@ -453,7 +473,24 @@ impl Settings {
         self.scroll_index = (self.scroll_index - d).clamp(SCROLL_RANGE.0, SCROLL_RANGE.1);
     }
 
-    /// Steps the display scale to the next or previous offered one.
+    /// The display scale as kept: `auto`, `1`, `2` or `3`.
+    pub fn display_label(&self) -> String {
+        if self.display_scale == crate::game::display::AUTO {
+            "auto".into()
+        } else {
+            self.display_scale.to_string()
+        }
+    }
+
+    /// Steps the display scale through `game::display::CHOICES` (Auto,
+    /// 1x, 2x, 3x), stopping at either end.
+    pub fn step_display(&mut self, d: i32) {
+        let c = crate::game::display::CHOICES;
+        let at = c.iter().position(|x| *x == self.display_scale).unwrap_or(0) as i32;
+        self.display_scale = c[(at + d).clamp(0, c.len() as i32 - 1) as usize];
+    }
+
+    /// Steps the interface size to the next or previous offered one.
     pub fn step_scale(&mut self, d: i32) {
         let at = SCALES.iter().position(|x| *x == self.ui_scale).unwrap_or(0) as i32;
         self.ui_scale = SCALES[(at + d).clamp(0, SCALES.len() as i32 - 1) as usize];

@@ -3223,7 +3223,8 @@ impl Session {
         let lm = self.layout().map;
         if let Some(f) = &self.play.failed {
             ui.fill(Rect::new(lm.x, lm.bottom() - 16, lm.w, 16), [0, 0, 0, 200]);
-            ui.text(lm.x + 4, lm.bottom() - 13, f.clone(), colour::BAD, lm);
+            // design: readable text and display scale (lead's request 2026-11-10)
+            ui.text_outlined(lm.x + 4, lm.bottom() - 13, f.clone(), colour::BAD, lm);
         }
         ui.extend(hud::countdown_view(
             &self.countdown_rows(),

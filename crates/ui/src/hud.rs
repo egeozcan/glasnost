@@ -503,10 +503,13 @@ pub fn countdown_view(rows: &[CountdownRow], map: Rect, clock_ms: i64) -> DrawLi
         );
         d.fill(band, [0, 0, 0, 150]);
         let [cr, cg, cb] = r.colour;
-        d.text(band.x + 3, y + 2, name, [cr, cg, cb, 255], band);
+        // The outline is our look (claim 18 leaves it to us); it keeps a
+        // dark house colour readable over any ground.
+        // design: readable text and display scale (lead's request 2026-11-10)
+        d.text_outlined(band.x + 3, y + 2, name, [cr, cg, cb, 255], band);
         // spec: S-0512 claim 18 (at s = 0 the time text blinks; its name stays in the house colour)
         if r.seconds > 0 || countdown_blink_on(clock_ms) {
-            d.text(band.x + 3 + nw, y + 2, time, colour::TEXT, band);
+            d.text_outlined(band.x + 3 + nw, y + 2, time, colour::TEXT, band);
         }
         y += font::LINE_HEIGHT + 3;
     }

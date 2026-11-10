@@ -1666,7 +1666,8 @@ impl Client {
         if let Some(text) = banner {
             let r = Rect::new((w - 420).max(0) / 2, 60, 420.min(w), 20);
             d.fill(r, colour::VEIL);
-            d.text_centred(r, &text, colour::ACCENT);
+            // design: readable text and display scale (lead's request 2026-11-10)
+            d.text_centred_outlined(r, &text, colour::ACCENT);
         }
     }
 

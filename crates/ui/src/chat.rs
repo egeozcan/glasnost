@@ -67,7 +67,8 @@ pub fn overlay(d: &mut DrawList, r: Rect, lines: &[Line], input: Option<&str>) {
         let shown = widget::tail_fit(&format!("Say: {text}"), r.w - 8, true);
         let w = font::text_width(&shown) + 8;
         d.fill(Rect::new(r.x, y - 1, w, ROW), colour::VEIL);
-        d.text_left(Rect::new(r.x + 4, y, w, ROW - 1), &shown, colour::ACCENT);
+        // design: readable text and display scale (lead's request 2026-11-10)
+        d.text_left_outlined(Rect::new(r.x + 4, y, w, ROW - 1), &shown, colour::ACCENT);
         y -= ROW;
     }
     for l in lines.iter().rev() {
@@ -77,7 +78,7 @@ pub fn overlay(d: &mut DrawList, r: Rect, lines: &[Line], input: Option<&str>) {
         let shown = font::fit(&l.shown(), r.w - 8);
         let w = font::text_width(&shown) + 8;
         d.fill(Rect::new(r.x, y - 1, w, ROW), colour::VEIL);
-        d.text_left(
+        d.text_left_outlined(
             Rect::new(r.x + 4, y, w, ROW - 1),
             &shown,
             if l.notice {

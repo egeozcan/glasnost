@@ -22,6 +22,8 @@
 //! - [`bot`]: a person played by our AI over the relay (M9 N6, the soak).
 //! - [`bench`]: the performance benchmark (M8 step C4).
 //! - [`touch`]: touch gestures and touchpad swipes (our own addition).
+//! - [`display`]: the display scale, view pixels to screen pixels (our own
+//!   addition).
 
 pub mod band;
 pub mod bench;
@@ -31,6 +33,7 @@ pub mod capture;
 pub mod client;
 pub mod cursor;
 pub mod direct;
+pub mod display;
 pub mod install;
 pub mod link;
 pub mod music_share;

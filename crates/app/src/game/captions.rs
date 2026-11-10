@@ -64,7 +64,8 @@ impl Captions {
             let y = map.bottom() - 230 - (n - i as i32) * 18;
             let r = Rect::new(map.x + (map.w - w) / 2, y, w, 16);
             d.fill(r, [0, 0, 0, 190]);
-            d.text_centred(r, &t, colour::TEXT);
+            // design: readable text and display scale (lead's request 2026-11-10)
+            d.text_centred_outlined(r, &t, colour::TEXT);
         }
     }
 }

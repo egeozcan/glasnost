@@ -69,11 +69,11 @@ pub fn build(release: bool) -> Result<PathBuf, String> {
     run_cmd(&mut build)?;
 
     let profile = if release { "release" } else { "debug" };
-    let wasm = root
-        .join("target")
-        .join(TARGET)
-        .join(profile)
-        .join(WASM_NAME);
+    // Cargo's own target directory: `CARGO_TARGET_DIR` when set (relative
+    // to the workspace root, or absolute), else `target`.
+    let target_dir =
+        std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| root.join("target"), |d| root.join(d));
+    let wasm = target_dir.join(TARGET).join(profile).join(WASM_NAME);
     let out = root.join("dist/web");
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;

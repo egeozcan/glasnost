@@ -37,6 +37,7 @@ use glasnost_vfs::{FileRef, PickedFile, Vfs};
 
 use super::captions::Captions;
 use super::direct::{Ice, OpenPair, Shape, Timeouts, platform_direct};
+use super::display::Display;
 use super::install::{self, Install};
 use super::link::{Connect, DEFAULT_RELAY, platform_connect};
 use super::paint::Painter;
@@ -219,8 +220,14 @@ pub struct Client {
     pub game_serial: u64,
     /// Whether Quit is offered (not on the web).
     pub can_quit: bool,
-    /// Window size.
+    /// The view's size in view pixels: the window's size divided by the
+    /// display factor ([`Client::set_window`]); the window's size where
+    /// the client was only given [`Client::resize`].
     pub size: (i32, i32),
+    /// The window as the host gave it ([`Client::set_window`]); `None` for
+    /// a client sized only through [`Client::resize`] (tests, the
+    /// benchmark), which draws one view pixel per screen pixel.
+    window: Option<Display>,
     /// The seed of the next game (the window layer sets it from the host
     /// clock; S-0202 claim 8).
     pub next_seed: u32,
@@ -337,6 +344,7 @@ impl Client {
             game_serial: 0,
             can_quit: true,
             size: (1024, 768),
+            window: None,
             next_seed: 1,
             job: None,
             quit: false,
@@ -443,6 +451,7 @@ impl Client {
     }
 
     fn apply_settings(&mut self) {
+        self.refit_display();
         let st = &self.settings;
         if let Some(a) = self.audio.as_mut() {
             let m = a.mixer_mut();
@@ -695,8 +704,46 @@ impl Client {
         self.loading_music();
     }
 
-    /// Sets the window size.
+    /// The window as the host gave it, with the display factor in use; one
+    /// view pixel per screen pixel for a client sized only through
+    /// [`Client::resize`].
+    pub fn display(&self) -> Display {
+        self.window.unwrap_or_else(|| Display::one(self.size))
+    }
+
+    /// The host's window: `physical` its drawable size in device pixels,
+    /// `host_scale` its scale factor (the browser's `devicePixelRatio`).
+    /// The view becomes the window divided by the display factor the
+    /// display-scale setting picks (`super::display`); the window layer
+    /// calls it at the start, on every resize and on every change of the
+    /// scale factor (design: readable text and display scale (lead's
+    /// request 2026-11-10)).
+    pub fn set_window(&mut self, physical: (i32, i32), host_scale: f64) {
+        let d = Display::new(physical, host_scale, self.settings.display_scale);
+        self.window = Some(d);
+        self.resize_view(d.view());
+    }
+
+    /// Sets the window size in view pixels, one per screen pixel (tests,
+    /// local snapshots and the benchmark; the window layer uses
+    /// [`Client::set_window`]).
     pub fn resize(&mut self, size: (i32, i32)) {
+        self.window = None;
+        self.resize_view(size);
+    }
+
+    /// Picks the display factor again after the setting changed.
+    fn refit_display(&mut self) {
+        if let Some(d) = self.window {
+            let n = Display::new(d.physical, d.host_scale, self.settings.display_scale);
+            if n != d {
+                self.window = Some(n);
+                self.resize_view(n.view());
+            }
+        }
+    }
+
+    fn resize_view(&mut self, size: (i32, i32)) {
         self.size = (size.0.max(64), size.1.max(64));
         let scale = self.ui_scale();
         if let Some(s) = self.session.as_mut() {
@@ -1660,3 +1707,7 @@ mod sidebar_tip_tests;
 #[cfg(test)]
 #[path = "client_touch_tests.rs"]
 mod touch_tests;
+
+#[cfg(test)]
+#[path = "client_display_tests.rs"]
+mod display_tests;

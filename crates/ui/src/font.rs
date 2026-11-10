@@ -18,14 +18,19 @@ pub const SPACE_ADVANCE: i32 = 3;
 pub const SPACING: i32 = 1;
 
 /// The masks, rows separated by `/`; `#` is ink. A missing row is empty.
+///
+/// The round capitals (C, G, O, Q, S) have cut corners and B a short
+/// middle bar, so that they differ from the square digits 0, 5, 6, 8 and 9
+/// at a glance; their widths are the old ones, so no layout moved.
+// design: readable text and display scale (lead's request 2026-11-10)
 const GLYPHS: &[(char, &str)] = &[
     ('A', "#####/#...#/#...#/#####/#...#/#...#/#...#"),
-    ('B', "####./#...#/#...#/#####/#...#/#...#/#####"),
-    ('C', "#####/#..../#..../#..../#..../#..../#####"),
+    ('B', "####./#...#/#...#/####./#...#/#...#/####."),
+    ('C', ".####/#..../#..../#..../#..../#..../.####"),
     ('D', "####./#...#/#...#/#...#/#...#/#...#/####."),
     ('E', "#####/#..../#..../####./#..../#..../#####"),
     ('F', "#####/#..../#..../####./#..../#..../#...."),
-    ('G', "#####/#..../#..../#.###/#...#/#...#/#####"),
+    ('G', ".####/#..../#..../#.###/#...#/#...#/.###."),
     ('H', "#...#/#...#/#...#/#####/#...#/#...#/#...#"),
     ('I', "###/.#./.#./.#./.#./.#./###"),
     ('J', "..###/...#./...#./...#./...#./#..#./####."),
@@ -33,11 +38,11 @@ const GLYPHS: &[(char, &str)] = &[
     ('L', "#..../#..../#..../#..../#..../#..../#####"),
     ('M', "#...#/##.##/#.#.#/#.#.#/#...#/#...#/#...#"),
     ('N', "#...#/##..#/#.#.#/#.#.#/#..##/#...#/#...#"),
-    ('O', "#####/#...#/#...#/#...#/#...#/#...#/#####"),
+    ('O', ".###./#...#/#...#/#...#/#...#/#...#/.###."),
     ('P', "#####/#...#/#...#/#####/#..../#..../#...."),
-    ('Q', "#####/#...#/#...#/#...#/#.#.#/#..#./###.#"),
+    ('Q', ".###./#...#/#...#/#...#/#.#.#/#..#./.##.#"),
     ('R', "#####/#...#/#...#/#####/#.#../#..#./#...#"),
-    ('S', "#####/#..../#..../#####/....#/....#/#####"),
+    ('S', ".####/#..../#..../.###./....#/....#/####."),
     ('T', "#####/..#../..#../..#../..#../..#../..#.."),
     ('U', "#...#/#...#/#...#/#...#/#...#/#...#/#####"),
     ('V', "#...#/#...#/#...#/#...#/.#.#./.#.#./..#.."),
@@ -235,6 +240,39 @@ mod tests {
         // An unknown character draws as '?'.
         assert_eq!(glyph('é').map(|g| g.ch), Some('?'));
         assert_eq!(advance('é'), advance('?'));
+    }
+
+    /// No two characters look the same, and the reshaped capitals kept
+    /// their widths (design: readable text and display scale, lead's
+    /// request 2026-11-10).
+    #[test]
+    fn every_glyph_is_distinct_and_the_round_capitals_kept_their_width() {
+        let gs = glyphs();
+        for (i, a) in gs.iter().enumerate() {
+            for b in &gs[i + 1..] {
+                assert!(
+                    a.width != b.width || a.mask != b.mask,
+                    "{:?} and {:?} look the same",
+                    a.ch,
+                    b.ch
+                );
+            }
+        }
+        for c in ['B', 'C', 'G', 'O', 'Q', 'S'] {
+            assert_eq!(glyph(c).unwrap().width, 5, "{c:?}");
+        }
+        // The letters that looked like digits now differ from them in at
+        // least two cells.
+        for (l, d) in [('S', '5'), ('O', '0'), ('B', '8'), ('G', '6'), ('O', 'D')] {
+            let (l, d) = (glyph(l).unwrap(), glyph(d).unwrap());
+            let differ = l.mask.iter().zip(&d.mask).filter(|(a, b)| a != b).count();
+            assert!(
+                differ >= 2,
+                "{:?} and {:?} differ in {differ} cells",
+                l.ch,
+                d.ch
+            );
+        }
     }
 
     #[test]

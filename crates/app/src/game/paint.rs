@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use glasnost_fmt::image::IndexedImage;
 use glasnost_render::batch2d::{self, Atlas, CpuImage, Quad};
-use glasnost_ui::draw::{DrawList, Prim};
+use glasnost_ui::draw::{DrawList, Prim, Rgba};
 use glasnost_ui::font;
 use glasnost_ui::geom::Rect;
 
@@ -135,20 +135,27 @@ impl Painter {
                     y,
                     text,
                     rgba,
+                    outline,
                     clip,
                 } => {
-                    let mut cx = *x;
-                    for c in text.chars() {
-                        if let Some(region) = self.glyphs.get(&c).or_else(|| self.glyphs.get(&'?'))
-                            && c != ' '
-                        {
-                            out.extend(batch2d::clip(
-                                Quad::glyph(cx, *y, *region, *rgba),
-                                r4(*clip),
-                            ));
+                    // The outline first, at the eight neighbouring offsets
+                    // of the whole line, so that no outline covers ink.
+                    // design: readable text and display scale (lead's request 2026-11-10)
+                    if let Some(o) = outline {
+                        for (dx, dy) in [
+                            (-1, -1),
+                            (0, -1),
+                            (1, -1),
+                            (-1, 0),
+                            (1, 0),
+                            (-1, 1),
+                            (0, 1),
+                            (1, 1),
+                        ] {
+                            self.glyph_quads(&mut out, (x + dx, y + dy), text, *o, *clip);
                         }
-                        cx += font::advance(c);
                     }
+                    self.glyph_quads(&mut out, (*x, *y), text, *rgba, *clip);
                 }
                 Prim::Sprite {
                     id,
@@ -185,6 +192,22 @@ impl Painter {
             }
         }
         out
+    }
+
+    /// The glyph quads of one line of `text` at `at`, in `rgba`, clipped.
+    fn glyph_quads(&self, out: &mut Vec<Quad>, at: (i32, i32), text: &str, rgba: Rgba, clip: Rect) {
+        let mut cx = at.0;
+        for c in text.chars() {
+            if let Some(region) = self.glyphs.get(&c).or_else(|| self.glyphs.get(&'?'))
+                && c != ' '
+            {
+                out.extend(batch2d::clip(
+                    Quad::glyph(cx, at.1, *region, rgba),
+                    r4(clip),
+                ));
+            }
+            cx += font::advance(c);
+        }
     }
 
     /// The CPU drawing of `quads` over black, for tests and snapshots.
@@ -235,6 +258,47 @@ mod tests {
         assert_eq!(
             &px[(18 * 40 + 30) * 4..(18 * 40 + 30) * 4 + 3],
             &colour::PANEL[..3]
+        );
+    }
+
+    /// Outlined text (design: readable text and display scale, lead's
+    /// request 2026-11-10): the ink stays where it was and every pixel
+    /// next to it that is not ink is the outline colour.
+    #[test]
+    fn outlined_text_has_a_dark_ring_around_its_ink() {
+        let p = Painter::new();
+        let clip = Rect::new(0, 0, 20, 14);
+        let mut plain = DrawList::new();
+        plain.fill(clip, [200, 200, 200, 255]);
+        plain.text(3, 2, "I", colour::TEXT, clip);
+        let mut ringed = DrawList::new();
+        ringed.fill(clip, [200, 200, 200, 255]);
+        ringed.text_outlined(3, 2, "I", colour::TEXT, clip);
+        let q = p.quads(&ringed);
+        // One fill, eight outline glyphs, one ink glyph.
+        assert_eq!(q.len(), 10);
+        let a = p.reference(&p.quads(&plain), &BTreeMap::new(), (20, 14));
+        let b = p.reference(&q, &BTreeMap::new(), (20, 14));
+        let ink = |px: &[u8], x: i32, y: i32| {
+            let at = ((y * 20 + x) * 4) as usize;
+            (0..20).contains(&x) && (0..14).contains(&y) && px[at..at + 3] == colour::TEXT[..3]
+        };
+        let (mut inked, mut ringed_px) = (0, 0);
+        for y in 0..14 {
+            for x in 0..20 {
+                let at = ((y * 20 + x) * 4) as usize;
+                assert_eq!(ink(&a, x, y), ink(&b, x, y), "the ink at {x},{y}");
+                inked += i32::from(ink(&a, x, y));
+                let near = (-1..=1).any(|dy| (-1..=1).any(|dx| ink(&a, x + dx, y + dy)));
+                if near && !ink(&a, x, y) {
+                    assert_eq!(&b[at..at + 3], &colour::OUTLINE[..3], "the ring at {x},{y}");
+                    ringed_px += 1;
+                }
+            }
+        }
+        assert!(
+            inked > 0 && ringed_px > inked,
+            "{inked} ink, {ringed_px} ring"
         );
     }
 
