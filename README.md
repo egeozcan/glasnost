@@ -214,7 +214,7 @@ The engine is written without looking at the original game's program code. The p
 - **The implementation side** writes the engine, working only from approved specs in [`spec/`](spec/README.md), measurement records in [`measurements/`](measurements/README.md) and this repository's own code.
 - **The project lead** owns the specs, runs the measurements on the original game, and reviews and approves the work, but writes no engine code.
 
-The spec writer, the scrub reviewer and the implementers are AI sessions, each confined to its own side. Future human contributors work under the implementation side's rules and state any earlier exposure to the sources that side may not read.
+The spec writer, the scrub reviewer and the implementers are AI sessions, each bound by its role's reading rules. Future human contributors work under the implementation side's rules and state any earlier exposure to the sources that side may not read.
 
 ### What passes between the sides
 
@@ -241,7 +241,7 @@ The full table is in [PROVENANCE.md, section 1](PROVENANCE.md#1-roles).
 
 ### What the repository contains
 
-It holds the engine's source code, the approved specs, the measurement records, synthetic test data and our own placeholder art. It holds no game files or pieces of them (archives, graphics, sounds, maps, string tables, rules files), no stock rules values and no install paths. When a measured value is itself a stock rules value, the record keeps the scenario, the method and the relation it confirms, and the value stays in a local-only file. Glasnost reads the game data from your own install, on your machine.
+It holds the engine's source code, the approved specs, the measurement records and synthetic test data. It holds no game files or pieces of them (archives, graphics, sounds, maps, string tables, rules files), no stock rules values and no install paths. When a measured value is itself a stock rules value, the record keeps the scenario, the method and the relation it confirms, and the value stays in a local-only file. Glasnost reads the game data from your own install, on your machine.
 
 ## For contributors
 
