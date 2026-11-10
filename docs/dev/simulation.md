@@ -1272,11 +1272,9 @@ S-0209 r76 answers Q-2822; the ledger is [docs/m8-claims/intake121.md](../m8-cla
   contact (part b), and the assignment restarts the delay and drops its stored path. Every other
   enter order in our engine assigns the object it names, so it restarts the delay too. The cases
   that claim 10 leaves to its Open questions keep that behaviour (seams in the ledger).
-- **The retry delay waits on Q-2896.** r76 also ends a walker's running retry delay at an
-  assignment of the destination it already holds. S-0212 r97, which owns that delay, keeps it for
-  every locomotor. Until the request is answered, the S-0212 text holds (`design: Q-2896` in
-  `path::destination_changed`): only a different destination, or none, ends the delay for the
-  driving and walk locomotors.
+- **The retry delay waited on Q-2896.** r76 also ends a walker's running retry delay at an
+  assignment of the destination it already holds, which S-0212 r97 kept. Intake 122 built
+  S-0212 r98's answer (next section).
 - **Play-fixes position.** C7-P4's `stalled` test reads `blocked_since`, and C7-P5's yield gives a
   refuge cell and later the resumed destination through `econ::assign_destination`. With the
   layer on, a walker given its destination again is no longer stalled until the delay has run
@@ -1284,6 +1282,30 @@ S-0209 r76 answers Q-2822; the ledger is [docs/m8-claims/intake121.md](../m8-cla
   destination differs from the refuge cell it replaces, so the yield is unchanged. No design
   switch decides claim 10's restart: in both positions it follows r76, and each switch's
   default (on, the original) is r76 as written.
+
+## Simulation (M8 A3 intake 122: a walker's retry delay at its own destination)
+
+S-0212 r98 answers Q-2896; the ledger is [docs/m8-claims/intake122.md](../m8-claims/intake122.md).
+
+- **The walker's retry delay ends at every assignment (claim 21).** In
+  `path::destination_changed`, `given` now also ends a running retry delay when the unit's current
+  locomotor is the walk locomotor and the destination it is given is the one it already holds
+  (the same cell or the same object). A delay started earlier in the same tick ends too, as
+  `retry_at` is set back to the present tick. A different destination, or none, ends it as before
+  for the driving and walk locomotors. The driving, ship and other locomotors keep the delay at
+  their own destination given again. An assignment of no destination to a walker that has none
+  ends nothing, since claim 21 names only a cell or an object. That case is not observable either
+  way: a walker with no destination makes no search.
+- **Not an assignment.** `path::failed` still passes `given` only for claim 23a's
+  house-selected destination. A walker that keeps its destination after a failed search (claim
+  23 row 3) is given nothing, so its retry delay runs for *R*, unless a later assignment ends it.
+- **Docking offers.** A harvester's offer of its docking cell still puts back a running delay
+  through `path::running_delay` and `path::keep_delay` (S-0402 claim 10a), as the state table's
+  exception says.
+- **Play-fixes position.** No design switch reads the retry delay. C7-P4's `stalled` test reads
+  `blocked_since`, and its nearest-reachable-cell try writes a different destination without
+  the hook. C7-P5's yield gives the refuge cell and then the resumed destination through the
+  hook, and each differs from the one before. So each switch's off position is r98 as written.
 
 ## Simulation (M8 A3 intake 118: S-0501 r167 and r172)
 

@@ -887,3 +887,24 @@ changes what each of our own pathing improvements fixes:
 | `harvest_cell_shared` | no | Harvesters are vehicles; the restart of claim 10 is a walker's. |
 
 Intake 121 leaves the layer file unchanged.
+
+## A3 intake 122 (S-0212 r98): no new switch; the own pathing improvements re-read
+
+Ledger: [intake122.md](intake122.md). S-0212 r98 (Q-2896) adds no quirk and rewrites no Edge case,
+so the S-0212 switches keep their defaults, their tests in both positions and their verdicts. r98's
+claim 21 ends a walker's running retry delay at every assignment of the destination it already
+holds (r97 kept it). Whether that changes what each of our own pathing improvements fixes:
+
+| Switch (off) | Changed by r98? | Reason |
+|---|---|---|
+| `path_through_stalled_blockers` | no | `stalled` reads `blocked_since` only, which intake 121 already restarts at the same assignment. A walker given its destination again now searches at once, in both positions, and its detour search (switch off) runs at that search. |
+| `unreachable_move_dropped` | no | Its try runs inside the failed computation (`path::compute_untraced`) and writes a different destination without the assignment hook. A failed search that keeps the destination is no assignment, so the delay it starts runs for *R* in both positions. |
+| `group_spread_no_detour` | no | Each member's cell is assigned through the order; a member ordered to its own destination again searches at once in both positions. |
+| `rally_point_shared` | no | Released units get their rally move at the release, with no wait running. |
+| `deadlock_no_yield` | no | The refuge cell and the resumed destination are each assigned through the hook and each differs from the destination before it, so r97 already ended the delay there. |
+| `harvest_cell_shared` | no | Harvesters are vehicles; r98's end is the walk locomotor's. A docking offer keeps the delay in both positions (S-0402 claim 10a). |
+
+What changed for the play-fixes position: only what changed for the reference rules. A walker
+given its own destination again, by a person repeating a move order, by the own AI, or by a
+scatter, no longer waits out a retry delay before it searches. Intake 122 leaves the layer file
+unchanged.
