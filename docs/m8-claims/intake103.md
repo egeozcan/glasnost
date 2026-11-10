@@ -76,7 +76,7 @@ named otherwise.
 | S-0212 21: a different destination ends the delay | tested | `claim_21_walker_different_destination_ends_the_delay`, `claim_21_drive_repath_delay_ended_by_a_new_order` |
 | S-0212 21: a stop (destination cleared) ends it | tested | `claim_21_a_stop_ends_the_delay` |
 | S-0212 21: driving failures that clear leave no delay | tested | `claim_21_drive_failures_that_clear_leave_no_delay`; the older `claims_s0212::retry_delay_after_fresh_searches`, `search_failure_far_away_gives_up` and `search_failure_within_one_cell_does_not_give_up` now assert no delay after the driving unit's gate failure and rows 2 and 3 |
-| S-0212 21 / Open questions: the same destination again keeps the delay | tested | `claim_21_the_same_destination_again_keeps_the_delay` |
+| S-0212 21 / Open questions: the same destination again keeps the delay | tested | `claim_21_the_same_destination_again_keeps_the_delay`. Later: S-0212 r98 (Q-2896) ends it for the walk locomotor; intake 122 renames the test `claim_21_r98_the_same_destination_again_ends_the_delay` and adds `claim_21_r98_others_keep_the_delay_at_the_same_destination` ([intake122.md](intake122.md)) |
 | S-0212 21: the ship keeps its delay | tested | `claim_21_ship_keeps_its_delay` |
 | S-0212 21 / S-0402 10a: the docking offer keeps the delay | tested | `docking_offer_keeps_the_delay` |
 | S-0212 21: the hovering locomotor | no change | S-0503's |
