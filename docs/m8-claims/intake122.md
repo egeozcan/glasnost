@@ -50,8 +50,9 @@ serialized field is added.
 
 ## Lanes
 
-Base 6c7096a (main), against this intake's code on that base (4208cab). The sim-gate goldens,
-regenerated on the changed tree, did not change.
+Base 6c7096a (main), against this intake's code on that base (4208cab, rebased onto the
+spec-only d14e5b3 as 0973ab0). The sim-gate goldens, regenerated on the changed tree, did not
+change. The final checks ran on the rebased tree.
 
 | Lane | Base | After |
 | --- | --- | --- |
