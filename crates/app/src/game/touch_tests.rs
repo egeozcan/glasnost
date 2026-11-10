@@ -117,7 +117,8 @@ fn a_drag_on_the_map_pans_with_the_finger() {
             sum = (sum.0 + d.0, sum.1 + d.1);
         }
     }
-    assert_eq!(sum, (50 - 0, 60 - 100));
+    // From (50, 60) to (0, 100).
+    assert_eq!(sum, (50, -40));
 }
 
 /// The region is the first finger's at its touch point: a drag that
