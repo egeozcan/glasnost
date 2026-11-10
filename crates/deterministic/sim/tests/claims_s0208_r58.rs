@@ -222,8 +222,15 @@ fn s0209_r76_a_scatter_to_the_walkers_own_destination_restarts_the_blockage_dela
     let Target::Cell(dc) = d else {
         panic!("the scatter's destination {d:?}")
     };
-    assert_eq!(o.path.for_goal, Some(dc), "searched in the extra locomotion");
-    assert!(walk_target(&w, id).is_some(), "a walking target chosen at once");
+    assert_eq!(
+        o.path.for_goal,
+        Some(dc),
+        "searched in the extra locomotion"
+    );
+    assert!(
+        walk_target(&w, id).is_some(),
+        "a walking target chosen at once"
+    );
     tick::step(&mut w);
     assert_ne!(pos(&w, id), before, "it moves in the tick of the scatter");
 }

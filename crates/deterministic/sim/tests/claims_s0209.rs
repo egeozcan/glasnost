@@ -998,7 +998,11 @@ fn r98_the_same_destination_again_ends_the_retry_delay() {
     let before = w.obj(m).unwrap().dest;
     glasnost_sim::econ::assign_destination(&mut w, m, before);
     assert_eq!(w.obj(m).unwrap().dest, before);
-    assert_eq!(w.obj(m).unwrap().path.retry_at, t, "ended at the assignment");
+    assert_eq!(
+        w.obj(m).unwrap().path.retry_at,
+        t,
+        "ended at the assignment"
+    );
     assert!(!path::delay_runs(&w, m), "the retry delay has ended");
     assert_eq!(w.obj(m).unwrap().path.blocked_since, None);
 }
