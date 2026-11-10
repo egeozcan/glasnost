@@ -702,3 +702,75 @@ fn ac35_a_flagged_type_that_is_not_a_rocket_type_takes_the_ground_rows_in_flight
         "control: enter: {d}"
     );
 }
+
+/// A `name` aircraft of house 0 in flight at cruise height on its way to
+/// AC33's *C*, marked visiting, with TGT of house 1 as its target and its
+/// ammunition full. Returns (world, aircraft, target).
+fn visiting_in_flight(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId) {
+    let (mut w, a, _, _) = ordered(r, name, Behaviour::Guard, false);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TGT",
+        1,
+        testkit::mid(SIZE, 12, -10),
+        0,
+    );
+    let mut up = false;
+    for _ in 0..600 {
+        step(&mut w);
+        let s = st(&w, a);
+        if air::height(&w, a) == cruise(&w, a) && !s.taking_off && !s.landing {
+            up = true;
+            break;
+        }
+    }
+    assert!(up, "void: never at cruise height: {}", describe(&w, a));
+    let o = w.obj_mut(a).unwrap();
+    o.target = Some(Target::Object(v));
+    o.air.as_mut().unwrap().visiting = true;
+    (w, a, v)
+}
+
+// spec: S-0501 claim 18, Missile types (r172: the missile-spawn flag alone puts an aircraft on the rows for an aircraft on the ground at any height; in flight these rows forget its destination unless it is visiting and either carries passengers or is in a team; a visiting one in retreat has none only until a retreat processing takes a cell on its house's arrival edge, claim 34) and T2 (on the ground, visiting, no passengers, not in a team: forgets target and destination; retreat); the unflagged control takes T2's in-flight row for a visiting armed aircraft with ammunition left: hunt, its target kept
+#[test]
+fn seams7b_a_visiting_flagged_type_in_flight_takes_the_ground_rows() {
+    let (mut w, a, v) = visiting_in_flight(&rules(), "FLAG");
+    assert!(w.obj(a).unwrap().dest.is_some(), "void: a destination");
+    air::fall_back_rows(&mut w, a);
+    let o = w.obj(a).unwrap();
+    let d = describe(&w, a);
+    assert_eq!((o.target, o.dest), (None, None), "forgotten: {d}");
+    assert!(
+        o.beh.current == Some(Behaviour::Retreat) || o.beh.queued == Some(Behaviour::Retreat),
+        "retreat: {d}"
+    );
+    // A retreat processing takes a cell again (on the arrival edge: its
+    // choice is claim 34's, tested with its draws elsewhere).
+    let mut edge = None;
+    for _ in 0..30 {
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        if o.beh.current == Some(Behaviour::Retreat)
+            && let Some(Target::Cell(c)) = o.dest
+        {
+            edge = Some(c);
+            break;
+        }
+    }
+    assert!(edge.is_some(), "an edge cell: {}", describe(&w, a));
+    // Control: the unflagged type.
+    let r = with(rules(), "FLAG", |u| u.missile_spawn = None);
+    let (mut w, a, v2) = visiting_in_flight(&r, "FLAG");
+    assert_eq!(v2, v, "void: the same set-up");
+    let dest = w.obj(a).unwrap().dest;
+    air::fall_back_rows(&mut w, a);
+    let o = w.obj(a).unwrap();
+    let d = describe(&w, a);
+    assert_eq!(o.target, Some(Target::Object(v)), "control: kept: {d}");
+    assert_eq!(o.dest, dest, "control: kept: {d}");
+    assert!(
+        o.beh.current == Some(Behaviour::Hunt) || o.beh.queued == Some(Behaviour::Hunt),
+        "control: hunt: {d}"
+    );
+}

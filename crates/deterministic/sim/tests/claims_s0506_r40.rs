@@ -17,7 +17,7 @@ use glasnost_rules::sim::{
     Decimal, LocomotionClass, Locomotor, SequenceEntry, UnitType, WarheadType, WeaponType,
 };
 use glasnost_sim::combat::damage::{self, Hit};
-use glasnost_sim::rules::Kind;
+use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::spawn::{self, ControllerState, SlotState};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{ObjectId, Target, World};
@@ -565,4 +565,92 @@ fn a_cooling_down_controller_keeps_the_pending_target_for_an_attacking_slot() {
     assert_eq!(c.slots[0].state, SlotState::Attacking);
     assert_eq!(w.obj(x).unwrap().target, Some(Target::Object(second)));
     assert_eq!(c.state, ControllerState::CoolingDown);
+}
+
+// spec: S-0501 claim 35, Flagged slot types (r172, Q-2821: a slot object of a flagged type that is not a rocket type becomes attacking only from returning, a state it first reaches while preparing for want of a controller target: a returning slot with ammunition left and a controller target becomes attacking) and T4 (returning, ammunition left and controller target present: attacking, receive the controller target and queue attack; returning otherwise: returning, the spawner as destination); S-0506 Slot table; unmeasured
+#[test]
+fn seams7b_a_returning_flagged_non_rocket_slot_with_ammunition_becomes_attacking() {
+    let mut r = rules();
+    // HAWKF flying, so the flight hooks of S-0501 T4 queue its behaviours.
+    r.sim.aircraft.get_mut("HAWKF").unwrap().locomotor = Some(Locomotor::Fly);
+    for ammo in [true, false] {
+        let (mut w, car, x, _, second) = carrier_with_pending(&r, "CARF");
+        // Preparing with no controller target: returning (the pending target
+        // adopted in a first pass, then cleared by hand, as in
+        // the_preparing_rows_move_a_flagged_non_rocket_object).
+        spawn::pass(&mut w, car);
+        w.obj_mut(car).unwrap().spawn.as_mut().unwrap().target = None;
+        spawn::pass(&mut w, car);
+        assert_eq!(
+            controller(&w, car).slots[0].state,
+            SlotState::Returning,
+            "void: returning"
+        );
+        assert!(!spawn::kamikaze(&w, x), "void: not released");
+        // A controller target again; with or without ammunition left.
+        w.obj_mut(car).unwrap().spawn.as_mut().unwrap().target = Some(Target::Object(second));
+        if !ammo {
+            w.obj_mut(x).unwrap().combat.ammo = 0;
+        }
+        spawn::pass(&mut w, car);
+        let s = controller(&w, car).slots[0].clone();
+        let o = w.obj(x).unwrap();
+        if ammo {
+            assert_eq!(s.state, SlotState::Attacking, "attacking");
+            assert_eq!(o.target, Some(Target::Object(second)), "the target");
+            assert!(
+                o.beh.current == Some(Behaviour::Attack) || o.beh.queued == Some(Behaviour::Attack),
+                "attack: {:?}",
+                o.beh
+            );
+            assert!(!spawn::kamikaze(&w, x), "not released");
+        } else {
+            // T4's returning rows other than the first: no flight is run
+            // between these passes, so it is still in the spawner's cell
+            // and takes the reloading row; elsewhere it would return again.
+            assert!(
+                matches!(s.state, SlotState::Reloading | SlotState::Returning),
+                "no ammunition: not attacking: {:?}",
+                s.state
+            );
+            assert_ne!(o.target, Some(Target::Object(second)), "no target");
+        }
+    }
+}
+
+// spec: S-0501 claim 20, Kamikaze removal (r178: a kamikaze that is not of a rocket type left its slot when it was enrolled, S-0506 claims 8, 11 and 13, so no slot holds it when it is removed and the removal's loss notification, S-0506 claim 9, changes no slot and starts no countdown); the control: S-0506 claim 9 (a slot object lost with health below 1 empties its slot with the regeneration countdown)
+#[test]
+fn seams7b_a_released_flagged_non_rocket_objects_removal_changes_no_slot() {
+    let r = rules();
+    let (mut w, car, x, _, _) = carrier_with_pending(&r, "CARF");
+    spawn::impossible(&mut w, car);
+    assert!(spawn::kamikaze(&w, x), "void: released");
+    let c0 = controller(&w, car);
+    assert!(
+        c0.slots.iter().all(|s| s.object != Some(x)),
+        "it left its slot"
+    );
+    objects::remove(&mut w, x);
+    assert!(w.obj(x).is_none_or(|o| !o.on_map), "removed");
+    assert_eq!(controller(&w, car), c0, "no slot changed");
+    // Control: the slot that holds its object loses it.
+    let (mut w, car, x, _, _) = carrier_with_pending(&r, "CAR2");
+    let before = controller(&w, car).slots[0].clone();
+    assert_eq!(before.object, Some(x), "void: in its slot");
+    damage::apply(
+        &mut w,
+        x,
+        Hit {
+            amount: 100_000,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    );
+    let after = controller(&w, car).slots[0].clone();
+    assert_eq!(after.state, SlotState::Empty, "control: emptied");
+    assert_ne!(after, before, "control: the slot changed");
 }

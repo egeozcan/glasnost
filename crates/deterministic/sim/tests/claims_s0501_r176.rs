@@ -451,3 +451,47 @@ fn quirk_unarmed_pad_bound_hover_off_has_the_moment() {
         }
     }
 }
+
+// spec: S-0501 T2 (r176: in flight, armed, no pad grants contact, not pad-bound: destination none, then the F8 spot; move) and claim 18, The moment with no destination (r176, Q-2867: the in-flight pad row gives no destination after the search, found or not, with claim 40's draws over a refused cell; F8's spot given right after it) and claim 21 (a search that finds none records no pad); F8 takes no draws (claim 24); no crash, as for the pad-bound one (claim 46)
+#[test]
+fn seams7b_not_pad_bound_with_no_grant_gets_the_f8_spot_and_move() {
+    let (w0, a, _) = cruising(&rules(), "JET", false);
+    // A building of its own house for F8's search, of no dock type.
+    let mut w0 = w0;
+    building(&mut w0, "HUT", 0, 6, 10);
+    let c = w0.obj(a).unwrap().pos.cell();
+    let old = Some(Target::Cell(CellXY::new(c.x + 6, c.y)));
+    for refused in [false, true] {
+        let mut w = w0.clone();
+        set_beh(&mut w, a, Behaviour::Guard, old);
+        set_heading(&mut w, a, None);
+        if refused {
+            reserve_own_cell(&mut w, a);
+        }
+        let mut probe = w.clone();
+        probe.obj_mut(a).unwrap().dest = None;
+        let spot = air::landing_spot(&mut probe, a).expect("void: an F8 spot");
+        let rng = w.rng.clone();
+        air::fall_back_rows(&mut w, a);
+        let o = w.obj(a).unwrap();
+        let d = describe(&w, a);
+        assert_eq!(
+            o.dest,
+            Some(Target::Cell(spot)),
+            "{refused}: F8's spot: {d}"
+        );
+        assert_ne!(o.dest, old, "{refused}: not its old destination: {d}");
+        assert!(
+            o.beh.current == Some(Behaviour::Move) || o.beh.queued == Some(Behaviour::Move),
+            "{refused}: move: {d}"
+        );
+        assert_eq!(o.contact, None, "{refused}: {d}");
+        assert!(!air::crashing(&w, a), "{refused}: no crash: {d}");
+        assert_eq!(heading(&w, a), None, "{refused}: none recorded: {d}");
+        if refused {
+            assert_ne!(w.rng, rng, "{refused}: the moment's draws: {d}");
+        } else {
+            assert_eq!(w.rng, rng, "{refused}: no draws, F8's none: {d}");
+        }
+    }
+}

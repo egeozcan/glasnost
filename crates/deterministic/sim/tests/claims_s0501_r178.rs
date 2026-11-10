@@ -102,7 +102,11 @@ fn describe(w: &World, id: ObjectId) -> String {
 /// that its orders do not change the target the attack order gave. Returns
 /// (world, K, T).
 fn ac36(r: &Ruleset, kamikaze: bool) -> (World, ObjectId, ObjectId) {
-    let mut w = game(r);
+    ac36_in(game(r), kamikaze)
+}
+
+/// [`ac36`] on a game already made.
+fn ac36_in(mut w: World, kamikaze: bool) -> (World, ObjectId, ObjectId) {
     ready(&mut w);
     let k = testkit::spawn(&mut w, Kind::Aircraft, "K", 0, testkit::mid(SIZE, -8, 4), 0);
     let t = testkit::spawn(&mut w, Kind::Vehicle, "T", 1, testkit::mid(SIZE, 8, 4), 0);
@@ -254,4 +258,90 @@ fn ac36_c_a_kill_by_the_pass_credits_no_house() {
     assert_eq!(after[0].0, before[0].0, "house 0 gets no kill");
     assert_eq!(after[1].0, before[1].0, "house 1 gets no kill");
     assert_eq!(after[1].1, before[1].1 + 1, "house 1 takes a loss");
+}
+
+// spec: S-0501 claim 20, Kamikaze removal (r178, Q-2868: the removal is not a death: it makes none of S-0011's destruction raises, claim 19, and a tag the kamikaze carries stays attached, S-0011 claim 2; a bomb planted on it is removed with no detonation, S-0519 claim 7); S-0519 claim 5 (a bomb set off on the map detonates at its carrier); the control, the same aircraft not enrolled, keeps its bomb and its tag in play
+#[test]
+fn seams7b_the_removal_makes_no_raise_keeps_the_tag_and_drops_the_bomb() {
+    let mut r = rules(1, 500);
+    // A bomb that would reach T from where the pass is made, and a timer
+    // that does not come due in these runs.
+    r.sim.warheads.insert(
+        "BigBoom".into(),
+        glasnost_rules::sim::WarheadType {
+            cell_spread: econ_common::dec("12"),
+            percent_at_max: econ_common::dec("1"),
+            verses: Some(vec![glasnost_rules::sim::Decimal("1".into()); 11]),
+            ..Default::default()
+        },
+    );
+    let g = &mut r.sim.general;
+    g.ivan_warhead = Some("BigBoom".into());
+    g.ivan_damage = Some(77);
+    g.ivan_timed_delay = Some(100_000);
+    for kamikaze in [true, false] {
+        let w = testkit::game_with_triggers(&r, SIZE, 7, testkit::entry_triggers());
+        let (mut w, k, t) = ac36_in(w, kamikaze);
+        // The destroyed-by-anything trigger DIE sets variable 1.
+        glasnost_sim::triggers::object_tag(&mut w, k, Some(b"DIE"));
+        let tag = *w.triggers.objects.get(&k).expect("void: tagged");
+        let carriers = w.triggers.tags[&tag].carriers;
+        let tick = w.tick;
+        w.obj_mut(k).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
+            planter: None,
+            house: Some(HouseId(1)),
+            planted: tick,
+        });
+        let (s, _, thp, _) = to_first_pass(&mut w, k, t);
+        let d = describe(&w, k);
+        assert_eq!(s.len(), 1, "{kamikaze}: void: one projectile: {d}");
+        assert!(
+            !w.effects
+                .iter()
+                .any(|e| matches!(e, Effect::Detonation { .. })),
+            "{kamikaze}: no detonation in s: {d}"
+        );
+        assert_eq!(w.obj(t).unwrap().health, thp, "{kamikaze}: T unhurt in s");
+        assert_eq!(w.triggers.objects.get(&k), Some(&tag), "{kamikaze}: tag");
+        assert_eq!(w.triggers.tags[&tag].carriers, carriers, "{kamikaze}");
+        if kamikaze {
+            assert!(w.obj(k).is_none_or(|o| !o.on_map), "removed: {d}");
+            assert!(!glasnost_sim::bomb::carries(&w, k), "the bomb is gone");
+        } else {
+            assert!(w.obj(k).is_some_and(|o| o.on_map), "control: {d}");
+            assert!(glasnost_sim::bomb::carries(&w, k), "control: kept");
+        }
+        for _ in 0..30 {
+            step(&mut w);
+        }
+        assert!(!w.triggers.variables[1], "{kamikaze}: no destruction raise");
+        if kamikaze {
+            assert_eq!(w.triggers.objects.get(&k), Some(&tag), "still attached");
+            continue;
+        }
+        // The control's death shows what the removal does not make: the
+        // bomb goes off on the map (S-0519 claim 5) and the raise fires.
+        w.effects.clear();
+        glasnost_sim::combat::damage::apply(
+            &mut w,
+            k,
+            glasnost_sim::combat::damage::Hit {
+                amount: 100_000,
+                warhead: None,
+                distance: 0,
+                attacker: None,
+                house: None,
+                ignore_defences: true,
+                no_escape: false,
+            },
+        );
+        step(&mut w);
+        assert!(
+            w.effects
+                .iter()
+                .any(|e| matches!(e, Effect::Detonation { .. })),
+            "control: the bomb goes off at its death"
+        );
+        assert!(w.triggers.variables[1], "control: the death's raise");
+    }
 }
