@@ -1278,6 +1278,11 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             crate::infantry::destination_assigned(w, id, before);
             return 1;
         }
+        if let Some(tg) = computer_taker_target(w, id) {
+            // spec: S-0215 claim 23 (Infantry, second row, original only: a computer-controlled owner, its target a building, and its type infiltrates, or occupies or assaults buildings and may occupy this one: the target becomes its destination and capture is forced; 1 tick, no draw; S-0215 Terms, Test-only computer-controlled player house)
+            go_for_building(w, id, tg);
+            return 1;
+        }
         let deployed = o
             .infantry
             .as_ref()
@@ -1366,6 +1371,11 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
         return NO_RULE_DELAY;
     };
     let stupid = u.raw.stupid_hunt.unwrap_or(false);
+    if let Some(tg) = computer_taker_target(w, id) {
+        // spec: S-0215 claim 27 (Infantry of a computer-controlled owner, original only, judged on the target held when the processing begins: a building it may take, as claim 23's second row; 1 tick, no draw, no search, no targeting-timer restart, no idle action; S-0215 Terms, Test-only computer-controlled player house)
+        go_for_building(w, id, tg);
+        return 1;
+    }
     if o.kind == Kind::Vehicle && u.raw.deploys_into.is_some() {
         // spec: S-0215 claim 27 (a deploying vehicle seeks a clear spot to deploy; the deploy specs own it)
         w.note("S-0215 claim 27: a hunting vehicle that deploys does not seek a spot yet (deploy specs)");
@@ -1432,6 +1442,52 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
     }
     // spec: S-0215 claim 27 (the standard delay with the rate of the behaviour current once the outcome took effect)
     standard_delay(w, id)
+}
+
+/// The building an infantry unit of a computer-controlled owner goes
+/// straight for (S-0215 claim 23, the second row of its infantry table, and
+/// claim 27's first infantry rule, both original only): its owner is not
+/// human-controlled (the neutral and special houses and a marked test-only
+/// computer-controlled player house, S-0215 Terms), its target is a
+/// building, and its type infiltrates, or occupies or assaults buildings and
+/// may occupy this one (S-0215 Terms, *Occupiable building*: S-0508 claim
+/// 1's test). `None` when the rule does not apply.
+fn computer_taker_target(w: &World, id: ObjectId) -> Option<Target> {
+    let o = w.obj(id)?;
+    // spec: S-0215 claims 23 and 27 (an infantry unit of a computer-controlled owner; S-0309 Terms, Test-only exception)
+    if o.kind != Kind::Infantry || crate::combat::acquire::player_owned(w, id) {
+        return None;
+    }
+    // spec: S-0215 claims 23 and 27 (its target is a building)
+    let Some(tg @ Target::Object(b)) = o.target else {
+        return None;
+    };
+    if !w.obj(b).is_some_and(|x| x.kind == Kind::Building) {
+        return None;
+    }
+    // spec: S-0215 claims 23 and 27 (its type infiltrates); S-0510 Import mapping (Infiltrate absent: no)
+    let infiltrates = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.raw.infiltrate.unwrap_or(false));
+    // spec: S-0215 claims 23 and 27 (or occupies or assaults buildings and may occupy this one: S-0215 Terms, Occupiable building, S-0508 claim 1)
+    let occupies = (crate::structures::garrison::occupier(w, id)
+        || crate::structures::garrison::assaulter(w, id))
+        && crate::structures::garrison::may_enter(w, id, b);
+    (infiltrates || occupies).then_some(tg)
+}
+
+/// The outcome of [`computer_taker_target`]'s rule: the target becomes the
+/// destination and *capture* is forced (S-0215 claims 23 and 27; claim 9).
+fn go_for_building(w: &mut World, id: ObjectId, tg: Target) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    // spec: S-0215 claims 23 and 27 (it takes the target as destination)
+    crate::econ::assign_destination(w, id, Some(tg));
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claims 23 and 27 (and forces capture: claim 9, current at once whether or not ready)
+        ob.beh.force(Behaviour::Capture, t, stale);
+    }
 }
 
 /// Whether an actor is a building taker (S-0215 claim 28): an infantry unit

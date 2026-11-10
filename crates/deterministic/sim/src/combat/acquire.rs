@@ -841,12 +841,13 @@ fn candidate(
     let a_unit = r.unit(ao.kind, ao.type_index);
     let a_engineer = ao.kind == Kind::Infantry && a_unit.is_some_and(|u| u.engineer);
     let t_building = (to.kind == Kind::Building).then(|| &r.buildings[to.type_index as usize]);
-    // spec: S-0309 claim 25 part e (for a searcher of the neutral or special house the two rows let T through only when T is a building, A an infantry unit, and an engineer of another owner may capture it or A may occupy it)
-    // The occupation alternative belongs to the structures specs: it never holds in our engine yet.
-    let house_exception = ao.kind == Kind::Infantry
-        && a_engineer
+    // spec: S-0309 claim 25 part e (for a searcher of the neutral or special house, or of a marked test house, the two rows let T through only when T is a building, A an infantry unit, and an engineer of another owner may capture it or A may occupy it)
+    let capture = a_engineer
         && t_building.is_some_and(|b| b.raw.needs_engineer.unwrap_or(false))
         && to.owner != ao.owner;
+    // spec: S-0309 claim 25 part e (occupation: A's type can occupy buildings and T can be occupied by A, the structures specs' test: S-0508 claim 1)
+    let occupy = || t_building.is_some() && crate::structures::garrison::may_enter(w, a, t);
+    let house_exception = ao.kind == Kind::Infantry && (capture || occupy());
     if passive && (player || !house_exception) {
         return Verdict::Reject;
     }
