@@ -974,6 +974,107 @@ fn c5_c2_the_same_destination_again_restarts_the_blockage_delay() {
     assert!(g1 > g0, "later than the control: {g1} against {g0}");
 }
 
+/// The corridor walker of [`blocked_walker`], but on its way to (1, 0), the
+/// cell the moving blocker holds, in a ruleset whose road land type has a
+/// zero foot multiplier (its other multipliers stay at 1, so the category
+/// stays passable). Half a blockage delay after the wait starts, (1, 0)
+/// becomes road: the next ask answers blocked, claim 7's search at once
+/// fails, the destination being next to the walker (S-0212 claim 15), and
+/// the walker keeps it (S-0212 claim 23 row 3). If `assign`, the same
+/// destination is then assigned through the assignment hook. (1, 0) is made
+/// clear again a tick later. Returns the game with the trace on, the
+/// walker, the tick the wait started and the tick of the failed search.
+fn kept_after_failure(assign: bool) -> (World, ObjectId, i32, i32) {
+    let (mut w, m) = corridor_scene("Mope", |s| {
+        s.ruleset.sim.land_types.insert(
+            LandType::Road,
+            LandRow {
+                foot: Some(glasnost_rules::sim::Decimal("0".into())),
+                ..Default::default()
+            },
+        );
+    });
+    order_move(&mut w, m, cell(1, 0));
+    stand_in(&mut w, m, cell(0, 0));
+    w.cells.claim_vehicle(cell(1, 0), Layer::Ground, true);
+    tick::step(&mut w);
+    let first = w.tick - 1;
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    let d = w.rules().general.blockage_delay;
+    let wait = first + d / 2 - w.tick;
+    run(&mut w, wait);
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    w.cells.grid.get_mut(cell(1, 0)).unwrap().land = glasnost_map::terrain::land::ROAD;
+    glasnost_sim::regions::cell_changed(&mut w, cell(1, 0));
+    trace::switch_on(&mut w);
+    tick::step(&mut w);
+    let failed = w.tick - 1;
+    let fresh: Vec<_> = trace::take(&w)
+        .iter()
+        .filter(|e| e.unit == m)
+        .filter_map(|e| match e.what {
+            trace::What::Search { asked, result, .. } => Some((asked, result)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        fresh,
+        vec![(path::Mode::Fresh, path::Search::SearchFailed)],
+        "claim 7's search at once, which fails"
+    );
+    let o = w.obj(m).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell(1, 0))), "kept within 1 cell");
+    let r = w.rules().general.retry_delay;
+    assert_eq!(o.path.retry_at, failed + r, "S-0212 claim 21: it waits R");
+    if assign {
+        let before = o.dest;
+        glasnost_sim::econ::assign_destination(&mut w, m, before);
+        assert_eq!(w.obj(m).unwrap().dest, before);
+    }
+    tick::step(&mut w);
+    trace::take(&w);
+    w.cells.grid.get_mut(cell(1, 0)).unwrap().land = glasnost_map::terrain::land::CLEAR;
+    glasnost_sim::regions::cell_changed(&mut w, cell(1, 0));
+    (w, m, first, failed)
+}
+
+// spec: S-0209 claim 10 (r76: the blockage delay starts afresh only after a walking step or at an assignment of a destination; a failed search after which the walker keeps its destination, S-0212 claim 23 row 3, is not an assignment, so the delay counts on from the first moving-blocker answer: the search that avoids the blocker comes no earlier than the blockage delay after that answer and earlier than the blockage delay after the failure); S-0209 claim 7 (a blocked answer at the first ask searches at once)
+#[test]
+fn seams7b_a_failed_search_that_keeps_the_destination_leaves_the_blockage_delay_running() {
+    let (mut w, m, first, failed) = kept_after_failure(false);
+    let d = w.rules().general.blockage_delay;
+    let r = w.rules().general.retry_delay;
+    assert!(r <= d / 2 - 3, "C5's set-up: R = {r}, D = {d}");
+    assert_eq!(
+        w.obj(m).unwrap().path.blocked_since,
+        Some(first),
+        "not restarted by the failure"
+    );
+    let pos = w.obj(m).unwrap().pos;
+    let g = avoids_at(&mut w, m, 4 * d).expect("it avoids");
+    assert!(g >= first + d, "the whole delay from the first answer: {g}");
+    assert!(g < failed + d, "not counted from the failure: {g}");
+    assert_eq!(
+        w.obj(m).unwrap().pos.cell(),
+        pos.cell(),
+        "it has not walked"
+    );
+}
+
+// spec: S-0209 claim 10 (r76: control: an assignment of the destination the walker already has, made in the tick of that failed search, does start the delay afresh, from the first moving-blocker answer after it)
+#[test]
+fn seams7b_the_control_an_assignment_after_the_failed_search_restarts_it() {
+    let (mut w, m, first, failed) = kept_after_failure(true);
+    let d = w.rules().general.blockage_delay;
+    let since = w.obj(m).unwrap().path.blocked_since;
+    assert!(
+        since.is_none_or(|s| s > failed),
+        "restarted after {first}: {since:?}"
+    );
+    let g = avoids_at(&mut w, m, 4 * d).expect("it avoids");
+    assert!(g >= failed + d, "the whole delay after the assignment: {g}");
+}
+
 // spec: S-0209 claim 10 (r76: the restart holds at every assignment that is made, here one of the destination the walker already has by another rule, through the assignment hook)
 #[test]
 fn r76_another_rules_assignment_of_the_same_destination_restarts_it() {
