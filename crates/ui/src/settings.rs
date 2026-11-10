@@ -1,6 +1,6 @@
 //! The settings screen (our own layout): volumes, scroll speed, display
-//! scale, captions, the house colour choice, the tooltip option, touch and
-//! touchpad scrolling and the key bindings. It only
+//! scale, captions, the house colour choice, the tooltip option, touchpad
+//! scrolling and the key bindings. It only
 //! draws the values it is given and reports what was clicked; what they
 //! mean and where they are stored is the client's (`glasnost-app`,
 //! `settings`).
@@ -28,8 +28,8 @@ pub enum Row {
     Colours,
     /// The tooltip option: name tips over the battlefield, on or off.
     ToolTips,
-    /// Touch and touchpad scrolling, on or off (our own addition).
-    Touch,
+    /// Touchpad scrolling, on or off (our own addition).
+    Touchpad,
 }
 
 /// All rows in the order drawn.
@@ -42,7 +42,7 @@ pub const ROWS: [Row; 9] = [
     Row::Captions,
     Row::Colours,
     Row::ToolTips,
-    Row::Touch,
+    Row::Touchpad,
 ];
 
 /// A target of the screen.
@@ -82,8 +82,7 @@ fn label(r: Row) -> &'static str {
         Row::Captions => "Captions",
         Row::Colours => "Colour-blind houses",
         Row::ToolTips => "Name tips",
-        // Touch and touchpad scrolling, shortened to fit beside its value.
-        Row::Touch => "Touch scrolling",
+        Row::Touchpad => "Touchpad scrolling",
     }
 }
 
@@ -201,7 +200,7 @@ mod tests {
             SettingsHit::Step(Row::Scale, -1),
             SettingsHit::Step(Row::Colours, 1),
             SettingsHit::Step(Row::ToolTips, -1),
-            SettingsHit::Step(Row::Touch, 1),
+            SettingsHit::Step(Row::Touchpad, 1),
             SettingsHit::Rebind(4),
             SettingsHit::Reset,
             SettingsHit::Back,

@@ -9,6 +9,7 @@
 //   - a two-finger tap on open ground (a right click) gives the selection up;
 //   - a wheel event with a pixel delta over the battlefield pans the view
 //     with the content (deltaMode 0, as a touchpad swipe);
+//   - a wheel notch Chromium sends in pixels (0, 100) or (0, 120) does not;
 //   - a one-finger drag on the battlefield pans the view with the finger.
 // The touches are CDP `Input.dispatchTouchEvent`. The install stays local: it
 // is read from DIR, never copied or committed.
@@ -151,6 +152,17 @@ try {
   let after = await view();
   check(after[0] - before[0] === 120 && after[1] - before[1] === -60,
     `a pixel wheel over the battlefield pans with the content: ${before} -> ${after}`);
+
+  // A mouse wheel's notch, which Chromium sends in pixels: 100 or 120 CSS
+  // pixels straight down is a strip step, not a pan.
+  for (const dy of [100, 120]) {
+    before = await view();
+    await page.mouse.wheel(0, dy);
+    await settle();
+    after = await view();
+    check(after[0] === before[0] && after[1] === before[1],
+      `a wheel notch of ${dy} over the battlefield does not pan: ${before} -> ${after}`);
+  }
 
   // A one-finger drag: from the middle 80 left and 50 up; the content
   // follows the finger, so the centre moves right 80 and down 50. The

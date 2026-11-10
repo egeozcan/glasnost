@@ -409,13 +409,17 @@ impl ApplicationHandler<GameEvent> for GameApp {
                         touch::WheelDelta::Lines(f64::from(y))
                     }
                     winit::event::MouseScrollDelta::PixelDelta(p) => {
-                        touch::WheelDelta::Pixels(p.x, p.y)
+                        touch::WheelDelta::from_pixels(
+                            (p.x, p.y),
+                            self.window.as_ref().map_or(1.0, |w| w.scale_factor()),
+                            cfg!(target_arch = "wasm32"),
+                        )
                     }
                 });
                 self.after_input();
             }
-            // design: touch and touchpad scrolling (lead's request 2026-11-10): with the setting off, touches are ignored as before
-            WindowEvent::Touch(t) if self.client.settings.touch_scroll => {
+            // design: touch and touchpad scrolling (lead's request 2026-11-10): touches work whatever the touchpad setting
+            WindowEvent::Touch(t) => {
                 use winit::event::TouchPhase as T;
                 let phase = match t.phase {
                     T::Started => touch::Phase::Start,

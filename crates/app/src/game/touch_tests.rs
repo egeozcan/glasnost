@@ -21,6 +21,47 @@ fn ev(
     t.event(phase, id, p, ms, region, PITCH)
 }
 
+/// In a browser, a vertical pixel delta of a whole number of 100 or 120 CSS
+/// pixels is a wheel notch; small, uneven or two-axis deltas, and every
+/// native pixel delta, are a swipe.
+#[test]
+fn a_browser_wheel_notch_is_told_from_a_swipe() {
+    let lines = |d, scale| WheelDelta::from_pixels(d, scale, true);
+    for (d, scale) in [
+        ((0.0, -100.0), 1.0),
+        ((0.0, 120.0), 1.0),
+        ((0.0, -240.0), 1.0),
+        ((0.0, 300.0), 1.0),
+        ((0.0, -200.0), 2.0),
+        ((0.0, 150.0), 1.5),
+        ((0.0, 180.0), 1.5),
+        ((0.0, -125.0), 1.25),
+    ] {
+        assert_eq!(lines(d, scale), WheelDelta::Lines(d.1), "{d:?} at {scale}");
+    }
+    for (d, scale) in [
+        ((0.0, -3.0), 1.0),
+        ((0.0, 53.0), 1.0),
+        ((0.0, 99.0), 1.0),
+        ((0.0, 110.0), 1.0),
+        ((0.0, 100.0), 2.0),
+        ((1.0, 100.0), 1.0),
+        ((-120.0, 0.0), 1.0),
+        ((0.0, 0.0), 1.0),
+        ((0.0, f64::NAN), 1.0),
+    ] {
+        assert!(
+            matches!(lines(d, scale), WheelDelta::Pixels(..)),
+            "{d:?} at {scale}"
+        );
+    }
+    // Natively a pixel delta is a touchpad's.
+    assert_eq!(
+        WheelDelta::from_pixels((0.0, 120.0), 1.0, false),
+        WheelDelta::Pixels(0.0, 120.0)
+    );
+}
+
 /// A touch that lifts within the slop is a left click where it touched
 /// down; one just past the slop is not.
 #[test]

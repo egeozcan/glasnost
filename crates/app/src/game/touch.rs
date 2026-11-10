@@ -11,13 +11,16 @@
 //!   per row height rather than one row per event.
 //! - [`Carry`] keeps the fraction of a touchpad's pixel deltas between
 //!   events.
+//! - [`WheelDelta::from_pixels`] tells a browser's wheel notch, which
+//!   Chromium reports in pixels, from a touchpad swipe.
 //!
 //! The client ([`super::client::Client::touch`] and
 //! [`super::client::Client::pixel_wheel`]) carries the gestures out: a pan
 //! through `Session::pan` (S-0101 F5's limit, and no pan where edge
 //! scrolling is suppressed, S-0201 claim 14), rows through S-0411 claim
 //! 18's wheel step, clicks through the mouse's own path. Nothing here
-//! reaches the simulation. With the setting off the window never calls in.
+//! reaches the simulation. Touches work whatever the setting; with
+//! touchpad scrolling off a pixel delta is one wheel step, as before.
 
 use glasnost_ui::geom::Point;
 
@@ -64,6 +67,11 @@ pub enum Phase {
     Cancel,
 }
 
+/// The pixel sizes, in CSS pixels, of one notch of a mouse wheel as
+/// Chromium reports it in pixel mode (`deltaMode` 0).
+// design: touch and touchpad scrolling (lead's request 2026-11-10): a browser's wheel notch is 100 or 120 CSS pixels
+pub const WHEEL_NOTCHES: [f64; 2] = [100.0, 120.0];
+
 /// A host wheel event's delta, positive for content moving right and down.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WheelDelta {
@@ -71,6 +79,36 @@ pub enum WheelDelta {
     Lines(f64),
     /// A delta in screen pixels (a touchpad, or a smooth wheel).
     Pixels(f64, f64),
+}
+
+impl WheelDelta {
+    /// A host pixel delta `d` in physical pixels, at the window's `scale`
+    /// (device pixels per CSS pixel). In a browser (`web`), a delta with no
+    /// horizontal part whose vertical part is a whole, non-zero number of
+    /// [`WHEEL_NOTCHES`] (in CSS pixels) is a mouse wheel's notch, so it is
+    /// [`WheelDelta::Lines`]; anything else, and every native pixel delta
+    /// (winit's touchpads on Wayland and macOS), is
+    /// [`WheelDelta::Pixels`]. A touchpad swipe that happens to move
+    /// exactly 100 or 120 CSS pixels straight up or down in one event is
+    /// read as a notch: one strip row, or no pan.
+    pub fn from_pixels(d: (f64, f64), scale: f64, web: bool) -> Self {
+        // design: touch and touchpad scrolling (lead's request 2026-11-10): in a browser a vertical whole-notch pixel delta is a wheel notch, not a swipe
+        let css = if scale > 0.0 {
+            d.1.abs() / scale
+        } else {
+            d.1.abs()
+        };
+        let notch = WHEEL_NOTCHES.iter().any(|n| {
+            let k = (css / n).round();
+            // A hundredth of a pixel covers the scaling's rounding.
+            k >= 1.0 && (css - k * n).abs() < 0.01
+        });
+        if web && d.0 == 0.0 && notch {
+            WheelDelta::Lines(d.1)
+        } else {
+            WheelDelta::Pixels(d.0, d.1)
+        }
+    }
 }
 
 /// What a touch event asks of the client.

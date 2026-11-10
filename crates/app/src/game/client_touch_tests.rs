@@ -303,8 +303,9 @@ fn no_edge_scroll_starts_from_a_touch() {
 }
 
 /// spec: S-0411 claim 18 (a wheel event moves the strip one row, upward for a positive delta) — a line
-/// delta is one row with the setting on or off, and with the setting off a
-/// pixel delta is one row too, wherever the pointer is.
+/// delta, and a browser's wheel notch reported in pixels, is one row with
+/// the setting on or off, and with the setting off a pixel delta is one
+/// row too, wherever the pointer is.
 #[test]
 fn line_deltas_and_the_setting_off_keep_one_row_per_event() {
     let mut c = game();
@@ -323,7 +324,15 @@ fn line_deltas_and_the_setting_off_keep_one_row_per_event() {
     c.pointer_moved(bar);
     c.wheel_event(WheelDelta::Lines(0.25));
     assert_eq!(session(&c).play.scroll, 5);
-    c.settings.touch_scroll = false;
+    // A browser's wheel notch, reported in pixels, is a line step.
+    c.pointer_moved(map);
+    c.wheel_event(WheelDelta::from_pixels((0.0, -120.0), 1.0, true));
+    assert_eq!(session(&c).play.scroll, 6, "a notch over the map: one row");
+    assert_eq!(session(&c).centre(), centre, "a notch: no pan");
+    c.pointer_moved(bar);
+    c.wheel_event(WheelDelta::from_pixels((0.0, 100.0), 1.0, true));
+    assert_eq!(session(&c).play.scroll, 5);
+    c.settings.touchpad_scroll = false;
     c.pointer_moved(map);
     c.wheel_event(WheelDelta::Pixels(40.0, -200.0));
     assert_eq!(session(&c).play.scroll, 6, "off: a pixel delta is one row");
@@ -335,12 +344,18 @@ fn line_deltas_and_the_setting_off_keep_one_row_per_event() {
     assert_eq!(session(&c).play.scroll, 5, "no delta, no row");
 }
 
-/// The window drops mouse events around touches only with the setting on;
-/// with it off, touches are ignored as they were.
+/// The setting off keeps the wheel's paths (above), and touch still works:
+/// the window drops mouse events around seen touches whatever the setting,
+/// a drag pans and a tap clicks.
 #[test]
-fn the_setting_off_keeps_todays_paths() {
-    let mut c = game();
+fn the_setting_off_keeps_the_wheels_paths_touch_still_works() {
+    let mut c = panning();
+    c.settings.touchpad_scroll = false;
     let p = session(&c).map_rect().centre();
+    assert!(
+        !c.mouse_quiet(0),
+        "no touch seen: no mouse event is dropped"
+    );
     touch(&mut c, Phase::Start, 1, p, 1_000);
     assert!(
         c.mouse_quiet(1_000 + MOUSE_QUIET_MS + 5_000),
@@ -349,36 +364,31 @@ fn the_setting_off_keeps_todays_paths() {
     touch(&mut c, Phase::End, 1, p, 1_100);
     assert!(c.mouse_quiet(1_100 + MOUSE_QUIET_MS - 1));
     assert!(!c.mouse_quiet(1_100 + MOUSE_QUIET_MS));
-    c.settings.touch_scroll = false;
-    touch(&mut c, Phase::Start, 2, p, 2_000);
-    assert!(!c.mouse_quiet(2_000), "off: no mouse event is dropped");
-    touch(&mut c, Phase::End, 2, p, 2_050);
-    // Off: a drag does not pan and a tap does not click.
+    // A drag pans with the finger.
     let centre = session(&c).centre();
     touch(&mut c, Phase::Start, 3, p, 3_000);
-    touch(&mut c, Phase::Move, 3, Point::new(p.x + 60, p.y), 3_010);
-    touch(&mut c, Phase::End, 3, Point::new(p.x + 60, p.y), 3_020);
-    assert_eq!(session(&c).centre(), centre);
-    selected(&mut c);
-    touch(
-        &mut c,
-        Phase::Start,
-        4,
-        Point::new(p.x - 60, p.y + 40),
-        4_000,
-    );
-    touch(&mut c, Phase::End, 4, Point::new(p.x - 60, p.y + 40), 4_050);
-    assert!(pending(&c).is_empty(), "off: a tap is no click");
+    touch(&mut c, Phase::Move, 3, Point::new(p.x + 30, p.y), 3_010);
+    touch(&mut c, Phase::End, 3, Point::new(p.x + 30, p.y), 3_020);
+    assert_eq!(session(&c).centre(), (centre.0 - 30, centre.1));
+    // A tap with the base unit selected gives the mouse click's order.
+    let mut twin = game();
+    twin.settings.touchpad_scroll = false;
+    selected(&mut twin);
+    let q = session(&twin).map_rect().centre();
+    let q = Point::new(q.x - 60, q.y + 40);
+    touch(&mut twin, Phase::Start, 4, q, 4_000);
+    touch(&mut twin, Phase::End, 4, q, 4_050);
+    assert!(!pending(&twin).is_empty(), "off: a tap still clicks");
     // The setting is on by default and is a row of the settings screen.
-    assert!(Settings::default().touch_scroll);
+    assert!(Settings::default().touchpad_scroll);
     let mut s = client(SIZE, 100);
     let r = s.menu_targets.rect_of(&MenuHit::Settings).unwrap();
     super::access_tests::click(&mut s, r);
     let _ = s.frame();
     let step = s
         .settings_targets
-        .rect_of(&SettingsHit::Step(glasnost_ui::settings::Row::Touch, 1))
+        .rect_of(&SettingsHit::Step(glasnost_ui::settings::Row::Touchpad, 1))
         .unwrap();
     super::access_tests::click(&mut s, step);
-    assert!(!s.settings.touch_scroll);
+    assert!(!s.settings.touchpad_scroll);
 }

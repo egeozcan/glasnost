@@ -397,10 +397,10 @@ fn keyboard_reaches_every_control_of_the_screens() {
     key(&mut c, Key::Down);
     key(&mut c, Key::Enter);
     assert!(!c.settings.tool_tips);
-    // The touch scrolling row (design: touch and touchpad scrolling (lead's request 2026-11-10)).
+    // The touchpad scrolling row (design: touch and touchpad scrolling (lead's request 2026-11-10)).
     key(&mut c, Key::Down);
     key(&mut c, Key::Enter);
-    assert!(!c.settings.touch_scroll);
+    assert!(!c.settings.touchpad_scroll);
     // A binding: Enter waits for a key, the letter rebinds.
     key(&mut c, Key::Tab);
     key(&mut c, Key::Enter);

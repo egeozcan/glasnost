@@ -755,14 +755,15 @@ impl Client {
         }
     }
 
-    /// A host wheel event. A line delta, and any delta with touch and
-    /// touchpad scrolling off, is one [`Client::wheel`] step with the sign
-    /// of its vertical delta (S-0411 claim 18); a pixel delta with the
-    /// setting on is [`Client::pixel_wheel`].
+    /// A host wheel event. A line delta (a browser's wheel notch included,
+    /// [`WheelDelta::from_pixels`]), and any delta with touchpad scrolling
+    /// off, is one [`Client::wheel`] step with the sign of its vertical
+    /// delta (S-0411 claim 18); a pixel delta with the setting on is
+    /// [`Client::pixel_wheel`].
     pub fn wheel_event(&mut self, d: WheelDelta) {
         match d {
             // design: touch and touchpad scrolling (lead's request 2026-11-10): only a pixel delta with the setting on swipes
-            WheelDelta::Pixels(x, y) if self.settings.touch_scroll => self.pixel_wheel((x, y)),
+            WheelDelta::Pixels(x, y) if self.settings.touchpad_scroll => self.pixel_wheel((x, y)),
             WheelDelta::Lines(y) | WheelDelta::Pixels(_, y) => {
                 // Host input only: the wheel's direction (S-0411 claim 18).
                 if y != 0.0 {
@@ -774,7 +775,7 @@ impl Client {
 
     /// A wheel event with a pixel delta (a touchpad swipe), `d` the
     /// content's movement in screen pixels (positive right and down), with
-    /// touch and touchpad scrolling on. Over the battlefield view it pans
+    /// touchpad scrolling on. Over the battlefield view it pans
     /// the view with the content; elsewhere it steps the icon strip one row
     /// per row height gathered (design: touch and touchpad scrolling
     /// (lead's request 2026-11-10)). [`Client::wheel_event`] sends it only
@@ -806,25 +807,20 @@ impl Client {
 
     /// Whether the window drops mouse events at host time `now_ms`: while a
     /// finger is down and shortly after a touch ([`touch::MOUSE_QUIET_MS`]),
-    /// with touch scrolling on, so a system that also makes mouse events of
-    /// the touches does not click twice.
+    /// so a system that also makes mouse events of the touches does not
+    /// click twice. Only seen touches start it; the setting does not.
     pub fn mouse_quiet(&self, now_ms: i64) -> bool {
-        self.settings.touch_scroll && self.touches.mouse_quiet(now_ms)
+        self.touches.mouse_quiet(now_ms)
     }
 
     /// A touch screen's event for contact `id` at screen pixel `p` at host
-    /// time `now_ms`, with touch scrolling on (design: touch and touchpad
-    /// scrolling (lead's request 2026-11-10)). A drag on the battlefield
-    /// pans the view with the finger, one on the sidebar steps the icon
-    /// strip; a tap is a left click and a two-finger tap a right click,
-    /// delivered as the mouse's are, on every screen. A touch never leaves
-    /// the pointer anywhere, so no edge scrolling starts from it. With the
-    /// setting off a touch does nothing, as before.
+    /// time `now_ms` (design: touch and touchpad scrolling (lead's request
+    /// 2026-11-10)), whatever the touchpad setting. A drag on the
+    /// battlefield pans the view with the finger, one on the sidebar steps
+    /// the icon strip; a tap is a left click and a two-finger tap a right
+    /// click, delivered as the mouse's are, on every screen. A touch never
+    /// leaves the pointer anywhere, so no edge scrolling starts from it.
     pub fn touch(&mut self, phase: touch::Phase, id: u64, p: Point, now_ms: i64, mods: Modifiers) {
-        // design: touch and touchpad scrolling (lead's request 2026-11-10): off, touches are ignored as before
-        if !self.settings.touch_scroll {
-            return;
-        }
         if phase == touch::Phase::Start {
             self.gesture();
         }
