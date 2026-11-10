@@ -29,6 +29,7 @@ fn custom() -> Settings {
         direct: false,
         ice: "stun:stun.example:3478 turn:turn.example:3478".into(),
         tool_tips: false,
+        touch_scroll: false,
     }
 }
 
@@ -79,6 +80,21 @@ fn the_tooltip_option_is_on_unless_turned_off() {
     assert!(Settings::from_text("version=1\n").tool_tips);
     assert!(!Settings::from_text("version=1\ntool_tips=0\n").tool_tips);
     assert!(Settings::from_text("version=1\ntool_tips=1\n").tool_tips);
+}
+
+/// Touch and touchpad scrolling (design: touch and touchpad scrolling
+/// (lead's request 2026-11-10)): on by default and in a file without the
+/// key (every file written before it); the default text has no line.
+#[test]
+fn touch_scrolling_is_on_unless_turned_off() {
+    let s = Settings::default();
+    assert!(s.touch_scroll);
+    assert!(!s.to_text().contains("touch="), "{}", s.to_text());
+    assert!(Settings::from_text("version=1\n").touch_scroll);
+    let off = Settings::from_text("version=1\ntouch=0\n");
+    assert!(!off.touch_scroll);
+    assert!(off.to_text().contains("touch=0\n"));
+    assert!(Settings::from_text("touch=maybe").touch_scroll);
 }
 
 #[test]

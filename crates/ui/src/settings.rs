@@ -1,6 +1,6 @@
 //! The settings screen (our own layout): volumes, scroll speed, display
-//! scale, captions, the house colour choice, the tooltip option and the
-//! key bindings. It only
+//! scale, captions, the house colour choice, the tooltip option, touch and
+//! touchpad scrolling and the key bindings. It only
 //! draws the values it is given and reports what was clicked; what they
 //! mean and where they are stored is the client's (`glasnost-app`,
 //! `settings`).
@@ -28,10 +28,12 @@ pub enum Row {
     Colours,
     /// The tooltip option: name tips over the battlefield, on or off.
     ToolTips,
+    /// Touch and touchpad scrolling, on or off (our own addition).
+    Touch,
 }
 
 /// All rows in the order drawn.
-pub const ROWS: [Row; 8] = [
+pub const ROWS: [Row; 9] = [
     Row::Sound,
     Row::Voices,
     Row::Music,
@@ -40,6 +42,7 @@ pub const ROWS: [Row; 8] = [
     Row::Captions,
     Row::Colours,
     Row::ToolTips,
+    Row::Touch,
 ];
 
 /// A target of the screen.
@@ -58,7 +61,7 @@ pub enum SettingsHit {
 /// What the screen shows.
 pub struct Page<'a> {
     /// The value text of each row, in [`ROWS`] order.
-    pub values: [String; 8],
+    pub values: [String; 9],
     /// Each rebindable action and the key it has now.
     pub bindings: Vec<(String, String)>,
     /// The binding waiting for a key press.
@@ -79,6 +82,8 @@ fn label(r: Row) -> &'static str {
         Row::Captions => "Captions",
         Row::Colours => "Colour-blind houses",
         Row::ToolTips => "Name tips",
+        // Touch and touchpad scrolling, shortened to fit beside its value.
+        Row::Touch => "Touch scrolling",
     }
 }
 
@@ -175,6 +180,7 @@ mod tests {
                 "On".into(),
                 "Off".into(),
                 "On".into(),
+                "On".into(),
             ],
             bindings: vec![("Stop".into(), "S".into()), ("Guard".into(), "G".into())],
             rebinding: None,
@@ -195,6 +201,7 @@ mod tests {
             SettingsHit::Step(Row::Scale, -1),
             SettingsHit::Step(Row::Colours, 1),
             SettingsHit::Step(Row::ToolTips, -1),
+            SettingsHit::Step(Row::Touch, 1),
             SettingsHit::Rebind(4),
             SettingsHit::Reset,
             SettingsHit::Back,
@@ -218,5 +225,14 @@ mod tests {
         // Every value row is one keyboard stop, then the keys, Reset and Back.
         assert_eq!(t.stops.len(), ROWS.len() + 5 + 2);
         assert!(d.texts().contains(&"F11: K"));
+    }
+
+    /// Every row's label fits beside its value box.
+    #[test]
+    fn every_label_fits_its_row() {
+        for row in ROWS {
+            let w = crate::font::text_width(label(row));
+            assert!(w <= 290 * 2 / 5, "{row:?} is {w} pixels wide");
+        }
     }
 }

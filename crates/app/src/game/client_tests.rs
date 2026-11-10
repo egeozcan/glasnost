@@ -351,6 +351,8 @@ fn state_hash_is_the_same_under_any_settings() {
                 direct: false,
                 ice: "stun:elsewhere:3478".into(),
                 tool_tips: false,
+                // design: touch and touchpad scrolling (lead's request 2026-11-10): no setting reaches the hash
+                touch_scroll: false,
             };
             c.settings_changed();
         }

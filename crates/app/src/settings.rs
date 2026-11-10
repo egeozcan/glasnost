@@ -210,6 +210,11 @@ pub struct Settings {
     /// The direct links' STUN or TURN servers, space-separated URLs (M9
     /// N7); none by default.
     pub ice: String,
+    /// Touch and touchpad scrolling (our own addition, `game::touch`): a
+    /// touchpad's pixel swipes pan the view or step the icon strip, and a
+    /// touch screen's drags and taps work. Off, a wheel event of any kind
+    /// steps the strip one row and touches are ignored, as before.
+    pub touch_scroll: bool,
 }
 
 /// A network game a client can rejoin after its link or its process went
@@ -286,6 +291,8 @@ impl Default for Settings {
             direct: true,
             // nocite: our own netcode (no STUN or TURN server: nothing contacted by default)
             ice: String::new(),
+            // design: touch and touchpad scrolling (lead's request 2026-11-10): on by default
+            touch_scroll: true,
         }
     }
 }
@@ -325,6 +332,9 @@ impl Settings {
         let ice: String = self.ice.chars().filter(|c| !c.is_control()).collect();
         if !ice.is_empty() {
             s += &format!("ice={ice}\n");
+        }
+        if !self.touch_scroll {
+            s += "touch=0\n";
         }
         s
     }
@@ -371,6 +381,7 @@ impl Settings {
                 }
                 "rejoin" => s.rejoin = Rejoin::from_text(v),
                 "direct" => s.direct = flag().unwrap_or(s.direct),
+                "touch" => s.touch_scroll = flag().unwrap_or(s.touch_scroll),
                 "ice" => {
                     s.ice = v
                         .chars()

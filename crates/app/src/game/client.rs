@@ -43,6 +43,7 @@ use super::paint::Painter;
 use super::play::Button;
 use super::report::{SaveReport, platform_save};
 use super::session::{GroupCommand, MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent, SideKey};
+use super::touch::{self, Carry, Gesture, Strip, Touches, WheelDelta};
 use crate::mapview::live::Pacer;
 use crate::settings::{Action, Bindings, Settings, Store};
 use glasnost_ui::settings::SettingsHit;
@@ -312,6 +313,12 @@ pub struct Client {
     last_screen: Option<std::mem::Discriminant<Screen>>,
     /// The announcements' captions (M8 step C3).
     pub captions: Captions,
+    /// The touch screen's gestures (`touch`; our own addition).
+    touches: Touches,
+    /// A touchpad's pixel fractions between swipe events.
+    wheel_carry: Carry,
+    /// A touchpad swipe's pixels toward the next icon-strip row.
+    wheel_strip: Strip,
 }
 
 impl Client {
@@ -381,6 +388,9 @@ impl Client {
             end_focus: Focus::new(),
             last_screen: None,
             captions: Captions::new(),
+            touches: Touches::new(),
+            wheel_carry: Carry::default(),
+            wheel_strip: Strip::default(),
         }
     }
 
@@ -743,6 +753,121 @@ impl Client {
         {
             s.wheel(delta);
         }
+    }
+
+    /// A host wheel event. A line delta, and any delta with touch and
+    /// touchpad scrolling off, is one [`Client::wheel`] step with the sign
+    /// of its vertical delta (S-0411 claim 18); a pixel delta with the
+    /// setting on is [`Client::pixel_wheel`].
+    pub fn wheel_event(&mut self, d: WheelDelta) {
+        match d {
+            // design: touch and touchpad scrolling (lead's request 2026-11-10): only a pixel delta with the setting on swipes
+            WheelDelta::Pixels(x, y) if self.settings.touch_scroll => self.pixel_wheel((x, y)),
+            WheelDelta::Lines(y) | WheelDelta::Pixels(_, y) => {
+                // Host input only: the wheel's direction (S-0411 claim 18).
+                if y != 0.0 {
+                    self.wheel(if y > 0.0 { 1 } else { -1 });
+                }
+            }
+        }
+    }
+
+    /// A wheel event with a pixel delta (a touchpad swipe), `d` the
+    /// content's movement in screen pixels (positive right and down), with
+    /// touch and touchpad scrolling on. Over the battlefield view it pans
+    /// the view with the content; elsewhere it steps the icon strip one row
+    /// per row height gathered (design: touch and touchpad scrolling
+    /// (lead's request 2026-11-10)). [`Client::wheel_event`] sends it only
+    /// with the setting on.
+    pub fn pixel_wheel(&mut self, d: (f64, f64)) {
+        let (dx, dy) = self.wheel_carry.take(d);
+        if self.shell.screen != Screen::Game {
+            return;
+        }
+        let Some(s) = self.session.as_mut() else {
+            return;
+        };
+        if self.pointer.is_some_and(|p| s.on_map(p)) {
+            // design: touch and touchpad scrolling (lead's request 2026-11-10): the content follows the fingers, so the centre moves against the delta
+            s.pan((-dx, -dy));
+        } else {
+            let rows = self.wheel_strip.add(dy, s.strip_pitch());
+            self.wheel_rows(rows);
+        }
+    }
+
+    /// Steps the icon strip `rows` rows, one S-0411 claim 18 wheel step
+    /// each, signed as the wheel's delta.
+    fn wheel_rows(&mut self, rows: i32) {
+        for _ in 0..rows.unsigned_abs() {
+            self.wheel(rows.signum());
+        }
+    }
+
+    /// Whether the window drops mouse events at host time `now_ms`: while a
+    /// finger is down and shortly after a touch ([`touch::MOUSE_QUIET_MS`]),
+    /// with touch scrolling on, so a system that also makes mouse events of
+    /// the touches does not click twice.
+    pub fn mouse_quiet(&self, now_ms: i64) -> bool {
+        self.settings.touch_scroll && self.touches.mouse_quiet(now_ms)
+    }
+
+    /// A touch screen's event for contact `id` at screen pixel `p` at host
+    /// time `now_ms`, with touch scrolling on (design: touch and touchpad
+    /// scrolling (lead's request 2026-11-10)). A drag on the battlefield
+    /// pans the view with the finger, one on the sidebar steps the icon
+    /// strip; a tap is a left click and a two-finger tap a right click,
+    /// delivered as the mouse's are, on every screen. A touch never leaves
+    /// the pointer anywhere, so no edge scrolling starts from it. With the
+    /// setting off a touch does nothing, as before.
+    pub fn touch(&mut self, phase: touch::Phase, id: u64, p: Point, now_ms: i64, mods: Modifiers) {
+        // design: touch and touchpad scrolling (lead's request 2026-11-10): off, touches are ignored as before
+        if !self.settings.touch_scroll {
+            return;
+        }
+        if phase == touch::Phase::Start {
+            self.gesture();
+        }
+        let (region, pitch) = match (&self.shell.screen, self.session.as_ref()) {
+            (Screen::Game, Some(s)) if !s.paused => (
+                if s.on_map(p) {
+                    touch::Region::Map
+                } else {
+                    touch::Region::Bar
+                },
+                s.strip_pitch(),
+            ),
+            _ => (touch::Region::Other, 1),
+        };
+        match self.touches.event(phase, id, p, now_ms, region, pitch) {
+            Some(Gesture::Pan(d)) => {
+                if self.shell.screen == Screen::Game
+                    && let Some(s) = self.session.as_mut()
+                {
+                    s.pan(d);
+                }
+            }
+            Some(Gesture::Rows(n)) => self.wheel_rows(n),
+            Some(Gesture::Click(b, at)) => {
+                self.pointer_moved(at);
+                self.pointer_down(b, at);
+                self.pointer_up(b, at, mods);
+                // No pointer stays behind at the touch point (an edge
+                // there is no mouse at the edge).
+                self.pointer_left();
+            }
+            None => {}
+        }
+    }
+
+    /// The running game's view centre and selection count (the browser
+    /// checks' probe, `GameOptions::probe`); `None` outside a game.
+    pub fn probe(&self) -> Option<((i32, i32), usize)> {
+        if self.shell.screen != Screen::Game {
+            return None;
+        }
+        let s = self.session.as_ref()?;
+        Some((s.centre(), s.play.selection.len()))
     }
 
     /// A button went down.
@@ -1535,3 +1660,7 @@ mod name_tip_tests;
 #[cfg(test)]
 #[path = "client_sidebar_tip_tests.rs"]
 mod sidebar_tip_tests;
+
+#[cfg(test)]
+#[path = "client_touch_tests.rs"]
+mod touch_tests;

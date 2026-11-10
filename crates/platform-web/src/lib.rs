@@ -85,6 +85,8 @@ mod web {
                 report: Some(crate::download::save),
                 test: None,
                 bench,
+                // `?probe=1`: the browser check of touch scrolling reads the view.
+                probe: param("probe") == "1",
             })
         } else if mode == "viewer" {
             glasnost_app::run_viewer(ViewerOptions {

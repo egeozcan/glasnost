@@ -7,8 +7,14 @@
   <title>Glasnost: renderer demo</title>
   <style>
     html, body { margin: 0; height: 100%; background: #08080c; color: #c8c8d0;
-                 font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
-    canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+                 font: 13px/1.4 system-ui, sans-serif; overflow: hidden;
+                 overscroll-behavior: none; }
+    /* Touch and touchpad scrolling (our own design): the page hands every
+       touch to the game, with no browser pan, zoom, text selection, callout
+       or tap flash (iPad Safari included). */
+    canvas { display: block; width: 100vw; height: 100vh; outline: none;
+             touch-action: none; user-select: none; -webkit-user-select: none;
+             -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
     #status { position: fixed; left: 12px; top: 10px; pointer-events: none; }
     #status b { color: #fff; }
     footer { position: fixed; left: 12px; right: 12px; bottom: 8px; font-size: 11px; opacity: .6; }
@@ -47,6 +53,10 @@
       }
     };
     new MutationObserver(show).observe(document.body, { attributes: true });
+    // Safari's pinch gestures would zoom the page past touch-action.
+    for (const kind of ["gesturestart", "gesturechange", "gestureend"]) {
+      document.addEventListener(kind, (e) => e.preventDefault(), { passive: false });
+    }
     try {
       await init();
     } catch (e) {

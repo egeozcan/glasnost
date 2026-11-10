@@ -894,6 +894,36 @@ impl Session {
         }
     }
 
+    /// A touch drag's or touchpad swipe's pan of the view centre by `d`
+    /// pixels (design: touch and touchpad scrolling (lead's request
+    /// 2026-11-10)): limited by F5 as every request is, and held to edge
+    /// scrolling's conditions, so none while the game stands still (the
+    /// options menu, no focus), nor during an order block. Returns whether
+    /// it was allowed.
+    pub fn pan(&mut self, d: (i32, i32)) -> bool {
+        let w = &self.play.game.world;
+        // spec: S-0201 claim 14 (edge scrolling is suppressed during an order block): our pan follows the edge's rule
+        let allowed =
+            self.ticking() && scroll::edge_enabled(self.focused, w.tick, w.orders_blocked_through);
+        if allowed {
+            // spec: S-0101 claim 8 (every request is limited by F5)
+            self.scroll(d);
+        }
+        allowed
+    }
+
+    /// The icon strip's row height in screen pixels at the interface's
+    /// scale, for touch and touchpad scrolling (design: touch and touchpad
+    /// scrolling (lead's request 2026-11-10)).
+    pub fn strip_pitch(&self) -> i32 {
+        (Layout::row_pitch() * self.ui.percent / 100).max(1)
+    }
+
+    /// Whether screen pixel `p` lies on the battlefield view.
+    pub fn on_map(&self, p: Point) -> bool {
+        self.map_rect().contains(p)
+    }
+
     /// Whether a view-arrow press or release made now is accepted (S-0213
     /// claim 23, S-0201 claim 14): not while orders are blocked, under
     /// `quirks.blocked_arrow_events`.

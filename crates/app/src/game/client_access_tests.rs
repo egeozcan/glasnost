@@ -367,15 +367,15 @@ fn keyboard_reaches_every_control_of_the_screens() {
     assert!(c.menu_focus.rect(&c.menu_targets).is_none());
     c.pointer_up(Button::Left, Point::new(0, 0), Modifiers::default());
 
-    // The settings screen: 8 values (the name tips' since M8 A4 round 8b),
-    // 10 bindings, Reset and Back.
+    // The settings screen: 9 values (the name tips' since M8 A4 round 8b,
+    // touch scrolling's since 2026-11-10), 10 bindings, Reset and Back.
     while c.menu_focus.target(&c.menu_targets) != Some(MenuHit::Settings) {
         key(&mut c, Key::Down);
     }
     key(&mut c, Key::Enter);
     assert_eq!(c.shell.screen, Screen::Settings);
     let _ = c.frame();
-    assert_eq!(c.settings_targets.stops.len(), 20);
+    assert_eq!(c.settings_targets.stops.len(), 21);
     key(&mut c, Key::Tab);
     assert_eq!(
         c.settings_focus.target(&c.settings_targets),
@@ -397,6 +397,10 @@ fn keyboard_reaches_every_control_of_the_screens() {
     key(&mut c, Key::Down);
     key(&mut c, Key::Enter);
     assert!(!c.settings.tool_tips);
+    // The touch scrolling row (design: touch and touchpad scrolling (lead's request 2026-11-10)).
+    key(&mut c, Key::Down);
+    key(&mut c, Key::Enter);
+    assert!(!c.settings.touch_scroll);
     // A binding: Enter waits for a key, the letter rebinds.
     key(&mut c, Key::Tab);
     key(&mut c, Key::Enter);

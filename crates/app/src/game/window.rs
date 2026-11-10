@@ -23,6 +23,7 @@ use super::client::{Client, Done, Key, run_job};
 use super::play::Button;
 use super::pump::Pump;
 use super::session::{MAP_IMAGE, Session};
+use super::touch;
 use crate::Status;
 use glasnost_ui::shell::Screen;
 
@@ -82,6 +83,11 @@ pub struct GameOptions {
     /// Run the performance benchmark (`--bench`, `?bench=`, M8 step C4)
     /// instead of the menus, and close (natively) when it is done.
     pub bench: Option<super::bench::BenchOptions>,
+    /// Mirror the game's view centre and selection count into the page
+    /// (`?probe=1`, web only) for the browser checks of touch and touchpad
+    /// scrolling: `data-glasnost-view` holds `x,y` and
+    /// `data-glasnost-selected` the count, in a game.
+    pub probe: bool,
 }
 
 /// Events delivered to the game's loop.
@@ -149,6 +155,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         pointer: Point::new(0, 0),
         cursor_hidden: false,
         pump: Pump::default(),
+        probed: None,
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -216,6 +223,8 @@ struct GameApp {
     /// Keeps a network game going while no frames are drawn (the M9 exit
     /// run).
     pump: Pump,
+    /// The probe last published ([`GameOptions::probe`]).
+    probed: Option<((i32, i32), usize)>,
 }
 
 impl GameApp {
@@ -385,20 +394,40 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 let mods = self.modifiers();
                 self.client.modifiers(mods);
             }
+            // design: touch and touchpad scrolling (lead's request 2026-11-10): mouse events made of touches are dropped while touches are handled
+            WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. }
+                if self.client.mouse_quiet(now_ms()) => {}
             WindowEvent::CursorMoved { position, .. } => {
                 self.pointer = Point::new(position.x as i32, position.y as i32);
                 self.client.pointer_moved(self.pointer);
             }
             WindowEvent::CursorLeft { .. } => self.client.pointer_left(),
             WindowEvent::MouseWheel { delta, .. } => {
-                let dy = match delta {
-                    winit::event::MouseScrollDelta::LineDelta(_, y) => y as f64,
-                    winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
+                // The client picks line steps or a swipe (S-0411 claim 18; touch scrolling).
+                self.client.wheel_event(match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                        touch::WheelDelta::Lines(f64::from(y))
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(p) => {
+                        touch::WheelDelta::Pixels(p.x, p.y)
+                    }
+                });
+                self.after_input();
+            }
+            // design: touch and touchpad scrolling (lead's request 2026-11-10): with the setting off, touches are ignored as before
+            WindowEvent::Touch(t) if self.client.settings.touch_scroll => {
+                use winit::event::TouchPhase as T;
+                let phase = match t.phase {
+                    T::Started => touch::Phase::Start,
+                    T::Moved => touch::Phase::Move,
+                    T::Ended => touch::Phase::End,
+                    T::Cancelled => touch::Phase::Cancel,
                 };
-                // Host input only: the wheel's direction (S-0411 claim 18).
-                if dy != 0.0 {
-                    self.client.wheel(if dy > 0.0 { 1 } else { -1 });
-                }
+                let p = Point::new(t.location.x as i32, t.location.y as i32);
+                // A tap's click is a release, as the mouse's (S-0202 claim 8: the client picks the next game's seed).
+                self.client.next_seed = host_seed();
+                let mods = self.modifiers();
+                self.client.touch(phase, t.id, p, now_ms(), mods);
                 self.after_input();
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -505,6 +534,9 @@ impl ApplicationHandler<GameEvent> for GameApp {
                             return;
                         }
                     }
+                }
+                if self.options.probe {
+                    publish_probe(&self.client, &mut self.probed);
                 }
                 let hide = self.client.draws_cursor();
                 if hide != self.cursor_hidden
@@ -958,6 +990,29 @@ impl Gfx {
             let rest = t.collect(&self.device);
             b.gpu_times(&rest);
         }
+    }
+}
+
+/// Mirrors the client's probe into the page when it changed (web only):
+/// `data-glasnost-view` (`x,y`) and `data-glasnost-selected`, both empty
+/// outside a game.
+fn publish_probe(client: &Client, last: &mut Option<((i32, i32), usize)>) {
+    let now = client.probe();
+    if now == *last {
+        return;
+    }
+    *last = now;
+    #[cfg(target_arch = "wasm32")]
+    if let Some(body) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.body())
+    {
+        let data = body.dataset();
+        let (view, selected) = now.map_or((String::new(), String::new()), |((x, y), n)| {
+            (format!("{x},{y}"), n.to_string())
+        });
+        let _ = data.set("glasnostView", &view);
+        let _ = data.set("glasnostSelected", &selected);
     }
 }
 

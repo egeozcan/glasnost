@@ -147,6 +147,7 @@ fn main() -> std::process::ExitCode {
             report: None,
             test,
             bench,
+            probe: false,
         })
     } else if viewer {
         glasnost_app::run_viewer(ViewerOptions {
