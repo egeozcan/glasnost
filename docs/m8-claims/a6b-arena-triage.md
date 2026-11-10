@@ -81,9 +81,9 @@ with that outcome on that side, on this branch.
 | 10 | M-0001 | TELE–E2 | side outcome, side B | col | col 0 of 64 (none 64) | (b) | New with the fix. The E2 take the full bunkers as targets, are refused at entry and scatter, fall back to rest and never hunt again (*The fix*, above); every game ends without a winner | S-0309 claim 25 (e); S-0215 claims 9, 14, 27, 28; S-0508 claim 4 | **Q-2926**; wishlist A6b-1: S-0215 B11 (b) at a full building with S-0508 G1's refusal | pass | fail |
 | 11 | M-0001 | CAOS–APOC | side outcome, side B | none | none 62 of 64 (*p*⁶ = 0.83) | (d) | – | – | none | fail | fail |
 | 12 | M-0001 | CAOS–TTNK | side outcome, side B | none | none 51 of 64 (*p*⁶ = 0.26) | (d) | – | – | none | fail | fail |
-| 13 | M-0001 | CAOS–E1 | side outcome, side B | col | – | (a) | Ours had neither the occupation alternative of the house exception nor claim 27's infantry rule for the test houses, so the E1 never went for the bunkers (M-0001 and M-0017 put four neutral bunkers in play from tick 0). With the rows built, side B gives the record's published outcome | S-0309 claim 25 (e); S-0215 claims 23, 27 | built, `claims_s0309_c25e_occupy.rs` | fail | **pass** |
+| 13 | M-0001 | CAOS–E1 | side outcome, side B | col | – | (a) | Ours had neither the occupation alternative of the house exception nor claim 27's infantry rule for the test houses, so the E1 never went for the bunkers (M-0001 and M-0017 put four neutral bunkers in play from tick 0). With the rows built, side B gives the record's published outcome | S-0309 claim 25 (e); S-0215 claims 23, 27 | built, `claims_s0309_c25e_occupy.rs` | fail | side B passes; the pairing still fails on side A (row 14) |
 | 14 | M-0001 | CAOS–E1 | side outcome, side A | col | col 21 of 64 (row 32, none 11; *p*⁶ = 0.001) | (e) | Systematic, before and after the fix. In the watched game (seed 0) the E1 lose nearly all their units in the first sample period and CAOS wins; we found no step of ours that departs from an approved claim. Whether the stock E1 on this side enter a building, and when, is what a trace would show | S-0309 claim 25 (e); S-0215 claim 27; S-0508 claims 1, 4 | wishlist A6b-3: the garrison trace of row 10, on CAOS–E1 side A | fail | fail |
-| 15 | M-0001 | CAOS–E2 | side outcome, side B | col | – | (a) | As row 13 | as row 13 | built, as row 13 | fail | **pass** |
+| 15 | M-0001 | CAOS–E2 | side outcome, side B | col | – | (a) | As row 13 | as row 13 | built, as row 13 | fail | side B passes; the pairing still fails on side A (row 16) |
 | 16 | M-0001 | CAOS–E2 | side outcome, side A | col | col 51 of 64 (*p*⁶ = 0.26) | (d) | – | – | none | fail | fail |
 | 17 | M-0001 | DISK–FV | win test, both sides | col | ours row 11 of 12 on seeds 0 to 5 | (b), (e) | A6 row 2: the FV never find a hovering disc again after their first targets die. S-0309 r53 answered Q-2112 in part; which occasion gives the stock hunters their targets is S-0309's open question *Q-2112 question 1* (low), which names the re-read that would decide it | S-0309 claims 7, 22; S-0215 claim 18 | **Q-2112** question 1 (open in S-0309); wishlist A6b-2: the re-read S-0309 names | fail | fail |
 | 18 | M-0002 | INIT–E1 | win test, side outcome, side B | row | row 0 of 64 (col 54, none 10) | (b) | New with the fix. The E1 now go for the bunkers and win from inside; which of Q-2926's points decides it (whether the stock units go for the building at all before the queued *hunt* starts, and what a refused one does) is open | as row 10 | **Q-2926** | pass | fail |
@@ -98,11 +98,12 @@ with that outcome on that side, on this branch.
 | 27 | M-0021 | part B: the side left and the dead per run; the six order-of-deaths rows (7 rows) | rows | – | – | (c) | These rows depend on how the vehicles move and which target each takes. M-0021 *Reproducing it* says a comparison builds the test types on a tank type of its own choice, and that part B's outcome depends on the movement, the countries' speed factors and the houses' factors, all kept local ([intake101.md](intake101.md): no request) | S-0413 claim 1; S-0301; S-0302 | covered by M-0021's *Reproducing it* | fail | fail |
 | 28 | M-0021 | seeds: every vehicle's first shot falls before the first difference | row | – | – | (c) | Q-2597 (the record's two readings) was declined at M-0021's approval and stays open on purpose; the harness shows reading (b) passing beside it | – | **Q-2597** (open) | fail | fail |
 
-Rows 1 to 25 are one row each of the arena's verdicts; rows 26 to 28 hold 3, 7 and 1 of M-0021's
-rows. Before: 28 failing rows; after: 33 (M-0001 12 → 14, M-0002 2 → 5, M-0003 2 → 2, M-0019 0 → 0,
+Rows 1 to 25 cover 23 arena rows: rows 13 and 14 are the two sides of one pairing (CAOS–E1), and
+so are rows 15 and 16 (CAOS–E2). Rows 26 to 28 hold 3, 7 and 1 of M-0021's rows. That makes 34
+arena rows: the 33 that fail after the fix, and MIND–E1, which passes. Before: 28 failing rows; after: 33 (M-0001 12 → 14, M-0002 2 → 5, M-0003 2 → 2, M-0019 0 → 0,
 M-0020 1 → 1, M-0021 11 → 11).
 
-**Count per class** (ledger rows; arena rows in brackets): **(a)** 2 [2, both now pass];
+**Count per class** (ledger rows; arena rows in brackets): **(a)** 2 [two sides that now give the stock's outcome; both pairings still fail on side A];
 **(b)** 5 [4 pairing rows and 3 M-0021 rows]; **(c)** 2 [8 M-0021 rows]; **(d)** 17 [17, of which
 1 now passes and 3 are new with the fix]; **(e)** 2 [2], and DISK–FV (row 17) has a wishlist entry
 beside its class (b).
@@ -111,9 +112,10 @@ beside its class (b).
 
 | request | question | interim |
 |---|---|---|
+| [Q-2927](../../spec/requests/Q-2927-may-occupy-for-an-assaulter-that-is-not-an-occupier.md) | What "may occupy this one" (S-0215 claims 23 and 27, S-0309 claim 25 (e)) means for an assaulter type that is not an occupier type: S-0508 claim 1's test (never true for it), claim 14's assault eligibility, or claim 1 without the unit-type condition | S-0508 claim 1's test (`garrison::may_enter`); no arena row is known to depend on it |
 | [Q-2926](../../spec/requests/Q-2926-occupiers-of-a-test-house-refused-at-a-full-building.md) | Whether a computer-controlled occupier refused at a full building returns to *hunt*; whether forced *capture* clears the queued *hunt* for good; whether claim 25 (e) counts units already bound for the building; whether the *area guard* search takes the building before the queued *hunt* starts | the claims as built (no workaround) |
 
-Q-2927 to Q-2935 are unused.
+Q-2928 to Q-2935 are unused.
 
 ## Seams found on the way
 
