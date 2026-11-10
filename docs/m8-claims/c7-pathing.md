@@ -186,3 +186,77 @@ Two sets of binaries: *base*, origin/main fbae0ce (A6, which changes no simulati
 - `cargo test --release -p glasnost-ai -- --include-ignored` on the branch: 239 passed, none failed. `cargo test --workspace`: 6 817 passed, none failed (113 ignored). fmt and clippy (`-D warnings`) are clean. `cargo xtask check`: deps, determinism, cite and canary pass; stock-guard reports 16 lines in the measurement records M-0013 and M-0015 (local values shown in a Result table), which are main's as of fbae0ce and not touched here.
 
 **Version effects.** Save format 86 and AI game format 48 (the yield's state): saves and AI games of earlier formats are refused. The layered `sim_rules_hash` changes again (the layer file's content is in it). The sim-gate goldens were regenerated for the format only: the nine files keep their line counts, and only the hashes of the saved state move (each object's path state gains one byte, `None` in every golden game since the reference never gives way). Wire 9, pathing report 2 and desync bundle 3 are unchanged.
+
+## Part 6
+
+Brief: `.claude/worktrees/M8-C7-PATHING6-BRIEF.md`. The same rules as parts 4 and 5: each change is our design, marked `// design: C7-P6 <name>`, behind a quirk switch whose default (on) is the original's, set off by the play-fixes layer, which now admits twenty switches. No saved state is added, so the formats are main's (save 126, AI game 92). No request was needed (block Q-2941 to Q-2945 unused).
+
+### A tempo diagnostic for the quick lane
+
+`GLASNOST_AI_TEMPO=1` (`skirmish_lane::Tempo`, documented in [own-ai.md](../dev/own-ai.md), *Lane diagnostics*) prints a `tempo` line per house under each game: credits earned and army units on the map at ticks 10 000, 20 000 and 30 000; unit-ticks moving and stuck (a unit with a destination that stays in one cell for at least the blockage delay) for harvesters, the army and the army's first trip; release to first rest; give-ups, those of harvesters within 4 cells of an own refinery another object is in contact with (*at a busy dock*) apart; failed searches, searches and yields. It reads the movement trace, which is never hashed or saved, so a game is the same with it. `GLASNOST_AI_HASH` and `GLASNOST_AI_OBJS` (already there) find the tick at which two builds' games part.
+
+### Item 1: part 5's longer games
+
+Quick lane, seeds 7 to 14, maps 0, 2 and 8, Yuri (house 1) against Allied and against Soviet: 48 games, the same seeds with the layer off and on (main at be378c8, before part 6's switch). Medians over the house-games:
+
+| | Reference | Layer (part 5) |
+|---|---|---|
+| Game length, median; mean (ticks) | 45 600; 52 467 | 47 533; 53 130 |
+| Wins house 0, house 1, not over | 22, 26, 0 | 21, 25, 2 |
+| Credits earned at 10 000 / 20 000 ticks | 36 347 / 62 733 | 36 551 / 65 445 |
+| Army on the map at 10 000 / 20 000 / 30 000 | 13 / 13 / 15 | 13.5 / 13 / 13 |
+| Earned per 1 000 ticks | 3 076 | 3 230 |
+| Stuck per mille: harvesters, army, first trip | 235, 131, 221 | 212, 127, 236 |
+| Give-ups: harvesters (at a busy dock), army | 7 289 (3 669), 24 518 | 523 (380), 11 611 |
+
+Paired game by game, the layer's game is longer in 24 and shorter in 24, with a median length ratio of 1.003, and has the same winner in 26. With the layer, houses earn as fast or faster and field the same army through 20 000 ticks; their units are stuck no more and give up less than half as often. The first trip's stuck share differs by house and map without a pattern (house 1 on maps 0, 2 and 8: 538, 385 and 304 per mille in the reference, 248, 479 and 451 with the layer). The two games the layer does not finish are an economy stalemate (seed 9, sides 1 and 2, map 2: house 1 has no refinery, 423 credits and sells out) and an army give-up loop of house 0 (seed 13, sides 0 and 2, map 2: 6 380 army give-ups, 373 per mille stuck), a kind the reference has too (seed 13, sides 0 and 2, map 8: 18 640 give-ups). **Decision: no switch is sluggish.** The longer median is the games' divergence: a different fight from the first few thousand ticks on, with no lost tempo in income, army or movement. No switch is changed for it (m8-plan.md, *Decisions of 2026-11-10*).
+
+### Item 2: harvesters at a busy dock
+
+With the layer, 380 harvester give-ups at a busy dock in the 48 games against 3 669 in the reference, which has them in 9 house-games (1 757, 1 096, 450, 244, 113 and fewer). With the layer, 372 of the 380 are in one house-game (seed 11, sides 1 and 2, map 8, house 0, which also runs captured buildings); the other four house-games have 1, 1, 2 and 4. A temporary print (not committed; `logs/diag-dock-print.txt`, `logs/diag-dock-watch2.txt`) shows the 372 are not a queue: they come from two harvesters, one after the other, that never move from one cell (54 give-ups of the first from tick 36 289 to 39 812, then 318 of a later one on the same cell from 40 412 to 41 408). Each search to the dock (and to the ore) fails, the move is given up, harvest falls to guard and starts again a tick or a few ticks later; a refinery within four cells with another harvester in contact makes the count read it as a busy dock. The cell is a pocket the search cannot leave (it looks like a factory exit closed by the house's own buildings; not confirmed). That give-up is the right answer for a unit with no path; the only cost is the searches it repeats. **No pathing fix** is made: the layer already cuts these give-ups by 90 %, and S-0402's queue rules are not ours to change.
+
+The new scenario *harvesters, queueing cell off the dock* (`pathing_common::harvesters` with a refinery whose queueing cell is the cell left of its dock; commit "sim: pathing scenarios for a busy dock and 1-wide passages") has 4 harvesters a seed queue there. Reference: 21 give-ups (2 open, 19 late), 12 shared, maximum 203. Layer: 16 give-ups (none open, 16 late), none shared, maximum 80; credits 4 625 in both. The layer's give-ups are on the cells round the queueing cell (the `diag` trace), harvesters arriving at the queue while another waits on it, not on the way to the dock.
+
+### Item 3: yield with more than two groups (`jammed_move_dropped` off, and the yield's crossing)
+
+**Problem.** In a passage one cell wide, two groups meeting head-on never reach part 5's yield. The units read each other as blocked, the search fails, and S-0212 claim 23 (row 2) gives the move up: the units stand in the passage for good with no destination, so they are never *stalled* (part 4's wait-for graph needs a destination) and no deadlock forms. Three new scenarios show it: three ways (three groups of 3 meeting at a crossing of three 1-wide passages), narrow rooms (two rooms joined by a 1-wide passage, 3 each way) and the same with one unit parked in a room. In both positions of part 5's switches, none of the units arrives.
+
+**Design (hold).** With `jammed_move_dropped` off, a failed search that would give the move up (`path::search_gives_up`, claim 23 row 2, shared with `path::failed`) is held instead when `path::jammed` says only moving units stand in the way: part 5's two-sided fill (`path::shut`) from the unit to its destination cell meets, with buildings, terrain objects, standing units (no destination) and wall overlays as walls and every unit with a destination passable, and the destination cell itself holds no standing or blocked unit (two units that would swap cells). A held unit keeps its destination, its steps are dropped, it counts as blocked from now if it was not, and it searches again after the retry delay. The C7-P4 nearest reachable cell is skipped for a held move. A unit is held while blocked for less than 300 ticks (`HOLD_FIRST`), and after that, up to 900 ticks (`HOLD_WAIT`, part 5's `YIELD_WAIT`), only while a unit within `YIELD_RADIUS` of it gives way. In the wait-for graph (`stalled_ring`) a blocked unit on a move with no stored path waits on every neighbour of its cell, as the computing unit does, so the held units form the deadlock and part 5's yield settles it.
+
+**Design (three ways, under `deadlock_no_yield`).** Part 5 counted a unit at right angles to the right-of-way unit (a dot product of 0) as going its way, so at a crossing two of three groups never gave way to each other. `path::goes_with` now needs a positive dot product: a unit of the deadlock at right angles crosses the way and gives way; a unit near the deadlock but not in it gives way only when heading against (a negative dot product), so one crossing the way elsewhere is not stopped.
+
+**Narrowing in the quick lane.** The first hold (held while only units stood in the way, every unit passable, up to 900 ticks) solved the scenarios but lengthened the quick lane against part 5's layer (14 games longer, 5 shorter; one game from 50 046 to 110 406 ticks with 365 yields). The game-parting tick of each longer game (`GLASNOST_AI_HASH`, `GLASNOST_AI_OBJS`) showed four causes, each narrowed without changing a scenario row:
+
+1. *A held unit with a standing crowd in the way*: standing units are now walls in the fill.
+2. *Two boats swapping cells at a gathering point* (each the other's destination, in open water where the yield never runs): a destination cell held by a standing or blocked unit is never held.
+3. *A unit next to its destination*: the computation's hold skipped the nearest reachable cell although `failed` would not give the move up (the destination within one cell), and a driving unit then lost its destination. Now only a failure that gives up is held.
+4. *A naval unit held in a crowded harbour* for the full 900 ticks: the hold now ends after 300 ticks unless a unit near it gives way.
+
+A narrowing that also took blocked movers as walls (hold only when they shut the unit in) was tried and dropped: the hold must start before the group mates count as blocked, and three ways and narrow rooms went back to every unit missing.
+
+**Effect.** Every other row, reference and layer, is unchanged; the three new rows with the layer:
+
+| Scenario (layer) | Before: median / max, missing, give-ups, reversals, searches, failed | After |
+|---|---|---|
+| three ways, 3 each | -, 27 of 27, 11 381, 0, 26 091, 30 | 457 / 758, 0, 0, 33, 345, 36 |
+| narrow rooms, 3 each way | -, 18 of 18, 45, 0, 147, 21 | 592 / 642, 0, 0, 18, 201, 30 |
+| narrow rooms, 3 each way, one parked | -, 18 of 18, 36, 0, 156, 30 | 758 / 808, 0, 15 (none open or late), 15, 462, 24 |
+
+The yield is deterministic (object-id order, ordered containers, no draw) and bounded: each hold ends after at most 900 ticks blocked, each yield after `YIELD_WAIT`, the fills after `YIELD_FLOOD` cells. Three groups pass in turn: the lowest-id unit's group keeps going and the two others give way, then the next deadlock settles the rest.
+
+**Tests** (`pathing_c7p4.rs`, both positions): `hold_off_clears_passages_one_cell_wide` (on: none arrives, open give-ups; off: every unit arrives in the three scenarios, no give-up, none unsettled), `hold_off_alone_gives_up_after_the_first_hold` (the hold without the yield: held, then given up within `HOLD_FIRST`), `hold_off_leaves_unreachable_moves_alone` (a move into a ring of buildings or onto rock is given up or redirected as before).
+
+**Tick cost** (`cost`, ns per tick, fastest of 3 rounds, full table in `logs/cost-final.txt`): the hold costs ticks only where it runs. Against the layer without the hold (`jammed_move_dropped` on): three ways 42 884 against 69 666 (the reference 73 093: the passages clear, so the searches stop); narrow rooms 28 915 against 26 934 (reference 27 160); narrow rooms with one parked 34 177 against 31 596 (reference 31 995), the held units' wait-for fills. Every other row is within 1.5 % of the layer without the hold (gap 1 63 947 against 63 719, by buildings 128 564 against 128 860, unreachable cell 38 423 against 38 392); the unreachable cell's distance from the reference (35 274) is part 4's `reachable_near`, not the hold.
+
+### Item 4: shore maximum
+
+Not taken: the shore's maximum (176 → 217 with the layer) is the group spread's tradeoff (the last members walk round to cells of their own), and nothing cheap changes it without giving back the spread.
+
+### Results, part 6 (local lane, outputs in the git-ignored `local-lane/m8/c7-pathing6/`)
+
+Base: origin/main 91e0a5b (with A6b), built in this worktree detached; branch: this branch rebased onto it. Fresh layer-off baselines were taken on the rebased base, so A6b's own arena moves are in both.
+
+- *Default runs, byte-identical.* The oracle arena (`arena --record all --threads 2`): all nine files (`ours-M-0001` to `0003.csv`, the oracle reports M-0001 to M-0003 and M-0019 to M-0021) are byte-identical between base and branch (M-0019 0 of 6 rows failing, M-0020 1 of 25, M-0021 11 of 50 on both). The M6c, M7a and M7b sweeps 1 to 16 print the same lines on base and branch (only the run times differ) and pass (smallest minimum 0, 1 and drain minimum 3). The sim-gate goldens pass with `--include-ignored` and leave the tree unchanged.
+- *Layer-on sweeps 1 to 16* (`GLASNOST_PLAY_FIXES=1`): all three pass and print the same lines on base and branch (smallest minimum 0 for M6c, 2 for M7a, drain minimum 3 for M7b; vehicles seized min 27 median 173, crates picked up min 10 median 20): the hold changes none of the sweeps' printed figures.
+- *Quick lane, layer on* (seeds 7 to 14, maps 0, 2 and 8, sides 0 and 2 and sides 1 and 2, `GLASNOST_AI_QUICK=1 GLASNOST_AI_TEMPO=1`, 48 games), branch against part 5's layer (be378c8; A6b does not reach the AI houses): 47 games are identical tick for tick and one ends 90 ticks sooner (seed 7, sides 1 and 2, map 0: 50 046 → 49 956), all 48 with the same winner. Median 47 533 and mean 53 129 against 47 533 and 53 130; army give-ups 11 582 against 11 611; yields 2 against 5. The hold leaves real games almost alone and clears the passages the scenarios build.
+- *Quick lane, layer off* (the same 48 games, branch against the rebased base): every game ends at the same tick with the same winner and prints the same tempo lines (income, unit-ticks, give-ups, searches); median 45 600 on both.
