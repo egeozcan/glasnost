@@ -94,6 +94,18 @@ revision. The intake that takes in each revision checks it against this list.
   brings the median back to the reference, so neither is the cause on its own. Units that no longer
   give up matter more in play than a slightly longer AI game, so both switches stay in the layer.
 
+## Decisions of 2026-11-10
+
+- **A6b merged although the arena count rose from 28 to 33 failing rows** (main session). The step
+  built two original-only rules the approved specs give for the test-only computer-controlled
+  houses: S-0309 claim 25 (e)'s occupation alternative and S-0215 claims 23 and 27's infantry rule
+  for a building it may take. Leaving them out would keep a known departure from approved claims.
+  The six rows that newly fail come from a chain of approved rules (a refused occupier falls back
+  to rest and claim 28's hunt rule leaves occupier types out). Q-2926 asks whether the original
+  behaves the same. The exit's "arena failures fall" waits on that answer; nothing is tuned toward
+  the records meanwhile. Our AI houses are human-flagged and not reached; the quick lane, sweeps
+  and goldens did not move.
+
 ## Track A: fidelity
 
 M7b ended with the oracle arena failing 55 of 155 measured pairings (M-0001 to M-0003), mostly because
