@@ -135,4 +135,18 @@ they were left:
 
 ## Checks
 
-CHECKS
+- Base: main e79d86f. The branch is rebased onto origin/main a71647f; the commits between them
+  change tests, docs and the app's client only, so the base build and its arena stand for the
+  rebased base. The final checks below ran on the rebased tree.
+- Save format 125 → 126 and AI game format 91 → 92: the occupier rows change what a saved game
+  replays to. The sim-gate goldens pass unchanged (none was regenerated).
+- Arena (all six records): 28 failing rows before, 33 after (table above).
+- Seed sweeps 1 to 16: M6c, M7a and M7b output identical to the base's (smallest minimum 0, 1 and
+  the drain minimum 3).
+- `glasnost-ai` with ignored tests, release: 264 passed, as on main.
+- AI quick lane (seeds 7 to 10, maps 0, 2 and 8, 36 games): every winner and every end tick
+  unchanged, so no game needed a trace. Our AI houses are human-controlled, so the rows reach only
+  neutral and special houses' infantry there.
+- Workspace tests, clippy, fmt, the wasm32 build, `glasnost-tools` (release), `cargo xtask check`
+  (the 137 stock-guard problems, all in measurement records) and `cargo xtask gate`: as on main,
+  with this step's 8 new tests.
