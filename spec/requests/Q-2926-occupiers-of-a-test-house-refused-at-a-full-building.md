@@ -1,9 +1,9 @@
 ---
 id: Q-2926
 title: Occupiers of a computer-controlled house refused at a full building, and the hunt they lose
-status: open
+status: answered
 related: [S-0215, S-0309, S-0508, M-0001, M-0002]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need
