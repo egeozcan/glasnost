@@ -202,9 +202,50 @@ When you report a bug, say what you did and what you expected. Also give the **b
 
 **Is it on phones and tablets?** Touch controls work in the browser, but no tablet or phone has been tried.
 
+**How is the engine written without the original game's code?** From written behaviour specs and measurements of the game, which a separate spec side prepares. See [How Glasnost is made (clean room)](#how-glasnost-is-made-clean-room).
+
+## How Glasnost is made (clean room)
+
+The engine is written without looking at the original game's program code. The project describes its method as a documented two-team process, and makes no claim to be a certified clean room. This is a summary; the full rules are in [PROVENANCE.md](PROVENANCE.md).
+
+### Who does what
+
+- **The spec side** studies the original game and writes behaviour specs: plain-language descriptions of what the game does, organised by game topic (combat, movement, production and so on). It works in a separate, private workspace that is never published.
+- **The implementation side** writes the engine, working only from approved specs in [`spec/`](spec/README.md), measurement records in [`measurements/`](measurements/README.md) and this repository's own code.
+- **The project lead** owns the specs, runs the measurements on the original game, and reviews and approves the work, but writes no engine code.
+
+The spec writer, the scrub reviewer and the implementers are AI sessions, each confined to its own side. Future human contributors work under the implementation side's rules and state any earlier exposure to the sources that side may not read.
+
+### What passes between the sides
+
+- **Specs, after the scrub.** An automated check rejects hexadecimal numbers, code-like syntax and names taken from the original program or from the YRpp, Ares and Phobos projects named below. A fresh AI session with no access to the spec workspace then rewrites anything code-shaped into prose and rejects drafts that fail. Last, the lead reads and approves the spec. Only the draft text moves on; the spec side's raw notes stay in its workspace.
+- **What a spec may say.** A spec describes what the game does, not how the original program is built: two different correct implementations must both satisfy it. Specs carry no stock rules values; they name a value by its role, such as "the weapon's reload time".
+- **Measurement records** from the stock, unmodified game: win rates, times, tick counts, credits, unit counts, positions. Only these observations cross, never the scripts, configuration or notes that produced them. When a spec and a measurement disagree, the measurement wins and the spec goes back for revision.
+- **Questions** go the other way only as written spec requests in [`spec/requests/`](spec/requests/README.md). An implementer who finds a spec missing, unclear or contradictory files a request and stops, rather than guessing or working from memory.
+
+### What each side may read
+
+- The spec side may study the stock game program and its decompilation, the YRpp, Ares and Phobos projects and their documentation, ModEnc, OpenRA, XCC and the lead's earlier modding repository.
+- The implementation side never disassembles or decompiles the game, and never reads the spec workspace, the lead's earlier modding repository, YRpp, Ares, Phobos or ModEnc. It may read public file-format documentation, and OpenRA and XCC source code (GPL-3) for file formats and loaders. Code adapted from them keeps its copyright notice and names its origin.
+- Neither side may use the Chrono Divide client or decompiled browser ports of the game.
+
+The full table is in [PROVENANCE.md, section 1](PROVENANCE.md#1-roles).
+
+### How the rules are checked
+
+- **Citations.** Every behavioural constant, formula, ordering rule and quirk switch in the simulation code carries a comment naming the spec (`S-xxxx`) or measurement (`M-xxxx`) it comes from, and tests cite the same IDs. CI rejects uncited constants in the simulation crates and IDs that do not exist in `spec/` or `measurements/`. Instructions to implementers cite IDs too, and reviews judge code against tests and behaviour, not against memory of the original.
+- **No game data.** Source, tests, fixtures, CI caches, release artifacts, screenshots and logs carry no EA data and no stock rules values. Tests use synthetic data the project makes itself. Tests that need a real install are opt-in, stay on the contributor's machine and never run in CI.
+- **Sign-off.** Every commit carries a [DCO](https://developercertificate.org/) sign-off. AI-assisted commits keep the tool's attribution line, and the human who reviewed and accepted the change signs off.
+- **Tool settings.** The implementer sessions' settings deny file access to the spec workspace, the scrub staging folders and the lead's modding repository, along with common disassembler commands and the documentation sites of those projects and ModEnc. File denies are the main guard. Command denies are best-effort, and a web deny cannot block a single GitHub repository, so implementers must also follow the written reading rules.
+- **Incidents.** If forbidden material reaches the repository (an identifier or address from the program, decompiler output, code-shaped spec text, a stock rules value, game data, or a session that read a forbidden source), work that builds on it stops. The commits are reverted, and public history is rewritten to remove them where practical. A spec that carried the material goes back through the scrub, a fresh session that has not seen it rewrites the affected code, and the incident is logged in `spec/incidents/`. See [PROVENANCE.md, section 8](PROVENANCE.md#8-incidents).
+
+### What the repository contains
+
+It holds the engine's source code, the approved specs, the measurement records, synthetic test data and our own placeholder art. It holds no game files or pieces of them (archives, graphics, sounds, maps, string tables, rules files), no stock rules values and no install paths. When a measured value is itself a stock rules value, the record keeps the scenario, the method and the relation it confirms, and the value stays in a local-only file. Glasnost reads the game data from your own install, on your machine.
+
 ## For contributors
 
-Glasnost has one unusual rule. Behaviour is implemented only from written behaviour specs in [`spec/`](spec/README.md) and measurement records in [`measurements/`](measurements/README.md), never from the original game's code. A separate spec team studies the game, and every spec passes a review before it reaches the code. [PROVENANCE.md](PROVENANCE.md) describes this two-team process and what contributors may and may not read.
+Glasnost has one unusual rule. Behaviour is implemented only from written behaviour specs in [`spec/`](spec/README.md) and measurement records in [`measurements/`](measurements/README.md), never from the original game's code. [How Glasnost is made](#how-glasnost-is-made-clean-room) explains the process, and [PROVENANCE.md](PROVENANCE.md) has the full rules, including what contributors may and may not read.
 
 The code is GPL-3.0-or-later. Every commit needs a DCO sign-off (`git commit -s`). Start with [CONTRIBUTING.md](CONTRIBUTING.md), then [PLAN.md](PLAN.md) for the architecture and milestones, and [docs/development.md](docs/development.md) for the workspace, checks and CI.
 
