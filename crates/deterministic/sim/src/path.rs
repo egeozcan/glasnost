@@ -3147,8 +3147,9 @@ pub fn waits(w: &mut World, id: ObjectId) -> bool {
 /// delays. The retry delay (S-0212 claim 21 and its state table, row
 /// *destination changes*): for the driving and walk locomotors a different
 /// destination, or none, ends it, a delay started earlier in the same tick
-/// included; the same destination given again keeps it (claim 21's Open
-/// questions; for the walk locomotor Q-2896's interim). The other
+/// included. For the walk locomotor `given` ends it too when the
+/// destination is the one it already holds (r98, Q-2896); the driving
+/// locomotor keeps it then (claim 21's Open questions). The other
 /// locomotors keep it. The blockage delay of a walker (S-0209 claim 10):
 /// `given` (an assignment was made) starts it afresh, the destination the
 /// walker already holds included; without `given` only a destination that
@@ -3172,11 +3173,11 @@ pub fn destination_changed(w: &mut World, id: ObjectId, before: Option<Target>, 
         ob.path.blocked_since = None;
     }
     if let Some(ob) = w.obj_mut(id)
-        && ob.dest != before
+        && (ob.dest != before || (walker && given && ob.dest.is_some()))
         && ob.path.retry_at > t
     {
-        // spec: S-0212 claim 21 (a destination changed to a different one or cleared ends a running retry delay for the driving and walk locomotors)
-        // design: Q-2896 (interim: the destination the unit already holds, given again, keeps a running retry delay for every locomotor, the walk locomotor included, as S-0212 r97's Open questions keep it; S-0209 r76 claim 10 ends it for the walk locomotor at every assignment that is made)
+        // spec: S-0212 claim 21 (a destination changed to a different one or cleared ends a running retry delay for the driving and walk locomotors, a delay started earlier in the same tick included)
+        // spec: S-0212 claim 21 (r98, Q-2896: for the walk locomotor the destination it already holds, the same cell or the same object, given by an order, a scatter or any other rule at every assignment S-0209 claim 10 says is made, ends a running retry delay too, a delay started earlier in the same tick included; the other locomotors keep it, Open questions)
         ob.path.retry_at = t;
     }
 }
@@ -3282,7 +3283,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
         }
     }
     // spec: S-0212 claims 21 and 23 (for the driving and walk locomotors the failure's clearing, or the new destination of claim 23a, ends the delay it started: no delay remains after a failed gate or a failure that clears the destination; a walker that keeps its destination, row 3, waits for R)
-    // spec: S-0209 claim 10 (r76: only claim 23a's destination is an assignment here; a walker that keeps its destination, row 3, is given none, so its blockage delay runs on)
+    // spec: S-0209 claim 10 (r76: only claim 23a's destination is an assignment here; a walker that keeps its destination, row 3, is given none, so its blockage delay runs on) and S-0212 claim 21 (r98: and its retry delay runs on too, unless a later assignment ends it)
     destination_changed(w, id, o.dest, house_given);
     // spec: S-0309 claim 22 (a route failure of a vehicle with the driving locomotor that does not give the move up, the vehicle standing still after it, S-0212 claim 23: a held target not within reach, claim 23, is dropped and the limited-scan mark set; the hovering and ship locomotors' conditions were not examined, Open questions, so they set none here)
     if res != Search::Found

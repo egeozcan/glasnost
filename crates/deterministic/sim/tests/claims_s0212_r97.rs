@@ -3,10 +3,12 @@
 //! a different one or cleared, a delay started earlier in the same tick
 //! included, so no delay remains after a failure that clears the
 //! destination (claim 23) and a new destination is searched at once. The
-//! ship locomotor keeps the delay; the same destination given again keeps
-//! it; a harvester's docking offer keeps it (S-0402 claim 10a). Synthetic
-//! data only: the test kit's invented walker and buggy, a ship of our own,
-//! our own water cells, no game data.
+//! ship locomotor keeps the delay; a harvester's docking offer keeps it
+//! (S-0402 claim 10a). Revision 98 (Q-2896, claim 21 and scenario P25 e):
+//! for the walk locomotor the destination it already holds, given again,
+//! ends the delay too; the driving and ship locomotors keep it then.
+//! Synthetic data only: the test kit's invented walker and buggy, a ship of
+//! our own, our own water cells, no game data.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -180,17 +182,114 @@ fn claim_21_walker_different_destination_ends_the_delay() {
     assert!(s < t + 30, "not held back to {}", t + 90);
 }
 
-// spec: S-0212 claim 21 and Open questions (for every locomotor, giving a unit the destination it already holds keeps the delay running: this spec keeps it)
-// design: Q-2896 (interim for the walk locomotor: S-0209 r76 claim 10 ends the delay at this assignment, S-0212 r97 keeps it; the S-0212 text is followed until the request is answered)
+// spec: S-0212 claim 21 (r98, Q-2896: for the walk locomotor the destination it already holds, the same cell, given again by another rule in a later tick ends the running delay, so it is searched for at once)
 #[test]
-fn claim_21_the_same_destination_again_keeps_the_delay() {
+fn claim_21_r98_the_same_destination_again_ends_the_delay() {
     let (mut w, g) = one(Kind::Infantry, "WALKER");
     let (t, near) = walker_kept(&mut w, g);
     tick::step(&mut w);
     give(&mut w, g, Some(Target::Cell(near)));
+    assert!(!path::delay_runs(&w, g), "ended at the assignment");
+    assert!(w.obj(g).unwrap().path.retry_at <= w.tick);
+    let (s, r) = next_search(&mut w, g, 5).expect("a search");
+    assert_eq!(r, Search::Found);
+    assert!(s < t + 10, "not held back to {}", t + 90);
+}
+
+// spec: S-0212 claim 21 (r98, Q-2896: the same object given again ends the walker's running delay, a delay started earlier in the same tick included)
+#[test]
+fn claim_21_r98_the_same_object_again_ends_the_delay() {
+    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let v = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, mid(SIZE, 6, 0), 0);
+    give(&mut w, g, Some(Target::Object(v)));
+    let t = w.tick;
+    let r = w.rules().general.retry_delay;
+    path::start_delay(w.obj_mut(g).unwrap(), t, r);
     assert!(path::delay_runs(&w, g));
-    assert_eq!(w.obj(g).unwrap().path.retry_at, t + 90);
-    assert_eq!(next_search(&mut w, g, 120), Some((t + 90, Search::Found)));
+    give(&mut w, g, Some(Target::Object(v)));
+    assert!(!path::delay_runs(&w, g), "ended in the same tick");
+    assert_eq!(w.obj(g).unwrap().path.retry_at, t);
+}
+
+// spec: S-0212 claim 21 and Open questions (r98: for every locomotor other than the walk locomotor, the destination a unit already holds, given again, keeps a running delay running: the driving and ship locomotors here)
+#[test]
+fn claim_21_r98_others_keep_the_delay_at_the_same_destination() {
+    for name in ["BUGGY", "BOAT"] {
+        let (mut w, v) = one(Kind::Vehicle, name);
+        let d = Some(Target::Cell(mid(SIZE, 6, 0)));
+        give(&mut w, v, d);
+        let t = w.tick;
+        let r = w.rules().general.retry_delay;
+        path::start_delay(w.obj_mut(v).unwrap(), t, r);
+        give(&mut w, v, d);
+        assert!(path::delay_runs(&w, v), "{name}: the delay runs on");
+        assert_eq!(w.obj(v).unwrap().path.retry_at, t + r, "{name}");
+        tick::step(&mut w);
+        give(&mut w, v, d);
+        assert!(path::delay_runs(&w, v), "{name}: a later tick too");
+        assert_eq!(w.obj(v).unwrap().path.retry_at, t + r, "{name}");
+    }
+}
+
+/// Scenario P25(e) on [`walker_kept`]'s walker: a move order in tick
+/// *c* + 10 to `to`. Returns *c*, the end-of-tick readings of the
+/// order's tick (whether a delay runs, its tick) and the tick of the
+/// walker's first path computation after *c*, read up to *c* + 100.
+fn p25_e(to: impl Fn(CellXY) -> CellXY) -> (i32, (bool, i32), Option<i32>) {
+    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let (c, near) = walker_kept(&mut w, g);
+    assert_eq!(w.obj(g).unwrap().path.retry_at, c + 90);
+    let mut first = None;
+    let mut at_order = None;
+    while w.tick <= c + 100 {
+        let k = w.tick;
+        if k == c + 10 {
+            move_to(&mut w, g, to(near));
+        }
+        tick::step(&mut w);
+        if first.is_none() {
+            first = searches(&trace::take(&w), g).first().map(|s| s.0);
+        } else {
+            trace::take(&w);
+        }
+        if k < c + 10 {
+            // Our walker's kept cell is open, so it walks once it searches;
+            // up to the order it stays, as P25(e) requires.
+            assert_eq!(w.obj(g).unwrap().pos.cell(), mid(SIZE, 0, 0), "it stays");
+        }
+        if k == c + 10 {
+            at_order = Some((path::delay_runs(&w, g), w.obj(g).unwrap().path.retry_at));
+        }
+        if first.is_some() && at_order.is_some() {
+            break;
+        }
+    }
+    (c, at_order.expect("the order's tick"), first)
+}
+
+/// The P25(e) expectation for one run: at the end of the order's tick the
+/// timer has run out or reads R from a computation in that tick, and the
+/// first computation after *c* comes before *c* + 90, at the order or later.
+fn p25_e_expect(run: &str, (c, (runs, at), first): (i32, (bool, i32), Option<i32>)) {
+    let s = first.unwrap_or_else(|| panic!("{run}: no computation"));
+    assert!(s >= c + 10, "{run}: none before the order: {s}");
+    assert!(s < c + 90, "{run}: not held back to {}: {s}", c + 90);
+    assert!(
+        !runs || (s == c + 10 && at == s + 90),
+        "{run}: the timer still counts from {c}: {at}"
+    );
+}
+
+// spec: S-0212 claim 21 (r98, Q-2896: a walker's running retry delay ends when it is given the destination it already holds, by an order in a later tick than the search that started it) and scenario P25 part e run 1
+#[test]
+fn p25_e_run_1_an_order_to_the_cell_it_holds_ends_the_delay() {
+    p25_e_expect("run 1", p25_e(|near| near));
+}
+
+// spec: S-0212 claim 21 (a destination changed to a different cell ends a walker's running retry delay) and scenario P25 part e run 2
+#[test]
+fn p25_e_run_2_an_order_to_the_second_tile_ends_the_delay() {
+    p25_e_expect("run 2", p25_e(|near| CellXY::new(near.x, near.y + 1)));
 }
 
 // spec: S-0212 claim 21 (r97: a destination cleared ends a running delay of the walk locomotor, so the cell it kept, ordered again, is a different destination from none and is searched at once)
