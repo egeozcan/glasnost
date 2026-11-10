@@ -4,7 +4,7 @@ How the workspace is laid out, which checks guard it, and how CI runs them. Read
 
 ## Workspace
 
-Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package names are prefixed `glasnost-`.
+Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package names are prefixed `glasnost-`. On Linux, building the workspace or the desktop game needs the ALSA development package for the game's sound (`alsa-lib-devel` on Fedora, `libasound2-dev` on Debian and Ubuntu); see *Audio (M5b)*, Outputs.
 
 | Crate | Path | Filled in | Role |
 |---|---|---|---|
@@ -21,7 +21,7 @@ Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package name
 | `ui` | `crates/ui` | M5 | Game UI |
 | `net` | `crates/net` | M9 | Lockstep networking (the relay server gets its own crate in M9) |
 | `app` | `crates/app` | M0 demo, M1 viewer | winit shell shared by native and web; the asset viewer |
-| `platform-native` | `crates/platform-native` | M0 | Native binary `glasnost` |
+| `platform-native` | `crates/platform-native` | M0 | Native binary `glasnost`; default feature `audio` (the device output) |
 | `platform-web` | `crates/platform-web` | M0 | wasm entry point |
 | `tools` | `crates/tools` | M0 fixtures, M1 local lane, M3 runner | `glasnost-fixtures`, `glasnost-local-lane`, `glasnost-headless`; later sync-diff |
 | `sim-gate` | `crates/sim-gate` | M3 | The determinism gate: per-tick state hashes of a synthetic replay, native and wasm32 |
@@ -315,10 +315,13 @@ Interim rules and gaps:
   - a separate announcement voice;
   - `render`, which tests call offline with no device.
 - **Music (`music`, `music_files`, M8 step C1).** The mixer's music voice, mixed after the announcement at our music volume; the player runs at the end of each audio pass. See "Music (M8 step C1 part 1)".
-- **Outputs (`output`, `web`, `pipe`).** `Output::pump` is called once per frame and pushes enough mixed audio to stay about 0.1 s ahead.
-  - **wasm32:** `web::WebOutput` schedules 1024-frame AudioBuffers on an AudioContext. The context starts suspended and is resumed by the first pointer, key or touch gesture. `Audio::resume` can also be called from an input handler.
-  - **Native:** the `native-output` feature (off by default) pipes 16-bit stereo to `pw-cat`, `pacat` or `aplay`. This is a stopgap: an in-process device crate (cpal) could not be fetched offline when M5b was written, and the default build needs no system audio headers.
-  - **Otherwise:** `NullOutput`, which discards voices, is used and its state names the reason.
+- **Outputs (`output`, `web`, `device`, `ring`).** `Output::pump` is called once per frame and renders enough mixed audio to stay a short lead ahead of the device. The mixer runs at the output's rate (`Output::rate`); it already resamples every clip and the music to that rate, so no output resamples.
+  - **wasm32:** `web::WebOutput` schedules 1024-frame AudioBuffers on an AudioContext, about 0.1 s ahead. The context starts suspended and is resumed by the first pointer, key or touch gesture. `Audio::resume` can also be called from an input handler.
+  - **Native (design: native audio, 2026-11-10):** `device::DeviceOutput`, feature `device` of `glasnost-audio`, plays on the system's default output device through [cpal](https://github.com/RustAudio/cpal) 0.18 (Apache-2.0): ALSA on Linux (PipeWire and PulseAudio serve it through their ALSA plugins), WASAPI on Windows, CoreAudio on macOS. It opens the device's default configuration (rate, channel count, sample format) and the mixer runs at that rate. The device's callback thread pulls from `ring::Ring`, a bounded lock-free ring of stereo frames; each pump tops the ring up to 60 ms (`device::LATENCY_MS`) plus the largest block the device has asked for, so the device's pull is the only clock. An empty ring plays silence, and the callback never waits or allocates. Left and right go to the first two channels, their mean to a mono device, silence to further channels. A stream error other than an underrun or a route change stops the output: its state turns silent with the reason, logged once. On close it logs the frames played and the frames of underrun silence.
+  - **Who opens the device:** only a program that calls `output::allow_device()`. The desktop game (`glasnost-platform-native --game`) does; tests and tools never do, so a workspace test run, which builds the feature through `glasnost-platform-native`, opens no device.
+  - **Otherwise:** `output::open_or_silent` falls back to `NullOutput`, which discards voices; its state names the reason (no device, the device did not open, a build without the feature), logged once as `no sound: …`. The settings screen then marks the three volume rows "(no sound)" and gives the reason on its note line (`Client::no_sound`).
+  - **The default feature.** `glasnost-platform-native` has the default feature `audio` (= `glasnost-audio/device`). On Linux it needs the ALSA development package: `alsa-lib-devel` on Fedora, `libasound2-dev` on Debian and Ubuntu. Because a workspace build selects `glasnost-platform-native`, `cargo build --workspace`, `cargo test --workspace` and clippy need it too (CI installs it). A silent desktop game that needs no audio headers: `cargo build --release -p glasnost-platform-native --no-default-features`.
+  - The command-line pipe output (`pipe`, feature `native-output`, which streamed to `pw-cat`, `pacat` or `aplay`) is gone. The asset viewer's one-sound preview (`preview::Player`) still hands a temporary WAV file to a command-line player natively.
 - **Events (`Audio`).** The game client owns one `Audio` (`Audio::platform()` picks the output). At each game start it calls `set_quirks`, `set_catalog`, `set_speech`, `set_bank`, `set_voices`, `set_names` and `start(world, local_house)`. Then it calls:
   - after each tick, `tick(world, effects, unsync)`. This plays:
     - the hit, shot, death and animation effects (claims 20 to 22), and the game-wide building damage and death sounds for building types with none of their own (claim 37);
