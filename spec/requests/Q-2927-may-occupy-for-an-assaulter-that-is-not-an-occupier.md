@@ -1,9 +1,9 @@
 ---
 id: Q-2927
 title: What "may occupy this one" means for an assaulter type that is not an occupier type
-status: open
+status: answered
 related: [S-0215, S-0309, S-0508]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need
