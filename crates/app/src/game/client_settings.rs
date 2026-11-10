@@ -38,6 +38,8 @@ impl Client {
                     Row::Voices => s.voices = settings::step_volume(s.voices, d),
                     Row::Music => s.music = settings::step_volume(s.music, d),
                     Row::Scroll => s.step_scroll(d),
+                    // design: readable text and display scale (lead's request 2026-11-10): the factor changes at once (`apply_settings`)
+                    Row::Display => s.step_display(d),
                     Row::Scale => s.step_scale(d),
                     Row::Captions => s.captions = !s.captions,
                     // spec: S-0111 claim 20 (both options menus change the tooltip option: the main menu's settings and the game's options menu reach this screen) and claim 26 (turning it off hides a tip)
@@ -121,6 +123,7 @@ impl Client {
                 format!("{}%", s.voices),
                 format!("{}%", s.music),
                 s.scroll_label(),
+                self.display().label(s.display_scale),
                 if fits == i32::from(s.ui_scale) {
                     format!("{}%", s.ui_scale)
                 } else {

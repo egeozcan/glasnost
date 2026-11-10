@@ -20,7 +20,9 @@ pub enum Row {
     Music,
     /// Scroll speed.
     Scroll,
-    /// Display scale of the interface.
+    /// Display scale of the whole game picture (Auto, 1x, 2x, 3x).
+    Display,
+    /// Size of the interface (the sidebar and the menus).
     Scale,
     /// Captions for announcements, on or off.
     Captions,
@@ -33,11 +35,13 @@ pub enum Row {
 }
 
 /// All rows in the order drawn.
-pub const ROWS: [Row; 9] = [
+pub const ROWS: [Row; 10] = [
     Row::Sound,
     Row::Voices,
     Row::Music,
     Row::Scroll,
+    // design: readable text and display scale (lead's request 2026-11-10): the display scale's row above the interface size's
+    Row::Display,
     Row::Scale,
     Row::Captions,
     Row::Colours,
@@ -61,7 +65,7 @@ pub enum SettingsHit {
 /// What the screen shows.
 pub struct Page<'a> {
     /// The value text of each row, in [`ROWS`] order.
-    pub values: [String; 9],
+    pub values: [String; 10],
     /// Each rebindable action and the key it has now.
     pub bindings: Vec<(String, String)>,
     /// The binding waiting for a key press.
@@ -78,7 +82,9 @@ fn label(r: Row) -> &'static str {
         Row::Voices => "Voices",
         Row::Music => "Music",
         Row::Scroll => "Scroll speed",
-        Row::Scale => "Display scale",
+        // design: readable text and display scale (lead's request 2026-11-10): "Display scale" now names the whole picture's factor; the interface-only scale is "Interface size"
+        Row::Display => "Display scale",
+        Row::Scale => "Interface size",
         Row::Captions => "Captions",
         Row::Colours => "Colour-blind houses",
         Row::ToolTips => "Name tips",
@@ -175,6 +181,7 @@ mod tests {
                 "100".into(),
                 "100".into(),
                 "4 of 7".into(),
+                "Auto (2x)".into(),
                 "100%".into(),
                 "On".into(),
                 "Off".into(),
@@ -197,6 +204,7 @@ mod tests {
         assert!(d.texts().contains(&"SETTINGS"));
         for hit in [
             SettingsHit::Step(Row::Music, 1),
+            SettingsHit::Step(Row::Display, 1),
             SettingsHit::Step(Row::Scale, -1),
             SettingsHit::Step(Row::Colours, 1),
             SettingsHit::Step(Row::ToolTips, -1),
@@ -211,8 +219,9 @@ mod tests {
         }
         for size in [(640, 480), (800, 600)] {
             let mut p = page();
-            p.bindings = (0..9).map(|i| (format!("A{i}"), "K".into())).collect();
-            p.fixed = (0..14).map(|i| (format!("F{i}"), "K".into())).collect();
+            // The client's counts: 10 bindings, 16 fixed keys.
+            p.bindings = (0..10).map(|i| (format!("A{i}"), "K".into())).collect();
+            p.fixed = (0..16).map(|i| (format!("F{i}"), "K".into())).collect();
             let (_, t) = view(size, &p, None);
             for (r, _) in &t.list {
                 assert!(

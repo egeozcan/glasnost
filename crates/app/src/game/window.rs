@@ -156,6 +156,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         cursor_hidden: false,
         pump: Pump::default(),
         probed: None,
+        display_probed: String::new(),
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -225,6 +226,8 @@ struct GameApp {
     pump: Pump,
     /// The probe last published ([`GameOptions::probe`]).
     probed: Option<((i32, i32), usize)>,
+    /// The display probe last published ([`publish_display`]).
+    display_probed: String,
 }
 
 impl GameApp {
@@ -257,6 +260,29 @@ impl GameApp {
             let done = pollster::block_on(run_job(job));
             self.client.done(done);
         }
+    }
+
+    /// Gives the client the window's drawable size and scale factor, after
+    /// the start, a resize or a change of the scale factor (a window moved
+    /// to another monitor, a browser zoom). The benchmark draws at its size
+    /// in physical pixels, one view pixel each, whatever the display.
+    fn fit_window(&mut self) {
+        let (Some(g), Some(w)) = (&self.gfx, &self.window) else {
+            return;
+        };
+        let physical = (g.config.width as i32, g.config.height as i32);
+        if self.bench.is_some() {
+            self.client.resize(physical);
+        } else {
+            self.client.set_window(physical, w.scale_factor());
+        }
+    }
+
+    /// The view pixel under a host position in physical pixels: the one
+    /// place mouse and touch positions are converted
+    /// (`super::display::Display::point`).
+    fn view_point(&self, p: winit::dpi::PhysicalPosition<f64>) -> Point {
+        self.client.display().point(p.x, p.y)
     }
 
     fn after_input(&mut self) {
@@ -347,8 +373,6 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     log::info!("game rendering with {}", gfx.backend);
                     // The battlefield is drawn on the GPU from here on.
                     self.client.cpu_map = false;
-                    self.client
-                        .resize((gfx.config.width as i32, gfx.config.height as i32));
                     if let Some(b) = self.bench.as_mut() {
                         b.device = gfx.device_label.clone();
                         b.gpu_timer = gfx.timer.is_some();
@@ -356,6 +380,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     }
                     gfx.window.request_redraw();
                     self.gfx = Some(gfx);
+                    self.fit_window();
                     if !self.started {
                         self.started = true;
                         #[cfg(not(target_arch = "wasm32"))]
@@ -381,12 +406,19 @@ impl ApplicationHandler<GameEvent> for GameApp {
             WindowEvent::Resized(size) => {
                 if let Some(g) = &mut self.gfx {
                     g.resize(size.width, size.height);
-                    self.client
-                        .resize((g.config.width as i32, g.config.height as i32));
                     if let Some(b) = self.bench.as_mut() {
                         b.set_size((g.config.width, g.config.height));
                     }
                 }
+                self.fit_window();
+            }
+            // design: readable text and display scale (lead's request 2026-11-10): a new scale factor (another monitor, a browser zoom) picks the factor again at once; the resize that follows sets the new size
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if let (Some(g), Some(w)) = (&mut self.gfx, &self.window) {
+                    let size = w.inner_size();
+                    g.resize(size.width, size.height);
+                }
+                self.fit_window();
             }
             WindowEvent::Focused(on) => self.client.focus(on),
             WindowEvent::ModifiersChanged(m) => {
@@ -398,13 +430,13 @@ impl ApplicationHandler<GameEvent> for GameApp {
             WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. }
                 if self.client.mouse_quiet(now_ms()) => {}
             WindowEvent::CursorMoved { position, .. } => {
-                self.pointer = Point::new(position.x as i32, position.y as i32);
+                self.pointer = self.view_point(position);
                 self.client.pointer_moved(self.pointer);
             }
             WindowEvent::CursorLeft { .. } => self.client.pointer_left(),
             WindowEvent::MouseWheel { delta, .. } => {
                 // The client picks line steps or a swipe (S-0411 claim 18; touch scrolling).
-                self.client.wheel_event(match delta {
+                let d = match delta {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => {
                         touch::WheelDelta::Lines(f64::from(y))
                     }
@@ -415,7 +447,10 @@ impl ApplicationHandler<GameEvent> for GameApp {
                             cfg!(target_arch = "wasm32"),
                         )
                     }
-                });
+                };
+                // A swipe's pixels in view pixels (`super::display`).
+                let d = self.client.display().wheel(d);
+                self.client.wheel_event(d);
                 self.after_input();
             }
             // design: touch and touchpad scrolling (lead's request 2026-11-10): touches work whatever the touchpad setting
@@ -427,7 +462,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     T::Ended => touch::Phase::End,
                     T::Cancelled => touch::Phase::Cancel,
                 };
-                let p = Point::new(t.location.x as i32, t.location.y as i32);
+                let p = self.view_point(t.location);
                 // A tap's click is a release, as the mouse's (S-0202 claim 8: the client picks the next game's seed).
                 self.client.next_seed = host_seed();
                 let mods = self.modifiers();
@@ -541,6 +576,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 }
                 if self.options.probe {
                     publish_probe(&self.client, &mut self.probed);
+                    publish_display(&self.client, &mut self.display_probed);
                 }
                 let hide = self.client.draws_cursor();
                 if hide != self.cursor_hidden
@@ -632,6 +668,11 @@ pub struct GpuDraw {
     /// The last prepare's laps, when [`GpuDraw::lap_clock`] is set.
     pub laps: DrawLaps,
     rebuilds: usize,
+    /// The last prepare's size in view pixels.
+    size: (u32, u32),
+    /// Screen pixels per view pixel and the target's size in screen
+    /// pixels ([`GpuDraw::set_screen`]).
+    screen: (u32, (u32, u32)),
 }
 
 /// Host-clock times of one [`GpuDraw::prepare`]'s parts, in milliseconds,
@@ -672,7 +713,18 @@ impl GpuDraw {
             lap_clock: None,
             laps: DrawLaps::default(),
             rebuilds: 0,
+            size: (1, 1),
+            screen: (1, (1, 1)),
         }
+    }
+
+    /// Draws each view pixel as `factor` × `factor` screen pixels on a
+    /// target of `target` screen pixels, from its top left corner
+    /// (`super::display`; design: readable text and display scale (lead's
+    /// request 2026-11-10)). The default, factor 1, draws view pixels as
+    /// they are.
+    pub fn set_screen(&mut self, factor: u32, target: (u32, u32)) {
+        self.screen = (factor.max(1), target);
     }
 
     /// The counts since the last call (draws, instances, uploads).
@@ -692,7 +744,7 @@ impl GpuDraw {
         self.lap_clock.map_or(0.0, |c| c())
     }
 
-    /// Takes the client's frame for a target of `size`: records the
+    /// Takes the client's frame for a view of `size` view pixels: records the
     /// battlefield into `encoder` (falling back to the CPU compose for good
     /// when that fails) and uploads and prepares the batch. Draw it with
     /// [`GpuDraw::draw`] after `encoder`'s work.
@@ -729,12 +781,24 @@ impl GpuDraw {
             self.batch.set_image(device, queue, *id, *w, *h, rgba);
         }
         let quads = painter.quads(&list);
+        self.size = size;
         self.batch.prepare(device, queue, size, &quads);
         self.laps.batch = self.lap() - batched;
     }
 
-    /// Records the prepared frame into `pass`.
+    /// Records the prepared frame into `pass`: the batch maps view pixels
+    /// onto a viewport of the view's size times the factor, so each view
+    /// pixel covers a whole square of screen pixels and the batch's texel
+    /// reads (`batch2d.wgsl`, pixel centres floored in view pixels) give
+    /// the nearest-neighbour enlargement of the 1x picture.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        let (f, target) = self.screen;
+        if f > 1 {
+            // design: readable text and display scale (lead's request 2026-11-10): whole-number factor, nearest neighbour, from the top left corner
+            let w = (self.size.0 * f).min(target.0).max(1);
+            let h = (self.size.1 * f).min(target.1).max(1);
+            pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
+        }
         self.batch.draw(pass);
     }
 
@@ -935,13 +999,14 @@ impl Gfx {
         if let Some(t) = self.timer.as_mut().filter(|_| timing.is_some()) {
             t.begin(&mut encoder);
         }
-        self.draw.prepare(
-            &self.device,
-            &self.queue,
-            client,
-            (self.config.width, self.config.height),
-            &mut encoder,
-        );
+        // The picture is drawn in view pixels and shown at the display
+        // factor (`super::display`).
+        let factor = client.display().factor.max(1) as u32;
+        let view = (client.size.0.max(1) as u32, client.size.1.max(1) as u32);
+        self.draw
+            .set_screen(factor, (self.config.width, self.config.height));
+        self.draw
+            .prepare(&self.device, &self.queue, client, view, &mut encoder);
         let t1 = bench::now();
         let view = frame
             .texture
@@ -1018,6 +1083,28 @@ fn publish_probe(client: &Client, last: &mut Option<((i32, i32), usize)>) {
         let _ = data.set("glasnostView", &view);
         let _ = data.set("glasnostSelected", &selected);
     }
+}
+
+/// Mirrors the display into the page when it changed (web only; the
+/// browser check of the display scale): `data-glasnost-display` holds
+/// `<physical w>x<physical h> <factor> <view w>x<view h> <host scale>`.
+fn publish_display(client: &Client, last: &mut String) {
+    let d = client.display();
+    let now = format!(
+        "{}x{} {} {}x{} {}",
+        d.physical.0, d.physical.1, d.factor, client.size.0, client.size.1, d.host_scale
+    );
+    if now == *last {
+        return;
+    }
+    #[cfg(target_arch = "wasm32")]
+    if let Some(body) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.body())
+    {
+        let _ = body.dataset().set("glasnostDisplay", &now);
+    }
+    *last = now;
 }
 
 /// Stores the benchmark's outputs: natively files in its folder, on the web

@@ -343,6 +343,8 @@ fn state_hash_is_the_same_under_any_settings() {
                 music: 0,
                 scroll_index: 0,
                 ui_scale: 300,
+                // design: readable text and display scale (lead's request 2026-11-10): no setting reaches the hash
+                display_scale: 3,
                 captions: false,
                 colour_blind: true,
                 bindings: b,

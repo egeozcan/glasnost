@@ -16,6 +16,7 @@ fn custom() -> Settings {
         music: 70,
         scroll_index: 0,
         ui_scale: 150,
+        display_scale: 2,
         captions: false,
         colour_blind: true,
         bindings: b,
@@ -149,6 +150,31 @@ fn missing_unknown_and_wrong_fields_take_defaults() {
     );
 }
 
+/// The display scale (design: readable text and display scale (lead's
+/// request 2026-11-10)): a file written before it, which has no `display`
+/// line, loads as Auto with its interface size kept as it was; each
+/// choice round-trips and a wrong value is ignored.
+#[test]
+fn a_file_older_than_the_display_scale_loads_as_auto() {
+    let old = "version=1\nsound=40\nvoices=100\nmusic=100\nscroll=3\nscale=200\n\
+               captions=1\ncolour_blind=0\ntool_tips=1\nrelay=\n";
+    let s = Settings::from_text(old);
+    assert_eq!(s.display_scale, crate::game::display::AUTO);
+    assert_eq!((s.ui_scale, s.sound), (200, 40));
+    assert!(Settings::default().to_text().contains("display=auto\n"));
+    for d in crate::game::display::CHOICES {
+        let s = Settings {
+            display_scale: d,
+            ..Settings::default()
+        };
+        assert_eq!(Settings::from_text(&s.to_text()).display_scale, d);
+    }
+    for bad in ["display=0", "display=4", "display=2x", "display="] {
+        assert_eq!(Settings::from_text(bad).display_scale, 0, "{bad}");
+    }
+    assert_eq!(Settings::from_text("display= 3 ").display_scale, 3);
+}
+
 #[test]
 fn bindings_refuse_conflicts_and_bad_keys() {
     let mut b = Bindings::default();
@@ -234,6 +260,14 @@ fn steps_stay_in_range() {
         s.step_scale(1);
     }
     assert_eq!(s.ui_scale, 300);
+    // The display scale steps Auto, 1x, 2x, 3x and stops at either end.
+    s.step_display(-1);
+    assert_eq!(s.display_scale, 0);
+    for want in [1, 2, 3, 3] {
+        s.step_display(1);
+        assert_eq!(s.display_scale, want);
+    }
+    assert_eq!(s.display_label(), "3");
     assert_eq!(step_volume(95, 1), 100);
     assert_eq!(step_volume(5, -1), 0);
 }
