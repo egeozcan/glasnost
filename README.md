@@ -75,7 +75,7 @@ Sound starts with your first click or key press, since browsers only allow sound
 
 **The end screen** shows victory or defeat and, for each player, what they built, killed and lost, and a score.
 
-**Settings** (from the main menu, or from the options menu outside network games) has sound effects, voices and music volume, scroll speed, captions for announcements, colour-blind house colours, name tips over units, touchpad scrolling, and the command keys. Settings are kept between sessions.
+**Settings** (from the main menu, or from the options menu outside network games) has sound effects, voices and music volume, scroll speed, captions for announcements, colour-blind house colours, name tips over units, touchpad scrolling, **Display scale** and **Interface size**, and the command keys. Settings are kept between sessions.
 
 ## Controls
 
@@ -168,6 +168,7 @@ When you report a bug, say what you did and what you expected. Also give the **b
 - Watching an all-computer game.
 - Settings and accessibility options: captions, colour-blind colours, keyboard-only menus and sidebar.
 - Sound, announcements and music in the browser.
+- The right size on high-resolution (2x) screens: the game is drawn at your display's scale and stays sharp, so a HiDPI laptop or a browser on a 2x screen shows the same area as an ordinary screen (**Display scale** in the settings: Auto, 1x, 2x or 3x).
 
 **Not yet:**
 
