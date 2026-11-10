@@ -35,6 +35,10 @@ pub enum Prim {
         text: String,
         /// Ink colour.
         rgba: Rgba,
+        /// When some, a one-pixel outline in this colour drawn under the
+        /// ink at the eight neighbouring offsets (text over the
+        /// battlefield).
+        outline: Option<Rgba>,
         /// Pixels outside are not drawn.
         clip: Rect,
     },
@@ -112,24 +116,56 @@ impl DrawList {
             y,
             text: text.into(),
             rgba,
+            outline: None,
+            clip,
+        });
+    }
+
+    /// Adds text clipped to `clip` with a one-pixel [`colour::OUTLINE`]
+    /// around its ink, for text over the battlefield, which stays readable
+    /// over any ground.
+    // design: readable text and display scale (lead's request 2026-11-10)
+    pub fn text_outlined(
+        &mut self,
+        x: i32,
+        y: i32,
+        text: impl Into<String>,
+        rgba: Rgba,
+        clip: Rect,
+    ) {
+        self.prims.push(Prim::Text {
+            x,
+            y,
+            text: text.into(),
+            rgba,
+            outline: Some(colour::OUTLINE),
             clip,
         });
     }
 
     /// Adds text centred in `rect` (cut with ".." when too wide).
     pub fn text_centred(&mut self, rect: Rect, text: &str, rgba: Rgba) {
-        let t = font::fit(text, rect.w - 2);
-        let x = rect.x + (rect.w - font::text_width(&t)) / 2;
-        let y = rect.y + (rect.h - 7) / 2;
+        let (x, y, t) = centred(rect, text);
         self.text(x, y, t, rgba, rect);
+    }
+
+    /// [`DrawList::text_centred`] with an outline ([`DrawList::text_outlined`]).
+    pub fn text_centred_outlined(&mut self, rect: Rect, text: &str, rgba: Rgba) {
+        let (x, y, t) = centred(rect, text);
+        self.text_outlined(x, y, t, rgba, rect);
     }
 
     /// Adds text left-aligned in `rect` with a small margin, vertically
     /// centred.
     pub fn text_left(&mut self, rect: Rect, text: &str, rgba: Rgba) {
-        let t = font::fit(text, rect.w - 4);
-        let y = rect.y + (rect.h - 7) / 2;
-        self.text(rect.x + 3, y, t, rgba, rect);
+        let (x, y, t) = left(rect, text);
+        self.text(x, y, t, rgba, rect);
+    }
+
+    /// [`DrawList::text_left`] with an outline ([`DrawList::text_outlined`]).
+    pub fn text_left_outlined(&mut self, rect: Rect, text: &str, rgba: Rgba) {
+        let (x, y, t) = left(rect, text);
+        self.text_outlined(x, y, t, rgba, rect);
     }
 
     /// Adds a sprite frame.
@@ -185,6 +221,21 @@ impl DrawList {
     }
 }
 
+/// Where text centred in `rect` goes, and the text cut to fit.
+fn centred(rect: Rect, text: &str) -> (i32, i32, String) {
+    let t = font::fit(text, rect.w - 2);
+    let x = rect.x + (rect.w - font::text_width(&t)) / 2;
+    let y = rect.y + (rect.h - 7) / 2;
+    (x, y, t)
+}
+
+/// Where text left-aligned in `rect` goes, and the text cut to fit.
+fn left(rect: Rect, text: &str) -> (i32, i32, String) {
+    let t = font::fit(text, rect.w - 4);
+    let y = rect.y + (rect.h - 7) / 2;
+    (rect.x + 3, y, t)
+}
+
 /// The interface colour scheme: graphite panels with amber accents (our own
 /// design).
 pub mod colour {
@@ -204,8 +255,9 @@ pub mod colour {
     pub const ACCENT: Rgba = [232, 176, 64, 255];
     /// Body text.
     pub const TEXT: Rgba = [214, 218, 224, 255];
-    /// Dim text.
-    pub const DIM: Rgba = [130, 136, 146, 255];
+    /// Dim text: at least 4.5 : 1 against [`RAISED`] and [`PANEL`].
+    // design: readable text and display scale (lead's request 2026-11-10)
+    pub const DIM: Rgba = [160, 166, 176, 255];
     /// Good (power surplus, legal placement, victory).
     pub const GOOD: Rgba = [96, 200, 112, 255];
     /// Bad (power shortage, illegal placement, defeat).
@@ -214,6 +266,9 @@ pub mod colour {
     pub const VEIL: Rgba = [0, 0, 0, 150];
     /// The keyboard focus mark (a cool colour apart from the amber hover).
     pub const FOCUS: Rgba = [96, 208, 255, 255];
+    /// The outline around text over the battlefield.
+    // design: readable text and display scale (lead's request 2026-11-10)
+    pub const OUTLINE: Rgba = [0, 0, 0, 255];
 }
 
 #[cfg(test)]
@@ -229,6 +284,66 @@ mod tests {
         assert_eq!(d.texts(), vec!["Hello"]);
         match &d.prims[0] {
             Prim::Text { x, .. } => assert_eq!(*x, (100 - font::text_width("Hello")) / 2),
+            p => panic!("{p:?}"),
+        }
+    }
+
+    /// The WCAG contrast ratio of two opaque colours, times 100.
+    fn contrast(a: Rgba, b: Rgba) -> u32 {
+        fn lum(c: Rgba) -> f64 {
+            let ch = |v: u8| {
+                let s = f64::from(v) / 255.0;
+                if s <= 0.040_45 {
+                    s / 12.92
+                } else {
+                    ((s + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * ch(c[0]) + 0.7152 * ch(c[1]) + 0.0722 * ch(c[2])
+        }
+        let (x, y) = (lum(a), lum(b));
+        let (hi, lo) = if x > y { (x, y) } else { (y, x) };
+        ((hi + 0.05) / (lo + 0.05) * 100.0) as u32
+    }
+
+    /// Text colours read on every surface they are drawn on (design:
+    /// readable text and display scale, lead's request 2026-11-10): at
+    /// least 4.5 : 1, the usual floor for small text.
+    #[test]
+    fn text_colours_contrast_with_their_backgrounds() {
+        for bg in [colour::BACKDROP, colour::PANEL, colour::RAISED, colour::HOT] {
+            for ink in [colour::TEXT, colour::ACCENT] {
+                assert!(contrast(ink, bg) >= 450, "{ink:?} on {bg:?}");
+            }
+        }
+        for bg in [colour::BACKDROP, colour::PANEL, colour::RAISED] {
+            assert!(contrast(colour::DIM, bg) >= 450, "dim on {bg:?}");
+        }
+    }
+
+    #[test]
+    fn outlined_text_lists_once_with_its_outline() {
+        let mut d = DrawList::new();
+        d.text_centred_outlined(Rect::new(0, 0, 100, 20), "Hello", colour::TEXT);
+        d.text_left_outlined(Rect::new(0, 20, 100, 20), "There", colour::TEXT);
+        assert_eq!(d.texts(), vec!["Hello", "There"]);
+        let mut plain = DrawList::new();
+        plain.text_centred(Rect::new(0, 0, 100, 20), "Hello", colour::TEXT);
+        match (&d.prims[0], &plain.prims[0]) {
+            (
+                Prim::Text {
+                    x, y, outline: o, ..
+                },
+                Prim::Text {
+                    x: px,
+                    y: py,
+                    outline: None,
+                    ..
+                },
+            ) => {
+                assert_eq!((x, y), (px, py), "the outline does not move the text");
+                assert_eq!(*o, Some(colour::OUTLINE));
+            }
             p => panic!("{p:?}"),
         }
     }

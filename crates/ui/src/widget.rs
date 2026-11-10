@@ -242,7 +242,9 @@ pub fn button(d: &mut DrawList, r: Rect, label: &str, hot: bool, enabled: bool) 
 /// marks on the right. Returns the rectangles of the "previous" and "next"
 /// halves of the value box.
 pub fn choice(d: &mut DrawList, r: Rect, label: &str, value: &str, enabled: bool) -> (Rect, Rect) {
-    let split = r.w * 2 / 5;
+    // Without a label (a table cell) the value takes the whole width.
+    // design: readable text and display scale (lead's request 2026-11-10)
+    let split = if label.is_empty() { 0 } else { r.w * 2 / 5 };
     let label_r = Rect::new(r.x, r.y, split, r.h);
     let value_r = Rect::new(r.x + split, r.y, r.w - split, r.h);
     d.text_left(label_r, label, colour::DIM);
@@ -372,6 +374,22 @@ mod tests {
         assert_eq!(b.right(), 200);
         assert_eq!(a.x, 80);
         assert!(d.texts().contains(&"10000"));
+    }
+
+    /// A table cell's choice box has no label and uses its whole width, so
+    /// a short column shows its value whole (design: readable text and
+    /// display scale, lead's request 2026-11-10).
+    #[test]
+    fn a_choice_without_a_label_uses_its_whole_width() {
+        let mut d = DrawList::new();
+        let (a, b) = choice(&mut d, Rect::new(10, 0, 70, 16), "", "Closed", true);
+        assert_eq!((a.x, b.right()), (10, 80));
+        assert!(d.texts().contains(&"Closed"), "{:?}", d.texts());
+        for value in ["Random", "Team 4", "Start 8", "Slot 8"] {
+            let mut d = DrawList::new();
+            choice(&mut d, Rect::new(0, 0, 70, 16), "", value, true);
+            assert!(d.texts().contains(&value), "{value}: {:?}", d.texts());
+        }
     }
 
     #[test]
