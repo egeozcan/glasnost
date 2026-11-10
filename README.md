@@ -47,7 +47,8 @@ In the local lane, Yuri plays a full game against Allied and against Soviet on m
 - animations as part of the simulation: their damage over time, their random loop delays and follow-ups, and their removal now play the same on every machine;
 - closer combat randomness: the disguise draw and the corpse and death-animation picks;
 - an opponent that expands with a second construction yard in full games, saves for its superweapon without losing as much tempo, and aims the psychic dominator where it can take units;
-- a settings screen: sound, voice and music volume, scroll speed and key bindings, kept between sessions natively and in the browser.
+- a settings screen: sound, voice and music volume, scroll speed and key bindings, kept between sessions natively and in the browser;
+- touch and touchpad scrolling: drag with one finger on a touch screen to move the view or the build icons, tap to click and tap with two fingers to right-click; swipe with two fingers on a touchpad to move the view or the build icons (touchpad scrolling: on by default, off in the settings).
 
 The arena now fails 49 of 155 measured pairings, down from 55. New spec revisions are taken in as they land. Still to come in M8: a colour-blind option and other accessibility work, music, performance on low-end laptops, and electric bolts.
 

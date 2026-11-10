@@ -673,7 +673,12 @@ impl Layout {
 
     /// The number of grid rows shown.
     pub fn rows(&self) -> usize {
-        (self.grid.h / (CAMEO.1 + 4)) as usize
+        (self.grid.h / Self::row_pitch()) as usize
+    }
+
+    /// The height of one grid row with its gap, logical pixels.
+    pub const fn row_pitch() -> i32 {
+        CAMEO.1 + 4
     }
 
     /// The slot (S-0411 Terms: one place of the shown strip, filled or

@@ -42,6 +42,8 @@ impl Client {
                     Row::Captions => s.captions = !s.captions,
                     // spec: S-0111 claim 20 (both options menus change the tooltip option: the main menu's settings and the game's options menu reach this screen) and claim 26 (turning it off hides a tip)
                     Row::ToolTips => s.tool_tips = !s.tool_tips,
+                    // design: touch and touchpad scrolling (lead's request 2026-11-10)
+                    Row::Touchpad => s.touchpad_scroll = !s.touchpad_scroll,
                     Row::Colours => {
                         s.colour_blind = !s.colour_blind;
                         if self.session.is_some() {
@@ -127,6 +129,7 @@ impl Client {
                 on(s.captions),
                 on(s.colour_blind),
                 on(s.tool_tips),
+                on(s.touchpad_scroll),
             ],
             bindings: ACTIONS
                 .iter()
