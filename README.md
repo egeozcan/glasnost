@@ -1,104 +1,212 @@
 # Glasnost
 
-An open-source reimplementation of the game engine for **Command & Conquer: Yuri's Revenge**, written in Rust. It targets the browser (WebAssembly, WebGL2 with optional WebGPU extras) and native desktop builds.
+Glasnost is a free, open-source game engine that plays **Command & Conquer: Yuri's Revenge** with the game files you already own. It runs in your web browser or as a desktop program.
 
-> Compatible with game data from *Command & Conquer: Yuri's Revenge* (not included).
+It comes with its own computer opponent that plays all three sides, multiplayer over the internet, optional fixes for units that get stuck, and touch and touchpad controls. Glasnost is still in development. The campaign is not playable yet, and some things are rough (see [What works and what doesn't yet](#what-works-and-what-doesnt-yet)).
 
-## Status
+## You need the original game
 
-**Milestone M5 (first playable game) is done.** You can play a 1v1 skirmish against our own computer opponent on stock multiplayer maps, natively and in the browser. A game runs from the main menu through skirmish setup (map, sides, countries, colours, starting credits and units) to the end screen and back. It has:
+Glasnost contains none of the game: no graphics, sounds, maps, rules or programs. You need your own installed copy of Yuri's Revenge.
 
-- the economy: ore and gems, harvesting (slave miners included), refineries and power;
-- base building: production queues, placement, selling and repair, and the tech tree;
-- movement, pathfinding and combat for ground units and buildings;
-- shroud and radar;
-- the multiplayer subset of map triggers;
-- victory and defeat.
+You point Glasnost at your game folder, the one with the game's `.mix` archive files directly inside it. Glasnost reads those archives and nothing is uploaded anywhere. It never changes your game folder.
 
-Sound effects and announcements are read from your files and play through WebAudio on the web.
+## Play in your browser
 
-The opponent plays every faction the setup offers. It uses only the orders a person could give and sees only its own shroud. The in-game sidebar and HUD have a layout of our own; the cameos, cursors and other art come from your files.
-
-The simulation is deterministic: integers only and one seeded random stream. Native and WebAssembly builds produce identical state hashes, and saves restore the same hash. Behaviour is implemented only from the specs in `spec/`. Where a spec is missing, a request is filed in `spec/requests/` and the interim rule is listed in `docs/development.md`.
-
-**M6a (first wave of M6) adds** aircraft and air pads, naval units (ships move on water, wake, sink, and are built at naval yards), the V3-style guided missile launcher, and the parasite (a drone that latches inside a vehicle). Carriers and their spawned craft fight. The computer opponent builds aircraft and pads, navies on maps with water, and missile launchers.
-
-**M6b (second wave of M6) adds** hover and amphibious movement over water, transports (units board, ride and unload; the opponent ferries infantry across water), bridges (destruction from the hut, collapse, repair by an engineer), cloaking and stealth (cloaked units, cloak fields, sensors), walls and gates, the teleporting locomotor, the repair depot and the ship-repair yard, the superweapons (nuclear strike, weather storm, iron curtain, chronosphere, force shield, spy plane and paradrop, with the sidebar icons, aiming and radar launch), parachutes and paradrops, the remaining multiplayer map trigger actions, and animation playback. The opponent uses transports and every superweapon kind it can aim, hover units on water maps, and repair depots. Aircraft cast their shadow on the ground.
-
-**M6c (last part of M6) adds** garrisons (infantry occupy civilian buildings and fire from them, and are evicted), engineers capturing buildings, spies infiltrating them, tech buildings (captured for their income and effects), jumpjet infantry and vehicles (they rise from their factory, fly and land), deployable units (in-place deploy, deploy-fire vehicles, deployed infantry), radiation fields, chrono weapons (temporal erasure), linked weapons (prism support beams and chargers), terror weapons (planted bombs, charges, suicide attacks, attack animals, air-strike designation) and crates with their power-ups. The opponent uses every one of these the way a person could, sets rally points on its barracks, and builds every unit class its side can build, jumpjet units included.
-
-**M6 is done.** In the local lane our AI plays itself to a winner on every stock map run (0, 2, 3, 5, 6, 7 and 8, the naval maps 0, 3 and 5 included), Allied against Allied and Allied against Soviet on all seven and Soviet against Soviet on maps 2 and 8, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game that exercises every M6c ability, natively and in WebAssembly.
-
-**M7a (first part of M7) makes the Yuri side playable.** It adds psychic weapons (units driven berserk), the psychic sensor and the psychic reveal, mind control (taking over enemy units, the controller's limit and overload, release when the controller dies), gattling weapons that spin up and down, gas weapons and their particle clouds, the bio reactor that takes in infantry, the grinder that recycles units for credits, the tank bunker, and the magnetic lift that seizes vehicles and drops them. The opponent plays Yuri and uses each of these the way a person could. In the local lane, Yuri plays Allied and Soviet on maps 0, 2 and 8 to a winner, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game with a Yuri house, natively and in WebAssembly.
-
-**M7b (last part of M7) completes the Yuri side.** It adds:
-- the floating disc's drain, which takes credits from refineries and power from power plants;
-- the genetic mutator, which turns infantry in the blast into the house's own new infantry;
-- the psychic dominator, which makes units in the blast change sides and dims the map's light while it charges and fires;
-- the special hit effects and the rest of the particle systems.
-
-The opponent drains enemy refineries and power, defends its harvesters and power against raiders and drainers, and builds and fires both new superweapons. It aims each by the value of what it would take or destroy. In M7 the dominator only did area damage in the full games on stock data; M8 makes it aim where it can take units. A wealthy house can also drive a second construction yard to a distant ore field.
-
-In the local lane, Yuri plays a full game against Allied and against Soviet on maps 2, 8 and the naval map 0 to a winner, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game in which the drain, the mutator and the dominator are each used several times, natively and in WebAssembly. Every interaction pair has a scenario test on synthetic data and a relation test on the installed data. 37 of the 42 relation tests pass. The other 5 skip because the installed data cannot form their pair. An arena mode (`glasnost-headless arena`) compares our combat with the committed measurement records using statistical tests.
-
-**M7 is done except for its arena check**, which continues in M8. Many matchups agree with the records on the winner, but some measured pairings still fail a statistical test, mostly because our games vary less from seed to seed than the original's.
-
-**M8 (fidelity, AI depth and polish) is about half done.** So far it adds:
-- animations as part of the simulation: their damage over time, their random loop delays and follow-ups, and their removal now play the same on every machine;
-- closer combat randomness: the disguise draw and the corpse and death-animation picks;
-- an opponent that expands with a second construction yard in full games, saves for its superweapon without losing as much tempo, and aims the psychic dominator where it can take units;
-- a settings screen: sound, voice and music volume, scroll speed and key bindings, kept between sessions natively and in the browser;
-- touch and touchpad scrolling: drag with one finger on a touch screen to move the view or the build icons, tap to click and tap with two fingers to right-click; swipe with two fingers on a touchpad to move the view or the build icons (touchpad scrolling: on by default, off in the settings).
-
-The arena now fails 49 of 155 measured pairings, down from 55. New spec revisions are taken in as they land. Still to come in M8: a colour-blind option and other accessibility work, music, performance on low-end laptops, and electric bolts.
-
-**M9 (multiplayer over the network) has started.** It adds:
-- a lockstep core: every machine runs the same simulation from the same orders and compares state hashes;
-- a relay server (`glasnost-relay`) with rooms and room codes;
-- a *Multiplayer* entry on the main menu: host or join a room, set the game up together (map, countries, colours, teams, starts, computer players), chat, and play.
-
-Two native clients on one machine play the same game over the relay. The browser client builds but has not been tried yet. Still to come in M9: desync reports, reconnecting, a long soak test, direct WebRTC links and a guide to playing across the internet.
-
-**Not there yet:**
-- the rest of M8 and M9;
-- the campaign (M10, optional).
-
-## You need your own copy of the game
-
-This repository contains **no EA game assets**: no graphics, sounds, maps, rules values or executables. At runtime the engine imports these from an install of Yuri's Revenge that you own, and everything it imports stays on your machine. Nothing derived from the game data is uploaded or redistributed.
-
-## Building
-
-Rust is pinned in `rust-toolchain.toml` (rustup installs it on first use).
+There is no hosted version yet, so you build the web version yourself and run it on your own computer. You need the same tools as for the desktop version: install Rust as described in [Play on your desktop](#play-on-your-desktop) and get the source code. Then, in the source folder:
 
 ```sh
-cargo run --release -p glasnost-platform-native -- --game --game-dir <your install>   # the game (menu, skirmish)
-cargo run --release -p glasnost-relay -- --listen 127.0.0.1:8787   # multiplayer relay (the game's default: --relay ws://127.0.0.1:8787/)
-cargo run -p glasnost-platform-native   # native renderer demo (Vulkan/Metal/DX12/GL)
-cargo run -p glasnost-platform-native -- --viewer --game-dir <your install>   # asset viewer
-cargo xtask web --serve                 # web demo at http://127.0.0.1:8000/ (needs wasm-bindgen-cli, see docs/web.md);
-                                        # add ?mode=game for the game or ?mode=viewer for the asset viewer,
-                                        # then pick your install folder
-cargo test --workspace                  # tests
-cargo xtask check                       # dependency rule, determinism, citations, no stock numbers
+cargo install wasm-bindgen-cli --version 0.2.129 --locked   # once
+cargo xtask web --release --serve
 ```
 
-## Reporting a pathing problem
+When it says it is serving, open **http://127.0.0.1:8000/?mode=game** (the address without `?mode=game` shows a test pattern instead of the game).
 
-When a unit takes a strange route or gets stuck, press **M** (mark) as it happens, then **P** (save pathing report) within 20 seconds. Both keys can be changed on the settings screen. The native client writes the report to `path-reports/path-<tick>-<n>.gpath` in the folder you started it from; the browser downloads it. The status line names the file. Run `glasnost-headless path-report <file>` on it to replay the last 20 seconds and explain what each selected or ordered unit did ([docs/development.md](docs/dev/play-notes.md#pathing-reports-m8-a4)). A report holds a save of your game, so keep it out of git: `path-reports/` and `*.gpath` are ignored.
+1. Click **Game folder** on the main menu and pick your game folder. The browser reads the files where they are; nothing is copied off your computer.
+2. Wait until **Skirmish** can be clicked, then start a game.
 
-## Documents
+Sound starts with your first click or key press, since browsers only allow sound after you do something on the page. You pick the game folder again on each visit. To leave, close the tab: the browser version has no Quit button.
 
-- [PLAN.md](PLAN.md): architecture, milestones and decisions.
-- [PROVENANCE.md](PROVENANCE.md): how behaviour specs are produced and how they reach the code (the two-team process).
-- [CONTRIBUTING.md](CONTRIBUTING.md): workflow, determinism rules, data rules and commit sign-off.
-- [docs/multiplayer.md](docs/multiplayer.md): run the relay, host and join a network game, direct links, reconnecting, desync reports, and the cross-network exit run.
-- [docs/development.md](docs/development.md): workspace layout, repository checks, CI. [docs/web.md](docs/web.md): the web build and browser tests.
-- [spec/](spec/README.md): behaviour specs. [measurements/](measurements/README.md): measurement records from the original game.
+**Browsers.** You need a browser with WebGL2. Firefox and Chromium-based browsers are the ones we test. Safari is not tested for play.
+
+## Play on your desktop
+
+1. **Install Rust.** On Linux or macOS, run the installer from [rustup.rs](https://rustup.rs):
+
+   ```sh
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+   On Windows, download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs). The project picks its exact Rust version by itself the first time you build.
+
+2. **Get the source code.**
+
+   ```sh
+   git clone https://github.com/egeozcan/glasnost.git
+   cd glasnost
+   ```
+
+3. **Start the game**, giving it your game folder in place of `GAME_FOLDER`:
+
+   ```sh
+   cargo run --release -p glasnost-platform-native -- --game --game-dir "GAME_FOLDER"
+   ```
+
+   The first build takes a while. After that, you can also start the built program directly: `target/release/glasnost --game --game-dir "GAME_FOLDER"`.
+
+`--game-dir` is needed on the desktop. Without it, the **Game folder** button on the menu only tells you to start again with it.
+
+**What is tested.** The desktop version is built and played on Linux. Windows and macOS builds are untested. They may work, but nobody has tried them yet. The desktop version is silent for now: sound and music play only in the browser.
+
+## Playing
+
+**Skirmish.** From the main menu, **Skirmish** opens the setup screen:
+
+- **Map:** any multiplayer map in your install with at least two start positions.
+- **Players:** each row is **You**, **AI** or **Closed**, with a country, colour, team and start position. You need at least two players, and no more than the map has start positions.
+- **Credits**, starting **Units** and **Game speed**.
+- **Options:** Short game, Superweapons, Crates, Build off ally and Redeploy.
+- **Pathing and other fixes:** our own fixes for units that get stuck or give up, and a few visual glitches. It is on by default. Turn it off to play the original behaviour.
+
+**The computer opponent** is our own. It plays Allied, Soviet and Yuri. It gives only the orders a person could give and sees only what its own units see. There are no difficulty levels.
+
+**Watch the computers play.** Set the first row to **AI** too, and you watch an all-computer game with the whole map revealed.
+
+**During a game,** **Escape** opens the options menu. There you can change the speed, open Settings, surrender or leave. A skirmish pauses while that menu is open or the game window is not in focus.
+
+**The end screen** shows victory or defeat and, for each player, what they built, killed and lost, and a score.
+
+**Settings** (from the main menu, or from the options menu outside network games) has sound effects, voices and music volume, scroll speed, captions for announcements, colour-blind house colours, name tips over units, touchpad scrolling, and the command keys. Settings are kept between sessions.
+
+## Controls
+
+### Mouse
+
+| Action | What it does |
+|---|---|
+| Left click | Select a unit or building. With units selected, give an order (move, attack, and so on). |
+| Left drag | Select the units in a box |
+| **Shift** + drag | Add to the selection |
+| **Ctrl** + click | Force fire |
+| **Alt** + click | Force move |
+| Right click | Clear the selection, or cancel placing, selling, repairing or aiming |
+| Right drag, or the pointer at the screen edge | Scroll the view |
+| Wheel over the sidebar | Scroll the build icons |
+| Left click on the radar | Jump the view there |
+
+### Keys
+
+You can change these on the settings screen (letters and digits only):
+
+| Key | Action |
+|---|---|
+| S | Stop |
+| X | Scatter |
+| G | Guard |
+| D | Deploy |
+| C | Cheer |
+| Z (hold) | Route mode: click to set a route, release to send it |
+| T | Select units of the same type (tap again to reach further) |
+| M, then P | Mark a moment, then save a pathing report (see [Reporting problems](#reporting-problems)) |
+| N + digit | Make a control group in the browser, where Ctrl + digit may belong to the browser |
+
+These are fixed:
+
+| Key | Action |
+|---|---|
+| Escape | Options menu |
+| Arrow keys | Scroll the view |
+| Ctrl + digit | Make a control group |
+| Digit | Select a control group; press it again quickly to centre the view on it |
+| Shift + digit | Add a control group to the selection |
+| Alt + digit | Select a control group and centre the view on it |
+| Delete | Delete the selected route point |
+| Enter | Chat (network games) |
+
+Every menu and the sidebar also work from the keyboard alone (Tab, the arrows, Enter, Space and Page Up/Down). The settings screen lists those keys too. The details are in [Accessibility](docs/development.md#accessibility-m8-step-c3).
+
+### Touch screens and touchpads
+
+- **Touch:** drag one finger to move the view, or to scroll the build icons on the sidebar. Tap to click. Tap with two fingers to right-click.
+- **Touchpad:** swipe with two fingers to move the view or scroll the build icons. This is on by default; turn it off with **Touchpad scrolling** in the settings.
+- In the desktop version on Windows, and on Linux under X11, a touchpad swipe only scrolls the build icons. It does not move the view. Tablets have not been tried.
+
+## Multiplayer
+
+Every player runs the game on their own machine, and the players meet through a **relay**, a small server program that one of you runs. The relay needs no copy of the game.
+
+1. **Everyone uses the same version.** Build from the same commit of the source, with no local changes. Use the same game files too. The lobby turns away a player whose version, rules or map differ, and tells you why.
+2. **One person runs the relay:**
+
+   ```sh
+   cargo run --release -p glasnost-relay -- --listen 0.0.0.0:8787
+   ```
+
+   On its own, without `--listen`, the relay accepts only players on the same computer. For players outside your home network, open TCP port 8787 on your router and firewall.
+3. **Point the game at the relay.** On the desktop, add `--relay ws://HOST:8787/` to the game's command line, or type the address into the **Relay** field of the Multiplayer screen. In the browser, add `&relay=ws://HOST:8787/` to the page address. `HOST` is the relay machine's address. A page served over `https://` needs a `wss://` relay.
+4. **Host:** main menu, **Multiplayer**, type your name, click **Host**. Tell the others the eight-character room code. Pick the map, and set each row to **Open** (for a person), **AI** or **Closed**.
+5. **Join:** **Multiplayer**, your name, the room code, **Join**. Set your own country, colour, team and start, then click **Ready**.
+6. The host clicks **Start game**.
+
+Press Enter to chat. Nobody can pause a network game, but any player can change its speed in the options menu. If your connection drops, you have 60 seconds of game time (by default) to click **Reconnect** on the Multiplayer screen, even after restarting the game. After that, your side surrenders.
+
+The full guide covers putting the relay on the internet, browser players, direct connections between players, and what each message means: [docs/multiplayer.md](docs/multiplayer.md).
+
+## Reporting problems
+
+When you report a bug, say what you did and what you expected. Also give the **build id** shown at the foot of the Multiplayer screen, which names the exact version you run.
+
+**A unit took a strange route or got stuck?** Press **M** as it happens, then **P** within 20 seconds. This saves a *pathing report* covering the last 20 seconds. The desktop version writes it to `path-reports/` in the folder you started the game from. The browser downloads it. Keep the file and say in your report that you have it. It holds a save of your game, so don't post it publicly or commit it.
+
+**"Desync" in a network game?** Each player's game saves a report by itself, to `desync-reports/` (or as a download in the browser). Keep the files and say in your report that you have them; like pathing reports, they hold a save of your game. See [docs/multiplayer.md](docs/multiplayer.md#6-reports-desyncs).
+
+## What works and what doesn't yet
+
+**Works:**
+
+- Skirmish against our computer opponent, or several of them, on the multiplayer maps of your install. All three sides are playable, with their units, buildings and superweapons. This includes air and naval units, garrisons, engineers and spies, tech buildings, crates, mind control and the rest of the Yuri side's specials.
+- Network games with friends and computer players, chat, and reconnecting after a drop.
+- Watching an all-computer game.
+- Settings and accessibility options: captions, colour-blind colours, keyboard-only menus and sidebar.
+- Sound, announcements and music in the browser.
+
+**Not yet:**
+
+- The campaign is not playable.
+- The desktop version has no sound.
+- You cannot save and load a game, and there is no replay viewer.
+- Windows and macOS desktop builds are untested.
+- There is no hosted web version, and the browser asks for your game folder on every visit.
+- There is no zoom.
+- Big late-game battles can stutter, especially in the browser.
+- Some things look or play differently from the original. The sidebar has our own layout, and some fights don't yet end the way they do in the original. We are still working on these.
+- On the desktop, the window does not respond for a few seconds while a map loads.
+
+## FAQ
+
+**Does Glasnost include any part of the game?** No. You need your own copy, and Glasnost reads it on your machine.
+
+**Does it change my game folder?** No. Settings are kept in your user settings folder (on Linux `~/.config/glasnost/settings.txt`), or in the browser's storage. Reports are saved in the folder you started the game from.
+
+**Can I play against people using the original game?** No. Glasnost's multiplayer only connects Glasnost players.
+
+**Do mods work?** Not yet. Glasnost reads the game's archives and ignores loose data files in your game folder. Mods are untested.
+
+**Is it on phones and tablets?** Touch controls work in the browser, but no tablet or phone has been tried.
+
+## For contributors
+
+Glasnost has one unusual rule. Behaviour is implemented only from written behaviour specs in [`spec/`](spec/README.md) and measurement records in [`measurements/`](measurements/README.md), never from the original game's code. A separate spec team studies the game, and every spec passes a review before it reaches the code. [PROVENANCE.md](PROVENANCE.md) describes this two-team process and what contributors may and may not read.
+
+The code is GPL-3.0-or-later. Every commit needs a DCO sign-off (`git commit -s`). Start with [CONTRIBUTING.md](CONTRIBUTING.md), then [PLAN.md](PLAN.md) for the architecture and milestones, and [docs/development.md](docs/development.md) for the workspace, checks and CI.
+
+```sh
+cargo test --workspace   # tests
+cargo xtask check        # repository checks: dependency rule, determinism, citations, no game data
+```
 
 ## Disclaimer
 
-This is an unofficial fan project. It is not affiliated with, endorsed by or supported by Electronic Arts Inc. Command & Conquer, Red Alert and Yuri's Revenge are trademarks of Electronic Arts Inc.; they are used here only to describe compatibility.
+This is an unofficial fan project. It is not affiliated with, endorsed by or supported by Electronic Arts Inc. Command & Conquer, Red Alert and Yuri's Revenge are trademarks of Electronic Arts Inc. They are used here only to describe compatibility.
 
 ## License
 
