@@ -7,8 +7,14 @@
 //! - [`NullOutput`]: no device (tests, servers, a build without output).
 //! - `WebOutput` (wasm32): WebAudio, scheduling rendered chunks as
 //!   `AudioBuffer`s back to back on the `AudioContext`'s clock.
-//! - `PipeOutput` (native, feature `native-output`): streams to a
-//!   command-line player's standard input.
+//! - `DeviceOutput` (native, feature `device`): the system's default
+//!   output device through cpal, fed through a lock-free ring.
+//!
+//! Natively the device is opened only in a program that calls
+//! [`allow_device`] (the desktop game does), so tests and tools built with
+//! the feature never open one.
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::mixer::Mixer;
 
@@ -69,29 +75,70 @@ impl Output for NullOutput {
     }
 }
 
-/// The platform's default output: WebAudio on the web; natively the pipe
-/// output with feature `native-output`, otherwise [`NullOutput`].
+/// Whether this build has the native device output (feature `device`).
+pub const DEVICE_BUILT: bool = cfg!(all(not(target_arch = "wasm32"), feature = "device"));
+
+static DEVICE_ALLOWED: AtomicBool = AtomicBool::new(false);
+
+/// Lets [`platform_default`] open the system's audio device. The desktop
+/// game calls it at start; nothing else does, so tests never open a device.
+pub fn allow_device() {
+    DEVICE_ALLOWED.store(true, Ordering::Relaxed);
+}
+
+/// Why the platform's output will be silent, when that is known before
+/// opening it: natively, a build without the device output or a program
+/// that has not called [`allow_device`]. `None` when it may play.
+pub fn known_silent() -> Option<&'static str> {
+    if cfg!(target_arch = "wasm32") {
+        None
+    } else if !DEVICE_BUILT {
+        Some("this build has no audio output (built without the audio feature)")
+    } else if !DEVICE_ALLOWED.load(Ordering::Relaxed) {
+        Some("this program does not open the audio device")
+    } else {
+        None
+    }
+}
+
+/// The output `open` gives, or, when it fails, a [`NullOutput`] naming why
+/// (logged once, here).
+pub fn open_or_silent(open: impl FnOnce() -> Result<Box<dyn Output>, String>) -> Box<dyn Output> {
+    match open() {
+        Ok(o) => o,
+        Err(e) => {
+            log::warn!("no sound: {e}");
+            Box::new(NullOutput::new(DEFAULT_RATE, &e))
+        }
+    }
+}
+
+/// The platform's default output: WebAudio on the web; natively the
+/// default device with feature `device` once [`allow_device`] was called;
+/// otherwise, or when that fails, [`NullOutput`] with the reason.
 pub fn platform_default() -> Box<dyn Output> {
     #[cfg(target_arch = "wasm32")]
     {
-        match crate::web::WebOutput::new() {
-            Ok(o) => Box::new(o),
-            Err(e) => Box::new(NullOutput::new(DEFAULT_RATE, &e)),
-        }
+        open_or_silent(|| crate::web::WebOutput::new().map(|o| Box::new(o) as Box<dyn Output>))
     }
-    #[cfg(all(not(target_arch = "wasm32"), feature = "native-output"))]
+    #[cfg(not(target_arch = "wasm32"))]
     {
-        match crate::pipe::PipeOutput::new(DEFAULT_RATE) {
-            Ok(o) => Box::new(o),
-            Err(e) => Box::new(NullOutput::new(DEFAULT_RATE, &e)),
-        }
+        open_or_silent(native_device)
     }
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "native-output")))]
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn native_device() -> Result<Box<dyn Output>, String> {
+    if let Some(why) = known_silent() {
+        return Err(why.to_owned());
+    }
+    #[cfg(feature = "device")]
     {
-        Box::new(NullOutput::new(
-            DEFAULT_RATE,
-            "native audio output is off (build with feature native-output)",
-        ))
+        crate::device::DeviceOutput::open().map(|o| Box::new(o) as Box<dyn Output>)
+    }
+    #[cfg(not(feature = "device"))]
+    {
+        Err("this build has no audio output".into())
     }
 }
 
@@ -120,5 +167,36 @@ mod tests {
         o.pump(&mut m);
         assert_eq!(m.alive(), 0);
         assert!(matches!(o.state(), OutputState::Silent(_)));
+    }
+
+    #[test]
+    fn a_device_that_fails_to_open_falls_back_to_silence_with_its_reason() {
+        let o = open_or_silent(|| Err("no audio output device (test)".into()));
+        assert_eq!(o.rate(), DEFAULT_RATE);
+        assert_eq!(
+            o.state(),
+            OutputState::Silent("no audio output device (test)".into())
+        );
+    }
+
+    #[test]
+    fn an_output_that_opens_is_used() {
+        let o = open_or_silent(|| Ok(Box::new(NullOutput::new(44_100, "stand-in"))));
+        assert_eq!(o.rate(), 44_100);
+        assert_eq!(o.state(), OutputState::Silent("stand-in".into()));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn tests_never_open_the_device() {
+        // No test calls allow_device, so the platform's output is silent
+        // whether or not the build has the device output.
+        let why = known_silent().expect("silent before allow_device");
+        assert_eq!(platform_default().state(), OutputState::Silent(why.into()));
+        if DEVICE_BUILT {
+            assert!(why.contains("does not open"), "{why}");
+        } else {
+            assert!(why.contains("without the audio feature"), "{why}");
+        }
     }
 }

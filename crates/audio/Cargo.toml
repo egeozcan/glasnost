@@ -9,11 +9,13 @@ publish.workspace = true
 
 [features]
 default = []
-# Native in-process output: streams the software mix to a command-line
-# player's standard input (`pw-cat`, `pacat` or `aplay`). Off by default; the
-# default build and every test need no audio device. See docs/development.md,
-# "Audio (M5b)".
-native-output = []
+# Native device output through cpal (ALSA on Linux, WASAPI on Windows,
+# CoreAudio on macOS). Off here; the desktop game (glasnost-platform-native,
+# feature `audio`) turns it on. On Linux it needs the ALSA development
+# package. Even with it on, a device opens only in a program that calls
+# `output::allow_device`, so tests never open one. See
+# docs/development.md, "Audio (M5b)".
+device = ["dep:cpal"]
 
 [dependencies]
 glasnost-fmt.workspace = true
@@ -21,6 +23,10 @@ glasnost-ini.workspace = true
 glasnost-rules.workspace = true
 glasnost-sim.workspace = true
 glasnost-vfs.workspace = true
+log = "0.4"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cpal = { version = "0.18.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.129"

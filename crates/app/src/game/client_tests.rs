@@ -244,6 +244,41 @@ fn settings_screen_changes_persist_to_the_store() {
     assert!(store.read().unwrap().contains("sound=100"));
 }
 
+/// An output that plays (a stand-in for a device).
+struct Playing;
+
+impl glasnost_audio::output::Output for Playing {
+    fn rate(&self) -> u32 {
+        48_000
+    }
+    fn pump(&mut self, mixer: &mut glasnost_audio::mixer::Mixer) {
+        mixer.clear();
+    }
+    fn state(&self) -> glasnost_audio::output::OutputState {
+        glasnost_audio::output::OutputState::Running
+    }
+}
+
+/// The settings screen says when nothing is heard, and why (design: native
+/// audio): before a game, what is known without a device; then the
+/// output's own reason; nothing while an output plays.
+#[test]
+fn the_settings_screen_says_when_there_is_no_sound() {
+    use glasnost_audio::output::{NullOutput, known_silent};
+    let mut c = Client::new();
+    assert_eq!(c.no_sound().as_deref(), known_silent());
+    open_settings(&mut c);
+    c.audio = Some(Audio::new(Box::new(NullOutput::new(
+        48_000,
+        "no device here",
+    ))));
+    assert_eq!(c.no_sound().as_deref(), Some("no device here"));
+    let _ = c.frame_rgba();
+    c.audio = Some(Audio::new(Box::new(Playing)));
+    assert_eq!(c.no_sound(), None);
+    let _ = c.frame_rgba();
+}
+
 /// Rebinding refuses a key another action has, accepts a free one, and the
 /// game then takes the new key.
 #[test]
