@@ -3125,8 +3125,7 @@ impl Tempo {
                     let rc = r.pos.cell();
                     (rc.x - c.x).abs().max((rc.y - c.y).abs()) <= 4
                 }
-                && w
-                    .objects
+                && w.objects
                     .values()
                     .any(|x| x.id != id && x.contact == Some(r.id))
         })
