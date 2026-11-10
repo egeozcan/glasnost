@@ -11,8 +11,17 @@ publish.workspace = true
 name = "glasnost"
 path = "src/main.rs"
 
+[features]
+# Sound through the system's audio device (cpal; on Linux it needs the ALSA
+# development package: alsa-lib-devel on Fedora, libasound2-dev on Debian
+# and Ubuntu). `--no-default-features` builds a silent game that needs no
+# system audio headers.
+default = ["audio"]
+audio = ["glasnost-audio/device"]
+
 [dependencies]
 glasnost-app.workspace = true
+glasnost-audio.workspace = true
 glasnost-render.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

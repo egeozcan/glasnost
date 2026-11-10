@@ -17,8 +17,8 @@
 //!    channels and their victims, audio passes, the announcement voice),
 //!    rendered offline in tests.
 //! 5. [`output::Output`]: streams the mix to a device: WebAudio on wasm32,
-//!    a command-line player's pipe natively with feature `native-output`,
-//!    or nothing.
+//!    the default output device through cpal natively with feature
+//!    `device` (through the lock-free [`ring::Ring`]), or nothing.
 //! 6. [`music::Music`]: the music database's track list and the
 //!    next-track rule of S-0703, streaming the picked track to the mixer's
 //!    music voice.
@@ -33,15 +33,16 @@
 
 pub mod bank;
 pub mod catalog;
+#[cfg(all(not(target_arch = "wasm32"), feature = "device"))]
+pub mod device;
 pub mod events;
 pub mod mixer;
 pub mod music;
 pub mod music_files;
 pub mod names;
 pub mod output;
-#[cfg(all(not(target_arch = "wasm32"), feature = "native-output"))]
-pub mod pipe;
 mod preview;
+pub mod ring;
 pub mod speech;
 pub mod stand;
 #[cfg(target_arch = "wasm32")]

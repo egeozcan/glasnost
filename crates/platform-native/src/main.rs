@@ -135,6 +135,10 @@ fn main() -> std::process::ExitCode {
         };
     }
     let result = if game {
+        // The game plays sound on the system's default output device (a
+        // build with the default feature `audio`); without it, or without a
+        // device, it runs silent and logs why.
+        glasnost_audio::output::allow_device();
         glasnost_app::run_game(GameOptions {
             backend: options.backend,
             game_dir,
@@ -170,3 +174,19 @@ fn main() -> std::process::ExitCode {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {}
+
+// The default feature `audio` is what builds the device output into the
+// desktop game (checked when this crate compiles); `--no-default-features`
+// leaves it out.
+#[cfg(all(feature = "audio", not(target_arch = "wasm32")))]
+const _: () = assert!(glasnost_audio::output::DEVICE_BUILT);
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    /// Whatever the features, nothing opens a device before the game calls
+    /// `allow_device`.
+    #[test]
+    fn no_device_opens_before_the_game_allows_it() {
+        assert!(glasnost_audio::output::known_silent().is_some());
+    }
+}

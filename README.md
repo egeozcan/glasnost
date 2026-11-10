@@ -45,7 +45,16 @@ Sound starts with your first click or key press, since browsers only allow sound
    cd glasnost
    ```
 
-3. **Start the game**, giving it your game folder in place of `GAME_FOLDER`:
+3. **On Linux, install the sound library's development package** (the game plays its sound through ALSA, which PipeWire and PulseAudio serve):
+
+   ```sh
+   sudo dnf install alsa-lib-devel      # Fedora
+   sudo apt install libasound2-dev      # Debian and Ubuntu
+   ```
+
+   Windows and macOS need nothing extra.
+
+4. **Start the game**, giving it your game folder in place of `GAME_FOLDER`:
 
    ```sh
    cargo run --release -p glasnost-platform-native -- --game --game-dir "GAME_FOLDER"
@@ -55,7 +64,7 @@ Sound starts with your first click or key press, since browsers only allow sound
 
 `--game-dir` is needed on the desktop. Without it, the **Game folder** button on the menu only tells you to start again with it.
 
-**What is tested.** The desktop version is built and played on Linux. Windows and macOS builds are untested. They may work, but nobody has tried them yet. The desktop version is silent for now: sound and music play only in the browser.
+**What is tested.** The desktop version is built and played on Linux, with sound and music on the system's default output device. Windows and macOS builds are untested. They should work, sound included, but nobody has tried them yet. If no sound device can be opened, the game runs silent, says why in its log, and, once a game has started, marks the volume rows in **Settings** "(no sound)". To build without sound, and without the sound library, add `--no-default-features` after `-p glasnost-platform-native`.
 
 ## Playing
 
@@ -167,13 +176,12 @@ When you report a bug, say what you did and what you expected. Also give the **b
 - Network games with friends and computer players, chat, and reconnecting after a drop.
 - Watching an all-computer game.
 - Settings and accessibility options: captions, colour-blind colours, keyboard-only menus and sidebar.
-- Sound, announcements and music in the browser.
+- Sound, announcements and music, in the browser and on the desktop.
 - The right size on high-resolution (2x) screens: the game is drawn at your display's scale and stays sharp, so a HiDPI laptop or a browser on a 2x screen shows the same area as an ordinary screen (**Display scale** in the settings: Auto, 1x, 2x or 3x).
 
 **Not yet:**
 
 - The campaign is not playable.
-- The desktop version has no sound.
 - You cannot save and load a game, and there is no replay viewer.
 - Windows and macOS desktop builds are untested.
 - There is no hosted web version, and the browser asks for your game folder on every visit.

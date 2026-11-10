@@ -4,6 +4,7 @@
 
 use super::{Client, Key};
 use crate::settings::{self, ACTIONS, Action, BindError, FIXED_KEYS, KEYBOARD_KEYS, Settings};
+use glasnost_audio::output::OutputState;
 use glasnost_ui::draw::DrawList;
 use glasnost_ui::geom::Point;
 use glasnost_ui::settings::{Page, Row, SettingsHit};
@@ -113,15 +114,36 @@ impl Client {
         }
     }
 
+    /// Why nothing is heard, when the sound output is silent: the output's
+    /// own reason once it exists, else one known before opening it (a
+    /// silent build).
+    pub(super) fn no_sound(&self) -> Option<String> {
+        match self.audio.as_ref().map(glasnost_audio::Audio::state) {
+            Some(OutputState::Silent(why)) => Some(why),
+            Some(_) => None,
+            None => glasnost_audio::output::known_silent().map(str::to_owned),
+        }
+    }
+
     pub(super) fn settings_frame(&mut self, hover: Option<Point>) -> DrawList {
+        // design: native audio (the volume rows and the note say when there is no sound)
+        let no_sound = self.no_sound();
+        let level = |v: u8| match no_sound {
+            Some(_) => format!("{v}% (no sound)"),
+            None => format!("{v}%"),
+        };
+        let note = match &no_sound {
+            Some(why) if self.settings_note.is_empty() => format!("No sound: {why}."),
+            _ => self.settings_note.clone(),
+        };
         let s = &self.settings;
         let fits = self.ui_scale().percent;
         let on = |b: bool| if b { "On" } else { "Off" }.to_owned();
         let page = Page {
             values: [
-                format!("{}%", s.sound),
-                format!("{}%", s.voices),
-                format!("{}%", s.music),
+                level(s.sound),
+                level(s.voices),
+                level(s.music),
                 s.scroll_label(),
                 self.display().label(s.display_scale),
                 if fits == i32::from(s.ui_scale) {
@@ -149,7 +171,7 @@ impl Client {
                 .chain(&KEYBOARD_KEYS)
                 .map(|(a, k)| ((*a).to_owned(), (*k).to_owned()))
                 .collect(),
-            note: &self.settings_note,
+            note: &note,
         };
         let (mut d, t) = glasnost_ui::settings::view(self.ui_size(), &page, hover);
         self.settings_focus.mark(&mut d, &t);
