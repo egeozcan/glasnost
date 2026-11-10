@@ -86,6 +86,16 @@
       // two groups that meet in a passage with no way round stay stuck. Answers: the scenario
       // "two rooms, 6 each way" of docs/m8-claims/c7-pathing.md.
       "deadlock_no_yield": false,
+      // Our design, C7-P6 hold (quirks.jammed_move_dropped off; S-0212 claim 23): a unit on a
+      // move whose search fails while only units stand in its way (a fill to its destination
+      // past every unit, stopped only by buildings, terrain objects and walls, reaches it)
+      // keeps its destination, counts as blocked and searches again after the retry delay, so
+      // the deadlock forms and one side gives way (deadlock_no_yield off); after 900 ticks
+      // blocked it gives up as the original does. On (the original), units that meet nose to
+      // nose in a passage one cell wide give their moves up and stand in it for good.
+      // Answers: the scenarios "three ways, 3 each" and "narrow rooms, 3 each way" of the same
+      // ledger.
+      "jammed_move_dropped": false,
       // Our design, C7-P4 nearest reachable cell (quirks.unreachable_move_dropped off; S-0212
       // claim 23): a move whose computation fails tries once more towards the nearest cell
       // the unit can stand on in its own reach region. On (the original), units sent to a cell

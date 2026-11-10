@@ -447,6 +447,17 @@ pub struct Quirks {
     // spec: S-0212 claims 8 and 22 (the mode-2 re-path through moving blockers; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub deadlock_no_yield: bool,
+    /// A move whose search fails gives up (the original). Off (our design,
+    /// C7 part 6, hold): when only units stand in the way (a fill from the
+    /// unit to its destination cell through its own reach region, past
+    /// units and stopped only by buildings, terrain objects and walls,
+    /// reaches it), the unit keeps its destination, counts as blocked and
+    /// searches again after the retry delay, so a deadlock in a passage with
+    /// no way round can form and give way (`deadlock_no_yield` off); after a
+    /// longest hold it gives up as the original does.
+    // spec: S-0212 claim 23 (the failed search's give-up; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub jammed_move_dropped: bool,
     /// The rebuild of a house's threat records counts its own and its allies' objects.
     // spec: S-0212 claim 16a and Edge cases (quirks.threat_rebuild_counts_friends)
     #[serde(default = "on")]
@@ -2401,6 +2412,7 @@ impl Default for Quirks {
             path_through_stalled_blockers: true,
             unreachable_move_dropped: true,
             deadlock_no_yield: true,
+            jammed_move_dropped: true,
             threat_rebuild_counts_friends: true,
             negative_threat_field: true,
             aircraft_threat_stays_put: true,
@@ -3097,6 +3109,7 @@ impl Quirks {
             ),
             ("unreachable_move_dropped", self.unreachable_move_dropped),
             ("deadlock_no_yield", self.deadlock_no_yield),
+            ("jammed_move_dropped", self.jammed_move_dropped),
             (
                 "threat_rebuild_counts_friends",
                 self.threat_rebuild_counts_friends,

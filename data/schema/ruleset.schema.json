@@ -9810,6 +9810,11 @@
           "type": "boolean",
           "default": true
         },
+        "jammed_move_dropped": {
+          "description": "A move whose search fails gives up (the original). Off (our design,\nC7 part 6, hold): when only units stand in the way (a fill from the\nunit to its destination cell through its own reach region, past\nunits and stopped only by buildings, terrain objects and walls,\nreaches it), the unit keeps its destination, counts as blocked and\nsearches again after the retry delay, so a deadlock in a passage with\nno way round can form and give way (`deadlock_no_yield` off); after a\nlongest hold it gives up as the original does.",
+          "type": "boolean",
+          "default": true
+        },
         "jumpjet_bridge_early_cruise_height": {
           "description": "An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition.",
           "type": "boolean",
