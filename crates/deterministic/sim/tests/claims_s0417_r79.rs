@@ -268,9 +268,8 @@ fn claim_17_kept_destination_request_ends_the_delay() {
     assert!(m < t + 5, "not held back to {}", t + 90);
 }
 
-// spec: S-0212 Open questions (for every locomotor, the destination a unit already holds, given again, keeps a running delay running)
-// design: Q-2896 (interim for the walk locomotor: S-0209 r76 claim 10 ends the retry delay at this assignment, S-0212 r97 keeps it)
-// design: S-0417 Open question 16 (whether later requests are refused where a request gives the kept destination is not established; here that destination reaches the walk locomotor, which has movement in progress while it waits, S-0107 Terms, so later requests are refused until its search)
+// spec: S-0212 claim 21 (r98, Q-2896: for the walk locomotor the destination it already holds, given again, ends the running retry delay, so the kept destination is not held unsearched; S-0212's note on S-0417 claim 17 and Open question 16)
+// design: S-0417 Open question 16 (whether later requests are refused where a request gives the kept destination is not established; here that destination reaches the walk locomotor, which has movement in progress until its search, S-0107 Terms, so later requests are refused until then)
 #[test]
 fn open_question_16_the_kept_destination_given_again() {
     let (mut w, k, g) = released(&ruleset_r90());
@@ -283,11 +282,12 @@ fn open_question_16_the_kept_destination_given_again() {
     give(&mut w, g, near);
     let t = w.tick;
     path::failed(&mut w, g, Search::SearchFailed, false);
+    assert!(path::delay_runs(&w, g), "the failed search started it");
     give(&mut w, g, near);
-    assert!(path::delay_runs(&w, g), "the delay keeps running");
-    assert_eq!(w.obj(g).unwrap().path.retry_at, t + 90);
+    assert!(!path::delay_runs(&w, g), "the delay has ended");
+    assert_eq!(w.obj(g).unwrap().path.retry_at, t);
     assert!(in_progress(&w, g));
-    assert_eq!(probe(&w, g), (false, 0), "refused while it waits");
+    assert_eq!(probe(&w, g), (false, 0), "refused until its search");
 }
 
 /// Water all round K's foundation, one cell out, so that every scatter

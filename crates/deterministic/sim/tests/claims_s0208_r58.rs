@@ -190,7 +190,7 @@ fn w17_m_a_scatter_ends_the_retry_delay_of_a_blocked_walker() {
 }
 
 // spec: S-0209 claim 10 (r76, Q-2822: an accepted scatter whose cell is already the walker's destination starts the blockage delay afresh too, S-0208 claim 6)
-// design: Q-2896 (interim: that destination given again keeps the running retry delay, as S-0212 r97's Open questions keep it; S-0209 r76 claim 10 would end it)
+// spec: S-0212 claim 21 (r98, Q-2896: that destination given again by a scatter ends the walker's running retry delay too, so the search in the extra locomotion is not held back, as S-0212's note on S-0208 claim 6 reads it)
 #[test]
 fn s0209_r76_a_scatter_to_the_walkers_own_destination_restarts_the_blockage_delay() {
     let (mut w, id) = corridor();
@@ -213,9 +213,24 @@ fn s0209_r76_a_scatter_to_the_walkers_own_destination_restarts_the_blockage_dela
     let retry = ob.path.retry_at;
     assert_eq!(ob.path.blocked_since, Some(first));
     assert!(retry > w.tick, "the retry delay runs");
+    let before = pos(&w, id);
     assert!(scatter::request(&mut w, id, UNFORCED));
     let o = w.obj(id).unwrap();
     assert_eq!(o.dest, Some(d), "the scatter gives that destination again");
     assert_eq!(o.path.blocked_since, None, "the blockage delay restarts");
-    assert_eq!(o.path.retry_at, retry, "the retry delay runs on");
+    assert!(o.path.retry_at <= w.tick, "the retry delay has ended");
+    let Target::Cell(dc) = d else {
+        panic!("the scatter's destination {d:?}")
+    };
+    assert_eq!(
+        o.path.for_goal,
+        Some(dc),
+        "searched in the extra locomotion"
+    );
+    assert!(
+        walk_target(&w, id).is_some(),
+        "a walking target chosen at once"
+    );
+    tick::step(&mut w);
+    assert_ne!(pos(&w, id), before, "it moves in the tick of the scatter");
 }

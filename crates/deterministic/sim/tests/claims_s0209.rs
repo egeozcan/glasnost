@@ -987,17 +987,23 @@ fn r76_another_rules_assignment_of_the_same_destination_restarts_it() {
     assert_eq!(again, Some(w.tick - 1), "afresh after {first}");
 }
 
-// design: Q-2896 (interim: the destination the walker already has, given again, keeps a running retry delay, as S-0212 r97's Open questions keep it; S-0209 r76 claim 10 would end it)
+// spec: S-0209 claim 10 (r76: the same assignment of the destination the walker already has also ends its running retry delay) and S-0212 claim 21 (r98, Q-2896: for the walk locomotor the destination it already holds, given again by any rule, ends a running retry delay, a delay started earlier in the same tick included)
 #[test]
-fn q2896_interim_the_same_destination_again_keeps_the_retry_delay() {
+fn r98_the_same_destination_again_ends_the_retry_delay() {
     let (mut w, m, _) = blocked_walker();
     let t = w.tick;
     let r = w.rules().general.retry_delay;
     path::start_delay(w.obj_mut(m).unwrap(), t, r);
+    assert!(path::delay_runs(&w, m), "a delay started in this tick");
     let before = w.obj(m).unwrap().dest;
     glasnost_sim::econ::assign_destination(&mut w, m, before);
-    assert_eq!(w.obj(m).unwrap().path.retry_at, t + r);
-    assert!(path::delay_runs(&w, m), "the retry delay runs on");
+    assert_eq!(w.obj(m).unwrap().dest, before);
+    assert_eq!(
+        w.obj(m).unwrap().path.retry_at,
+        t,
+        "ended at the assignment"
+    );
+    assert!(!path::delay_runs(&w, m), "the retry delay has ended");
     assert_eq!(w.obj(m).unwrap().path.blocked_since, None);
 }
 
@@ -1081,11 +1087,15 @@ fn r76_an_attack_order_given_again_ends_the_wait() {
 }
 
 // spec: S-0209 claim 10 (r76: a duplicate enter order, given by a walker already in enter and in contact with the building it enters, is ignored by S-0213 table T3 part a, so nothing is assigned and the wait counts on)
+// spec: S-0212 claim 21 (r98: only an assignment that is made ends a walker's running retry delay at the destination it already holds, so this one runs on)
 #[test]
 fn r76_a_duplicate_enter_order_assigns_nothing() {
     let (mut w, m, first, [_, shed, _]) = blocked_with_objects("Mope");
     waits_for(&mut w, m, Behaviour::Enter, Target::Object(shed));
     w.obj_mut(m).unwrap().contact = Some(shed);
+    let t = w.tick;
+    let r = w.rules().general.retry_delay;
+    path::start_delay(w.obj_mut(m).unwrap(), t, r);
     apply(
         &mut w,
         behaviour_order(m, Behaviour::Enter, None, Some(Target::Object(shed))),
@@ -1094,6 +1104,8 @@ fn r76_a_duplicate_enter_order_assigns_nothing() {
     assert_eq!(o.dest, Some(Target::Object(shed)));
     assert_eq!(o.contact, Some(shed));
     assert_eq!(o.path.blocked_since, Some(first), "the wait counts on");
+    assert_eq!(o.path.retry_at, t + r);
+    assert!(path::delay_runs(&w, m), "the retry delay runs on");
 }
 
 // spec: S-0209 claim 10 (r76: an enter order given again by a tethered walker that is not a duplicate: by S-0213 table T3 part b it keeps its link, and with it its contact, since K is not a building of the unloading kind; the assignment is made, starting the blockage delay afresh, and drops its stored path, S-0208 claim 6 for a walker in contact)
@@ -1125,10 +1137,15 @@ fn r76_a_tethered_walkers_enter_order_given_again_restarts_it() {
 }
 
 // spec: S-0209 claim 10 (r76: an enter order given again by a walker with no contact, to an idle transport that has room for it, no destination and no other contact, on land in its reach region: the assignment is made and starts the blockage delay afresh; whether the destination is the transport or its cell is open, Open questions, and our engine gives the transport)
+// spec: S-0212 claim 21 (r98, Q-2896: the same object given again by an order ends the walker's running retry delay)
 #[test]
 fn r76_an_enter_order_given_again_to_an_idle_transport_restarts_it() {
     let (mut w, m, _, [_, _, wagon]) = blocked_with_objects("Mope");
     waits_for(&mut w, m, Behaviour::Enter, Target::Object(wagon));
+    let t = w.tick;
+    let r = w.rules().general.retry_delay;
+    path::start_delay(w.obj_mut(m).unwrap(), t, r);
+    assert!(path::delay_runs(&w, m));
     apply(
         &mut w,
         behaviour_order(m, Behaviour::Enter, None, Some(Target::Object(wagon))),
@@ -1136,6 +1153,8 @@ fn r76_an_enter_order_given_again_to_an_idle_transport_restarts_it() {
     let o = w.obj(m).unwrap();
     assert_eq!(o.dest, Some(Target::Object(wagon)));
     assert_eq!(o.path.blocked_since, None, "the blockage delay restarts");
+    assert_eq!(o.path.retry_at, t, "the retry delay ends");
+    assert!(!path::delay_runs(&w, m));
 }
 
 // ---------------------------------------------------------------------------
