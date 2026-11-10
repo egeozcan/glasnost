@@ -227,6 +227,24 @@ fn a_change_before_the_builddown_leaves_the_sale_unchanged() {
     assert_eq!(paid, sell::refund(&w, B, hut_ref(&w, "HUT")));
 }
 
+// spec: S-0215 claim 11 (for a turreted building the body-range rule applies while its behaviour is selling) and S-0309 claim 31 (the fall-back's idle-body request replaces the build-down; with a zero-delay range the sale ends at the building's next turn, cut short) (seam sweep 7a: intake 116's row, a turreted building)
+#[test]
+fn seams7a_a_turreted_building_sold_ends_its_sale_at_the_next_turn() {
+    let mut r = work_rules();
+    let mut turreted = hut(None);
+    turreted.turret = Some(true);
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("HUTT".into());
+    r.sim.buildings.insert("HUTT".into(), turreted);
+    let (mut w, b, d, t) = changed_in_builddown(&r, "HUTT");
+    assert!(w.obj(b).unwrap().econ.idle_body.is_some(), "requested");
+    let removed = removal(&mut w, b, 60).expect("removed");
+    assert_eq!(removed, t, "the building's next turn");
+    assert!(removed < d + 36, "the build-down is cut short");
+}
+
 // spec: S-0309 Edge cases (quirks.owner_change_interrupts_building_work off: a building selling at the change gets neither the guard request nor the fall-back, so its build-down runs on under the new owner by S-0408)
 #[test]
 fn quirk_interrupts_building_work_off_keeps_the_builddown() {
@@ -498,6 +516,41 @@ fn an_ended_unloading_leaves_the_door_open() {
         );
     }
     assert!(sent, "the next unit is sent out");
+}
+
+// spec: S-0309 claim 31 (no fall-back for a vehicle factory whose current behaviour is still unload after the guard request: one not ready at the change keeps unload current with guard queued and requests no idle body; a factory whose guard started gets the fall-back's idle-body request) and S-0215 claim 11 (a range of positive delay sets the mark only on landing on its last stage, so the start that made unload current leaves the factory not ready) (seam sweep 7a: intake 112's row)
+#[test]
+fn seams7a_a_factory_still_in_unload_gets_no_fall_back() {
+    let run = |ready: bool| {
+        let mut r = vf_rules();
+        r.sim.buildings.get_mut("VF").unwrap().econ.anim_idle = Some([0, 3, 4]);
+        let (mut w, k, _) = factory_released(&r);
+        for _ in 0..100 {
+            if beh(&w, k).0 == Some(Behaviour::Unload) {
+                break;
+            }
+            step(&mut w);
+        }
+        assert_eq!(beh(&w, k).0, Some(Behaviour::Unload));
+        assert!(!w.obj(k).unwrap().beh.ready_mark, "the start used the mark");
+        let o = w.obj_mut(k).unwrap();
+        // Set-up: no idle body, so that the fall-back's request shows.
+        o.econ.idle_body = None;
+        if ready {
+            // Set-up: the state of a turn whose range has just set the mark.
+            o.beh.ready_mark = true;
+        }
+        ownership::change(&mut w, k, Some(B), Cause::Trigger);
+        (beh(&w, k), w.obj(k).unwrap().econ.idle_body.is_some())
+    };
+    assert_eq!(
+        run(false),
+        ((Some(Behaviour::Unload), Some(Behaviour::Guard)), false),
+        "unload stays current, guard queued, no fall-back"
+    );
+    let ((cur, _), idle) = run(true);
+    assert_eq!(cur, Some(Behaviour::Guard), "the control: guard started");
+    assert!(idle, "and the fall-back requested the idle body");
 }
 
 // spec: S-0309 Edge cases (quirks.owner_change_interrupts_building_work off: a vehicle factory with unload queued gets neither the guard request nor the fall-back; the unloading goes on under the new owner by S-0417 and the factory sends its unit out)

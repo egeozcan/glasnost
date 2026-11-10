@@ -447,3 +447,41 @@ fn claim_18_a_slave_master_never_retaliates() {
         assert_eq!(acquire::retaliate(&mut w, v, a), want, "master {master}");
     }
 }
+
+// spec: S-0309 claim 18 (a harvesting slave, a slave of a slave group by S-0402 claim 14 and S-0215 Terms, never retaliates); the control, an armed infantry unit of the same type with no master, retaliates (seam sweep 7a: air-retaliate's row, the harvesting-slave half)
+#[test]
+fn seams7a_claim_18_a_harvesting_slave_never_retaliates() {
+    for slave in [false, true] {
+        let mut r = rules(false, "6", 0);
+        r.sim.infantry.get_mut("WALKER").unwrap().primary = Some("Gun".into());
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.econ.resource_gatherer = Some(true);
+        cart.econ.resource_destination = Some(true);
+        cart.econ.enslaves = Some("WALKER".into());
+        cart.econ.slaves_number = Some(1);
+        let mut w = testkit::game_with(&r, SIZE, 5);
+        // The master's group is created with its slave inside (S-0402 claim 19).
+        let m = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 4, 4), 0);
+        let v = if slave {
+            let s = glasnost_sim::econ::slaves::slaves_of(&w, m)[0];
+            // Set-up: the slave out on the map, as after its emergence
+            // (S-0402 claim 21).
+            let p = glasnost_sim::world::Pos::centre(mid(SIZE, 0, 0), 0);
+            glasnost_sim::objects::place(&mut w, s, p, 0);
+            s
+        } else {
+            spawn(&mut w, Kind::Infantry, "WALKER", 1, mid(SIZE, 0, 0), 0)
+        };
+        assert!(w.obj(v).unwrap().on_map);
+        let a = spawn(&mut w, Kind::Vehicle, "BUGGY", 0, mid(SIZE, -3, 0), 64);
+        force(&mut w, a, Behaviour::Sleep);
+        force(&mut w, v, Behaviour::Guard);
+        assert_eq!(glasnost_sim::seams::is_harvesting_slave(&w, v), slave);
+        let want = if slave {
+            Retaliation::MayNot
+        } else {
+            Retaliation::Done
+        };
+        assert_eq!(acquire::retaliate(&mut w, v, a), want, "slave {slave}");
+    }
+}

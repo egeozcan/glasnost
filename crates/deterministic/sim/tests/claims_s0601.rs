@@ -1570,6 +1570,88 @@ fn claim_13_domination() {
     assert!(mind::permanent(&w, a));
 }
 
+/// BOX of Alpha's taken by Beta's CTRL3, then given an engaged attack-move
+/// memory to a remembered destination.
+fn held_engaged(w: &mut World) -> (ObjectId, ObjectId) {
+    let c = veh(w, "CTRL3", BETA, 0, 0);
+    let a = veh(w, "BOX", ALPHA, 3, 0);
+    assert!(mind::take(w, c, a));
+    let o = w.obj_mut(a).unwrap();
+    o.attack_move = Some(glasnost_sim::world::AttackMoveMemory::Dest(Target::Cell(
+        at(8, 0),
+    )));
+    o.combat.engaged = true;
+    // Set-up: the take's fall-back used this tick's refresh (S-0309 claim
+    // 23 (b)); the release comes on a later tick.
+    o.beh.last_common_effects = None;
+    (c, a)
+}
+
+// spec: S-0309 claim 31 (a release followed by a psychic domination: a reset at each change, the domination's only when the dominating house is not then the owner; the domination's reset clears the destination that the release's fall-back resumed, and its own refresh, already used on the tick, S-0309 claim 23 (b), resumes nothing) and S-0601 claims 9 and 13 (seam sweep 7a: intake 116's row)
+#[test]
+fn seams7a_release_then_domination_resets_at_each_change() {
+    let remembered = Some(Target::Cell(at(8, 0)));
+    // Dominated by its original owner: the release is the only change.
+    let mut w = game();
+    let (_, a) = held_engaged(&mut w);
+    assert!(mind::dominate(&mut w, a, HouseId(ALPHA)));
+    let o = w.obj(a).unwrap();
+    assert_eq!(owner(&w, a), Some(ALPHA));
+    assert_eq!(o.dest, remembered, "the release's resumption is kept");
+    assert_eq!(o.beh.current, Some(Behaviour::Move));
+    // Dominated by another house: two changes, two resets.
+    let mut w = game();
+    let (_, a) = held_engaged(&mut w);
+    assert!(mind::dominate(&mut w, a, HouseId(BETA)));
+    let o = w.obj(a).unwrap();
+    assert_eq!(owner(&w, a), Some(BETA));
+    assert_eq!(
+        o.dest, None,
+        "the second reset clears the resumed destination"
+    );
+    assert_ne!(
+        o.beh.current,
+        Some(Behaviour::Move),
+        "and nothing resumes it"
+    );
+    assert!(o.attack_move.is_some(), "the memory is kept");
+}
+
+// spec: S-0309 claim 31 (an object off the map gets no fall-back: at its release the attack-move memory and engaged mark stay as they were and nothing is resumed, while the guard request is still made; on the map the fall-back's refresh resumes it) and S-0601 claim 9 (seam sweep 7a: intake 112's row)
+#[test]
+fn seams7a_a_release_off_the_map_gets_no_fall_back() {
+    for inside in [false, true] {
+        let mut w = game();
+        let (c, a) = held_engaged(&mut w);
+        if inside {
+            // Set-up: the victim is off the map at its release.
+            glasnost_sim::objects::take_inside(&mut w, a);
+            assert!(!w.obj(a).unwrap().on_map);
+        }
+        mind::release(&mut w, c, a);
+        assert_eq!(owner(&w, a), Some(ALPHA), "released");
+        let o = w.obj(a).unwrap();
+        if inside {
+            assert!(o.combat.engaged, "the engaged mark is kept");
+            assert_eq!(
+                o.attack_move,
+                Some(glasnost_sim::world::AttackMoveMemory::Dest(Target::Cell(
+                    at(8, 0)
+                )))
+            );
+            assert_eq!(o.dest, None, "nothing is resumed");
+            assert_eq!(o.beh.last_common_effects, None, "no common effects");
+            assert!(
+                o.beh.current == Some(Behaviour::Guard) || o.beh.queued == Some(Behaviour::Guard),
+                "the guard request"
+            );
+        } else {
+            assert!(!o.combat.engaged, "resuming ends the engaged mark");
+            assert_eq!(o.dest, Some(Target::Cell(at(8, 0))), "resumed");
+        }
+    }
+}
+
 // spec: S-0601 claim 13 (not a building, not psionics-immune, not protected; one already of the dominating house becomes permanent without an owner change)
 #[test]
 fn claim_13_domination_conditions() {
