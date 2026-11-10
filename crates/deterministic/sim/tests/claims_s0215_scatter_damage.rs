@@ -715,6 +715,48 @@ fn claim_15_w7_h_second_case_an_ai_house_and_the_neutral_house() {
     }
 }
 
+// spec: S-0215 claim 16, Order within the hit (the no-threat test comes after the scatter from damage: request A of S-0208 claim 15 is decided on the target and destination the actor had before the no-threat fall-back, request B on the state that the fall-back leaves) and claim 13 (an infantry unit's fall-back takes its guard spot on another cell as its destination); the control without the no-threat property keeps request A's destination (seam sweep 7a: scatter-damage's row; the spec rates this order `unmeasured`, so it is tested synthetically)
+#[test]
+fn seams7a_claim_16_request_a_comes_before_the_no_threat_fall_back() {
+    for no_threat in [false, true] {
+        let mut r = rules(true);
+        r.sim.behaviours.insert(
+            Behaviour::Guard.key().into(),
+            BehaviourProps {
+                scatter: Some(true),
+                no_threat: Some(no_threat),
+                ..Default::default()
+            },
+        );
+        let mut w = testkit::game_with(&r, SIZE, 5);
+        // An unarmed PEON of a player house with the player-scatter rule on:
+        // request A by its second case (W7 part h4).
+        let (s, a) = foot_scene(&mut w, "PEON", 1, 0, 9);
+        let spot = mid(SIZE, 4, 4);
+        w.obj_mut(s).unwrap().guard_spot = Some(Target::Cell(spot));
+        let t = w.tick;
+        hit(&mut w, s, Some(a));
+        let got = answers(&w, s, t);
+        assert_eq!(
+            got.first().map(|x| x.0),
+            Some(true),
+            "no-threat {no_threat}: request A, decided before the fall-back: {got:?}"
+        );
+        assert_eq!(got.len(), 2, "then request B: {got:?}");
+        let a_dest = got[0].1;
+        assert!(a_dest.is_some() && a_dest != Some(spot));
+        if no_threat {
+            assert_eq!(
+                dest_cell(&w, s),
+                Some(spot),
+                "the fall-back after request A gives the guard spot"
+            );
+        } else {
+            assert_eq!(dest_cell(&w, s), a_dest, "no fall-back: A's destination");
+        }
+    }
+}
+
 /// W7 part j's file: *guard* with the scatter property and no retaliate
 /// property (the unit may not retaliate; request A by its second case,
 /// request B accepted by a fraidycat); the player-scatter rule on, so that

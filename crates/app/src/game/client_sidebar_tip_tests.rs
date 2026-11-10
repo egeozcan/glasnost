@@ -259,6 +259,61 @@ fn claims_20_and_21_an_icon_tip() {
     );
 }
 
+/// spec: S-0411 claim 20 (Text: the same text whatever the item's state; here idle, building and
+/// on hold, S-0404 claims 3 and 5) (seam sweep 7a: intake 115's row)
+#[test]
+fn seams7a_claim_20_the_icon_tip_is_the_same_building_and_on_hold() {
+    use glasnost_sim::econ::production::{self, Hold};
+    use glasnost_sim::orders::Order;
+    let mut c = bar_game((800, 600), 100);
+    let l = session(&c).layout();
+    let t0 = slots(&c)[0].expect("an icon in the first slot");
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    let p = mid(&c, l.cameo(0));
+    c.pointer_moved(p);
+    frame_at(&mut c, &mut t, 16);
+    frame_at(&mut c, &mut t, 1000);
+    let idle = shown(&c).expect("the tip after the wait").text;
+    let me = session(&c).play.me();
+    let item = |c: &Client| {
+        production::line_of(session(c).play.world(), me, t0)
+            .and_then(|l| l.item.as_ref())
+            .filter(|i| i.t == t0)
+            .map(|i| i.hold)
+    };
+    // The tip again after a movement within the icon, in state `what`.
+    let again = |c: &mut Client, t: &mut i64, dx: i32, what: &str| {
+        c.pointer_moved(Point::new(p.x + dx, p.y));
+        frame_at(c, t, 16);
+        let s = shown(c).unwrap_or_else(|| panic!("{what}: shown at once"));
+        assert_eq!(s.text, idle, "{what}: the same text");
+    };
+    session_mut(&mut c).play.game.world.houses[usize::from(me.0)].credits = 100_000;
+    assert_eq!(
+        session_mut(&mut c)
+            .play
+            .issue(vec![Order::Build { what: t0 }]),
+        1
+    );
+    for _ in 0..5 {
+        session_mut(&mut c).step();
+    }
+    assert_eq!(item(&c), Some(Hold::None), "set-up: building");
+    again(&mut c, &mut t, 1, "building");
+    assert_eq!(
+        session_mut(&mut c)
+            .play
+            .issue(vec![Order::Hold { what: t0 }]),
+        1
+    );
+    for _ in 0..3 {
+        session_mut(&mut c).step();
+    }
+    assert_eq!(item(&c), Some(Hold::Player), "set-up: on hold");
+    again(&mut c, &mut t, 0, "on hold");
+}
+
 /// spec: S-0411 claim 20 (no drawn frame between the movement onto the slots and the next one:
 /// that one is ordinary too)
 #[test]

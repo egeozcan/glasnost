@@ -469,3 +469,111 @@ fn r7_d_the_reset_comes_at_the_start_of_cloaking_whatever_house_and_sensors() {
     r7_d(1, true);
     r7_d(0, false);
 }
+
+// spec: S-0506 claim 11 (r37: a controller target removed from play is lost, cleared before the reset: here a building target its owner sells, removed at the end of its build-down, S-0408) and claim 12 (r37, Q-2749: the released missile gets F8's cell); scenario R21's lost-target variant part d, through the real sale order (seam sweep 7a: intake 113's row)
+#[test]
+fn seams7a_r21_d_the_sale_of_a_building_target_resets_at_its_removal() {
+    use glasnost_rules::sim::BuildingType;
+    use glasnost_sim::econ::sell;
+    use glasnost_sim::orders::{self, Order};
+    let mut r = rules();
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("SHED".into());
+    let mut shed = BuildingType {
+        strength: Some(400),
+        cost: Some(1000),
+        foundation: Some([1, 1]),
+        owner: Some(vec!["Alphaland".into(), "Betaland".into()]),
+        ..Default::default()
+    };
+    shed.econ.buildup = Some(true);
+    shed.econ.buildup_frames = Some(10);
+    r.sim.buildings.insert("SHED".into(), shed);
+    let mut w = testkit::game_with(&r, SIZE, 7);
+    let lnc = put(&mut w, Kind::Vehicle, "LNC", 0, 0, 0);
+    let b = put(&mut w, Kind::Building, "SHED", 1, 8, 0);
+    testkit::run(&mut w, 4);
+    let house = w.obj(b).unwrap().owner.unwrap();
+    assert!(orders::issue(&mut w, house, Order::Sell { actor: b }));
+    let builddown = |w: &World| {
+        w.obj(b)
+            .and_then(|o| o.econ.sale.clone())
+            .is_some_and(|s| matches!(s.stage, sell::Stage::BuildDown(_)))
+    };
+    for _ in 0..10 {
+        testkit::run(&mut w, 1);
+        if builddown(&w) {
+            break;
+        }
+    }
+    assert!(builddown(&w), "set-up: the build-down has begun");
+    let x = preparing(&mut w, lnc, b);
+    assert!(w.obj(b).is_some(), "set-up: still in play");
+    for _ in 0..100 {
+        let preparing = controller(&w, lnc).slots[0].state == SlotState::Preparing;
+        testkit::run(&mut w, 1);
+        if w.obj(b).is_none() {
+            assert!(preparing, "set-up: still preparing at the removal");
+            assert_reset(&w, lnc, x, "the sale");
+            return;
+        }
+    }
+    panic!("the sale never removed the building");
+}
+
+// spec: S-0506 claim 11 (r37: the controller target is lost at the hit that destroys it, even while it then stays in play: a vessel that sinks, S-0312 claim 10; cleared before the reset) and claim 12 (r37, Q-2749: F8's cell); scenario R7 part c's rule for a sinking vessel (seam sweep 7a: intake 113's row)
+#[test]
+fn seams7a_r7_c_the_reset_comes_at_the_destroying_hit_of_a_sinking_vessel() {
+    use glasnost_map::terrain::land;
+    use glasnost_rules::sim::MovementZone;
+    let mut r = rules();
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("SKIFF".into());
+    let mut skiff = UnitType {
+        strength: Some(300),
+        speed: Some(5),
+        rot: Some(5),
+        locomotion_class: Some(LocomotionClass::Float),
+        locomotor: Some(Locomotor::Ship),
+        movement_zone: Some(MovementZone::Water),
+        weight: dec("4"),
+        ..Default::default()
+    };
+    skiff.combat.naval = Some(true);
+    r.sim.vehicles.insert("SKIFF".into(), skiff);
+    // The sinking weight below the SKIFF's (S-0312 claim 10).
+    r.sim.general.ship_sinking_weight = dec("3");
+    let mut w = testkit::game_with(&r, SIZE, 7);
+    let water = |w: &mut World| {
+        for dx in 6..=10 {
+            for dy in -2..=2 {
+                let c = testkit::mid(SIZE, dx, dy);
+                w.cells.grid.get_mut(c).unwrap().land = land::WATER;
+            }
+        }
+    };
+    water(&mut w);
+    let lnc = put(&mut w, Kind::Vehicle, "LNC", 0, 0, 0);
+    let ship = put(&mut w, Kind::Vehicle, "SKIFF", 1, 8, 0);
+    water(&mut w);
+    let x = preparing(&mut w, lnc, ship);
+    let hit = Hit {
+        amount: 100_000,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: true,
+        no_escape: true,
+    };
+    damage::apply(&mut w, ship, hit);
+    assert!(
+        glasnost_sim::naval::sinking(&w, ship),
+        "set-up: still in play, sinking"
+    );
+    assert_reset(&w, lnc, x, "the destroying hit of a sinking vessel");
+}

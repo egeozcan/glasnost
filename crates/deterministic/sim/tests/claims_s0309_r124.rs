@@ -9,6 +9,7 @@
 //! scenario A19, on the synthetic rules of `structures_common`: invented
 //! types and numbers, no game data. Ledger: `docs/m8-claims/intake112.md`.
 
+mod deploy_common;
 mod structures_common;
 
 use glasnost_map::triggers::{Action, Event, TagDef, TriggerDef, Triggers};
@@ -417,4 +418,62 @@ fn a_contact_that_follows_the_building_is_reset() {
     let o = w.obj(v).unwrap();
     assert_eq!(o.guard_spot, None, "the guard spot is forgotten");
     assert!(guarded(&w, v), "guard requested");
+}
+
+// spec: S-0309 claim 31 (a vehicle in the middle of deploying or undeploying in place, S-0517 Terms, claims 4 and 6, keeps its guard spot at the change; a mobile vehicle of the same type forgets it) (seam sweep 7a: intake 112's row)
+#[test]
+fn seams7a_a_vehicle_deploying_in_place_keeps_its_guard_spot() {
+    use glasnost_sim::econ::inplace::{self, Form};
+    let size = deploy_common::SIZE;
+    for undeploy in [false, true] {
+        let mut w = glasnost_sim::testkit::game_with_triggers(
+            &deploy_common::ruleset(),
+            size,
+            7,
+            change_owner_triggers(),
+        );
+        glasnost_sim::testkit::run(&mut w, 4);
+        // ATANK deploys in place with a presentation: its transitions last
+        // several ticks (S-0517 claim 7).
+        let v = deploy_common::put(&mut w, "ATANK", Kind::Vehicle, 0, 0, 0);
+        let m = deploy_common::put(&mut w, "ATANK", Kind::Vehicle, 0, 4, 0);
+        tag(&mut w, v, "TAG");
+        tag(&mut w, m, "TAG");
+        deploy_common::deploy(&mut w, v);
+        if undeploy {
+            for _ in 0..60 {
+                if inplace::form(&w, v) == Form::Deployed {
+                    break;
+                }
+                glasnost_sim::tick::step(&mut w);
+            }
+            assert_eq!(inplace::form(&w, v), Form::Deployed);
+            deploy_common::deploy(&mut w, v);
+        }
+        for _ in 0..40 {
+            if inplace::in_transition(&w, v) {
+                break;
+            }
+            glasnost_sim::tick::step(&mut w);
+        }
+        let form = inplace::form(&w, v);
+        if undeploy {
+            assert!(matches!(form, Form::Undeploying { .. }), "{form:?}");
+        } else {
+            assert!(matches!(form, Form::Deploying { .. }), "{form:?}");
+        }
+        assert_eq!(inplace::form(&w, m), Form::Mobile);
+        let spot = Some(Target::Cell(glasnost_sim::testkit::mid(size, 6, 6)));
+        w.obj_mut(v).unwrap().guard_spot = spot;
+        w.obj_mut(m).unwrap().guard_spot = spot;
+        raise_change(&mut w, v);
+        assert_eq!((owner(&w, v), owner(&w, m)), (Some(B), Some(B)));
+        assert!(inplace::in_transition(&w, v), "still in transition");
+        assert_eq!(w.obj(v).unwrap().guard_spot, spot, "kept in transition");
+        assert_eq!(
+            w.obj(m).unwrap().guard_spot,
+            None,
+            "a mobile one forgets it"
+        );
+    }
 }
