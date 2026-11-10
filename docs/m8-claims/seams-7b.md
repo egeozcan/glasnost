@@ -10,16 +10,19 @@ ledgers, so it adds no row. Rows that only name the switch `aircraft_descent_tou
 are not seam rows. No row here is the same claim as a 7a row (intakes 112 to 116, the
 scatter-damage, air-retaliate and stalled-harvester rows).
 
-**Counts.** 16 rows read: 1 closed earlier, 0 blocked by an open request, 9 tested (none with a
-code change), 6 left. A row restated in two intakes counts twice (intake 121's not-an-assignment
+**Counts.** 16 rows read: 1 closed earlier, 0 blocked by an open request, 9 tested (one of them
+in part, intake 118's row 33, whose untested half is under *Left*; none with a code change), 6
+left. A row restated in two intakes counts twice (intake 121's not-an-assignment
 row, restated as intake 122's third row of claim 21). Intake 117 has no marker row.
 
 **Result.** 9 rows tested through the real path, in 10 new tests. Every test agrees with the
 code: no simulation change, no hashed or replayed state, no format bump (save 125, AI game 91,
 wire 12), goldens and lanes unaffected. No spec request filed (Q-2921 to Q-2925 unused). No
-oracle wishlist row added: the `unmeasured` rows tested here are ones the specs say no scenario
-sets up, and the `measurable` ones are scenarios P25 and C5, which the wishlist already reaches
-(rows 23 and 24) or which the spec defines in full.
+oracle wishlist row added. The brief's rule adds a row only for an `unmeasured` claim that a
+scenario would settle. The `unmeasured` rows tested here (the visiting flagged type's rows, the
+kamikaze's tag, bomb and raises, its slot, the flagged slot's T4 row) are ones S-0501 says no
+scenario here sets up. The P25(e) rows are `measurable` (scenario P25), so the rule does not
+apply to them.
 
 ## Built
 
@@ -34,7 +37,7 @@ None. No test showed the code differing from an approved claim.
 | 3 | 122 (35) | S-0212 r98 | P25 part e, runs 1 and 2: the "leaves its cell" void, checked only up to the order | tested in part | `seams7b_p25_e_run_1_real_failed_search_an_order_to_the_held_cell`, `seams7b_p25_e_run_2_real_failed_search_an_order_to_the_second_tile` (`claims_s0212_r97.rs`): part (a)'s passed-gate walker through the order and tick path (road land with a zero foot multiplier east of the walker and south of that), no failure made by hand. The search at *c* fails and keeps the destination with *R* from *c*; the order in *c* + 10 ends the delay; one more computation, which fails again and starts *R* from it; the walker stays in its cell from *c* to *c* + 100. Code agrees. |
 | 4 | 122 (33) | S-0212 r98 | claim 21: a destination given as nothing to a walker that has none | built, no test | `seams7b_nothing_given_to_a_walker_with_no_destination_keeps_the_delay` (`claims_s0212_r97.rs`): the delay runs on, in the same tick and a later one. Code agrees. |
 | 5 | 118 (30) | S-0501 r172 | claims 17, 34 and 45: a visiting aircraft of a missile type takes the *Missile types* rows | built, not tested on its own | `seams7b_a_visiting_flagged_type_in_flight_takes_the_ground_rows` (`claims_s0501_r167.rs`): in flight with ammunition left, the fall-back forgets target and destination and gives *retreat*; a later *retreat* processing takes a cell again. The unflagged control gets *hunt* with its target and destination kept. Code agrees. |
-| 6 | 118 (33) | S-0501 r172, S-0506 | claim 35 and T4: a returning flagged slot with ammunition left and a controller target becomes attacking | built, not tested on its own | `seams7b_a_returning_flagged_non_rocket_slot_with_ammunition_becomes_attacking` (`claims_s0506_r40.rs`, HAWKF made a flying type): attacking, the controller target received, *attack* queued, not released; with no ammunition it does not become attacking. The row's claim 29 half (a *guard* processing below cruise height can find it a pad) is the path `ac35_a_…` already checks for a map-placed flagged type; the carrier helpers run no slot aircraft flight, so it is not set up for a slot one. Code agrees. |
+| 6 | 118 (33), in part | S-0501 r172, S-0506 | claim 35 and T4: a returning flagged slot with ammunition left and a controller target becomes attacking | built, not tested on its own | `seams7b_a_returning_flagged_non_rocket_slot_with_ammunition_becomes_attacking` (`claims_s0506_r40.rs`, HAWKF made a flying type): attacking, the controller target received, *attack* queued, not released; with no ammunition it does not become attacking. The row's claim 29 half (a *guard* processing below cruise height can find it a pad) is the path `ac35_a_…` already checks for a map-placed flagged type; the carrier helpers run no slot aircraft flight, so it is not set up for a slot one. Code agrees. |
 | 7 | 119 (26) | S-0501 r176 | T2: armed, not pad-bound, no pad grants contact: none, then the F8 spot and *move* | built, no test | `seams7b_not_pad_bound_with_no_grant_gets_the_f8_spot_and_move` (`claims_s0501_r176.rs`): F8's spot as destination, *move*, no contact, no crash, no pad recorded; the moment's draws only over a refused cell. Code agrees. |
 | 8 | 119 (30) | S-0501 r178 | claim 20: the removal makes no S-0011 raise, the tag stays, a planted bomb is removed silently | tested in part | `seams7b_the_removal_makes_no_raise_keeps_the_tag_and_drops_the_bomb` (`claims_s0501_r178.rs`, `testkit::entry_triggers`): no detonation and T unhurt in the pass's tick, the tag attached with its carrier count, no destroyed-by-anything firing; the control (not enrolled) keeps the bomb, and its death sets the bomb off and fires the trigger. Code agrees. |
 | 9 | 119 (32) | S-0501 r178, S-0506 | claim 20: a kamikaze not of a rocket type left its slot, so its removal changes no slot | built (already), no test | `seams7b_a_released_flagged_non_rocket_objects_removal_changes_no_slot` (`claims_s0506_r40.rs`): released by a reset, removed, the controller unchanged; the control's slot object killed in its slot empties the slot. Code agrees. |
@@ -57,4 +60,5 @@ None. Of the open requests (Q-2097, Q-2597), none names a row here.
 | 1 | 120 (35) | S-0309 | claim 31: whether the unit left standing holds up the new unit's exit track | S-0309 Open questions; nothing is built for it |
 | 1 | 120 (36) | S-0309 | claim 31: which unit a factory with more than one place sends out first | S-0309 Open questions |
 | 1 | 121 (32) | S-0209 | claim 10: whether the enter order's destination is the transport or its cell | S-0209 Open questions (*The destination at an accepted enter order*) |
+| (half of a tested row) | 118 (33) | S-0501 r172 | claim 29 for a flagged slot aircraft: a *guard* processing below cruise height can find it a pad | the carrier helpers of `claims_s0506_r40` run no slot aircraft flight, so no set-up brings a slot aircraft below cruise height in *guard*; `claims_s0501_r167::ac35_a_…` covers only a map-placed flagged type (no pad at cruise height); `unmeasured` in the spec |
 | 2 | 121 (33), 122 (31) | S-0209, S-0212 | claim 10 and claim 21 (r98) at the enter orders the Open questions leave open | S-0209 Open questions (*An enter order's assignment to a walker with no contact*, low, `unmeasured`); nothing is built from those low results |
