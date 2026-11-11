@@ -688,8 +688,10 @@ impl Bench {
         }
     }
 
-    /// After the frame was drawn and submitted.
-    pub fn after_frame(&mut self, c: &Client, end: FrameEnd) {
+    /// After the frame was drawn and submitted; `drawn` is false when the
+    /// host had no surface to draw to (a covered or minimised window).
+    pub fn after_frame(&mut self, c: &Client, end: FrameEnd, drawn: bool) {
+        let _ = drawn;
         self.gpu_times(&end.gpu);
         if self.stage != Stage::Run {
             return;
@@ -1364,6 +1366,7 @@ pub fn run_offscreen(
                 wait: t3 - t2,
                 gpu,
             },
+            true,
         );
         if let Some(name) = shot {
             let t = now();
@@ -1449,6 +1452,67 @@ fn missed_frames(totals: &[f64], quantised: bool) -> (usize, Option<f64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A run of one view of `warmup` and `frames` frames, already timing.
+    fn running(warmup: u32, frames: u32) -> Bench {
+        let mut b = Bench::new(
+            BenchOptions {
+                warmup,
+                frames,
+                views: vec![ViewKind::Base],
+                ..Default::default()
+            },
+            "native-window",
+        );
+        b.stage = Stage::Run;
+        b
+    }
+
+    /// A frame's start as `run` records it.
+    fn start_row(b: &mut Bench) {
+        if let Some(last) = b.rows.last_mut() {
+            last.total = Some(now() - last.start);
+        }
+        b.rows.push(Row {
+            frame: b.rows.len() as u64,
+            view: b.view,
+            timed: b.in_view >= b.opts.warmup,
+            start: now(),
+            ..Row::default()
+        });
+    }
+
+    /// #92: a frame the window could not draw (no surface texture) is not a
+    /// timed frame and does not count towards the view's frames.
+    #[test]
+    fn an_undrawn_frame_is_not_timed() {
+        let c = Client::new();
+        let mut b = running(0, 2);
+        start_row(&mut b);
+        b.after_frame(&c, FrameEnd::default(), false);
+        assert!(!b.rows[0].timed);
+        assert!(!b.finished());
+        for _ in 0..2 {
+            start_row(&mut b);
+            b.after_frame(&c, FrameEnd::default(), true);
+        }
+        assert!(b.finished());
+        assert_eq!(b.rows.iter().filter(|r| r.timed).count(), 2);
+        assert!(b.notes.iter().any(|n| n.contains("1 frame")), "{:?}", b.notes);
+    }
+
+    /// #92: the run's last frame has a total too.
+    #[test]
+    fn the_last_frame_has_a_total() {
+        let c = Client::new();
+        let mut b = running(1, 2);
+        for _ in 0..3 {
+            start_row(&mut b);
+            b.after_frame(&c, FrameEnd::default(), true);
+        }
+        assert!(b.finished());
+        assert!(b.rows.iter().all(|r| r.total.is_some()), "{:?}", b.rows);
+    }
 
     /// #91: on the web, frame totals are counted against the refresh
     /// interval they are quantised to; elsewhere against the 60 Hz budget.

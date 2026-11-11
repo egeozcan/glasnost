@@ -563,7 +563,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 };
                 if let Some(b) = self.bench.as_mut() {
                     if !b.finished() {
-                        b.after_frame(&self.client, end);
+                        b.after_frame(&self.client, end, drawn == Drawn::Yes);
                     }
                     // A run that failed before its frames ends here too.
                     if b.take_report() {
