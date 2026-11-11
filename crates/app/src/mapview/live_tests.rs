@@ -56,6 +56,56 @@ fn pacing_has_no_catch_up() {
     assert_eq!(n, 10);
 }
 
+/// #76. spec: S-0201 claim 4 (each cycle lasts 16 × s ms, or as long as its work if longer),
+/// claim 17 (a network game's period ⌊1000 ÷ cap⌋ likewise), claim 3 (a late cycle is not made
+/// up). Frames at display rates that are not a multiple of the period still give 1000 ÷ period
+/// ticks per second; whole-millisecond timestamps with a millisecond of jitter do not flip the
+/// cycle between two and three frames.
+#[test]
+fn pacing_keeps_the_period_between_display_frames() {
+    // Ticks over ten seconds of frames at `frame(i)` ms, the pacer asked once per frame (the
+    // network path tells it of the frames it does not tick in).
+    let ticks = |frame: &dyn Fn(i64) -> i64, frames: i64, period: i64| {
+        let mut p = Pacer::default();
+        let mut n = 0;
+        for i in 0..frames {
+            let t = frame(i);
+            if p.remaining_for(t, period) == 0 && p.due_after(t, period) {
+                n += 1;
+            } else {
+                p.waited(t);
+            }
+        }
+        n
+    };
+    // 75 Hz (13.33 ms, truncated) and 144 Hz (6.94 ms) at 16 ms: 62.5 per second, not 37.5 or 48.
+    let n = ticks(&|i| i * 40 / 3, 750, 16);
+    assert!((622..=626).contains(&n), "75 Hz: {n}");
+    let n = ticks(&|i| i * 1000 / 144, 1440, 16);
+    assert!((622..=626).contains(&n), "144 Hz: {n}");
+    // 60 Hz at 32 ms: 31.25 per second, not 30.
+    let n = ticks(&|i| i * 50 / 3, 600, 32);
+    assert!((310..=313).contains(&n), "60 Hz, 32 ms: {n}");
+    // 60 Hz with ±1 ms of jitter at cap 30's 33 ms: 30.3 per second, not fewer than 30.
+    let jitter = [0, 1, -1, 0, -1, 1];
+    let n = ticks(&|i| i * 50 / 3 + jitter[(i % 6) as usize], 600, 33);
+    assert!((301..=304).contains(&n), "60 Hz ± 1 ms, 33 ms: {n}");
+    // A frame slower than the period, then a stall: one tick each, then the period from there.
+    let mut p = Pacer::default();
+    assert!(p.due_after(0, 16));
+    p.waited(10);
+    assert!(p.due_after(40, 16), "a slow frame ticks once");
+    p.waited(50);
+    assert!(p.due_after(56, 16), "the phase from the slow frame's start");
+    assert!(p.due_after(400, 16), "after a stall");
+    p.waited(410);
+    assert!(
+        !p.due_after(415, 16),
+        "no catch-up: 16 ms from the stall's frame"
+    );
+    assert!(p.due_after(416, 16));
+}
+
 /// spec: S-0102 claim 6 (enter before the first strictly greater key, so a
 /// newcomer follows equal keys)
 #[test]
@@ -212,6 +262,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -301,6 +352,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1875,6 +1927,7 @@ fn considered_aircraft_defaults_by_kind() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         let s = entries[0]
@@ -1971,6 +2024,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -2167,6 +2221,7 @@ fn a_vehicle_shadow_lies_on_its_surface() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         let items = &entries[0].items;
@@ -2290,6 +2345,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -2392,6 +2448,7 @@ fn multi_turret_draws_the_models_of_the_selected_index() {
             berserk: None,
             turret_index: index,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let sizes: Vec<(u32, u32)> = entries[0]
@@ -2585,6 +2642,7 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
             berserk: None,
             turret_index: index,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let (shadows, lit): (Vec<Item>, Vec<Item>) = entries[0]
@@ -2979,6 +3037,7 @@ fn aircraft_attitude_is_drawn() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -3189,6 +3248,7 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -3960,6 +4020,7 @@ fn protection_curtain_vehicle_rows() {
                 berserk: None,
                 turret_index: None,
                 walk: Default::default(),
+                deck: false,
             };
             let look = Look {
                 kind: ProtectKind::Curtain,
@@ -5081,6 +5142,7 @@ fn plain_mobile(kind: Kind) -> Mobile {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     }
 }
 
@@ -5161,6 +5223,207 @@ fn berserk_claim7_rows() {
         "the cell centre shrouded for the viewer"
     );
     assert_eq!(mad.1, plain.1, "shadows unchanged");
+}
+
+/// #74: spec: S-0104 claim 13 (infantry on a bridge deck: U + extra infantry light + (h ÷ 208)·λ,
+/// h measured from the deck; anywhere else outside shadowed cells infantry ignore their height; a
+/// vehicle on a bridge deck: U + 4λ + extra unit light), λ the normal set's level factor with no
+/// effect in force (claim 2, per-cell height terms column)
+#[test]
+fn claim_13_mobiles_on_a_bridge_deck_take_the_level_factor_terms() {
+    use glasnost_render::light::brightness_rho;
+    // An invented level factor, thousandths per height level.
+    const LAMBDA: i32 = 30;
+    let (import, catalogue, assets) = context();
+    let mut map = decode(
+        &Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new()),
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    map.lighting.normal.level = LAMBDA;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    // The synthetic rules give no extra light: 0 (S-0104 claim 13).
+    let u = painter.ground_light(glasnost_map::CellXY::new(2, 3));
+    let mut rhos = |m: Mobile| -> Vec<u16> {
+        let (e, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        lit_shades(&e[0].items).iter().map(|s| s.rho).collect()
+    };
+    let rho = |b: i32| brightness_rho(b) as u16;
+    let man = |deck, above| Mobile {
+        deck,
+        above,
+        ..plain_mobile(Kind::Infantry)
+    };
+    assert_eq!(
+        rhos(man(false, 416)),
+        [rho(u)],
+        "off a deck: no height term"
+    );
+    assert_eq!(rhos(man(true, 0)), [rho(u)], "standing on the deck: h = 0");
+    assert_eq!(rhos(man(true, 416)), [rho(u + 2 * LAMBDA)], "416 ÷ 208 = 2");
+    let car = |deck| Mobile {
+        deck,
+        ..plain_mobile(Kind::Vehicles)
+    };
+    let off = rhos(car(false));
+    assert!(
+        !off.is_empty() && off.iter().all(|&r| r == rho(u)),
+        "{off:?}"
+    );
+    let on = rhos(car(true));
+    assert!(
+        !on.is_empty() && on.iter().all(|&r| r == rho(u + 4 * LAMBDA)),
+        "{on:?}"
+    );
+}
+
+/// #74: spec: S-0104 claim 2 (per-cell height terms: ion storm, then the dominator in any phase,
+/// then the nuke flash brightening phase, then normal) and claim 13 (λ_air: the ion storm's
+/// level factor during a storm, the normal one otherwise, never the nuke's or the dominator's)
+#[test]
+fn claim_13_object_level_factors_follow_the_per_cell_ranking() {
+    use super::live::object_levels_of;
+    use glasnost_sim::lighting::NUKE_SET;
+    // Invented level factors, thousandths per height level.
+    let mut map = glasnost_map::Lighting::default();
+    map.normal.level = 8;
+    map.ion.level = 21;
+    map.dominator.level = 34;
+    assert_eq!(object_levels_of(&map, false, false, false), (8, 8));
+    assert_eq!(object_levels_of(&map, true, true, true), (21, 21));
+    assert_eq!(object_levels_of(&map, false, true, true), (34, 8));
+    assert_eq!(
+        object_levels_of(&map, false, false, true),
+        (NUKE_SET.level, 8)
+    );
+}
+
+/// #74: spec: S-0104 claim 13 (aircraft: U + extra aircraft light + (h ÷ 208)·λ_air)
+#[test]
+fn claim_13_aircraft_take_the_air_level_factor() {
+    use glasnost_render::light::brightness_rho;
+    // An invented level factor, thousandths per height level.
+    const LAMBDA_AIR: i32 = 30;
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let (mut import, catalogue, mut assets) =
+        context_with(&format!("{RULES}[AircraftTypes]\n1=JETX\n"));
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [("body".to_string(), b"jetx.vxl".to_vec())].into(),
+            ..Default::default()
+        },
+    );
+    assets.insert(
+        b"jetx.vxl",
+        VxlWriter {
+            model: &synthetic_model(),
+        }
+        .write(),
+    );
+    let map = decode(
+        &Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new()),
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    let u = painter.ground_light(glasnost_map::CellXY::new(2, 3));
+    painter.set_object_levels(0, LAMBDA_AIR);
+    let jet = |above| Mobile {
+        above,
+        ..plain_mobile(Kind::Aircraft)
+    };
+    let mut rhos = |m| {
+        let (e, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        lit_shades(&e[0].items)
+            .iter()
+            .map(|s| s.rho)
+            .collect::<Vec<_>>()
+    };
+    let rho = |b: i32| brightness_rho(b) as u16;
+    let ground = rhos(jet(0));
+    assert!(
+        !ground.is_empty() && ground.iter().all(|&r| r == rho(u)),
+        "{ground:?}"
+    );
+    // 1500 ÷ 208 = 7
+    let high = rhos(jet(1500));
+    assert!(
+        !high.is_empty() && high.iter().all(|&r| r == rho(u + 7 * LAMBDA_AIR)),
+        "{high:?}"
+    );
+}
+
+/// #75: spec: S-0104 claim 3 (global effects replace the tints: the 53-shade house-colour
+/// palettes are rebuilt with the chosen effect set's tint; at "normal" every table goes back to
+/// its own tint, white here) and claim 5; Formulas, "Map value storage" (‰ = hundredths × 10)
+#[test]
+fn claim_3_an_effect_tint_replaces_the_house_tables_tint() {
+    use glasnost_render::compose::{Shade, row565};
+    use glasnost_render::light::shade_table;
+    use glasnost_render::palette::{TINT_EXEMPT, house_palette};
+    // An invented effect tint, hundredths.
+    const TINT: [i32; 3] = [120, 80, 150];
+    with_rules_inputs(false, RULES, |inputs, painter, scene| {
+        let shade = |painter: &mut super::build::Painter, scene: &mut Scene| {
+            let (e, _) = painter.mobiles(inputs, scene, &[plain_mobile(Kind::Infantry)]);
+            lit_shades(&e[0].items)[0]
+        };
+        let table =
+            |scene: &Scene, s: Shade| scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec();
+        let hsv = super::build::owner_definition(inputs.import, inputs.options, b"Neutral").0;
+        let pal = house_palette(&inputs.palettes.unit, hsv);
+        let expect = |tint: [i32; 3]| {
+            shade_table(&pal, tint, 53, Some(TINT_EXEMPT))
+                .iter()
+                .map(row565)
+                .collect::<Vec<_>>()
+        };
+        let normal = shade(painter, scene);
+        assert_eq!(table(scene, normal), expect([1000; 3]), "white light");
+        painter.set_effect_tint(Some(TINT));
+        let effect = shade(painter, scene);
+        assert_eq!(
+            table(scene, effect),
+            expect(TINT.map(|t| t * 10)),
+            "the effect's tint"
+        );
+        painter.set_effect_tint(None);
+        assert_eq!(shade(painter, scene).base, normal.base, "its own tint");
+    });
 }
 
 /// The items `painter` draws for MANX at height 520 with shadow height
@@ -6478,6 +6741,69 @@ fn claim_18_a_disguised_unit_shows_no_insignia_to_whom_it_fools() {
     assert_eq!(status(&mut live, &mut scene), 0, "disguised to house 0");
     live.set_viewer(Some(HouseId(1)));
     assert_eq!(status(&mut live, &mut scene), 1, "its owner sees it");
+}
+
+/// #73. spec: S-0111 claim 3 (a hovered unit that appears disguised to the local player's house,
+/// S-0516 claim 35, shows a health bar only when its disguise has a house; the restriction does
+/// not apply to a selected unit, or to a hovered unit that does not appear disguised)
+#[test]
+fn claim_3_a_hovered_unit_disguised_without_a_house_shows_no_health_bar() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, _cart, walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let status = |live: &mut Live, scene: &mut Scene| {
+        live.redraw_status(&inputs, scene);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(walker)))
+            .count()
+    };
+    live.set_viewer(Some(HouseId(0)));
+    live.set_marks(&[], Some(walker));
+    assert!(status(&mut live, &mut scene) > 0, "hovered, not disguised");
+    let disguise = |house| {
+        Some(glasnost_sim::cloak::disguise::Disguise {
+            what: None,
+            house,
+            since: 0,
+        })
+    };
+    live.world.obj_mut(walker).unwrap().cloak.disguise = disguise(None);
+    assert!(glasnost_sim::cloak::disguise::appears_disguised(
+        &live.world,
+        walker,
+        Some(HouseId(0))
+    ));
+    assert_eq!(
+        status(&mut live, &mut scene),
+        0,
+        "hovered, disguised without a house"
+    );
+    live.set_marks(&[walker], None);
+    assert!(status(&mut live, &mut scene) > 0, "selected, disguised");
+    live.set_marks(&[], Some(walker));
+    live.world.obj_mut(walker).unwrap().cloak.disguise = disguise(Some(HouseId(0)));
+    assert!(
+        status(&mut live, &mut scene) > 0,
+        "hovered, disguised with a house"
+    );
+    live.world.obj_mut(walker).unwrap().cloak.disguise = disguise(None);
+    live.set_viewer(Some(HouseId(1)));
+    assert!(status(&mut live, &mut scene) > 0, "its owner is not fooled");
 }
 
 /// #66. spec: S-0111 claim 18 (no insignia when cloak presentation hides the object from the

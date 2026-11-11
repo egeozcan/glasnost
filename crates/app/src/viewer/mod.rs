@@ -19,6 +19,7 @@ use crate::Status;
 
 mod browser;
 mod input;
+mod map_display;
 mod map_pane;
 pub mod preview;
 mod rules;
@@ -323,13 +324,13 @@ struct Gfx {
     map: Option<MapGpu>,
 }
 
-/// The GPU map pass's resources: the uploaded scene, its targets and the
-/// sRGB-typed copy egui samples.
+/// The GPU map pass's resources: the uploaded scene, its targets and what
+/// egui samples.
 struct MapGpu {
     generation: u64,
     renderer: glasnost_render::map_gpu::MapRenderer,
     size: (u32, u32),
-    targets: Option<(wgpu::Texture, wgpu::Texture, wgpu::Texture)>,
+    targets: Option<(wgpu::Texture, wgpu::Texture, map_display::MapDisplay)>,
     texture: Option<egui::TextureId>,
 }
 
@@ -440,32 +441,18 @@ impl Gfx {
         let size = r.view.size;
         if m.size != size || m.targets.is_none() {
             let (color, depth) = targets(device, size, COLOR_FORMAT);
-            let display = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("map display"),
-                size: wgpu::Extent3d {
-                    width: size.0.max(1),
-                    height: size.1.max(1),
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            let view = display.create_view(&wgpu::TextureViewDescriptor::default());
+            let display = map_display::MapDisplay::new(&color);
             match m.texture {
                 Some(id) => self.renderer.update_egui_texture_from_wgpu_texture(
                     device,
-                    &view,
+                    display.view(),
                     wgpu::FilterMode::Nearest,
                     id,
                 ),
                 None => {
                     m.texture = Some(self.renderer.register_native_texture(
                         device,
-                        &view,
+                        display.view(),
                         wgpu::FilterMode::Nearest,
                     ))
                 }
@@ -473,7 +460,7 @@ impl Gfx {
             m.targets = Some((color, depth, display));
             m.size = size;
         }
-        let (color, depth, display) = m.targets.as_ref().ok_or("no targets")?;
+        let (color, depth, _display) = m.targets.as_ref().ok_or("no targets")?;
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("map") });
         m.renderer.render_lit(
@@ -487,17 +474,6 @@ impl Gfx {
             &r.filter,
             &glasnost_render::compose::ComposeQuirks::default(),
             r.alpha.as_deref(),
-        );
-        // The pass renders into an exact (non-sRGB) target; egui samples an
-        // sRGB-typed copy of the same bytes.
-        encoder.copy_texture_to_texture(
-            color.as_image_copy(),
-            display.as_image_copy(),
-            wgpu::Extent3d {
-                width: size.0.max(1),
-                height: size.1.max(1),
-                depth_or_array_layers: 1,
-            },
         );
         self.queue.submit([encoder.finish()]);
         if self.frames_presented.is_multiple_of(120) {

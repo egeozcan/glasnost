@@ -52,6 +52,65 @@ pub fn sim_code(id: ObjectId) -> u32 {
     SIM_OBJECT | id.0
 }
 
+/// The level factors of the object height terms in the game's tick
+/// (S-0104 claim 13): λ and λ<sub>air</sub> ([`object_levels_of`]).
+pub fn object_levels(w: &World) -> (i32, i32) {
+    use glasnost_sim::lighting::{NUKE_BRIGHTENING, storm_in_force};
+    let l = &w.lighting;
+    // spec: S-0104 claim 5, Nuke flash timing (brightening: ticks 0 to 30 after the detonation)
+    let brightening = l
+        .nuke
+        .is_some_and(|t| (0..NUKE_BRIGHTENING).contains(&(w.tick - t)));
+    object_levels_of(
+        &l.map,
+        storm_in_force(w),
+        glasnost_sim::domination::in_force(w),
+        brightening,
+    )
+}
+
+/// The level factors of the object height terms (S-0104 claim 13),
+/// thousandths per height level, with the map's sets `map` while an ion
+/// storm is in force (`storm`), a psychic domination is in force in any
+/// phase (`dominated`) and a nuke flash is in its brightening phase
+/// (`brightening`):
+/// - λ, chosen by claim 2's per-cell ranking: the ion storm's, then the
+///   dominator's, then the nuke flash's, then the normal one;
+/// - λ<sub>air</sub>: the ion storm's during a storm, the normal one
+///   otherwise.
+///
+/// Claim 13 leaves open whether an object's λ term switches as soon as a
+/// domination is over; here it does.
+pub fn object_levels_of(
+    map: &glasnost_map::Lighting,
+    storm: bool,
+    dominated: bool,
+    brightening: bool,
+) -> (i32, i32) {
+    let lambda = if storm {
+        // spec: S-0104 claim 2, per-cell height terms rank 1 (ion storm)
+        map.ion.level
+    } else if dominated {
+        // spec: S-0104 claim 2, per-cell height terms rank 2 (psychic dominator, in every phase)
+        // design: render (#74) claim 13 leaves open the λ term after a domination is over; it
+        // stops with the domination
+        map.dominator.level
+    } else if brightening {
+        // spec: S-0104 claim 2, per-cell height terms rank 3 (nuke flash brightening phase); Constants (its fixed set)
+        glasnost_sim::lighting::NUKE_SET.level
+    } else {
+        // spec: S-0104 claim 2, per-cell height terms rank 4 (normal)
+        map.normal.level
+    };
+    // spec: S-0104 claim 13 (λ_air: the ion storm's level factor while a storm is in force, the normal one otherwise)
+    let lambda_air = if storm {
+        map.ion.level
+    } else {
+        map.normal.level
+    };
+    (lambda, lambda_air)
+}
+
 /// Two translucency codes combined (S-0109 Terms): the larger of the two,
 /// except that 1 and 2 combine to 3.
 pub fn combine_codes(
@@ -92,15 +151,20 @@ pub use glasnost_ui::setup::{net_period_ms, period_ms};
 pub struct Pacer {
     /// Start of the current cycle, in host milliseconds.
     cycle_start: Option<i64>,
+    /// The host time of the latest drawn frame the pacer was told of.
+    last_frame: Option<i64>,
 }
 
 impl Pacer {
     /// Whether a tick is due at host time `now_ms` at game speed `speed`.
     /// At index 0 the display rate limits the ticks (one per drawn frame),
     /// below S-0201 claim 5's 125 per second.
-    /// When it is, a new cycle starts at `now_ms`: time lost to a late call
-    /// is not made up (S-0201 claim 3). Call once per drawn frame, so at most
-    /// one tick runs per frame.
+    /// When it is, a new cycle starts: at the time it fell due when the
+    /// previous frame came before that time and at most one period ago, so
+    /// the display's frame times do not round every cycle up; otherwise at
+    /// `now_ms`, so time lost to a late frame or a stall is not made up
+    /// (S-0201 claim 3). Call once per drawn frame, so at most one tick runs
+    /// per frame.
     pub fn due(&mut self, now_ms: i64, speed: u8) -> bool {
         self.due_after(now_ms, period_ms(speed))
     }
@@ -109,12 +173,28 @@ impl Pacer {
     /// `period` milliseconds (a network game's, S-0201 claim 17); as
     /// [`Pacer::due`] otherwise.
     pub fn due_after(&mut self, now_ms: i64, period: i64) -> bool {
-        let due = self.cycle_start.is_none_or(|s| now_ms - s >= period);
-        if due {
-            // spec: S-0201 claim 3 (each cycle measures its paced period from its own start) and claim 17 (so does a network game's, with no catch-up)
+        let previous = self.last_frame.replace(now_ms);
+        let Some(start) = self.cycle_start else {
             self.cycle_start = Some(now_ms);
+            return true;
+        };
+        let falls_due = start + period;
+        if now_ms < falls_due {
+            return false;
         }
-        due
+        // spec: S-0201 claim 4 (each cycle lasts exactly 16 × s ms measured from its start, or as long as its work if longer) and claim 17 (a network game's period likewise)
+        // design: render (#76) a tick that falls due between two drawn frames runs in the later one, but its cycle starts when it fell due, as long as the earlier frame came before that and at most one period ago: the cycle did not take longer, the display only showed it late
+        let on_time = previous.is_some_and(|p| p < falls_due && now_ms - p <= period);
+        // spec: S-0201 claim 3 (no catch-up: a cycle that took longer, or a stretch without frames, starts the next cycle at its own late start)
+        self.cycle_start = Some(if on_time { falls_due } else { now_ms });
+        true
+    }
+
+    /// Tells the pacer of a drawn frame at host time `now_ms` that ran no
+    /// tick without asking [`Pacer::due_after`] (a network game waiting on
+    /// its period or on the other peers).
+    pub fn waited(&mut self, now_ms: i64) {
+        self.last_frame = Some(now_ms);
     }
 
     /// Milliseconds until the next tick is due (0 when it is).
@@ -133,6 +213,7 @@ impl Pacer {
     /// game resumes without catching up).
     pub fn reset(&mut self) {
         self.cycle_start = None;
+        self.last_frame = None;
     }
 }
 
@@ -421,6 +502,9 @@ pub struct Live {
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
     pub battlefield: Option<((i32, i32), (u32, u32))>,
+    /// The battlefield view the status extras were last culled against
+    /// (S-0111 claim 1).
+    status_view: Option<((i32, i32), (u32, u32))>,
     /// Whether our own debug markers are drawn for what has no art (the
     /// viewer); the game client draws only art.
     debug_markers: bool,
@@ -1216,6 +1300,7 @@ impl Live {
             target_lines: BTreeMap::new(),
             cosmetic,
             battlefield: None,
+            status_view: None,
             debug_markers: true,
             move_flash,
             viewer: None,
@@ -2971,6 +3056,8 @@ impl Live {
                     .then(|| inputs.import.turret_tables.get(&idx))
                     .flatten(),
             ),
+            // spec: S-0104 claim 13 (the bridge-deck rows of vehicles and infantry)
+            deck: o.layer == Layer::Deck,
         })
     }
 
@@ -2991,6 +3078,11 @@ impl Live {
             .iter()
             .filter_map(|&id| self.mobile(inputs, id))
             .collect();
+        let (lambda, lambda_air) = object_levels(&self.world);
+        self.painter.set_object_levels(lambda, lambda_air);
+        // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)
+        self.painter
+            .set_effect_tint(glasnost_sim::lighting::tint(&self.world));
         let (entries, notes) = self.painter.mobiles(inputs, scene, &mobiles);
         self.notes.extend(notes);
         let mut by_code: BTreeMap<u32, GroundEntry> = mobiles
@@ -4127,6 +4219,13 @@ impl Live {
         self.draw_status(inputs, scene);
     }
 
+    /// Whether the battlefield view has changed since the status extras
+    /// were last culled against it (S-0111 claim 1), so that a view moved
+    /// between ticks needs [`Live::redraw_status`].
+    pub fn status_view_stale(&self) -> bool {
+        self.status_view != self.battlefield
+    }
+
     /// S-0111's status extras after the effects: every object's bomb icon
     /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
@@ -4137,6 +4236,7 @@ impl Live {
     /// object's begin, in the object order of S-0102 (claim 17).
     fn draw_status(&mut self, inputs: &Inputs, scene: &mut Scene) {
         scene.items.truncate(self.effects_end);
+        self.status_view = self.battlefield;
         let r = self.rules.clone();
         let ratios = Ratios {
             yellow: r.general.condition_yellow,
@@ -4242,6 +4342,13 @@ impl Live {
             // spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's house, S-0516 claims 35–36, even when drawn as its real type)
             let disguised = self.viewer.is_some()
                 && glasnost_sim::cloak::disguise::appears_disguised(&self.world, o.id, self.viewer);
+            // spec: S-0111 claim 3 (a hovered unit that appears disguised to the local player's house, S-0516 claim 35, shows a health bar only when its disguise has a house; a selected unit is not restricted)
+            let bar = bar.filter(|&selected| {
+                selected
+                    || !disguised
+                    || o.kind == SimKind::Building
+                    || o.cloak.disguise.is_some_and(|d| d.house.is_some())
+            });
             // spec: S-0111 claim 18 (nor while cloak presentation hides the object from the viewer, S-0516 claim 28: a building at fade levels 11 to 15 by the fully cloaked rule, at 0 to 10 not suppressed), the viewer as for the object's own picture (apply_cloak)
             let hidden =
                 glasnost_sim::cloak::view::look(&self.world, o.id, self.viewer.or(o.owner))

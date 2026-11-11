@@ -173,6 +173,7 @@ pub(super) fn images(
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         let items = &entries[0].items;

@@ -26,7 +26,9 @@
 //! acquire, the encoding, the submit and present) and the renderer's counts
 //! (instances, draw calls, passes, backdrop copies, uploads and bytes), and
 //! the GPU time when the device has timestamp queries. The summary gives
-//! mean, median, p95, p99, worst and the frames over 16.7 ms per view.
+//! mean, median, p95, p99, worst and the frames over 16.7 ms per view; on
+//! the web, whose totals are whole display refresh intervals, the frames
+//! that missed a refresh instead (#91).
 //!
 //! Hosts: [`run_offscreen`] (native, no window), the game window with
 //! `--bench` (native) or `?bench=` (web). Our own tooling: nothing here is
@@ -959,9 +961,11 @@ impl Bench {
             let _ = writeln!(out, "FAILED: {f}");
         }
         let _ = writeln!(out);
+        let quantised = refresh_quantised(&self.host);
         let _ = writeln!(
             out,
-            "frame time (ms, start to next start)  frames   mean median    p95    p99  worst  >16.7ms  ticks"
+            "frame time (ms, start to next start)  frames   mean median    p95    p99  worst  {}  ticks",
+            if quantised { "  missed" } else { ">16.7ms" }
         );
         let groups: Vec<(String, Vec<&Row>)> = (0..o.views.len())
             .map(|v| {
@@ -981,21 +985,26 @@ impl Bench {
                     .collect(),
             )))
             .collect();
+        let mut interval = None;
         for (name, rows) in &groups {
             let totals: Vec<f64> = rows.iter().filter_map(|r| r.total).collect();
             let st = Stats::of(&totals);
             let ticks = rows.iter().filter(|r| r.ticked).count();
+            let (missed, refresh) = missed_frames(&totals, quantised);
+            interval = refresh;
             let _ = writeln!(
                 out,
                 "  {name:<35} {:>6} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>8} {:>6}",
-                st.n,
-                st.mean,
-                st.median,
-                st.p95,
-                st.p99,
-                st.worst,
-                totals.iter().filter(|&&t| t > BUDGET_MS).count(),
-                ticks
+                st.n, st.mean, st.median, st.p95, st.p99, st.worst, missed, ticks
+            );
+        }
+        if let Some(i) = interval {
+            let _ = writeln!(
+                out,
+                "note: on this host the totals are whole display refresh intervals plus timer jitter; \
+                 \"missed\" counts totals of at least 1.5 refresh intervals, the interval estimated as \
+                 the median total ({i:.2} ms over all views); \"work\" leaves out the GPU work the \
+                 browser runs later"
             );
         }
         let _ = writeln!(out);
@@ -1409,9 +1418,61 @@ pub fn start_headless(opts: BenchOptions, game_dir: &str) -> Result<(Client, Str
     Ok((client, bench.map_hash.clone()))
 }
 
+/// Whether host `host`'s frame totals are whole display refresh intervals:
+/// on the web, redraws come from the browser's animation frames whatever the
+/// present mode, so a start-to-next-start time cannot show whether the work
+/// fitted a 60 Hz budget (#91).
+fn refresh_quantised(host: &str) -> bool {
+    host == "web"
+}
+
+/// The frames of `totals` that missed their slot, and the refresh interval
+/// estimated for a refresh-quantised host: there, the median total is the
+/// interval and a total of at least 1.5 intervals missed a refresh;
+/// elsewhere, a total over [`BUDGET_MS`] missed.
+fn missed_frames(totals: &[f64], quantised: bool) -> (usize, Option<f64>) {
+    if !quantised {
+        return (totals.iter().filter(|&&t| t > BUDGET_MS).count(), None);
+    }
+    if totals.is_empty() {
+        return (0, None);
+    }
+    let interval = Stats::of(totals).median;
+    // nocite: our own tooling (#91: halfway between one refresh interval and two)
+    let late = 1.5 * interval;
+    (
+        totals.iter().filter(|&&t| t >= late).count(),
+        Some(interval),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #91: on the web, frame totals are counted against the refresh
+    /// interval they are quantised to; elsewhere against the 60 Hz budget.
+    #[test]
+    fn web_totals_count_missed_refreshes() {
+        assert!(refresh_quantised("web"));
+        assert!(!refresh_quantised("native-offscreen"));
+        assert!(!refresh_quantised("native-window"));
+        // A 120 Hz display: most frames take one refresh (8.33 ms, with
+        // jitter), two take two, one takes three. None is over 16.7 ms,
+        // which hides the three misses.
+        let mut totals = vec![8.3, 8.4, 8.33, 8.2, 8.5, 8.33, 8.3, 8.4];
+        totals.extend([16.65, 16.6, 25.0]);
+        assert_eq!(missed_frames(&totals, false), (1, None));
+        let (missed, interval) = missed_frames(&totals, true);
+        assert_eq!(missed, 3);
+        assert!((interval.unwrap() - 8.33).abs() < 0.2);
+        // A 60 Hz display: a frame of 16.9 ms is one refresh with jitter,
+        // not a miss.
+        let totals = [16.6, 16.9, 16.7, 16.5, 33.4];
+        assert_eq!(missed_frames(&totals, false).0, 3);
+        assert_eq!(missed_frames(&totals, true).0, 1);
+        assert_eq!(missed_frames(&[], true), (0, None));
+    }
 
     #[test]
     fn options_parse() {

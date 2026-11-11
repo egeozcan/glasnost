@@ -1110,7 +1110,9 @@ impl Lights {
 #[derive(Default)]
 struct Rows {
     tiles: BTreeMap<TileTable, (usize, usize)>,
-    houses: BTreeMap<[u8; 3], (usize, usize)>,
+    /// The 53-shade house-colour tables by colour definition and the tint
+    /// (‰) they are shaded with (S-0104 claim 3).
+    houses: BTreeMap<([u8; 3], [i32; 3]), (usize, usize)>,
     /// The start-up tables: `false` the resource table, `true` the mine
     /// table (S-0112 claim 2).
     startup: BTreeMap<bool, (usize, usize)>,
@@ -1247,6 +1249,13 @@ pub struct Painter {
     /// The live game's debris pieces' image slots (S-0317 claims 22, 24
     /// and 27).
     pieces: super::piece_pool::PiecePool<PieceKey>,
+    /// The level factors of the object height terms (S-0104 claim 13),
+    /// thousandths per height level: λ, chosen by claim 2's per-cell
+    /// ranking, and λ<sub>air</sub>, the ion storm's or the normal one.
+    object_levels: (i32, i32),
+    /// The effect tint the tintable tables show, hundredths (S-0104
+    /// claims 3 and 5); `None` for every table's own tint.
+    effect_tint: Option<[i32; 3]>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -1594,6 +1603,8 @@ impl<'a> Builder<'a> {
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
         self.p
             .compute_lights(self.map, l.ambient, l, self.options.detail);
+        // spec: S-0104 claims 2 and 13 (with no effect in force, λ and λ_air are the normal level factor)
+        self.p.object_levels = (l.level, l.level);
     }
 
     fn tile_row(&mut self, table: TileTable, brightness: i32) -> Shade {
@@ -1606,17 +1617,24 @@ impl<'a> Builder<'a> {
     }
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
-        let (base, n) = match self.p.rows.houses.get(&hsv) {
+        let tint = match self.p.effect_tint {
+            // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour
+            // palettes); Formulas, "Map value storage" (‰ = hundredths × 10)
+            Some(t) => t.map(|c| c * 10),
+            // spec: S-0104 claim 3 (otherwise the house-colour palettes are shaded with white light)
+            None => WHITE,
+        };
+        let (base, n) = match self.p.rows.houses.get(&(hsv, tint)) {
             Some(r) => *r,
             None => {
                 let pal = house_palette(&self.palettes.unit, hsv);
                 // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
-                let t = light::shade_table(&pal, WHITE, HOUSE_ROWS, Some(TINT_EXEMPT));
+                let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
                 let base = self.built.scene.rows.len();
                 for row in &t {
                     self.built.scene.add_row(row565(row));
                 }
-                self.p.rows.houses.insert(hsv, (base, t.len()));
+                self.p.rows.houses.insert((hsv, tint), (base, t.len()));
                 (base, t.len())
             }
         };
@@ -4169,6 +4187,8 @@ impl<'a> Builder<'a> {
             // spec: S-0105 claim 43 and S3 (the index a vehicle is created with: no tick has run)
             turret_index: creation_turret_index(self.rules, self.import, kind, i),
             walk: Default::default(),
+            // A map unit stands on its surface (S-0107 claim 19), on no deck.
+            deck: false,
         };
         Some(self.mobile(&m))
     }
@@ -4257,13 +4277,46 @@ impl<'a> Builder<'a> {
         let cell = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (the cell holding a position)
         let u = self.unit_depth(m.kind, m.idx, cell, z);
         let (hsv, _) = self.owner_colour(&m.owner);
-        let ground = self
-            .p
-            .lights
-            .get(cell)
-            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
+        let levels = self.p.lights.get(cell).map_or(
+            light::CellLevels {
+                unscaled_ground: NEUTRAL_BRIGHTNESS,
+                ..Default::default()
+            },
+            light::CellLevels::from,
+        );
+        let extra = light::ExtraLight {
+            unit: self.extra_light(b"ExtraUnitLight"),
+            infantry: self.extra_light(b"ExtraInfantryLight"),
+            aircraft: self.extra_light(b"ExtraAircraftLight"),
+        };
+        // spec: S-0104 claim 13 (the height above the surface, from the deck on a bridge deck)
+        let height = m.above;
+        // spec: S-0104 claim 13 (no cell counts as shadowed: which cells are shadowed needs the theater spec)
+        let shadowed_cell = false;
+        let object = match m.kind {
+            Kind::Infantry => light::LitObject::Infantry {
+                on_bridge_deck: m.deck,
+                shadowed_cell,
+                height,
+            },
+            Kind::Aircraft => light::LitObject::Aircraft { height },
+            _ => light::LitObject::Vehicle {
+                on_bridge_deck: m.deck,
+                shadowed_cell,
+                height,
+            },
+        };
+        let (lambda, lambda_air) = self.p.object_levels;
+        // spec: S-0104 claim 13, Formulas "Object brightness" (vehicles, infantry and aircraft)
+        let lit = light::object_brightness(
+            object,
+            levels,
+            lambda,
+            lambda_air,
+            extra,
+            &LightQuirks::default(),
+        );
         let items = if m.kind == Kind::Infantry {
-            // spec: S-0104 claim 13 (infantry: U + extra infantry light; shadowed cells need the theater spec)
             // spec: S-0610 claim 7 (a berserk infantry sprite body takes the berserk mask, unless the
             // centre of its cell is shrouded for the viewer; S-0102 F9's union after the shade row)
             let mask = self.protection_masks().berserk_of(
@@ -4271,17 +4324,9 @@ impl<'a> Builder<'a> {
                 super::protection::MobileKind::Infantry,
                 m.berserk == Some(true),
             );
-            let row = self
-                .house_row(hsv, ground + self.extra_light(b"ExtraInfantryLight"))
-                .with_mask(mask);
+            let row = self.house_row(hsv, lit).with_mask(mask);
             self.infantry_items(m, point, u, row)
         } else {
-            // spec: S-0104 claim 13 (vehicles: U + extra unit light; aircraft on the ground: U + extra aircraft light)
-            let extra = if m.kind == Kind::Aircraft {
-                self.extra_light(b"ExtraAircraftLight")
-            } else {
-                self.extra_light(b"ExtraUnitLight")
-            };
             let voxel = self
                 .import
                 .arts
@@ -4289,9 +4334,9 @@ impl<'a> Builder<'a> {
                 .is_some_and(|a| a.voxels.contains_key("body"));
             let b = if m.disabled && m.kind == Kind::Vehicles && voxel {
                 // spec: S-0104 claim 13 (Deactivated voxel vehicles: trunc(b / 2) ‰, before claim 15's shade-row mapping)
-                (ground + extra) / 2
+                lit / 2
             } else {
-                ground + extra
+                lit
             };
             // spec: S-0513 F9, S-0102 claim 34 (protection changes the ordinary brightness before the shade-row selection)
             let b = super::protection::brightness(m.protection, b);
@@ -4315,7 +4360,7 @@ impl<'a> Builder<'a> {
             // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
             let mut items: Vec<Item> = m
                 .harvesting
-                .and_then(|h| self.harvesting_item(m, h, u, ground + extra))
+                .and_then(|h| self.harvesting_item(m, h, u, lit))
                 .into_iter()
                 .collect();
             items.extend(body);
@@ -5622,6 +5667,9 @@ pub struct Mobile {
     /// shown tick (S-0102 claim 22, S-0105 claim 16), as the view keeps
     /// them ([`super::walk`]); counter 0 and standing without a game state.
     pub walk: super::walk::Walk,
+    /// Whether it is on a bridge deck (S-0104 claim 13, the deck rows);
+    /// `false` without a game state.
+    pub deck: bool,
 }
 
 /// The selected turret index of a vehicle (S-0105 claim 43, state table
@@ -5929,7 +5977,25 @@ impl Painter {
             tile_items: Vec::new(),
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
+            object_levels: (0, 0),
+            effect_tint: None,
         }
+    }
+
+    /// Sets the effect tint the tintable tables show (S-0104 claims 3 and
+    /// 5), hundredths: the set the game's last lighting re-evaluation
+    /// chose (`glasnost_sim::lighting::tint`), `None` for every table's
+    /// own tint. What is drawn next takes it.
+    pub fn set_effect_tint(&mut self, tint: Option<[i32; 3]>) {
+        self.effect_tint = tint;
+    }
+
+    /// Sets the level factors of the object height terms (S-0104 claim
+    /// 13): `lambda` by claim 2's per-cell ranking and `lambda_air` for
+    /// aircraft, thousandths per height level. The next
+    /// [`Painter::mobiles`] draws with them.
+    pub fn set_object_levels(&mut self, lambda: i32, lambda_air: i32) {
+        self.object_levels = (lambda, lambda_air);
     }
 
     /// Sets the look of the building occupying each cell and whether the
@@ -6005,7 +6071,9 @@ impl Painter {
     ///
     /// Our presentation: a full recompute of every cell with the chosen
     /// set's terms and its tint as the map tint, which stands in for claim
-    /// 5's retint of the tintable tables and claim 9's incremental update;
+    /// 5's retint of the tile shade tables and claim 9's incremental update
+    /// (the house-colour tables take the effect tint by
+    /// [`Painter::set_effect_tint`]);
     /// claim 10's and claim 16's height terms and the static objects of
     /// the cell pass are not followed (a seam of the view, not of the
     /// game).

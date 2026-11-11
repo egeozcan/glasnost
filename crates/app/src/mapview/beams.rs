@@ -1390,6 +1390,20 @@ impl Lines {
         if state.ended {
             return;
         }
+        // spec: S-0607 claim 21 (the wave ends at its next turn when its firer or its target has left play, or its firer's target is no longer the wave's), claim 25 (the band stays where it last was)
+        // design: render (#72) an object removed or put away by a turn after the wave's own leaves the wave not yet ended at the end of the tick; its ends are kept as its next turn's end will keep them, not taken from an object no longer in play
+        let in_play = |x: glasnost_sim::world::ObjectId| {
+            w.obj(x).is_some_and(|o| {
+                o.on_map
+                    && o.structure.inside.is_none()
+                    && glasnost_sim::transport::riding(w, x).is_none()
+            }) && glasnost_sim::structures::bunker::bunkered_in(w, x).is_none()
+        };
+        let target_gone = matches!(state.target, Target::Object(t) if !in_play(t));
+        let retargeted = w.obj(state.firer).and_then(|o| o.target) != Some(state.target);
+        if !in_play(state.firer) || target_gone || retargeted {
+            return;
+        }
         let Some(v) = self.waves.get_mut(&id) else {
             return;
         };
