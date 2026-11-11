@@ -282,6 +282,10 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     if matches!(order, Order::Routed(_)) {
         return false;
     }
+    // nocite: our own input validation (#219): a cell outside the window is refused before any arithmetic on it; S-0213 claim 4 checks no cell, and S-0513 claims 1 and 3 take off-map cells, which the window keeps
+    if !in_window(&order) {
+        return false;
+    }
     // spec: S-0213 claims 3 and 15 (every house, an AI house included, is held to S-0214's input rules when it issues an order, so a house's orders act only on its own objects) and S-0214 Terms (an actor that is not an own object gets select or nothing: input gives it no order), claim 11's detonate included (offered only on the player's own object); nocite: our own input validation (#220): the test is made where an order enters, so every machine makes it in the same tick; an order taken here still applies after an owner change (claim 15)
     if let Some(a) = order.actor()
         && w.obj(a).and_then(|o| o.owner) != Some(house)
@@ -289,6 +293,71 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
         return false;
     }
     admit(w, house, order)
+}
+
+/// The smallest cell coordinate an order may carry (#219): a map's legal
+/// cells lie in 0 … 511 (S-0009 claim 2), and input clicks only cells of
+/// the map (S-0214 Terms; S-0513 claim 1), so the window holds every
+/// cell a person can give with a whole map's width to spare on each side,
+/// and every coordinate in it keeps lepton and distance arithmetic far
+/// from overflow.
+// nocite: our own input validation (#219): one map's coordinate range below 0
+pub const WINDOW_MIN: i32 = -(glasnost_map::geometry::MAX_COORDINATE + 1);
+
+/// The largest cell coordinate an order may carry (#219).
+// nocite: our own input validation (#219): one map's coordinate range above 511
+pub const WINDOW_MAX: i32 = 2 * glasnost_map::geometry::MAX_COORDINATE + 1;
+
+/// Whether every cell the order carries lies in the window (#219).
+pub fn in_window(o: &Order) -> bool {
+    let inside = |c: CellXY| {
+        (WINDOW_MIN..=WINDOW_MAX).contains(&c.x) && (WINDOW_MIN..=WINDOW_MAX).contains(&c.y)
+    };
+    order_cells(o).into_iter().flatten().all(inside)
+}
+
+/// The cells an order carries, in its targets, destinations, places and
+/// cell fields. Every kind is listed, so a new kind must say its cells.
+fn order_cells(o: &Order) -> [Option<CellXY>; 3] {
+    let cell = |t: Option<Target>| match t {
+        Some(Target::Cell(c)) => Some(c),
+        Some(Target::Object(_)) | None => None,
+    };
+    match *o {
+        Order::Behaviour { target, dest, .. } => [cell(target), cell(dest), None],
+        Order::Routed(ref r) => [cell(r.target), cell(r.dest), None],
+        Order::RoutePoint {
+            target,
+            dest,
+            place,
+            ..
+        } => [cell(target), cell(dest), cell(place)],
+        Order::GuardSpot { spot, .. } => [cell(Some(spot)), None, None],
+        Order::RouteJoin { place, .. } => [cell(Some(place)), None, None],
+        Order::Place { cell: c, .. } => [c, None, None],
+        Order::SellWall { cell: c } | Order::FireSuperweapon { cell: c, .. } => {
+            [Some(c), None, None]
+        }
+        Order::Stop { .. }
+        | Order::Scatter { .. }
+        | Order::Deploy { .. }
+        | Order::Cheer
+        | Order::Build { .. }
+        | Order::Hold { .. }
+        | Order::Cancel { .. }
+        | Order::CancelAll { .. }
+        | Order::Sell { .. }
+        | Order::Repair { .. }
+        | Order::PowerOff { .. }
+        | Order::PowerOn { .. }
+        | Order::Primary { .. }
+        | Order::Surrender
+        | Order::Alliance { .. }
+        | Order::Detonate { .. }
+        | Order::GameSpeed { .. }
+        | Order::RouteCommit
+        | Order::RouteDelete { .. } => [None, None, None],
+    }
 }
 
 /// Issues the order a route gives for its point (S-0213 claim 16c), in

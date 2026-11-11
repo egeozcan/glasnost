@@ -246,6 +246,37 @@ fn an_order_with_a_cell_outside_the_window_is_refused_without_a_panic() {
     );
 }
 
+/// The window's corners, the farthest cells an order may carry.
+fn corners() -> Vec<CellXY> {
+    let (lo, hi) = (orders::WINDOW_MIN, orders::WINDOW_MAX);
+    vec![
+        CellXY::new(lo, lo),
+        CellXY::new(hi, hi),
+        CellXY::new(lo, hi),
+        CellXY::new(hi, lo),
+    ]
+}
+
+// spec: S-0213 claim 4 (cells in orders are not checked); nocite: our own input validation (#219): every order kind with a cell takes the window's corners, and applying them overflows nothing in a debug build
+#[test]
+fn orders_at_the_window_corners_are_taken_without_a_panic() {
+    for c in corners() {
+        let mut w = game();
+        let b = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, at(0, 0), 0);
+        let mut refused = Vec::new();
+        for o in cell_orders(b, c) {
+            // A place order is judged for its building's placement (S-0404 claim 10), so it may be refused.
+            let place = matches!(o, Order::Place { .. });
+            if !orders::issue(&mut w, A, o.clone()) && !place {
+                refused.push(o);
+            }
+            testkit::run(&mut w, 1);
+        }
+        assert!(refused.is_empty(), "refused at {c:?}: {refused:?}");
+        testkit::run(&mut w, 300);
+    }
+}
+
 // --- #158: a route's length has a bound ---
 
 /// Joins alone double a route, four orders at a time; the bound stops it.
