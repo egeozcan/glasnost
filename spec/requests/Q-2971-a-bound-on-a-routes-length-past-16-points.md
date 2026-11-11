@@ -1,9 +1,9 @@
 ---
 id: Q-2971
 title: Is there a bound on a route's length once joins have taken it past 16 points?
-status: open
+status: answered
 related: [S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
