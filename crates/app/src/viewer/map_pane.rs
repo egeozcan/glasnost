@@ -789,8 +789,11 @@ impl MapPane {
     }
 
     fn view_ui(&mut self, ui: &mut Ui) {
+        // design: render (#90): the GPU map pass runs before the interface, so a jump or a new
+        // view size taken here is drawn by the next frame, which is asked for
         if let Some(t) = self.pending_jump.take() {
             self.set_centre(t);
+            ui.ctx().request_repaint();
         }
         let avail = ui.available_size();
         let ppp = ui.ctx().pixels_per_point();
@@ -800,6 +803,7 @@ impl MapPane {
             self.view_size = size;
             let c = self.centre;
             self.set_centre(c);
+            ui.ctx().request_repaint();
         }
         if self.shown.is_none() {
             ui.centered_and_justified(|ui| ui.label("No map loaded."));
@@ -1503,14 +1507,18 @@ mod tests {
             output.drop_without_applying_deltas();
             d
         };
-        for _ in 0..4 {
-            delay(&mut pane, 500.0);
-        }
-        assert!(!delay(&mut pane, 500.0).is_zero(), "a frame with nothing new");
+        // egui's own follow-up frames die out.
+        let settle = |pane: &mut MapPane, width: f32| {
+            for _ in 0..4 {
+                delay(pane, width);
+            }
+            assert!(!delay(pane, width).is_zero(), "a frame with nothing new");
+        };
+        settle(&mut pane, 500.0);
         pane.pending_jump = Some((0, 0));
         assert!(delay(&mut pane, 500.0).is_zero(), "a jump");
-        assert!(!delay(&mut pane, 500.0).is_zero());
+        settle(&mut pane, 500.0);
         assert!(delay(&mut pane, 520.0).is_zero(), "a new size");
-        assert!(!delay(&mut pane, 520.0).is_zero());
+        settle(&mut pane, 520.0);
     }
 }
