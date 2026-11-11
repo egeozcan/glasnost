@@ -10,7 +10,7 @@ measured-on: 2026-11-04
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-11
 ---
 
 # M-0021: Unit arena, a test pairing after Q-1714's
@@ -180,16 +180,29 @@ the houses' rate-of-fire factor (Notes).
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Part A: *c* in a judged shot | cells | 6 runs, every judged shot (count local) | 3 or more in every judged shot | | exact |
-| Part A: hits a judged shot owns | objects | same | 1 shot-warhead hit on *X*, and 3 fragment-warhead hits on 3 distinct G vehicles other than *X* | none | exact |
-| Part A: F vehicles hit by a judged shot's fragments | objects | same | 0 | none | exact |
+| Part A: *c* in a judged shot | cells | 6 runs, every judged shot (count local) | below the table |  | exact |
+| Part A: hits a judged shot owns | objects | same | below the table | none | exact |
+| Part A: F vehicles hit by a judged shot's fragments | objects | same | below the table | none | exact |
 | Part A: health one fragment hit took | health | every fragment hit owned by a judged shot | the same in every hit (value local) | none | exact |
-| Part A: fragment-warhead hits whose attacker is not an F vehicle, or that name none | hits | 6 runs | 0 | | exact |
-| Part A: fragment-warhead hits in a judged shot's window naming its firer as their attacker | hits | 6 runs, every judged shot | 3 | none | exact |
-| Part A0: fragment-warhead hits | hits | 2 runs | 0 | | exact |
-| Part A0: objects damaged by one F shot | objects | 2 runs, every shot (count local) | 1, its target | none | exact |
-| Part B: hits a judged shot owns | objects | 6 runs, every judged shot (count local) | as part A, with *c* ≥ 3 in every judged shot | none | exact |
-| Control: hits a judged shot owns | objects | 2 runs, every judged shot (count local) | as part A, with *c* ≥ 3 in every judged shot | none | exact |
+| Part A: fragment-warhead hits whose attacker is not an F vehicle, or that name none | hits | 6 runs | below the table |  | exact |
+| Part A: fragment-warhead hits in a judged shot's window naming its firer as their attacker | hits | 6 runs, every judged shot | below the table | none | exact |
+| Part A0: fragment-warhead hits | hits | 2 runs | below the table |  | exact |
+| Part A0: objects damaged by one F shot | objects | 2 runs, every shot (count local) | below the table | none | exact |
+| Part B: hits a judged shot owns | objects | 6 runs, every judged shot (count local) | below the table | none | exact |
+| Control: hits a judged shot owns | objects | 2 runs, every judged shot (count local) | below the table | none | exact |
+
+Relations for the table above:
+
+- Part A: *c* in a judged shot: 3 or more in every judged shot.
+- *Part A: hits a judged shot owns*: 1 shot-warhead hit on *X*, and 3 fragment-warhead hits on 3
+  distinct G vehicles other than *X*.
+- *Part A: F vehicles hit by a judged shot's fragments*: 0.
+- *Part A: fragment-warhead hits whose attacker is not an F vehicle, or that name none*: 0.
+- *Part A: fragment-warhead hits in a judged shot's window naming its firer as their attacker*: 3.
+- *Part A0: fragment-warhead hits*: 0.
+- *Part A0: objects damaged by one F shot*: 1, its target.
+- *Part B: hits a judged shot owns*: as part A, with *c* ≥ 3 in every judged shot.
+- *Control: hits a judged shot owns*: as part A, with *c* ≥ 3 in every judged shot.
 
 By cells read from positions at *t*, no cell at Chebyshev distance 1 to 3 from *X* held both an F
 and a G vehicle in any judged shot, so by that reading the first-listed object (S-0318 Terms) of
@@ -201,8 +214,14 @@ S-0318 claim 3's alliance test.
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Judged shots whose 3 G vehicles hit stand in the first 3 candidate cells of T1's order, cells read at *t* | shots | parts A and B and the control, every judged shot (count local) | all but 13 | | not for tests |
-| The same, cells read at *t* − 1, *t* or *t* + 1 | shots | same | all but 6 | | not for tests |
+| Judged shots whose 3 G vehicles hit stand in the first 3 candidate cells of T1's order, cells read at *t* | shots | parts A and B and the control, every judged shot (count local) | below the table |  | not for tests |
+| The same, cells read at *t* − 1, *t* or *t* + 1 | shots | same | below the table |  | not for tests |
+
+Relations for the table above:
+
+- Judged shots whose 3 G vehicles hit stand in the first 3 candidate cells of T1's order, cells read
+  at *t*: all but 13.
+- The same, cells read at *t* − 1, *t* or *t* + 1: all but 6.
 
 Of those 6 shots, 4 have, at one or more of the three readings, a candidate cell holding two G
 vehicles by position, so the recording does not say which of them was listed first. The other 2
@@ -214,11 +233,19 @@ game lists a moving vehicle.
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
 | Side that fires first | side | 16 runs | F in every run | | exact |
-| Centre distance at F's first shot, from the shot row's positions | leptons | 16 runs, every F shot of that tick | 1527 (5.96 cells), at equal heights | none | exact |
-| Centre distance at G's first shot, from the shot row's positions | leptons | 16 runs, every G shot of that tick | 1280 (5.00 cells), at equal heights | none | exact |
+| Centre distance at F's first shot, from the shot row's positions | leptons | 16 runs, every F shot of that tick | below the table | none | exact |
+| Centre distance at G's first shot, from the shot row's positions | leptons | 16 runs, every G shot of that tick | below the table | none | exact |
 | F's first shot: target within F's range by the per-tick rows stamped *t* − 1, *t* | yes or no | same | yes, yes | none | exact |
 | G's first shot: target within G's range by the per-tick rows stamped *t* − 1, *t* | yes or no | same | no, yes | none | exact |
-| G's first shot: the per-tick distance stamped *t* | leptons | same | 1280, equal to the shot row's | none | exact |
+| G's first shot: the per-tick distance stamped *t* | leptons | same | below the table | none | exact |
+
+Relations for the table above:
+
+- *Centre distance at F's first shot, from the shot row's positions*: 1527 (5.96 cells), at equal
+  heights.
+- *Centre distance at G's first shot, from the shot row's positions*: 1280 (5.00 cells), at equal
+  heights.
+- G's first shot: the per-tick distance stamped *t*: 1280, equal to the shot row's.
 
 Both first shots are within the firing weapon's own range (S-0307 claim 1): G's is at exactly its
 range. So F's target is already within F's range (6 cells, 1536 leptons) at the end of the tick
@@ -235,12 +262,21 @@ positions a shot row gives (*Reading points*).
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Per-tick row that first shows a hit's health after, for a hit at *t* | row | every hit with a per-tick row at its tick | the row stamped *t*; never the row stamped *t* − 1 | none | exact |
-| Per-tick rows of a vehicle destroyed by a hit at *t* | row | every death (part B) | the row stamped *t*, off the map with no health left, and none from *t* + 1 on; its last row on the map is the one stamped *t* − 1, with health left | none | exact |
+| Per-tick row that first shows a hit's health after, for a hit at *t* | row | every hit with a per-tick row at its tick | below the table | none | exact |
+| Per-tick rows of a vehicle destroyed by a hit at *t* | row | every death (part B) | below the table | none | exact |
 | F shot at *t*: the per-tick row whose position equals the firer's in the shot row, where rows *t* − 1 and *t* differ | row | every such shot | *t* | none | exact |
-| F shot at *t*: the same for the target, a G vehicle | row | every such shot | *t* − 1 | none | exact |
+| F shot at *t*: the same for the target, a G vehicle | row | every such shot | below the table | none | exact |
 | G shot at *t*: the same for the firer | row | every such shot | *t* | none | exact |
 | G shot at *t*: the same for the target, an F vehicle | row | every such shot | *t* | none | exact |
+
+Relations for the table above:
+
+- Per-tick row that first shows a hit's health after, for a hit at *t*: the row stamped *t*; never
+  the row stamped *t* − 1.
+- Per-tick rows of a vehicle destroyed by a hit at *t*: the row stamped *t*, off the map with no
+  health left, and none from *t* + 1 on; its last row on the map is the one stamped *t* − 1, with
+  health left.
+- F shot at *t*: the same for the target, a G vehicle: *t* − 1.
 
 Each of the four shot rows holds with F on side A and with F on side B, and no shot row's
 position equals neither row. In the remaining shots the object did not move during *t*. So the
@@ -275,9 +311,15 @@ whether that shot came before the destroying hit.
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Value read in the tick before, and the tick of, a stage change from 0 to 1 | spin value | 16 runs, every such change | 30, then 31 | none | exact |
-| Largest value read | spin value | 16 runs | 60 | none | exact |
-| Value read in the tick before, and the tick of, a stage change from 1 to 0 | spin value | part B, 6 runs, every such change (parts A, A0 and the control have none) | 30, then 29 | none | exact |
+| Value read in the tick before, and the tick of, a stage change from 0 to 1 | spin value | 16 runs, every such change | below the table | none | exact |
+| Largest value read | spin value | 16 runs | below the table | none | exact |
+| Value read in the tick before, and the tick of, a stage change from 1 to 0 | spin value | part B, 6 runs, every such change (parts A, A0 and the control have none) | below the table | none | exact |
+
+Relations for the table above:
+
+- *Value read in the tick before, and the tick of, a stage change from 0 to 1*: 30, then 31.
+- *Largest value read*: 60.
+- *Value read in the tick before, and the tick of, a stage change from 1 to 0*: 30, then 29.
 
 **Part B (to the end).**
 
