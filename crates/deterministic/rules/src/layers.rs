@@ -163,7 +163,7 @@ mod tests {
 
     /// The switches the play-fixes layer turns off (M8 step C7). Changing the
     /// layer's list means changing this one, its docs section and its tests.
-    const ADMITTED: [&str; 19] = [
+    const ADMITTED: [&str; 20] = [
         "absorber_stale_contact_kept",
         "aircraft_edge_hold",
         "aircraft_grounded_enter_stall",
@@ -176,6 +176,7 @@ mod tests {
         "group_spread_no_detour",
         "harvest_cell_shared",
         "hover_landing_request_stands",
+        "jammed_move_dropped",
         "path_through_stalled_blockers",
         "rally_point_shared",
         "switched_off_hover_lead",
@@ -185,7 +186,7 @@ mod tests {
         "walker_attacks_unhittable_obstacle",
     ];
 
-    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off); S-0212 claims 8, 22 and 23 and S-0213 claim 7 (quirks.path_through_stalled_blockers, quirks.unreachable_move_dropped and quirks.group_spread_no_detour off, our design, C7 part 4); S-0417 claims 8 and 10, S-0212 claims 8 and 22 and S-0402 claim 4 (quirks.rally_point_shared, quirks.deadlock_no_yield and quirks.harvest_cell_shared off, our design, C7 part 5); S-0108 claims 11 and 18 and Edge cases (quirks.ungranted_super_reads_clock off); S-0306 claim 3 (b) and Edge cases (quirks.switched_off_hover_lead off); S-0501 claims 4, 10 and 51 and Edge cases (quirks.aircraft_edge_hold off); S-0209 claims 4 and 9 and Edge cases (quirks.walker_attacks_unhittable_obstacle off); S-0501 claim 24 and Edge cases (quirks.aircraft_grounded_enter_stall off) and claim 31 and Edge cases (quirks.aircraft_ready_mark_outlives_enter off); S-0501 claim 6 and Edge cases (quirks.aircraft_offmap_stop_start off): the layer sets exactly these nineteen switches, and only switches
+    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off); S-0212 claims 8, 22 and 23 and S-0213 claim 7 (quirks.path_through_stalled_blockers, quirks.unreachable_move_dropped and quirks.group_spread_no_detour off, our design, C7 part 4); S-0417 claims 8 and 10, S-0212 claims 8 and 22 and S-0402 claim 4 (quirks.rally_point_shared, quirks.deadlock_no_yield and quirks.harvest_cell_shared off, our design, C7 part 5); S-0212 claim 23 (quirks.jammed_move_dropped off, our design, C7 part 6); S-0108 claims 11 and 18 and Edge cases (quirks.ungranted_super_reads_clock off); S-0306 claim 3 (b) and Edge cases (quirks.switched_off_hover_lead off); S-0501 claims 4, 10 and 51 and Edge cases (quirks.aircraft_edge_hold off); S-0209 claims 4 and 9 and Edge cases (quirks.walker_attacks_unhittable_obstacle off); S-0501 claim 24 and Edge cases (quirks.aircraft_grounded_enter_stall off) and claim 31 and Edge cases (quirks.aircraft_ready_mark_outlives_enter off); S-0501 claim 6 and Edge cases (quirks.aircraft_offmap_stop_start off): the layer sets exactly these twenty switches, and only switches
     #[test]
     fn play_fixes_sets_only_the_admitted_switches_off() {
         let mut paths = paths(&play_fixes()).unwrap();

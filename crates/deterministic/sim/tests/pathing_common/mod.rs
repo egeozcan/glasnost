@@ -150,7 +150,12 @@ pub fn ruleset(rules: Rules) -> Ruleset {
     };
     refn.econ.refinery = Some(true);
     refn.econ.dock_unload = Some(true);
-    for (n, b) in [("BLOCK", block), ("VF", vf), ("REFN", refn)] {
+    // REFQ: REFN with a queueing shift, so its queueing cell lies off the
+    // docking cell (C7 part 6). The shift is invented: one cell east of the
+    // docking cell's column and two rows below it.
+    let mut refq = refn.clone();
+    refq.econ.queueing_cell = Some([4, 3]);
+    for (n, b) in [("BLOCK", block), ("VF", vf), ("REFN", refn), ("REFQ", refq)] {
         push(&mut r, "buildings", n);
         r.sim.buildings.insert(n.into(), b);
     }
@@ -181,7 +186,7 @@ pub fn ruleset(rules: Rules) -> Ruleset {
     let mut harv = wheel(6);
     harv.harvester = Some(true);
     harv.storage = Some(5);
-    harv.econ.dock = Some(vec!["REFN".into()]);
+    harv.econ.dock = Some(vec!["REFN".into(), "REFQ".into()]);
     push(&mut r, "vehicles", "HARV");
     r.sim.vehicles.insert("HARV".into(), harv);
     match rules {
@@ -629,6 +634,18 @@ pub fn by_buildings(rules: Rules, n: usize, seed: u32) -> Scene {
 /// `n` harvesters sharing one refinery and a 6 × 6 field 10 cells east of
 /// it, for `bound` ticks.
 pub fn harvesters(rules: Rules, n: usize, seed: u32) -> Scene {
+    harvesters_at(rules, "REFN", n, seed)
+}
+
+/// [`harvesters`] with REFQ, whose queueing cell lies off the docking cell
+/// (C7 part 6).
+pub fn harvesters_queue(rules: Rules, n: usize, seed: u32) -> Scene {
+    let mut s = harvesters_at(rules, "REFQ", n, seed);
+    s.name = "harvesters, queueing cell off the dock";
+    s
+}
+
+fn harvesters_at(rules: Rules, refinery: &str, n: usize, seed: u32) -> Scene {
     let r = ruleset(rules);
     let mut w = world(&r, seed, |x, y| {
         if (8..14).contains(&x) && (-3..3).contains(&y) {
@@ -638,7 +655,7 @@ pub fn harvesters(rules: Rules, n: usize, seed: u32) -> Scene {
         }
     });
     ready(&mut w);
-    testkit::spawn(&mut w, Kind::Building, "REFN", 0, at(-3, -1), 0);
+    testkit::spawn(&mut w, Kind::Building, refinery, 0, at(-3, -1), 0);
     let ids: Vec<ObjectId> = (0..n as i32)
         .map(|i| testkit::spawn(&mut w, Kind::Vehicle, "HARV", 0, at(3, i * 2 - 4), 0))
         .collect();
@@ -950,6 +967,88 @@ pub fn rooms(rules: Rules, n: usize, seed: u32) -> Scene {
     }
 }
 
+/// Three closed rooms of 6 × 6, west, east and north, joined only by halls
+/// 1 cell wide that meet at one cell (C7 part 6); `n` vehicles in each
+/// room, sent round: west to east, east to north, north to west. Every
+/// group needs the meeting cell, and two of the three pairs head across
+/// each other rather than head-on.
+pub fn three_ways(rules: Rules, n: usize, seed: u32) -> Scene {
+    let r = ruleset(rules);
+    let mut w = world(&r, seed, |x, y| {
+        let west = (-16..=-11).contains(&x) && (-3..=2).contains(&y);
+        let east = (11..=16).contains(&x) && (-3..=2).contains(&y);
+        let north = (-3..=2).contains(&x) && (-16..=-11).contains(&y);
+        let hall = (y == 0 && x.abs() <= 10) || (x == 0 && (-10..=0).contains(&y));
+        if west || east || north || hall {
+            Ground::Clear
+        } else {
+            Ground::Rock
+        }
+    });
+    ready(&mut w);
+    let a = block(&mut w, Kind::Vehicle, "TANK", n, 3, (-15, -2));
+    let b = block(&mut w, Kind::Vehicle, "TANK", n, 3, (12, -2));
+    let c = block(&mut w, Kind::Vehicle, "TANK", n, 3, (-2, -15));
+    testkit::run(&mut w, 1);
+    let (ga, gb, gc) = (at(13, 0), at(0, -13), at(-13, 0));
+    send(&mut w, &a, ga);
+    send(&mut w, &b, gb);
+    send(&mut w, &c, gc);
+    let mut g = goals(&a, ga, 3);
+    g.extend(goals(&b, gb, 3));
+    g.extend(goals(&c, gc, 3));
+    Scene {
+        name: "three ways, 3 each",
+        w,
+        goals: g,
+        bound: 4000,
+        open: true,
+        each: None,
+    }
+}
+
+/// The two closed rooms of [`rooms`] joined by a hall 1 cell wide instead
+/// (C7 part 6); `n` vehicles in each room sent to the other. With `parked`
+/// one more vehicle of the same house stands in the middle of the hall with
+/// no order; it is not followed.
+pub fn narrow_rooms(rules: Rules, n: usize, parked: bool, seed: u32) -> Scene {
+    let r = ruleset(rules);
+    let mut w = world(&r, seed, |x, y| {
+        let room = (9..=14).contains(&x.abs()) && (-3..=2).contains(&y);
+        let hall = x.abs() < 9 && y == 0;
+        if room || hall {
+            Ground::Clear
+        } else {
+            Ground::Rock
+        }
+    });
+    ready(&mut w);
+    if parked {
+        testkit::spawn(&mut w, Kind::Vehicle, "TANK", 0, at(0, 0), 0);
+    }
+    let a = block(&mut w, Kind::Vehicle, "TANK", n, 3, (-14, -2));
+    let b = block(&mut w, Kind::Vehicle, "TANK", n, 3, (12, -2));
+    testkit::run(&mut w, 1);
+    let ga = at(12, 0);
+    let gb = at(-12, 0);
+    send(&mut w, &a, ga);
+    send(&mut w, &b, gb);
+    let mut g = goals(&a, ga, 3);
+    g.extend(goals(&b, gb, 3));
+    Scene {
+        name: if parked {
+            "narrow rooms, 3 each way, one parked"
+        } else {
+            "narrow rooms, 3 each way"
+        },
+        w,
+        goals: g,
+        bound: 3000,
+        open: true,
+        each: None,
+    }
+}
+
 /// Every scenario of the set, under `rules` with `seed`.
 pub fn all(rules: Rules, seed: u32) -> Vec<Scene> {
     vec![
@@ -975,6 +1074,10 @@ pub fn all(rules: Rules, seed: u32) -> Vec<Scene> {
         mixed_speeds(rules, 6, seed),
         rooms(rules, 3, seed),
         rooms(rules, 6, seed),
+        harvesters_queue(rules, 4, seed),
+        three_ways(rules, 3, seed),
+        narrow_rooms(rules, 3, false, seed),
+        narrow_rooms(rules, 3, true, seed),
     ]
 }
 

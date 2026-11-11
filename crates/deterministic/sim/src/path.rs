@@ -2232,6 +2232,10 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     if res == Search::Found || w.rules().quirks.unreachable_move_dropped {
         return res;
     }
+    // design: C7-P6 hold (a move held for units in its way keeps its destination: the nearest reachable cell is for a destination the unit cannot reach)
+    if res == Search::SearchFailed && holds(w, id) {
+        return res;
+    }
     // design: C7-P4 nearest reachable cell (a failed move tries once more towards the nearest cell the unit can stand on in its own reach region; one try, as the new destination is reachable)
     let Some(c) = reachable_near(w, id) else {
         return res;
@@ -2387,15 +2391,19 @@ fn stalled_ring(w: &World, id: ObjectId) -> BTreeMap<ObjectId, CellXY> {
     for (&u, &c) in &units {
         by_cell.entry(c).or_default().push(u);
     }
+    // design: C7-P6 hold (quirks.jammed_move_dropped off: a unit as the hold keeps it, blocked on a move to a cell with no stored path, waits, like `id`, on every neighbour of its cell)
+    let hold = !w.rules().quirks.jammed_move_dropped;
+    let held = |u: ObjectId| hold && blocked_mover(w, u);
     let waits: BTreeMap<ObjectId, Vec<ObjectId>> = units
         .keys()
         .map(|&u| {
             // The cells it waits for: the one it heads for; for `id` with no
             // stored path (a blocked step discards it before the search),
-            // every neighbour of its cell.
+            // and with the hold for a unit as it keeps one, every neighbour
+            // of its cell.
             let cells: Vec<CellXY> = match heading_cell(w, u) {
                 Some(h) => vec![h],
-                None if u == id => STEPS
+                None if u == id || held(u) => STEPS
                     .iter()
                     .map(|&(dx, dy)| CellXY::new(units[&u].x + dx, units[&u].y + dy))
                     .collect(),
@@ -2455,19 +2463,19 @@ pub const YIELD_WAIT: i32 = 900;
 // nocite: design: C7-P5 yield (our choice: two rooms and a long passage between them, small against a map's open ground)
 pub const YIELD_FLOOD: usize = 2048;
 
-/// Whether `walls` shut `id` off from `goal` (our design, C7 part 5): a
-/// fill from `id`'s cell and one from `goal`, a step at a time each, in
-/// the eight directions through cells of the usable area in `id`'s reach
-/// region that are not in `walls`. Some(true) when one of them runs out of
-/// cells before they meet, Some(false) when they meet; None when they have
-/// looked at [`YIELD_FLOOD`] cells between them, or when `id` is on a
-/// deck, outside the usable area or the fills meet a bridge cell (a fill
-/// on the ground alone cannot say).
+/// Whether the cells `wall` names shut `id` off from `goal` (our design, C7
+/// part 5): a fill from `id`'s cell and one from `goal`, a step at a time
+/// each, in the eight directions through cells of the usable area in
+/// `id`'s reach region that are not walls. Some(true) when one of them runs
+/// out of cells before they meet, Some(false) when they meet; None when
+/// they have looked at [`YIELD_FLOOD`] cells between them, or when `id` is
+/// on a deck, outside the usable area or the fills meet a bridge cell (a
+/// fill on the ground alone cannot say).
 fn shut(
     w: &World,
     id: ObjectId,
     u: &crate::rules::UnitRules,
-    walls: &BTreeSet<CellXY>,
+    wall: &dyn Fn(CellXY) -> bool,
     goal: CellXY,
 ) -> Option<bool> {
     let o = w.obj(id)?;
@@ -2493,7 +2501,7 @@ fn shut(
                     }
                     if w.cells.cell(n).is_none()
                         || !w.cells.usable(n)
-                        || walls.contains(&n)
+                        || wall(n)
                         || regions::reach_read(w, n, u.zone, true) != own
                     {
                         continue;
@@ -2519,8 +2527,8 @@ fn shut(
 
 /// Whether the deadlock `ring` leaves `id` no way round to `goal` (our
 /// design, C7 part 5, yield): whether the cells of the deadlock's units
-/// heading against `id` (a negative dot product of the headings to their
-/// destinations) shut it off from `goal` ([`shut`]).
+/// not going `id`'s way ([`goes_with`]) shut it off from `goal`
+/// ([`shut`]).
 fn shut_in(
     w: &World,
     id: ObjectId,
@@ -2528,16 +2536,26 @@ fn shut_in(
     ring: &BTreeMap<ObjectId, CellXY>,
     goal: CellXY,
 ) -> bool {
-    let Some((hx, hy)) = heading(w, id) else {
+    let Some(h) = heading(w, id) else {
         return false;
     };
-    // design: C7-P5 yield (no way round: the deadlock's units heading against `id` shut it off from its destination; those going its way move on with it)
+    // design: C7-P5 yield (no way round: the deadlock's units not going `id`'s way shut it off from its destination; those going its way move on with it)
     let walls: BTreeSet<CellXY> = ring
         .iter()
-        .filter(|&(&x, _)| x != id && heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0))
+        .filter(|&(&x, _)| x != id && !goes_with(w, x, h))
         .map(|(_, &c)| c)
         .collect();
-    shut(w, id, u, &walls, goal) == Some(true)
+    shut(w, id, u, &|c| walls.contains(&c), goal) == Some(true)
+}
+
+/// Whether unit `x` goes the way of the heading `h` (our design, C7 parts 5
+/// and 6, yield): its own heading to its destination makes a positive dot
+/// product with `h`. Part 5 counted a unit at right angles (a dot product of
+/// 0) as going the same way; at a crossing of passages it does not, so of
+/// three groups meeting there two would never give way to each other.
+fn goes_with(w: &World, x: ObjectId, (hx, hy): (i64, i64)) -> bool {
+    // design: C7-P6 three ways (going the same way: a positive dot product of the headings; a unit at right angles crosses the way and is not going with it)
+    heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy > 0)
 }
 
 /// The straight-line heading of a unit to its destination cell, in cells.
@@ -2554,8 +2572,10 @@ fn heading(w: &World, x: ObjectId) -> Option<(i64, i64)> {
 /// object id that is not already giving way has the right of way. The
 /// units in play are the deadlock's and every unit of that unit's house
 /// on a move to a cell within [`YIELD_RADIUS`] of a unit of the deadlock;
-/// of these, every one whose heading to its destination points against
-/// that unit's (a negative dot product) gives way, the others go with it.
+/// of these, every unit of the deadlock not going that unit's way
+/// ([`goes_with`]) and every other one whose heading to its destination
+/// points against that unit's (a negative dot product) gives way, the
+/// others go with it.
 /// A unit that gives way gets the nearest free cell off the way of the
 /// units it gives way to (the cells of their paths by the original's
 /// search, and their own cells) and saves its order to resume
@@ -2592,11 +2612,17 @@ fn give_way(w: &mut World, id: ObjectId, ring: &BTreeMap<ObjectId, CellXY>) -> O
         if !free(w, x) {
             continue;
         }
+        // design: C7-P6 three ways (a unit of the deadlock that is not going the way of the unit with the right of way gives way, one at right angles among them; a unit near it but not in it gives way only when heading against it, so one crossing the way elsewhere is not stopped)
+        let crosses = if ring.contains_key(&x) {
+            !goes_with(w, x, (hx, hy))
+        } else {
+            heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0)
+        };
         let against = x != first
             && w.obj(x).is_some_and(|o| {
                 o.beh.current == Some(Behaviour::Move) && matches!(o.dest, Some(Target::Cell(_)))
             })
-            && heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0);
+            && crosses;
         // design: C7-P5 yield (the side that gives way: heading against the unit with the right of way)
         if against {
             yielders.push(x);
@@ -2784,6 +2810,103 @@ pub fn order_given(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.path.yielding = None;
     }
+}
+
+/// The longest a unit holds a move whose search failed for units in its
+/// way, counted from the start of its blockage, in ticks.
+// nocite: design: C7-P6 hold (our choice: the yield's longest wait, so a unit held behind a group that gives way and passes is not given up before that group has passed)
+pub const HOLD_WAIT: i32 = YIELD_WAIT;
+
+/// The longest a unit holds a move whose search failed for units in its
+/// way while no unit near it gives way, counted from the start of its
+/// blockage, in ticks.
+// nocite: design: C7-P6 hold (our choice: about twenty seconds of game time, time for the units in the way to stall and a deadlock's yield to start; a hold that sees no yield start by then gives up as the original does)
+pub const HOLD_FIRST: i32 = 300;
+
+/// Whether only moving units stand in the way of `id`'s move (our design,
+/// C7 part 6, hold): a vehicle or infantry unit on the ground layer, on a
+/// move to a cell, for which [`shut`] finds the destination cell reached
+/// from the unit's cell when only cells holding a building, a terrain
+/// object or another object that is not a unit, a unit with no destination
+/// (one standing, which will not move off by itself), or a wall overlay,
+/// are walls. A unit in a crowd of standing units so gives up as the
+/// original does. False when the destination cell itself holds another
+/// unit that stands or is blocked (two units that would swap cells), and
+/// when the fills cannot say ([`shut`]'s None), so the unit then gives up
+/// as the original does.
+fn jammed(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if !o.on_map
+        || o.layer != Layer::Ground
+        || !matches!(o.kind, Kind::Vehicle | Kind::Infantry)
+        || o.beh.current != Some(Behaviour::Move)
+    {
+        return false;
+    }
+    let Some(Target::Cell(goal)) = o.dest else {
+        return false;
+    };
+    let r = w.rules();
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return false;
+    };
+    // design: C7-P6 hold (not when the destination cell itself holds another unit that stands or is blocked: two units that would swap cells, or one whose cell is taken by a unit that will not leave, gain nothing by waiting where there is a way round, and give up as the original does)
+    if w.cells.list(goal, Layer::Ground).iter().any(|&x| {
+        x != id
+            && w.obj(x)
+                .is_some_and(|p| p.kind.is_mobile() && (p.dest.is_none() || blocked_mover(w, x)))
+    }) {
+        return false;
+    }
+    // design: C7-P6 hold (only moving units in the way: a fill that passes every unit with a destination and stops at buildings, terrain objects, standing units and walls reaches the destination cell)
+    let wall = |c: CellXY| {
+        w.cells.list(c, Layer::Ground).iter().any(|&x| {
+            x != id
+                && w.obj(x)
+                    .is_some_and(|p| !p.kind.is_mobile() || p.dest.is_none())
+        }) || w.cells.cell(c).is_some_and(|cell| {
+            cell.overlay != glasnost_map::NO_OVERLAY
+                && r.overlays
+                    .get(usize::from(cell.overlay))
+                    .is_some_and(|v| v.wall)
+        })
+    };
+    shut(w, id, u, &wall, goal) == Some(false)
+}
+
+/// Whether unit `x` is on a move to a cell and blocked: its blockage has
+/// begun (S-0212 claim 22). Our design, C7 part 6, hold.
+fn blocked_mover(w: &World, x: ObjectId) -> bool {
+    w.obj(x).is_some_and(|o| {
+        o.beh.current == Some(Behaviour::Move)
+            && matches!(o.dest, Some(Target::Cell(_)))
+            && o.path.blocked_since.is_some()
+    })
+}
+
+/// Whether `id`'s failed search is held instead of given up (our design,
+/// C7 part 6, hold; `quirks.jammed_move_dropped` off): only moving units
+/// stand in its way ([`jammed`]), the failure would give the move up
+/// ([`search_gives_up`]) and its blockage has not lasted [`HOLD_FIRST`],
+/// or, while a unit within [`YIELD_RADIUS`] of it gives way, [`HOLD_WAIT`].
+fn holds(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // design: C7-P6 hold (only a failure that gives the move up: one that does not takes the original's way, the nearest reachable cell of C7-P4 among it)
+    if w.rules().quirks.jammed_move_dropped || !search_gives_up(w, id) {
+        return false;
+    }
+    let blocked = o.path.blocked_since.map_or(0, |b| w.tick.wrapping_sub(b));
+    // design: C7-P6 hold (held while blocked for less than the first hold; after it, up to the longest hold, only while a unit within the yield's reach gives way, so a unit waiting behind a yield is not given up before the other side has passed, and one in a crowd no yield settles gives up as the original does)
+    let here = o.pos.cell();
+    let yield_near = || {
+        w.objects.values().any(|p| {
+            p.path.yielding.is_some() && p.on_map && {
+                let c = p.pos.cell();
+                (c.x - here.x).abs().max((c.y - here.y).abs()) <= YIELD_RADIUS
+            }
+        })
+    };
+    (blocked < HOLD_FIRST || (blocked < HOLD_WAIT && yield_near())) && jammed(w, id)
 }
 
 /// One path computation of [`compute_untraced`].
@@ -3206,6 +3329,22 @@ pub fn keep_delay(w: &mut World, id: ObjectId, held: Option<i32>) {
     }
 }
 
+/// Whether a failed search of unit `id` gives its move up (S-0212 claim 23
+/// row 2): its destination is not within one cell of it, or it is not on a
+/// bridge deck while the destination is a bridge cell.
+fn search_gives_up(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let goal = goal_cell(w, id);
+    let near = goal.is_some_and(|g| {
+        let c = o.pos.cell();
+        (g.x - c.x).abs().max((g.y - c.y).abs()) <= 1
+    });
+    // spec: S-0212 claim 23 row 2 (or not on a bridge deck while the destination is a bridge cell)
+    let off_deck = o.layer != Layer::Deck && goal.is_some_and(|g| w.high_bridge(g));
+    // spec: S-0212 claim 23 row 2 (a unit gives up when its destination is not within one cell of it)
+    !near || off_deck
+}
+
 /// What follows a failed path computation (S-0212 claims 21 and 23).
 /// `repath`: the computation was a re-path for a blocked step.
 pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
@@ -3234,13 +3373,6 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             }
         }
         Search::SearchFailed => {
-            let goal = goal_cell(w, id);
-            let near = goal.is_some_and(|g| {
-                let c = o.pos.cell();
-                (g.x - c.x).abs().max((g.y - c.y).abs()) <= 1
-            });
-            // spec: S-0212 claim 23 row 2 (or not on a bridge deck while the destination is a bridge cell)
-            let off_deck = o.layer != Layer::Deck && goal.is_some_and(|g| w.high_bridge(g));
             // spec: S-0212 claim 23 row 2 and Departure D5 (guard for a human-controlled owner, AI houses included; the neutral and special houses keep area guard)
             let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
             let give_up = if human {
@@ -3248,7 +3380,29 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             } else {
                 Behaviour::AreaGuard
             };
-            let gives_up = !near || off_deck;
+            let gives_up = search_gives_up(w, id);
+            // design: C7-P6 hold (quirks.jammed_move_dropped off: a move that would be given up while only units stand in its way is kept; the unit stops, counts as blocked from now if it was not, and searches again after the retry delay)
+            if gives_up && holds(w, id) {
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.path.steps.clear();
+                    start_delay(ob, t, r.general.retry_delay);
+                    ob.path.blocked_since = Some(ob.path.blocked_since.unwrap_or(t));
+                    if walker {
+                        // design: C7-P6 hold (a held walker ends its movement in progress as one that keeps its destination after a failed search does)
+                        ob.path.failed_for = ob.dest;
+                    }
+                }
+                crate::trace::record(w, id, || {
+                    let after = w.obj(id);
+                    crate::trace::What::Failed {
+                        result: res,
+                        gave_up: false,
+                        dest_cleared: false,
+                        retry_at: after.map_or(t, |x| x.path.retry_at),
+                    }
+                });
+                return;
+            }
             gave_up = gives_up;
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();

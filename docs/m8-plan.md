@@ -96,6 +96,19 @@ revision. The intake that takes in each revision checks it against this list.
 
 ## Decisions of 2026-11-10
 
+- **Part 5's longer quick-lane games are divergence, not a sluggish switch** (C7 part 6, under the
+  lead's autonomy of 2026-10-25): on the same 48 games (seeds 7 to 14), the layer's game is longer
+  in 24 and shorter in 24 (median ratio 1.003). With the layer, houses earn as fast or faster (3 230
+  against 3 076 credits per 1 000 ticks; 65 445 against 62 733 by tick 20 000) and field the same army
+  through 20 000 ticks. Their units are stuck no more (army 127 against 131 per mille) and give up
+  less than half as often (army 11 611 against 24 518; harvesters 523 against 7 289). No switch is
+  changed for it. Figures: docs/m8-claims/c7-pathing.md, *Part 6*.
+- **The hold for passages one cell wide joins the layer** (`jammed_move_dropped` off, C7 part 6):
+  it clears the three passage scenarios and leaves the layer's quick lane unchanged in 47 of 48 games
+  (the 48th ends 90 ticks sooner); every default run is byte-identical.
+  The harvesters' busy dock gets no pathing change: the layer already cuts those give-ups by 90 %,
+  the 372 left in one game come from two harvesters standing in a pocket with no path (a correct
+  give-up, not a queue), and S-0402's queue rules stay as they are.
 - **A6b merged although the arena count rose from 28 to 33 failing rows** (main session). The step
   built two original-only rules the approved specs give for the test-only computer-controlled
   houses: S-0309 claim 25 (e)'s occupation alternative and S-0215 claims 23 and 27's infantry rule
