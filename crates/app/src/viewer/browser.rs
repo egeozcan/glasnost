@@ -96,7 +96,14 @@ enum GamePalette {
 pub struct Browser {
     vfs: Option<Vfs>,
     status: String,
+    /// The file system is out in a task, or a mount is under way.
     busy: bool,
+    /// The number of the current mount; results of tasks started for an
+    /// earlier one are dropped (#89).
+    mount: u64,
+    /// Names the current mount's index harvested, waiting for the file
+    /// system to come back from a task (#89).
+    index: Option<BTreeSet<String>>,
     #[cfg(not(target_arch = "wasm32"))]
     folder: String,
     archive: Option<ArchiveId>,
@@ -146,6 +153,8 @@ impl Browser {
             vfs: None,
             status: "No install mounted.".into(),
             busy: false,
+            mount: 0,
+            index: None,
             #[cfg(not(target_arch = "wasm32"))]
             folder: folder.unwrap_or_default(),
             archive: None,
@@ -189,33 +198,52 @@ impl Browser {
         spawner.spawn(tasks::mount(files));
     }
 
+    /// Starts `task` for the current mount: its result is dropped if it
+    /// comes back after another mount (#89).
+    fn spawn(&self, spawner: &dyn Spawner, task: tasks::Task) {
+        spawner.spawn(tasks::for_mount(self.mount, task));
+    }
+
     /// Handles a finished task.
     pub fn on_task(&mut self, result: TaskResult, spawner: &dyn Spawner) {
         match result {
+            TaskResult::ForMount { mount, result } => {
+                // design: render (#89): a result of an earlier mount, its file system included, is
+                // dropped; the current mount's file system and index stay
+                if mount == self.mount {
+                    self.on_task(*result, spawner);
+                } else {
+                    log::info!("dropped a task result of an earlier mount");
+                }
+            }
             TaskResult::Mounted(Ok(mounted)) => {
                 let (vfs, summary) = *mounted;
                 crate::status::publish_mount(Some(vfs.archives().len()));
+                self.mount += 1;
                 self.status = format!("{summary}. Indexing…");
                 let jobs = tasks::index_jobs(&vfs);
                 self.vfs = Some(vfs);
+                self.busy = false;
                 self.kinds.clear();
+                self.index = None;
                 self.archive = Some(ArchiveId(0));
                 self.selected = None;
                 self.preview = Preview::Nothing;
                 self.rows_dirty = true;
-                spawner.spawn(tasks::index(jobs));
+                self.spawn(spawner, tasks::index(jobs));
                 if self.pending_map.is_some()
                     && let Some(vfs) = self.vfs.take()
                 {
                     self.map_mode = true;
                     self.busy = true;
-                    spawner.spawn(tasks::find_maps(vfs));
+                    self.spawn(spawner, tasks::find_maps(vfs));
                 }
             }
             TaskResult::Imported(imported) => {
                 let imported = *imported;
                 self.busy = false;
                 self.vfs = Some(imported.vfs);
+                self.apply_index();
                 self.rows_dirty = true;
                 let data = imported.resolved.map(|resolved| {
                     RulesData::new(
@@ -245,6 +273,7 @@ impl Browser {
                 log::info!("{} maps found", maps.len());
                 self.vfs = Some(vfs);
                 self.busy = false;
+                self.apply_index();
                 if let Some(want) = self.pending_map.take() {
                     let want = want.to_ascii_lowercase();
                     let hit = maps
@@ -255,9 +284,12 @@ impl Browser {
                         })
                         .map(|m| (m.file, m.archive.clone()));
                     log::info!("map to open: {:?}", hit.as_ref().map(|h| &h.1));
-                    if let (Some((file, origin)), Some(vfs)) = (hit, self.vfs.take()) {
+                    // The file system goes out only with a map to load.
+                    if let Some((file, origin)) = hit
+                        && let Some(vfs) = self.vfs.take()
+                    {
                         self.busy = true;
-                        spawner.spawn(tasks::load_map(
+                        let task = tasks::load_map(
                             vfs,
                             file,
                             origin,
@@ -266,7 +298,8 @@ impl Browser {
                                 ..Default::default()
                             },
                             self.map.voxel_canvas(),
-                        ));
+                        );
+                        self.spawn(spawner, task);
                     }
                 }
                 self.map.set_listings(maps);
@@ -280,6 +313,7 @@ impl Browser {
                 );
                 self.vfs = Some(vfs);
                 self.busy = false;
+                self.apply_index();
                 self.map.set_loaded(loaded);
             }
             TaskResult::Mounted(Err(e)) => {
@@ -288,36 +322,10 @@ impl Browser {
                 self.status = e;
             }
             TaskResult::Indexed { kinds, tokens } => {
-                self.busy = false;
+                // The busy flag stays: it is the file system's being out in a task.
                 self.kinds = kinds;
-                if let Some(vfs) = &mut self.vfs {
-                    let before = vfs.names().len();
-                    learn_names(vfs, &tokens);
-                    self.status = format!(
-                        "{} archives, {} entries classified, {} names found in text entries.",
-                        vfs.archives().len(),
-                        self.kinds.len(),
-                        vfs.names().len() - before
-                    );
-                    self.palettes = self
-                        .kinds
-                        .iter()
-                        .filter(|(_, k)| **k == Kind::Pal)
-                        .map(|(&(a, id), _)| {
-                            let entry = vfs
-                                .archive(a)
-                                .and_then(|x| x.index.find(id))
-                                .copied()
-                                .unwrap_or(MixEntry {
-                                    id,
-                                    offset: 0,
-                                    size: 0,
-                                });
-                            (entry_label(vfs, a, id), FileRef { archive: a, entry })
-                        })
-                        .collect();
-                    self.palettes.sort_by(|a, b| a.0.cmp(&b.0));
-                }
+                self.index = Some(tokens);
+                self.apply_index();
                 self.rows_dirty = true;
             }
             TaskResult::Loaded { purpose, bytes } => match (purpose, bytes) {
@@ -352,6 +360,43 @@ impl Browser {
                 _ => {}
             },
         }
+    }
+
+    /// Learns the names harvested by the index and lists the palettes, once
+    /// the file system is here; the index may come back while a task holds
+    /// it (#89).
+    fn apply_index(&mut self) {
+        let Some(vfs) = &mut self.vfs else { return };
+        let Some(tokens) = self.index.take() else {
+            return;
+        };
+        let before = vfs.names().len();
+        learn_names(vfs, &tokens);
+        self.status = format!(
+            "{} archives, {} entries classified, {} names found in text entries.",
+            vfs.archives().len(),
+            self.kinds.len(),
+            vfs.names().len() - before
+        );
+        self.palettes = self
+            .kinds
+            .iter()
+            .filter(|(_, k)| **k == Kind::Pal)
+            .map(|(&(a, id), _)| {
+                let entry = vfs
+                    .archive(a)
+                    .and_then(|x| x.index.find(id))
+                    .copied()
+                    .unwrap_or(MixEntry {
+                        id,
+                        offset: 0,
+                        size: 0,
+                    });
+                (entry_label(vfs, a, id), FileRef { archive: a, entry })
+            })
+            .collect();
+        self.palettes.sort_by(|a, b| a.0.cmp(&b.0));
+        self.rows_dirty = true;
     }
 
     fn play(&mut self, pcm: &glasnost_fmt::pcm::Pcm) -> String {
@@ -456,7 +501,10 @@ impl Browser {
             Ok(loc) => {
                 if let Some(source) = vfs.source(loc.source) {
                     self.preview = Preview::Loading;
-                    spawner.spawn(tasks::read(Purpose::Preview(file), source, loc, None));
+                    self.spawn(
+                        spawner,
+                        tasks::read(Purpose::Preview(file), source, loc, None),
+                    );
                 }
             }
             Err(e) => self.preview = Preview::Error(e.to_string()),
@@ -660,14 +708,17 @@ impl Browser {
                     if let Some(vfs) = self.vfs.take() {
                         self.busy = true;
                         self.map.status = "Finding maps…".into();
-                        spawner.spawn(tasks::find_maps(vfs));
+                        self.spawn(spawner, tasks::find_maps(vfs));
                     }
                 }
                 Some(MapAction::Load(file, origin, options)) => {
                     if let Some(vfs) = self.vfs.take() {
                         self.busy = true;
                         let canvas = self.map.voxel_canvas();
-                        spawner.spawn(tasks::load_map(vfs, file, origin, options, canvas));
+                        self.spawn(
+                            spawner,
+                            tasks::load_map(vfs, file, origin, options, canvas),
+                        );
                     }
                 }
                 None => {}
@@ -875,7 +926,7 @@ impl Browser {
                     "Importing the rules for {}…",
                     self.rules.theater.identifier()
                 );
-                spawner.spawn(tasks::import(vfs, self.rules.theater));
+                self.spawn(spawner, tasks::import(vfs, self.rules.theater));
             }
             RulesAction::Open(name, palette) => {
                 if let Some(p) = palette {
@@ -1007,7 +1058,10 @@ impl Browser {
                 && let Some((_, file)) = self.palettes.get(i)
                 && let (Ok(loc), Some(src)) = (vfs.locate(file), vfs.source(file_source(vfs, file)))
             {
-                spawner.spawn(tasks::read(Purpose::Palette(*file), src, loc, None));
+                self.spawn(
+                    spawner,
+                    tasks::read(Purpose::Palette(*file), src, loc, None),
+                );
             }
         }
         ui.label(
@@ -1251,7 +1305,10 @@ impl Browser {
                     len: u64::from(entry.size).min(loc.len.saturating_sub(u64::from(entry.offset))),
                 };
                 self.sample_status = "loading…".into();
-                spawner.spawn(tasks::read(Purpose::Sample(entry), src, sample, None));
+                self.spawn(
+                    spawner,
+                    tasks::read(Purpose::Sample(entry), src, sample, None),
+                );
             }
         }
     }

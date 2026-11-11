@@ -74,6 +74,24 @@ pub enum TaskResult {
         /// Its bytes, or why reading failed.
         bytes: Result<Vec<u8>, String>,
     },
+    /// The result of a task started for mount number `mount` ([`for_mount`]).
+    ForMount {
+        /// The mount the task was started for.
+        mount: u64,
+        /// What the task gave.
+        result: Box<TaskResult>,
+    },
+}
+
+/// `task`, its result marked as belonging to mount number `mount`, so that a
+/// result that comes back after a later mount can be told apart (#89).
+pub fn for_mount(mount: u64, task: Task) -> Task {
+    Box::pin(async move {
+        TaskResult::ForMount {
+            mount,
+            result: Box::new(task.await),
+        }
+    })
 }
 
 /// Mounts the picked files.
