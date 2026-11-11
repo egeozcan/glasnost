@@ -934,12 +934,23 @@ fn cancel_item(w: &mut World, li: usize) {
 pub(crate) fn delete_item_object(w: &mut World, id: ObjectId) {
     if w.obj(id).is_some_and(|o| !o.on_map) {
         tech::object_ends(w, id);
-        // spec: S-0506 claim 13 (the spawner removed: its docked slot objects are removed silently)
-        crate::spawn::removing(w, id);
+        drop_creation_set(w, id);
         w.objects.remove(&id);
         // spec: S-0414 claim 15 (an object that ceases to exist at once, for the cancellation exception)
         super::victory::object_deleted(w, id);
     }
+}
+
+/// What an item's object brought with it at its creation goes with it
+/// when it is deleted unplaced (#156): its docked slot objects, its
+/// hidden slaves and its mind-control record.
+fn drop_creation_set(w: &mut World, id: ObjectId) {
+    // spec: S-0506 claim 13 (the spawner removed: its docked slot objects are removed silently)
+    crate::spawn::removing(w, id);
+    // spec: S-0402 claim 19 (the slaves were created with the master) and S-0404 claim 6 (the item's object is deleted)
+    super::slaves::unplaced_master_deleted(w, id);
+    // spec: S-0601 claims 1 and 10 (a controller has its record from its creation; a controller removed from the game releases its victims and its record goes)
+    crate::mind::removing(w, id);
 }
 
 /// Resumes a held item (S-0404 claim 5; the lift of an automatic hold,
@@ -1156,6 +1167,7 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
     }
     // An upgrade enters no play as a building (S-0406 claim 12): its object goes.
     if w.obj(item.object).is_some_and(|o| !o.on_map) {
+        drop_creation_set(w, item.object);
         w.objects.remove(&item.object);
     }
     // spec: S-0404 claim 7 (when the placement succeeds, the line ceases to exist)

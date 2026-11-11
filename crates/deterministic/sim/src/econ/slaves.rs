@@ -303,6 +303,26 @@ pub fn removing(w: &mut World, id: ObjectId) {
     lost(w, id);
 }
 
+/// A production item's master is deleted before it was ever placed
+/// (S-0404 claim 6): the slaves created with it at production start
+/// (S-0402 claim 19), hidden inside it, go out of the game with it,
+/// silently, as a removed spawner's docked slot objects do (S-0506 claim
+/// 13). S-0312 claim 31 leaves never-placed masters out (Q-0193), and
+/// Q-2973 asks whether the game counts or announces them.
+pub(crate) fn unplaced_master_deleted(w: &mut World, id: ObjectId) {
+    let Some(g) = detach(w, id) else { return };
+    for m in &g.members {
+        let Some(s) = m.id else { continue };
+        if let Some(ob) = w.obj_mut(s) {
+            ob.econ.slave = None;
+        }
+        // spec: S-0407 claim 12 (g) and (o) (a unit's end is the tech tree's event, as for its master)
+        super::tech::object_ends(w, s);
+        // nocite: our own input validation (#156): a cancelled item leaves no hidden slave behind; removed without destruction or notification until Q-2973 is answered
+        crate::objects::remove(w, s);
+    }
+}
+
 /// A slave is killed or lost (S-0402 claim 14): its slot starts the
 /// regeneration delay.
 pub fn lost(w: &mut World, id: ObjectId) {
