@@ -153,9 +153,11 @@ fn a_shadow_with_no_depth_test_darkens_over_a_nearer_writer() {
         .push(flat_item(shade, 4, 0, DepthTest::Ignore, Paint::Shadow));
     let (cpu, gpu) = cpu_and_gpu(&device, &queue, &s, (16, 4));
     assert!(cpu[4 * 4] < cpu[0], "the CPU darkens under the shadow");
+    // The GPU halves rounded down (#79): the same packed pixel, display bits within 4.
     for (a, b) in cpu.chunks(4).zip(gpu.chunks(4)) {
+        assert_eq!(packed(a), packed(b), "cpu {a:?} gpu {b:?}");
         for k in 0..3 {
-            assert!(a[k].abs_diff(b[k]) <= 8, "cpu {a:?} gpu {b:?}");
+            assert!(a[k].abs_diff(b[k]) <= 4, "cpu {a:?} gpu {b:?}");
         }
     }
 }

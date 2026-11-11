@@ -8,10 +8,12 @@
 //! the pipelines that store depth. Items are drawn in scene order, batched
 //! into runs that share a pipeline, so the result matches
 //! [`Scene::compose`] pixel for pixel. The one exception is shadows: the GPU
-//! halves the expanded 8-bit channels by blending, which can differ from the
-//! CPU's 5-6-5 halving in the lowest bits (S-0102 claim 26, F7: an engine
-//! that keeps 8-bit channels packs to the same hi-colour pixel; the display
-//! path here keeps the expanded channels).
+//! halves the expanded 8-bit channels by blending, rounded down (the blend
+//! constant `SHADOW_FACTOR`), so a shadowed pixel packs to the CPU's 5-6-5
+//! halving and a later translucent drawing reads the same backdrop, but its
+//! low display bits can differ from the CPU's re-expanded channels (S-0102
+//! claim 26, F7: an engine that keeps 8-bit channels packs to the same
+//! hi-colour pixel; the display path here keeps the expanded channels).
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
@@ -28,6 +30,16 @@ pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Colour format of the map pass target.
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// The blend constant a shadow multiplies the target's 8-bit channels by.
+/// With *c* = 127/255, round(*v*·*c*) = ⌊*v*/2⌋ for every *v* in 0 … 255
+/// (*v*/2 − *v*/510 is within ½ − 1/510 of ⌊*v*/2⌋), and 127/255 is exact
+/// in an 8-bit fixed-point blend unit. ⌊*v*/2⌋ keeps the top 5 (6) bits of
+/// a halved expanded channel equal to the halved 5-bit (6-bit) channel, at
+/// every repeat, so `packed` reads the CPU's pixel.
+// spec: S-0102 claim 26, F7 (each channel halved, rounded down)
+// design: render (#79) (a factor under one half, so the blend's rounding to nearest gives the floor)
+const SHADOW_FACTOR: f64 = 127.0 / 255.0;
 
 const NO_IMAGE: u32 = u32::MAX;
 
@@ -939,9 +951,9 @@ impl MapRenderer {
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.set_vertex_buffer(0, self.instances.slice(..));
             pass.set_blend_constant(wgpu::Color {
-                r: 0.5,
-                g: 0.5,
-                b: 0.5,
+                r: SHADOW_FACTOR,
+                g: SHADOW_FACTOR,
+                b: SHADOW_FACTOR,
                 a: 1.0,
             });
             pass
