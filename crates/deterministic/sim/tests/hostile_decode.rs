@@ -62,7 +62,12 @@ fn input_orders_keep_their_bytes() {
     assert_eq!(bytes(Order::Stop { actor: ObjectId(7) }), [1, 7]);
     assert_eq!(bytes(Order::Cheer), [5]);
     assert_eq!(bytes(Order::Surrender), [17]);
-    assert_eq!(bytes(Order::Detonate { actor: ObjectId(300) }), [19, 172, 2]);
+    assert_eq!(
+        bytes(Order::Detonate {
+            actor: ObjectId(300)
+        }),
+        [19, 172, 2]
+    );
     assert_eq!(bytes(Order::GameSpeed { speed: 4 }), [21, 4]);
     assert_eq!(bytes(Order::RouteCommit), [24]);
     assert_eq!(bytes(Order::RouteDelete { point: 3 }), [25, 3]);

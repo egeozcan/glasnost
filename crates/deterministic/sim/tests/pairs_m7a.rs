@@ -416,7 +416,10 @@ fn an_order_of_the_former_owner_still_applies_in_the_takeover_tick() {
     let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, 6, 0);
     testkit::run(&mut w, 5);
     // spec: S-0213 claim 15 (a house's orders act only on its own objects: Alpha orders the gattling while it is Alpha's)
-    assert!(attack(&mut w, ALPHA, gat, tgt), "Alpha orders its own object");
+    assert!(
+        attack(&mut w, ALPHA, gat, tgt),
+        "Alpha orders its own object"
+    );
     // The controller comes now, so that it has not taken the gattling by fire before the order.
     let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 6);
     assert!(mind::take(&mut w, clone, gat));
