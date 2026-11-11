@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-11-11
 ---
 
 # M-0013: Which cells receive spreading ore (S-0401 scenario E8)
@@ -93,19 +93,35 @@ approved-on: 2026-10-28
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Free control cells P3, P6, P8 receiving ore | runs | 10 | 10 (all three cells) | | exact |
-| Infantry cells P7, P9 receiving ore | runs | 10 | 10 (both cells) | | exact |
-| Tree cells P1, P2 receiving ore | runs | 10 | 0 | | exact |
-| Living-building cell P4 receiving ore | runs | 10 | 0 | | exact |
-| Ore-mine cell P5 receiving ore | runs | 10 | 0 | | exact |
-| High-bridge cells (95,84), (96,84), (97,84) receiving ore | runs | 10 | 0 | | exact |
-| Rock cells (98,86) to (98,88) receiving ore | runs | 10 | 0 | | exact |
-| Wall cells receiving ore | runs | 10 | 0 (all 56 cells) | | exact |
-| Ticks of spread gains, stock rules | tick | 5 | 0, *S* or 2*S* (*S* local) | per cell and run, table below | exact |
-| Ticks of spread gains, test rules | tick | 5 | multiples of 60 (0 to 120 for the test cells) | table below | exact |
-| Stage of a new ore cell in the tick it appears (spread steps and the ore mine's) | stage | 118 gains | 3 | none | exact |
-| Ore mine's new cells: ticks, stock rules | tick | 5 | 77 to 2004, not on the spread schedule | | |
-| Ore mine putting ore on its own cell or on a wall | runs | 10 | 0 | | exact |
+| Free control cells P3, P6, P8 receiving ore | runs | 10 | below the table | | exact |
+| Infantry cells P7, P9 receiving ore | runs | 10 | below the table | | exact |
+| Tree cells P1, P2 receiving ore | runs | 10 | below the table | | exact |
+| Living-building cell P4 receiving ore | runs | 10 | below the table | | exact |
+| Ore-mine cell P5 receiving ore | runs | 10 | below the table | | exact |
+| High-bridge cells (95,84), (96,84), (97,84) receiving ore | runs | 10 | below the table | | exact |
+| Rock cells (98,86) to (98,88) receiving ore | runs | 10 | below the table | | exact |
+| Wall cells receiving ore | runs | 10 | below the table | | exact |
+| Ticks of spread gains, stock rules | tick | 5 | below the table | per cell and run, table below | exact |
+| Ticks of spread gains, test rules | tick | 5 | below the table | table below | exact |
+| Stage of a new ore cell in the tick it appears (spread steps and the ore mine's) | stage | 118 gains | below the table | none | exact |
+| Ore mine's new cells: ticks, stock rules | tick | 5 | below the table | | |
+| Ore mine putting ore on its own cell or on a wall | runs | 10 | below the table | | exact |
+
+Relations for the table above:
+
+- *Free control cells P3, P6, P8 receiving ore*: 10 (all three cells).
+- *Infantry cells P7, P9 receiving ore*: 10 (both cells).
+- *Tree cells P1, P2 receiving ore*: 0.
+- *Living-building cell P4 receiving ore*: 0.
+- *Ore-mine cell P5 receiving ore*: 0.
+- *High-bridge cells (95,84), (96,84), (97,84) receiving ore*: 0.
+- *Rock cells (98,86) to (98,88) receiving ore*: 0.
+- *Wall cells receiving ore*: 0 (all 56 cells).
+- *Ticks of spread gains, stock rules*: 0, *S* or 2*S* (*S* local).
+- *Ticks of spread gains, test rules*: multiples of 60 (0 to 120 for the test cells).
+- *Stage of a new ore cell in the tick it appears (spread steps and the ore mine's)*: 3.
+- *Ore mine's new cells: ticks, stock rules*: 77 to 2004, not on the spread schedule.
+- *Ore mine putting ore on its own cell or on a wall*: 0.
 
 Ticks of the gains in the test cells (*S* is the stock ore type's spread field, a local value):
 
