@@ -1307,6 +1307,32 @@ S-0212 r98 answers Q-2896; the ledger is [docs/m8-claims/intake122.md](../m8-cla
   the hook. C7-P5's yield gives the refuge cell and then the resumed destination through the
   hook, and each differs from the one before. So each switch's off position is r98 as written.
 
+## Simulation (M8 A3 intake 123: garrisons r19, "may occupy" and capture's hunt rule)
+
+S-0508 r19 answers Q-2926 and Q-2927; the ledger is
+[docs/m8-claims/intake123.md](../m8-claims/intake123.md).
+
+- **"May occupy" (S-0508 claim 1, Q-2927).** `garrison::may_occupy` is the test S-0215 claims 23
+  and 27 ask of a computer-controlled infantry unit whose target is a building: claim 1's test for
+  an occupier type (a type with both marks included), claim 14's assault eligibility for an
+  assaulter type that is not an occupier type, and never for a type with neither mark. An
+  infiltrator type goes for the building whatever it gives (`process::computer_taker_target`). The
+  arrival test of claim 2 (`garrison::attempt`) uses the same function. S-0309 claim 25 (e) still
+  uses claim 1's test (`garrison::may_enter`), which an assaulter that is not an occupier never
+  passes.
+- **Units on their way (claim 1, Q-2926).** Nothing changes: `targeting::may_garrison` compares the
+  occupants inside with the capacity, and no place is reserved for a unit bound for the building.
+- **Capture's hunt rule (S-0215 claim 28).** `process::capture_hunt_rule` applies it in rows 2 and
+  4 for the owners that keep the original's computer-controlled rules in our engine: the neutral
+  and special houses and the marked test-only computer-controlled player houses (S-0215 Terms).
+  The destination is cleared and *hunt* queued, replacing what the fall-back or scatter queued.
+  Occupier types are left out by type (S-0508 claim 4, r19), *eaten* never takes it, and an
+  aircraft that S-0501 claim 34 holds ignores it (S-0501 claim 49). The seam row had read the
+  claim's "In our engine the hunt rule never applies" for every house; S-0215's Terms limit such a
+  sentence to the player houses. Player houses, our AI's included, are human-controlled and are
+  not reached.
+- **Formats.** Save 127, AI game 93.
+
 ## Simulation (M8 A3 intake 118: S-0501 r167 and r172)
 
 Q-2802 and Q-2821 answered; the ledger is [docs/m8-claims/intake118.md](../m8-claims/intake118.md).

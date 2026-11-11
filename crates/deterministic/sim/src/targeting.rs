@@ -691,6 +691,7 @@ pub fn may_garrison(w: &World, actor: ObjectId, t: ObjectId) -> bool {
         return false;
     }
     // spec: S-0508 claim 1 (the occupant count is not equal to the occupant capacity: equality only, quirks.garrison_capacity_equality; off: the count must be below the capacity)
+    // spec: S-0508 claim 1 (r19, Q-2926: units on their way count for nothing; the count is that of the occupants inside, with no place held for a unit that has the building as target or destination)
     let n = crate::econ::power::occupants(w, t);
     let full = if w.rules().quirks.garrison_capacity_equality {
         n == tb.building.max_occupants

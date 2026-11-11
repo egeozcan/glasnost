@@ -155,6 +155,25 @@ pub fn may_enter(w: &World, unit: ObjectId, b: ObjectId) -> bool {
     crate::targeting::may_garrison(w, unit, b)
 }
 
+/// Whether infantry unit `unit` "may occupy" building `b` in the sense of
+/// S-0215 claims 23 and 27 (S-0508 claim 1, r19, Q-2927), which is also the
+/// test of an arrival (claim 2): claim 1's test for a unit of an occupier
+/// type (a type with both marks included, claim 14), claim 14's assault
+/// eligibility for a unit of an assaulter type that is not an occupier type,
+/// and never for a type with neither mark.
+pub fn may_occupy(w: &World, unit: ObjectId, b: ObjectId) -> bool {
+    if occupier(w, unit) {
+        // spec: S-0508 claim 1 (r19, Q-2927: for a unit of an occupier type, this claim's test) and claim 14 (a type with both marks behaves as an occupier type only)
+        may_enter(w, unit, b)
+    } else if assaulter(w, unit) {
+        // spec: S-0508 claim 1 (r19, Q-2927: for an assaulter type that is not an occupier type, claim 14's assault eligibility)
+        assault_eligible(w, unit, b)
+    } else {
+        // spec: S-0508 claim 1 (r19, Q-2927: never met by a type with neither mark)
+        false
+    }
+}
+
 /// The complete assault eligibility test of claim 14 for an infantry unit of
 /// an assaulter type that is not an occupier type.
 pub fn assault_eligible(w: &World, unit: ObjectId, b: ObjectId) -> bool {
@@ -195,15 +214,10 @@ pub fn assault_eligible(w: &World, unit: ObjectId, b: ObjectId) -> bool {
 /// An arrival of an occupier or assaulter type at its destination building
 /// (claim 2): the entry attempt. Returns whether the unit left the map.
 pub fn attempt(w: &mut World, unit: ObjectId, b: ObjectId) -> bool {
+    // spec: S-0508 claim 2 (an arrival of an occupier type or an assaulter type) and Terms and claim 14 (a type with both marks behaves as an occupier type only: claim 1's test, else claim 14's assault eligibility)
     let occ = occupier(w, unit);
-    // spec: S-0508 Terms and claim 14 (a type with both marks behaves as an occupier type only)
-    let passes = if occ {
-        may_enter(w, unit, b)
-    } else {
-        assault_eligible(w, unit, b)
-    };
-    if !passes {
-        // spec: S-0508 claim 4 (a failed attempt: no raise, destination cleared, scatter from the building's centre)
+    if !may_occupy(w, unit, b) {
+        // spec: S-0508 claim 4 (a failed attempt: no raise, destination cleared, scatter from the building's centre; r19: the target is not changed)
         crate::structures::entry::refuse(w, unit, b);
         return false;
     }
