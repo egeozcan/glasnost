@@ -90,7 +90,14 @@ fn a_routed_order_from_outside_is_refused() {
     // The same order inside the simulation's route marker, from outside.
     let (mut w, b) = routed_buggy();
     let before = steps(&w, b);
-    let taken = orders::issue(&mut w, A, Order::Routed(Box::new(Order::Stop { actor: b })));
+    let marked = Order::Routed(orders::RoutedOrder {
+        actor: b,
+        behaviour: Behaviour::Guard,
+        attack_move: false,
+        target: None,
+        dest: None,
+    });
+    let taken = orders::issue(&mut w, A, marked);
     testkit::run(&mut w, 1);
     assert!(
         !taken,

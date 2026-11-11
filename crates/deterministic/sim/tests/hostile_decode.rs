@@ -7,7 +7,7 @@
 use glasnost_sim::orders::Order;
 use glasnost_sim::save::{FORMAT_VERSION, Replay};
 use glasnost_sim::testkit::setup;
-use glasnost_sim::world::HouseId;
+use glasnost_sim::world::{HouseId, ObjectId};
 
 /// Levels of nesting: what a 64 KiB relay message holds.
 const DEPTH: usize = 60_000;
@@ -50,6 +50,23 @@ fn deeply_nested_order_bytes_decode_without_overflowing_the_stack() {
         // Whatever it decodes to, it is dropped here too.
         drop(r);
     });
+}
+
+/// The marker holds a behaviour order's fields now, so the bytes of every
+/// order that input sends are what they were: the wire format keeps its
+/// version. Each order kind's tag is its place in the list of kinds.
+// nocite: our own input validation (#155): the encoding of input orders is unchanged
+#[test]
+fn input_orders_keep_their_bytes() {
+    let bytes = |o: Order| postcard::to_allocvec(&o).unwrap();
+    assert_eq!(bytes(Order::Stop { actor: ObjectId(7) }), [1, 7]);
+    assert_eq!(bytes(Order::Cheer), [5]);
+    assert_eq!(bytes(Order::Surrender), [17]);
+    assert_eq!(bytes(Order::Detonate { actor: ObjectId(300) }), [19, 172, 2]);
+    assert_eq!(bytes(Order::GameSpeed { speed: 4 }), [21, 4]);
+    assert_eq!(bytes(Order::RouteCommit), [24]);
+    assert_eq!(bytes(Order::RouteDelete { point: 3 }), [25, 3]);
+    assert_eq!(marker_tag(), 26);
 }
 
 // nocite: our own input validation (#155): the same bytes inside a replay file

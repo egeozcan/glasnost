@@ -1125,7 +1125,7 @@ fn issue_next(w: &mut World, id: ObjectId) {
         lower(w, house);
     }
     // spec: S-0213 claim 16b (revision 84: the order a holder issues for a point is the one recorded for it at the add, or copied to it at a join, as changed by a loop's attack-move change; it is not classified anew when it is issued) and Changes for other specs (S-0215 claim 13: the route row's object classification, service and alliance guards and cell-action fallback do not apply to these points)
-    let order = Order::Behaviour {
+    let order = orders::RoutedOrder {
         actor: id,
         behaviour: step.behaviour,
         attack_move: step.attack_move,
@@ -1135,7 +1135,7 @@ fn issue_next(w: &mut World, id: ObjectId) {
     // spec: S-0213 claim 16f (a point issued from a route without a loop or before a loop's first point that no route holds any more is deleted at once)
     drop_orphans(w);
     // spec: S-0215 claim 13 (the route point issues an order through the ordinary order timing of S-0213 claim 1) and S-0213 claim 17 (orders a route issues for its points do not end it)
-    orders::issue(w, owner, Order::Routed(Box::new(order)));
+    orders::issue_routed(w, owner, order);
 }
 
 /// An ordinary route-mode click by `house` with `selection`, at its release
