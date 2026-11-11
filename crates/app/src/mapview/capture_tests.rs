@@ -1098,6 +1098,83 @@ fn a_building_placed_in_play_opens_at_its_completion() {
     );
 }
 
+/// #87. spec: S-0606 claims 6 and 12 (the walls' event starts the special slots) and S-0108
+/// claim 11 (a completed building's slots run)
+///
+/// A walls event of a tick in which the building's type has not been drawn yet (a network game
+/// that ticks without drawing, or a type's first tick) is kept until the type's slot definitions
+/// are known, not dropped.
+#[test]
+fn a_walls_event_before_the_first_drawing_is_kept() {
+    use glasnost_sim::combat::effects::Effect;
+    let (import, catalogue, assets) = import_with("ActiveAnim=SLOTL\nSpecialAnim=SLOTL\n");
+    let map = testkit::empty_map(SIZE);
+    let rules = rules(false);
+    let setup = setup();
+    let world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    // A building of a type not drawn yet enters in play; ticks without
+    // drawing follow, and in the last one the walls' event starts
+    // special-1.
+    let b = testkit::spawn(
+        &mut live.world,
+        SimKind::Building,
+        "HUTX",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    live.step();
+    live.step();
+    live.world.effects.push(Effect::SpecialAnims {
+        building: b,
+        slots: [1, 0],
+        start: true,
+        damaged: false,
+    });
+    live.after_tick();
+    // Drawing resumes.
+    live.redraw(&inputs, &mut scene);
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    let names = live.slot_names(b);
+    assert!(
+        names.iter().any(|n| n.starts_with("Special1=")),
+        "special-1 runs: {names:?}"
+    );
+    // A second redraw and tick do not start it again.
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(
+        live.slot_names(b)
+            .iter()
+            .filter(|n| n.starts_with("Special1="))
+            .count(),
+        1
+    );
+}
+
 /// The superweapon slots of a HUTX that has the superweapon CURTX
 /// (recharge 0.1 minutes, 90 ticks, S-0512): its art starts SLOTL in
 /// *super-1* and in *super-3*; with `reads` the switch
