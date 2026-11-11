@@ -949,11 +949,7 @@ impl Session {
             )
             .displacement
         });
-        // spec: S-0101 claim 12 (edge scrolling only without a mouse button held)
-        let pointer = self
-            .pointer
-            .filter(|_| edge && self.press.is_none())
-            .map(|p| (p.x, p.y));
+        let pointer = self.edge_pointer(edge);
         let e = self.edge.cycle(
             pointer,
             self.screen,
@@ -965,6 +961,16 @@ impl Session {
         let a = scroll::arrows(held);
         // spec: S-0101 claims 14 and 16 (mouse and arrow requests add before the next view position, subject to F5)
         self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
+    }
+
+    /// The pointer as edge scrolling sees it, for its request and for its
+    /// cursor alike (#86): none while edge scrolling is suppressed (`live`
+    /// false) or a mouse button is held.
+    fn edge_pointer(&self, live: bool) -> Option<(i32, i32)> {
+        // spec: S-0101 claim 12 (edge scrolling only without a mouse button held)
+        self.pointer
+            .filter(|_| live && self.press.is_none())
+            .map(|p| (p.x, p.y))
     }
 
     /// Whether F5 blocks a one-pixel scroll in a screen direction from the
@@ -2410,10 +2416,11 @@ impl Session {
             .filter(|_| self.right.is_some_and(|r| r.scrolling))
             .map(|r| cursor::drag(r, size.0, size.1));
         // spec: S-0213 claim 24 (during edge scrolling the cursor shows the requested screen direction; the whole outer edge, sidebar included, selects it)
+        // spec: S-0101 claim 12 (no edge scrolling, so no edge-scroll cursor, while a mouse button is held; #86)
         let edge = drag.or_else(|| {
             self.edge
                 .shown_direction(
-                    self.pointer.map(|p| (p.x, p.y)),
+                    self.edge_pointer(self.edge_live),
                     self.screen,
                     self.scroll_index,
                 )
