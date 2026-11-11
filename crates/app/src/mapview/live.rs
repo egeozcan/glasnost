@@ -3080,6 +3080,9 @@ impl Live {
             .collect();
         let (lambda, lambda_air) = object_levels(&self.world);
         self.painter.set_object_levels(lambda, lambda_air);
+        // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)
+        self.painter
+            .set_effect_tint(glasnost_sim::lighting::tint(&self.world));
         let (entries, notes) = self.painter.mobiles(inputs, scene, &mobiles);
         self.notes.extend(notes);
         let mut by_code: BTreeMap<u32, GroundEntry> = mobiles

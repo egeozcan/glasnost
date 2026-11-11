@@ -1110,7 +1110,9 @@ impl Lights {
 #[derive(Default)]
 struct Rows {
     tiles: BTreeMap<TileTable, (usize, usize)>,
-    houses: BTreeMap<[u8; 3], (usize, usize)>,
+    /// The 53-shade house-colour tables by colour definition and the tint
+    /// (‰) they are shaded with (S-0104 claim 3).
+    houses: BTreeMap<([u8; 3], [i32; 3]), (usize, usize)>,
     /// The start-up tables: `false` the resource table, `true` the mine
     /// table (S-0112 claim 2).
     startup: BTreeMap<bool, (usize, usize)>,
@@ -1615,17 +1617,24 @@ impl<'a> Builder<'a> {
     }
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
-        let (base, n) = match self.p.rows.houses.get(&hsv) {
+        let tint = match self.p.effect_tint {
+            // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour
+            // palettes); Formulas, "Map value storage" (‰ = hundredths × 10)
+            Some(t) => t.map(|c| c * 10),
+            // spec: S-0104 claim 3 (otherwise the house-colour palettes are shaded with white light)
+            None => WHITE,
+        };
+        let (base, n) = match self.p.rows.houses.get(&(hsv, tint)) {
             Some(r) => *r,
             None => {
                 let pal = house_palette(&self.palettes.unit, hsv);
                 // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
-                let t = light::shade_table(&pal, WHITE, HOUSE_ROWS, Some(TINT_EXEMPT));
+                let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
                 let base = self.built.scene.rows.len();
                 for row in &t {
                     self.built.scene.add_row(row565(row));
                 }
-                self.p.rows.houses.insert(hsv, (base, t.len()));
+                self.p.rows.houses.insert((hsv, tint), (base, t.len()));
                 (base, t.len())
             }
         };
@@ -6062,7 +6071,9 @@ impl Painter {
     ///
     /// Our presentation: a full recompute of every cell with the chosen
     /// set's terms and its tint as the map tint, which stands in for claim
-    /// 5's retint of the tintable tables and claim 9's incremental update;
+    /// 5's retint of the tile shade tables and claim 9's incremental update
+    /// (the house-colour tables take the effect tint by
+    /// [`Painter::set_effect_tint`]);
     /// claim 10's and claim 16's height terms and the static objects of
     /// the cell pass are not followed (a seam of the view, not of the
     /// game).
