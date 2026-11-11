@@ -40,8 +40,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The desktop game's sound (cpal, feature `audio` of
       # glasnost-platform-native) links ALSA.
+      # Retries and a step timeout: a slow or failing Ubuntu mirror should
+      # retry, then fail in minutes, not hang the job.
       - name: Install the ALSA development package
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev
+        timeout-minutes: 10
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends libasound2-dev
       - name: clippy, whole workspace (simulation crates use crates/deterministic/clippy.toml)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # An explicit list: glasnost-relay (a native tokio server) and
@@ -79,7 +82,8 @@ jobs:
           sudo docker image prune --all --force
           df -h /
       - name: Install lavapipe (software Vulkan) for the offscreen render test, and ALSA's development package for the desktop game's sound
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libasound2-dev
+        timeout-minutes: 10
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends mesa-vulkan-drivers libasound2-dev
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked
@@ -175,6 +179,7 @@ jobs:
       - working-directory: web-tests
         run: npm ci
       - working-directory: web-tests
+        timeout-minutes: 15
         run: npx playwright install --with-deps ${{ matrix.browser }}
       - working-directory: web-tests
         run: ${{ matrix.launch }} node smoke.mjs --browser ${{ matrix.browser }} --backend webgl2 ${{ matrix.headed }}
@@ -217,6 +222,7 @@ jobs:
       - working-directory: web-tests
         run: npm ci
       - working-directory: web-tests
+        timeout-minutes: 15
         run: npx playwright install --with-deps chromium
       - working-directory: web-tests
         run: node smoke.mjs --browser chromium --backend auto --webgpu --expect WebGPU
