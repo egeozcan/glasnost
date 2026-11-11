@@ -343,7 +343,7 @@ fn a_controller_riding_an_open_transport_takes_and_loses_a_victim() {
     assert!(!mind::mind_controlled(&w, grunt));
 }
 
-fn attack(w: &mut World, house: u8, actor: ObjectId, target: ObjectId) {
+fn attack(w: &mut World, house: u8, actor: ObjectId, target: ObjectId) -> bool {
     orders::issue(
         w,
         HouseId(house),
@@ -354,7 +354,7 @@ fn attack(w: &mut World, house: u8, actor: ObjectId, target: ObjectId) {
             target: Some(Target::Object(target)),
             dest: None,
         },
-    );
+    )
 }
 
 // Pair: a gattling taken over by mind control while it fires.
@@ -414,9 +414,14 @@ fn an_order_of_the_former_owner_still_applies_in_the_takeover_tick() {
     let mut w = testkit::game_with(&rules(), SIZE, 1);
     let gat = put(&mut w, Kind::Vehicle, "GAT", ALPHA, 0, 0);
     let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, 6, 0);
-    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 6);
     testkit::run(&mut w, 5);
-    attack(&mut w, ALPHA, gat, tgt);
+    // spec: S-0213 claim 15 (a house's orders act only on its own objects: Alpha orders the gattling while it is Alpha's)
+    assert!(
+        attack(&mut w, ALPHA, gat, tgt),
+        "Alpha orders its own object"
+    );
+    // The controller comes now, so that it has not taken the gattling by fire before the order.
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 6);
     assert!(mind::take(&mut w, clone, gat));
     assert_eq!(w.obj(gat).unwrap().target, None, "the guard reset");
     tick::step(&mut w);

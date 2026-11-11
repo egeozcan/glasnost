@@ -78,6 +78,14 @@ impl Rng {
         }
     }
 
+    /// Whether the stream holds together, as [`Rng::new`] makes it: its
+    /// state has the generator's length and the position lies within it. A
+    /// stream decoded from bytes may not (#157).
+    pub fn is_consistent(&self) -> bool {
+        // spec: S-0202 claim 2 (250 words of state)
+        self.state.len() == STATE && self.next < STATE
+    }
+
     /// The next raw value (S-0202 claims 1 and 2).
     pub fn raw(&mut self) -> u32 {
         // spec: S-0202 claim 2 (x_n = x_{n−250} ⊕ x_{n−147})

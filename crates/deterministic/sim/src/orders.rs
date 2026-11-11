@@ -184,16 +184,47 @@ pub enum Order {
         point: u32,
     },
     /// An order a route issued for its point (S-0213 claim 16c, S-0215
-    /// claim 13): applied as the order it holds, without ending the route
-    /// (S-0213 claim 17). Issued by the simulation only, never by input.
-    Routed(Box<Order>),
+    /// claim 13): applied as the behaviour order it holds, without ending
+    /// the route (S-0213 claim 17). Issued by the simulation only
+    /// ([`issue_routed`]); [`issue`] refuses it from input. It holds the
+    /// behaviour order's fields, not an order, so its bytes cannot nest.
+    Routed(RoutedOrder),
+}
+
+/// The behaviour order a route issued for its point (S-0213 claim 16c):
+/// the fields of [`Order::Behaviour`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutedOrder {
+    /// The actor.
+    pub actor: ObjectId,
+    /// The behaviour.
+    pub behaviour: Behaviour,
+    /// An attack-move order.
+    pub attack_move: bool,
+    /// Target.
+    pub target: Option<Target>,
+    /// Destination.
+    pub dest: Option<Target>,
+}
+
+impl RoutedOrder {
+    /// The behaviour order it holds.
+    pub fn order(&self) -> Order {
+        Order::Behaviour {
+            actor: self.actor,
+            behaviour: self.behaviour,
+            attack_move: self.attack_move,
+            target: self.target,
+            dest: self.dest,
+        }
+    }
 }
 
 impl Order {
     /// The actor the order names; house orders have none.
     pub fn actor(&self) -> Option<ObjectId> {
         match *self {
-            Order::Routed(ref o) => o.actor(),
+            Order::Routed(ref r) => Some(r.actor),
             Order::RoutePoint { actor, .. } | Order::RouteJoin { actor, .. } => Some(actor),
             Order::Behaviour { actor, .. }
             | Order::Stop { actor }
@@ -240,7 +271,104 @@ pub fn blocked(w: &World) -> bool {
 
 /// Issues an order in a house's name during the current tick. Returns
 /// whether it was taken (S-0213 claims 1 and 2).
+///
+/// Every order from outside the simulation enters here: a peer's frame
+/// (on every machine, in the same tick), a replay, our AI and the client.
+/// A refused order is not put into the pending list, so it is not applied
+/// and not recorded. The checks read only the simulation's own state, so
+/// every machine refuses the same orders.
 pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
+    // nocite: our own input validation (#155): the route marker is the simulation's own (S-0213 claim 17 lets a route-issued order keep the route), never an input
+    if matches!(order, Order::Routed(_)) {
+        return false;
+    }
+    // nocite: our own input validation (#219): a cell outside the window is refused before any arithmetic on it; S-0213 claim 4 checks no cell, and S-0513 claims 1 and 3 take off-map cells, which the window keeps
+    if !in_window(&order) {
+        return false;
+    }
+    // spec: S-0213 claims 3 and 15 (every house, an AI house included, is held to S-0214's input rules when it issues an order, so a house's orders act only on its own objects) and S-0214 Terms (an actor that is not an own object gets select or nothing: input gives it no order), claim 11's detonate included (offered only on the player's own object); nocite: our own input validation (#220): the test is made where an order enters, so every machine makes it in the same tick; an order taken here still applies after an owner change (claim 15)
+    if let Some(a) = order.actor()
+        && w.obj(a).and_then(|o| o.owner) != Some(house)
+    {
+        return false;
+    }
+    admit(w, house, order)
+}
+
+/// The smallest cell coordinate an order may carry (#219): a map's legal
+/// cells lie in 0 … 511 (S-0009 claim 2), and input clicks only cells of
+/// the map (S-0214 Terms; S-0513 claim 1), so the window holds every
+/// cell a person can give with a whole map's width to spare on each side,
+/// and every coordinate in it keeps lepton and distance arithmetic far
+/// from overflow.
+// nocite: our own input validation (#219): one map's coordinate range below 0
+pub const WINDOW_MIN: i32 = -(glasnost_map::geometry::MAX_COORDINATE + 1);
+
+/// The largest cell coordinate an order may carry (#219).
+// nocite: our own input validation (#219): one map's coordinate range above 511
+pub const WINDOW_MAX: i32 = 2 * glasnost_map::geometry::MAX_COORDINATE + 1;
+
+/// Whether every cell the order carries lies in the window (#219).
+pub fn in_window(o: &Order) -> bool {
+    let inside = |c: CellXY| {
+        (WINDOW_MIN..=WINDOW_MAX).contains(&c.x) && (WINDOW_MIN..=WINDOW_MAX).contains(&c.y)
+    };
+    order_cells(o).into_iter().flatten().all(inside)
+}
+
+/// The cells an order carries, in its targets, destinations, places and
+/// cell fields. Every kind is listed, so a new kind must say its cells.
+// nocite: our own input validation (#219): 3 is the most cells one order kind carries, not a game value
+fn order_cells(o: &Order) -> [Option<CellXY>; 3] {
+    let cell = |t: Option<Target>| match t {
+        Some(Target::Cell(c)) => Some(c),
+        Some(Target::Object(_)) | None => None,
+    };
+    match *o {
+        Order::Behaviour { target, dest, .. } => [cell(target), cell(dest), None],
+        Order::Routed(ref r) => [cell(r.target), cell(r.dest), None],
+        Order::RoutePoint {
+            target,
+            dest,
+            place,
+            ..
+        } => [cell(target), cell(dest), cell(place)],
+        Order::GuardSpot { spot, .. } => [cell(Some(spot)), None, None],
+        Order::RouteJoin { place, .. } => [cell(Some(place)), None, None],
+        Order::Place { cell: c, .. } => [c, None, None],
+        Order::SellWall { cell: c } | Order::FireSuperweapon { cell: c, .. } => {
+            [Some(c), None, None]
+        }
+        Order::Stop { .. }
+        | Order::Scatter { .. }
+        | Order::Deploy { .. }
+        | Order::Cheer
+        | Order::Build { .. }
+        | Order::Hold { .. }
+        | Order::Cancel { .. }
+        | Order::CancelAll { .. }
+        | Order::Sell { .. }
+        | Order::Repair { .. }
+        | Order::PowerOff { .. }
+        | Order::PowerOn { .. }
+        | Order::Primary { .. }
+        | Order::Surrender
+        | Order::Alliance { .. }
+        | Order::Detonate { .. }
+        | Order::GameSpeed { .. }
+        | Order::RouteCommit
+        | Order::RouteDelete { .. } => [None, None, None],
+    }
+}
+
+/// Issues the order a route gives for its point (S-0213 claim 16c), in
+/// the name of the route holder's owner.
+pub(crate) fn issue_routed(w: &mut World, house: HouseId, order: RoutedOrder) -> bool {
+    admit(w, house, Order::Routed(order))
+}
+
+/// The checks of S-0213 claims 1 to 3 and the pending list's limit.
+fn admit(w: &mut World, house: HouseId, order: Order) -> bool {
     // spec: S-0213 claim 11 and quirks.detonate_in_planter_name (the detonate order is issued in the name of the planter's house; off: in the issuing house's name)
     let house = match order {
         Order::Detonate { actor } if w.rules().quirks.detonate_in_planter_name => w
@@ -314,7 +442,7 @@ pub fn apply_pending(w: &mut World) {
                 // spec: S-0107 r46 claim 11, Changes of target (a change made earlier by a rule that does not test it is settled first, so the order's own change is told apart)
                 crate::infantry::watch_test(w, a);
             }
-            apply_other(w, HouseId(hi as u8), unrouted(o));
+            apply_other(w, HouseId(hi as u8), &unrouted(o));
             if let Some(a) = actor {
                 // spec: S-0215 r118 claim 11 (Other endings: a change of an infantry unit's target by an order ends its attack state when the order takes effect, so no start after it sees the state) and S-0107 r46 claim 11, Changes of target (an order when it takes effect; the change asks for deployed, prone or stand)
                 crate::infantry::watch_test(w, a);
@@ -324,7 +452,7 @@ pub fn apply_pending(w: &mut World) {
         }
         // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
         let marked: Vec<Order> = orders.into_iter().filter(is_behaviour).collect();
-        let behaviour: Vec<Order> = marked.iter().map(|o| unrouted(o).clone()).collect();
+        let behaviour: Vec<Order> = marked.iter().map(unrouted).collect();
         let dests = group_destinations(w, &behaviour);
         for ((o, d), m) in behaviour.iter().zip(dests).zip(&marked) {
             // spec: S-0213 claim 17 (a behaviour order ends the actor's route when applied, unless a route issued it)
@@ -346,16 +474,16 @@ pub fn apply_pending(w: &mut World) {
 }
 
 /// The order a route issued, or the order itself.
-fn unrouted(o: &Order) -> &Order {
+fn unrouted(o: &Order) -> Order {
     match o {
-        Order::Routed(inner) => unrouted(inner),
-        o => o,
+        Order::Routed(r) => r.order(),
+        o => o.clone(),
     }
 }
 
 /// A behaviour order (S-0213 claim 3), a route-issued one included.
 fn is_behaviour(o: &Order) -> bool {
-    matches!(unrouted(o), Order::Behaviour { .. })
+    matches!(o, Order::Behaviour { .. } | Order::Routed(_))
 }
 
 /// Live and on the map (S-0213 Terms).

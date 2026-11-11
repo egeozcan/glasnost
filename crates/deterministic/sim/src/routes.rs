@@ -37,6 +37,14 @@ pub const HOLDER_LIMIT: u32 = 128; // spec: S-0213 Constants (route-holder limit
 /// The most points a point add takes a route to (S-0213 claim 16b).
 pub const MAX_POINTS: usize = 16; // spec: S-0213 claim 16b (a point add is refused when the route already holds 16 points)
 
+/// The most steps any route holds (#158). S-0213 claim 16b refuses a
+/// point add only at exactly 16 points and lets a join's copy pass 16
+/// "whatever their number", so joins could double a route without end. A
+/// point add to a route of this length is refused with no message, and a
+/// join whose copy would take a route past it does nothing (Q-2971).
+// nocite: our own input validation (#158): 64 times the 16 points that point adds alone give a route, far above any route a person makes
+pub const MAX_STEPS: usize = 1024;
+
 /// The smallest loop input can make (S-0213 claim 16c), and the size below
 /// which a deletion cancels a loop (claim 16e).
 pub const MIN_LOOP: usize = 3; // spec: S-0213 claims 16c and 16e (a loop made by input holds at least 3 points; one left with fewer than 3 is cancelled)
@@ -693,6 +701,10 @@ pub fn apply_point(
     let Some(at) = place else { return };
     let cell = place_cell(w, at).unwrap_or(CellXY::new(0, 0));
     if let Some(r) = w.routes.routes.get(&actor) {
+        // nocite: our own input validation (#158): a route at the step bound takes no point add, silently (Q-2971)
+        if r.steps.len() >= MAX_STEPS {
+            return;
+        }
         // spec: S-0213 claim 16b, A point that a route holds twice (the action read at the last point is the one recorded at that point's earliest place still in the route)
         let last = r.last_point().and_then(|p| r.action_at(p));
         // spec: S-0213 claim 16b (a point add is refused, when applied, after a terminating or continual last point, in a loop, or at 16 points; each with its own message) and Constants (refused only at exactly 16: a longer route, from a press's copy, is not refused for its length)
@@ -864,6 +876,10 @@ pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32, pl
     let ignores = w.rules().quirks.press_copy_ignores_route_state;
     // spec: S-0213 claim 16b, Who gets a press's orders, and Edge cases (quirks.press_copy_ignores_route_state off: a join does nothing when the copy would take its route past 16 points)
     if !ignores && n + copy.len() > MAX_POINTS {
+        return;
+    }
+    // nocite: our own input validation (#158): a join whose copy would take the route past the step bound does nothing, under either setting of the switch (Q-2971); the copy is not cut, so its loop stays whole
+    if n + copy.len() > MAX_STEPS {
         return;
     }
     let since = w.routes.stamp;
@@ -1125,7 +1141,7 @@ fn issue_next(w: &mut World, id: ObjectId) {
         lower(w, house);
     }
     // spec: S-0213 claim 16b (revision 84: the order a holder issues for a point is the one recorded for it at the add, or copied to it at a join, as changed by a loop's attack-move change; it is not classified anew when it is issued) and Changes for other specs (S-0215 claim 13: the route row's object classification, service and alliance guards and cell-action fallback do not apply to these points)
-    let order = Order::Behaviour {
+    let order = orders::RoutedOrder {
         actor: id,
         behaviour: step.behaviour,
         attack_move: step.attack_move,
@@ -1135,7 +1151,7 @@ fn issue_next(w: &mut World, id: ObjectId) {
     // spec: S-0213 claim 16f (a point issued from a route without a loop or before a loop's first point that no route holds any more is deleted at once)
     drop_orphans(w);
     // spec: S-0215 claim 13 (the route point issues an order through the ordinary order timing of S-0213 claim 1) and S-0213 claim 17 (orders a route issues for its points do not end it)
-    orders::issue(w, owner, Order::Routed(Box::new(order)));
+    orders::issue_routed(w, owner, order);
 }
 
 /// An ordinary route-mode click by `house` with `selection`, at its release
