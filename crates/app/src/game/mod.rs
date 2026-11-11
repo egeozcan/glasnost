@@ -28,6 +28,7 @@
 pub mod band;
 pub mod bench;
 pub mod bot;
+pub mod brawl;
 pub mod captions;
 pub mod capture;
 pub mod client;
