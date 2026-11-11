@@ -482,6 +482,28 @@ fn a_held_button_shows_no_edge_cursor() {
     );
 }
 
+/// #83. spec: S-0101 F8 (the cursor probe reads each cell's height level) and F1 (a cell's
+/// level lifts it by the terrain lift per level)
+///
+/// With every cell of the world raised by 4 levels in play, the cell under a point is the one
+/// the load-time map gives 4 terrain lifts lower on the screen.
+#[test]
+fn the_cursor_cell_follows_the_world_levels() {
+    let mut c = super::access_tests::client((800, 600), 100);
+    super::access_tests::start_by_keyboard(&mut c);
+    let s = c.session.as_mut().expect("a game");
+    let m = s.map_rect();
+    let lift = glasnost_render::projection::TERRAIN_LIFT * 4;
+    let p = Point::new(m.x + m.w / 2, m.y + m.h / 2 - lift);
+    let lower = s.under(Point::new(p.x, p.y + lift)).0;
+    let grid = &mut s.play.game.world.cells.grid;
+    let all: Vec<_> = grid.iter().map(|(xy, _)| xy).collect();
+    for xy in all {
+        grid.get_mut(xy).expect("a legal cell").level += 4;
+    }
+    assert_eq!(s.under(p).0, lower);
+}
+
 /// Animated cursors of at least four frames (S-0214 table C).
 const ANIMATED: [std::ops::RangeInclusive<u16>; 3] = [
     18..=30,   // spec: S-0214 table C (select, toggle select: 18–30)
