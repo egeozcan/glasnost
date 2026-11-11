@@ -25,6 +25,7 @@ pub mod bridges;
 pub mod cells;
 pub mod cloak;
 pub mod combat;
+pub mod computer;
 pub mod consts;
 pub mod corridor;
 pub mod crates;

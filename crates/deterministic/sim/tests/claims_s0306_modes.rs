@@ -427,6 +427,8 @@ fn claim18_land_row_stops_retaliation_and_mode_zero_fires_back() {
 fn claim18_retaliation_keeps_the_guard_processing_timer() {
     let (mut w, a, x) = duel("AAV", 0, 0, "AGV", land::CLEAR);
     w.houses[0].human = false;
+    // spec: S-0217 claims 2 and 4 (the test holds the house's next check past its ticks: a house with no building would otherwise have hunt queued for the copy at its first check)
+    w.houses[0].checks.next = i32::MAX;
     // Let the copy's guard processing run, so that its timer holds a delay.
     testkit::run(&mut w, 8);
     let o = w.obj(a).unwrap();

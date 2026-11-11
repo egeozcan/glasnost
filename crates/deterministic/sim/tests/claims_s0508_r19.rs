@@ -154,6 +154,8 @@ fn go_inside(w: &mut World, u: ObjectId, b: ObjectId) {
 #[test]
 fn units_on_their_way_hold_no_place() {
     let mut w = game(false);
+    // spec: S-0217 claims 2 and 4 (the test holds house 0's next check past its ticks: owning only the occupied hut, its check would put the occupants out with hunt; claims_s0217 tests that)
+    w.houses[0].checks.next = i32::MAX;
     let hut = put(&mut w, Kind::Building, "HUT", 2, 5, 0);
     let n = CAP + 2;
     let units: Vec<ObjectId> = (0..n)

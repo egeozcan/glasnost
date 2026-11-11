@@ -2254,7 +2254,10 @@ fn owners_game(r: &Ruleset, ore: &[(CellXY, u8, u8)]) -> World {
         });
     }
     let rules = Arc::new(SimRules::new(r, "synthetic-test"));
-    glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &s).unwrap()
+    let mut w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &s).unwrap();
+    // spec: S-0217 claims 2 to 4 (the test holds house 3's next check past its ticks: with no factory building its checks would give its miners hunt, and sell its refinery after tick 900)
+    w.houses[3].checks.next = i32::MAX;
+    w
 }
 
 /// Where the four houses' miners stand: off tiberium land, more than the

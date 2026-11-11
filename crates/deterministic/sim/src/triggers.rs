@@ -1138,9 +1138,9 @@ fn action(
         // spec: S-0508 Import mapping and S-0011 claim 23 (6 house-wide hunt: the number slot is a house value; its garrison evictions hunt, without inside fallback)
         6 => {
             if let Some(h) = crate::mp_triggers::resolve_house(w, a.number, triggering) {
-                crate::structures::garrison::hunt_order(w, h);
+                // spec: S-0217 claim 1 (map action code 6 gives the house-wide hunt order to the house its number slot resolves to; a rule of our engine for every house) and S-0508 claim 13 (r39)
+                crate::computer::hunt_order(w, h);
             }
-            w.note("S-0508 claim 13: the house-wide hunt action's effect on units that are not garrison occupants belongs to the computer-player system and is not built");
         }
         // spec: S-0011 claim 24 (14 change owner: every present object that carries the tag holding the firing trigger changes its owner to the resolved house, without announcement; a carrier inside a transport or building keeps its owner)
         14 => {

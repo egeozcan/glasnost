@@ -331,6 +331,8 @@ fn claim_19_b6_b_case_2_owner_rule_with_player_scatter_off() {
     // A test-only computer-controlled player house: the request.
     let (mut w, v, a) = cart_scene(&r, 9);
     w.houses[1].human = false;
+    // spec: S-0217 claims 2 and 4 (the test holds the house's next check past its ticks: a house with no building would otherwise have hunt queued for the vehicle before the hit)
+    w.houses[1].checks.next = i32::MAX;
     shoot(&mut w, a, v);
     assert!(
         scattered(&w, v),
@@ -404,6 +406,8 @@ fn b6_fg(scatter: bool, retaliate: bool) -> Ruleset {
 fn hunt_scene(r: &Ruleset, name: &str, h: u8) -> (World, ObjectId, ObjectId) {
     let mut w = game(r, None, false);
     w.houses[1].human = false;
+    // spec: S-0217 claims 2 and 4 (the test holds the house's next check past its ticks: a house with no building would otherwise have hunt queued for G at tick 0's check, processed before the judged hit)
+    w.houses[1].checks.next = i32::MAX;
     let v = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 0, 0), 0);
     let a = spawn(&mut w, Kind::Vehicle, name, h, mid(SIZE, -9, 0), 64);
     force(&mut w, a, Behaviour::Sleep);

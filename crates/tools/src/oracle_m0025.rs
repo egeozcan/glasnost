@@ -12,7 +12,7 @@
 //!   *A*'s lobby team) and *C* (the Russians, on another team), and
 //!   M-0021's British observer with its one building ([`m21::observer_building`]).
 //!   *A* and *B* take M-0001's two computer start positions, *C* the map's
-//!   start position 2 (the record keeps its own local: our choice), and
+//!   start position 2 (the record does not report its own: our choice), and
 //!   every house's starting construction vehicle and the neutral house's
 //!   objects are taken off before the units, as in M-0021.
 //! - **Types** ([`test_ruleset`]): built on M-0021's test chassis. The
@@ -20,12 +20,12 @@
 //!   choice of the two.
 //! - **Units**: *G* of *A* on the arena's centre cell W, *Q* of *C* on the
 //!   cell east of it, the firer 7 cells south of *Q* (cells and facings
-//!   our choice; the record keeps its own local), then the observer's
+//!   our choice; the record does not report its own), then the observer's
 //!   building. Each unit is placed as the arena places its groups and
 //!   queued in *hunt* ([`oracle::place_unit`]); no order is given.
 //!
-//! The record keeps the hit counts, ticks and cells local (Notes, *Kept
-//! local*), so the full report goes only to the git-ignored local lane.
+//! The record does not report the hit counts, ticks and cells (Notes, *Not
+//! reported*), so the full report goes only to the git-ignored local lane.
 //!
 //! Tooling only: the recorder reads state and effects after each tick and
 //! touches no simulation state.
@@ -73,7 +73,7 @@ pub const FIRER_SPREAD: &str = "1.5";
 /// 7 cells from *Q*).
 pub const FIRER_DISTANCE: i32 = 7;
 /// *C*'s start position: another of the map's (measure: M-0025, Setup,
-/// Houses; the record keeps its own local, so this is our choice).
+/// Houses; the record does not report its own, so this is our choice).
 /// design: nocite (a harness choice)
 pub const C_START: u32 = 2;
 /// The special armour class *G* cannot harm (measure: M-0025: one of the

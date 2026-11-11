@@ -969,6 +969,8 @@ fn auto_deploy_tick_as(
     if let Some(i) = test_index {
         w.houses[1].human = false;
         w.houses[1].econ.setup.difficulty = i;
+        // spec: S-0217 claims 2 and 4 (the test holds the house's next check past its ticks: a house with no building would otherwise have hunt queued for the walker in guard)
+        w.houses[1].checks.next = i32::MAX;
     }
     let inf = of(&w, 1, Kind::Infantry, 0)[0];
     let s = w.tick;

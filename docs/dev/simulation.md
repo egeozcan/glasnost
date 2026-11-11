@@ -1333,6 +1333,33 @@ S-0508 r19 answers Q-2926 and Q-2927; the ledger is
   not reached.
 - **Formats.** Save 127, AI game 93.
 
+## Simulation (M8 A3 intake 124: the house-wide hunt order and the test houses' checks)
+
+S-0217 (new) and S-0508 r39 answer Q-2951; the ledger is
+[docs/m8-claims/intake124.md](../m8-claims/intake124.md). The code is `glasnost_sim::computer`.
+
+- **The house-wide hunt order (S-0217 claim 1).** `computer::hunt_order` queues *hunt* (S-0215
+  claim 7, no immediate start; S-0501 claim 34's aircraft row through `air::queue`) for every
+  infantry, vehicle and aircraft of the house on the map that is not a passenger, then
+  `garrison::hunt_order` evicts with hunting the occupants of every building the house owns at
+  that moment, in reverse creation order (the object map's order reversed). Map action code 6 gives
+  it (S-0508 claim 13, r39); before, the action reached only the occupants.
+- **The checks (claims 2 to 4).** Only a test-only computer-controlled player house (a player house
+  with `human` clear, which only the oracle arena and its oracles make) checks. Our AI houses are
+  human-controlled and never check; the AI crate is untouched. `computer::house_update` runs in the
+  house's update after `triggers::house_raise` (an engine rule of claim 2): at tick 0 and then at
+  *t* + 105 + R(1, 7), the draw at the end of the check. A check sells every own building on the
+  map with health left in order of ownership (`combat.acquired`, then id) through `econ::sell::sell`
+  and then gives the order when the house is not held (*t* > *L* + 900) and owns no factory
+  building on the map (claim 3); it gives the order alone when the house owns no building other
+  than occupied civilian ones and no construction vehicle (claim 4), held or not.
+- **The last base hit tick *L*.** `combat::damage::apply_hit` calls `computer::building_hit` for a
+  hit on a building that lowers its health and has an attacker in the world (Q-2986's interim);
+  a one-cell building that undeploys into a vehicle (`econ::sell::vehicle_like`) does not set it.
+  A building's own damage without the self-damage mark never reaches it (S-0302 claim 8 stage 1).
+- **State.** `House::checks` (`computer::Checks`: the next check's tick and *L*), saved.
+- **Formats.** Save 129, AI game 97.
+
 ## Simulation (M8 A3 intake 118: S-0501 r167 and r172)
 
 Q-2802 and Q-2821 answered; the ledger is [docs/m8-claims/intake118.md](../m8-claims/intake118.md).
