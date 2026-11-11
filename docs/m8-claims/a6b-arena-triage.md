@@ -15,6 +15,12 @@ with a test); **(b)** the specs are silent or ambiguous (request filed or named,
 within noise or the known spread gap (A1); **(e)** a record that a new oracle run would settle (a
 wishlist entry in [oracle-wishlist.md](oracle-wishlist.md)).
 
+**Since intake 123** ([intake123.md](intake123.md)): S-0508 r19 answered Q-2926 and Q-2927. It
+confirms the chain of rows 9, 10, 18, 20 and 21 (and row 4) as the original's, so for the
+systematic rows (10, 18, 20) the record and the spec now disagree; the measurement wins, and
+**Q-2951** names them. Intake 123's changes (the assaulter's "may occupy" and capture's hunt rule)
+leave every arena game as it was; the 64-seed counts of those six rows are unchanged.
+
 ## Method
 
 As A6's ([a6-arena-triage.md](a6-arena-triage.md), *Method*): `arena --watch` and `--trace-summary`
@@ -112,8 +118,8 @@ beside its class (b).
 
 | request | question | interim |
 |---|---|---|
-| [Q-2927](../../spec/requests/Q-2927-may-occupy-for-an-assaulter-that-is-not-an-occupier.md) | What "may occupy this one" (S-0215 claims 23 and 27, S-0309 claim 25 (e)) means for an assaulter type that is not an occupier type: S-0508 claim 1's test (never true for it), claim 14's assault eligibility, or claim 1 without the unit-type condition | S-0508 claim 1's test (`garrison::may_enter`); no arena row is known to depend on it |
-| [Q-2926](../../spec/requests/Q-2926-occupiers-of-a-test-house-refused-at-a-full-building.md) | Whether a computer-controlled occupier refused at a full building returns to *hunt*; whether forced *capture* clears the queued *hunt* for good; whether claim 25 (e) counts units already bound for the building; whether the *area guard* search takes the building before the queued *hunt* starts | the claims as built (no workaround) |
+| [Q-2927](../../spec/requests/Q-2927-may-occupy-for-an-assaulter-that-is-not-an-occupier.md) | What "may occupy this one" (S-0215 claims 23 and 27, S-0309 claim 25 (e)) means for an assaulter type that is not an occupier type: S-0508 claim 1's test (never true for it), claim 14's assault eligibility, or claim 1 without the unit-type condition | **answered** by S-0508 r19 claim 1 (claim 14's assault eligibility for claims 23 and 27; part (e) asks only occupier types); built at intake 123 ([intake123.md](intake123.md)) |
+| [Q-2926](../../spec/requests/Q-2926-occupiers-of-a-test-house-refused-at-a-full-building.md) | Whether a computer-controlled occupier refused at a full building returns to *hunt*; whether forced *capture* clears the queued *hunt* for good; whether claim 25 (e) counts units already bound for the building; whether the *area guard* search takes the building before the queued *hunt* starts | **answered** by S-0508 r19 claims 1 and 4: the chain as built is the original's (no place held, no *hunt* after a refusal for an occupier type). The rows still fail; intake 123 filed **Q-2951** naming them ([intake123.md](intake123.md)) |
 
 Q-2928 to Q-2935 are unused.
 
@@ -131,6 +137,8 @@ they were left:
   computer-controlled player house* term overrides for the arena houses (and the neutral and
   special houses keep it). `process::process_capture` cites it as never applying. It does not
   reach the E1 and E2 of rows 10, 18 and 20 (occupier types), so it would not move them.
+  *Built at intake 123* (`process::capture_hunt_rule`; [intake123.md](intake123.md)); the arena
+  did not move.
 - **S-0215 claim 24, vehicle row 4** (`process.rs`, the *attack* vehicle rows) and **claim 26
   row 4** (deploying into a construction yard), original-only rows for computer-controlled owners.
 - **S-0215's original-only automatic deploy row** for computer-controlled deployers.
