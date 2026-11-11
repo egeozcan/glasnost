@@ -318,6 +318,7 @@ pub fn in_window(o: &Order) -> bool {
 
 /// The cells an order carries, in its targets, destinations, places and
 /// cell fields. Every kind is listed, so a new kind must say its cells.
+// nocite: our own input validation (#219): 3 is the most cells one order kind carries, not a game value
 fn order_cells(o: &Order) -> [Option<CellXY>; 3] {
     let cell = |t: Option<Target>| match t {
         Some(Target::Cell(c)) => Some(c),
