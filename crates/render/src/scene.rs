@@ -285,6 +285,25 @@ impl Scene {
         )
     }
 
+    /// Whether `item`'s rectangle contains world pixel `(x, y)`; the cheap
+    /// tests on the item's corner come before the image's size is read.
+    fn covers(&self, item: &Item, x: i32, y: i32) -> bool {
+        if x < item.x || y < item.y {
+            return false;
+        }
+        let (_, _, r, b) = self.bounds(item);
+        x < r && y < b
+    }
+
+    /// Whether `item`'s image pixel at world pixel `(x, y)` is there and not
+    /// transparent.
+    fn opaque_at(&self, item: &Item, x: i32, y: i32) -> bool {
+        self.covers(item, x, y)
+            && self.images[item.image as usize]
+                .get((x - item.x) as u32, (y - item.y) as u32)
+                .is_some_and(|v| v != 0)
+    }
+
     /// Composites the scene for `view` on the CPU.
     pub fn compose(&self, view: &View, filter: &Filter, quirks: &ComposeQuirks) -> Frame {
         self.compose_lit(view, filter, quirks, None)
@@ -413,15 +432,27 @@ impl Scene {
         quirks: &ComposeQuirks,
     ) -> Option<u32> {
         let top = view.origin.1;
+        let candidate = |item: &Item| {
+            item.object
+                .filter(|_| item.paint != Paint::Shadow && item.group != Group::Status)
+        };
+        // design: render (#68): only an item that can supply the object and has an opaque pixel
+        // at the point can win, so the replay ends at the last such item, and there is none at
+        // all when no such item exists (over open ground the pick costs one cheap pass that
+        // skips the items without an object, as before #68).
+        let last = self.items.iter().rposition(|item| {
+            candidate(item).is_some()
+                && filter.shows(item)
+                && item.copies(top).any(|c| self.opaque_at(&c, x, y))
+        })?;
         let mut frame = Frame::new(1, 1, y, view.reference);
         let mut found = None;
-        for item in &self.items {
-            if !filter.shows(item) {
+        for item in &self.items[..=last] {
+            // Only the items with a copy over the point can paint it.
+            if !item.copies(top).any(|c| self.covers(&c, x, y)) || !filter.shows(item) {
                 continue;
             }
-            let candidate = item
-                .object
-                .filter(|_| item.paint != Paint::Shadow && item.group != Group::Status);
+            let candidate = candidate(item);
             for copy in item.copies(top) {
                 let painted = self.draw_item(&mut frame, &copy, (x, y), quirks);
                 if painted > 0 && candidate.is_some() {
