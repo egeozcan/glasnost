@@ -761,6 +761,30 @@ fn smudges_painted_per_covered_cell() {
     assert!(last_smudge < first_overlay);
 }
 
+/// design: render (#111): a smudge whose rules give a huge footprint is walked only over the
+/// cells of the map grid, so the build ends and paints only cells that exist.
+/// spec: S-0102 claim 25, S-0112 claim 3 (one painting per covered cell)
+#[test]
+fn a_huge_smudge_footprint_is_walked_within_the_grid() {
+    let ctx = context_with(&RULES.replace(
+        "[CRATERX]\nWidth=2",
+        "[CRATERX]\nWidth=2147483647\nHeight=2147483647",
+    ));
+    let (b, map) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Smudge]\n0=CRATERX,6,9,0\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "smudge");
+    assert!(!items.is_empty());
+    let side = i64::from(map.cells.footprint().coordinate_side());
+    // At most one painting for each legal cell at or past the smudge's first cell.
+    let legal = (side - 6) * (side - 9);
+    let n = items.len() as i64;
+    assert!(n <= legal, "{n} paintings, {legal} cells");
+}
+
 /// spec: S-0102 claim 23, S-0112 claim 3 (terrain objects at the cell centre; an ore spawner 16 rows
 /// higher with the start-up mine table)
 #[test]
