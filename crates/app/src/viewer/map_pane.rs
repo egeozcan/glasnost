@@ -794,10 +794,8 @@ impl MapPane {
         }
         let avail = ui.available_size();
         let ppp = ui.ctx().pixels_per_point();
-        let size = (
-            ((avail.x * ppp) as u32).max(64),
-            ((avail.y * ppp) as u32).max(64),
-        );
+        let max_side = ui.ctx().input(|i| i.max_texture_side);
+        let size = view_size(avail.x * ppp, avail.y * ppp, max_side);
         if size != self.view_size {
             self.view_size = size;
             let c = self.centre;
@@ -1427,6 +1425,18 @@ fn object_ui(ui: &mut Ui, o: &ObjectInfo) {
     }
 }
 
+/// The map view's size in pixels for an available area of `w × h`
+/// physical pixels: at least 64 a side, and at most `max_side`, the
+/// device's texture limit, which the view's textures must fit.
+///
+/// design: render (#109): a larger pane shows the view at the limit
+/// rather than failing to make its textures.
+fn view_size(w: f32, h: f32, max_side: usize) -> (u32, u32) {
+    let max = u32::try_from(max_side).unwrap_or(u32::MAX).max(64);
+    let side = |v: f32| (v as u32).clamp(64, max);
+    (side(w), side(h))
+}
+
 /// `rules explain` for a type: the history of every value of its type
 /// entry in the converted tree.
 fn explain(loaded: &Loaded, type_name: &str) -> String {
@@ -1454,5 +1464,14 @@ mod tests {
         // The GPU box turns the pass back on.
         pane.set_use_gpu(true);
         assert!(pane.use_gpu);
+    }
+
+    /// design: render (#109): the map view never asks for textures over the device's limit,
+    /// and keeps its 64-pixel floor.
+    #[test]
+    fn the_view_size_stays_within_the_texture_limit() {
+        assert_eq!(view_size(5000.0, 300.0, 4096), (4096, 300));
+        assert_eq!(view_size(10.0, 9000.0, 2048), (64, 2048));
+        assert_eq!(view_size(800.0, 600.0, usize::MAX), (800, 600));
     }
 }

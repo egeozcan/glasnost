@@ -20,7 +20,7 @@ use glasnost_vfs::names::candidates;
 use glasnost_vfs::{ArchiveId, FileRef, Vfs};
 
 use super::map_pane::{MapAction, MapPane};
-use super::preview::{Rgba, rgb, strip, voxel_preview};
+use super::preview::{Rgba, fits, rgb, strip, voxel_preview};
 use super::rules::{RulesAction, RulesData, RulesPane};
 use super::tasks::{self, Purpose, Spawner, TaskResult};
 use glasnost_render::palette::PaletteChoice;
@@ -515,10 +515,16 @@ impl Browser {
         })
     }
 
-    fn picture(&self) -> Option<Result<Rgba, String>> {
+    /// The selected file's picture, its strips wrapped at `max_side`, the
+    /// device's texture limit (#109).
+    fn picture(&self, max_side: usize) -> Option<Result<Rgba, String>> {
         let base = self.base_palette();
         let rows = self.rows_for(&base);
         let text = |e: glasnost_fmt::Error| e.to_string();
+        // Every strip below wraps at the limit.
+        let strip = |img: &glasnost_fmt::image::IndexedImage, rows: &[_], zero: bool| {
+            strip(img, rows, zero, max_side)
+        };
         Some(match &self.preview {
             Preview::Shp(bytes) => Shp::parse(bytes)
                 .and_then(|s| {
@@ -1097,7 +1103,12 @@ impl Browser {
     fn preview_pane(&mut self, ui: &mut Ui, spawner: &dyn Spawner) {
         if self.texture_dirty {
             self.texture_dirty = false;
-            self.texture = match self.picture() {
+            let max_side = ui.ctx().input(|i| i.max_texture_side);
+            // design: render (#109): a picture over the device's texture limit is not uploaded
+            let picture = self
+                .picture(max_side)
+                .map(|r| r.and_then(|p| fits(&p, max_side).map(|()| p)));
+            self.texture = match picture {
                 Some(Ok(p)) if p.width > 0 && p.height > 0 => Some(ui.ctx().load_texture(
                     "preview",
                     egui::ColorImage::from_rgba_unmultiplied([p.width, p.height], &p.pixels),
