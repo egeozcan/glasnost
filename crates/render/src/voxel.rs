@@ -4100,7 +4100,10 @@ mod tests {
             &q(),
         );
         assert_eq!((on.body, on.shadow), (banked.body, banked.shadow));
-        assert_ne!(on.turret, banked.body, "the turret is placed, not the body's");
+        assert_ne!(
+            on.turret, banked.body,
+            "the turret is placed, not the body's"
+        );
         // Facing the drawn heading, the turret turns with the body alone: its frame is D · X(d).
         let t = flying_body_local(raw32(9), &a, &q())
             .translate([vehicle_turret_shift(offset), 0.0, 0.0])

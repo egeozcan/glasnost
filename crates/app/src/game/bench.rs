@@ -1520,7 +1520,11 @@ mod tests {
         }
         assert!(b.finished());
         assert_eq!(b.rows.iter().filter(|r| r.timed).count(), 2);
-        assert!(b.notes.iter().any(|n| n.contains("1 frame")), "{:?}", b.notes);
+        assert!(
+            b.notes.iter().any(|n| n.contains("1 frame")),
+            "{:?}",
+            b.notes
+        );
     }
 
     /// #92: the run's last frame has a total too.

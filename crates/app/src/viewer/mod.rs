@@ -618,8 +618,14 @@ mod tests {
     /// asked for at once, and egui's endless delay asks for nothing.
     #[test]
     fn a_finite_repaint_delay_is_kept() {
-        assert_eq!(delayed_repaint(Duration::from_millis(500), 1_000), Some(1_500));
-        assert_eq!(delayed_repaint(Duration::from_micros(10), 1_000), Some(1_001));
+        assert_eq!(
+            delayed_repaint(Duration::from_millis(500), 1_000),
+            Some(1_500)
+        );
+        assert_eq!(
+            delayed_repaint(Duration::from_micros(10), 1_000),
+            Some(1_001)
+        );
         assert_eq!(delayed_repaint(Duration::ZERO, 1_000), None);
         assert_eq!(delayed_repaint(Duration::MAX, 1_000), None);
     }

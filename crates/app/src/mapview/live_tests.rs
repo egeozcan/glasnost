@@ -994,8 +994,15 @@ fn a_vehicle_placed_later_starts_its_barrel_level() {
     let first = live.mobile(&inputs, cart).expect("the first cart is drawn");
     let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
     let target = voxel::barrel_elevation_after(fire_angle, 1000);
-    assert_ne!(target, voxel::ELEVATION_LEVEL, "the test type's barrel turns");
-    assert_eq!(first.elevation, target, "placed at the start: turned by now");
+    assert_ne!(
+        target,
+        voxel::ELEVATION_LEVEL,
+        "the test type's barrel turns"
+    );
+    assert_eq!(
+        first.elevation, target,
+        "placed at the start: turned by now"
+    );
     // A second cart enters the map after tick 5 (as a factory's would).
     let late = testkit::spawn(
         &mut live.world,

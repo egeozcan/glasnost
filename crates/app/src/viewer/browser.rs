@@ -715,10 +715,7 @@ impl Browser {
                     if let Some(vfs) = self.vfs.take() {
                         self.busy = true;
                         let canvas = self.map.voxel_canvas();
-                        self.spawn(
-                            spawner,
-                            tasks::load_map(vfs, file, origin, options, canvas),
-                        );
+                        self.spawn(spawner, tasks::load_map(vfs, file, origin, options, canvas));
                     }
                 }
                 None => {}
