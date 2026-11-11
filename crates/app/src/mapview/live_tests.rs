@@ -967,6 +967,58 @@ fn combat_live_with(
     (live, built.scene, map, import, catalogue, cart, walker)
 }
 
+/// spec: S-0105 claim 6 and F9 (a vehicle placed on the map starts its
+/// barrel elevation level and turns it toward the fire angle from its
+/// placement, not from the game's start; #81)
+#[test]
+fn a_vehicle_placed_later_starts_its_barrel_level() {
+    use glasnost_render::voxel;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..5 {
+        live.step();
+    }
+    let first = live.mobile(&inputs, cart).expect("the first cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_ne!(target, voxel::ELEVATION_LEVEL, "the test type's barrel turns");
+    assert_eq!(first.elevation, target, "placed at the start: turned by now");
+    // A second cart enters the map after tick 5 (as a factory's would).
+    let late = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 6),
+        16384,
+    );
+    live.after_tick();
+    let elevation = |live: &Live| live.mobile(&inputs, late).expect("drawn").elevation;
+    let mut seen = vec![elevation(&live)];
+    for _ in 0..3 {
+        live.step();
+        seen.push(elevation(&live));
+    }
+    let expected: Vec<u16> = (0..4)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(seen[0], voxel::ELEVATION_LEVEL, "level when first drawn");
+    assert_eq!(seen, expected, "turned from its own placement");
+}
+
 /// spec: S-0309 claim 1 (units in guard find targets in range by
 /// themselves), S-0101 F1 and F2 (a projectile is drawn at its projected
 /// point), S-0111 claims 3, 4, 5 and 6 (the health bars of a selected and
