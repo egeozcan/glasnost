@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 19
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-10
+approved-on: 2026-11-11
 measurements: []
-requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990, Q-2712, Q-2926, Q-2927]
+requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990, Q-2712, Q-2926, Q-2927, Q-2951]
 supersedes: []
 ---
 
@@ -19,9 +19,9 @@ supersedes: []
 How infantry occupy a building whose type can be garrisoned: which units may enter which building,
 when, in what order and up to what number. It also covers how a civilian garrison building changes
 hands with its occupants, and how occupants leave or are lost: an evacuation order, the building
-being badly damaged, destroyed, sold or erased, a map trigger, an assault, or an occupant's own
-house being defeated. Skirmish only; network
-games and campaigns are out of scope.
+being badly damaged, destroyed, sold or erased, a map trigger, the house-wide hunt order of a map
+action or of the computer player's periodic checks (S-0217), an assault, or an occupant's own house
+being defeated. Skirmish only; network games and campaigns are out of scope.
 
 Neighbouring specs own the rest:
 - the order and cursor that send an infantry unit to garrison (S-0214 row I8) and the *capture*
@@ -33,6 +33,7 @@ Neighbouring specs own the rest:
 - when a sale puts the occupants out (S-0408 claim 9) and how a destroyed building's contacts and
   survivors leave (S-0312 claims 17 and 18),
 - the effects of a building ownership change (S-0509 claim 12),
+- the house-wide hunt order and the computer player's checks that give it (S-0217 claims 1 to 4),
 - engineers and capture (S-0509), transports (S-0507) and special attacks (S-0519),
 - the drawing of occupied buildings (S-0108 claim 2) and the announcements (S-0701 claim 28).
 
@@ -154,22 +155,36 @@ Neighbouring specs own the rest:
    claims 11 to 13), as an engineer refusal does (S-0509 claim 4). It stays on the map. The
    refusal does not change its target.
 
-   **No hunt after a refusal (original only).** For a unit of a computer-controlled owner, a
-   *hunt* current or queued when *capture* was forced on it was removed by that force (S-0215
-   claim 9). Capture's hunt rule (S-0215 claim 28) leaves out every unit of an occupier type by
-   its type alone, whether it was refused, lost its target on the way or never set out.
-   An assaulter type that is not an occupier type is not left out. None of S-0215's rules for
-   *capture*, *attack* and the fall-back to rest (claims 14, 23 and 28) gives an occupier-type unit
-   *hunt*, so a refused occupier-type unit does not go back to *hunt* by any of them. The force does
-   not touch a suspended *hunt* (S-0215 claims 9 and 10): a unit whose *hunt* an override such as
-   a retaliation had suspended can have it made current again by a later revert. A new order, a
-   map action or another spec's rule (a berserk hit, S-0610 claim 4, for example) can also give
-   *hunt*. What a refused unit does after the scatter request is not
-   given here (Open questions).
+   **No hunt after a refusal (original only, and test-only computer-controlled player houses).** For
+   a unit of a computer-controlled owner, a *hunt* current or queued when *capture* was forced on it
+   was removed by that force (S-0215 claim 9). Capture's hunt rule (S-0215 claim 28) leaves out
+   every unit of an occupier type by its type alone, whether it was refused, lost its target on the
+   way or never set out. An assaulter type that is not an occupier type is not left out. None of
+   S-0215's rules for *capture*, *attack* and the fall-back to rest (claims 14, 23 and 28) gives an
+   occupier-type unit *hunt*, so a refused occupier-type unit does not go back to *hunt* by any of
+   them. The force does not touch a suspended *hunt* (S-0215 claims 9 and 10): a unit whose *hunt*
+   an override such as a retaliation had suspended can have it made current again by a later revert.
+   A new order, a map action or another spec's rule (a berserk hit, S-0610 claim 4, for example) can
+   also give *hunt*. In the original, and for a test-only computer-controlled player house in our
+   engine (S-0217), the owner's own periodic checks give it *hunt* too: a check that gives the
+   house-wide hunt order (S-0217 claims 1 to 4) queues *hunt* for every unit of the house on the map
+   (S-0215 claim 7 says what that changes for a unit that has *hunt* current), so a refused unit of
+   a house that owns no building other than occupied civilian buildings (S-0217 Terms) and no
+   construction vehicle has *hunt* queued at the next check of its house, at most 112 ticks later,
+   if it is still on the map then. A refused unit for which *hunt* is already current at that check,
+   by a revert or by any of the other means above, is changed by the check as S-0215 claim 7 gives
+   for a unit with *hunt* current. The queued *hunt* becomes current as S-0215 claims 7 and 11 give.
+   What a refused unit does after the scatter request and before such an order is not given here
+   (Open questions).
    - Backing: `measurable` (scenarios G1 and G2) for the destination, the scatter request and the
-     unit staying on the map, and (scenario G21) for the absence of *hunt*. The unchanged target is
-     `unmeasured`: in a computer-controlled owner's run other rules can change the target in the
-     refusal tick (S-0309 claim 25), and no setup here separates them from the refusal.
+     unit staying on the map, and (scenario G21, for units refused before its trigger's tick) for
+     the absence of *hunt*. The *hunt* that the owner's checks give takes S-0217 claims 1 to 4's
+     backing and levels (S-0217 scenario H1, medium): scenario G21 leaves the *hunt* from its
+     trigger's tick on to S-0217 scenario H1. S-0217 scenario H1 judges a check's order only through
+     its evictions, so the *hunt* a refused unit gets at a check after tick 0 at which its house
+     owns no occupied building is `unmeasured` there (S-0217 claim 4), and so here. The unchanged
+     target is `unmeasured`: in a computer-controlled owner's run other rules can change the target
+     in the refusal tick (S-0309 claim 25), and no setup here separates them from the refusal.
    - Confidence: high (destination, scatter request, staying on the map); medium (unchanged
      target, no *hunt*)
 
@@ -348,10 +363,16 @@ Neighbouring specs own the rest:
     | The building is destroyed | no | no | S-0312 claim 17 |
     | The building is sold | no | yes | S-0408 claim 9 |
     | A map trigger action that evicts a building's occupants | no | no | S-0011 |
-    | A house-wide order that sends all its units hunting, including map action code 6 | yes | no | the action's firing tick |
+    | The house-wide hunt order (S-0217 claim 1): map action code 6, or a check of the original's computer player or of a test-only computer-controlled player house (S-0217 claims 3 and 4) | yes | no | the action's firing tick, or the check's tick (S-0217 claims 1 and 2) |
 
-    - Backing: `measurable` (scenarios G6, G7, G8 and G9 for the first four rows; G13 for the last two)
-    - Confidence: high (first four rows); medium (trigger action); low (house-wide hunt order)
+    - Backing: `measurable` (scenarios G6, G7, G8 and G9 for the first four rows; G13 for the last
+      two, and S-0217 scenario H1 for the checks of S-0217 claim 4 in the last row; those of S-0217
+      claim 3 are `unmeasured` there)
+    - Confidence: high (first four rows); medium (the fifth row, a map trigger action that
+      evicts); low (the last row's order given by map action code 6); medium (the last row's order
+      at the checks of S-0217 claim 4 after tick 0, which S-0217 scenario H1 tests, and at the
+      checks of S-0217 claim 3, `unmeasured` here, at that claim's medium); low for the order given
+      at a house's check of tick 0 (S-0217 claim 4)
 
 ### Clearing and loss of occupants
 
@@ -448,7 +469,7 @@ Neighbouring specs own the rest:
       each cause. The index of an erased building is `unmeasured`: the building has no subsequent
       shot through which to observe it. Reset timing relative to individual releases/removals is
       also `unmeasured`: no validated fixture interleaves a shot or credited destruction within
-      the action. Such timing is not an implementation constraint (Cross-spec changes required).
+      the action. Such timing is not an implementation constraint (Changes for other specs).
     - Confidence: high
 
 19. **Skirmish departure and death inventory.** The following events have different scopes.
@@ -1158,31 +1179,51 @@ change.
 **G21. Refused computer-controlled occupiers (claims 1 and 4, Q-2926).** Setup: a tiny skirmish map
 with one empty civilian building of imported capacity *c* and two test-only computer-controlled
 player houses *C* and *D*, enemies of each other, in place of the bystander *B*; *A* only watches,
-far from both. *C* has *c* + 2 armed units of one stock occupier type, side by side a few cells from
-the building, and *D* a single armed unit of its own several cells beyond it, on the far side from
-*C*, whose weapons have no berserk effect. Procedure: a map trigger gives *C* the house-wide hunt
-action (claim 13) once, at a fixed early tick. Record, each tick and for each unit of *C*: its
-current, queued and suspended behaviours, target, destination, position, every order or map action
-it receives, every hit it takes, every override and revert (S-0215 claim 10), and its entry or
-refusal tick; record the occupant count and the building's health. A run is valid when at least *c*
-+ 1 of *C*'s units have *capture* forced with the building as destination. A valid run is a race run
-when it has a tick at which the units of *C* on the map with the building as destination outnumber
-its free places (*c* minus the count inside); occupants are not counted, whatever destination they
-still record. A run is void when any unit of *C* receives an order or map action other than the one
-hunt action (from *C*'s own computer player, for example), when a unit of *C* takes a berserk hit,
-or when the building's health falls below its value at the start. *C*'s computer player may void
-many runs: repeat until 10 runs are valid, and on until 3 are race runs or 30 runs are valid.
-M-0001's arena set-up (side *B*), as Q-2926 proposes, may stand in for this map when its record
-gives the same quantities under the same void conditions. Expected: an arrival is refused only while
-the count inside is *c*. A race run is the outcome for units on their way: more units are bound for
-the building than it has free places, which a place held for each unit on its way would not allow.
-Race runs alone test that part; with no race run, it is inconclusive, not falsified. From the tick
-at which *capture* is forced on a unit, that unit has *hunt* current or queued again only when a
-revert makes a suspended *hunt* current, whether it was refused, lost its target on the way or never
-arrived. Falsified by a refusal while fewer than *c* units are inside, or by *hunt* current or
-queued for a unit of *C* on the map after *capture* was forced on that unit other than by such a
-revert. The behaviours after each refusal are recorded for the open question on them; after a
-refusal only the falsifier on *hunt* above is tested.
+far from both. *C* starts with no building and no construction vehicle. *C* has *c* + 2 armed units
+of one stock occupier type, placed by the map with a behaviour other than *hunt*, side by side a
+few cells from the building, and *D* a single armed unit of its own several cells beyond it, on the
+far side from *C*, of a type that cannot occupy a building, whose weapons have no berserk effect.
+Procedure: a map trigger gives *C* the house-wide hunt action (claim 13) once, at a fixed tick from
+tick 1 to tick 105; a later tick leaves more refusals before it, so tick 105 is preferred where the
+map allows. Record, each tick and for each unit of *C*: its current, queued and suspended
+behaviours, target, destination, position, every order or map action it receives, every hit it
+takes, every override and revert (S-0215 claim 10), and its entry or refusal tick; record the
+occupant count each tick and at the moment of each refusal, and the building's owner and health. A
+run is valid when at least *c* + 1 of *C*'s units have *capture* forced with the building as
+destination. A valid run is a race run when it has a tick at which the units of *C* on the map with
+the building as destination outnumber its free places (*c* minus the count inside); occupants are
+not counted, whatever destination they still record. A run is void when any unit of *C* receives an
+order or map action other than the one hunt action and the house-wide hunt orders of *C*'s own
+checks (S-0217 claims 2 to 4), when a unit of *C* takes a berserk hit, when the building's health
+falls below its value at the start, or when the building's owner becomes a house other than *C* and
+the civilian house. *D* is a test-only house too, so its checks send its unit hunting: a unit of
+*C* that it destroys does not void the run and is judged only up to its destruction. *C* owns no
+building later other than civilian garrison buildings its units occupy, so each of its checks gives
+that order (S-0217 claim 4); *C*'s first check is at tick 0 and its second no earlier than tick 106
+(S-0217 claim 2), so from tick 1 to tick 105 the trigger's action, at its fixed tick, is the only
+house-wide hunt order *C* receives. The falsifier on the count is judged only up to tick 900: after
+that, S-0217 claim 3 can give *C*'s occupied buildings a sell order, whose sale puts the occupants
+out. Repeat until 10 runs are valid, and on until 3 are race runs or 30 runs are valid. M-0001's
+arena set-up (side *B*), as Q-2926 proposes, may stand in for this map when *C*'s house there also
+starts with no building and no construction vehicle and its record gives the same quantities under
+the same void conditions. Expected: an arrival is refused only while the count inside is *c*. A
+race run is the outcome for units on their way: more units are bound for the building than it has
+free places, which a place held for each unit on its way would not allow. Race runs alone test that
+part; with no race run, it is inconclusive, not falsified. From the tick at which *capture* is
+forced on a unit to the tick before the trigger's tick, that unit has *hunt* current or queued
+again only when a revert makes a suspended *hunt* current, or the *hunt* is the one that the tick-0
+check gave it (that exception serves only a unit on which *capture* was forced in tick 0 before
+*C*'s check: a later force removes that *hunt*, S-0215 claim 9), whether it was refused, lost its
+target on the way or never arrived. From the trigger's tick on, its action and *C*'s checks give
+*C*'s units *hunt* (claim 13, S-0217 claims 1 and 4), which S-0217 scenario H1 tests. Falsified by
+a refusal at whose moment the count read is below *c*, or by *hunt* current or queued for a unit of
+*C* on the map after *capture* was forced on that unit and before the trigger's tick, other than by
+such a revert or by the tick-0 check. A unit refused at or after the trigger's tick is tested only
+by the falsifier on the count: the trigger's *hunt* can reach it on its way and stay queued through
+its refusal (S-0217 State and ordering). Only refusals before the trigger's tick test the absence
+of *hunt* after a refusal, and a valid run with none leaves that part inconclusive, not falsified.
+The behaviours after each refusal are recorded for the open question on them; only the falsifier on
+*hunt* above tests them, and only before the trigger's tick.
 
 ## Open questions
 
@@ -1202,10 +1243,17 @@ refusal only the falsifier on *hunt* above is tested.
   original positions. Q-0990 is answered by claim 25's engine-only point i mod 10 for positions
   10 or later. The unsafe original result stays unmeasured; no lead decision is pending.
 - Q-2926 is answered by claims 1 and 4 (units on their way, the searches of S-0309 claim 25 part
-  (e), the unchanged target and no *hunt* after a refusal), and Q-2927 by claim 1 ("may occupy"
+  (e), the unchanged target and no *hunt* after a refusal from S-0215's *capture*, *attack* and
+  rest rules), and Q-2927 by claim 1 ("may occupy"
   in other specs).
-- Whether any skirmish cause other than map action code 6 and the original's computer player
-  sends the house-wide hunt order of claim 13.
+- Q-2951 is answered in part, by claim 4 (the owner's checks give a refused unit *hunt*) and claim
+  13 (the checks evict with hunting), with S-0217 claims 1 to 4 (r20). Which target each arena unit
+  picks first, and so whether and when the units of the named pairings enter (its questions 1 first
+  part, 2 and 3), is S-0309's (claims 17 and 25 part e) and is not predicted here; S-0217 scenario
+  H1 records it. What a unit with *hunt* then does, and so whether it goes for the other group (its
+  question 1), is S-0215's (its *hunt* rules), which this spec does not restate.
+- Whether any skirmish cause other than map action code 6 and the original's computer player's
+  checks (S-0217) sends the house-wide hunt order of claim 13.
 - What a refused unit does after claim 4's scatter request while it keeps the building as target.
   While an accepted request's destination is held, S-0215 claim 28's third row changes nothing. When
   the unit refuses the request, or the request gives it no destination (S-0208 claims 11 to 13), the
@@ -1213,7 +1261,7 @@ refusal only the falsifier on *hunt* above is tested.
   follows once a scatter destination is reached, and whether and how often the unit walks back to
   the building, is not established here. G21 records it.
 
-## Cross-spec changes required
+## Changes for other specs
 
 The current S-0308 claim 13, S-0313 claim 6 and S-0311 claim 15 already agree on completed-action
 reset and claim 19's defeat exception. Earlier demands to change their reset ordering are satisfied.
