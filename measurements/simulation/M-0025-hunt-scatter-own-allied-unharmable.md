@@ -5,12 +5,12 @@ topic: simulation
 specs: [S-0215]
 requests: [Q-2782]
 verdict: confirms
-value-visibility: local
+value-visibility: committed
 measured-on: 2026-11-07
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-11
 ---
 
 # M-0025: The scatter from damage for a hunting vehicle hit by its own house, an allied house or an enemy it cannot harm
@@ -59,7 +59,7 @@ not retaliate against (claim 18).
   - *part g2*: a firer of *B*, 7 cells from *Q*, likewise.
   - *part g3*: a firer of *C*, 7 cells from *Q*. Its shots go to *G*.
 
-  The cells and facings are kept `local`.
+  The cells and facings are not reported.
 - Runs: seeds 1000, 1001 and 1002 for each part, 9 runs, each to a tick limit of 600.
 
 ## Procedure
@@ -84,7 +84,7 @@ including the hits recorded at *t*.
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
 | Judged hits whose attacker is of *A* (g1), *B* (g2), *C* (g3) | hits | each part's 3 runs, every judged hit | all | none | exact |
-| Judged hits leaving *G* with a destination in a cell next to its own, no target, in *hunt* | hits | 9 runs, every judged hit (count local) | all | none | exact |
+| Judged hits leaving *G* with a destination in a cell next to its own, no target, in *hunt* | hits | 9 runs, every judged hit (count not reported) | all | none | exact |
 | Judged hits whose *G* position changed from the end of *t* − 2 to the end of *t* − 1 | hits | same | 0 | none | exact |
 | Runs with at least one judged hit | runs | 9 | 9 | none | exact |
 | Part g3: rows in which *G* holds a target | rows | 3 runs, every row | 0 | none | exact |
@@ -114,7 +114,7 @@ Each run's first hit on *G* comes in the run's first tick, with no earlier row, 
   - what *G* does after it reaches the destination cell.
 - **"Standing still"** is read from positions over the two ticks before the hit, not from the
   vehicle's locomotor state.
-- **Kept local:** the number of judged hits per run, the ticks of the hits, the cells, facings and
+- **Not reported:** the number of judged hits per run, the ticks of the hits, the cells, facings and
   start positions, and how long *G* takes to reach the destination cell. The hit counts and ticks
   follow from the firer's test weapon and the units' movement, which takes the countries' speed
   factors (M-0021, *Notes*). This record states only the rows above.
