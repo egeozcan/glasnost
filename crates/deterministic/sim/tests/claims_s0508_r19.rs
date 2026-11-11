@@ -138,7 +138,10 @@ fn order(w: &mut World, a: ObjectId, b: Behaviour, t: ObjectId) {
 /// until it is inside.
 fn go_inside(w: &mut World, u: ObjectId, b: ObjectId) {
     let tick = w.tick;
-    w.obj_mut(u).unwrap().beh.force(Behaviour::Capture, tick, true);
+    w.obj_mut(u)
+        .unwrap()
+        .beh
+        .force(Behaviour::Capture, tick, true);
     glasnost_sim::econ::assign_destination(w, u, Some(Target::Object(b)));
     testkit::run(w, 300);
     assert!(!w.obj(u).unwrap().on_map, "inside");
@@ -180,7 +183,11 @@ fn units_on_their_way_hold_no_place() {
         .iter()
         .filter(|&&u| w.obj(u).is_some_and(|o| o.on_map))
         .count();
-    assert_eq!(outside, (n - CAP) as usize, "the late arrivals were refused");
+    assert_eq!(
+        outside,
+        (n - CAP) as usize,
+        "the late arrivals were refused"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -324,9 +331,17 @@ fn forced_capture_keeps_a_suspended_hunt() {
     glasnost_sim::tick::step(&mut w);
     let o = w.obj_mut(a).unwrap();
     assert_eq!(o.beh.current, Some(Behaviour::Capture), "capture forced");
-    assert_eq!(o.beh.suspended, Some(Behaviour::Hunt), "suspended hunt kept");
+    assert_eq!(
+        o.beh.suspended,
+        Some(Behaviour::Hunt),
+        "suspended hunt kept"
+    );
     assert!(o.beh.revert().is_some());
-    assert_eq!(o.beh.current, Some(Behaviour::Hunt), "a revert makes it current");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Hunt),
+        "a revert makes it current"
+    );
 }
 
 // spec: S-0508 claim 4 (r19, Q-2926: capture's hunt rule, S-0215 claim 28, leaves out every unit of an occupier type by its type alone; an assaulter type that is not an occupier type is not left out) and S-0215 claim 28 row 4 (a destination and no target), for a test-only computer-controlled player house

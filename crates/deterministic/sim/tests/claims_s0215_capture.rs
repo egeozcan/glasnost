@@ -351,7 +351,10 @@ fn claim_28_a_computer_engineer_without_a_target_hunts() {
     processed(&mut w, u);
     // spec: S-0215 claim 11 (a ready actor's queued behaviour may start late in the same tick)
     assert!(rested(&w, u, Behaviour::Hunt), "hunt queued");
-    assert!(!rested(&w, u, Behaviour::AreaGuard), "hunt replaced area guard");
+    assert!(
+        !rested(&w, u, Behaviour::AreaGuard),
+        "hunt replaced area guard"
+    );
     assert_eq!(w.obj(u).unwrap().dest, None);
 }
 
