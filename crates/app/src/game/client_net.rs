@@ -1295,6 +1295,7 @@ impl Client {
                 .last_tick
                 .is_some_and(|t| now.saturating_sub(t) < period + period / 2); // nocite: our own netcode (half a period more)
         if self.pacer.remaining_for(now_ms, period as i64) > 0 || stretched {
+            self.pacer.waited(now_ms);
             return false;
         }
         let ev = &mut net.evidence;
@@ -1333,6 +1334,9 @@ impl Client {
         let tick_ms = net_period_ms(s.speed).max(1) as u32;
         if ls.tick_ms() != tick_ms {
             ls.set_tick_ms(tick_ms);
+        }
+        if !ran {
+            self.pacer.waited(now_ms);
         }
         if ran {
             self.pacer.due_after(now_ms, period as i64);

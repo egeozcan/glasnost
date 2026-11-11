@@ -92,15 +92,20 @@ pub use glasnost_ui::setup::{net_period_ms, period_ms};
 pub struct Pacer {
     /// Start of the current cycle, in host milliseconds.
     cycle_start: Option<i64>,
+    /// The host time of the latest drawn frame the pacer was told of.
+    last_frame: Option<i64>,
 }
 
 impl Pacer {
     /// Whether a tick is due at host time `now_ms` at game speed `speed`.
     /// At index 0 the display rate limits the ticks (one per drawn frame),
     /// below S-0201 claim 5's 125 per second.
-    /// When it is, a new cycle starts at `now_ms`: time lost to a late call
-    /// is not made up (S-0201 claim 3). Call once per drawn frame, so at most
-    /// one tick runs per frame.
+    /// When it is, a new cycle starts: at the time it fell due when the
+    /// previous frame came before that time and at most one period ago, so
+    /// the display's frame times do not round every cycle up; otherwise at
+    /// `now_ms`, so time lost to a late frame or a stall is not made up
+    /// (S-0201 claim 3). Call once per drawn frame, so at most one tick runs
+    /// per frame.
     pub fn due(&mut self, now_ms: i64, speed: u8) -> bool {
         self.due_after(now_ms, period_ms(speed))
     }
@@ -109,18 +114,29 @@ impl Pacer {
     /// `period` milliseconds (a network game's, S-0201 claim 17); as
     /// [`Pacer::due`] otherwise.
     pub fn due_after(&mut self, now_ms: i64, period: i64) -> bool {
-        let due = self.cycle_start.is_none_or(|s| now_ms - s >= period);
-        if due {
-            // spec: S-0201 claim 3 (each cycle measures its paced period from its own start) and claim 17 (so does a network game's, with no catch-up)
+        let previous = self.last_frame.replace(now_ms);
+        let Some(start) = self.cycle_start else {
             self.cycle_start = Some(now_ms);
+            return true;
+        };
+        let falls_due = start + period;
+        if now_ms < falls_due {
+            return false;
         }
-        due
+        // spec: S-0201 claim 4 (each cycle lasts exactly 16 × s ms measured from its start, or as long as its work if longer) and claim 17 (a network game's period likewise)
+        // design: render (#76) a tick that falls due between two drawn frames runs in the later one, but its cycle starts when it fell due, as long as the earlier frame came before that and at most one period ago: the cycle did not take longer, the display only showed it late
+        let on_time = previous.is_some_and(|p| p < falls_due && now_ms - p <= period);
+        // spec: S-0201 claim 3 (no catch-up: a cycle that took longer, or a stretch without frames, starts the next cycle at its own late start)
+        self.cycle_start = Some(if on_time { falls_due } else { now_ms });
+        true
     }
 
     /// Tells the pacer of a drawn frame at host time `now_ms` that ran no
     /// tick without asking [`Pacer::due_after`] (a network game waiting on
     /// its period or on the other peers).
-    pub fn waited(&mut self, _now_ms: i64) {}
+    pub fn waited(&mut self, now_ms: i64) {
+        self.last_frame = Some(now_ms);
+    }
 
     /// Milliseconds until the next tick is due (0 when it is).
     pub fn remaining(&self, now_ms: i64, speed: u8) -> i64 {
@@ -138,6 +154,7 @@ impl Pacer {
     /// game resumes without catching up).
     pub fn reset(&mut self) {
         self.cycle_start = None;
+        self.last_frame = None;
     }
 }
 
