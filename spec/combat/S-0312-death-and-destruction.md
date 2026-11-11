@@ -2,14 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 66
+revision: 71
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-08
+approved-on: 2026-11-11
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973]
 supersedes: []
 ---
 
@@ -1076,7 +1076,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     or packing up preserves the old working group (S-0415 claims 6 and 10), but can discard
     a temporary group already created for the replacement master, as below. No killing hit
     is implied by removal.
-    Never-placed production masters remain outside this claim under Q-0193.
+    A production master whose item is cancelled is such a removal (*A cancelled production
+    master* below). A never-placed production master killed by a defeat or surrender hit
+    remains outside this claim under Q-0193.
 
     Hidden slaves are destroyed and removed without attacker credit, with the suppressed
     death effects and common destruction notifications of claim 30, without its three
@@ -1100,20 +1102,41 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     or healing; they are not freed to a civilian-side house by this temporary-group cleanup.
     S-0402 claim 19a owns creation and placement ordering and the refused-placement case.
 
+    **A cancelled production master.** A production item whose type names a slave infantry type has
+    its slaves from the start of its production, hidden inside it (S-0402 claim 19). The item can be
+    cancelled by a cancel or cancel-all order of its house, including the cancellation orders that
+    follow the removal of its icon (S-0411 claim 2), or by the check of S-0404 claim 8 when no
+    factory building of its house could make it any longer. Either way, deleting its object (S-0404
+    claim 6) is a removal without a killing hit, of a group that has neither ended nor been
+    transferred. Every slave of the group is therefore destroyed and removed at the cancellation,
+    with no attacker credit and with the common destruction notifications and suppressed death
+    effects above. Each one gives its house a loss, subject to S-0414 claim 21's victim exclusions.
+    No object is credited with such a slave's destruction: it is not a destruction by a hit, and it
+    is none of the other kinds of destruction that S-0311 claim 9 credits to an object. So it gives
+    no house a kill or score (S-0414 claims 21 and 22). The master itself gives no loss, since a
+    cancellation is not a destruction (S-0414 claim 21). The slaves' removal adds no sound or
+    message of its own to those of the cancellation. Their creation draws are not undone.
+
     This specifies the remaining group's fate at removal, not when a sale, failed conversion
     or erasure reaches that removal. S-0408 claim 10a owns true-sale fate and its timing boundary.
     S-0415 owns whether a failed packing attempt transfers the old group. An earlier group-ending
     event with a remembered attacker or forced new owner is not replaced by this attacker-less
     rule. In particular, erasure and environmental sinking's earlier group-ending events remain
     open below.
-    - Backing: `measurable` (scenario D22) for the remaining group's hidden removal,
-      civilian transfer and no regeneration after refused pack-up; `measurable` (S-0402
-      scenario H24) for temporary-slave removal during successful pack-up and its losses.
-      `unmeasured` for tag notifications (no established data-only setup attaches a tag to
-      these generated slaves) and absent recipient houses (no isolated skirmish fixture is
-      established here)
-    - Confidence: high for removal ending an untransferred group and the no-recipient
-      exception; medium for the notification and presentation outcomes
+    - Backing: `measurable` (scenario D22) for the remaining group's hidden removal, civilian
+      transfer and no regeneration after refused pack-up; `measurable` (S-0402 scenario H24) for
+      temporary-slave removal during successful pack-up and its losses. `unmeasured` for tag
+      notifications (no established data-only setup attaches a tag to these generated slaves) and
+      absent recipient houses (no isolated skirmish fixture is established here). `measurable`
+      (scenario D24) for a cancelled production master's slaves: their removal, their losses and the
+      absence of kills and score, and the absence of a message of the slaves' removal (parts a and
+      e). `unmeasured` for the absence of a sound at that removal (D24 records no audio)
+    - Confidence: high for the removal ending an untransferred group and for the no-recipient
+      exception; medium for the notification and presentation outcomes, and for a cancelled master's
+      slaves: their removal, their losses and the absence of kills (a master that was never on the
+      map comes under the rule by inference until scenario D24 is run); low for the absence of score
+      from their destruction, as S-0414 claim 22 rates a destruction with neither an attacking
+      object nor an attacking house
 
 ### Further killing hits during sinking
 
@@ -1160,7 +1183,7 @@ otherwise. No measurement has been completed for this revision.
 
 | Claim or formula | Backing and reason for the part not covered by a scenario |
 |---|---|
-| Death rules for never-placed production items | Unresolved under Q-0193, not covered by the numbered death rules' backing. S-0414's off-map hit eligibility and existence counts establish neither effects, draws nor immediate deletion. No prediction for these outcomes is asserted here. |
+| Death rules for never-placed production items killed by a defeat or surrender hit | Unresolved under Q-0193, not covered by the numbered death rules' backing. S-0414's off-map hit eligibility and existence counts establish neither effects, draws nor immediate deletion. No prediction for these outcomes is asserted here. |
 | 30, 31 | Hidden-slave tag notifications are `unmeasured`: D21, D22 and S-0402 H24 do not establish tag attachment to generated slaves. H24 tests temporary creation, removal and losses, not tag evaluation. Suppression of an attached bomb on a hidden slave is also `unmeasured`: these scenarios establish no such bomb attachment. D22 tests refused pack-up, not the timing or attribution of sale, erasure or environmental sinking. |
 | 29 | `unmeasured` for separately supplied attacking-house attribution and interruption by a destruction-trigger action that removes the raising object during these raises: no isolated safe fixture is established here. D20 uses actions that leave the dying object alone. Q-0193's never-placed production items remain outside this claim. |
 | 1, 19(d), 22 | `unmeasured` for resource spilling combined with other building death effects: no skirmish setup fills building storage. D1 and D14 test the effects their setups reach. |
@@ -2297,6 +2320,40 @@ crashable removal falsifies the corresponding rule. Merely missing the short int
 inconclusive. Types with death image frames are an exploratory recording only: this
 scenario makes no prediction for their untraced path. No measurement is claimed completed.
 
+**D24. Slaves of a cancelled production master (claim 31; Q-2973).** Use the common measurement
+setup, speed 6, no engine add-on and no mods (the named test files of a scenario excepted), on a
+tiny flat map that holds no resources, where the computer house owns nothing that can attack and
+neither house owns a harvester. The human player's house owns a construction yard, one factory
+building that can build a vehicle type whose enslaves field names an infantry type and whose slave
+count *k* is positive (S-0402 claim 19), one building of each of that type's prerequisites and
+enough credits for the whole item. In 10 runs per part, start the master type's production and
+record, from the start of production to 200 ticks after the item ends, the number of the house's
+objects of the slave type, the house's loss and kill totals as S-0414 scenario V17 records them,
+every house's kill total and score, and the messages shown. In parts (a) to (c) a named test-map
+override gives the slave type no not-scored mark.
+- Part (a): give a cancel order for the item at about half progress.
+- Part (b): sell a prerequisite building of the master type during production, so that the
+  first recheck after its removal takes the icon away and gives the cancellation orders
+  (S-0411 claim 2).
+- Part (c): sell the factory building during production (S-0404 claim 8, or S-0411 claim 2 when
+  its recheck cancels the item first).
+- Part (d): as part (a), with a named test-map override that gives the slave type the not-scored
+  mark.
+- Part (e): as part (a), with a vehicle type whose enslaves field is empty in place of the master
+  type, built by the same factory building.
+- Controls: the same production completed and the unit placed, and a run with no production.
+
+Expected: in parts (a) to (d) the house's count of slave-type objects rises by *k* at the start of
+production and falls by *k* in the tick in which the cancellation takes effect. In parts (a) to (c)
+the house's loss total rises by *k* in that tick. In part (d) it does not change. No house's kill
+total changes in any part, no house's score changes in parts (a) and (d), and no message names the
+slaves. In part (a) the messages shown from the cancellation to 200 ticks after it are those that
+part (e) shows over the same span. A loss total unchanged in (a) to (c), slave-type objects left
+after the cancellation, a kill change, a score change in (a) or (d), a message in part (a) that part
+(e) does not show, or a loss in part (d) falsifies the corresponding prediction. A run in which the
+item is done before it is cancelled, or in which the sale of (b) or (c) does not lead to a
+cancellation, does not test this claim.
+
 ## Open questions
 
 - Q-0270 part 3: slave-group destruction paths without an ordinary killing hit, including
@@ -2313,7 +2370,8 @@ scenario makes no prediction for their untraced path. No measurement is claimed 
   progress, completion, refund, release and placement, including survival of a factory without
   later cancellation, remain for S-0404. Off-map hit eligibility does not answer these parts.
   Q-0193 must be reopened at hand-off: S-0414's answer resolves only the defeat-count portion,
-  not the whole request. This spec does not list Q-0193 as answered.
+  not the whole request. This spec does not list Q-0193 as answered. The removal of a
+  cancelled item is not such a death: claim 31 gives the fate of a cancelled master's slaves.
 - The unplaced default position of a death weapon's projectile (claim 6): believed to be the map
   origin, which would put its warhead debris at the map's corner and take the land type of that
   corner's cell. Scenario D6, variant d, would show it.
@@ -2340,6 +2398,12 @@ scenario makes no prediction for their untraced path. No measurement is claimed 
   S-0616 claim 1 resolves the eligible kinds and the attachment condition.
 
 ## Changes for other specs
+
+S-0404 claim 6: "Delete the item's object" can point to claim 31 here (*A cancelled production
+master*): deleting a slave master's object destroys and removes its hidden slaves, and each one
+gives its house a loss, subject to S-0414 claim 21's victim exclusions. S-0402 claim 19 can point to
+the same paragraph for the fate of a group created at the start of production whose item is then
+cancelled.
 
 S-0408 claims 7 and 8 and scenario S6 (e): the no-crew state of F5 arises only at a destruction
 whose killing damage ignores defences (claim 18 here, *No crew*), so it never holds at a sale.
