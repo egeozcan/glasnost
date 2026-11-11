@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-11
 ---
 
 # M-0004: Firing cycle with the random-state recorder
@@ -162,42 +162,42 @@ only the draw's range and that one such draw is attributed to each countdown it 
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| MTNK's power-plant-proof cannon copy: countdown after each shot that ends its burst, by the recorded burst position (which shots those are, and the run's shot pattern, kept in the local file) | ticks | 1 run (the base run), every such shot (count local) | base + *u*, base local, equal to the interval to the next shot; *u* is the attributed delay draw (the equality is the attribution criterion, Procedure step 4) | *u* from 0 to 2 | exact per draw: the draw's range and one attributed draw per countdown |
-| Attributed delay draws per burst-ending shot, base run | draws | 1 run (the base run), every such shot (count local) | one attributed draw, from 0 to 2 (attributed by its range and by its result equal to the countdown minus the base, Procedure step 4) | | exact: the range and the count of one |
+| MTNK's power-plant-proof cannon copy: countdown after each shot that ends its burst, by the recorded burst position (which shots those are, and the run's shot pattern, kept in the local file) | ticks | 1 run (the base run), every such shot (count local) | below the table | below the table | exact per draw: the draw's range and one attributed draw per countdown |
+| Attributed delay draws per burst-ending shot, base run | draws | 1 run (the base run), every such shot (count local) | below the table |  | exact: the range and the count of one |
 | Shot ticks at game-speed setting 4 against the fastest | ticks | 2 runs | identical | | exact |
 | Retarget at 300 to GAPOWR: secondary's first shot | tick | 1 | the countdown's due tick (tick local) | | that it falls on the countdown's due tick exact; the tick number not for tests: counted from the first shot |
-| Secondary's later countdowns after each shot that ends its burst (which shots those are, and its shot pattern, kept in the local file) | ticks | 1 run | the secondary's base + *u* (its base local), equal to the interval to the next shot; *u* is the attributed delay draw (the equality is the attribution criterion, Procedure step 4) | *u* from 0 to 2 | exact per draw: the draw's range and one attributed draw per countdown |
-| Retarget at 300 to GAAIRC: the turret turn, as reported (how it was read is not recorded) | ticks | 1 | starts at 300, ends after the countdown's due tick, length local | | not for tests |
+| Secondary's later countdowns after each shot that ends its burst (which shots those are, and its shot pattern, kept in the local file) | ticks | 1 run | below the table | below the table | exact per draw: the draw's range and one attributed draw per countdown |
+| Retarget at 300 to GAAIRC: the turret turn, as reported (how it was read is not recorded) | ticks | 1 | below the table |  | not for tests |
 | Shot after that turn | tick | 1 | local: the tick after the reported end of the turn | | not for tests |
 | Retarget at 300 to the second GAPILE: the shot | tick | 1 | local: later than the countdown's due tick (turret turn not read) | | not for tests: taken to depend on the turret turn, which was not read |
-| Burst 3: shot ticks of the first burst | ticks | 1 run | local, the first at *t*₁ | | not for tests |
+| Burst 3: shot ticks of the first burst | ticks | 1 run | below the table |  | not for tests |
 | Burst 3: countdown after shot 1 or 2 of a burst | ticks | every such countdown of the run (count local) | local, with its draws (whether a draw was attributed, its range and its values) | | not for tests |
-| Burst 3: countdown after shot 3 | ticks | 1 run | base + *u*, one attributed draw from 0 to 2 | | exact per draw |
-| Burst 3, burst-delay keys 7 and 9: in-burst countdowns | ticks | 1 run | 7, then 9, no attributed delay draw | | exact |
+| Burst 3: countdown after shot 3 | ticks | 1 run | below the table |  | exact per draw |
+| Burst 3, burst-delay keys 7 and 9: in-burst countdowns | ticks | 1 run | below the table |  | exact |
 | The same: end-of-burst countdown | ticks | 1 run | base + *u* | | exact per draw |
 | E1 with a burst-3 copy of its stock gun: in-burst shot spacing | ticks | 1 run | local | | not for tests: the value, and how it relates to the drawn countdowns, are kept in the local file |
 | E1: end-of-burst interval | ticks | every end of a burst in the run (count local) | local | | not for tests, as the row above |
-| E1: attributed delay draws per shot | draws | 1 run | from 3 to 5 after a shot inside a burst, from 0 to 2 after the shot that ends it | | exact |
+| E1: attributed delay draws per shot | draws | 1 run | below the table |  | exact |
 | Stop at *t*₁ + 2, attack the same GAPILE at *t*₁ + 3 | ticks | 1 | after the attack order, a fresh burst of three shots (their ticks local), then the full countdown | | the shot count and the full countdown exact; the ticks not for tests |
 | Retarget at *t*₁ + 1 to the second GAPILE | ticks | 1 | two shots (their ticks local), then the full countdown: three shots in the burst | | the shot count exact; the ticks not for tests: the first taken to depend on the turret turn, which was not read |
-| Primary burst 3, secondary burst 2 at rate *R*ₛ: the first shot with the primary, retarget at *t*₁ + 1 to GAPOWR | ticks | 1 | secondary's first shot (tick local), countdown: the secondary's base + *u*, with *u* = 1 | | the countdown exact; the shot tick not for tests: taken to depend on the turret turn, which was not read |
-| The same, later | | 1 run | ordinary 2-shot bursts of the secondary | | exact |
-| Pillbox, burst-2 copy of its stock gun, 4 rounds: each group except the first (the first group local) | ticks | 1 run | countdowns 1, 1, 1 with no attributed delay draw, then base + *u* (base local) | | exact |
-| Pillbox, 3 rounds: two consecutive groups (which ones local) | ticks | 1 run | countdowns 1, 1, then one draw from 3 to 5; next group 1, 1, then base + *u* | | exact |
-| Pillbox, 3 rounds: ammunition at the end of each tick of a group, each group except the first (the first group local) | rounds | 1 run | 3 (the tick before the group's first shot), 2, 1, 3: full again at the end of the tick of the group's last shot | never 0 | exact |
-| Pillbox, 4 rounds: ammunition at the end of each tick of a group, each group except the first (the first group local) | rounds | 1 run | 4 (the tick before the group's first shot), 3, 2, 1, 4: full again at the end of the tick of the group's last shot | never 0 | exact |
+| Primary burst 3, secondary burst 2 at rate *R*ₛ: the first shot with the primary, retarget at *t*₁ + 1 to GAPOWR | ticks | 1 | below the table |  | the countdown exact; the shot tick not for tests: taken to depend on the turret turn, which was not read |
+| The same, later |  | 1 run | below the table |  | exact |
+| Pillbox, burst-2 copy of its stock gun, 4 rounds: each group except the first (the first group local) | ticks | 1 run | below the table |  | exact |
+| Pillbox, 3 rounds: two consecutive groups (which ones local) | ticks | 1 run | below the table |  | exact |
+| Pillbox, 3 rounds: ammunition at the end of each tick of a group, each group except the first (the first group local) | rounds | 1 run | below the table | below the table | exact |
+| Pillbox, 4 rounds: ammunition at the end of each tick of a group, each group except the first (the first group local) | rounds | 1 run | below the table | below the table | exact |
 | Pillbox: stops for lack of ammunition, up to the tick limit | | both runs | never (the test reload key far longer than the run) | | exact |
-| Test projectile (arcing, inaccurate): attributed draws per shot, in order | draws | every shot of both scatter runs | from *S*/2 to *S* (*S* local), then from 0 to 2147483646 | | exact |
-| The same: delay draw at each shot that ends its burst | draws | both scatter runs, every such shot (count local) | one from 0 to 2, after the two draws above; the draws after those two at any other shot are kept local | | exact |
-| Spray-attack key on, burst-3 cannon: shots | shots | 1 run | every tick from *t*₁ to the tick limit (count local), counted as the fire events the recorder logged for the tank (Procedure step 2), each with its own draw from 0 to 7: countdown 0 after each and no attributed delay draw; reported with no projectile and no damage (how those two were read is not recorded); called void shots here, an inference from those observations | | a shot every tick from the first and the countdown exact; the count (every tick from the first shot to the tick limit) and the first tick not for tests: set by the start placement and facing |
-| Spray: attributed draws per void shot | draws | every void shot of the run | one from 0 to 7, no attributed delay draw; whether a void shot takes any other draw is not separated from the background | | exact |
-| Spray and test projectile: attributed draws per void shot, in order | draws | 1 run | 0 to 7, then *S*/2 to *S*, then 0 to 2147483646, no attributed delay draw; any other draw is not separated from the background | | exact |
+| Test projectile (arcing, inaccurate): attributed draws per shot, in order | draws | every shot of both scatter runs | below the table |  | exact |
+| The same: delay draw at each shot that ends its burst | draws | both scatter runs, every such shot (count local) | below the table |  | exact |
+| Spray-attack key on, burst-3 cannon: shots | shots | 1 run | below the table |  | a shot every tick from the first and the countdown exact; the count (every tick from the first shot to the tick limit) and the first tick not for tests: set by the start placement and facing |
+| Spray: attributed draws per void shot | draws | every void shot of the run | below the table |  | exact |
+| Spray and test projectile: attributed draws per void shot, in order | draws | 1 run | below the table |  | exact |
 | The fire-particle run's stock weapon, unchanged, on MTNK: delay draw | draws | 1 run | none attributed: no draw fits the recorded countdown, which is its rate-of-fire field with no added part; further draws inside its shots are not separated from the background | | exact |
 | The same: countdown after a shot | ticks | 1 run | exactly its rate-of-fire field, local | | exact |
 | The same: interval between shots, under the one attack order and no later order | ticks | 1 run | local, much longer than the countdown | | exact per run |
-| The first shot: draws in its tick beyond the control's | draws | 2 runs, each against the control (one of them a run with the test projectile; the other is not recorded) | no extra draw beyond the draws attributed to the shot (in the run with the test projectile, the two scatter draws among them), the draws attributed to the attack processing set aside (Procedure step 4) | | exact, as far as the comparison of Procedure step 3 goes (its matched fields not recorded) |
+| The first shot: draws in its tick beyond the control's | draws | 2 runs, each against the control (one of them a run with the test projectile; the other is not recorded) | below the table |  | exact, as far as the comparison of Procedure step 3 goes (its matched fields not recorded) |
 | The ticks from 6 to *t*₁ − 1 (before the first shot) and from *t*₁ + 1 to the window's end (local): draws against the control, the draws attributed to the attack processing set aside (Procedure step 4) | draws | 1 run against the control (which attacking run is not recorded) | none extra; whether the tank attempted to fire in each tick was not recorded | | exact, as far as the comparison of Procedure step 3 goes |
-| Attack processing: draws outside the shot | draws | 1 run | one from 0 to 2 on the order's tick, followed by draws attributed to the attack processing by range and spacing | | attribution only; not an independent test of the processing count |
+| Attack processing: draws outside the shot | draws | 1 run | below the table |  | attribution only; not an independent test of the processing count |
 | Interval between the draws attributed to the attack processing | ticks | every such interval of the run (count local) | base + that draw, base local | | a fit: the spacing is one of the attribution criteria (Procedure step 4) |
 
 - **Relations (values in the local file).** How each base (the MTNK cannon's, the secondary's and
@@ -205,6 +205,60 @@ only the draw's range and that one such draw is attributed to each countdown it 
   fire-particle run's weapon's countdown is its rate-of-fire field after every shot. *S* is the
   rules' ballistic scatter distance in leptons, and the first draw's range is from trunc(*S*/2) to
   *S*.
+
+Relations for the table above:
+
+- *MTNK's power-plant-proof cannon copy: countdown after each shot that ends its burst, by the
+  recorded burst position (which shots those are, and the run's shot pattern, kept in the local
+  file)*: base + *u*, base local, equal to the interval to the next shot; *u* is the attributed
+  delay draw (the equality is the attribution criterion, Procedure step 4), spread *u* from 0 to 2.
+- *Attributed delay draws per burst-ending shot, base run*: one attributed draw, from 0 to 2
+  (attributed by its range and by its result equal to the countdown minus the base, Procedure step
+  4).
+- *Secondary's later countdowns after each shot that ends its burst (which shots those are, and its
+  shot pattern, kept in the local file)*: the secondary's base + *u* (its base local), equal to the
+  interval to the next shot; *u* is the attributed delay draw (the equality is the attribution
+  criterion, Procedure step 4), spread *u* from 0 to 2.
+- *Retarget at 300 to GAAIRC: the turret turn, as reported (how it was read is not recorded)*:
+  starts at 300, ends after the countdown's due tick, length local.
+- *Burst 3: shot ticks of the first burst*: local, the first at *t*₁.
+- *Burst 3: countdown after shot 3*: base + *u*, one attributed draw from 0 to 2.
+- *Burst 3, burst-delay keys 7 and 9: in-burst countdowns*: 7, then 9, no attributed delay draw.
+- *E1: attributed delay draws per shot*: from 3 to 5 after a shot inside a burst, from 0 to 2 after
+  the shot that ends it.
+- Primary burst 3, secondary burst 2 at rate *R*ₛ: the first shot with the primary, retarget at *t*₁
+  + 1 to GAPOWR: secondary's first shot (tick local), countdown: the secondary's base + *u*, with
+  *u* = 1.
+- *The same, later*: ordinary 2-shot bursts of the secondary.
+- *Pillbox, burst-2 copy of its stock gun, 4 rounds: each group except the first (the first group
+  local)*: countdowns 1, 1, 1 with no attributed delay draw, then base + *u* (base local).
+- *Pillbox, 3 rounds: two consecutive groups (which ones local)*: countdowns 1, 1, then one draw
+  from 3 to 5; next group 1, 1, then base + *u*.
+- *Pillbox, 3 rounds: ammunition at the end of each tick of a group, each group except the first
+  (the first group local)*: 3 (the tick before the group's first shot), 2, 1, 3: full again at the
+  end of the tick of the group's last shot, spread never 0.
+- *Pillbox, 4 rounds: ammunition at the end of each tick of a group, each group except the first
+  (the first group local)*: 4 (the tick before the group's first shot), 3, 2, 1, 4: full again at
+  the end of the tick of the group's last shot, spread never 0.
+- *Test projectile (arcing, inaccurate): attributed draws per shot, in order*: from *S*/2 to *S*
+  (*S* local), then from 0 to 2147483646.
+- *The same: delay draw at each shot that ends its burst*: one from 0 to 2, after the two draws
+  above; the draws after those two at any other shot are kept local.
+- *Spray-attack key on, burst-3 cannon: shots*: every tick from *t*₁ to the tick limit (count
+  local), counted as the fire events the recorder logged for the tank (Procedure step 2), each with
+  its own draw from 0 to 7: countdown 0 after each and no attributed delay draw; reported with no
+  projectile and no damage (how those two were read is not recorded); called void shots here, an
+  inference from those observations.
+- *Spray: attributed draws per void shot*: one from 0 to 7, no attributed delay draw; whether a void
+  shot takes any other draw is not separated from the background.
+- *Spray and test projectile: attributed draws per void shot, in order*: 0 to 7, then *S*/2 to *S*,
+  then 0 to 2147483646, no attributed delay draw; any other draw is not separated from the
+  background.
+- *The first shot: draws in its tick beyond the control's*: no extra draw beyond the draws
+  attributed to the shot (in the run with the test projectile, the two scatter draws among them),
+  the draws attributed to the attack processing set aside (Procedure step 4).
+- *Attack processing: draws outside the shot*: one from 0 to 2 on the order's tick, followed by
+  draws attributed to the attack processing by range and spacing.
 
 ## Evidence
 
