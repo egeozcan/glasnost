@@ -3587,6 +3587,40 @@ impl CursorArt {
     }
 }
 
+#[cfg(test)]
+impl Session {
+    /// Gives the session a synthetic cursor image of `frames` frames of
+    /// `w` × `h` pixels, each filled with colour 1 (tests only).
+    pub(crate) fn set_test_cursor(&mut self, frames: u16, (w, h): (u16, u16)) {
+        use glasnost_fmt::shp::{ShpWriter, WriteFrame};
+        let image = IndexedImage::new(u32::from(w), u32::from(h), vec![1; usize::from(w * h)])
+            .expect("a synthetic cursor frame");
+        let bytes = ShpWriter {
+            width: w,
+            height: h,
+            frames: (0..frames)
+                .map(|_| WriteFrame {
+                    x: 0,
+                    y: 0,
+                    image: image.clone(),
+                    compression: 1,
+                })
+                .collect(),
+        }
+        .write();
+        self.cursor_art = Some(CursorArt {
+            bytes,
+            size: (i32::from(w), i32::from(h)),
+            palette: [0; 1024],
+        });
+    }
+
+    /// The battlefield cursor frame drawn this frame, if any (tests only).
+    pub(crate) fn cursor_frame(&self) -> Option<u16> {
+        self.cursor_shown.map(|(f, _)| f)
+    }
+}
+
 /// The cursor palette's file as the session keeps it (S-0111 claim 19a,
 /// S-0005 claim 22): one copy, shared by the cursor images (S-0214), the
 /// wrench and the bomb icon.

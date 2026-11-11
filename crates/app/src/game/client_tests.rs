@@ -419,3 +419,65 @@ fn state_hash_is_the_same_under_any_settings() {
     };
     assert_eq!(play(false), play(true));
 }
+
+/// The edge-scroll cursor's frames (S-0213 table E: the allowed and the
+/// blocked variant of the eight directions).
+const EDGE_FRAMES: std::ops::RangeInclusive<u16> = 2..=17; // spec: S-0213 table E (frames 2 to 9 allowed, 10 to 17 blocked)
+
+/// A started game past the order block of its first ticks, with a
+/// synthetic cursor image of every battlefield frame, and the client
+/// focused.
+fn cursor_game() -> Client {
+    let mut c = super::access_tests::client((800, 600), 100);
+    super::access_tests::start_by_keyboard(&mut c);
+    c.focused = true;
+    let s = c.session.as_mut().expect("a game");
+    // Frames up to the last of S-0214 table CS (503).
+    s.set_test_cursor(504, (8, 8));
+    while s.play.game.world.tick <= s.play.game.world.orders_blocked_through {
+        s.step();
+    }
+    c
+}
+
+/// One unfrozen cycle's scrolling at real time `t`, then the frame's cursor.
+fn cursor_cycle(c: &mut Client, t: i64) -> Option<u16> {
+    let s = c.session.as_mut().expect("a game");
+    s.clock_ms = t;
+    s.scroll_cycle(t as u64, [false; 4], true);
+    s.update_cursor(&mut c.painter);
+    s.cursor_frame()
+}
+
+/// #86. spec: S-0101 claim 12 (edge scrolling only without a mouse button held), S-0213 claim 24
+/// (the edge-scroll cursor shows during edge scrolling)
+///
+/// A button pressed on the battlefield and held while the pointer moves onto the screen's edge
+/// neither scrolls the view nor shows the edge-scroll cursor; released there, both follow.
+#[test]
+fn a_held_button_shows_no_edge_cursor() {
+    let mut c = cursor_game();
+    let s = c.session.as_ref().expect("a game");
+    let m = s.map_rect();
+    let inside = Point::new(m.x + m.w / 2, m.y + m.h / 2);
+    let edge = Point::new(m.x + m.w / 2, 0);
+    let centre = s.view().origin;
+    c.pointer_down(Button::Left, inside);
+    c.pointer_moved(edge);
+    let held = cursor_cycle(&mut c, 20_000);
+    assert_eq!(
+        c.session.as_ref().unwrap().view().origin,
+        centre,
+        "a held button: no edge scroll"
+    );
+    assert!(
+        !held.is_some_and(|f| EDGE_FRAMES.contains(&f)),
+        "a held button: no edge-scroll cursor, got {held:?}"
+    );
+    c.pointer_up(Button::Left, edge, Modifiers::default());
+    let released = cursor_cycle(&mut c, 20_016);
+    assert!(
+        released.is_some_and(|f| EDGE_FRAMES.contains(&f)),
+        "released at the edge: the edge-scroll cursor, got {released:?}"
+    );
+}
