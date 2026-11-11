@@ -69,8 +69,9 @@ fn s0213_pending_limit() {
         assert!(orders::issue(&mut w, ALPHA, Order::Stop { actor: id }));
     }
     assert!(!orders::issue(&mut w, ALPHA, Order::Stop { actor: id }));
-    // Another house has its own list.
-    assert!(orders::issue(&mut w, BETA, Order::Stop { actor: id }));
+    // Another house has its own list (its order for its own vehicle, S-0213 claim 15).
+    let theirs = of(&w, 1, Kind::Vehicle, 0)[0];
+    assert!(orders::issue(&mut w, BETA, Order::Stop { actor: theirs }));
     tick::step(&mut w);
     assert!(w.houses.iter().all(|h| h.pending.is_empty()));
 }
@@ -272,15 +273,20 @@ fn s0213_deploy() {
     assert!(o.beh.queued == Some(Behaviour::Unload) || o.beh.current == Some(Behaviour::Unload));
 }
 
-// spec: S-0213 claim 15 (no owner check: an order in another house's name still reaches the actor)
+// spec: S-0213 claim 15 (no owner check at application: an actor whose owner changes between the issue and the application of an order still gets it; a house's orders act only on its own objects, so an order for another house's object is not taken)
 #[test]
 fn s0213_no_owner_check() {
     let mut w = ready(1);
+    let own = of(&w, 0, Kind::Vehicle, 0)[0];
     let enemy = of(&w, 1, Kind::Vehicle, 0)[0];
     let c = testkit::cell(4, 4);
-    orders::issue(&mut w, ALPHA, mv(enemy, c));
+    assert!(!orders::issue(&mut w, ALPHA, mv(enemy, c)));
+    assert!(orders::issue(&mut w, ALPHA, mv(own, c)));
+    // The owner changes in the tick of the order.
+    w.obj_mut(own).unwrap().owner = Some(BETA);
     tick::step(&mut w);
-    assert_eq!(w.obj(enemy).unwrap().dest, Some(Target::Cell(c)));
+    assert_eq!(w.obj(own).unwrap().dest, Some(Target::Cell(c)));
+    assert_ne!(w.obj(enemy).unwrap().dest, Some(Target::Cell(c)));
 }
 
 // spec: S-0213 claim 18 (a key command looks at every selected object in order; at most one order each)

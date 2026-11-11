@@ -282,6 +282,12 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     if matches!(order, Order::Routed(_)) {
         return false;
     }
+    // spec: S-0213 claims 3 and 15 (every house, an AI house included, is held to S-0214's input rules when it issues an order, so a house's orders act only on its own objects) and S-0214 Terms (an actor that is not an own object gets select or nothing: input gives it no order), claim 11's detonate included (offered only on the player's own object); nocite: our own input validation (#220): the test is made where an order enters, so every machine makes it in the same tick; an order taken here still applies after an owner change (claim 15)
+    if let Some(a) = order.actor()
+        && w.obj(a).and_then(|o| o.owner) != Some(house)
+    {
+        return false;
+    }
     admit(w, house, order)
 }
 
