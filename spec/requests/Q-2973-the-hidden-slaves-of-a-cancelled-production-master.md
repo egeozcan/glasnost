@@ -1,9 +1,9 @@
 ---
 id: Q-2973
 title: What becomes of the hidden slaves of a production item that is cancelled
-status: open
+status: answered
 related: [S-0402, S-0404, S-0312, S-0601, Q-0193]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
