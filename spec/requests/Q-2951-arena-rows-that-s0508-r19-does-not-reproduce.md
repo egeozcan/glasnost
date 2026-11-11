@@ -3,7 +3,7 @@ id: Q-2951
 title: Arena rows that S-0508 r19's occupier rules do not reproduce
 status: open
 related: [S-0508, S-0215, S-0309, M-0001, M-0002]
-answered-by: [S-0217]
+answered-by: [S-0217, S-0508]
 ---
 
 ## Need
