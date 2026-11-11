@@ -4247,6 +4247,13 @@ impl Live {
             // spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's house, S-0516 claims 35–36, even when drawn as its real type)
             let disguised = self.viewer.is_some()
                 && glasnost_sim::cloak::disguise::appears_disguised(&self.world, o.id, self.viewer);
+            // spec: S-0111 claim 3 (a hovered unit that appears disguised to the local player's house, S-0516 claim 35, shows a health bar only when its disguise has a house; a selected unit is not restricted)
+            let bar = bar.filter(|&selected| {
+                selected
+                    || !disguised
+                    || o.kind == SimKind::Building
+                    || o.cloak.disguise.is_some_and(|d| d.house.is_some())
+            });
             // spec: S-0111 claim 18 (nor while cloak presentation hides the object from the viewer, S-0516 claim 28: a building at fade levels 11 to 15 by the fully cloaked rule, at 0 to 10 not suppressed), the viewer as for the object's own picture (apply_cloak)
             let hidden =
                 glasnost_sim::cloak::view::look(&self.world, o.id, self.viewer.or(o.owner))
