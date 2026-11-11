@@ -118,7 +118,8 @@ fn check(w: &mut World, h: HouseId, t: i32, last: i32) {
     // spec: S-0217 claim 3 (whatever construction vehicles it owns)
     let sale = !held && !factory;
     // spec: S-0217 claim 4 (no building other than occupied civilian buildings, and no construction vehicle: the order at every check, held or not)
-    let bare = buildings.iter().all(|&b| occupied_civilian(w, b, h)) && !owns_construction_vehicle(w, h);
+    let bare =
+        buildings.iter().all(|&b| occupied_civilian(w, b, h)) && !owns_construction_vehicle(w, h);
     if sale {
         sell_all(w, h);
     }
@@ -186,7 +187,12 @@ fn owns_construction_vehicle(w: &World, h: HouseId) -> bool {
 /// whose type undeploys into a vehicle and covers one cell changes nothing.
 /// The building's own damage reaches here only when its type damages
 /// itself (S-0302 claim 8's first stage stops it otherwise).
-pub fn building_hit(w: &mut World, b: ObjectId, owner: Option<HouseId>, attacker: Option<ObjectId>) {
+pub fn building_hit(
+    w: &mut World,
+    b: ObjectId,
+    owner: Option<HouseId>,
+    attacker: Option<ObjectId>,
+) {
     // spec: S-0217 claim 3 (damage that has an attacker; S-0302 claim 1: a known attacker is an object in the world) and Q-2986 (interim: only a hit that lowers the building's health sets L; the caller passes no other)
     if !attacker.is_some_and(|a| w.obj(a).is_some()) {
         return;

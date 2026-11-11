@@ -118,8 +118,14 @@ fn claim_1_mobile_actors_have_hunt_queued_without_a_start() {
     let cart = put(&mut w, Kind::Vehicle, "CART", 0, -4, 3);
     let other = put(&mut w, Kind::Infantry, "GARRI", 1, 4, 0);
     computer::hunt_order(&mut w, A);
-    assert_eq!(beh(&w, inf), (Some(Behaviour::Guard), Some(Behaviour::Hunt)));
-    assert_eq!(beh(&w, cart), (Some(Behaviour::Guard), Some(Behaviour::Hunt)));
+    assert_eq!(
+        beh(&w, inf),
+        (Some(Behaviour::Guard), Some(Behaviour::Hunt))
+    );
+    assert_eq!(
+        beh(&w, cart),
+        (Some(Behaviour::Guard), Some(Behaviour::Hunt))
+    );
     assert_eq!(beh(&w, other), (Some(Behaviour::Guard), None));
 }
 
@@ -194,7 +200,10 @@ fn claim_1_map_action_6_reaches_units_outside_garrisons() {
     // An entry raises the tag.
     let u = put(&mut w, Kind::Infantry, "GARRI", 0, -3, 0);
     garrison::attempt(&mut w, u, b);
-    assert_eq!(beh(&w, out), (Some(Behaviour::Guard), Some(Behaviour::Hunt)));
+    assert_eq!(
+        beh(&w, out),
+        (Some(Behaviour::Guard), Some(Behaviour::Hunt))
+    );
     assert_eq!(beh(&w, enemy), (Some(Behaviour::Guard), None));
 }
 
@@ -213,7 +222,11 @@ fn claim_2_one_draw_sets_the_next_check() {
     computer::house_update(&mut w, A);
     assert_eq!(w.rng, replay, "one R(1, 7) draw and no other");
     assert_eq!(w.houses[0].checks.next, 300 + 105 + r);
-    assert_eq!(w.obj(u).unwrap().beh.queued, Some(Behaviour::Hunt), "claim 4");
+    assert_eq!(
+        w.obj(u).unwrap().beh.queued,
+        Some(Behaviour::Hunt),
+        "claim 4"
+    );
     // Before the delay runs out: no check, no draw.
     let before = w.rng.clone();
     w.tick = 301;
@@ -295,7 +308,10 @@ fn claim_3_a_hit_with_an_attacker_sets_the_last_base_hit_tick() {
     assert_eq!(w.houses[0].checks.last_base_hit, 70, "the house's own unit");
     w.tick = 90;
     damage::apply(&mut w, b, hit(-10, Some(enemy)));
-    assert_eq!(w.houses[0].checks.last_base_hit, 70, "Q-2986 interim: a healing hit");
+    assert_eq!(
+        w.houses[0].checks.last_base_hit, 70,
+        "Q-2986 interim: a healing hit"
+    );
     assert_eq!(w.houses[1].checks.last_base_hit, 0);
 }
 
@@ -311,7 +327,10 @@ fn claim_3_vehicle_like_and_self_damage() {
     damage::apply(&mut w, v, hit(10, Some(enemy)));
     assert_eq!(w.houses[0].checks.last_base_hit, 0, "vehicle-like");
     damage::apply(&mut w, plain, hit(10, Some(plain)));
-    assert_eq!(w.houses[0].checks.last_base_hit, 0, "own damage, no self-damage mark");
+    assert_eq!(
+        w.houses[0].checks.last_base_hit, 0,
+        "own damage, no self-damage mark"
+    );
     damage::apply(&mut w, selfb, hit(10, Some(selfb)));
     assert_eq!(w.houses[0].checks.last_base_hit, 40, "self-damage mark");
 }
