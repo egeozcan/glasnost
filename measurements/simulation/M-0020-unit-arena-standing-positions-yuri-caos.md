@@ -10,7 +10,7 @@ measured-on: 2026-11-02
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-11
 ---
 
 # M-0020: Unit arena, YURI against GGI and SHK and CAOS against E1
@@ -144,8 +144,13 @@ did not change the winner at any of the 12 seeds.
 
 | Quantity | Games | Value |
 |---|---|---|
-| Result equal to the archived game's | 6 | 6 |
-| Shot and damage events identical to those recorded during M-0017's replay of the game | 6 | 6 |
+| Result equal to the archived game's | 6 | below the table |
+| Shot and damage events identical to those recorded during M-0017's replay of the game | 6 | below the table |
+
+Relations for the table above:
+
+- *Result equal to the archived game's*: 6.
+- *Shot and damage events identical to those recorded during M-0017's replay of the game*: 6.
 
 **Part 1: standing positions at tick 0 (Q-2277 q1).**
 
@@ -167,10 +172,10 @@ did not change the winner at any of the 12 seeds.
 
 | Quantity | Games | Value |
 |---|---|---|
-| Procedure 4's pattern equal to the last draws before tick 0's update | 6 | 6 |
+| Procedure 4's pattern equal to the last draws before tick 0's update | 6 | below the table |
 | Draws of that run each taking exactly one raw value | 6 | all |
 | Draws after that run and before tick 0's update | 6 | none |
-| Raw values taken from the seeding to the start of that run | 6 | 706 in each |
+| Raw values taken from the seeding to the start of that run | 6 | below the table |
 
 - The recording does not tie a draw to an object. What fits is the sequence: in identifier
   order, the set-up's objects present at tick 0, those off the map included, match the run draw
@@ -179,6 +184,11 @@ did not change the winner at any of the 12 seeds.
   and equal M-0019's *N*₀ for seed 0. They count raw values, not draws: the scenario-stream log gives the raw
   values each draw takes, and some of the draws before the run take more than one, so fewer than
   706 draws come before it.
+
+Relations for the table above:
+
+- *Procedure 4's pattern equal to the last draws before tick 0's update*: 6.
+- *Raw values taken from the seeding to the start of that run*: 706 in each.
 
 **Part 1: first targets, shots, captures, the drones' end.** Every value is local
 (`measurements/local/M-0020.json`): per game, the first tick at which each house's units hold
@@ -209,11 +219,20 @@ to then), the CAOS kills by attacker kind, and the E1 kills.
 
 | Check | Games | Value |
 |---|---|---|
-| Moved games with every side-A YURI at the arm's position at tick 0 | 120 | 120 |
-| Moved games whose draws before tick 0's update equal arm S's at the same seed | 120 | 120 |
-| Arm S games at seeds 0 to 5 with the archived game's result | 12 | 12 |
-| Same-spot runs identical to part 1's replay of the same game (object state, shots, damage, draws after the seeding) | 2 | 2 |
-| Moved games whose damage events differ from arm S's game at the same seed | 120 | 120 |
+| Moved games with every side-A YURI at the arm's position at tick 0 | 120 | below the table |
+| Moved games whose draws before tick 0's update equal arm S's at the same seed | 120 | below the table |
+| Arm S games at seeds 0 to 5 with the archived game's result | 12 | below the table |
+| Same-spot runs identical to part 1's replay of the same game (object state, shots, damage, draws after the seeding) | 2 | below the table |
+| Moved games whose damage events differ from arm S's game at the same seed | 120 | below the table |
+
+Relations for the table above:
+
+- *Moved games with every side-A YURI at the arm's position at tick 0*: 120.
+- *Moved games whose draws before tick 0's update equal arm S's at the same seed*: 120.
+- *Arm S games at seeds 0 to 5 with the archived game's result*: 12.
+- *Same-spot runs identical to part 1's replay of the same game (object state, shots, damage, draws
+  after the seeding)*: 2.
+- *Moved games whose damage events differ from arm S's game at the same seed*: 120.
 
 ## Evidence
 
