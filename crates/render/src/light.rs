@@ -1591,6 +1591,40 @@ mod tests {
         assert_eq!(light.falloff((11, 11)), Some(858));
     }
 
+    /// #80. spec: S-0104 claim 11, Formulas "Cell light" (d = ⌊√ₜ(n)⌋, the table square root
+    /// of S-0105 F1 and S-0204 claim 5; for a building light it first differs from the integer
+    /// root at 16388 leptons, with the light half a cell off one axis; reach stays n ≤ R²)
+    #[test]
+    fn falloff_takes_the_table_root() {
+        use glasnost_num::Rounding;
+        use glasnost_num::geom::{isqrt, root_floor};
+        // A 2 × 1 foundation: its light is half a cell off the cell centres along x.
+        let radius = 24000;
+        let light = LightSource::building((0, 0), (2, 1), radius, 500, [0; 3]);
+        assert_eq!((light.x, light.y), (256, 128));
+        let mut differing = 0;
+        for i in 0..100 {
+            for j in 0..100 {
+                let (dx, dy) = (i64::from(i) * 256 - 128, i64::from(j) * 256);
+                let n = (dx * dx + dy * dy) as u64;
+                let f = light.falloff((i, j));
+                if n > (radius as u64).pow(2) {
+                    assert_eq!(f, None, "cell ({i}, {j})");
+                    continue;
+                }
+                let d = root_floor(n, true, Rounding::TowardZero) as i64;
+                let exact = isqrt(u128::from(n)) as i64;
+                if d != exact {
+                    differing += 1;
+                    assert!(exact >= 16388, "cell ({i}, {j}) at {exact}");
+                }
+                let r = i64::from(radius);
+                assert_eq!(f, Some(1000 * (r - d) / r), "cell ({i}, {j})");
+            }
+        }
+        assert!(differing > 0, "some reached cell takes a lower table root");
+    }
+
     /// spec: S-0525 claim 13 (a field's light: at the centre point of its centre cell, radius R,
     /// counting at every detail level, low and medium included)
     #[test]
