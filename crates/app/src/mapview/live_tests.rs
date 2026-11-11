@@ -262,6 +262,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -351,6 +352,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1925,6 +1927,7 @@ fn considered_aircraft_defaults_by_kind() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         let s = entries[0]
@@ -2021,6 +2024,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -2217,6 +2221,7 @@ fn a_vehicle_shadow_lies_on_its_surface() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         let items = &entries[0].items;
@@ -2340,6 +2345,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -2442,6 +2448,7 @@ fn multi_turret_draws_the_models_of_the_selected_index() {
             berserk: None,
             turret_index: index,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let sizes: Vec<(u32, u32)> = entries[0]
@@ -2635,6 +2642,7 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
             berserk: None,
             turret_index: index,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let (shadows, lit): (Vec<Item>, Vec<Item>) = entries[0]
@@ -3029,6 +3037,7 @@ fn aircraft_attitude_is_drawn() {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -3239,6 +3248,7 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             berserk: None,
             turret_index: None,
             walk: Default::default(),
+            deck: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -4010,6 +4020,7 @@ fn protection_curtain_vehicle_rows() {
                 berserk: None,
                 turret_index: None,
                 walk: Default::default(),
+                deck: false,
             };
             let look = Look {
                 kind: ProtectKind::Curtain,
@@ -5131,6 +5142,7 @@ fn plain_mobile(kind: Kind) -> Mobile {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     }
 }
 
@@ -5211,6 +5223,74 @@ fn berserk_claim7_rows() {
         "the cell centre shrouded for the viewer"
     );
     assert_eq!(mad.1, plain.1, "shadows unchanged");
+}
+
+/// #74: spec: S-0104 claim 13 (infantry on a bridge deck: U + extra infantry light + (h ÷ 208)·λ,
+/// h measured from the deck; anywhere else outside shadowed cells infantry ignore their height; a
+/// vehicle on a bridge deck: U + 4λ + extra unit light), λ the normal set's level factor with no
+/// effect in force (claim 2, per-cell height terms column)
+#[test]
+fn claim_13_mobiles_on_a_bridge_deck_take_the_level_factor_terms() {
+    use glasnost_render::light::brightness_rho;
+    // An invented level factor, thousandths per height level.
+    const LAMBDA: i32 = 30;
+    let (import, catalogue, assets) = context();
+    let mut map = decode(
+        &Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new()),
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    map.lighting.normal.level = LAMBDA;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    // The synthetic rules give no extra light: 0 (S-0104 claim 13).
+    let u = painter.ground_light(glasnost_map::CellXY::new(2, 3));
+    let mut rhos = |m: Mobile| -> Vec<u16> {
+        let (e, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        lit_shades(&e[0].items).iter().map(|s| s.rho).collect()
+    };
+    let rho = |b: i32| brightness_rho(b) as u16;
+    let man = |deck, above| Mobile {
+        deck,
+        above,
+        ..plain_mobile(Kind::Infantry)
+    };
+    assert_eq!(
+        rhos(man(false, 416)),
+        [rho(u)],
+        "off a deck: no height term"
+    );
+    assert_eq!(rhos(man(true, 0)), [rho(u)], "standing on the deck: h = 0");
+    assert_eq!(rhos(man(true, 416)), [rho(u + 2 * LAMBDA)], "416 ÷ 208 = 2");
+    let car = |deck| Mobile {
+        deck,
+        ..plain_mobile(Kind::Vehicles)
+    };
+    let off = rhos(car(false));
+    assert!(
+        !off.is_empty() && off.iter().all(|&r| r == rho(u)),
+        "{off:?}"
+    );
+    let on = rhos(car(true));
+    assert!(
+        !on.is_empty() && on.iter().all(|&r| r == rho(u + 4 * LAMBDA)),
+        "{on:?}"
+    );
 }
 
 /// The items `painter` draws for MANX at height 520 with shadow height

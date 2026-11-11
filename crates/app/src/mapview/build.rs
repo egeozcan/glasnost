@@ -4169,6 +4169,8 @@ impl<'a> Builder<'a> {
             // spec: S-0105 claim 43 and S3 (the index a vehicle is created with: no tick has run)
             turret_index: creation_turret_index(self.rules, self.import, kind, i),
             walk: Default::default(),
+            // A map unit stands on its surface (S-0107 claim 19), on no deck.
+            deck: false,
         };
         Some(self.mobile(&m))
     }
@@ -5622,6 +5624,9 @@ pub struct Mobile {
     /// shown tick (S-0102 claim 22, S-0105 claim 16), as the view keeps
     /// them ([`super::walk`]); counter 0 and standing without a game state.
     pub walk: super::walk::Walk,
+    /// Whether it is on a bridge deck (S-0104 claim 13, the deck rows);
+    /// `false` without a game state.
+    pub deck: bool,
 }
 
 /// The selected turret index of a vehicle (S-0105 claim 43, state table

@@ -2997,6 +2997,8 @@ impl Live {
                     .then(|| inputs.import.turret_tables.get(&idx))
                     .flatten(),
             ),
+            // spec: S-0104 claim 13 (the bridge-deck rows of vehicles and infantry)
+            deck: o.layer == Layer::Deck,
         })
     }
 

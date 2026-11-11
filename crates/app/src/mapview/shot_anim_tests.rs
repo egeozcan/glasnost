@@ -183,6 +183,7 @@ fn mobile(w: &World, a: ObjectId, cart: usize) -> Mobile {
         berserk: None,
         turret_index: None,
         walk: Default::default(),
+        deck: false,
     }
 }
 
