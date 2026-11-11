@@ -481,3 +481,106 @@ fn a_held_button_shows_no_edge_cursor() {
         "released at the edge: the edge-scroll cursor, got {released:?}"
     );
 }
+
+/// Animated cursors of at least four frames (S-0214 table C).
+const ANIMATED: [std::ops::RangeInclusive<u16>; 3] = [
+    18..=30,   // spec: S-0214 table C (select, toggle select: 18–30)
+    31..=40,   // spec: S-0214 table C (move frames 31–40)
+    110..=118, // spec: S-0214 table C (deploy, area attack: 110–118)
+];
+
+/// A point on the battlefield, away from the screen's edges, where an
+/// animated cursor shows, and that cursor's first frame.
+fn animated_point(c: &mut Client, t: i64) -> (Point, u16) {
+    let m = c.session.as_ref().expect("a game").map_rect();
+    for dy in (40..m.h - 40).step_by(4) {
+        for dx in (40..m.w - 40).step_by(4) {
+            let p = Point::new(m.x + dx, m.y + dy);
+            c.pointer_moved(p);
+            let s = c.session.as_mut().expect("a game");
+            s.clock_ms = t;
+            s.update_cursor(&mut c.painter);
+            if let Some(r) = s
+                .cursor_frame()
+                .and_then(|f| ANIMATED.iter().find(|r| r.contains(&f)))
+            {
+                return (p, *r.start());
+            }
+        }
+    }
+    let s = c.session.as_ref().unwrap();
+    panic!(
+        "no point shows an animated cursor; selection {:?}, map {m:?}",
+        s.play.selection
+    );
+}
+
+/// The frame's cursor at real time `t`, without a scroll cycle.
+fn cursor_at(c: &mut Client, t: i64) -> Option<u16> {
+    let s = c.session.as_mut().expect("a game");
+    s.clock_ms = t;
+    s.update_cursor(&mut c.painter);
+    s.cursor_frame()
+}
+
+/// #85. spec: S-0214 claim 22 (changing cursor kind starts at its first frame and restarts the
+/// interval; the clock advances a frame every 4 units of 16 milliseconds)
+///
+/// An animated action cursor that gave way to the system pointer (over the sidebar) or to the
+/// edge-scroll cursor starts again at its first frame when the pointer comes back.
+#[test]
+fn a_cursor_shown_again_starts_at_its_first_frame() {
+    let mut c = cursor_game();
+    // An own vehicle selected: the ground offers a move.
+    let unit = super::access_tests::own(&c, glasnost_sim::rules::Kind::Vehicle)[0];
+    c.session.as_mut().unwrap().play.selection = vec![unit];
+    let (p, first) = animated_point(&mut c, 30_000);
+    // Restart at a known time: away from the map, then back.
+    c.pointer_left();
+    let _ = cursor_at(&mut c, 30_000);
+    c.pointer_moved(p);
+    assert_eq!(cursor_at(&mut c, 40_000), Some(first));
+    // Three advances, 64 ms apart.
+    let advance = |c: &mut Client, t: i64| {
+        for k in 1..=3 {
+            assert_eq!(cursor_at(c, t + 64 * k), Some(first + k as u16));
+        }
+    };
+    advance(&mut c, 40_000);
+    // Over the sidebar the system pointer shows; back on the map, the
+    // select cursor starts again.
+    let m = c.session.as_ref().unwrap().map_rect();
+    c.pointer_moved(Point::new(m.x + m.w + 20, m.y + m.h / 2));
+    assert_eq!(cursor_at(&mut c, 40_208), None, "the system pointer");
+    c.pointer_moved(p);
+    assert_eq!(
+        cursor_at(&mut c, 40_272),
+        Some(first),
+        "after the system pointer"
+    );
+    // The edge-scroll cursor, then back to the same place.
+    advance(&mut c, 40_272);
+    let centre = c.session.as_ref().unwrap().centre();
+    c.pointer_moved(Point::new(m.x + m.w / 2, 0));
+    let edge = cursor_cycle(&mut c, 40_480);
+    assert!(edge.is_some_and(|f| EDGE_FRAMES.contains(&f)), "{edge:?}");
+    c.pointer_moved(p);
+    // While the edge momentum runs out the retained direction's cursor
+    // shows; the view is put back before each frame's cursor, so that `p`
+    // keeps its object.
+    let mut t = 40_496;
+    let back = loop {
+        let s = c.session.as_mut().unwrap();
+        s.clock_ms = t;
+        s.scroll_cycle(t as u64, [false; 4], true);
+        s.set_centre(centre);
+        s.update_cursor(&mut c.painter);
+        let f = s.cursor_frame();
+        if !f.is_some_and(|f| EDGE_FRAMES.contains(&f)) {
+            break f;
+        }
+        t += 16;
+        assert!(t < 50_000, "the edge momentum runs out");
+    };
+    assert_eq!(back, Some(first), "after the edge-scroll cursor");
+}
