@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-11
 ---
 
 # M-0008: Random streams with the random-state recorder
@@ -125,40 +125,74 @@ approved-on: 2026-10-30
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Replay of logged draws on the S-0202 generator, results and index steps | mismatches | 8 runs; logged calls per run: local | 0 | | exact |
+| Replay of logged draws on the S-0202 generator, results and index steps | mismatches | 8 runs; logged calls per run: local | below the table | | exact |
 | Control interval, ticks 0 to 299: draws of the R5 a run against its control | draws | 1 pair | identical | | exact |
-| Draws in the control interval, ticks 0 to 299, game-start draws at tick 0 included, with the runs' starting-unit setting, by range: raw value | calls / index steps | 1 run | 3494 / 3494 | | exact within the runs' setting; none outside it (not recorded) |
+| Draws in the control interval, ticks 0 to 299, game-start draws at tick 0 included, with the runs' starting-unit setting, by range: raw value | calls / index steps | 1 run | below the table | | exact within the runs' setting; none outside it (not recorded) |
 | Range 0..0, equal bounds (the case of S-0202 claim 4) | calls / index steps | 1 run | logged, and none takes a raw value (count local) | | exact within the runs' setting; none outside it (not recorded) |
 | Every other range | calls / index steps | 1 run | ranges, bounds, calls and index steps local | | exact within the runs' setting; none outside it (not recorded) |
-| Draws at the placement tick (300) that the control lacks, in order | draws | 1 | raw value; 0..3; 0..2 | | exact |
-| The 0..2 draws that the control lacks, taken as the E1's, in the clean window, split into chains by their ticks and values (Notes) | chains | 1 run | 2: family G, whose first draw is the third of the placement tick's draws, and family T, whose first draw comes a fixed first run-out after the creation (local) | | a fit (Notes), not checked: no test tolerance |
+| Draws at the placement tick (300) that the control lacks, in order | draws | 1 | below the table | | exact |
+| The 0..2 draws that the control lacks, taken as the E1's, in the clean window, split into chains by their ticks and values (Notes) | chains | 1 run | below the table | | a fit (Notes), not checked: no test tolerance |
 | Family G: spacing to the next draw | ticks | every interval of the clean window (count local) | a fit, not a check (Notes): one base for the whole family + the previous draw, base local | | a fit (Notes), not checked: no test tolerance |
-| Idle attempts (identified by their own timer and *r* draws) on a tick of a family G draw | attempts | 4 | 4 | | a fit (Notes), not checked: no test tolerance |
-| Family T: first | ticks after the creation | 1 | local: a fixed first run-out, the same as the MTNK control run's after tick 0 | | a fit (Notes), not checked: no test tolerance |
+| Idle attempts (identified by their own timer and *r* draws) on a tick of a family G draw | attempts | 4 | below the table | | a fit (Notes), not checked: no test tolerance |
+| Family T: first | ticks after the creation | 1 | below the table | | a fit (Notes), not checked: no test tolerance |
 | Family T: spacing to the next draw | ticks | every interval of the clean window (count local) | a fit, not a check (Notes): the normal targeting delay (local) + the previous draw | | a fit (Notes), not checked: no test tolerance |
-| The MTNK control run: its 0..2 draws, as chains | tick | 1 run | a fit (Notes): a chain from tick 0 at family G's spacing and a chain from the first run-out after tick 0 at family T's, in every interval to the tick limit | | a fit (Notes), not checked: no test tolerance |
+| The MTNK control run: its 0..2 draws, as chains | tick | 1 run | below the table | | a fit (Notes), not checked: no test tolerance |
 | Idle attempts 1 to 4, in the clean window | ticks | 4 | local | | exact |
-| Draws of one idle attempt, in order | draws | 4 | timer draw 0..2147483646; *r* 0..10; δ 0..7 after *r* = 6 and *r* = 10 (attempts 1 and 3), none after *r* = 0 and *r* = 5 | | exact |
-| Attempt 1 | draws | 1 | timer local; *r* = 6 (one rejected value, 2 index steps); δ = 2 | | exact |
-| Attempt 2 | draws | 1 | timer local; *r* = 0; no δ | | exact |
-| Attempt 3 | draws | 1 | timer local; *r* = 10; δ = 7 | | exact |
-| Attempt 4 | draws | 1 | timer local; *r* = 5; no δ | | exact |
+| Draws of one idle attempt, in order | draws | 4 | below the table | | exact |
+| Attempt 1 | draws | 1 | below the table | | exact |
+| Attempt 2 | draws | 1 | below the table | | exact |
+| Attempt 3 | draws | 1 | below the table | | exact |
+| Attempt 4 | draws | 1 | below the table | | exact |
 | Each later attempt against S-0107 F4's predicted expiry (local) | | 3 | the first family G tick (taken as a guard processing) at or after the expiry | | a fit (Notes), not checked: no test tolerance |
 | Family G ticks (taken as guard processings) just before attempts 2, 3 and 4 | tick | 3 | local; each before the predicted expiry | | a fit (Notes), not checked: no test tolerance |
-| Attempt 1, timing | | 1 | at the second family G tick, taken as the E1's second guard processing (the first is at 300, the creation tick); its tick local | | a fit (Notes), not checked: no test tolerance |
-| Desired body facing after attempt 3's δ = 7 | eighths of a turn | 1 | 7 | | exact |
-| Desired body facing after attempt 1's δ = 2 | eighths of a turn | 1 | 2, the facing it already had: no change shows | | exact |
+| Attempt 1, timing | | 1 | below the table | | a fit (Notes), not checked: no test tolerance |
+| Desired body facing after attempt 3's δ = 7 | eighths of a turn | 1 | below the table | | exact |
+| Desired body facing after attempt 1's δ = 2 | eighths of a turn | 1 | below the table | | exact |
 | Production, R5 c: draws at 300 that the control lacks | draws | 1 | one raw value | | exact |
 | Production: the unit leaves the barracks | ticks after 300 | 1 | local, as is the cell it leaves to | | exact |
-| Production: first idle attempt | ticks after leaving | 1 | local; a timer draw, then *r* = 0 | | exact |
+| Production: first idle attempt | ticks after leaving | 1 | below the table | | exact |
 | The unsellable run against the R5 a run | state records | 1 pair | identical over the ticks both recorded; inconclusive: whether its test rules file took effect was not shown (Notes) | | none |
-| Seed, launches 1, 2, 3 | | 3 | 39 557 213, 39 586 941, 39 604 667 | | exact |
+| Seed, launches 1, 2, 3 | | 3 | below the table | | exact |
 | Seed against the system tick count read just before the seeding | | 3 | equal | | exact |
-| Seed minus host uptime | ms | 3 | −497, −499, −503 | | ±10 ms |
-| Seed differences against wall-clock differences, launches 1–2 and 2–3 | ms | 2 | 29 728 / 29 727; 17 726 / 17 728 | | within 2 ms |
-| *N*, scenario stream at tick 0, with the runs' starting-unit setting | raw values | 3 | 725, 708, 714 | | exact within the runs' setting; none outside it (not recorded) |
-| *N*, unsynchronised stream at tick 0, same seed and setting | raw values | 3 | 147, 133, 115 | | exact within the runs' setting; none outside it (not recorded) |
-| An earlier seeding before the game-start seeding, read from the random-state recorder's seeding rows | seed units | 3 | in every launch a seed about 600 lower, on a stream the record does not identify (about 0.6 s earlier if that stream is seeded from the same millisecond count, which is not shown); launch 1: seed 39 556 602, then 39 557 213, 611 apart | | launch 1 exact; launches 2 and 3 about 600 |
+| Seed minus host uptime | ms | 3 | below the table | | ±10 ms |
+| Seed differences against wall-clock differences, launches 1–2 and 2–3 | ms | 2 | below the table | | within 2 ms |
+| *N*, scenario stream at tick 0, with the runs' starting-unit setting | raw values | 3 | below the table | | exact within the runs' setting; none outside it (not recorded) |
+| *N*, unsynchronised stream at tick 0, same seed and setting | raw values | 3 | below the table | | exact within the runs' setting; none outside it (not recorded) |
+| An earlier seeding before the game-start seeding, read from the random-state recorder's seeding rows | seed units | 3 | below the table | | launch 1 exact; launches 2 and 3 about 600 |
+
+Relations for the table above:
+
+- *Replay of logged draws on the S-0202 generator, results and index steps*: 0.
+- *Draws in the control interval, game-start draws included, by range: raw value*: 3494 / 3494.
+- *Draws at the placement tick (300) that the control lacks, in order*: raw value; 0..3; 0..2.
+- *The 0..2 draws that the control lacks, taken as the E1's, as chains*: 2: family G, whose first
+  draw is the third of the placement tick's draws, and family T, whose first draw comes a fixed
+  first run-out after the creation (local).
+- *Idle attempts on a tick of a family G draw*: 4.
+- *Family T: first*: local: a fixed first run-out, the same as the MTNK control run's after tick 0.
+- *The MTNK control run: its 0..2 draws, as chains*: a fit (Notes): a chain from tick 0 at family
+  G's spacing and a chain from the first run-out after tick 0 at family T's, in every interval to
+  the tick limit.
+- *Draws of one idle attempt, in order*: timer draw 0..2147483646; *r* 0..10; δ 0..7 after *r* = 6
+  and *r* = 10 (attempts 1 and 3), none after *r* = 0 and *r* = 5.
+- *Attempt 1*: timer local; *r* = 6 (one rejected value, 2 index steps); δ = 2.
+- *Attempt 2*: timer local; *r* = 0; no δ.
+- *Attempt 3*: timer local; *r* = 10; δ = 7.
+- *Attempt 4*: timer local; *r* = 5; no δ.
+- *Attempt 1, timing*: at the second family G tick, taken as the E1's second guard processing (the
+  first is at 300, the creation tick); its tick local.
+- *Desired body facing after attempt 3's δ = 7*: 7.
+- *Desired body facing after attempt 1's δ = 2*: 2, the facing it already had: no change shows.
+- *Production: first idle attempt*: local; a timer draw, then *r* = 0.
+- *Seed, launches 1, 2, 3*: 39 557 213, 39 586 941, 39 604 667.
+- *Seed minus host uptime*: −497, −499, −503.
+- *Seed differences against wall-clock differences, launches 1–2 and 2–3*: 29 728 / 29 727; 17 726 /
+  17 728.
+- *N, scenario stream at tick 0, with the runs' starting-unit setting*: 725, 708, 714.
+- *N, unsynchronised stream at tick 0, same seed and setting*: 147, 133, 115.
+- *An earlier seeding before the game-start seeding*: in every launch a seed about 600 lower, on a
+  stream the record does not identify (about 0.6 s earlier if that stream is seeded from the same
+  millisecond count, which is not shown); launch 1: seed 39 556 602, then 39 557 213, 611 apart.
 
 The control interval's rows (the raw-value and equal-bounds counts and every other range), the
 tick-0 *N* readings and the bystander drift in Notes were taken with the runs' starting-unit
