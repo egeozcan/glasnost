@@ -3284,6 +3284,118 @@ fn aircraft_attitude_is_drawn() {
     );
 }
 
+/// spec: S-0105 claims 7, 8, 10 and 42 (the turret and barrel of a type with the turret flag are
+/// placed on the body transform D, here a flying body's pitched and banked one); claim 26 (an
+/// image is reused only for the same pose). design: render (#82) their images under an attitude
+/// are kept apart from the level ones (Q-2983).
+#[test]
+fn an_aircraft_turret_follows_its_attitude() {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let rules = format!(
+        "{RULES}[AircraftTypes]\n1=JETX\n[JETX]\nTurret=yes\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
+    );
+    let (mut import, catalogue, mut assets) = context_with(&rules);
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [
+                ("body".to_string(), b"jetx.vxl".to_vec()),
+                ("turret".to_string(), b"jetxtur.vxl".to_vec()),
+                ("barrel".to_string(), b"jetxbarl.vxl".to_vec()),
+            ]
+            .into(),
+            ..Default::default()
+        },
+    );
+    for name in [&b"jetx.vxl"[..], b"jetxtur.vxl", b"jetxbarl.vxl"] {
+        assets.insert(
+            name,
+            VxlWriter {
+                model: &synthetic_model(),
+            }
+            .write(),
+        );
+    }
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene: Scene = built.scene;
+    let craft = |height: i32, turn: i32| Mobile {
+        kind: Kind::Aircraft,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos: (3 * 256 + 128, 3 * 256 + 128, 1500),
+        body: 16384,
+        turret: 20480,
+        elevation: 16384,
+        anim: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude: Attitude::Flying {
+            height,
+            speed: 0.75f64.to_bits(),
+            turn,
+            crashing: false,
+            tumble: (0, 0),
+        },
+        disabled: false,
+        above: 0,
+        protection: None,
+        generic_shadow: None,
+        berserk: None,
+        turret_index: None,
+        walk: Default::default(),
+        deck: false,
+    };
+    // The lit images drawn, body first: the body, then the turret and the barrel.
+    let mut images = |m: Mobile| {
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        entries[0]
+            .items
+            .iter()
+            .filter(|i| i.paint != Paint::Shadow)
+            .map(|i| i.image)
+            .collect::<Vec<_>>()
+    };
+    let banked = images(craft(10, 1));
+    let level = images(craft(0, 0));
+    assert_eq!(banked.len(), 3, "body, turret and barrel: {banked:?}");
+    assert_eq!(level.len(), 3, "body, turret and barrel: {level:?}");
+    assert_ne!(banked[0], level[0], "the body is drawn banked");
+    for k in 1..3 {
+        assert_ne!(
+            banked[k], level[k],
+            "a banked turret part is not the level one"
+        );
+    }
+    // Each attitude reuses its own images.
+    assert_eq!(images(craft(10, 1)), banked);
+    assert_eq!(images(craft(0, 0)), level);
+}
+
 /// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405
 /// claims 13 and 20 is drawn at trunc(b / 2) ‰, before claim 15's shade-row mapping)
 #[test]
