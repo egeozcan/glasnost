@@ -29,6 +29,8 @@ use std::cmp::Ordering;
 use std::ops::RangeInclusive;
 
 use glasnost_fmt::image::{PALETTE_LEN, Palette, Rgb8};
+use glasnost_num::Rounding;
+use glasnost_num::geom::root_floor;
 
 use crate::palette::hicolor_565;
 
@@ -122,6 +124,15 @@ pub struct LightQuirks {
     /// always, h above the terrain, plus −500 in a shadowed cell off a deck
     /// at h ≤ 208.
     pub infantry_height_light_limited: bool,
+    /// The ruleset's `quirks.table_root_distance` (S-0204, read here by
+    /// claim 11): the falloff distance is the table square root; off, the
+    /// integer square root. S-0204 owns the switch, so [`Self::named`]
+    /// leaves it out.
+    pub table_root_distance: bool,
+    /// The ruleset's `quirks.chop_rounding` (S-0205, read here by claim 11
+    /// and Formulas "Cell light"): the squared distance goes to single
+    /// precision rounded toward zero; off, to nearest. S-0205 owns it.
+    pub chop_rounding: bool,
 }
 
 impl Default for LightQuirks {
@@ -139,6 +150,10 @@ impl Default for LightQuirks {
             deploy_animation_unlit: true,
             building_light_tint_default_1000: true,
             infantry_height_light_limited: true,
+            // spec: S-0204 claim 5, S-0104 claim 11 (quirks.table_root_distance, default on)
+            table_root_distance: true,
+            // spec: S-0205 claim 5, S-0104 Formulas "Cell light" (quirks.chop_rounding, default on)
+            chop_rounding: true,
         }
     }
 }
@@ -520,8 +535,8 @@ impl LightSource {
 
     /// The falloff *f* in ‰ of this light at `cell`, or `None` when it
     /// does not reach the cell's centre (S-0104 claim 11, Formulas "Cell
-    /// light").
-    pub fn falloff(&self, cell: (i32, i32)) -> Option<i64> {
+    /// light"). `q` gives the distance's square root.
+    pub fn falloff(&self, cell: (i32, i32), q: &LightQuirks) -> Option<i64> {
         let radius = i64::from(self.radius);
         // spec: S-0104 claim 11 (radius 0 reaches no cell: a departure)
         if radius <= 0 {
@@ -532,12 +547,20 @@ impl LightSource {
         let cy = i64::from(cell.1) * CELL_LEPTONS + 128;
         let dx = cx - i64::from(self.x);
         let dy = cy - i64::from(self.y);
-        // spec: S-0104 claim 11, Formulas "Cell light" (d = the integer square root of Δx² + Δy²)
-        let d = (dx * dx + dy * dy).unsigned_abs().isqrt() as i64;
-        // spec: S-0104 claim 11 (reaches the cell when d ≤ R)
-        if d > radius {
+        let n = (dx * dx + dy * dy).unsigned_abs();
+        // spec: S-0104 claim 11, Formulas "Cell light" (reaches the cell when n ≤ R², exact integers)
+        if n > radius.unsigned_abs().pow(2) {
             return None;
         }
+        let mode = if q.chop_rounding {
+            Rounding::TowardZero
+        } else {
+            // spec: S-0104 Formulas "Cell light", S-0205 (quirks.chop_rounding off: σ(n) rounds to nearest)
+            Rounding::Nearest
+        };
+        // spec: S-0104 claim 11, Formulas "Cell light" (d = ⌊√ₜ(n)⌋, the table square root; with
+        // quirks.table_root_distance off ⌊√n⌋)
+        let d = root_floor(n, q.table_root_distance, mode) as i64;
         // spec: S-0104 claim 11, Formulas "Cell light" (f = ⌊1000·(R − d) / R⌋)
         Some(1000 * (radius - d) / radius)
     }
@@ -686,7 +709,7 @@ pub fn full_recompute_with_terms(
         if source.required_detail > detail {
             continue;
         }
-        let Some(f) = source.falloff(cell) else {
+        let Some(f) = source.falloff(cell, q) else {
             continue;
         };
         // spec: S-0104 claim 11 (⌊I·f / 1000⌋, truncation toward zero)
@@ -1168,6 +1191,8 @@ mod tests {
         deploy_animation_unlit: true,
         building_light_tint_default_1000: true,
         infantry_height_light_limited: true,
+        table_root_distance: true,
+        chop_rounding: true,
     };
 
     /// Synthetic palette: entry i = (i, 255 − i, i / 2).
@@ -1566,7 +1591,7 @@ mod tests {
         let light = LightSource::building((10, 10), (1, 1), 2560, 500, [0; 3]);
         assert_eq!((light.x, light.y), (10 * 256 + 128, 10 * 256 + 128));
         for k in 0..=10 {
-            let f = light.falloff((10 + k, 10)).unwrap();
+            let f = light.falloff((10 + k, 10), &Q).unwrap();
             assert_eq!(f, 1000 - 100 * i64::from(k));
             let hi = full_recompute(
                 30,
@@ -1586,9 +1611,66 @@ mod tests {
                 assert_eq!(lo.source_sum, 0);
             }
         }
-        assert_eq!(light.falloff((21, 10)), None);
+        assert_eq!(light.falloff((21, 10), &Q), None);
         // Diagonal: Δ = (256, 256), d = ⌊√131072⌋ = 362, f = ⌊1000·2198 / 2560⌋ = 858.
-        assert_eq!(light.falloff((11, 11)), Some(858));
+        assert_eq!(light.falloff((11, 11), &Q), Some(858));
+    }
+
+    /// #80. spec: S-0104 claim 11, Formulas "Cell light" (d = ⌊√ₜ(n)⌋, the table square root
+    /// of S-0105 F1 and S-0204 claim 5; for a building light it first differs from the integer
+    /// root at 16388 leptons, with the light half a cell off one axis; reach stays n ≤ R²)
+    #[test]
+    fn falloff_takes_the_table_root() {
+        use glasnost_num::Rounding;
+        use glasnost_num::geom::{isqrt, root_floor};
+        // A 2 × 1 foundation: its light is half a cell off the cell centres along x.
+        let radius = 24000;
+        let light = LightSource::building((0, 0), (2, 1), radius, 500, [0; 3]);
+        assert_eq!((light.x, light.y), (256, 128));
+        // quirks.table_root_distance off (S-0204): the integer root.
+        let off = LightQuirks {
+            table_root_distance: false,
+            ..Q
+        };
+        let mut differing = 0;
+        for i in 0..100 {
+            for j in 0..100 {
+                let (dx, dy) = (i64::from(i) * 256 - 128, i64::from(j) * 256);
+                let n = (dx * dx + dy * dy) as u64;
+                let f = light.falloff((i, j), &Q);
+                if n > (radius as u64).pow(2) {
+                    assert_eq!(f, None, "cell ({i}, {j})");
+                    assert_eq!(light.falloff((i, j), &off), None, "cell ({i}, {j})");
+                    continue;
+                }
+                let d = root_floor(n, true, Rounding::TowardZero) as i64;
+                let exact = isqrt(u128::from(n)) as i64;
+                if d != exact {
+                    differing += 1;
+                    assert!(exact >= 16388, "cell ({i}, {j}) at {exact}");
+                }
+                let r = i64::from(radius);
+                assert_eq!(f, Some(1000 * (r - d) / r), "cell ({i}, {j})");
+                assert_eq!(
+                    light.falloff((i, j), &off),
+                    Some(1000 * (r - exact) / r),
+                    "cell ({i}, {j})"
+                );
+                // A building light's n is exact in single precision: the mode changes nothing.
+                let nearest = LightQuirks {
+                    chop_rounding: false,
+                    ..Q
+                };
+                assert_eq!(light.falloff((i, j), &nearest), f, "cell ({i}, {j})");
+            }
+        }
+        assert!(differing > 0, "some reached cell takes a lower table root");
+        // Reach is n ≤ R² exactly: a cell whose integer distance truncates to R is not reached.
+        let edge = LightSource::building((0, 0), (1, 1), 300, 500, [0; 3]);
+        // Δ = (256, 256): n = 131072, ⌊√n⌋ = 362 but 362² = 131044 < n; R = 363 reaches it.
+        let at = |radius| LightSource { radius, ..edge };
+        assert_eq!(at(363).falloff((1, 1), &Q), Some(1000 / 363));
+        assert_eq!(at(362).falloff((1, 1), &Q), None);
     }
 
     /// spec: S-0525 claim 13 (a field's light: at the centre point of its centre cell, radius R,
@@ -1597,8 +1679,8 @@ mod tests {
     fn field_light_counts_at_every_detail_level() {
         let light = LightSource::field((10, 10), 2560, 500, [0, 1000, 0]);
         assert_eq!((light.x, light.y), (10 * 256 + 128, 10 * 256 + 128));
-        assert_eq!(light.falloff((10, 10)), Some(1000));
-        assert_eq!(light.falloff((21, 10)), None);
+        assert_eq!(light.falloff((10, 10), &Q), Some(1000));
+        assert_eq!(light.falloff((21, 10), &Q), None);
         for detail in [DetailLevel::Low, DetailLevel::Medium, DetailLevel::High] {
             let c = full_recompute(30, 0, 0, [100; 3], (10, 10), 0, &[light], detail, &Q);
             assert_eq!(c.unscaled_ground, 300 + 500);
@@ -1637,7 +1719,7 @@ mod tests {
     #[test]
     fn radius_zero_reaches_nothing() {
         let light = LightSource::building((3, 3), (1, 1), 0, 500, [0; 3]);
-        assert_eq!(light.falloff((3, 3)), None);
+        assert_eq!(light.falloff((3, 3), &Q), None);
         let c = full_recompute(
             100,
             0,

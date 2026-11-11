@@ -397,7 +397,14 @@ fn overlapping_writer_shadows() {
         } else {
             assert!(o < one, "darkened twice where the shadows overlap");
         }
+        // The GPU halves rounded down (#79): the same packed pixel. The low display bits keep
+        // the halved expansion (255, 127, 63), the CPU re-expands (255, 123, 57).
         for (a, b) in cpu.chunks(4).zip(gpu.chunks(4)) {
+            assert_eq!(
+                (a[0] >> 3, a[1] >> 2, a[2] >> 3),
+                (b[0] >> 3, b[1] >> 2, b[2] >> 3),
+                "switch {on}: cpu {a:?} gpu {b:?}"
+            );
             for k in 0..3 {
                 assert!(a[k].abs_diff(b[k]) <= 8, "switch {on}: cpu {a:?} gpu {b:?}");
             }

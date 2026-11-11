@@ -153,6 +153,9 @@ pub struct Session {
     /// The view's centre at the last name-tip update, to tell a moving view
     /// (S-0111 claim 20).
     tip_centre: (i32, i32),
+    /// Whether the last scroll cycle moved the view: the view is moving in
+    /// the drawn frames up to the next cycle too (S-0111 claim 20, #84).
+    scroll_moved: bool,
     /// The name tip glyphs' painter rows, one per tip colour
     /// ([`name_tip::register`]).
     tip_rows: [Option<u32>; 2],
@@ -528,6 +531,7 @@ impl Session {
             // spec: S-0015 State and ordering (the table is read once, at start-up, by the install: `install::prepare`; the client hands it to the game)
             strings: None,
             tip_centre: (0, 0),
+            scroll_moved: false,
             tip_rows: [None; 2],
             edge: EdgeScroll::default(),
             edge_live: true,
@@ -949,11 +953,7 @@ impl Session {
             )
             .displacement
         });
-        // spec: S-0101 claim 12 (edge scrolling only without a mouse button held)
-        let pointer = self
-            .pointer
-            .filter(|_| edge && self.press.is_none())
-            .map(|p| (p.x, p.y));
+        let pointer = self.edge_pointer(edge);
         let e = self.edge.cycle(
             pointer,
             self.screen,
@@ -963,8 +963,27 @@ impl Session {
             blocked,
         );
         let a = scroll::arrows(held);
+        let before = self.centre;
         // spec: S-0101 claims 14 and 16 (mouse and arrow requests add before the next view position, subject to F5)
         self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
+        // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll) and S-0101 claims 13 to 15 (the view moves once per unfrozen cycle): a cycle that moved it keeps it moving until the next cycle (#84)
+        self.scroll_moved = self.centre != before;
+    }
+
+    /// The game stands still (no cycle runs: S-0201 claims 8 and 9), so the
+    /// view no longer moves (S-0111 claim 20, #84).
+    pub fn view_still(&mut self) {
+        self.scroll_moved = false;
+    }
+
+    /// The pointer as edge scrolling sees it, for its request and for its
+    /// cursor alike (#86): none while edge scrolling is suppressed (`live`
+    /// false) or a mouse button is held.
+    fn edge_pointer(&self, live: bool) -> Option<(i32, i32)> {
+        // spec: S-0101 claim 12 (edge scrolling only without a mouse button held)
+        self.pointer
+            .filter(|_| live && self.press.is_none())
+            .map(|p| (p.x, p.y))
     }
 
     /// Whether F5 blocks a one-pixel scroll in a screen direction from the
@@ -1149,13 +1168,14 @@ impl Session {
     /// battlefield.
     pub fn under(&mut self, p: Point) -> (CellXY, Option<ObjectId>) {
         let (qx, qy) = self.world_point(p);
-        let map = &self.loaded.map;
+        // spec: S-0101 F8 (the probe reads each cell's height level): the world's cells, whose levels change in play (a collapsed pier), not the map file's (#83)
+        let cells = &self.play.game.world.cells.grid;
         let q = ProjectionQuirks::default();
         // spec: S-0101 claim 10 (the highest level is read only with quirks.cursor_probe_depth_180 off)
         let max_level = if q.cursor_probe_depth_180 {
             0
         } else {
-            map.cells
+            cells
                 .iter()
                 .map(|(_, c)| i32::from(c.level))
                 .max()
@@ -1165,7 +1185,7 @@ impl Session {
             qx,
             qy,
             |x, y| {
-                map.cells
+                cells
                     .get(CellXY::new(x, y))
                     .map_or(0, |c| i32::from(c.level))
             },
@@ -2398,6 +2418,8 @@ impl Session {
     pub fn update_cursor(&mut self, painter: &mut Painter) {
         self.cursor_shown = None;
         if self.cursor_art.is_none() || self.paused {
+            // spec: S-0214 claim 22 (the system pointer replaces the cursor: the next image is a change of kind; #85)
+            self.animator.other(None);
             return;
         }
         let Some(art) = self.cursor_art.as_ref() else {
@@ -2410,10 +2432,11 @@ impl Session {
             .filter(|_| self.right.is_some_and(|r| r.scrolling))
             .map(|r| cursor::drag(r, size.0, size.1));
         // spec: S-0213 claim 24 (during edge scrolling the cursor shows the requested screen direction; the whole outer edge, sidebar included, selects it)
+        // spec: S-0101 claim 12 (no edge scrolling, so no edge-scroll cursor, while a mouse button is held; #86)
         let edge = drag.or_else(|| {
             self.edge
                 .shown_direction(
-                    self.pointer.map(|p| (p.x, p.y)),
+                    self.edge_pointer(self.edge_live),
                     self.screen,
                     self.scroll_index,
                 )
@@ -2421,12 +2444,18 @@ impl Session {
                 .and_then(|d| cursor::edge(d, self.scroll_blocked()(d), size.0, size.1))
         });
         let (frames, frame, hot) = if let Some((frames, hot)) = edge {
+            // spec: S-0214 claim 22 (the edge-scroll and drag images are kinds of their own: an action image after them starts at its first frame, and a kept image is the one shown; #85)
+            self.animator.other(Some((frames, hot)));
             (frames, frames.first, hot)
         } else {
             let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+                // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
+                self.animator.other(None);
                 return;
             };
             let Some((offer, shrouded)) = self.offer(p) else {
+                // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
+                self.animator.other(None);
                 return;
             };
             let retain = self
@@ -2438,7 +2467,7 @@ impl Session {
                 .damaging_entry_cursor_retained;
             let choice = cursor::table_c(offer, shrouded, retain);
             let (frames, frame) = self.animator.frame(choice, self.clock_ms);
-            (frames, frame, cursor::hot_spot(frames, size.0, size.1))
+            (frames, frame, self.animator.hot(frames, size.0, size.1))
         };
         let Some(art) = self.cursor_art.as_ref() else {
             return;
@@ -2494,7 +2523,10 @@ impl Session {
     /// 22): the option, the blocks of the pointer's place, a movement over
     /// the slots shown at once, and the rest's one choice when the wait ends.
     fn update_name_tip(&mut self) {
-        let moving = self.centre != self.tip_centre;
+        // A view moved since the last frame (a radar click, a jump) or by
+        // the last scroll cycle, which runs once per cycle, not per frame
+        // (#84).
+        let moving = self.centre != self.tip_centre || self.scroll_moved;
         self.tip_centre = self.centre;
         self.focus_tip = None;
         // spec: S-0111 claim 20 (Options menu: opening the in-game options menu hides a tip and stops the wait; while it is open no wait runs and no tip shows; when it closes nothing shows until the pointer moves and rests again) and claim 20 (the tooltip option off); S-0411 claim 20 (with the option off no sidebar tip ever shows; the options menu as for the name tip)
@@ -2509,7 +2541,7 @@ impl Session {
         let blocked = match place {
             // spec: S-0411 claim 20 (Buttons and blocks: of S-0111 claim 20's blocks only the hidden mouse cursor applies to sidebar tips, so an order block blocks them; a moving battlefield view blocks none, and a held button does not stop a movement over the slots) and claim 22 (the controls: claim 20's blocks here, the hidden cursor and the options menu)
             TipPlace::Bar(_) => order_block,
-            // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame
+            // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame or by the last scroll cycle
             // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the view and held)
             _ => moving || self.view_button_held || order_block,
         };
@@ -3584,6 +3616,40 @@ impl CursorArt {
             .ok()?
             .decode_on_canvas(usize::from(f))
             .ok()
+    }
+}
+
+#[cfg(test)]
+impl Session {
+    /// Gives the session a synthetic cursor image of `frames` frames of
+    /// `w` × `h` pixels, each filled with colour 1 (tests only).
+    pub(crate) fn set_test_cursor(&mut self, frames: u16, (w, h): (u16, u16)) {
+        use glasnost_fmt::shp::{ShpWriter, WriteFrame};
+        let image = IndexedImage::new(u32::from(w), u32::from(h), vec![1; usize::from(w * h)])
+            .expect("a synthetic cursor frame");
+        let bytes = ShpWriter {
+            width: w,
+            height: h,
+            frames: (0..frames)
+                .map(|_| WriteFrame {
+                    x: 0,
+                    y: 0,
+                    image: image.clone(),
+                    compression: 1,
+                })
+                .collect(),
+        }
+        .write();
+        self.cursor_art = Some(CursorArt {
+            bytes,
+            size: (i32::from(w), i32::from(h)),
+            palette: [0; 1024],
+        });
+    }
+
+    /// The battlefield cursor frame drawn this frame, if any (tests only).
+    pub(crate) fn cursor_frame(&self) -> Option<u16> {
+        self.cursor_shown.map(|(f, _)| f)
     }
 }
 

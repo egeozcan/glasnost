@@ -307,6 +307,8 @@ pub struct Bench {
     rows: Vec<Row>,
     view: usize,
     in_view: u32,
+    /// Frames the host could not draw while timing (#92).
+    undrawn: u32,
     centre: (i32, i32),
     pan: Option<(i32, i32)>,
     excluded: f64,
@@ -344,6 +346,7 @@ impl Bench {
             rows: Vec::new(),
             view: 0,
             in_view: 0,
+            undrawn: 0,
             centre: (0, 0),
             pan: None,
             excluded: 0.0,
@@ -688,8 +691,9 @@ impl Bench {
         }
     }
 
-    /// After the frame was drawn and submitted.
-    pub fn after_frame(&mut self, c: &Client, end: FrameEnd) {
+    /// After the frame was drawn and submitted; `drawn` is false when the
+    /// host had no surface to draw to (a covered or minimised window).
+    pub fn after_frame(&mut self, c: &Client, end: FrameEnd, drawn: bool) {
         self.gpu_times(&end.gpu);
         if self.stage != Stage::Run {
             return;
@@ -697,6 +701,13 @@ impl Bench {
         let Some(row) = self.rows.last_mut() else {
             return;
         };
+        if !drawn {
+            // Not a frame of the view: its row stays, untimed, and the view
+            // still gets all its frames once the window draws again.
+            row.timed = false;
+            self.undrawn += 1;
+            return;
+        }
         row.work = now() - row.start;
         row.draw = end.laps;
         row.stats = end.stats;
@@ -709,6 +720,11 @@ impl Bench {
             self.in_view = 0;
             self.view += 1;
             if self.view >= self.opts.views.len() {
+                // The last frame's total ends here, with no next frame to
+                // start.
+                if let Some(last) = self.rows.last_mut() {
+                    last.total = Some(now() - last.start - std::mem::take(&mut self.excluded));
+                }
                 self.finish(c);
             }
         }
@@ -724,6 +740,12 @@ impl Bench {
     }
 
     fn finish(&mut self, c: &Client) {
+        if self.undrawn > 0 {
+            self.notes.push(format!(
+                "{} frame(s) the window could not draw (covered or minimised) left out of the timing",
+                self.undrawn
+            ));
+        }
         self.end_hash = c.session.as_ref().map(|s| s.play.game.state_hash());
         self.load_after = load_average();
         self.stage = Stage::Finished;
@@ -1306,11 +1328,13 @@ pub fn run_offscreen(
         if bench.finished() {
             break;
         }
-        let frame = bench.frame();
+        // Only the run's frames are timed on the GPU, as in the window host:
+        // before it, `frame` is 0 and would land on the first row (#92).
+        let frame = bench.running().then(|| bench.frame());
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("benchmark frame"),
         });
-        if let Some(t) = timer.as_mut() {
+        if let Some(t) = timer.as_mut().filter(|_| frame.is_some()) {
             t.begin(&mut encoder);
         }
         draw.prepare(&device, &queue, &mut client, (w, h), &mut encoder);
@@ -1331,13 +1355,13 @@ pub fn run_offscreen(
             });
             draw.draw(&mut pass);
         }
-        if let Some(t) = timer.as_mut() {
+        if let Some(t) = timer.as_mut().filter(|_| frame.is_some()) {
             t.end(&mut encoder);
         }
         let commands = encoder.finish();
         let t1 = now();
         let index = queue.submit([commands]);
-        if let Some(t) = timer.as_mut() {
+        if let (Some(t), Some(frame)) = (timer.as_mut(), frame) {
             t.submitted(frame);
         }
         let t2 = now();
@@ -1364,6 +1388,7 @@ pub fn run_offscreen(
                 wait: t3 - t2,
                 gpu,
             },
+            true,
         );
         if let Some(name) = shot {
             let t = now();
@@ -1449,6 +1474,71 @@ fn missed_frames(totals: &[f64], quantised: bool) -> (usize, Option<f64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A run of one view of `warmup` and `frames` frames, already timing.
+    fn running(warmup: u32, frames: u32) -> Bench {
+        let mut b = Bench::new(
+            BenchOptions {
+                warmup,
+                frames,
+                views: vec![ViewKind::Base],
+                ..Default::default()
+            },
+            "native-window",
+        );
+        b.stage = Stage::Run;
+        b
+    }
+
+    /// A frame's start as `run` records it.
+    fn start_row(b: &mut Bench) {
+        if let Some(last) = b.rows.last_mut() {
+            last.total = Some(now() - last.start);
+        }
+        b.rows.push(Row {
+            frame: b.rows.len() as u64,
+            view: b.view,
+            timed: b.in_view >= b.opts.warmup,
+            start: now(),
+            ..Row::default()
+        });
+    }
+
+    /// #92: a frame the window could not draw (no surface texture) is not a
+    /// timed frame and does not count towards the view's frames.
+    #[test]
+    fn an_undrawn_frame_is_not_timed() {
+        let c = Client::new();
+        let mut b = running(0, 2);
+        start_row(&mut b);
+        b.after_frame(&c, FrameEnd::default(), false);
+        assert!(!b.rows[0].timed);
+        assert!(!b.finished());
+        for _ in 0..2 {
+            start_row(&mut b);
+            b.after_frame(&c, FrameEnd::default(), true);
+        }
+        assert!(b.finished());
+        assert_eq!(b.rows.iter().filter(|r| r.timed).count(), 2);
+        assert!(
+            b.notes.iter().any(|n| n.contains("1 frame")),
+            "{:?}",
+            b.notes
+        );
+    }
+
+    /// #92: the run's last frame has a total too.
+    #[test]
+    fn the_last_frame_has_a_total() {
+        let c = Client::new();
+        let mut b = running(1, 2);
+        for _ in 0..3 {
+            start_row(&mut b);
+            b.after_frame(&c, FrameEnd::default(), true);
+        }
+        assert!(b.finished());
+        assert!(b.rows.iter().all(|r| r.total.is_some()), "{:?}", b.rows);
+    }
 
     /// #91: on the web, frame totals are counted against the refresh
     /// interval they are quantised to; elsewhere against the 60 Hz budget.

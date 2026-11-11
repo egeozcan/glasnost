@@ -789,8 +789,11 @@ impl MapPane {
     }
 
     fn view_ui(&mut self, ui: &mut Ui) {
+        // design: render (#90): the GPU map pass runs before the interface, so a jump or a new
+        // view size taken here is drawn by the next frame, which is asked for
         if let Some(t) = self.pending_jump.take() {
             self.set_centre(t);
+            ui.ctx().request_repaint();
         }
         let avail = ui.available_size();
         let ppp = ui.ctx().pixels_per_point();
@@ -800,6 +803,7 @@ impl MapPane {
             self.view_size = size;
             let c = self.centre;
             self.set_centre(c);
+            ui.ctx().request_repaint();
         }
         if self.shown.is_none() {
             ui.centered_and_justified(|ui| ui.label("No map loaded."));
@@ -882,13 +886,18 @@ impl MapPane {
         };
         self.hover = r.hover_pos().map(|p| {
             let (qx, qy) = to_world(p);
-            let map = &shown.loaded.map;
+            // spec: S-0101 F8 (the probe reads each cell's height level): a live game's cells, whose levels change in play, else the map's (#83)
+            let cells = shown
+                .loaded
+                .live
+                .as_ref()
+                .map_or(&shown.loaded.map.cells, |l| &l.world.cells.grid);
             let q = ProjectionQuirks::default();
             // spec: S-0101 claim 10 (the highest level is read only with quirks.cursor_probe_depth_180 off)
             let max_level = if q.cursor_probe_depth_180 {
                 0
             } else {
-                map.cells
+                cells
                     .iter()
                     .map(|(_, c)| i32::from(c.level))
                     .max()
@@ -898,7 +907,7 @@ impl MapPane {
                 qx,
                 qy,
                 |x, y| {
-                    map.cells
+                    cells
                         .get(glasnost_map::CellXY::new(x, y))
                         .map_or(0, |c| i32::from(c.level))
                 },
@@ -1473,5 +1482,43 @@ mod tests {
         assert_eq!(view_size(5000.0, 300.0, 4096), (4096, 300));
         assert_eq!(view_size(10.0, 9000.0, 2048), (64, 2048));
         assert_eq!(view_size(800.0, 600.0, usize::MAX), (800, 600));
+    }
+
+    /// design: render (#90): a jump or a new view size taken by the interface, after the GPU
+    /// map pass of its frame, asks for the next frame, which draws it.
+    #[test]
+    fn a_jump_or_a_new_size_asks_for_the_next_frame() {
+        let ctx = egui::Context::default();
+        let mut pane = MapPane::default();
+        let delay = |pane: &mut MapPane, width: f32| {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 400.0),
+                )),
+                ..Default::default()
+            };
+            let output = ctx.run_ui(raw, |ui| pane.view_ui(ui));
+            let d = output
+                .viewport_output
+                .get(&egui::ViewportId::ROOT)
+                .expect("the root viewport")
+                .repaint_delay;
+            output.drop_without_applying_deltas();
+            d
+        };
+        // egui's own follow-up frames die out.
+        let settle = |pane: &mut MapPane, width: f32| {
+            for _ in 0..4 {
+                delay(pane, width);
+            }
+            assert!(!delay(pane, width).is_zero(), "a frame with nothing new");
+        };
+        settle(&mut pane, 500.0);
+        pane.pending_jump = Some((0, 0));
+        assert!(delay(&mut pane, 500.0).is_zero(), "a jump");
+        settle(&mut pane, 500.0);
+        assert!(delay(&mut pane, 520.0).is_zero(), "a new size");
+        settle(&mut pane, 520.0);
     }
 }

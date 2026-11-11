@@ -967,6 +967,65 @@ fn combat_live_with(
     (live, built.scene, map, import, catalogue, cart, walker)
 }
 
+/// spec: S-0105 claim 6 and F9 (a vehicle placed on the map starts its
+/// barrel elevation level and turns it toward the fire angle from its
+/// placement, not from the game's start; #81)
+#[test]
+fn a_vehicle_placed_later_starts_its_barrel_level() {
+    use glasnost_render::voxel;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..5 {
+        live.step();
+    }
+    let first = live.mobile(&inputs, cart).expect("the first cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_ne!(
+        target,
+        voxel::ELEVATION_LEVEL,
+        "the test type's barrel turns"
+    );
+    assert_eq!(
+        first.elevation, target,
+        "placed at the start: turned by now"
+    );
+    // A second cart enters the map after tick 5 (as a factory's would).
+    let late = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 6),
+        16384,
+    );
+    live.after_tick();
+    let elevation = |live: &Live| live.mobile(&inputs, late).expect("drawn").elevation;
+    let mut seen = vec![elevation(&live)];
+    for _ in 0..3 {
+        live.step();
+        seen.push(elevation(&live));
+    }
+    let expected: Vec<u16> = (0..4)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(seen[0], voxel::ELEVATION_LEVEL, "level when first drawn");
+    assert_eq!(seen, expected, "turned from its own placement");
+}
+
 /// spec: S-0309 claim 1 (units in guard find targets in range by
 /// themselves), S-0101 F1 and F2 (a projectile is drawn at its projected
 /// point), S-0111 claims 3, 4, 5 and 6 (the health bars of a selected and
@@ -1206,6 +1265,28 @@ fn live_building_items(
     gate_door: Option<DoorView>,
     health: (i32, i32),
 ) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
+    live_building_items_quirks(
+        ctx,
+        unloading,
+        gate_door,
+        health,
+        super::quirks::ViewQuirks::default(),
+    )
+}
+
+/// As [`live_building_items`], with the painter's rendering switches set to
+/// `quirks`.
+fn live_building_items_quirks(
+    ctx: (
+        glasnost_convert::Import,
+        glasnost_convert::theater::Catalogue,
+        super::build::Assets,
+    ),
+    unloading: Option<Unloading>,
+    gate_door: Option<DoorView>,
+    health: (i32, i32),
+    quirks: super::quirks::ViewQuirks,
+) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
     let (import, catalogue, assets) = ctx;
     let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
     let map = decode(
@@ -1229,6 +1310,7 @@ fn live_building_items(
         cells: None,
     };
     let (built, mut painter) = build_parts(&inputs, true);
+    painter.set_view_quirks(quirks);
     let mut scene: Scene = built.scene;
     let cell = glasnost_map::CellXY::new(2, 2);
     let (drawn, _) = painter.buildings(
@@ -1335,6 +1417,28 @@ fn roof_unload_without_roof_sprites_has_no_fallback() {
     assert_eq!(items.len(), 4, "{items:?}");
     assert_eq!(items[0], (6, DepthTest::Writer, Profile::Upright, -2, 2));
     assert_eq!(items[3], (3, DepthTest::Reader, Profile::Flat, -7, 1));
+}
+
+/// spec: S-0108 claim 22 and Edge cases (quirks.roof_unload_no_fallback off: the ordinary
+/// deploying and under-door sprites stand in for a marked unit), claim 23 (the door image)
+#[test]
+fn roof_unload_fallback_with_the_switch_off() {
+    let roles = ["deploying", "under_door", "door"];
+    let quirks = super::quirks::ViewQuirks {
+        roof_unload_no_fallback: false,
+        ..Default::default()
+    };
+    let items = live_building_items_quirks(
+        unloading_context(&roles),
+        unloading_with(true, DoorView::Closed),
+        None,
+        (256, 256),
+        quirks,
+    );
+    assert_eq!(items.len(), 5, "{items:?}");
+    assert_eq!(items[0], (7, DepthTest::Writer, Profile::Upright, -22, 2));
+    assert_eq!(items[3], (5, DepthTest::Writer, Profile::Flat, -2, 1));
+    assert_eq!(items[4], (3, DepthTest::Reader, Profile::Flat, -7, 1));
 }
 
 /// spec: S-0108 claim 23 (the door image in every door state of the unload, closed included;
@@ -3185,6 +3289,118 @@ fn aircraft_attitude_is_drawn() {
         images(craft(16384, 20480, crash(0, 0.75, 1, 0.3, 1.2))).1,
         base_shadow
     );
+}
+
+/// spec: S-0105 claims 7, 8, 10 and 42 (the turret and barrel of a type with the turret flag are
+/// placed on the body transform D, here a flying body's pitched and banked one); claim 26 (an
+/// image is reused only for the same pose). design: render (#82) their images under an attitude
+/// are kept apart from the level ones (Q-2983).
+#[test]
+fn an_aircraft_turret_follows_its_attitude() {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let rules = format!(
+        "{RULES}[AircraftTypes]\n1=JETX\n[JETX]\nTurret=yes\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
+    );
+    let (mut import, catalogue, mut assets) = context_with(&rules);
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [
+                ("body".to_string(), b"jetx.vxl".to_vec()),
+                ("turret".to_string(), b"jetxtur.vxl".to_vec()),
+                ("barrel".to_string(), b"jetxbarl.vxl".to_vec()),
+            ]
+            .into(),
+            ..Default::default()
+        },
+    );
+    for name in [&b"jetx.vxl"[..], b"jetxtur.vxl", b"jetxbarl.vxl"] {
+        assets.insert(
+            name,
+            VxlWriter {
+                model: &synthetic_model(),
+            }
+            .write(),
+        );
+    }
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene: Scene = built.scene;
+    let craft = |height: i32, turn: i32| Mobile {
+        kind: Kind::Aircraft,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos: (3 * 256 + 128, 3 * 256 + 128, 1500),
+        body: 16384,
+        turret: 20480,
+        elevation: 16384,
+        anim: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude: Attitude::Flying {
+            height,
+            speed: 0.75f64.to_bits(),
+            turn,
+            crashing: false,
+            tumble: (0, 0),
+        },
+        disabled: false,
+        above: 0,
+        protection: None,
+        generic_shadow: None,
+        berserk: None,
+        turret_index: None,
+        walk: Default::default(),
+        deck: false,
+    };
+    // The lit images drawn, body first: the body, then the turret and the barrel.
+    let mut images = |m: Mobile| {
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        entries[0]
+            .items
+            .iter()
+            .filter(|i| i.paint != Paint::Shadow)
+            .map(|i| i.image)
+            .collect::<Vec<_>>()
+    };
+    let banked = images(craft(10, 1));
+    let level = images(craft(0, 0));
+    assert_eq!(banked.len(), 3, "body, turret and barrel: {banked:?}");
+    assert_eq!(level.len(), 3, "body, turret and barrel: {level:?}");
+    assert_ne!(banked[0], level[0], "the body is drawn banked");
+    for k in 1..3 {
+        assert_ne!(
+            banked[k], level[k],
+            "a banked turret part is not the level one"
+        );
+    }
+    // Each attitude reuses its own images.
+    assert_eq!(images(craft(10, 1)), banked);
+    assert_eq!(images(craft(0, 0)), level);
 }
 
 /// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405

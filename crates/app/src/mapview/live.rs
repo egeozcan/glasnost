@@ -546,6 +546,11 @@ pub struct Live {
     /// The vehicles' walk counters (S-0102 claim 22, S-0105 claim 16): the
     /// view's own, moved once per game tick.
     walks: super::walk::Counters,
+    /// The game tick from which each mobile object on the map counts the
+    /// turn of its barrel elevation (S-0105 claim 6): 0 for the objects on
+    /// the map when the view started, else the tick the view first saw it
+    /// on the map. Presentation state, outside the game state (#81).
+    placed: BTreeMap<ObjectId, i32>,
     /// Each vehicle type's walk and idle rates (S-0102 Import mapping), by
     /// the simulation's vehicle type index.
     walk_rates: Vec<super::walk::Rates>,
@@ -1315,7 +1320,17 @@ impl Live {
             walks: Default::default(),
             walk_rates,
             setup_charges: BTreeMap::new(),
+            placed: BTreeMap::new(),
         };
+        // spec: S-0105 claim 6 (an object on the map when the game is set up was placed before tick 0)
+        // design: render (#81) a loaded or joined game's objects count from tick 0 too (Q-2982)
+        live.placed = live
+            .world
+            .objects
+            .values()
+            .filter(|o| o.kind.is_mobile() && o.on_map)
+            .map(|o| (o.id, 0))
+            .collect();
         // spec: S-0108 claim 11 (a building placed during the game's set-up opens during the set-up: the record it meets is the one the set-up left, before the first tick's house updates grant it)
         live.setup_charges = live
             .building_ids
@@ -1494,9 +1509,11 @@ impl Live {
         self.sync_ground();
     }
 
-    /// Sets the drawing's quirk switches (S-0102 Edge cases).
+    /// Sets the drawing's quirk switches (S-0102 Edge cases); the painter
+    /// reads them from the next drawing on.
     pub fn set_view_quirks(&mut self, q: super::quirks::ViewQuirks) {
         self.view_quirks = q;
+        self.painter.set_view_quirks(q);
     }
 
     /// The layer a mobile object was last put into (S-0102 claims 3 and 4).
@@ -1734,6 +1751,25 @@ impl Live {
                 slots.depot(*active1, *start, *damaged, defs, &mut mk);
             }
         }
+        // design: render (#87) the drawing learns a type and its slot definitions when it draws a frame, so a building whose type it has not drawn yet (a network game ticks on without drawing; a type's first tick comes before its first frame) keeps its walls and depot events, in their order, until it can take them; those of a building gone from the map or of a type with no drawing are dropped. A capture's turn order (S-0108 claim 26) belongs to its own tick and is not kept.
+        let waiting = |b: &ObjectId| {
+            self.world.obj(*b).is_some_and(|o| {
+                o.kind == SimKind::Building
+                    && o.on_map
+                    && match self.types.get(&(o.kind, o.type_index)) {
+                        None => true,
+                        Some(None) => false,
+                        Some(Some(idx)) => !self.slot_defs.contains_key(idx),
+                    }
+            })
+        };
+        let kept: Vec<_> = events.into_iter().filter(|(b, ..)| waiting(b)).collect();
+        let kept_depot: Vec<_> = depot_events
+            .into_iter()
+            .filter(|(b, ..)| waiting(b))
+            .collect();
+        self.special_events = kept;
+        self.depot_events = kept_depot;
     }
 
     /// A building's running slot animations as the drawing takes them.
@@ -2400,6 +2436,23 @@ impl Live {
         });
     }
 
+    /// Notes the mobile objects that entered the map in the tick just run
+    /// (S-0105 claim 6: the barrel elevation starts level at placement) and
+    /// forgets those no longer on it.
+    fn note_placements(&mut self) {
+        let tick = self.world.tick;
+        let mut next = BTreeMap::new();
+        for o in self.world.objects.values() {
+            if !o.kind.is_mobile() || !o.on_map {
+                continue;
+            }
+            // design: render (#81) an object leaving the map and coming back (unloaded, warped) is placed again: its turn starts over (Q-2982)
+            let since = self.placed.get(&o.id).copied().unwrap_or(tick);
+            next.insert(o.id, since);
+        }
+        self.placed = next;
+    }
+
     /// Takes the tick's presentation events out of the game (they are not
     /// game state): animations start playing; shots, detonations and
     /// animations without art become short-lived markers.
@@ -2412,6 +2465,7 @@ impl Live {
         self.rocking.take(&self.world, &effects);
         // spec: S-0102 claim 22 (the walk counter grows in a tick, once per game tick and not per drawn frame)
         self.walks.advance(&self.world, &self.walk_rates);
+        self.note_placements();
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -2958,6 +3012,14 @@ impl Live {
         v
     }
 
+    /// The game ticks object `id` has spent on the map since it was placed
+    /// (S-0105 claim 6); 0 for one the view has not yet noted.
+    fn ticks_since_placed(&self, id: ObjectId) -> u32 {
+        let tick = self.world.tick;
+        let since = self.placed.get(&id).copied().unwrap_or(tick);
+        (tick - since).max(0) as u32
+    }
+
     /// What one simulation object looks like now, if it is drawn.
     pub fn mobile(&self, inputs: &Inputs, id: ObjectId) -> Option<Mobile> {
         let w = &self.world;
@@ -3017,8 +3079,9 @@ impl Live {
             // spec: S-0206 F1 (the facings' values at the current tick number)
             body: o.body.value(w.tick),
             turret: o.turret.value(w.tick),
-            // spec: S-0105 claim 6 (placed level, then turned toward the fire angle since placement at tick 0)
-            elevation: voxel::barrel_elevation_after(fire_angle, w.tick.max(0) as u32),
+            // spec: S-0105 claim 6 (placed level, then turned toward the fire angle for the ticks since its placement)
+            // design: render (#81) the clock starts at the tick the view first sees the object on the map (Q-2982)
+            elevation: voxel::barrel_elevation_after(fire_angle, self.ticks_since_placed(id)),
             // spec: S-0105 claim 16 and S-0609 claim 14 (the animation-frame counter as the simulation keeps it; the bit pattern, taken modulo the frame count)
             anim: o.combat.anim_frame as u32,
             infantry,

@@ -12,7 +12,7 @@ use glasnost_render::gpu::{self, BackendChoice};
 use glasnost_render::wgpu;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowId};
 
 use crate::Status;
@@ -73,6 +73,7 @@ pub fn run_viewer(options: ViewerOptions) -> Result<(), winit::error::EventLoopE
         egui: egui::Context::default(),
         input: None,
         started: false,
+        repaint_at: None,
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -127,6 +128,9 @@ struct ViewerApp {
     egui: egui::Context,
     input: Option<Input>,
     started: bool,
+    /// The host time (ms) of a repaint the interface asked for after a
+    /// delay (#90).
+    repaint_at: Option<i64>,
 }
 
 impl ApplicationHandler<ViewerEvent> for ViewerApp {
@@ -246,6 +250,38 @@ impl ApplicationHandler<ViewerEvent> for ViewerApp {
         }
         self.spawner.flush();
     }
+
+    /// Between events: a repaint the interface asked for after a delay (a
+    /// tooltip's, the text cursor's blink) wakes the loop then (#90).
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = crate::redraw::now_ms();
+        let wait = match self.repaint_at {
+            Some(at) if at <= now => {
+                self.repaint_at = None;
+                self.request_redraw();
+                None
+            }
+            Some(at) => u64::try_from(at - now).ok(),
+            None => None,
+        };
+        event_loop.set_control_flow(match wait {
+            Some(ms) => ControlFlow::wait_duration(std::time::Duration::from_millis(ms)),
+            None => ControlFlow::Wait,
+        });
+    }
+}
+
+/// When a repaint asked for after `delay` is due, from host time `now` in
+/// milliseconds: `None` for a repaint at once (the frame loop asks for it)
+/// or for none at all (egui's endless delay).
+fn delayed_repaint(delay: std::time::Duration, now: i64) -> Option<i64> {
+    if delay.is_zero() || delay == std::time::Duration::MAX {
+        return None;
+    }
+    // A delay past the host clock's range is no repaint.
+    i64::try_from(delay.as_millis())
+        .ok()
+        .and_then(|ms| now.checked_add(ms.max(1)))
 }
 
 impl ViewerApp {
@@ -278,10 +314,12 @@ impl ViewerApp {
         let browser = &mut self.browser;
         let spawner = self.spawner.as_ref();
         let output = self.egui.run_ui(raw, |ui| browser.ui(ui, spawner, backend));
-        let repaint_now = output
+        let delay = output
             .viewport_output
             .get(&egui::ViewportId::ROOT)
-            .is_some_and(|v| v.repaint_delay.is_zero());
+            .map(|v| v.repaint_delay);
+        let repaint_now = delay.is_some_and(|d| d.is_zero());
+        self.repaint_at = delay.and_then(|d| delayed_repaint(d, crate::redraw::now_ms()));
         gfx.paint(&self.egui, output)?;
         if repaint_now || self.options.exit_after_frames.is_some() {
             gfx.window.request_redraw();
@@ -567,5 +605,28 @@ impl Gfx {
         self.queue.present(frame);
         self.frames_presented += 1;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::delayed_repaint;
+
+    /// design: render (#90): a finite repaint delay wakes the loop at its end; a zero delay is
+    /// asked for at once, and egui's endless delay asks for nothing.
+    #[test]
+    fn a_finite_repaint_delay_is_kept() {
+        assert_eq!(
+            delayed_repaint(Duration::from_millis(500), 1_000),
+            Some(1_500)
+        );
+        assert_eq!(
+            delayed_repaint(Duration::from_micros(10), 1_000),
+            Some(1_001)
+        );
+        assert_eq!(delayed_repaint(Duration::ZERO, 1_000), None);
+        assert_eq!(delayed_repaint(Duration::MAX, 1_000), None);
     }
 }

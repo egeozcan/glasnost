@@ -1,11 +1,14 @@
 //! The GPU map path's depth roles against the CPU reference compositor for
-//! drawings that skip the depth test (#70, #71). Needs a GPU adapter
+//! drawings that skip the depth test (#70, #71), and the shadow's halving
+//! read back by a translucent drawing (#79). Needs a GPU adapter
 //! (software is fine); skipped without one unless `GLASNOST_REQUIRE_GPU=1`.
 
 #![cfg(not(target_arch = "wasm32"))]
 
 use glasnost_fmt::image::IndexedImage;
-use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE, DepthTest, Paint, Profile};
+use glasnost_render::compose::{
+    ComposeQuirks, DEPTH_REFERENCE, DepthTest, Paint, Profile, Shade, Translucency,
+};
 use glasnost_render::gpu;
 use glasnost_render::map_gpu::{MapRenderer, targets};
 use glasnost_render::offscreen::read_texture;
@@ -150,9 +153,58 @@ fn a_shadow_with_no_depth_test_darkens_over_a_nearer_writer() {
         .push(flat_item(shade, 4, 0, DepthTest::Ignore, Paint::Shadow));
     let (cpu, gpu) = cpu_and_gpu(&device, &queue, &s, (16, 4));
     assert!(cpu[4 * 4] < cpu[0], "the CPU darkens under the shadow");
+    // The GPU halves rounded down (#79): the same packed pixel, display bits within 4.
     for (a, b) in cpu.chunks(4).zip(gpu.chunks(4)) {
+        assert_eq!(packed(a), packed(b), "cpu {a:?} gpu {b:?}");
         for k in 0..3 {
-            assert!(a[k].abs_diff(b[k]) <= 8, "cpu {a:?} gpu {b:?}");
+            assert!(a[k].abs_diff(b[k]) <= 4, "cpu {a:?} gpu {b:?}");
         }
     }
+}
+
+/// The 5-6-5 channels an RGBA pixel packs to (top bits, S-0103 claim 9).
+fn packed(p: &[u8]) -> (u8, u8, u8) {
+    (p[0] >> 3, p[1] >> 2, p[2] >> 3)
+}
+
+/// #79. spec: S-0102 claim 26, F7 (a shadow halves each hi-colour channel, rounded down),
+/// claim 32, F8 (a translucent drawing blends with the packed channels already drawn)
+///
+/// A white ground, a shadow over part of it, and a three-quarter translucent black drawing
+/// over the shadow and the open ground: under the shadow the GPU packs to the CPU's halved
+/// pixel, and the translucent drawing reads the same backdrop on both paths.
+#[test]
+fn a_translucent_drawing_over_a_shadow_reads_the_halved_pixel() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = Scene::default();
+    s.add_row(std::array::from_fn(|_| 0xFFFF));
+    s.add_row(std::array::from_fn(|_| 0x0000));
+    let ground = s.add_image(IndexedImage::new(24, 4, vec![1; 96]).unwrap());
+    let shade = s.add_image(IndexedImage::new(8, 4, vec![1; 32]).unwrap());
+    let glass = s.add_image(IndexedImage::new(16, 4, vec![1; 64]).unwrap());
+    s.items
+        .push(flat_item(ground, 0, -100, DepthTest::Writer, Paint::Row(0)));
+    s.items
+        .push(flat_item(shade, 0, 0, DepthTest::Ignore, Paint::Shadow));
+    s.items.push(flat_item(
+        glass,
+        4,
+        0,
+        DepthTest::Ignore,
+        Paint::Translucent(Shade::new(1, 1, 1000), Translucency::ThreeQuarter),
+    ));
+    let (cpu, gpu) = cpu_and_gpu(&device, &queue, &s, (24, 4));
+    // Shadow only (x < 4): the packed channels agree.
+    assert_eq!(packed(&cpu[..4]), (15, 31, 15), "the CPU halves white");
+    // Shadow, then the translucent drawing (4 ≤ x < 8), and the drawing alone (8 ≤ x < 20).
+    assert_ne!(cpu[4 * 4..4 * 4 + 3], cpu[8 * 4..8 * 4 + 3]);
+    let mut differing = Vec::new();
+    for (i, (a, b)) in cpu.chunks(4).zip(gpu.chunks(4)).enumerate() {
+        if packed(a) != packed(b) {
+            differing.push((i % 24, packed(a), packed(b)));
+        }
+    }
+    assert!(differing.is_empty(), "x, cpu, gpu: {differing:?}");
 }

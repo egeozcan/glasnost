@@ -715,6 +715,54 @@ fn claim_20_the_order_block() {
     assert!(shown(&mut c).is_some(), "moved and rested after the block");
 }
 
+/// #84. spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll)
+/// and S-0101 claims 13 to 15 (scrolling is requested once per unfrozen cycle, not per drawn frame)
+///
+/// A held arrow scrolls the view at every third drawn frame; a wait that ends in a frame between
+/// two cycles is blocked too.
+#[test]
+fn claim_20_a_scroll_blocks_between_its_cycles() {
+    let (mut c, p) = tip_game();
+    let mut t = 10_000;
+    frame_at(&mut c, &mut t, 0);
+    let s = session_mut(&mut c);
+    // The held arrow with the most room to scroll from here.
+    let start = s.centre();
+    let held = (0..4)
+        .map(|k| {
+            let mut h = [false; 4];
+            h[k] = true;
+            h
+        })
+        .max_by_key(|&h| {
+            s.set_centre(start);
+            for _ in 0..40 {
+                s.scroll_cycle(t as u64, h, false);
+            }
+            let d = s.centre();
+            (d.0 - start.0).abs() + (d.1 - start.1).abs()
+        })
+        .unwrap();
+    s.set_centre(start);
+    s.update_marks();
+    c.pointer_moved(p);
+    let s = session_mut(&mut c);
+    for k in 0..90 {
+        t += 16;
+        s.clock_ms = t;
+        if k % 3 == 0 {
+            let before = s.centre();
+            s.scroll_cycle(t as u64, held, false);
+            assert_ne!(s.centre(), before, "the view moves at frame {k}");
+        }
+        s.update_marks();
+        assert!(
+            s.name_tip_shown().is_none(),
+            "frame {k}: the view is moving"
+        );
+    }
+}
+
 /// spec: S-0111 claim 20 (r40, Options menu: opening it hides a tip and stops the wait; while it
 /// is open no wait runs; when it closes nothing shows until the pointer moves and rests again)
 #[test]

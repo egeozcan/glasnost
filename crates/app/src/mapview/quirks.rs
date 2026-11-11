@@ -225,24 +225,24 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     // S-0103
     (
         "parachute_brightness_fixed",
-        "S-0103 claim 8: parachutes are not drawn",
+        "S-0103 claim 8: the on state is drawn (a parachute keeps the light of its creation tick); the off state is not implemented",
     ),
     // S-0104
     (
         "split_effect_priority",
-        "S-0104 claim 2: the lighting effects in force (nuke, dominator, ion storm, chrono flash) are not modelled",
+        "S-0104 claim 2: objects' height terms take the height-term order, as with the switch on, but every cell is relit with the one global choice (the tint/target order); the off state is not implemented",
     ),
     (
         "chrono_flash_no_reevaluation",
-        "S-0104 claims 2 and 5: no chrono flash and no lighting re-evaluations",
+        "S-0104 claims 2 and 5: nothing starts a chrono flash",
     ),
     (
         "dominator_height_terms_linger",
-        "S-0104 claim 16: no dominator effect",
+        "S-0104 claim 16: every change of the ambient or of the global lighting choice relights every cell in full with the chosen set; the lingering height terms are not modelled",
     ),
     (
         "trigger_tint_retints_all_tables",
-        "S-0104 claim 17: trigger actions do not change the lighting",
+        "S-0104 claim 17: no trigger action changes the map tint (the set-base-ambient action, claim 14, changes only the ambient)",
     ),
     // S-0105
     (
@@ -281,11 +281,11 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "turret_start_clears_damaged",
-        "S-0108 claims 11 and 12: building slot animations are not drawn",
+        "S-0108 claims 11 and 12: building slot animations are played, but the turret slot is not",
     ),
     (
         "damage_swap_drops_occupied",
-        "S-0108 claims 11 and 12: building slot animations are not drawn",
+        "S-0108 claims 11 and 12: the on state is played (a damage swap never picks the occupied slot); the off state is not implemented",
     ),
     (
         "theater_refresh_buildup_range",
@@ -294,15 +294,15 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     // S-0109
     (
         "anim_hide_at_level_15",
-        "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
+        "S-0109 claim 20: building slot animations are played but drawn at translucency level t = 0, as every other animation; their level is not modelled",
     ),
     (
         "anim_low_detail_shows_cloaked",
-        "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
+        "S-0109 claim 20: building slot animations are played but drawn at translucency level t = 0, as every other animation; their level is not modelled",
     ),
     (
         "anim_translucency_levels",
-        "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
+        "S-0109 claim 20: building slot animations are played but drawn at translucency level t = 0, as every other animation; their level is not modelled",
     ),
 ];
 

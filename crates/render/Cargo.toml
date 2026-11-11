@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 glasnost-fmt.workspace = true
+glasnost-num.workspace = true
 glasnost-vfs.workspace = true
 bytemuck = { version = "1", features = ["derive"] }
 log = "0.4"

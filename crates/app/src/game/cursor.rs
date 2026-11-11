@@ -340,9 +340,38 @@ pub struct Animator {
     shown: Option<Frames>,
     frame: u16,
     last: i64,
+    /// The hot spot of an image shown outside the animation (the edge-scroll
+    /// and drag cursors, which have their own hot spots), kept with it.
+    hot: Option<(i32, i32)>,
 }
 
 impl Animator {
+    /// Records an image shown instead of an animated one: the edge-scroll
+    /// or drag cursor with its hot spot, or `None` when no battlefield
+    /// cursor is drawn (the system pointer shows). A later image is then a
+    /// change of kind, and a kept image (`Choice::Retain`) is this one.
+    pub fn other(&mut self, shown: Option<(Frames, (i32, i32))>) {
+        match shown {
+            // spec: S-0214 claim 22 (changing cursor kind starts at its first frame; the edge-scroll and drag images are static); #85
+            Some((frames, hot)) => {
+                if self.shown != Some(frames) {
+                    self.shown = Some(frames);
+                    self.frame = frames.first;
+                }
+                self.hot = Some(hot);
+            }
+            // design: render (#85) with no battlefield cursor drawn nothing is kept: the next image starts at its first frame, and a kept image is the ordinary arrow
+            None => *self = Self::default(),
+        }
+    }
+
+    /// The hot spot of the image the last [`Animator::frame`] gave, in a
+    /// full canvas of `w` × `h` pixels: that of a kept edge-scroll or drag
+    /// image, otherwise [`hot_spot`].
+    pub fn hot(&self, frames: Frames, w: i32, h: i32) -> (i32, i32) {
+        self.hot.unwrap_or_else(|| hot_spot(frames, w, h))
+    }
+
     /// The frame to show at real time `now_ms` for the choice `c`: a
     /// changed image starts at its first frame and restarts the interval;
     /// the same image advances one frame, wrapping, once 4 clock units
@@ -360,6 +389,7 @@ impl Animator {
                 shown: Some(frames),
                 frame: frames.first,
                 last: clock,
+                hot: None,
             };
         } else if clock - self.last >= INTERVAL {
             // spec: S-0214 claim 22 (one update advances at most one frame, wrapping to the first; no catch-up)
@@ -554,6 +584,37 @@ mod tests {
         let still = Choice::Show(Frames::one(41));
         assert_eq!(a.frame(still, 20_000).1, 41);
         assert_eq!(a.frame(still, 30_000).1, 41);
+    }
+
+    /// #85. spec: S-0214 claim 22 (changing cursor kind starts at its first frame and restarts the
+    /// interval) and claim 21 (damaging entry keeps the previous cursor image)
+    #[test]
+    fn claim_22_an_image_shown_outside_the_animation() {
+        let mv = Choice::Show(Frames::range(31, 40));
+        let up = edge((0, -1), false, 55, 43).unwrap();
+        let mut a = Animator::default();
+        assert_eq!(a.frame(mv, 0).1, 31);
+        assert_eq!(a.frame(mv, 64).1, 32);
+        // The edge-scroll cursor, then the same action: its first frame.
+        a.other(Some(up));
+        assert_eq!(a.frame(mv, 80).1, 31);
+        assert_eq!(a.hot(Frames::range(31, 40), 55, 43), (27, 21));
+        // A kept image after the edge-scroll cursor is that image, with
+        // its own hot spot.
+        a.other(Some(up));
+        let (frames, frame) = a.frame(Choice::Retain, 96);
+        assert_eq!((frames, frame), (up.0, up.0.first));
+        assert_eq!(a.hot(frames, 55, 43), up.1);
+        // The system pointer: the action starts again, and a kept image is
+        // the ordinary arrow.
+        assert_eq!(a.frame(mv, 112).1, 31);
+        assert_eq!(a.frame(mv, 176).1, 32);
+        a.other(None);
+        assert_eq!(a.frame(mv, 192).1, 31);
+        a.other(None);
+        let (frames, _) = a.frame(Choice::Retain, 208);
+        assert_eq!(frames, Frames::ARROW);
+        assert_eq!(a.hot(frames, 55, 43), (0, 0));
     }
 
     /// spec: S-0101 claim 17 (the drag-scroll frame by refused directions, 385 to 393, any other combination 385; the hot spot the canvas centre)

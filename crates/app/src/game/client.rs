@@ -1362,6 +1362,8 @@ impl Client {
         } else if !s.ticking() || !self.focused {
             // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
             self.pacer.reset();
+            // spec: S-0111 claim 20 (Blocked: the view moving) and S-0101 claims 13 to 15 (no scrolling while the game stands still; #84)
+            s.view_still();
             false
         } else if self.pacer.due(now_ms, s.speed) {
             s.step();
