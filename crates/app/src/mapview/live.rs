@@ -4567,6 +4567,52 @@ pub const WRENCH_MISSING: &str = "the wrench sprite WRENCH.SHP or its image fram
 /// Edge cases: our engine's departure, no switch).
 pub const CURSOR_PALETTE_MISSING: &str = "the cursor palette MOUSEPAL.PAL is missing: neither the repair wrench nor the bomb icon is drawn (S-0111 claim 19a)";
 
+/// The person's house of a setup: the first player house without an AI.
+pub fn person_house(setup: &GameSetup) -> Option<HouseId> {
+    setup
+        .houses
+        .iter()
+        .position(|h| !h.ai && h.role == glasnost_sim::world::HouseRole::Player)
+        .map(|i| HouseId(i as u8))
+}
+
+/// The local house of a client game on `setup` chosen as `choice`: the
+/// house asked for (a person's house unless the game is watched), else in
+/// a watched game the person's house or the first player house, else the
+/// person's house, `None` when the setup has none (a watch game from no
+/// house). The session and the loader's wall colour (#94) both use it.
+pub fn local_of(
+    setup: &GameSetup,
+    choice: super::build::LocalChoice,
+) -> Result<Option<HouseId>, String> {
+    Ok(match choice.house {
+        Some(h)
+            if setup
+                .houses
+                .get(usize::from(h.0))
+                .is_some_and(|x| choice.watch || !x.ai) =>
+        {
+            Some(h)
+        }
+        Some(h) => return Err(format!("house {} is no person's house", h.0)),
+        None if choice.watch => {
+            // A watched game's first player house (M8 step C4).
+            let first = setup
+                .houses
+                .iter()
+                .position(|h| h.role == glasnost_sim::world::HouseRole::Player);
+            Some(
+                person_house(setup)
+                    .or(first.map(|i| HouseId(i as u8)))
+                    .ok_or("the setup has no player house")?,
+            )
+        }
+        // spec: S-0412 Terms (human participant: our setup may start a skirmish with none, every player house an AI house)
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): a setup with no person's house is watched from no house at all
+        None => person_house(setup),
+    })
+}
+
 /// Whether object `id` of world `w` has its selection drawn by S-0111's
 /// marks: a unit's bracket image (the bracket sprite and the overlay palette
 /// are there), or a building's corner brackets (claim 8; the overlay palette

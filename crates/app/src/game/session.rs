@@ -41,13 +41,13 @@ use super::band;
 use super::cursor::{self, Offer};
 use super::name_tip;
 use super::paint::Painter;
-use super::play::{Button, GROUPS, Play, Reach, Tool, local_house};
+use super::play::{Button, GROUPS, Play, Reach, Tool};
 use super::scroll::{self, EdgeScroll};
 use super::sidebar_art::{self, SidebarArt};
 use super::sidebar_tip::{self, Control, Looked};
 use super::status_font;
 use super::strings;
-use crate::mapview::build::{self, GameMode, Inputs, Options};
+use crate::mapview::build::{self, GameMode, Inputs, LocalChoice, Options};
 use crate::mapview::combat::CURSOR_PALETTE;
 use crate::mapview::cover;
 use crate::mapview::live::{self, Live};
@@ -303,6 +303,10 @@ impl Session {
             skirmish: true,
             game: GameMode::Skirmish,
             colour_blind,
+            local: Some(LocalChoice {
+                house: local,
+                watch,
+            }),
             ..Options::default()
         };
         let mut loaded = load::load_with(
@@ -448,32 +452,14 @@ impl Session {
             glasnost_sim::save::state_hash(&live.world),
             "the drawn copy and the game start alike"
         );
-        let local = match local {
-            Some(h)
-                if setup
-                    .houses
-                    .get(usize::from(h.0))
-                    .is_some_and(|x| watch || !x.ai) =>
-            {
-                Some(h)
-            }
-            Some(h) => return Err(format!("house {} is no person's house", h.0)),
-            None if watch => {
-                // A watched game's first player house (M8 step C4).
-                let first = setup
-                    .houses
-                    .iter()
-                    .position(|h| h.role == HouseRole::Player);
-                Some(
-                    local_house(&setup)
-                        .or(first.map(|i| HouseId(i as u8)))
-                        .ok_or("the setup has no player house")?,
-                )
-            }
-            // spec: S-0412 Terms (human participant: our setup may start a skirmish with none, every player house an AI house)
-            // design: watch mode (lead request 2026-11-02, an extra not in the original): a setup with no person's house is watched from no house at all
-            None => local_house(&setup),
-        };
+        // The same choice the loader made for the walls' colour (#94).
+        let local = live::local_of(
+            &setup,
+            LocalChoice {
+                house: local,
+                watch,
+            },
+        )?;
         if let Some(l) = loaded.live.as_mut() {
             // spec: S-0516 claims 28 and 29 (the battlefield drawn through the local player's eyes)
             // design: watch mode (lead request 2026-11-02, an extra not in the original): with no viewer every object is drawn as its own house sees it, with no shroud

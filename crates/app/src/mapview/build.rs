@@ -116,6 +116,21 @@ pub struct Options {
     /// ([`COLOUR_BLIND_SLOTS`]) instead of their slots' definitions: the
     /// person's presentation choice (M8 step C3), never game data.
     pub colour_blind: bool,
+    /// The house a client game is played or watched from, as the session
+    /// asks for it; `None` outside the client's games. The loader resolves
+    /// it to the local house and gives the placeholder human house that
+    /// house's lobby colour slot, which the walls take (S-0112 claim 1 row
+    /// 4; #94).
+    pub local: Option<LocalChoice>,
+}
+
+/// How a client game chooses its local house (`Session::start`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LocalChoice {
+    /// The house asked for (a network game's slot), if any.
+    pub house: Option<glasnost_sim::world::HouseId>,
+    /// Whether the game is watched rather than played.
+    pub watch: bool,
 }
 
 /// Our colour-blind house colours (M8 step C3): the colour definition (H,
@@ -161,6 +176,7 @@ impl Default for Options {
             unresolved_owners: Vec::new(),
             game: GameMode::Sandbox,
             colour_blind: false,
+            local: None,
         }
     }
 }
