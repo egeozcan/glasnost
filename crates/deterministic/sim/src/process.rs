@@ -1450,8 +1450,11 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
 /// human-controlled (the neutral and special houses and a marked test-only
 /// computer-controlled player house, S-0215 Terms), its target is a
 /// building, and its type infiltrates, or occupies or assaults buildings and
-/// may occupy this one (S-0215 Terms, *Occupiable building*: S-0508 claim
-/// 1's test). `None` when the rule does not apply.
+/// may occupy this one (S-0508 claim 1, r19, Q-2927: claim 1's test for an
+/// occupier type, claim 14's assault eligibility for an assaulter type that
+/// is not an occupier type, never for a type with neither mark; an
+/// infiltrator type goes whatever that test gives). `None` when the rule
+/// does not apply.
 fn computer_taker_target(w: &World, id: ObjectId) -> Option<Target> {
     let o = w.obj(id)?;
     // spec: S-0215 claims 23 and 27 (an infantry unit of a computer-controlled owner; S-0309 Terms, Test-only exception)
@@ -1470,10 +1473,8 @@ fn computer_taker_target(w: &World, id: ObjectId) -> Option<Target> {
         .rules()
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.raw.infiltrate.unwrap_or(false));
-    // spec: S-0215 claims 23 and 27 (or occupies or assaults buildings and may occupy this one: S-0215 Terms, Occupiable building, S-0508 claim 1)
-    let occupies = (crate::structures::garrison::occupier(w, id)
-        || crate::structures::garrison::assaulter(w, id))
-        && crate::structures::garrison::may_enter(w, id, b);
+    // spec: S-0215 claims 23 and 27 (or occupies or assaults buildings and may occupy this one) and S-0508 claim 1 (r19, Q-2927: "may occupy" is claim 1's test for an occupier type, claim 14's assault eligibility for an assaulter type that is not an occupier type, never met by a type with neither mark; an infiltrator type takes the target whatever this test gives)
+    let occupies = crate::structures::garrison::may_occupy(w, id, b);
     (infiltrates || occupies).then_some(tg)
 }
 
@@ -1558,12 +1559,50 @@ pub(crate) fn process_capture(w: &mut World, id: ObjectId, eaten: bool) -> i32 {
                     },
                 );
             }
-            // spec: S-0215 claim 28 (hunt rule: in our engine it never applies, so the actor is left as the fall-back and the scatter leave it; for eaten it never applies in the original either)
+            // spec: S-0215 claim 28 row 2 (if it then has no target, the hunt rule applies as well: judged on the target the fall-back to rest leaves it with)
+            if w.obj(id).is_some_and(|x| x.target.is_none()) {
+                capture_hunt_rule(w, id, eaten);
+            }
         }
+    } else if o.target.is_none() {
+        // spec: S-0215 claim 28 row 4 (a destination and no target: the hunt rule applies)
+        capture_hunt_rule(w, id, eaten);
     }
-    // spec: S-0215 claim 28 rows 3 and 4 (a destination: no change; row 4's hunt rule never applies in our engine)
+    // spec: S-0215 claim 28 row 3 (a destination and a target: no change)
     // spec: S-0215 claim 28 and T2 (the delay is always the standard delay, with the rate of the behaviour current now, claim 6)
     standard_delay(w, id)
+}
+
+/// The hunt rule of S-0215 claim 28 (original only): an actor of a
+/// computer-controlled owner, other than one of an occupier infantry type,
+/// has its destination cleared and queues *hunt*. In our engine it reaches
+/// the neutral and special houses and the marked test-only
+/// computer-controlled player houses (S-0215 Terms); every other player
+/// house is human-controlled and is left as the other effects leave it.
+/// *Eaten* never takes it.
+fn capture_hunt_rule(w: &mut World, id: ObjectId, eaten: bool) {
+    // spec: S-0215 claim 28 (eaten: the hunt rule never applies)
+    if eaten {
+        return;
+    }
+    // spec: S-0215 claim 28 (hunt rule, original only: an actor of a computer-controlled owner; an actor of a human-controlled owner is left as the other effects leave it) and Terms (houses in our engine: the neutral and special houses keep the rule; Test-only computer-controlled player house)
+    if crate::combat::acquire::player_owned(w, id) {
+        return;
+    }
+    // spec: S-0215 claim 28 (other than one of an occupier infantry type) and S-0508 claim 4 (r19, Q-2926: every unit of an occupier type is left out by its type alone, whether it was refused, lost its target on the way or never set out; an assaulter type that is not an occupier type is not left out)
+    if crate::structures::garrison::occupier(w, id) {
+        return;
+    }
+    // spec: S-0215 claim 28 and S-0501 claim 49 (an aircraft, not a strike aircraft, whose retreat or approach behaviour became current at the fall-back ignores the hunt request, S-0501 claim 34, and ends the processing as the fall-back left it)
+    if crate::air::queue_ignored(w, id, Behaviour::Hunt) {
+        return;
+    }
+    // spec: S-0215 claim 28 (has its destination cleared, also one that its fall-back to rest or scatter gave it in the same processing)
+    crate::econ::assign_destination(w, id, None);
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 28 and claim 7 (queues hunt, which replaces whatever the fall-back or scatter queued; without an immediate start, S-0501 claim 49)
+        ob.beh.queue(Some(Behaviour::Hunt));
+    }
 }
 
 /// Area guard (S-0215 claim 26); an aircraft's below its flight height

@@ -284,44 +284,75 @@ fn claim_28_scatter_off_a_building_vehicle_takes_no_draw() {
     no_unbuilt_note(&w);
 }
 
-// spec: S-0215 claim 28 rows 3 and 4 (a destination: no change with a target; without one the hunt rule, which never applies in our engine), for a player house and for the neutral house (computer-controlled)
+// spec: S-0215 claim 28 rows 3 and 4 (a destination: no change with a target; without one the hunt rule, which a human-controlled owner does not take: in our engine every player house; S-0215 Terms, houses in our engine)
 #[test]
-fn claim_28_rows_3_and_4_a_destination_changes_nothing() {
-    for house in [0u8, 2] {
-        let mut w = game();
-        let hut = put(&mut w, Kind::Building, "HUT", 1, 6, 0);
-        let row3 = put(&mut w, Kind::Infantry, "ENG", house, -4, -2);
-        let row4 = put(&mut w, Kind::Infantry, "ENG", house, -4, 2);
-        let tv = put(&mut w, Kind::Vehicle, "BUGGY", house, -4, 5);
-        let h = Some(Target::Object(hut));
-        set(&mut w, row3, Behaviour::Capture, h, h);
-        set(&mut w, row4, Behaviour::Capture, None, h);
-        set(&mut w, tv, Behaviour::Capture, None, h);
-        tick::step(&mut w);
-        for (u, t) in [(row3, h), (row4, None), (tv, None)] {
-            let o = w.obj(u).unwrap();
-            assert!(o.beh.last.is_some(), "processed");
-            assert_eq!(o.beh.current, Some(Behaviour::Capture), "house {house}");
-            assert_eq!(o.beh.queued, None, "house {house}: nothing queued, no hunt");
-            assert_eq!(o.dest, h, "house {house}: the destination stays");
-            assert_eq!(o.target, t, "house {house}: the target stays");
-        }
-        no_unbuilt_note(&w);
+fn claim_28_rows_3_and_4_a_destination_changes_nothing_for_a_player_house() {
+    let mut w = game();
+    let hut = put(&mut w, Kind::Building, "HUT", 1, 6, 0);
+    let row3 = put(&mut w, Kind::Infantry, "ENG", 0, -4, -2);
+    let row4 = put(&mut w, Kind::Infantry, "ENG", 0, -4, 2);
+    let tv = put(&mut w, Kind::Vehicle, "BUGGY", 0, -4, 5);
+    let h = Some(Target::Object(hut));
+    set(&mut w, row3, Behaviour::Capture, h, h);
+    set(&mut w, row4, Behaviour::Capture, None, h);
+    set(&mut w, tv, Behaviour::Capture, None, h);
+    tick::step(&mut w);
+    for (u, t) in [(row3, h), (row4, None), (tv, None)] {
+        let o = w.obj(u).unwrap();
+        assert!(o.beh.last.is_some(), "processed");
+        assert_eq!(o.beh.current, Some(Behaviour::Capture));
+        assert_eq!(o.beh.queued, None, "nothing queued, no hunt");
+        assert_eq!(o.dest, h, "the destination stays");
+        assert_eq!(o.target, t, "the target stays");
     }
+    no_unbuilt_note(&w);
 }
 
-// spec: S-0215 claim 28 (hunt rule, original only: "In our engine the hunt rule never applies"); scenario B12 (a) records the original's hunt, which our engine does not take
+// spec: S-0215 claim 28 row 3 (a destination and a target: no change) and row 4 with the hunt rule (original only: a destination and no target; an actor of a computer-controlled owner other than an occupier infantry type has its destination cleared and queues hunt), for the neutral house, which keeps the original's rules for computer-controlled owners (S-0215 Terms, houses in our engine)
 #[test]
-fn claim_28_a_computer_engineer_without_a_target_does_not_hunt() {
+fn claim_28_row_4_the_hunt_rule_for_the_neutral_house() {
+    let mut w = game();
+    let hut = put(&mut w, Kind::Building, "HUT", 1, 6, 0);
+    let row3 = put(&mut w, Kind::Infantry, "ENG", 2, -4, -2);
+    let row4 = put(&mut w, Kind::Infantry, "ENG", 2, -4, 2);
+    let tv = put(&mut w, Kind::Vehicle, "BUGGY", 2, -4, 5);
+    let occ = put(&mut w, Kind::Infantry, "OCC", 2, -4, 8);
+    let h = Some(Target::Object(hut));
+    set(&mut w, row3, Behaviour::Capture, h, h);
+    set(&mut w, row4, Behaviour::Capture, None, h);
+    set(&mut w, tv, Behaviour::Capture, None, h);
+    set(&mut w, occ, Behaviour::Capture, None, h);
+    tick::step(&mut w);
+    let o = w.obj(row3).unwrap();
+    assert!(o.beh.last.is_some(), "processed");
+    assert_eq!(o.beh.current, Some(Behaviour::Capture));
+    assert_eq!(o.beh.queued, None, "row 3: nothing queued");
+    assert_eq!((o.dest, o.target), (h, h), "row 3: no change");
+    for u in [row4, tv] {
+        let o = w.obj(u).unwrap();
+        assert!(o.beh.last.is_some(), "processed");
+        // spec: S-0215 claim 11 (a ready actor's queued behaviour may start late in the same tick)
+        assert!(rested(&w, u, Behaviour::Hunt), "row 4: hunt queued");
+        assert_eq!(o.dest, None, "row 4: the destination cleared");
+    }
+    // spec: S-0215 claim 28 (the hunt rule leaves out an occupier infantry type) and S-0508 claim 4 (r19, Q-2926: by its type alone)
+    let o = w.obj(occ).unwrap();
+    assert_eq!(o.beh.queued, None, "an occupier: no hunt");
+    assert_eq!(o.dest, h, "an occupier: the destination stays");
+    no_unbuilt_note(&w);
+}
+
+// spec: S-0215 claim 28 row 2 with the hunt rule (original only, kept by the neutral house, S-0215 Terms): the fall-back to rest queues area guard (claim 14 row 9: not human-controlled), and hunt replaces it, with no destination; scenario B12 (a)
+#[test]
+fn claim_28_a_computer_engineer_without_a_target_hunts() {
     let mut w = game();
     let u = put(&mut w, Kind::Infantry, "ENG", 2, 0, 0);
     set(&mut w, u, Behaviour::Capture, None, None);
     processed(&mut w, u);
-    let o = w.obj(u).unwrap();
-    assert_ne!(o.beh.queued, Some(Behaviour::Hunt));
-    assert_ne!(o.beh.current, Some(Behaviour::Hunt));
-    // spec: S-0215 claim 14 row 9 (not human-controlled, an engineer: area guard)
-    assert!(rested(&w, u, Behaviour::AreaGuard), "area guard");
+    // spec: S-0215 claim 11 (a ready actor's queued behaviour may start late in the same tick)
+    assert!(rested(&w, u, Behaviour::Hunt), "hunt queued");
+    assert!(!rested(&w, u, Behaviour::AreaGuard), "hunt replaced area guard");
+    assert_eq!(w.obj(u).unwrap().dest, None);
 }
 
 // spec: S-0215 claim 5 (sabotage is processed exactly as capture, with the rate of sabotage) and claim 28 row 1; T2 (capture, sabotage, eaten: always the standard delay D_r + U(0, 2))

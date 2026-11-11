@@ -845,7 +845,7 @@ fn candidate(
     let capture = a_engineer
         && t_building.is_some_and(|b| b.raw.needs_engineer.unwrap_or(false))
         && to.owner != ao.owner;
-    // spec: S-0309 claim 25 part e (occupation: A's type can occupy buildings and T can be occupied by A, the structures specs' test: S-0508 claim 1)
+    // spec: S-0309 claim 25 part e (occupation: A's type can occupy buildings and T can be occupied by A, the structures specs' test: S-0508 claim 1); S-0508 claim 1 (r19, Q-2926 and Q-2927: asked only of a searcher of an occupier type, so an assaulter type that is not an occupier type never passes; no behaviour or search condition; the count compared is the occupants inside, no place held for units on their way)
     let occupy = || t_building.is_some() && crate::structures::garrison::may_enter(w, a, t);
     let house_exception = ao.kind == Kind::Infantry && (capture || occupy());
     if passive && (player || !house_exception) {
