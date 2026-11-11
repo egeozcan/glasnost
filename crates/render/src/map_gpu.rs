@@ -152,6 +152,8 @@ enum Role {
     Ignore,
     /// A shadow that stores its depth where it darkens (S-0102 claim 27).
     ShadowWriter,
+    /// A shadow that neither reads nor writes depth (S-0102 claim 25).
+    ShadowIgnore,
     /// Translucent drawings (S-0102 claim 32, F8) with the depth tests of
     /// a tile, a writer, a reader and a drawing that ignores depth: the
     /// shader blends with a copy of the target.
@@ -165,13 +167,14 @@ enum Role {
 }
 
 /// Every role, in pipeline order.
-const ROLES: [Role; 11] = [
+const ROLES: [Role; 12] = [
     Role::Tile,
     Role::Writer,
     Role::Reader,
     Role::Shadow,
     Role::Ignore,
     Role::ShadowWriter,
+    Role::ShadowIgnore,
     Role::BlendTile,
     Role::BlendWriter,
     Role::BlendReader,
@@ -224,7 +227,7 @@ pub struct MapStats {
 
 /// GPU resources for one scene.
 pub struct MapRenderer {
-    pipelines: [wgpu::RenderPipeline; 11],
+    pipelines: [wgpu::RenderPipeline; ROLES.len()],
     bind_group: wgpu::BindGroup,
     layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
@@ -445,6 +448,8 @@ impl MapRenderer {
                 Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
                 Role::Ignore => (wgpu::CompareFunction::Always, false),
                 Role::ShadowWriter => (wgpu::CompareFunction::Less, true),
+                // spec: S-0102 claim 25 (a drawing with no depth test neither reads nor writes depth)
+                Role::ShadowIgnore => (wgpu::CompareFunction::Always, false),
                 Role::BlendTile => (wgpu::CompareFunction::LessEqual, true),
                 Role::BlendWriter => (wgpu::CompareFunction::Less, true),
                 Role::BlendReader => (wgpu::CompareFunction::Less, false),
@@ -452,8 +457,8 @@ impl MapRenderer {
                 // spec: S-0518 claim 20 (a beam reads depth and never writes it; strictly less passes)
                 Role::Spot => (wgpu::CompareFunction::Less, false),
             };
-            let blend =
-                matches!(role, Role::Shadow | Role::ShadowWriter).then_some(wgpu::BlendState {
+            let blend = matches!(role, Role::Shadow | Role::ShadowWriter | Role::ShadowIgnore)
+                .then_some(wgpu::BlendState {
                     color: wgpu::BlendComponent {
                         src_factor: wgpu::BlendFactor::Zero,
                         dst_factor: wgpu::BlendFactor::Constant,
@@ -793,6 +798,8 @@ impl MapRenderer {
                         (Paint::Shadow, DepthTest::Writer) if q.cell_pass_shadows_write_depth => {
                             Role::ShadowWriter
                         }
+                        // spec: S-0102 claim 25 (no depth test: drawn whatever the stored depth), S-0111 claim 16 (the self-heal marker)
+                        (Paint::Shadow, DepthTest::Ignore) => Role::ShadowIgnore,
                         (Paint::Shadow, _) => Role::Shadow,
                         (Paint::Translucent(..), DepthTest::Reader) => Role::BlendReader,
                         (Paint::Translucent(..), DepthTest::Tile) => Role::BlendTile,
