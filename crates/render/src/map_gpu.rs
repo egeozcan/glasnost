@@ -759,7 +759,12 @@ impl MapRenderer {
                     depth,
                     reference_row,
                 } => (
-                    Role::Tile,
+                    // spec: S-0102 claim 9 (a tile without depth data does not touch the buffer: it neither reads nor writes depth)
+                    if depth.is_some() {
+                        Role::Tile
+                    } else {
+                        Role::Ignore
+                    },
                     0u32,
                     0,
                     reference_row,
