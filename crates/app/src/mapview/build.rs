@@ -1256,6 +1256,9 @@ pub struct Painter {
     /// The effect tint the tintable tables show, hundredths (S-0104
     /// claims 3 and 5); `None` for every table's own tint.
     effect_tint: Option<[i32; 3]>,
+    /// The rendering quirk switches the drawing reads (`docs/development.md`,
+    /// *Rendering quirks*).
+    view_quirks: ViewQuirks,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -5979,7 +5982,13 @@ impl Painter {
             pieces: Default::default(),
             object_levels: (0, 0),
             effect_tint: None,
+            view_quirks: ViewQuirks::default(),
         }
+    }
+
+    /// Sets the rendering quirk switches; what is drawn next reads them.
+    pub fn set_view_quirks(&mut self, q: ViewQuirks) {
+        self.view_quirks = q;
     }
 
     /// Sets the effect tint the tintable tables show (S-0104 claims 3 and

@@ -1206,6 +1206,28 @@ fn live_building_items(
     gate_door: Option<DoorView>,
     health: (i32, i32),
 ) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
+    live_building_items_quirks(
+        ctx,
+        unloading,
+        gate_door,
+        health,
+        super::quirks::ViewQuirks::default(),
+    )
+}
+
+/// As [`live_building_items`], with the painter's rendering switches set to
+/// `quirks`.
+fn live_building_items_quirks(
+    ctx: (
+        glasnost_convert::Import,
+        glasnost_convert::theater::Catalogue,
+        super::build::Assets,
+    ),
+    unloading: Option<Unloading>,
+    gate_door: Option<DoorView>,
+    health: (i32, i32),
+    quirks: super::quirks::ViewQuirks,
+) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
     let (import, catalogue, assets) = ctx;
     let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
     let map = decode(
@@ -1229,6 +1251,7 @@ fn live_building_items(
         cells: None,
     };
     let (built, mut painter) = build_parts(&inputs, true);
+    painter.set_view_quirks(quirks);
     let mut scene: Scene = built.scene;
     let cell = glasnost_map::CellXY::new(2, 2);
     let (drawn, _) = painter.buildings(
@@ -1335,6 +1358,28 @@ fn roof_unload_without_roof_sprites_has_no_fallback() {
     assert_eq!(items.len(), 4, "{items:?}");
     assert_eq!(items[0], (6, DepthTest::Writer, Profile::Upright, -2, 2));
     assert_eq!(items[3], (3, DepthTest::Reader, Profile::Flat, -7, 1));
+}
+
+/// spec: S-0108 claim 22 and Edge cases (quirks.roof_unload_no_fallback off: the ordinary
+/// deploying and under-door sprites stand in for a marked unit), claim 23 (the door image)
+#[test]
+fn roof_unload_fallback_with_the_switch_off() {
+    let roles = ["deploying", "under_door", "door"];
+    let quirks = super::quirks::ViewQuirks {
+        roof_unload_no_fallback: false,
+        ..Default::default()
+    };
+    let items = live_building_items_quirks(
+        unloading_context(&roles),
+        unloading_with(true, DoorView::Closed),
+        None,
+        (256, 256),
+        quirks,
+    );
+    assert_eq!(items.len(), 5, "{items:?}");
+    assert_eq!(items[0], (7, DepthTest::Writer, Profile::Upright, -22, 2));
+    assert_eq!(items[3], (5, DepthTest::Writer, Profile::Flat, -2, 1));
+    assert_eq!(items[4], (3, DepthTest::Reader, Profile::Flat, -7, 1));
 }
 
 /// spec: S-0108 claim 23 (the door image in every door state of the unload, closed included;
