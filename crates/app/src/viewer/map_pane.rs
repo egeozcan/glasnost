@@ -1479,4 +1479,38 @@ mod tests {
         assert_eq!(view_size(10.0, 9000.0, 2048), (64, 2048));
         assert_eq!(view_size(800.0, 600.0, usize::MAX), (800, 600));
     }
+
+    /// design: render (#90): a jump or a new view size taken by the interface, after the GPU
+    /// map pass of its frame, asks for the next frame, which draws it.
+    #[test]
+    fn a_jump_or_a_new_size_asks_for_the_next_frame() {
+        let ctx = egui::Context::default();
+        let mut pane = MapPane::default();
+        let delay = |pane: &mut MapPane, width: f32| {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 400.0),
+                )),
+                ..Default::default()
+            };
+            let output = ctx.run_ui(raw, |ui| pane.view_ui(ui));
+            let d = output
+                .viewport_output
+                .get(&egui::ViewportId::ROOT)
+                .expect("the root viewport")
+                .repaint_delay;
+            output.drop_without_applying_deltas();
+            d
+        };
+        for _ in 0..4 {
+            delay(&mut pane, 500.0);
+        }
+        assert!(!delay(&mut pane, 500.0).is_zero(), "a frame with nothing new");
+        pane.pending_jump = Some((0, 0));
+        assert!(delay(&mut pane, 500.0).is_zero(), "a jump");
+        assert!(!delay(&mut pane, 500.0).is_zero());
+        assert!(delay(&mut pane, 520.0).is_zero(), "a new size");
+        assert!(!delay(&mut pane, 520.0).is_zero());
+    }
 }
