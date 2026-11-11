@@ -1734,6 +1734,25 @@ impl Live {
                 slots.depot(*active1, *start, *damaged, defs, &mut mk);
             }
         }
+        // design: render (#87) the drawing learns a type and its slot definitions when it draws a frame, so a building whose type it has not drawn yet (a network game ticks on without drawing; a type's first tick comes before its first frame) keeps its walls and depot events, in their order, until it can take them; those of a building gone from the map or of a type with no drawing are dropped. A capture's turn order (S-0108 claim 26) belongs to its own tick and is not kept.
+        let waiting = |b: &ObjectId| {
+            self.world.obj(*b).is_some_and(|o| {
+                o.kind == SimKind::Building
+                    && o.on_map
+                    && match self.types.get(&(o.kind, o.type_index)) {
+                        None => true,
+                        Some(None) => false,
+                        Some(Some(idx)) => !self.slot_defs.contains_key(idx),
+                    }
+            })
+        };
+        let kept: Vec<_> = events.into_iter().filter(|(b, ..)| waiting(b)).collect();
+        let kept_depot: Vec<_> = depot_events
+            .into_iter()
+            .filter(|(b, ..)| waiting(b))
+            .collect();
+        self.special_events = kept;
+        self.depot_events = kept_depot;
     }
 
     /// A building's running slot animations as the drawing takes them.
