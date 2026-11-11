@@ -8,8 +8,8 @@
 //! ([`crate::oracle_m0021`]); the *hunt* section keeps the install's other
 //! fields of the behaviour (measure: M-0024, Setup, Test rules files: its
 //! other fields left as stock), read at run time and never written down.
-//! The record keeps every count local (Notes, *Kept local*), so the full
-//! report goes only to the git-ignored local lane.
+//! The record does not report the counts (Notes, *Not reported: counts and
+//! ticks*), so the full report goes only to the git-ignored local lane.
 //!
 //! Tooling only: the recorder reads state and effects after each tick and
 //! touches no simulation state.
