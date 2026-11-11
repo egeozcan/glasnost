@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 96
+revision: 104
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-11
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230, Q-2247]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230, Q-2247, Q-2971, Q-2972]
 supersedes: []
 ---
 
@@ -47,10 +47,14 @@ Terms).
 - **AI house.** A house of our engine that our own AI plays, in place of the original's computer
   player. By decision of the project lead (2026-10-09), an AI house has the same unit rules and the
   same order legality as a human-controlled house; the batch's glossary (*AI house*) records the
-  decision. For this spec that means: its orders are applied although the original
-  drops orders in a computer house's name (claim 3); it is held to S-0214's input rules when it
-  issues an order (claim 3); An AI house has the same pending-order limit (claim 2) and the same application checks as a human-controlled house (claims 4 and 15): only sell checks the actor's owner, and the other listed orders do not (claim 15); it counts as human-controlled wherever this spec tests that (claims 9, 11, 12 and 20); and it has no teams (table T3, part c).
-  This is a rule of our engine, not a claim about the original.
+  decision. For this spec that means: its orders are applied although the original drops orders in a
+  computer house's name (claim 3); it is held to S-0214's input rules when it issues an order (claim
+  3); An AI house has the same pending-order limit (claim 2) and the same application checks as a
+  human-controlled house (claims 4 and 15): in a skirmish game only sell checks the actor's owner
+  and the other listed orders do not, and in a network game every order but the detonate order
+  checks it (claim 15); it counts as human-controlled wherever this spec tests that (claims 9, 11,
+  12 and 20); and it has no teams (table T3, part c). This is a rule of our engine, not a claim
+  about the original.
 - **Scripted input.** Mouse and keyboard input that a script produces through the game's normal
   input only, as a player would, never writing into the game. It is an allowance of the
   measurement setup, added by the project lead's decision of 2026-10-09 (Measurement scenarios,
@@ -746,8 +750,10 @@ Terms).
       by issuing two in one tick. The local player hears a notice when one
       of the player's buildings becomes primary.
 
-    None of these checks the owner of the building when it is applied (see claim 15). What
-    repairing, powering and the primary factory change belongs to the economy and production specs.
+    The original checks the owner of the building for none of these when it is applied (claim 15).
+    Our engine reproduces this in a skirmish game and checks the owner in a network game, as claim
+    15 gives. What repairing, powering and the primary factory change belongs to the economy and
+    production specs.
     - Backing: `measurable` (Scenario O6, step 3, for repair; Scenario O12 for power, the
       firestorm-wall flag and making a factory primary; part b tests producing versus
       non-producing categories). "Off the map" for repair and primary, and
@@ -769,26 +775,60 @@ Terms).
       boundary.
     - Confidence: medium
 
-15. **No owner check on most orders.** When it applies a behaviour, stop, scatter, deploy,
-    detonate, repair, power, primary or guard-spot (claim 20) order, the original does not check
-    that the issuing house owns the actor. Only the sell order checks the owner. In the original
-    only the owner's input can create these orders (S-0214), so the difference shows only when the
-    actor's owner changes between the issue and the application of an order: for example by mind
-    control, capture or a map trigger's change of owner (S-0011, claim 24) during the tick of the
-    order. Such an actor still gets the order, and a building in that case is not sold. Our engine
-    applies the same rule to every house, human or AI, with no exemption: the checks of table T1
-    are the same for all, and an AI house is held to S-0214's input rules when it issues an order
-    (claim 3), which let a house order only its own objects. So a house's orders act only on its
-    own objects, with two exceptions that hold in the original too and that our engine reproduces
-    for every house, with no departure: the detonate order of claim 11, which names the planter's
-    house, and an actor whose owner changes between the issue and the application of an order.
+15. **No owner check on most orders.** When it applies a behaviour, stop, scatter, deploy, detonate,
+    repair, power, primary or guard-spot (claim 20) order, the original does not check that the
+    issuing house owns the actor. Only the sell order checks the owner. In the original only the
+    owner's input can create these orders (S-0214), so the difference shows only when the actor's
+    owner changes between the issue and the application of an order: for example by mind control,
+    capture or a map trigger's change of owner (S-0011, claim 24) during the tick of the order, or
+    in a network game during the order delay (below). Such an actor still gets the order, and a
+    building in that case is not sold. Our engine applies the same rule to every house, human or AI,
+    with no exemption: the checks of table T1 are the same for all, and an AI house is held to
+    S-0214's input rules when it issues an order (claim 3), which let a house order only its own
+    objects. So a house's orders act only on its own objects, with two exceptions that hold in the
+    original too and that our engine reproduces for every house: the detonate order of claim 11,
+    which names the planter's house, and an actor whose owner changes between the issue and the
+    application of an order. Our engine reproduces the second exactly in a skirmish game and departs
+    from it in a network game (below).
+
+    *Network games, Q-2972.* In a network game the original issues a player's order in the tick in
+    which the player gives it, and every machine carries it out *W* ticks later, *W* being the order
+    delay (S-0201, Terms). The original makes no owner check then either, except for the sell order.
+    So an order given to an own object is carried out on it although its owner has changed in
+    between, by mind control, capture or a map trigger's change of owner: a unit that is taken over
+    still moves, attacks, stops, scatters or deploys as its former owner ordered, and a building's
+    repair, power and primary orders still act on it under its new owner. A sell order is not
+    carried out on a building that the issuing house does not own when the order is carried out
+    (claim 12). In a skirmish game the order is carried out at the end of the tick in which it is
+    given (claim 1), so only an owner change in that tick has this effect, as above.
+
+    Our engine departs from the original in a network game (decided under the delegation,
+    2026-11-11). Every machine applies an order sent in tick *N* at the step where claim 1 applies
+    the orders of a skirmish game: after all objects have been updated for tick *N* + *W* and before
+    any object is updated for the next tick, together with the other orders applied there, in the
+    order of claim 3. Immediately before applying it, each machine checks the actor's owner. It
+    refuses an order whose actor the issuing house does not own then, other than the detonate order
+    of claim 11, with no message or sound. So an owner change up to that step refuses the order
+    unless the issuing house owns the actor again at that step, a trigger's change of owner in that
+    tick's polling of map triggers (S-0011 claim 6) included, and the sell order's own check (claim
+    12) is made at the same step. An order refused by this check has no effect at all: unlike a
+    failed check of table T1, it does not end the actor's planned route (claim 17), since the house
+    that issued it no longer owns the actor. Reason: the original's only check is the sender's input
+    (S-0214), which the other machines cannot verify. A check that every machine makes in one tick
+    keeps any house from ordering objects it does not own, and reproducing the original would need
+    every machine to know each object's owner *W* ticks earlier. What differs is each order of the
+    house that has just lost the object that is applied after the change, each sent at most *W*
+    ticks before it. No quirk switch.
     - Backing: `measurable` (Scenario O16, part a) for an object whose owner changes in the tick of
       the order, which is the case that tells "no owner check" from "owner check" apart; Scenario
       O16, part b, gives the contrast of the sell order. An order to an object that its house
       already did not own when the order was issued is `unmeasured`: no input path of the original
       creates one (S-0214). The rules for AI houses are design rules of our engine and need no
+      backing. The original's network case is `unmeasured`: no scenario here gives an owner change
+      during the order delay of a game played on more than one machine, and Scenario O16 tests the
+      same rule in a skirmish. Our engine's check in a network game is a design rule and needs no
       backing.
-    - Confidence: medium
+    - Confidence: medium, for the original's network case too
 
 16. **Route mode.** While the player holds the route-mode key, clicks do not order the selection
     directly. Each click adds a route point, with the action it stands for, to the planned route of
@@ -1025,8 +1065,20 @@ Terms).
       the loop begins at that own point and has as many points as the copied loop, so it ends
       before its route's last point (low). How a holder goes round such a loop, and what a
       join copies from it, are claim 16c's (*A loop that ends early*) and *Joins* below.
-    - a route that holds more than 16 points is not refused a point add for its length: the
-      length refusal above is made only at 16 points (low).
+    - a route that holds more than 16 points is not refused a point add for its length: the length
+      refusal above is made only at 16 points (low). The original sets no other bound on a route's
+      length (Q-2971): point adds to such a route and further joins lengthen it as long as the
+      program's memory lasts, and each join can add as many points as the route it copies holds
+      (low, as the outcomes above that it extends). What the original does when its memory runs out
+      is not established.
+    - Our engine bounds a route at 1024 steps, a point counting once for each time the route
+      holds it (decided under the delegation, 2026-11-11). A point add to a route of
+      1024 steps or more is refused with no message and no sound, and a join whose copy would
+      take the route past 1024 steps does nothing, adding no part of its copy. The bound holds
+      with `quirks.press_copy_ignores_route_state` on or off; with the switch off no route
+      passes 16 points. Reason: no route built for play comes near the bound, while without one
+      a short series of joins makes a route long enough to slow every machine. 1024 is 64 times
+      the 16 points that point adds alone give.
     - Quirk: `quirks.press_copy_ignores_route_state` (default: original). With the switch off,
       a join that a press gives any object of its list, selected or not, does nothing when the
       copy would take its route past 16 points, and the copy's loop always begins in the copy,
@@ -1204,10 +1256,11 @@ Terms).
       click outside the click area, part w (8) for the orders a press gives objects that are
       not selected, a loop closed and a copy added after a route's own points that hold points of
       the copied loop other than the joined point, and part h for presses on points of other
-      houses). For an object that is not selected, a copy that takes its route past 16 points, a
-      point add to a route of more than 16 points, the copy's loop replacing a loop its route had
-      or leaving it none, and a loop that begins at one of its own points are `unmeasured`: no
-      scenario here gives an object that is not selected such a route. A selected holder whose
+      houses). For an object that is not selected, a copy that takes its route past 16 points and
+      a point add to a route of more than 16 points are `measurable` (part ad). The copy's loop
+      replacing a loop its route had or leaving it none, and a loop that begins at one of its own
+      points, are `unmeasured`: no scenario here gives an object that is not selected such a
+      route. A selected holder whose
       route has changed before its order is applied, and that order's join after the
       holder's own points, its loop closed with no test at a later place or a later-made point,
       or its doing nothing, are `unmeasured`: no scenario here has a selected holder issue the
@@ -1266,64 +1319,60 @@ Terms).
       not capturing the building are `measurable` in part ac, for *capture* in run 1 and for
       *sabotage* in run 2. That its route goes on at its next fall-back to rest is
       `unmeasured`: a *capture* point is terminating, so part ac's copy has no later point.
-    - Confidence: high that the click takes its ordinary S-0214 action, and for the deploy
-      refusal for a vehicle or infantry unit; medium for the four refusal cases and their
-      separate texts (an aircraft's deploy is not one of them: it adds no point because its
-      order has no place, rated low below with the aircraft's click actions), the action
-      kept per holder, the order's place, the order a holder issues being the one recorded at the
-      add or copied at a join with no new classification, a copied action that a click would
-      not give the joining holder being applied as for any actor (a joining vehicle's copied
-      *capture* or *sabotage* giving it that behaviour, no shot at the building before its step
-      into the building, the override's attack on the building at that step, and no capture, and
-      its route going on at its next fall-back to rest, unmeasured), the info messages, the sound
-      and the three conditions
-      of the point-click test, and for the holder that a join copies (holders given the point
-      in the same tick included) and what the copy holds and loops; medium for the copied
-      points' being uncommitted until the next commit; low for
-      the route record kept once the route is empty, for the hover highlight, for which point a
-      press takes where click areas overlap (the unmeasured branches above included), for
-      presses on points of other houses. Medium for the point that a press takes among points at
-      one place, in each case of *Two points at one place*, for the further point added there by
-      a click outside the click area, and for the later-made marker drawn on top; medium
-      for an order that finds no point at its place doing nothing, and for an order's acting on
-      the earliest-made point at its place rather than on the point the press took. Medium for
-      one press that closes a loop and joins, the detonate sent at the release after claim 16d's
-      tests and refused with no order when one of them refuses (its route-state test included),
-      every other click action of a vehicle or infantry unit that orders something giving a
-      behaviour order, and an action that S-0214 gives no order for adding no point, the
-      rally-point click sent directly at the release, the click area, and the patrol action's
-      point add and its being neither terminating nor continual. Low for an aircraft's click
-      actions and a building's *attack* action giving behaviour orders in the same way, a
-      building's other actions on an object going the two ways of claim 16b (its *unload* orders
-      as point adds at its own place, which takes in its *deploy* action coming only from a
-      click on the building itself and each *unload* naming the building as its target, read
-      from the original with no scenario here giving a selected building the deploy action, its
-      primary, guard-spot and detonate orders sent directly, and its deploy action not refused
-      in route mode), an
-      aircraft's deploy action adding no point, and
-      the undeploy click sent directly (all unmeasured): which action a click gives an aircraft
-      or a building is S-0214 claim 10's mapping, rated low there for both kinds. Medium for an
-      order that names neither a target nor a destination adding no point, and for the place of
-      a *move* click on an object and of a *patrol* point (unmeasured). Medium for a
-      click that selects or toggles the selection adding no point (no object gets an order,
-      S-0214 claim 3). Medium for the
-      objects listed by a press on a point
-      and the list's order, and for the pending-list limit dropping the orders after the first
-      128 in the list (unmeasured). Low
-      for each outcome for an object that is not selected: the loop closed (at its last point
-      or the one before it, or over an existing loop, included) and the copy added after its own
-      points with the copy's loop (past 16 points, in place of a loop it had, and beginning at
-      one of its own points, included), and for a route of more than 16 points taking a point
-      add. Medium for the choice between a loop close and a join being made when each order is
-      applied (unmeasured), as a rule. Low for each outcome for a selected holder whose route
-      has changed before its order is applied: the join after its own points (past 16 points
-      included), the loop closed with no test at a later place or a later-made point at the
-      place, and the order that does nothing. Medium for the first-place rule of *A
-      point that a route holds twice* and for a point
-      delete removing every place (unmeasured), as rules; routes that hold a point twice come
-      about only through the low outcomes above, which bound how often they apply, not the
-      rules. Low for the action read at a point held twice and for the point a delete selects
-      next on such a route (unmeasured)
+      That the original sets no bound on a route's length beyond the 16-point refusal is
+      `unmeasured`: no run can show that a bound is never met, and no played game runs the
+      program out of memory. Our engine's bound is a design rule and needs no backing.
+    - Confidence: high that the click takes its ordinary S-0214 action, and for the deploy refusal
+      for a vehicle or infantry unit; medium for the four refusal cases and their separate texts (an
+      aircraft's deploy is not one of them: it adds no point because its order has no place, rated
+      low below with the aircraft's click actions), the action kept per holder, the order's place,
+      the order a holder issues being the one recorded at the add or copied at a join with no new
+      classification, a copied action that a click would not give the joining holder being applied
+      as for any actor (a joining vehicle's copied *capture* or *sabotage* giving it that behaviour,
+      no shot at the building before its step into the building, the override's attack on the
+      building at that step, and no capture, and its route going on at its next fall-back to rest,
+      unmeasured), the info messages, the sound and the three conditions of the point-click test,
+      and for the holder that a join copies (holders given the point in the same tick included) and
+      what the copy holds and loops; medium for the copied points' being uncommitted until the next
+      commit; low for the route record kept once the route is empty, for the hover highlight, for
+      which point a press takes where click areas overlap (the unmeasured branches above included),
+      for presses on points of other houses. Medium for the point that a press takes among points at
+      one place, in each case of *Two points at one place*, for the further point added there by a
+      click outside the click area, and for the later-made marker drawn on top; medium for an order
+      that finds no point at its place doing nothing, and for an order's acting on the earliest-made
+      point at its place rather than on the point the press took. Medium for one press that closes a
+      loop and joins, the detonate sent at the release after claim 16d's tests and refused with no
+      order when one of them refuses (its route-state test included), every other click action of a
+      vehicle or infantry unit that orders something giving a behaviour order, and an action that
+      S-0214 gives no order for adding no point, the rally-point click sent directly at the release,
+      the click area, and the patrol action's point add and its being neither terminating nor
+      continual. Low for an aircraft's click actions and a building's *attack* action giving
+      behaviour orders in the same way, a building's other actions on an object going the two ways
+      of claim 16b (its *unload* orders as point adds at its own place, which takes in its *deploy*
+      action coming only from a click on the building itself and each *unload* naming the building
+      as its target, read from the original with no scenario here giving a selected building the
+      deploy action, its primary, guard-spot and detonate orders sent directly, and its deploy
+      action not refused in route mode), an aircraft's deploy action adding no point, and the
+      undeploy click sent directly (all unmeasured): which action a click gives an aircraft or a
+      building is S-0214 claim 10's mapping, rated low there for both kinds. Medium for an order
+      that names neither a target nor a destination adding no point, and for the place of a *move*
+      click on an object and of a *patrol* point (unmeasured). Medium for a click that selects or
+      toggles the selection adding no point (no object gets an order, S-0214 claim 3). Medium for
+      the objects listed by a press on a point and the list's order, and for the pending-list limit
+      dropping the orders after the first 128 in the list (unmeasured). Low for each outcome for an
+      object that is not selected: the loop closed (at its last point or the one before it, or over
+      an existing loop, included) and the copy added after its own points with the copy's loop (past
+      16 points, in place of a loop it had, and beginning at one of its own points, included), for a
+      route of more than 16 points taking a point add, and for the original's setting no other bound
+      on a route's length. Medium for the choice between a loop close and a join being made when
+      each order is applied (unmeasured), as a rule. Low for each outcome for a selected holder
+      whose route has changed before its order is applied: the join after its own points (past 16
+      points included), the loop closed with no test at a later place or a later-made point at the
+      place, and the order that does nothing. Medium for the first-place rule of *A point that a
+      route holds twice* and for a point delete removing every place (unmeasured), as rules; routes
+      that hold a point twice come about only through the low outcomes above, which bound how often
+      they apply, not the rules. Low for the action read at a point held twice and for the point a
+      delete selects next on such a route (unmeasured)
 
 16c. **Commit, following and loops, Q-1986 question 3.** Points added since the last commit are
     not followed: a holder whose route reaches them falls back to rest there and waits for a
@@ -1810,15 +1859,14 @@ Terms).
       focus loss or at the options menu, as our engine's design rule has it, is low
 
 17. **Every order to an actor ends its route.** Any order that names an actor, apart from the
-    route-mode orders themselves, removes that actor's planned route. This happens when the order
-    is applied, for any actor that still exists, whether or not the order then passes the checks of
-    its kind: a behaviour order whose target died in the same tick, a duplicate enter order that
-    part (a) of table T3 ignores, and an order to an actor carried inside a transport all end the
-    route. An object whose route still holds a point when the order is applied stops being a
-    route holder and lowers the house's route-holder count (Terms) at once (claim 16f). Orders
-    that a
-    route itself issues for its
-    points (claim 16c) do not end it.
+    route-mode orders themselves, removes that actor's planned route. This happens when the order is
+    applied, for any actor that still exists, whether or not the order then passes the checks of its
+    kind: a behaviour order whose target died in the same tick, a duplicate enter order that part
+    (a) of table T3 ignores, and an order to an actor carried inside a transport all end the route.
+    An object whose route still holds a point when the order is applied stops being a route holder
+    and lowers the house's route-holder count (Terms) at once (claim 16f). Orders that a route
+    itself issues for its points (claim 16c) do not end it. Nor, in a network game, does an order
+    that our engine's owner check refuses (claim 15).
     - Backing: `measurable` (Scenario O8, steps 2 and 4) for the removal of the route by an order
       that takes effect, and (Scenario O13, part c) for an order that fails its target check.
       The other failing cases are `unmeasured`: an actor that fails its own checks would have
@@ -1860,12 +1908,17 @@ Terms).
       remembered tick is set to −100 at every game start, so it never carries over from an
       earlier game.
 
-20. **Guard-spot order.** The order names an actor and an object or cell, and sets the actor's
-    guard spot to that object or cell. It needs only a live actor: it is applied to an actor that
-    is off the map, and it checks neither hit points nor owner (claim 15). Like every order it
-    passes through the pending list (claim 2). For a factory the guard spot is its rally point,
-    the place toward which its new units head (production specs). Input creates the order for a
-    selected building of the player's in three cases (S-0214, table M, part 3):
+20. **Guard-spot order.** The order names an actor and an object or cell, and sets the actor's guard
+    spot to that object or cell. It needs only a live actor: it is applied to an actor that is off
+    the map, and it checks neither hit points nor owner (claim 15). Our engine reproduces this in a
+    skirmish game. In a network game it checks the owner, as claim 15 gives for every order but the
+    detonate order. Like every order it passes through the pending list (claim 2). For a factory the
+    guard spot is its rally point, the place toward which its new units head (production specs). An
+    owner change of the building forgets it (S-0309 claim 31). A naval vehicle factory left without
+    one gets one again at the change, a cell near the factory, as its grand opening gives it one
+    (S-0108 claim 11, with the amendment for a naval vehicle factory that S-0309 lists under Changes
+    for other specs). Input creates the order for a selected building of the player's in three cases
+    (S-0214, table M, part 3):
     - **(a) Rally point on a cell.** A rally-capable building clicked on a cell (S-0214, row BC5).
     - **(b) A building that undeploys into a vehicle, on a cell.** A move or harvest click on a
       cell with such a building selected. The same click then also issues a sell order, with
@@ -1904,10 +1957,15 @@ Terms).
       a failed search is `unmeasured`: it needs a clicked cell with no usable cell within the
       search's reach, which a map can hardly provide for a ground factory. The flying zone of an
       aircraft factory is `measurable` with a named test rules file that makes an aircraft factory
-      type a repair depot (Scenario O14, step 5).
-    - Confidence: medium for the effect, the check, the three input cases and the search around
-      the clicked cell; low for the movement zone used per kind of building and for the choice
-      among qualifying cells
+      type a repair depot (Scenario O14, step 5). The forgetting at a trigger's change-owner action
+      is `measurable` (S-0309 scenario A19 part f); at other owner changes it rests on S-0309 claim
+      31's backing. The naval vehicle factory's new rally point is `measurable` (S-0309 scenario A19
+      part o).
+    - Confidence: medium for the effect, the check, the three input cases and the search around the
+      clicked cell; low for the movement zone used per kind of building and for the choice among
+      qualifying cells; high for the forgetting at a trigger's change-owner action; medium for the
+      forgetting at other owner changes, as S-0309 claim 31 rates them, and for the naval vehicle
+      factory's new rally point
 
 21. **Destination assignment, not an order name, governs prone get-up (Q-0087).**
     S-0107 claim 15 owns the rule: an eligible prone infantry unit asks, not forced, for
@@ -2280,6 +2338,7 @@ pixels. No floating-point arithmetic is used.
 | Initial last-cheer tick | −100 | ticks | Claim 19 |
 | Route-holder limit per house | 128 | route-holder count plus new objects | Claim 16 |
 | Route length at which a point add is refused | 16 | points | Claims 16a and 16b: only at exactly 16; a longer route (claim 16b's copy) is not refused for its length |
+| Longest route in our engine | 1024 | steps, a point counted each time the route holds it | Claim 16b: our engine's own bound; the original has none |
 | Fewest points in a loop that a press closes on a selected object's own route, unless that route changes between the click and the order's application | 3 | points | Claims 16b and 16c |
 | Fewest loop points kept after a deletion | 3 | points | Claim 16e |
 | Order delay | 1 | ticks | Claim 1: issued in tick *N*, first acted on in tick *N* + 1 |
@@ -2308,7 +2367,10 @@ Right and bottom hot spots use *w* and *h*, not their last pixel indices.
 
 **Table T1: the order kinds.** The terms *exists*, *live*, *on the map* and *valid* are those of
 Terms. All checks are made when the order is applied; an order that fails one has no effect apart
-from claim 17. Every row that carries an actor also ends the actor's planned route (claim 17).
+from claim 17. The rows give the checks of a skirmish game. In a network game our engine also checks
+the actor's owner of every order that carries an actor, the detonate order excepted, and an order
+refused by that check does not end the actor's planned route (claim 15). Every row that carries an
+actor also ends the actor's planned route (claim 17).
 
 | Order | Carries | Checks when applied | Result |
 |---|---|---|---|
@@ -2564,10 +2626,12 @@ only when they actually assign a destination.
 - **Behaviour orders after other orders** (claim 3). The original's grouping makes a behaviour
   order win over a stop, scatter or deploy order given later in the same tick. This is the
   original's rule for the orders of one tick, not a defect of game state, so no switch is proposed.
-- **No owner check** (claim 15). The original checks the owner only for the sell order. Our
-  engine keeps that, for every house alike; ownership is kept by the input rules that every house's
-  orders pass when issued (claim 3). An object whose owner changes between issue and application
-  still gets the order, as in the original. No switch is proposed.
+- **No owner check** (claim 15). The original checks the owner only for the sell order. Our engine
+  keeps that in a skirmish game, for every house alike; ownership is kept by the input rules that
+  every house's orders pass when issued (claim 3). In a skirmish game an object whose owner changes
+  between issue and application still gets the order, as in the original. In a network game our
+  engine departs from the original: it refuses an order whose actor the issuing house no longer owns
+  when the order is carried out, the detonate order excepted (claim 15). No switch is proposed.
 - **The click marker.** S-0214 claim 30 owns click-marker eligibility and placement.
   In a skirmish game the original creates it as an ordinary animation object.
   Our engine treats it as drawing only: it never takes part in
@@ -3490,6 +3554,27 @@ Q-1753).**
     X, the cursor showing *sabotage* over X at N's click; the same expectations and falsifiers with
     *sabotage* in place of *capture*. If the cursor does not show the run's action over X at N's
     click, or T is not given the point, the run decides nothing.
+  - *(ad) Routes past 16 points (claims 16a and 16b, Q-2971):* a fresh game, with vehicles S and Z
+    of the player's that have not held a route point. All points are cells far from S and Z. (1)
+    Give S and Z plain move orders to far cells and, while they move, select S alone, hold the key,
+    click A₁, A₂ and A₃ and release (S is not interrupted, claim 16c). (2) Select Z alone, hold the
+    key, press A₃'s marker and release: Z's route is A₃. (3) Select Z alone, hold the key, click B₁
+    to B₁₅ and release: Z's route holds 16 points, and the 16-point message shows after B₁₅. (4)
+    Select S alone, hold the key, press A₁'s marker and release. S closes a loop at A₁, and Z, which
+    holds S's last point A₃ and is not selected, is given the copy A₁, A₂, A₃ after its own points,
+    with its loop: 19 points. (4′) Select Z alone, hold the key without clicking, record Z's route
+    line and release. (5) Clear the selection, hold the key, click A₂'s marker and press the delete
+    key, then release: both loops are left with 2 points and are cancelled, and Z's route holds 18
+    points with no loop. (6) Select Z alone, hold the key, click C₁, C₂ and C₃ and release.
+    Expected: at (4′) Z's route line runs from A₃ through B₁ to B₁₅ and on to A₁, A₂ and A₃, so the
+    copy has taken Z's route past 16 points. Each click of (6) is accepted with no message, and with
+    the key held and Z selected, Z's route line runs from A₃ through B₁ to B₁₅, A₁, A₃ and C₁ to C₃.
+    The copy past 16 points is falsified if Z's line at (4′) ends at B₁₅. The point adds past 16
+    points are falsified if a click of (6) is refused or shows the 16-point message, or if Z's line
+    ends before C₃. Z's route holds A₃ twice from (4) on, but no expectation here depends on the
+    rules for a point that a route holds twice (claim 16b). The clicks must come before S or Z
+    reaches its far cell. A run in which the 16-point message does not show after B₁₅ decides
+    nothing. A run in which the copy is falsified decides nothing on the point adds of (6).
 
 **Scenario O9: one input event per cycle (claims 1 and 3).**
 - *Setup:* one vehicle of the player's, selected, moving towards a far cell *A*. Game speed 6
