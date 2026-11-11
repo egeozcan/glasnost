@@ -153,6 +153,9 @@ pub struct Session {
     /// The view's centre at the last name-tip update, to tell a moving view
     /// (S-0111 claim 20).
     tip_centre: (i32, i32),
+    /// Whether the last scroll cycle moved the view: the view is moving in
+    /// the drawn frames up to the next cycle too (S-0111 claim 20, #84).
+    scroll_moved: bool,
     /// The name tip glyphs' painter rows, one per tip colour
     /// ([`name_tip::register`]).
     tip_rows: [Option<u32>; 2],
@@ -528,6 +531,7 @@ impl Session {
             // spec: S-0015 State and ordering (the table is read once, at start-up, by the install: `install::prepare`; the client hands it to the game)
             strings: None,
             tip_centre: (0, 0),
+            scroll_moved: false,
             tip_rows: [None; 2],
             edge: EdgeScroll::default(),
             edge_live: true,
@@ -959,8 +963,17 @@ impl Session {
             blocked,
         );
         let a = scroll::arrows(held);
+        let before = self.centre;
         // spec: S-0101 claims 14 and 16 (mouse and arrow requests add before the next view position, subject to F5)
         self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
+        // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll) and S-0101 claims 13 to 15 (the view moves once per unfrozen cycle): a cycle that moved it keeps it moving until the next cycle (#84)
+        self.scroll_moved = self.centre != before;
+    }
+
+    /// The game stands still (no cycle runs: S-0201 claims 8 and 9), so the
+    /// view no longer moves (S-0111 claim 20, #84).
+    pub fn view_still(&mut self) {
+        self.scroll_moved = false;
     }
 
     /// The pointer as edge scrolling sees it, for its request and for its
@@ -2509,7 +2522,10 @@ impl Session {
     /// 22): the option, the blocks of the pointer's place, a movement over
     /// the slots shown at once, and the rest's one choice when the wait ends.
     fn update_name_tip(&mut self) {
-        let moving = self.centre != self.tip_centre;
+        // A view moved since the last frame (a radar click, a jump) or by
+        // the last scroll cycle, which runs once per cycle, not per frame
+        // (#84).
+        let moving = self.centre != self.tip_centre || self.scroll_moved;
         self.tip_centre = self.centre;
         self.focus_tip = None;
         // spec: S-0111 claim 20 (Options menu: opening the in-game options menu hides a tip and stops the wait; while it is open no wait runs and no tip shows; when it closes nothing shows until the pointer moves and rests again) and claim 20 (the tooltip option off); S-0411 claim 20 (with the option off no sidebar tip ever shows; the options menu as for the name tip)
@@ -2524,7 +2540,7 @@ impl Session {
         let blocked = match place {
             // spec: S-0411 claim 20 (Buttons and blocks: of S-0111 claim 20's blocks only the hidden mouse cursor applies to sidebar tips, so an order block blocks them; a moving battlefield view blocks none, and a held button does not stop a movement over the slots) and claim 22 (the controls: claim 20's blocks here, the hidden cursor and the options menu)
             TipPlace::Bar(_) => order_block,
-            // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame
+            // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll): our test is a view centre changed since the last frame or by the last scroll cycle
             // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the view and held)
             _ => moving || self.view_button_held || order_block,
         };
