@@ -198,6 +198,51 @@ pub struct Cells {
     pub anim_first: Option<Vec<bool>>,
 }
 
+impl Cells {
+    /// Whether the per-cell tables hold together: the grid is consistent
+    /// and every table indexed by dense index has one entry per cell. A
+    /// world decoded from bytes may not (#157). Every field is named, so a
+    /// new table must be placed here.
+    pub fn is_consistent(&self) -> bool {
+        let Cells {
+            grid,
+            category,
+            occ,
+            lists,
+            deck,
+            deck_entry,
+            bridge_axis,
+            bridge_body,
+            section_self,
+            covered_by,
+            links: _,
+            alternate: _,
+            pier_levels: _,
+            mark_seq: _,
+            wall_owner,
+            anim_started,
+            anim_first: _,
+        } = self;
+        let n = grid.len();
+        grid.is_consistent()
+            && [
+                category.len(),
+                occ.len(),
+                lists.len(),
+                deck.len(),
+                deck_entry.len(),
+                bridge_axis.len(),
+                bridge_body.len(),
+                section_self.len(),
+                covered_by.len(),
+                wall_owner.len(),
+                anim_started.len(),
+            ]
+            .iter()
+            .all(|&l| l == n)
+    }
+}
+
 /// The high-bridge overlay indices and their marking directions (S-0211
 /// claim 15): indices 24 and 237 mark along step direction 0 (map north),
 /// 25 and 238 along step direction 6 (map west).

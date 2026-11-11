@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 
 use crate::load::{self, LoadError};
 use crate::orders::{self, Order};
-use crate::rules::SimRules;
+use crate::rules::{Kind, SimRules};
 use crate::world::{GameSetup, HouseId, World};
 
 /// Format version of saves and replays.
@@ -114,10 +114,51 @@ pub fn load(
         });
     }
     let mut w = s.world;
+    // nocite: our own input validation (#157): a save from another peer or a damaged file is refused, not a panic
+    holds_together(&w, &rules).map_err(SaveError::Format)?;
     w.rules = Some(rules);
     w.catalogue = Some(catalogue);
     crate::regions::rebuild(&mut w);
     Ok(w)
+}
+
+/// Whether a decoded world holds together (#157): the indices that the
+/// load's region rebuild and the first ticks trust without a check. Each
+/// part is decoded on its own, so bytes another peer chose may give tables
+/// of other lengths. Not checked (a seam): the overlay indices of the
+/// grid's cells, and the ids that objects, routes and other records hold
+/// of each other.
+fn holds_together(w: &World, rules: &SimRules) -> Result<(), String> {
+    if !w.cells.is_consistent() {
+        return Err("the cell tables do not agree with the grid".into());
+    }
+    if !w.rng.is_consistent() || w.map_rng.as_ref().is_some_and(|r| !r.is_consistent()) {
+        return Err("a random stream is broken".into());
+    }
+    for (&id, o) in &w.objects {
+        if o.id != id {
+            return Err(format!("object {} is filed as {}", o.id.0, id.0));
+        }
+        if o.owner.is_some_and(|h| usize::from(h.0) >= w.houses.len()) {
+            return Err(format!("object {} has a house the game lacks", id.0));
+        }
+        let types = match o.kind {
+            Kind::Infantry => rules.infantry.len(),
+            Kind::Vehicle => rules.vehicles.len(),
+            Kind::Aircraft => rules.aircraft.len(),
+            Kind::Building => rules.buildings.len(),
+            Kind::Terrain => rules.terrain.len(),
+        };
+        if usize::try_from(o.type_index).map_or(true, |t| t >= types) {
+            return Err(format!("object {} has a type the rules do not have", id.0));
+        }
+    }
+    for h in &w.houses {
+        if !h.pending.iter().all(crate::orders::in_window) {
+            return Err("a pending order carries a cell outside the window".into());
+        }
+    }
+    Ok(())
 }
 
 /// A replay: the rules hash, the game setup and every order with the tick

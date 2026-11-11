@@ -164,6 +164,14 @@ impl CellGrid {
         self.cells.len()
     }
 
+    /// Whether the grid holds together, as [`CellGrid::new`] makes it: its
+    /// side is the footprint's coordinate side and it holds side × side
+    /// cells. A grid decoded from bytes may not (#157).
+    pub fn is_consistent(&self) -> bool {
+        self.side == self.footprint.coordinate_side()
+            && usize::from(self.side) * usize::from(self.side) == self.cells.len()
+    }
+
     /// Whether the grid holds no cell.
     pub fn is_empty(&self) -> bool {
         self.cells.is_empty()
