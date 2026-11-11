@@ -898,7 +898,10 @@ impl MapPane {
             (
                 cell.0,
                 cell.1,
-                shown.scene.object_at(qx, qy, view.origin.1, &filter),
+                // The object drawn at the point (S-0102 claims 10 and 31; #68).
+                shown
+                    .scene
+                    .object_at(qx, qy, &view, &filter, &ComposeQuirks::default()),
             )
         });
         let hover = self.hover;

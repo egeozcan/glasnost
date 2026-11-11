@@ -1186,8 +1186,11 @@ impl Session {
             max_level,
             &q,
         );
-        let top = self.view().origin.1;
-        let code = self.scene.object_at(qx, qy, top, &self.filter);
+        // The object drawn at the point (S-0102 claims 10 and 31; #68).
+        let view = self.view();
+        let code = self
+            .scene
+            .object_at(qx, qy, &view, &self.filter, &ComposeQuirks::default());
         let id = code.and_then(|c| {
             self.with_live(|live, _, _| live.object_of_code(c))
                 .flatten()
