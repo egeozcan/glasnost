@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-11
 ---
 
 # M-0007: Repair depot timing and contact loss with the depot recorder
@@ -114,42 +114,42 @@ scheduled processing. Run 3 settles question 2 for a destroyed vehicle. The runs
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| *D*, the delay that the settling step sets to the next processing, test rules | ticks | pilot; runs 1, 3 and 6 (rows below); runs 4a and 4b through *D* + *K*<sub>u</sub> − 1 | 14 | | exact |
-| *K*<sub>u</sub>, the step interval, test rules | ticks | pilot; runs 3, 4a and 4b | 113 | | exact |
+| *D*, the delay that the settling step sets to the next processing, test rules | ticks | pilot; runs 1, 3 and 6 (rows below); runs 4a and 4b through *D* + *K*<sub>u</sub> − 1 | below the table |  | exact |
+| *K*<sub>u</sub>, the step interval, test rules | ticks | pilot; runs 3, 4a and 4b | below the table |  | exact |
 | *D* and *K*<sub>u</sub>, stock rules | ticks | 1 run | local | | exact |
-| Pilot: arrival at the docking point, inferred from one reading (no position or arrival event was read): the first tick from which the MTNK has no destination | tick | 1 | 214 | | exact for these runs' placement only (Placement, below) |
+| Pilot: arrival at the docking point, inferred from one reading (no position or arrival event was read): the first tick from which the MTNK has no destination | tick | 1 | below the table |  | exact for these runs' placement only (Placement, below) |
 | Pilot: the MTNK's behaviour from that tick | | 1 | *guard*, not *sleep* | | exact |
-| Pilot: the depot queues *repair*, inferred (Evidence) | tick | 1 | 214 | | exact |
-| Pilot: first waiting processing, accepting | tick | 1 | 215; it sets the next processing 3 ticks later | | exact |
-| Pilot: settling step | tick | 1 | 218; it sets the next processing *D* later | | exact |
-| Pilot: slots at the settling step | | 1 | *special-1* starts; *active-1* and *idle* stop | | exact |
-| Pilot: working processings | ticks | 1 | every tick from 232 | | exact |
-| Pilot: second step | tick | 1 | 344 (settling step + 126) | | exact |
-| Pilot: later steps | ticks | 1 run | every 113 | | exact |
+| Pilot: the depot queues *repair*, inferred (Evidence) | tick | 1 | below the table |  | exact |
+| Pilot: first waiting processing, accepting | tick | 1 | below the table |  | exact |
+| Pilot: settling step | tick | 1 | below the table |  | exact |
+| Pilot: slots at the settling step |  | 1 | below the table |  | exact |
+| Pilot: working processings | ticks | 1 | below the table |  | exact |
+| Pilot: second step | tick | 1 | below the table |  | exact |
+| Pilot: later steps | ticks | 1 run | below the table |  | exact |
 | Step cost | credits | every step | local | | exact |
-| Run 1: destroyed at 223 (settling step + 5): first reaction | tick | 1 | 232: settling; *special-3* and *active-1* start | | exact |
-| Run 1: then | | 2 (one with each art) | processed every tick while *special-3* runs; *guard* at 253 (short *special-3*: 243), the tick after the one by which *special-3* has ended (start 232: 252, short 242) | | exact |
-| Run 2: destroyed at 345 (second step + 1): reaction | tick | 1 | 345: settling; *special-3* and *active-1* start | | exact |
-| Run 2: return to *guard* | tick | 2 (one with each art) | 366 (short *special-3*: 356), the tick after the one by which *special-3*, started at 345, has ended (365, short 355) | | exact |
-| Run 3: credits set to 0 at 345: the step at 457 | | 1 | *cannot pay*: settling; *special-3* and *active-1* start | | exact |
-| Run 3: retries | ticks | 1 | 458 and 472 | | exact |
-| Run 3: destroyed at 475: next processing | tick | 1 | 486 (472 + 14), none in between; *guard* there; *special-3*, started at 457, ran to 476 and had ended by 477 | | exact |
-| Runs 4a, 4b: second vehicle's settling steps | ticks | 2 | 521 and 558 | | exact |
-| Runs 4a, 4b: its later steps | ticks | 2 runs | settling step + 126, then every 113 | | exact |
-| Run 5: destroyed at 216 (acceptance + 1): next processing | tick | 1 | 218: *guard*; *special-3* does not start | | exact |
-| Run 6: health written to full at 216 or 217: settling step | tick | 2 | 218: *not needed*, no payment; contact released; vehicle sent to a cell away from the depot (cell local) | | exact |
-| Run 6: next processing | tick | 2 | 232 (+14), settling with no contact; *guard* in that processing, shown first in tick 232's record; no *special-3* | | exact |
+| Run 1: destroyed at 223 (settling step + 5): first reaction | tick | 1 | below the table |  | exact |
+| Run 1: then |  | 2 (one with each art) | below the table |  | exact |
+| Run 2: destroyed at 345 (second step + 1): reaction | tick | 1 | below the table |  | exact |
+| Run 2: return to *guard* | tick | 2 (one with each art) | below the table |  | exact |
+| Run 3: credits set to 0 at 345: the step at 457 |  | 1 | below the table |  | exact |
+| Run 3: retries | ticks | 1 | below the table |  | exact |
+| Run 3: destroyed at 475: next processing | tick | 1 | below the table |  | exact |
+| Runs 4a, 4b: second vehicle's settling steps | ticks | 2 | below the table |  | exact |
+| Runs 4a, 4b: its later steps | ticks | 2 runs | below the table |  | exact |
+| Run 5: destroyed at 216 (acceptance + 1): next processing | tick | 1 | below the table |  | exact |
+| Run 6: health written to full at 216 or 217: settling step | tick | 2 | below the table |  | exact |
+| Run 6: next processing | tick | 2 | below the table |  | exact |
 | Run 7: move order at 214, 215, 216 or 219 | | 4 | contact released on the order's tick each time | | exact |
 | Hover (LCRF): arrival, inferred from one reading (no position or arrival event was read): the first tick from which the vehicle is in *sleep* | tick | 1 | local | | exact for these runs' placement only |
-| Hover: accepting waiting processing | tick | 1 | the arrival + 1 | | exact |
+| Hover: accepting waiting processing | tick | 1 | below the table |  | exact |
 | Hover: settling processings while it sinks | ticks | 1 | every tick from the first settling processing until it is down, with no step (ticks, span and height local) | | exact at tick granularity: no processing in a tick before the touchdown tick takes a step (the order within the touchdown tick was not established) |
 | Hover: settling step | tick | 1 | the first settling processing after it is down (tick local; height was read per tick, so whether the touchdown came before or after a processing within its tick was not established) | | exact |
 | B18 part d's nearest case: move order applied at 215, before that tick's logic | | 1 | see the next three rows | | exact |
-| The same: the depot's first waiting processing, at 215 | | 1 | no contact; *special-3* starts; it sets the next processing 1 tick later | | exact |
-| The same: the depot's behaviour | | 1 | *guard* at 216, while *special-3*, started at 215, runs to 234 | | exact |
+| The same: the depot's first waiting processing, at 215 |  | 1 | below the table |  | exact |
+| The same: the depot's behaviour |  | 1 | below the table |  | exact |
 | The same: *special-1* | | 1 | does not start | | exact |
 | The same: *active-1* | | 1 | already running; whether it restarted cannot be seen | | exact |
-| Scenario-stream draws in any depot repair processing | draws | every run reported under Result (not part b's unreported attempt) | 0 | | exact |
+| Scenario-stream draws in any depot repair processing | draws | every run reported under Result (not part b's unreported attempt) | below the table |  | exact |
 
 - **Placement.** The vehicle's travel to the docking point depends on where the depot and the
   vehicle were placed, which is not recorded (Setup). So the arrival tick (itself inferred from
@@ -170,6 +170,46 @@ scheduled processing. Run 3 settles question 2 for a destroyed vehicle. The runs
   *D* + *K*<sub>u</sub> − 1. The run 4 settling steps are 37 ticks apart, not a multiple of 113,
   and 177 and 214 ticks after the lost vehicle's last step. In both run 4 repeats no part of the
   lost vehicle's step spacing carried over.
+
+Relations for the table above:
+
+- *D*, the delay that the settling step sets to the next processing, test rules: 14.
+- *K*<sub>u</sub>, the step interval, test rules: 113.
+- *Pilot: arrival at the docking point, inferred from one reading (no position or arrival event was
+  read): the first tick from which the MTNK has no destination*: 214.
+- Pilot: the depot queues *repair*, inferred (Evidence): 214.
+- *Pilot: first waiting processing, accepting*: 215; it sets the next processing 3 ticks later.
+- *Pilot: settling step*: 218; it sets the next processing *D* later.
+- *Pilot: slots at the settling step*: *special-1* starts; *active-1* and *idle* stop.
+- *Pilot: working processings*: every tick from 232.
+- *Pilot: second step*: 344 (settling step + 126).
+- *Pilot: later steps*: every 113.
+- *Run 1: destroyed at 223 (settling step + 5): first reaction*: 232: settling; *special-3* and
+  *active-1* start.
+- *Run 1: then*: processed every tick while *special-3* runs; *guard* at 253 (short *special-3*:
+  243), the tick after the one by which *special-3* has ended (start 232: 252, short 242).
+- *Run 2: destroyed at 345 (second step + 1): reaction*: 345: settling; *special-3* and *active-1*
+  start.
+- Run 2: return to *guard*: 366 (short *special-3*: 356), the tick after the one by which
+  *special-3*, started at 345, has ended (365, short 355).
+- *Run 3: credits set to 0 at 345: the step at 457*: *cannot pay*: settling; *special-3* and
+  *active-1* start.
+- *Run 3: retries*: 458 and 472.
+- *Run 3: destroyed at 475: next processing*: 486 (472 + 14), none in between; *guard*
+  there; *special-3*, started at 457, ran to 476 and had ended by 477.
+- *Runs 4a, 4b: second vehicle's settling steps*: 521 and 558.
+- *Runs 4a, 4b: its later steps*: settling step + 126, then every 113.
+- *Run 5: destroyed at 216 (acceptance + 1): next processing*: 218: *guard*; *special-3* does not
+  start.
+- *Run 6: health written to full at 216 or 217: settling step*: 218: *not needed*, no
+  payment; contact released; vehicle sent to a cell away from the depot (cell local).
+- *Run 6: next processing*: 232 (+14), settling with no contact; *guard* in that processing, shown
+  first in tick 232's record; no *special-3*.
+- *Hover: accepting waiting processing*: the arrival + 1.
+- *The same: the depot's first waiting processing, at 215*: no contact; *special-3* starts; it sets
+  the next processing 1 tick later.
+- *The same: the depot's behaviour*: *guard* at 216, while *special-3*, started at 215, runs to 234.
+- *Scenario-stream draws in any depot repair processing*: 0.
 
 ## Evidence
 
