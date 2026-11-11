@@ -5,12 +5,12 @@ topic: simulation
 specs: [S-0215]
 requests: [Q-2782]
 verdict: confirms
-value-visibility: local
+value-visibility: committed
 measured-on: 2026-11-07
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-11
 ---
 
 # M-0024: The scatter from damage for hunting vehicles of computer-controlled houses
@@ -73,14 +73,14 @@ are read after tick *t* has run, so they show the state at the end of tick *t*. 
 
 | Quantity | Unit | n | Value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
-| Part f: judged hits classed *neighbouring destination* or *target* | hits | 6 runs, every judged hit (count local) | all | none | exact |
+| Part f: judged hits classed *neighbouring destination* or *target* | hits | 6 runs, every judged hit (count not reported) | all | none | exact |
 | Part f: judged hits classed *far destination* or *free* | hits | same | 0 | none | exact |
-| Part f: judged hits classed *neighbouring destination* | hits | same | most of them (count local); every judged hit that names no attacker | | exact for "every hit naming no attacker" |
-| Part f: judged hits naming no attacker | hits | same | at least one in each of 2 runs (counts local) | | not for tests |
-| Part fc: judged hits classed *neighbouring destination* or *far destination* | hits | 2 runs, every judged hit (count local) | 0 | none | exact |
+| Part f: judged hits classed *neighbouring destination* | hits | same | most of them (count not reported); every judged hit that names no attacker | | exact for "every hit naming no attacker" |
+| Part f: judged hits naming no attacker | hits | same | at least one in each of 2 runs (counts not reported) | | not for tests |
+| Part fc: judged hits classed *neighbouring destination* or *far destination* | hits | 2 runs, every judged hit (count not reported) | 0 | none | exact |
 | Part fc: judged hits classed *free* or *target* | hits | same | all | none | exact |
 | Parts f and fc: judged hits whose vehicle's position changed from the end of *t* − 2 to the end of *t* − 1 | hits | 8 runs, every judged hit | 0 | none | exact |
-| Parts f and fc: un-hit free vehicles (step 4) classed *neighbouring destination* | vehicle-ticks | 8 runs, every such row (count local) | 0 | none | exact |
+| Parts f and fc: un-hit free vehicles (step 4) classed *neighbouring destination* | vehicle-ticks | 8 runs, every such row (count not reported) | 0 | none | exact |
 | Parts f and fc: un-hit free vehicles classed *far destination* | vehicle-ticks | same | 1 in one part f run and 1 in one part fc run | | not for tests |
 
 Judged hits occur on both sides' vehicles in part f. In 5 of the 8 runs, some vehicles
@@ -118,11 +118,11 @@ not say what gave it.
 - **Hits classed *target*.** A judged hit can leave the vehicle holding a target at the end of the
   hit's tick. The recording does not show whether a request was sent in that tick. Such hits occur
   in both files.
-- **Kept local: counts and ticks.** The number of judged hits, and how many of them name no attacker,
-  grow with the number of shots, which would bound the houses' rate-of-fire factor (M-0021, *Notes*).
-  So they are local. How many ticks a vehicle took to reach the destination cell would bound its
-  country's speed factor (M-0021, *Notes*), so those ticks are not given. Neither are the runs'
-  outcomes and deaths: this record states only the rows above.
+- **Not reported: counts and ticks.** The number of judged hits, and how many of them name no
+  attacker, grow with the number of shots, which would bound the houses' rate-of-fire factor
+  (M-0021, *Notes*). So they are not reported. How many ticks a vehicle took to reach the
+  destination cell would bound its country's speed factor (M-0021, *Notes*), so those ticks are not
+  given. Neither are the runs' outcomes and deaths: this record states only the rows above.
 - **Reproducing it.** A comparison builds M-0021's test types as M-0021's *Reproducing it* note
   gives, with this record's *hunt* section, and judges the rows of the Procedure. The rows above
   depend on the fight only through which vehicles stand free when hit.
