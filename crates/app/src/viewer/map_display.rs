@@ -57,7 +57,7 @@ mod tests {
             screen_rect: Some(screen_rect),
             ..Default::default()
         };
-        let out = ctx.run_ui(raw, |ui| {
+        let mut out = ctx.run_ui(raw, |ui| {
             ui.painter().image(
                 id,
                 screen_rect,
@@ -70,6 +70,8 @@ mod tests {
                 renderer.update_texture(device, queue, *tid, d);
             }
         }
+        // The deltas are applied above.
+        out.textures_delta.clear();
         let jobs = ctx.tessellate(out.shapes, 1.0);
         let screen = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [w, h],
