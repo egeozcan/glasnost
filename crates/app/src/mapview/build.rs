@@ -1601,13 +1601,8 @@ impl<'a> Builder<'a> {
         }
         self.p.sources = sources;
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
-        self.p.compute_lights(
-            self.map,
-            self.rules,
-            l.ambient,
-            l,
-            self.options.detail,
-        );
+        self.p
+            .compute_lights(self.map, self.rules, l.ambient, l, self.options.detail);
         // spec: S-0104 claims 2 and 13 (with no effect in force, λ and λ_air are the normal level factor)
         self.p.object_levels = (l.level, l.level);
     }
