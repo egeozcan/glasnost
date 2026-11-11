@@ -441,7 +441,7 @@ impl Gfx {
         let size = r.view.size;
         if m.size != size || m.targets.is_none() {
             let (color, depth) = targets(device, size, COLOR_FORMAT);
-            let display = map_display::MapDisplay::new(device, &color);
+            let display = map_display::MapDisplay::new(&color);
             match m.texture {
                 Some(id) => self.renderer.update_egui_texture_from_wgpu_texture(
                     device,
@@ -460,7 +460,7 @@ impl Gfx {
             m.targets = Some((color, depth, display));
             m.size = size;
         }
-        let (color, depth, display) = m.targets.as_ref().ok_or("no targets")?;
+        let (color, depth, _display) = m.targets.as_ref().ok_or("no targets")?;
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("map") });
         m.renderer.render_lit(
@@ -475,7 +475,6 @@ impl Gfx {
             &glasnost_render::compose::ComposeQuirks::default(),
             r.alpha.as_deref(),
         );
-        display.record(&mut encoder, color);
         self.queue.submit([encoder.finish()]);
         if self.frames_presented.is_multiple_of(120) {
             log::info!(

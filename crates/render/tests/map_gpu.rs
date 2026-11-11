@@ -171,35 +171,8 @@ fn gpu_matches_cpu_reference() {
             &filter,
             &ComposeQuirks::default(),
         );
-        // The viewer shows an sRGB-typed copy of the target: the copy must
-        // keep the bytes (the GL backends included).
-        let display = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("display"),
-            size: wgpu::Extent3d {
-                width: size.0,
-                height: size.1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        encoder.copy_texture_to_texture(
-            color.as_image_copy(),
-            display.as_image_copy(),
-            wgpu::Extent3d {
-                width: size.0,
-                height: size.1,
-                depth_or_array_layers: 1,
-            },
-        );
         queue.submit([encoder.finish()]);
         let gpu = read_texture(&device, &queue, &color, size.0, size.1);
-        let copied = read_texture(&device, &queue, &display, size.0, size.1);
-        assert_eq!(gpu, copied, "the sRGB-typed copy changed bytes");
         let differing = cpu
             .chunks(4)
             .zip(gpu.chunks(4))
