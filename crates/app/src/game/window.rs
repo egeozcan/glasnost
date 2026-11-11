@@ -25,6 +25,7 @@ use super::pump::Pump;
 use super::session::{MAP_IMAGE, Session};
 use super::touch;
 use crate::Status;
+use crate::redraw::{Drawn, Hidden, now_ms};
 use glasnost_ui::shell::Screen;
 
 /// The digit a digit key or a keypad digit key stands for.
@@ -157,6 +158,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         pump: Pump::default(),
         probed: None,
         display_probed: String::new(),
+        hidden: Hidden::default(),
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -168,26 +170,6 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         use winit::platform::web::EventLoopExtWebSys;
         event_loop.spawn_app(app);
         Ok(())
-    }
-}
-
-/// Host milliseconds since the program started (pacing only; never game
-/// state).
-fn now_ms() -> i64 {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use std::sync::OnceLock;
-        static START: OnceLock<std::time::Instant> = OnceLock::new();
-        START
-            .get_or_init(std::time::Instant::now)
-            .elapsed()
-            .as_millis() as i64
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        web_sys::window()
-            .and_then(|w| w.performance())
-            .map_or(0, |p| p.now() as i64)
     }
 }
 
@@ -228,6 +210,8 @@ struct GameApp {
     probed: Option<((i32, i32), usize)>,
     /// The display probe last published ([`publish_display`]).
     display_probed: String,
+    /// Whether the window is hidden, so that it asks for no redraw (#99).
+    hidden: Hidden,
 }
 
 impl GameApp {
@@ -238,6 +222,16 @@ impl GameApp {
             force_fire: self.mods.control_key(),
             force_move: self.mods.alt_key(),
             attack_move_mode: false,
+        }
+    }
+
+    /// Asks a hidden window for a redraw once it is shown, resized or
+    /// focused (#99).
+    fn wake(&mut self) {
+        if self.hidden.wake()
+            && let Some(g) = &self.gfx
+        {
+            g.window.request_redraw();
         }
     }
 
@@ -411,7 +405,9 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     }
                 }
                 self.fit_window();
+                self.wake();
             }
+            WindowEvent::Occluded(false) => self.wake(),
             // design: readable text and display scale (lead's request 2026-11-10): a new scale factor (another monitor, a browser zoom) picks the factor again at once; the resize that follows sets the new size
             WindowEvent::ScaleFactorChanged { .. } => {
                 if let (Some(g), Some(w)) = (&mut self.gfx, &self.window) {
@@ -420,7 +416,12 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 }
                 self.fit_window();
             }
-            WindowEvent::Focused(on) => self.client.focus(on),
+            WindowEvent::Focused(on) => {
+                self.client.focus(on);
+                if on {
+                    self.wake();
+                }
+            }
             WindowEvent::ModifiersChanged(m) => {
                 self.mods = m.state();
                 let mods = self.modifiers();
@@ -552,8 +553,8 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 let Some(g) = &mut self.gfx else {
                     return;
                 };
-                let end = match g.render(&mut self.client, timing) {
-                    Ok(end) => end,
+                let (end, drawn) = match g.render(&mut self.client, timing) {
+                    Ok(r) => r,
                     Err(e) => {
                         Status::Error(e).publish();
                         event_loop.exit();
@@ -601,7 +602,10 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     event_loop.exit();
                     return;
                 }
-                g.window.request_redraw();
+                // A hidden window asks for no redraw; it waits (#99).
+                if self.hidden.after(drawn, now_ms()) {
+                    g.window.request_redraw();
+                }
                 self.run_jobs(true);
             }
             _ => {}
@@ -614,12 +618,24 @@ impl ApplicationHandler<GameEvent> for GameApp {
     /// Between events: while a network link is open, the client is
     /// updated even when the window draws no frames (covered, minimised, a
     /// background tab), and the loop wakes on a timer for it; otherwise the
-    /// loop waits for events as before. The benchmark is left alone.
+    /// loop waits for events as before. While the window is hidden, it also
+    /// wakes every `redraw::RETRY_MS` to try to draw again (#99). The
+    /// benchmark's frames are otherwise left alone.
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = now_ms();
+        if self.hidden.due(now)
+            && let Some(g) = &self.gfx
+        {
+            g.window.request_redraw();
+        }
+        let hidden_wait = self.hidden.wait_ms(now);
         if self.bench.is_some() {
+            event_loop.set_control_flow(match hidden_wait {
+                Some(ms) => ControlFlow::wait_duration(std::time::Duration::from_millis(ms)),
+                None => ControlFlow::Wait,
+            });
             return;
         }
-        let now = now_ms();
         if self.pump.between_frames(&mut self.client, now) {
             self.run_jobs(true);
             if self.client.quit {
@@ -627,7 +643,11 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 return;
             }
         }
-        event_loop.set_control_flow(match self.pump.wait_ms(&self.client, now) {
+        let wait = match (self.pump.wait_ms(&self.client, now), hidden_wait) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        event_loop.set_control_flow(match wait {
             Some(ms) => ControlFlow::wait_duration(std::time::Duration::from_millis(ms)),
             None => ControlFlow::Wait,
         });
@@ -972,19 +992,22 @@ impl Gfx {
     }
 
     /// Draws the client's frame; `timing` numbers a benchmark frame, whose
-    /// times come back.
-    fn render(&mut self, client: &mut Client, timing: Option<u64>) -> Result<FrameEnd, String> {
+    /// times come back, with what came of the try (#99).
+    fn render(
+        &mut self,
+        client: &mut Client,
+        timing: Option<u64>,
+    ) -> Result<(FrameEnd, Drawn), String> {
         let mut end = FrameEnd::default();
         let t0 = bench::now();
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(end);
-            }
+            wgpu::CurrentSurfaceTexture::Timeout => return Ok((end, Drawn::Again)),
+            wgpu::CurrentSurfaceTexture::Occluded => return Ok((end, Drawn::Hidden)),
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.device, &self.config);
-                return Ok(end);
+                return Ok((end, Drawn::Again));
             }
             wgpu::CurrentSurfaceTexture::Validation => {
                 return Err("the surface texture failed validation".into());
@@ -1048,7 +1071,7 @@ impl Gfx {
                 end.gpu = t.collect(&self.device);
             }
         }
-        Ok(end)
+        Ok((end, Drawn::Yes))
     }
 
     /// The benchmark's last GPU times, once the device is idle (native).

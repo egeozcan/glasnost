@@ -15,12 +15,13 @@ use glasnost_render::palette_quad::{PaletteQuad, QuadParams};
 use glasnost_render::wgpu;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 pub mod game;
 pub mod mapview;
+mod redraw;
 pub mod settings;
 mod status;
 pub mod viewer;
@@ -54,6 +55,7 @@ pub fn run_demo(options: DemoOptions) -> Result<(), winit::error::EventLoopError
         proxy: Some(event_loop.create_proxy()),
         window: None,
         graphics: None,
+        hidden: redraw::Hidden::default(),
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -74,6 +76,20 @@ struct App {
     proxy: Option<EventLoopProxy<Result<Graphics, String>>>,
     window: Option<Arc<Window>>,
     graphics: Option<Graphics>,
+    /// Whether the window is hidden (#99).
+    hidden: redraw::Hidden,
+}
+
+impl App {
+    /// Asks a hidden window for a redraw once it is shown, resized or
+    /// focused (#99).
+    fn wake(&mut self) {
+        if self.hidden.wake()
+            && let Some(g) = &self.graphics
+        {
+            g.window.request_redraw();
+        }
+    }
 }
 
 impl ApplicationHandler<Result<Graphics, String>> for App {
@@ -135,7 +151,9 @@ impl ApplicationHandler<Result<Graphics, String>> for App {
                 if let Some(g) = &mut self.graphics {
                     g.resize(size.width, size.height);
                 }
+                self.wake();
             }
+            WindowEvent::Occluded(false) | WindowEvent::Focused(true) => self.wake(),
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -153,11 +171,14 @@ impl ApplicationHandler<Result<Graphics, String>> for App {
                 let Some(g) = &mut self.graphics else {
                     return;
                 };
-                if let Err(e) = g.render() {
-                    Status::Error(e).publish();
-                    event_loop.exit();
-                    return;
-                }
+                let drawn = match g.render() {
+                    Ok(d) => d,
+                    Err(e) => {
+                        Status::Error(e).publish();
+                        event_loop.exit();
+                        return;
+                    }
+                };
                 if g.frames_presented == 1 {
                     Status::Presented {
                         backend: g.backend.to_owned(),
@@ -173,10 +194,28 @@ impl ApplicationHandler<Result<Graphics, String>> for App {
                     event_loop.exit();
                     return;
                 }
-                g.window.request_redraw();
+                // A hidden window waits (#99).
+                if self.hidden.after(drawn, redraw::now_ms()) {
+                    g.window.request_redraw();
+                }
             }
             _ => {}
         }
+    }
+
+    /// While the window is hidden, the loop wakes every `redraw::RETRY_MS`
+    /// to try again (#99), and waits for events otherwise.
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = redraw::now_ms();
+        if self.hidden.due(now)
+            && let Some(g) = &self.graphics
+        {
+            g.window.request_redraw();
+        }
+        event_loop.set_control_flow(match self.hidden.wait_ms(now) {
+            Some(ms) => ControlFlow::wait_duration(std::time::Duration::from_millis(ms)),
+            None => ControlFlow::Wait,
+        });
     }
 }
 
@@ -272,16 +311,16 @@ impl Graphics {
         }
     }
 
-    fn render(&mut self) -> Result<(), String> {
+    /// Draws a frame, and says what came of the try (#99).
+    fn render(&mut self) -> Result<redraw::Drawn, String> {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(());
-            }
+            wgpu::CurrentSurfaceTexture::Timeout => return Ok(redraw::Drawn::Again),
+            wgpu::CurrentSurfaceTexture::Occluded => return Ok(redraw::Drawn::Hidden),
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.device, &self.config);
-                return Ok(());
+                return Ok(redraw::Drawn::Again);
             }
             wgpu::CurrentSurfaceTexture::Validation => {
                 return Err("the surface texture failed validation".into());
@@ -322,6 +361,6 @@ impl Graphics {
         self.queue.present(frame);
         self.frame += 1;
         self.frames_presented += 1;
-        Ok(())
+        Ok(redraw::Drawn::Yes)
     }
 }
