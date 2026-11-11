@@ -81,8 +81,9 @@ hunting at tick 0. Each holds that house's next check past the test's ticks
 | S-0508 G21 (r39) and S-0217 H1 to H3 | not run (oracle scenarios) | the lead's |
 | S-0217 Open questions: the money step, a check against other draws of the update, which hits set *L*, the order's reach to a walker's queued *enter*, the units the original's order destroys | seam (spec open) | Q-2986 asks the hits; the rest are left as the spec leaves them |
 
-Requests: **Q-2986** (which hits set *L*), **Q-2987** (the arena rows, below). Q-2988 to Q-2995 are
-unused.
+Requests: **Q-2986** (which hits set *L*), **Q-2987** (the arena rows, below), **Q-2988** (M-0024's
+row on an approach destination left when the target dies in the same tick, below). Q-2989 to
+Q-2995 are unused.
 
 ## Play-fixes layer
 
@@ -161,11 +162,15 @@ An un-hit G vehicle in *hunt* with no target gains a destination in a neighbouri
 runs at that tick (both houses' next checks are at 652 and 653), no hit lands on it, and nothing is
 queued for it. The record's houses are computer-controlled with no building, so their checks run
 there too, but on vehicles already in *hunt* with nothing queued they change nothing (S-0215 claim
-7). The run reaches this tick because the checks' draws move every later draw. The rule that gives
-that destination was not traced further. It is not one of S-0217's, so no request is filed for it
-here.
+7). The run reaches this tick because the checks' draws move every later draw. A second
+diagnostic, also not committed, traced the vehicle over ticks 628 to 633. In that tick, its *hunt*
+processing takes the last F vehicle as target (S-0215 claim 27), and its approach step finds an
+approach position in the next cell (S-0215 claim 37 part f, S-0307). Then another G vehicle
+destroys the target, and S-0309 claim 27 drops the target but not the destination. So the
+claims as built produce the row, and the record states 0 such rows (exact): **Q-2988** asks
+whether the original keeps such an approach destination. That part stops there.
 
 Figures: `local-lane/m8/i124/arena-base.out`, `arena-after.out`, `base-sr-*.out`,
 `after-sr-*.out`, `base-trace-caos-e1-b0.out`, `after-trace-caos-e1-b0.out`,
 `after-trace-yuri-e1-b0.out`, `base-oracles-m0023-25.out`, `after-oracles-m0023-25.out`,
-`diag-m0024.out`.
+`diag-m0024.out`, `diag-m0024-b.out`.
