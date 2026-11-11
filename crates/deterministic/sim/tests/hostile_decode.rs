@@ -31,7 +31,9 @@ fn nested() -> Vec<u8> {
 }
 
 /// Runs `f` on a thread with a small stack; a stack overflow aborts the
-/// process.
+/// process. The thread belongs to the test harness, not to the simulation,
+/// which runs on it alone.
+#[allow(clippy::disallowed_types)]
 fn on_small_stack(f: impl FnOnce() + Send + 'static) {
     std::thread::Builder::new()
         .stack_size(STACK)
