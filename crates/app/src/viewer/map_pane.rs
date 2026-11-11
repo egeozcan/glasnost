@@ -882,13 +882,18 @@ impl MapPane {
         };
         self.hover = r.hover_pos().map(|p| {
             let (qx, qy) = to_world(p);
-            let map = &shown.loaded.map;
+            // spec: S-0101 F8 (the probe reads each cell's height level): a live game's cells, whose levels change in play, else the map's (#83)
+            let cells = shown
+                .loaded
+                .live
+                .as_ref()
+                .map_or(&shown.loaded.map.cells, |l| &l.world.cells.grid);
             let q = ProjectionQuirks::default();
             // spec: S-0101 claim 10 (the highest level is read only with quirks.cursor_probe_depth_180 off)
             let max_level = if q.cursor_probe_depth_180 {
                 0
             } else {
-                map.cells
+                cells
                     .iter()
                     .map(|(_, c)| i32::from(c.level))
                     .max()
@@ -898,7 +903,7 @@ impl MapPane {
                 qx,
                 qy,
                 |x, y| {
-                    map.cells
+                    cells
                         .get(glasnost_map::CellXY::new(x, y))
                         .map_or(0, |c| i32::from(c.level))
                 },

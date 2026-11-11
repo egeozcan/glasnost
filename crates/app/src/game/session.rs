@@ -1168,13 +1168,14 @@ impl Session {
     /// battlefield.
     pub fn under(&mut self, p: Point) -> (CellXY, Option<ObjectId>) {
         let (qx, qy) = self.world_point(p);
-        let map = &self.loaded.map;
+        // spec: S-0101 F8 (the probe reads each cell's height level): the world's cells, whose levels change in play (a collapsed pier), not the map file's (#83)
+        let cells = &self.play.game.world.cells.grid;
         let q = ProjectionQuirks::default();
         // spec: S-0101 claim 10 (the highest level is read only with quirks.cursor_probe_depth_180 off)
         let max_level = if q.cursor_probe_depth_180 {
             0
         } else {
-            map.cells
+            cells
                 .iter()
                 .map(|(_, c)| i32::from(c.level))
                 .max()
@@ -1184,7 +1185,7 @@ impl Session {
             qx,
             qy,
             |x, y| {
-                map.cells
+                cells
                     .get(CellXY::new(x, y))
                     .map_or(0, |c| i32::from(c.level))
             },
