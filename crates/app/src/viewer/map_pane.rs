@@ -1013,7 +1013,9 @@ impl MapPane {
                 .selection
                 .iter()
                 .copied()
-                .filter(|&id| !live.bracket_drawn(&shown.loaded.assets, id))
+                .filter(|&id| {
+                    !crate::mapview::live::bracket_drawn(&live.world, &shown.loaded.assets, id)
+                })
                 .collect();
             selection_markers(ui, live, &plain, &view, r.rect, ppp);
         } else if r.clicked() {

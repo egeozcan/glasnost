@@ -4127,21 +4127,6 @@ impl Live {
         self.draw_status(inputs, scene);
     }
 
-    /// Whether an object's selection is drawn by S-0111's marks: a unit's
-    /// bracket image (the bracket sprite and the overlay palette are
-    /// there), or a building's corner brackets (claim 8; the overlay
-    /// palette is there).
-    pub fn bracket_drawn(&self, assets: &super::build::Assets, id: ObjectId) -> bool {
-        let Some(o) = self.world.obj(id) else {
-            return false;
-        };
-        let palette = assets.get(combat::OVERLAY_PALETTE).is_some();
-        if o.kind == SimKind::Building {
-            return palette;
-        }
-        o.kind.is_mobile() && palette && assets.get(combat::BRACKET_SPRITE).is_some()
-    }
-
     /// S-0111's status extras after the effects: every object's bomb icon
     /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
@@ -4581,6 +4566,22 @@ pub const WRENCH_MISSING: &str = "the wrench sprite WRENCH.SHP or its image fram
 /// The note for a missing cursor palette, given once (S-0111 claim 19a and
 /// Edge cases: our engine's departure, no switch).
 pub const CURSOR_PALETTE_MISSING: &str = "the cursor palette MOUSEPAL.PAL is missing: neither the repair wrench nor the bomb icon is drawn (S-0111 claim 19a)";
+
+/// Whether object `id` of world `w` has its selection drawn by S-0111's
+/// marks: a unit's bracket image (the bracket sprite and the overlay palette
+/// are there), or a building's corner brackets (claim 8; the overlay palette
+/// is there). `w` is the world the marks are drawn from: in a game, the
+/// canonical world, which holds the objects made since the game began (#67).
+pub fn bracket_drawn(w: &World, assets: &super::build::Assets, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else {
+        return false;
+    };
+    let palette = assets.get(combat::OVERLAY_PALETTE).is_some();
+    if o.kind == SimKind::Building {
+        return palette;
+    }
+    o.kind.is_mobile() && palette && assets.get(combat::BRACKET_SPRITE).is_some()
+}
 
 /// Whether cell `c` counts as shrouded for house `viewer` for the slot
 /// animations drawn over it (S-0513 claim 29b): S-0110 claim 8's point

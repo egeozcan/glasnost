@@ -3064,10 +3064,11 @@ impl Session {
         let plain: Vec<ObjectId> = {
             let ids = self.play.selection.clone();
             let assets = &self.loaded.assets;
+            // The canonical world, not the live drawing's copy outside `with_live` (#67).
             match self.loaded.live.as_ref() {
-                Some(l) => ids
+                Some(_) => ids
                     .into_iter()
-                    .filter(|&id| !l.bracket_drawn(assets, id))
+                    .filter(|&id| !crate::mapview::live::bracket_drawn(w, assets, id))
                     .collect(),
                 None => ids,
             }

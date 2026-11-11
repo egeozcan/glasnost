@@ -6681,11 +6681,11 @@ fn claim_8_a_selected_building_in_the_live_view() {
         rules: None,
         cells: None,
     };
-    assert!(live.bracket_drawn(&assets, tower));
-    assert!(live.bracket_drawn(&assets, cart));
+    assert!(super::live::bracket_drawn(&live.world, &assets, tower));
+    assert!(super::live::bracket_drawn(&live.world, &assets, cart));
     let mut bare = assets.clone();
     bare.set(super::combat::OVERLAY_PALETTE, None);
-    assert!(!live.bracket_drawn(&bare, tower));
+    assert!(!super::live::bracket_drawn(&live.world, &bare, tower));
     let mine = |scene: &Scene| -> Vec<_> {
         scene
             .items
