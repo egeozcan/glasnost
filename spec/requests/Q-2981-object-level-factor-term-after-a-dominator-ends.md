@@ -10,7 +10,7 @@ answered-by: []
 
 S-0104 claim 13 adds a level-factor term λ to some objects' brightness: 4λ for a vehicle on a bridge deck, (*h* ÷ 208) × λ for infantry on a deck or high over a shadowed cell, and (*h* ÷ 208) × λ<sub>air</sub> for aircraft. λ is the level factor of the set chosen by claim 2's per-cell ranking. The claim says it is open "whether an object's added λ term switches immediately after a dominator ends, while its cell still retains dominator height terms" (also listed under Open questions).
 
-Render issue #74 (GitHub, render audit #154) made live vehicles, infantry and aircraft take these terms (merged 38e51cd). The client has to pick λ in that interval and needs the answer.
+Render issue #74 (GitHub, render audit #154) made live vehicles, infantry and aircraft take these terms (merged 377952e). The client has to pick λ in that interval and needs the answer.
 
 ## Questions
 
