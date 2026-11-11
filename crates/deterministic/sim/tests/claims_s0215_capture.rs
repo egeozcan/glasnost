@@ -471,6 +471,21 @@ fn claim_28_an_aircraft_in_capture_falls_back_with_the_standard_delay() {
     no_unbuilt_note(&w);
 }
 
+// spec: S-0215 claim 28 (the hunt rule follows an aircraft's fall-back for a computer-controlled owner, kept by the neutral house, S-0215 Terms) and S-0501 claim 49 (a landed unarmed aircraft that gets no take-off stays landed with no destination and hunt queued; AC31 part a)
+#[test]
+fn claim_28_a_neutral_landed_aircraft_in_capture_queues_hunt() {
+    let mut w = game();
+    let a = put(&mut w, Kind::Aircraft, "FLYER", 2, -4, 0);
+    assert!(glasnost_sim::air::on_ground(&w, a));
+    set(&mut w, a, Behaviour::Capture, None, None);
+    processed(&mut w, a);
+    assert!(glasnost_sim::air::on_ground(&w, a), "stays landed");
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, None, "no destination");
+    assert!(rested(&w, a, Behaviour::Hunt), "hunt queued");
+    no_unbuilt_note(&w);
+}
+
 // spec: S-0215 claim 4 and table T1 (buildings have no processing rule for capture, sabotage or eaten: nothing, 450 ticks, no draw)
 #[test]
 fn claim_4_a_building_in_capture_has_no_processing_rule() {
