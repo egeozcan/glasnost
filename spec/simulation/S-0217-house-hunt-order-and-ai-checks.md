@@ -2,13 +2,13 @@
 id: S-0217
 title: House-wide hunt order and the computer player's periodic checks (original only)
 topic: simulation
-revision: 20
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-11
 measurements: []
-requests: [Q-2951]
+requests: [Q-2951, Q-2986]
 supersedes: []
 ---
 
@@ -32,8 +32,8 @@ original's computer player's; in our engine only test-only computer-controlled p
   checks of claims 2 to 4 give it to the checking house.
 - **Check.** One periodic strategy step of a computer-controlled player house in a skirmish of the
   original (claim 2). It takes place in that house's house update (S-0203, row 7).
-- **Last base hit tick (*L*).** Per house, the tick at which a building of the house was last hit
-  by damage that has an attacker (claim 3). It is 0 at game start.
+- **Last base hit tick (*L*).** Per house, the tick at which a hit that has an attacker last
+  reached a building of the house (claim 3). It is 0 at game start.
 - **Occupied civilian building.** A civilian garrison building that a house owns only because its
   own infantry occupy it (S-0508 claim 7).
 - **Creation order:** as S-0309 Terms defines it (the object created first comes first).
@@ -113,15 +113,18 @@ every house that receives the order.
    - Confidence: medium
 
 3. **No factory and no recent hit (original only).** At a check at tick *t*, the house is *held*
-   when *t* ≤ *L* + 900. *L* becomes the current tick whenever a building of the house
-   is hit by damage that has an attacker (whether a hit that the building's armour reduces to
-   nothing, or a healing hit, counts is an open question), whatever the attacker's house: an
-   enemy, an ally or the house itself. The building's own damage hits it, and so changes *L*,
-   only when the building's type is marked to damage itself. A building whose type can undeploy
-   into a vehicle and covers one cell does not change *L*. When the house is not held and owns
-   no factory building of any kind on the map (building factories included), whatever
-   construction vehicles it owns, the check does both of the following, in this order, in the
-   same house update:
+   when *t* ≤ *L* + 900. *L* becomes the current tick whenever a hit that has an attacker reaches a
+   building of the house, whatever the attacker's house: an enemy, an ally or the house itself. *L*
+   is set whatever the hit then does (S-0302): a hit whose final amount is 0, a healing hit, at full
+   health or not, and a hit that a row of S-0302 claim 8 stops, at any stage, all set it, except in
+   the two cases next. The building's own damage hits it, and so changes *L*, only when the
+   building's type is marked to damage itself. A building whose type can undeploy into a vehicle and
+   covers one cell does not change *L*. A hit that its source does not deliver sets nothing: a
+   detonation leaves out a building with no health (S-0303 claim 9), so the no-health row of S-0302
+   claim 8 sets *L* only for a source that delivers such a hit (S-0302 claim 8, *No-health
+   targets*). When the house is not held and owns no factory building of any kind on the map
+   (building factories included), whatever construction vehicles it owns, the check does both of the
+   following, in this order, in the same house update:
    - every building the house owns on the map that has health left, occupied civilian buildings
      included, receives a sell order (S-0408 claim 4, which decides whether it is sold), one after
      another in the house's order of ownership (Terms), which is not the order in which claim 1
@@ -140,20 +143,26 @@ every house that receives the order.
      the sell orders nor the order from this claim: no scenario here gives a computer-controlled
      house a factory building. That the house then receives the house-wide hunt order: H2 does not
      observe *C*'s units, since the money step of Open questions may already send them hunting, and
-     H1's houses own no building, so their checks give the order by claim 4. That no sale comes from
-     this claim while the house is held: a sale before the hold ends cannot be told from one by the
-     money step of Open questions, so H2 leaves such runs inconclusive. The boundary tick *L* + 900,
-     for the same reason. That the sell orders come before the order: both act in one house update,
-     and the order would show in the stream only when a building removed at its sell order (S-0408
-     claim 4, a firestorm-wall type) has holders whose drops take draws (S-0309 claim 27) against
-     the evictions' scatter draws (S-0508 claim 11), which no scenario here has. The sell order to
-     occupied civilian buildings: a computer-controlled house cannot be ordered to occupy one, and
-     whether its units occupy one by their own search, and when, is not predicted here (S-0309), so
-     no scenario is sure to have one at a check that is not held; H1 records such sales without
-     judging them. Hits from the house's own units or from the building itself, and a building that
-     can undeploy into a vehicle, are `unmeasured` too: no H2 part has one. So are a house that owns
-     a construction vehicle (H2's house owns none) and the order of the sell orders among the
-     buildings, which shows in the same way (H2's house has one building).
+     H1's houses own no building, so their checks give the order by claim 4. That no sale comes
+     from this claim while the house is held: a sale before the hold ends cannot be told from one
+     by the money step of Open questions, so H2 leaves such runs inconclusive. The boundary tick
+     *L* + 900, for the same reason. That the sell orders come before the order: both act in one
+     house update, and the order would show in the stream only when a building removed at its sell
+     order (S-0408 claim 4, a firestorm-wall type) has holders whose drops take draws (S-0309 claim
+     27) against the evictions' scatter draws (S-0508 claim 11), which no scenario here has. The
+     sell order to occupied civilian buildings: a computer-controlled house cannot be ordered to
+     occupy one, and whether its units occupy one by their own search, and when, is not predicted
+     here (S-0309), so no scenario is sure to have one at a check that is not held; H1 records such
+     sales without judging them. Hits from the house's own units or from the building itself, and a
+     building that can undeploy into a vehicle, are `unmeasured` too: no H2 part has one. So are a
+     house that owns a construction vehicle (H2's house owns none) and the order of the sell orders
+     among the buildings, which shows in the same way (H2's house has one building). Hits that
+     leave the building's health unchanged are `unmeasured`: a hit whose final amount is 0, a
+     healing hit at full health, and a hit that any row of S-0302 claim 8 stops. H2 would show
+     whether such a hit sets *L* only through the sale's tick, and a sale at the first check after
+     tick 900, the one that a hit not setting *L* would give, cannot be told from a sale by the
+     money step of Open questions. A healing hit on a damaged building is `unmeasured` too: no H2
+     part has one.
    - Confidence: medium; low for the order of the sell orders
 
 4. **A house with no building (original only).** A house that owns no building other than
@@ -227,8 +236,9 @@ Ordering as observable consequences:
 
 ## Edge cases and quirks
 
-- A hit sets *L* whatever the attacker's house, so damage from an ally or from the house's own
-  units holds the sale back as an enemy's does. No switch: this is the original's computer player,
+- A hit sets *L* whatever the attacker's house, and whatever the hit does, so damage from an ally
+  or from the house's own units, a hit that does no damage and a healing hit all hold the sale back
+  as an enemy's damaging hit does. No switch: this is the original's computer player,
   which our AI does not copy.
 - A house that owns only occupied civilian buildings, none of a factory type, counts as having no
   factory building, so claim 3 gives those buildings a sell order at each check that is not held.
@@ -343,8 +353,6 @@ first, or in (c) by the other house's update or delay draw coming first.
   engine's test-only houses.
 - Where a check falls among the other draws of its house's update is not established here for the
   original, and this spec leaves it free for our engine.
-- Whether a hit whose damage the building's armour reduces to nothing, or a healing hit, sets
-  *L* is not established here.
 - Whether the order reaches a walker whose queued *enter* its *hunt* replaces (S-0208 claim 6)
   before or after an eviction of the same order whose scatter can reach that walker is not
   established here.
