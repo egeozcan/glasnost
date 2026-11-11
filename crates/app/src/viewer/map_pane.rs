@@ -425,6 +425,18 @@ impl MapPane {
         self.use_gpu = on;
     }
 
+    /// The GPU map pass failed with `error`: the pane falls back on the CPU
+    /// reference, so the pass is not built again on every frame; the GPU
+    /// box turns it back on.
+    ///
+    /// design: render (#110): the game's drawer falls back on the CPU
+    /// compositor in the same way.
+    pub fn gpu_failed(&mut self, error: &str) {
+        self.use_gpu = false;
+        self.gpu_texture = None;
+        self.status = format!("GPU map pass failed, showing the CPU reference: {error}");
+    }
+
     /// The texture the shell drew this frame's GPU view into.
     pub fn set_gpu_texture(&mut self, id: Option<egui::TextureId>) {
         self.gpu_texture = id;
@@ -1423,4 +1435,24 @@ fn explain(loaded: &Loaded, type_name: &str) -> String {
         return format!("{type_name} is not in the converted rules");
     };
     glasnost_rules::explain::explain(tree, &loaded.import.provenance, &path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// design: render (#110): a failed GPU map pass falls back on the CPU reference and asks
+    /// for no further GPU pass, so the renderer is not built again on every frame.
+    #[test]
+    fn a_failed_gpu_pass_falls_back_on_the_cpu_reference() {
+        let mut pane = MapPane::default();
+        assert!(pane.use_gpu);
+        pane.gpu_failed("the atlas is full");
+        assert!(!pane.use_gpu);
+        assert!(pane.gpu_request().is_none());
+        assert!(pane.status.contains("the atlas is full"), "{}", pane.status);
+        // The GPU box turns the pass back on.
+        pane.set_use_gpu(true);
+        assert!(pane.use_gpu);
+    }
 }

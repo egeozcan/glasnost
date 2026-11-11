@@ -268,7 +268,8 @@ impl ViewerApp {
         let texture = request.and_then(|r| match gfx.render_map(&r) {
             Ok(id) => Some(id),
             Err(e) => {
-                self.browser.map.status = format!("GPU map pass failed: {e}");
+                // Not built again on the next frame (#110).
+                self.browser.map.gpu_failed(&e);
                 None
             }
         });
