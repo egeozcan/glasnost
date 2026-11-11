@@ -1,9 +1,9 @@
 ---
 id: Q-2972
 title: An order a player gives an own object whose owner changes before the order is carried out
-status: open
+status: answered
 related: [S-0213, S-0214]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
