@@ -446,6 +446,11 @@ pub fn new_game(
             infiltrated_vehicle_factory: false, // spec: S-0510 Terms (both flags are clear at the start of a game)
             infiltrated_infantry_factory: false, // spec: S-0510 Terms (both flags are clear at the start of a game)
             idle_test_house: false, // spec: S-0216 claim 8 (Removal before the groups: only the arena's human player house is idle)
+            // spec: S-0217 claim 2 (the first check is in the house update of tick 0) and Constants (the last base hit tick is 0 at game start)
+            checks: crate::computer::Checks {
+                next: 0,
+                last_base_hit: 0,
+            },
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {

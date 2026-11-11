@@ -504,6 +504,10 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         set_health(w, target, h2);
         res
     };
+    if building && lost > 0 {
+        // spec: S-0217 claim 3 (a hit on a building of the house by damage that has an attacker sets its owner's last base hit tick, whatever the attacker's house) and Q-2986 (interim: only a hit that lowers the building's health)
+        crate::computer::building_hit(w, target, o.owner, hit.attacker);
+    }
     let result = if result == HitResult::NowDead {
         killing_hit(w, target, &hit, &tc)
     } else {

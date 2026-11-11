@@ -580,6 +580,8 @@ fn retaliation_comes_first_and_move_is_queued_behind_it() {
     r.sim.vehicles.get_mut("CRUSHER").unwrap().primary = Some("Gun".into());
     let mut w = testkit::game_with(&r, SIZE, 1);
     computer(&mut w, ALPHA, 2, 1);
+    // spec: S-0217 claims 2 and 4 (the test holds the house's next check past its ticks: a house with no building would otherwise have hunt queued for the crusher at tick 0's check)
+    w.houses[usize::from(ALPHA)].checks.next = i32::MAX;
     let c = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, 0, 0);
     let a = put(&mut w, Kind::Infantry, "WALKER", BETA, 1, 0);
     w.obj_mut(a).unwrap().beh.current = Some(Behaviour::Sticky);

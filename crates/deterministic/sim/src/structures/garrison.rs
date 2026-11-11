@@ -553,18 +553,24 @@ pub fn trigger_evict(w: &mut World, eligible: &[ObjectId]) {
     }
 }
 
-/// The house-wide hunt order's garrison part (S-0011 action 6, S-0508 claim
-/// 13): every garrisoned building of the house evicts, hunting, without
-/// inside fallback.
+/// The house-wide hunt order's garrison part (S-0217 claim 1, S-0508 claim
+/// 13): every garrisoned building the house owns on the map evicts, hunting,
+/// without inside fallback, the one created last first.
 pub fn hunt_order(w: &mut World, house: HouseId) {
+    // spec: S-0217 claim 1 (the buildings with occupants are reached in reverse creation order, the one created last first; S-0309 Terms, creation order)
     let mine: Vec<ObjectId> = w
         .objects
         .values()
-        .filter(|o| o.kind == Kind::Building && o.owner == Some(house))
+        .rev()
+        .filter(|o| o.kind == Kind::Building && o.on_map)
         .map(|o| o.id)
         .collect();
     for b in mine {
-        // spec: S-0508 claim 13 (a house-wide order that sends all its units hunting: hunting eviction, no inside fallback)
+        // spec: S-0217 claim 1 (occupants are reached only through a building the house owns at that moment, S-0508 claim 7)
+        if w.obj(b).is_none_or(|o| o.owner != Some(house)) {
+            continue;
+        }
+        // spec: S-0508 claim 13 (the house-wide hunt order, r39: hunting eviction, no inside fallback)
         if garrisoned(w, b) {
             evict(w, b, Evict::HUNT);
         }

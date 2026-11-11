@@ -161,6 +161,11 @@ pub struct House {
     /// has it clear.
     #[serde(default)]
     pub idle_test_house: bool,
+    /// The periodic checks' state (S-0217 claims 2 and 3): the next check's
+    /// tick and the last base hit tick. Only a test-only computer-controlled
+    /// player house makes checks; every house keeps the last base hit tick.
+    #[serde(default)]
+    pub checks: crate::computer::Checks,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).
