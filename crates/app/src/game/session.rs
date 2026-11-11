@@ -2404,6 +2404,8 @@ impl Session {
     pub fn update_cursor(&mut self, painter: &mut Painter) {
         self.cursor_shown = None;
         if self.cursor_art.is_none() || self.paused {
+            // spec: S-0214 claim 22 (the system pointer replaces the cursor: the next image is a change of kind; #85)
+            self.animator.other(None);
             return;
         }
         let Some(art) = self.cursor_art.as_ref() else {
@@ -2428,12 +2430,18 @@ impl Session {
                 .and_then(|d| cursor::edge(d, self.scroll_blocked()(d), size.0, size.1))
         });
         let (frames, frame, hot) = if let Some((frames, hot)) = edge {
+            // spec: S-0214 claim 22 (the edge-scroll and drag images are kinds of their own: an action image after them starts at its first frame, and a kept image is the one shown; #85)
+            self.animator.other(Some((frames, hot)));
             (frames, frames.first, hot)
         } else {
             let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+                // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
+                self.animator.other(None);
                 return;
             };
             let Some((offer, shrouded)) = self.offer(p) else {
+                // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
+                self.animator.other(None);
                 return;
             };
             let retain = self
@@ -2445,7 +2453,7 @@ impl Session {
                 .damaging_entry_cursor_retained;
             let choice = cursor::table_c(offer, shrouded, retain);
             let (frames, frame) = self.animator.frame(choice, self.clock_ms);
-            (frames, frame, cursor::hot_spot(frames, size.0, size.1))
+            (frames, frame, self.animator.hot(frames, size.0, size.1))
         };
         let Some(art) = self.cursor_art.as_ref() else {
             return;
