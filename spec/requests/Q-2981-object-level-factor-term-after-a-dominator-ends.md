@@ -1,9 +1,9 @@
 ---
 id: Q-2981
 title: Does an object's added level-factor term switch at once when a dominator ends?
-status: open
+status: answered
 related: [S-0104]
-answered-by: []
+answered-by: [S-0104]
 ---
 
 ## Need
