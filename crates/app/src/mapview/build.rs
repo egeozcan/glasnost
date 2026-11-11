@@ -2744,11 +2744,12 @@ impl<'a> Builder<'a> {
         let Some(body_sprite) = art.sprite.clone() else {
             return items;
         };
+        let quirks = self.p.view_quirks;
         // spec: S-0108 claim 22 (while unloading, the deploying or roof-deploying sprite replaces the
-        // body sprite; quirks.roof_unload_no_fallback on, its default: the switch is not yet a field)
+        // body sprite)
         let unload_sprites = unloading.map(|u| {
             // spec: S-0108 claim 22 (quirks.roof_unload_no_fallback)
-            let no_fallback = ViewQuirks::default().roof_unload_no_fallback;
+            let no_fallback = quirks.roof_unload_no_fallback;
             unload::unload_sprites(&art.building_sprites, u.roof, no_fallback)
         });
         let replaced = unload_sprites.and_then(|u| u.body);
@@ -2775,7 +2776,7 @@ impl<'a> Builder<'a> {
             // spec: S-0108 Import mapping (TechLevel absent: 255)
             let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
             // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule; 2·[occupied] + [hurt])
-            super::quirks::occupiable_frame(tech, damaged, badly, occupied, &ViewQuirks::default())
+            super::quirks::occupiable_frame(tech, damaged, badly, occupied, &quirks)
         } else if gate {
             if damaged {
                 gate_stages.saturating_add(1)
@@ -4226,7 +4227,7 @@ impl<'a> Builder<'a> {
         // spec: S-0102 claim 14 (a cell is high when more than 3 levels above the unit's cell)
         let high = |dx: i32| level(dx).is_some_and(|l| l - own > CLIFF_LEVELS);
         // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker)
-        let factor = cliff_factor(high(1), high(2), &ViewQuirks::default());
+        let factor = cliff_factor(high(1), high(2), &self.p.view_quirks);
         let fudge = rule_int(self.import, kind, idx, b"ZFudgeCliff", DEFAULT_CLIFF_FUDGE);
         // spec: S-0102 claim 14 (U = −L(z) + s + F, F the largest fudge)
         -height_lift(z) + SITUATIONAL + (factor * fudge).max(0)
@@ -4560,7 +4561,7 @@ impl<'a> Builder<'a> {
             walk_start
         };
         // spec: S-0102 claim 22 (facing part; quirks.sprite_vehicle_eight_facings_only)
-        let d = sprite_vehicle_facing_part(facings, m.body, &ViewQuirks::default());
+        let d = sprite_vehicle_facing_part(facings, m.body, &self.p.view_quirks);
         // spec: S-0102 Import mapping (IdleRate absent: 0)
         let idle_rate = rule_int(self.import, k, i, b"IdleRate", 0);
         // spec: S-0102 claim 22 (frame table: nothing fires or dies; the standing-pose state is on

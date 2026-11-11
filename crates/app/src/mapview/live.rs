@@ -1494,9 +1494,11 @@ impl Live {
         self.sync_ground();
     }
 
-    /// Sets the drawing's quirk switches (S-0102 Edge cases).
+    /// Sets the drawing's quirk switches (S-0102 Edge cases); the painter
+    /// reads them from the next drawing on.
     pub fn set_view_quirks(&mut self, q: super::quirks::ViewQuirks) {
         self.view_quirks = q;
+        self.painter.set_view_quirks(q);
     }
 
     /// The layer a mobile object was last put into (S-0102 claims 3 and 4).

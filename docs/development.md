@@ -156,11 +156,11 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 |---|---|---|
 | `screen_to_ground_not_exact_inverse` | S-0101 claim 9 | the on state's F6 converts building slot displacements (S-0108 claim 10, `render::projection::screen_to_ground`); the off state's exact inverse is not implemented; the cell under a pixel is F7's pixel formula, the same in both settings |
 | `slot_values_replace_animation_adjustments` | S-0102 claim 17 | the on state is drawn (the slot's depth adjustment and y-sort replace the type's, from the first drawn frame); the off state (the slot's values added to the type's) is not implemented |
-| `parachute_brightness_fixed` | S-0103 claim 8 | parachutes are not drawn |
-| `split_effect_priority` | S-0104 claim 2 | the lighting effects in force (nuke, dominator, ion storm, chrono flash) are not modelled |
-| `chrono_flash_no_reevaluation` | S-0104 claims 2 and 5 | no chrono flash and no lighting re-evaluations |
-| `dominator_height_terms_linger` | S-0104 claim 16 | no dominator effect |
-| `trigger_tint_retints_all_tables` | S-0104 claim 17 | trigger actions do not change the lighting |
+| `parachute_brightness_fixed` | S-0103 claim 8 | the on state is drawn (a parachute keeps the light of its creation tick); the off state is not implemented |
+| `split_effect_priority` | S-0104 claim 2 | objects' height terms take the height-term order, as with the switch on, but every cell is relit with the one global choice (the tint/target order); the off state is not implemented |
+| `chrono_flash_no_reevaluation` | S-0104 claims 2 and 5 | nothing starts a chrono flash |
+| `dominator_height_terms_linger` | S-0104 claim 16 | every change of the ambient or of the global lighting choice relights every cell in full with the chosen set; the lingering height terms are not modelled |
+| `trigger_tint_retints_all_tables` | S-0104 claim 17 | no trigger action changes the map tint (the set-base-ambient action, claim 14, changes only the ambient) |
 | `vehicle_no_recoil` | S-0105 claim 28 | recoil placement is not applied; vehicles never recoil, as with the switch on |
 | `barrel_only_no_recoil` | S-0105 claim 37 | recoil placement is not applied; a barrel without a turret never recoils, as with the switch on |
 | `voxel_single_pixel` | S-0105 claim 22 | the on state is drawn; the off state (no gaps in magnified sections) is not implemented |
@@ -169,12 +169,12 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `tilter_flag_ignored` | S-0106 claim 10 | voxel bodies are not tilted on slopes |
 | `full_state_unmaxed` | S-0108 claim 2 | buildings are drawn in their idle state only |
 | `turret_building_no_body_wrap` | S-0108 claim 6 | building body ranges are not played |
-| `turret_start_clears_damaged` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; the turret slot start and damage swaps are not played |
-| `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; damage swaps are not played |
+| `turret_start_clears_damaged` | S-0108 claims 11 and 12 | building slot animations are played, but the turret slot is not |
+| `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | the on state is played (a damage swap never picks the occupied slot); the off state is not implemented |
 | `theater_refresh_buildup_range` | S-0108 claim 5 | no theater refresh |
-| `anim_hide_at_level_15` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played (the played animations have *t* = 0) |
-| `anim_low_detail_shows_cloaked` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played |
-| `anim_translucency_levels` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played |
+| `anim_hide_at_level_15` | S-0109 claim 20 | building slot animations are played but drawn at translucency level *t* = 0, as every other animation; their level is not modelled |
+| `anim_low_detail_shows_cloaked` | S-0109 claim 20 | building slot animations are played but drawn at translucency level *t* = 0, as every other animation; their level is not modelled |
+| `anim_translucency_levels` | S-0109 claim 20 | building slot animations are played but drawn at translucency level *t* = 0, as every other animation; their level is not modelled |
 
 **Coverage.** `convert::coverage` gives every (category, key) of the rules and art files an outcome: `field` and `render` for keys interpreted per an approved spec, `folded` for type lists and similar, `unsupported` for keys kept as INI text because no approved spec maps them yet (the `spec` column names the specs whose import mapping mentions a key that is not converted yet).
 
