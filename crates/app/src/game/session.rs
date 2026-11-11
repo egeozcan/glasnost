@@ -2482,7 +2482,9 @@ impl Session {
             let marks = live.set_marks(&selection, hovered);
             // Making or changing a group changes no mark, but its digits.
             let groups = live.set_group_digits(digits);
-            if marks || groups {
+            // spec: S-0111 claim 1 (status extras are culled against the battlefield view as drawn)
+            // design: render (#78) a view moved between ticks (a scroll, a radar click, a jump to a group) redraws the status extras in the frame it shows, not at the next tick
+            if marks || groups || live.status_view_stale() {
                 live.redraw_status(inputs, scene);
             }
         });

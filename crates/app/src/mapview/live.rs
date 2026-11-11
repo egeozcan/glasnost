@@ -426,6 +426,9 @@ pub struct Live {
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
     pub battlefield: Option<((i32, i32), (u32, u32))>,
+    /// The battlefield view the status extras were last culled against
+    /// (S-0111 claim 1).
+    status_view: Option<((i32, i32), (u32, u32))>,
     /// Whether our own debug markers are drawn for what has no art (the
     /// viewer); the game client draws only art.
     debug_markers: bool,
@@ -1221,6 +1224,7 @@ impl Live {
             target_lines: BTreeMap::new(),
             cosmetic,
             battlefield: None,
+            status_view: None,
             debug_markers: true,
             move_flash,
             viewer: None,
@@ -4132,6 +4136,13 @@ impl Live {
         self.draw_status(inputs, scene);
     }
 
+    /// Whether the battlefield view has changed since the status extras
+    /// were last culled against it (S-0111 claim 1), so that a view moved
+    /// between ticks needs [`Live::redraw_status`].
+    pub fn status_view_stale(&self) -> bool {
+        self.status_view != self.battlefield
+    }
+
     /// S-0111's status extras after the effects: every object's bomb icon
     /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
@@ -4142,6 +4153,7 @@ impl Live {
     /// object's begin, in the object order of S-0102 (claim 17).
     fn draw_status(&mut self, inputs: &Inputs, scene: &mut Scene) {
         scene.items.truncate(self.effects_end);
+        self.status_view = self.battlefield;
         let r = self.rules.clone();
         let ratios = Ratios {
             yellow: r.general.condition_yellow,
