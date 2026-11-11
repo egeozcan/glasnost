@@ -464,6 +464,12 @@ const PITCH_SPEED_DEFAULT: f64 = 0.25;
 /// rather than a rocking body's single-precision angle bits: a cache key
 /// of ours, not a behaviour.
 const TUMBLE_STEP_TAG: u32 = 1 << 31;
+/// Marks the image-cache angles of a flying body's turret and barrel as the
+/// F1 table steps of its pitch and bank (#82): a cache key of ours.
+const FLIGHT_STEP_TAG: u32 = (1 << 31) | (1 << 30);
+/// Marks the image-cache angle of a rocket's turret and barrel as the F1
+/// table step of its drawn pitch (#82): a cache key of ours.
+const ROCKET_STEP_TAG: u32 = (1 << 31) | (1 << 29);
 
 /// A type's drawing angle in radians (S-0105 Import mapping): the degrees
 /// multiplied by the binary64 π/180, rounded toward zero; −1 keeps the value
@@ -5135,11 +5141,40 @@ impl<'a> Builder<'a> {
                 None => voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q),
             },
             // spec: S-0105 claim 41 (V · Rz(θ_body) · Ry(−p), the shadow unpitched)
-            Tilt::Rocket { pitch, .. } => voxel::rocket_body_pose(body_raw, pitch, &q),
+            // spec: S-0105 claims 7, 8 and 10 (T and B are built on the locomotor's D)
+            Tilt::Rocket { pitch, .. } => voxel::turret_on_body(
+                voxel::rocket_body_pose(body_raw, pitch, &q),
+                &voxel::rocket_body_local(body_raw, pitch, &q),
+                body_raw,
+                turret_raw,
+                offset,
+                elevation,
+                &q,
+            ),
             // spec: S-0105 claim 42 (V · Rz(θ_flight) · Ry(α) · Rx(β), the shadow the heading alone)
-            Tilt::Flying(a) => voxel::flying_body_pose(heading, &a, &q),
+            // spec: S-0105 claims 7, 8 and 10 (T and B are built on the locomotor's D)
+            // design: render (#82) θ_rel is taken against the drawn heading, the aiming facing, so the turret faces it (Q-2983)
+            Tilt::Flying(a) => voxel::turret_on_body(
+                voxel::flying_body_pose(heading, &a, &q),
+                &voxel::flying_body_local(heading, &a, &q),
+                heading,
+                turret_raw,
+                offset,
+                elevation,
+                &q,
+            ),
             // spec: S-0113 claim 20 (a crashing flying body at strictly positive signed height: V · Rz(θ_flight) · Rx(φ) · Ry(ψ′), whatever the size of its angles; the shadow on the heading alone)
-            Tilt::Tumbling { pitch, roll } => voxel::crashing_body_pose(heading, roll, pitch, &q),
+            // spec: S-0105 claims 7, 8 and 10 (T and B are built on the locomotor's D)
+            // design: render (#82) θ_rel against the drawn heading, as for a flying body (Q-2983)
+            Tilt::Tumbling { pitch, roll } => voxel::turret_on_body(
+                voxel::crashing_body_pose(heading, roll, pitch, &q),
+                &voxel::crashing_body_local(heading, roll, pitch, &q),
+                heading,
+                turret_raw,
+                offset,
+                elevation,
+                &q,
+            ),
         };
         // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles)
         let list = match tilt {
@@ -5149,6 +5184,18 @@ impl<'a> Builder<'a> {
                 voxel::table_step(f64::from(roll), &q) | TUMBLE_STEP_TAG,
             )),
             _ => rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits())),
+        };
+        // design: render (#82) a turret and barrel under a rocket's pitch or a flying body's pitch and bank are kept apart under the F1 table steps their transforms depend on, beside the body's own keys, which claims 41 and 42 fix (Q-2983)
+        let turret_list = match tilt {
+            Tilt::Flying(a) => Some((
+                voxel::table_step(a.alpha, &q) | FLIGHT_STEP_TAG,
+                voxel::table_step(a.beta, &q) | FLIGHT_STEP_TAG,
+            )),
+            Tilt::Rocket { pitch, .. } => Some((
+                voxel::table_step(-f64::from(pitch), &q) | ROCKET_STEP_TAG,
+                ROCKET_STEP_TAG,
+            )),
+            _ => list,
         };
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
@@ -5298,9 +5345,10 @@ impl<'a> Builder<'a> {
             // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
             let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
             // spec: S-0105 claim 26 (turret key; flat ground, the selected turret index of a multi-turret type, the alternative-model state off)
+            // design: render (#82) the body facing in the key is the one the body is drawn with: a flying body's heading (Q-2983)
             let turret_key = voxel::vehicle_turret_key(
                 voxel::RAMP_FLAT,
-                body_raw,
+                heading,
                 turret_raw,
                 offset,
                 index,
@@ -5328,7 +5376,7 @@ impl<'a> Builder<'a> {
                 let Some(file) = art.voxels.get(part_name).cloned() else {
                     continue;
                 };
-                if let Some(part) = self.cached_part_in(kind, idx, list, key, |b| {
+                if let Some(part) = self.cached_part_in(kind, idx, turret_list, key, |b| {
                     let model = b.voxel_model(&file)?;
                     let vpl = b.vpl();
                     let p = pose();
