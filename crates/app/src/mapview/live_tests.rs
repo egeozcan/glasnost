@@ -5387,6 +5387,45 @@ fn claim_13_aircraft_take_the_air_level_factor() {
     );
 }
 
+/// #75: spec: S-0104 claim 3 (global effects replace the tints: the 53-shade house-colour
+/// palettes are rebuilt with the chosen effect set's tint; at "normal" every table goes back to
+/// its own tint, white here) and claim 5; Formulas, "Map value storage" (‰ = hundredths × 10)
+#[test]
+fn claim_3_an_effect_tint_replaces_the_house_tables_tint() {
+    use glasnost_render::compose::{Shade, row565};
+    use glasnost_render::light::shade_table;
+    use glasnost_render::palette::{TINT_EXEMPT, house_palette};
+    // An invented effect tint, hundredths.
+    const TINT: [i32; 3] = [120, 80, 150];
+    with_rules_inputs(false, RULES, |inputs, painter, scene| {
+        let shade = |painter: &mut super::build::Painter, scene: &mut Scene| {
+            let (e, _) = painter.mobiles(inputs, scene, &[plain_mobile(Kind::Infantry)]);
+            lit_shades(&e[0].items)[0]
+        };
+        let table =
+            |scene: &Scene, s: Shade| scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec();
+        let hsv = super::build::owner_definition(inputs.import, inputs.options, b"Neutral").0;
+        let pal = house_palette(&inputs.palettes.unit, hsv);
+        let expect = |tint: [i32; 3]| {
+            shade_table(&pal, tint, 53, Some(TINT_EXEMPT))
+                .iter()
+                .map(row565)
+                .collect::<Vec<_>>()
+        };
+        let normal = shade(painter, scene);
+        assert_eq!(table(scene, normal), expect([1000; 3]), "white light");
+        painter.set_effect_tint(Some(TINT));
+        let effect = shade(painter, scene);
+        assert_eq!(
+            table(scene, effect),
+            expect(TINT.map(|t| t * 10)),
+            "the effect's tint"
+        );
+        painter.set_effect_tint(None);
+        assert_eq!(shade(painter, scene).base, normal.base, "its own tint");
+    });
+}
+
 /// The items `painter` draws for MANX at height 520 with shadow height
 /// `hs`, the generic shadow sprite `file` among the assets.
 fn generic_shadow_items(

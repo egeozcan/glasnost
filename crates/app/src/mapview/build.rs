@@ -1251,6 +1251,9 @@ pub struct Painter {
     /// thousandths per height level: λ, chosen by claim 2's per-cell
     /// ranking, and λ<sub>air</sub>, the ion storm's or the normal one.
     object_levels: (i32, i32),
+    /// The effect tint the tintable tables show, hundredths (S-0104
+    /// claims 3 and 5); `None` for every table's own tint.
+    effect_tint: Option<[i32; 3]>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -5966,7 +5969,16 @@ impl Painter {
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
             object_levels: (0, 0),
+            effect_tint: None,
         }
+    }
+
+    /// Sets the effect tint the tintable tables show (S-0104 claims 3 and
+    /// 5), hundredths: the set the game's last lighting re-evaluation
+    /// chose (`glasnost_sim::lighting::tint`), `None` for every table's
+    /// own tint. What is drawn next takes it.
+    pub fn set_effect_tint(&mut self, tint: Option<[i32; 3]>) {
+        self.effect_tint = tint;
     }
 
     /// Sets the level factors of the object height terms (S-0104 claim
