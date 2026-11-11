@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-29
+approved-on: 2026-11-11
 ---
 
 # M-0015: Unit arena, TELE against BFRT, stock replay watched per unit
@@ -114,15 +114,23 @@ in M-0001.
 
 | Quantity | Value | Tolerance for tests |
 |---|---|---|
-| Holds (one per fire event that started a hold; no hold passed from one Magnetron to another without a tick between) | 56 in seed 0, 52 in seed 1 | exact |
+| Holds (one per fire event that started a hold; no hold passed from one Magnetron to another without a tick between) | below the table | exact |
 | Of those, holds that end in a landing | local | exact |
 | Of those, holds still running at tick 6079, the last recorded tick | local | exact |
 | Time a held fortress is carried before release, in ticks | local | range only: per-hold values are not given here |
-| Height above the surface at the end of the release tick, in leptons | local; above 0 in every one | range only |
+| Height above the surface at the end of the release tick, in leptons | below the table | range only |
 | Time from release to landing, in ticks | local | range only |
-| Damage events at a landing other than the landing crush | 0 | exact |
+| Damage events at a landing other than the landing crush | below the table | exact |
 
 - What ended each hold (S-0607 claim 12) is not recorded.
+
+Relations for the table above:
+
+- *Holds (one per fire event that started a hold; no hold passed from one Magnetron to another
+  without a tick between)*: 56 in seed 0, 52 in seed 1.
+- *Height above the surface at the end of the release tick, in leptons*: local; above 0 in every
+  one.
+- *Damage events at a landing other than the landing crush*: 0.
 
 **The landing crush.** In both seeds two fortresses, held by two different Magnetrons, were
 released one tick apart and came down in the same tick, the landing tick.
