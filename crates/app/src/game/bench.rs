@@ -307,6 +307,8 @@ pub struct Bench {
     rows: Vec<Row>,
     view: usize,
     in_view: u32,
+    /// Frames the host could not draw while timing (#92).
+    undrawn: u32,
     centre: (i32, i32),
     pan: Option<(i32, i32)>,
     excluded: f64,
@@ -344,6 +346,7 @@ impl Bench {
             rows: Vec::new(),
             view: 0,
             in_view: 0,
+            undrawn: 0,
             centre: (0, 0),
             pan: None,
             excluded: 0.0,
@@ -691,7 +694,6 @@ impl Bench {
     /// After the frame was drawn and submitted; `drawn` is false when the
     /// host had no surface to draw to (a covered or minimised window).
     pub fn after_frame(&mut self, c: &Client, end: FrameEnd, drawn: bool) {
-        let _ = drawn;
         self.gpu_times(&end.gpu);
         if self.stage != Stage::Run {
             return;
@@ -699,6 +701,13 @@ impl Bench {
         let Some(row) = self.rows.last_mut() else {
             return;
         };
+        if !drawn {
+            // Not a frame of the view: its row stays, untimed, and the view
+            // still gets all its frames once the window draws again.
+            row.timed = false;
+            self.undrawn += 1;
+            return;
+        }
         row.work = now() - row.start;
         row.draw = end.laps;
         row.stats = end.stats;
@@ -711,6 +720,11 @@ impl Bench {
             self.in_view = 0;
             self.view += 1;
             if self.view >= self.opts.views.len() {
+                // The last frame's total ends here, with no next frame to
+                // start.
+                if let Some(last) = self.rows.last_mut() {
+                    last.total = Some(now() - last.start - std::mem::take(&mut self.excluded));
+                }
                 self.finish(c);
             }
         }
@@ -726,6 +740,12 @@ impl Bench {
     }
 
     fn finish(&mut self, c: &Client) {
+        if self.undrawn > 0 {
+            self.notes.push(format!(
+                "{} frame(s) the window could not draw (covered or minimised) left out of the timing",
+                self.undrawn
+            ));
+        }
         self.end_hash = c.session.as_ref().map(|s| s.play.game.state_hash());
         self.load_after = load_average();
         self.stage = Stage::Finished;
@@ -1308,11 +1328,13 @@ pub fn run_offscreen(
         if bench.finished() {
             break;
         }
-        let frame = bench.frame();
+        // Only the run's frames are timed on the GPU, as in the window host:
+        // before it, `frame` is 0 and would land on the first row (#92).
+        let frame = bench.running().then(|| bench.frame());
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("benchmark frame"),
         });
-        if let Some(t) = timer.as_mut() {
+        if let Some(t) = timer.as_mut().filter(|_| frame.is_some()) {
             t.begin(&mut encoder);
         }
         draw.prepare(&device, &queue, &mut client, (w, h), &mut encoder);
@@ -1333,13 +1355,13 @@ pub fn run_offscreen(
             });
             draw.draw(&mut pass);
         }
-        if let Some(t) = timer.as_mut() {
+        if let Some(t) = timer.as_mut().filter(|_| frame.is_some()) {
             t.end(&mut encoder);
         }
         let commands = encoder.finish();
         let t1 = now();
         let index = queue.submit([commands]);
-        if let Some(t) = timer.as_mut() {
+        if let (Some(t), Some(frame)) = (timer.as_mut(), frame) {
             t.submitted(frame);
         }
         let t2 = now();
