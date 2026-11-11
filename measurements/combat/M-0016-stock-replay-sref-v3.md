@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-11
 ---
 
 # M-0016: Unit arena, stock replay of every archived game with SREF or V3
@@ -80,13 +80,13 @@ pairings is confirmed as stock behaviour at its end sample. M-0002 has no game w
 
 | Quantity | n | Value |
 |---|---|---|
-| Games identical in every sample and in the result | 276 | 221 |
-| Games that differ | 276 | 55, in 8 pairings |
-| Of those, counted by the comparison as a change of the recorded row | 55 | 48 |
-| Of those 48, with a change in the winner, end frame or a side's unit count | 48 | 46 |
-| Of those 46, games whose winner changes | 46 | 13 |
-| Of the 48, with winner, end frame and unit counts equal and a change in the shares only | 48 | 2 (CAOS against SREF, B5; TELE against V3, A2) |
-| Games that differ only in samples before the end | 55 | 7 (5 BFRT against V3, 2 DISK against V3) |
+| Games identical in every sample and in the result | 276 | below the table |
+| Games that differ | 276 | below the table |
+| Of those, counted by the comparison as a change of the recorded row | 55 | below the table |
+| Of those 48, with a change in the winner, end frame or a side's unit count | 48 | below the table |
+| Of those 46, games whose winner changes | 46 | below the table |
+| Of the 48, with winner, end frame and unit counts equal and a change in the shares only | 48 | below the table |
+| Games that differ only in samples before the end | 55 | below the table |
 
 - The 15 pairings in which all 12 games are identical: DISK against SREF, FV against V3, LTNK
   against SREF, LTNK against V3, MGTK against V3, MIND against V3, MTNK against V3, ROBO against V3,
@@ -102,6 +102,17 @@ pairings is confirmed as stock behaviour at its end sample. M-0002 has no game w
   its army value at the start, both from the harness's samples, and reports that this reproduces the
   shares of all 1860 archived games of M-0001 to M-0003. What the harness's army value counts, and
   so why one unit count can give two shares, is not recorded.
+
+Relations for the table above:
+
+- *Games identical in every sample and in the result*: 221.
+- *Games that differ*: 55, in 8 pairings.
+- *Of those, counted by the comparison as a change of the recorded row*: 48.
+- *Of those 48, with a change in the winner, end frame or a side's unit count*: 46.
+- *Of those 46, games whose winner changes*: 13.
+- *Of the 48, with winner, end frame and unit counts equal and a change in the shares only*: 2 (CAOS
+  against SREF, B5; TELE against V3, A2).
+- *Games that differ only in samples before the end*: 7 (5 BFRT against V3, 2 DISK against V3).
 
 **Pairings with changed rows, stock** (the row's wins with the 48 stock rows in place of the
 archived ones; columns as in M-0001's Result, except that its overall row win rate is not given
