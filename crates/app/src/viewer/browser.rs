@@ -1485,6 +1485,41 @@ mod tests {
         assert!(!b.remap);
     }
 
+    /// #89: with a map to open, the index arrives while the map search
+    /// holds the file system; its names and palettes still apply.
+    #[test]
+    fn a_map_to_open_keeps_the_index() {
+        let queue = Queue::default();
+        let mut b = Browser::new(None);
+        b.pending_map = Some("no such map".into());
+        b.mount(&queue, install());
+        settle(&mut b, &queue);
+        assert!(!b.busy, "{}", b.status);
+        let vfs = b.vfs.as_ref().unwrap();
+        assert_eq!(vfs.names().get(id_hash("discs.shp")), Some("discs.shp"));
+        assert_eq!(b.palettes.len(), 1);
+    }
+
+    /// #89: a task of an earlier mount that comes back after a new mount
+    /// leaves the new mount's file system alone.
+    #[test]
+    fn a_result_of_an_earlier_mount_is_dropped() {
+        let queue = Queue::default();
+        let mut b = Browser::new(None);
+        b.mount(&queue, rules_install());
+        settle(&mut b, &queue);
+        b.rules_action(RulesAction::Import, &queue);
+        let stale = queue.0.borrow_mut().pop().expect("the import's result");
+        b.mount(&queue, install());
+        settle(&mut b, &queue);
+        b.on_task(stale, &queue);
+        settle(&mut b, &queue);
+        assert!(!b.busy, "{}", b.status);
+        let vfs = b.vfs.as_ref().expect("the new mount's file system");
+        assert_eq!(vfs.archives().len(), 2, "top-level plus nested");
+        assert!(b.rules.data().is_none(), "the earlier mount's rules");
+    }
+
     #[test]
     fn mounts_indexes_and_previews_a_synthetic_install() {
         let queue = Queue::default();
