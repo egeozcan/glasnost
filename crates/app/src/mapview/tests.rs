@@ -761,6 +761,30 @@ fn smudges_painted_per_covered_cell() {
     assert!(last_smudge < first_overlay);
 }
 
+/// design: render (#111): a smudge whose rules give a huge footprint is walked only over the
+/// cells of the map grid, so the build ends and paints only cells that exist.
+/// spec: S-0102 claim 25, S-0112 claim 3 (one painting per covered cell)
+#[test]
+fn a_huge_smudge_footprint_is_walked_within_the_grid() {
+    let ctx = context_with(&RULES.replace(
+        "[CRATERX]\nWidth=2",
+        "[CRATERX]\nWidth=2147483647\nHeight=2147483647",
+    ));
+    let (b, map) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Smudge]\n0=CRATERX,6,9,0\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "smudge");
+    assert!(!items.is_empty());
+    let side = i64::from(map.cells.footprint().coordinate_side());
+    // At most one painting for each legal cell at or past the smudge's first cell.
+    let legal = (side - 6) * (side - 9);
+    let n = items.len() as i64;
+    assert!(n <= legal, "{n} paintings, {legal} cells");
+}
+
 /// spec: S-0102 claim 23, S-0112 claim 3 (terrain objects at the cell centre; an ore spawner 16 rows
 /// higher with the start-up mine table)
 #[test]
@@ -2013,6 +2037,45 @@ fn colour_blind_colours_replace_slot_definitions_only() {
             assert_ne!(a, b);
         }
     }
+}
+
+/// #94: a client game gives the walls the local house's lobby slot, the local house chosen as
+/// the session chooses it. spec: S-0112 claim 1 row 4 (walls take the local player's house
+/// colour), S-0103 claim 10 (a house's lobby colour slot picks its colour definition); design:
+/// render (#94)
+#[test]
+fn walls_take_the_local_house_slot() {
+    use super::build::LocalChoice;
+    use glasnost_sim::econ::setup::HouseValues;
+    use glasnost_sim::world::HouseId;
+    let mut setup = glasnost_sim::testkit::setup(7);
+    setup.skirmish.houses = vec![
+        HouseValues {
+            colour: Some(5),
+            ..Default::default()
+        },
+        HouseValues {
+            colour: Some(3),
+            ..Default::default()
+        },
+    ];
+    let slot = |setup: &glasnost_sim::world::GameSetup, house, watch| {
+        super::load::local_slot(setup, LocalChoice { house, watch })
+    };
+    // The first person's house, or the house a network game asks for.
+    assert_eq!(slot(&setup, None, false), Some(5));
+    assert_eq!(slot(&setup, Some(HouseId(1)), false), Some(3));
+    // A computer house is only watched; a game played from it does not start.
+    setup.houses[0].ai = true;
+    assert_eq!(slot(&setup, None, false), Some(3));
+    assert_eq!(slot(&setup, Some(HouseId(0)), false), None);
+    assert_eq!(slot(&setup, Some(HouseId(0)), true), Some(5));
+    // No person's house: watched from the first player house, played from none.
+    setup.houses[1].ai = true;
+    assert_eq!(slot(&setup, None, true), Some(5));
+    assert_eq!(slot(&setup, None, false), None);
+    // The session's options carry the choice; the viewer's do not.
+    assert_eq!(Options::default().local, None);
 }
 
 /// spec: S-0101 claim 3 and F2 (r10: the exact lift is the drawing lift only; the sight

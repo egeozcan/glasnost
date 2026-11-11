@@ -423,8 +423,10 @@ impl Frame {
         (self.reference - (r + self.origin_row)).rem_euclid(DEPTH_MOD)
     }
 
-    /// Draws `d` with the palette rows `rows`.
-    pub fn draw(&mut self, d: &Drawing<'_>, rows: &[Row565], q: &ComposeQuirks) {
+    /// Draws `d` with the palette rows `rows`, and returns how many of its
+    /// pixels were painted (passed every test of the drawing), which the
+    /// pointer pick reads ([`crate::scene::Scene::object_at`]).
+    pub fn draw(&mut self, d: &Drawing<'_>, rows: &[Row565], q: &ComposeQuirks) -> usize {
         let (w, h) = (d.image.width() as i32, d.image.height() as i32);
         let (fw, fh) = (self.width as i32, self.height as i32);
         let x0 = d.x.max(0);
@@ -432,8 +434,9 @@ impl Frame {
         let y0 = d.y.max(0);
         let y1 = (d.y + h).min(fh);
         if x0 >= x1 || y0 >= y1 {
-            return;
+            return 0;
         }
+        let mut painted = 0;
         // spec: S-0102 F2 (r₀ and r₁ are the drawing rectangle before clipping; clipping removes pixels only)
         let (r0, r1) = (d.y, d.y + h - 1);
         let first_row = match d.paint {
@@ -444,7 +447,7 @@ impl Frame {
             Paint::Shadow | Paint::Pixel(_) => None,
         };
         if !matches!(d.paint, Paint::Shadow | Paint::Pixel(_)) && first_row.is_none() {
-            return;
+            return 0;
         }
         let diamond = matches!(d.paint, Paint::Diamond(_) | Paint::LitDiamond(_));
         for y in y0..y1 {
@@ -475,6 +478,7 @@ impl Frame {
                         // spec: S-0102 claim 9 (tiles without depth data do not touch the buffer)
                         None => {
                             self.paint(x, y, index, d.paint, rows);
+                            painted += 1;
                             continue;
                         }
                     },
@@ -502,6 +506,7 @@ impl Frame {
                     // spec: S-0102 claim 25 (a smudge neither reads nor writes depth)
                     DepthTest::Ignore => {
                         self.paint(x, y, index, d.paint, rows);
+                        painted += 1;
                         continue;
                     }
                 };
@@ -516,8 +521,10 @@ impl Frame {
                     self.depth[i] = depth.rem_euclid(DEPTH_MOD) as u16;
                 }
                 self.paint(x, y, index, d.paint, rows);
+                painted += 1;
             }
         }
+        painted
     }
 
     fn profile_row_depth(

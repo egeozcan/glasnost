@@ -23,25 +23,55 @@ pub struct Rgba {
 const STRIP_GAP: usize = 6;
 
 /// Draws `image` once per palette row, side by side (index 0 transparent
-/// when `transparent_zero`).
-pub fn strip(image: &IndexedImage, rows: &[Palette], transparent_zero: bool) -> Rgba {
+/// when `transparent_zero`), wrapped onto further lines so that the
+/// picture is at most `max_side` pixels wide where one copy fits.
+///
+/// design: render (#109): a strip wider than the device's texture limit
+/// would fail to upload, so the copies wrap.
+pub fn strip(
+    image: &IndexedImage,
+    rows: &[Palette],
+    transparent_zero: bool,
+    max_side: usize,
+) -> Rgba {
     let (w, h) = (image.width() as usize, image.height() as usize);
     let n = rows.len().max(1);
-    let width = w * n + STRIP_GAP * (n - 1);
-    let mut pixels = vec![0u8; width * h * 4];
+    // Copies per line: as many as fit in `max_side`, at least one.
+    let per_line = (max_side.saturating_add(STRIP_GAP) / (w + STRIP_GAP)).clamp(1, n);
+    let lines = n.div_ceil(per_line);
+    let width = w * per_line + STRIP_GAP * (per_line - 1);
+    let height = h * lines + STRIP_GAP * (lines - 1);
+    let mut pixels = vec![0u8; width * height * 4];
     for (k, row) in rows.iter().enumerate() {
         let rgba = resolve_rgba(image, row, transparent_zero);
-        let x0 = k * (w + STRIP_GAP);
+        let x0 = (k % per_line) * (w + STRIP_GAP);
+        let y0 = (k / per_line) * (h + STRIP_GAP);
         for y in 0..h {
             let src = &rgba[y * w * 4..(y + 1) * w * 4];
-            let dst = (y * width + x0) * 4;
+            let dst = ((y0 + y) * width + x0) * 4;
             pixels[dst..dst + w * 4].copy_from_slice(src);
         }
     }
     Rgba {
         width,
-        height: h,
+        height,
         pixels,
+    }
+}
+
+/// Whether picture `p` fits a texture of at most `max_side` pixels a side,
+/// else the preview's error.
+///
+/// design: render (#109): a picture over the device's texture limit is
+/// not uploaded (the upload would fail); the preview says so instead.
+pub fn fits(p: &Rgba, max_side: usize) -> Result<(), String> {
+    if p.width > max_side || p.height > max_side {
+        Err(format!(
+            "the picture is {} × {} pixels, more than this device's texture limit of {max_side}",
+            p.width, p.height
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -153,10 +183,35 @@ mod tests {
         let img = IndexedImage::new(2, 1, vec![0, 1]).unwrap();
         let mut a = Palette::default();
         a.colors[1] = glasnost_fmt::image::Rgb8::new(9, 9, 9);
-        let s = strip(&img, &[a.clone(), a], true);
+        let s = strip(&img, &[a.clone(), a], true, usize::MAX);
         assert_eq!(s.width, 2 * 2 + STRIP_GAP);
         assert_eq!(&s.pixels[4..8], &[9, 9, 9, 255]);
         assert_eq!(s.pixels[3], 0);
+    }
+
+    /// design: render (#109): eight copies of a 64-wide image under a 256 texture limit wrap
+    /// onto lines no wider than the limit, every copy kept.
+    #[test]
+    fn strip_wraps_at_the_texture_limit() {
+        let img = IndexedImage::new(64, 2, vec![1; 128]).unwrap();
+        let mut a = Palette::default();
+        a.colors[1] = glasnost_fmt::image::Rgb8::new(9, 9, 9);
+        let rows = vec![a; 8];
+        // Unwrapped: 8 · 64 + 7 · 6 = 554 > 256.
+        assert!(fits(&strip(&img, &rows, true, usize::MAX), 256).is_err());
+        let s = strip(&img, &rows, true, 256);
+        // (256 + 6) / (64 + 6) = 3 copies a line, 3 lines.
+        assert_eq!(
+            (s.width, s.height),
+            (3 * 64 + 2 * STRIP_GAP, 3 * 2 + 2 * STRIP_GAP)
+        );
+        assert!(fits(&s, 256).is_ok());
+        let opaque = s.pixels.chunks(4).filter(|p| p[3] == 255).count();
+        assert_eq!(opaque, 8 * 64 * 2);
+        // One copy wider than the limit cannot fit: the preview says so.
+        let wide = IndexedImage::new(300, 1, vec![1; 300]).unwrap();
+        let s = strip(&wide, &[Palette::default()], true, 256);
+        assert!(fits(&s, 256).is_err());
     }
 
     #[test]

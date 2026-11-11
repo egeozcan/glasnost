@@ -236,6 +236,18 @@ pub async fn load(
     .await
 }
 
+/// The lobby colour slot of the local house that `choice` picks in
+/// `setup` (S-0112 claim 1 row 4: the walls take the local player's house
+/// colour; S-0103 claim 10: a house's colour is its lobby slot's), `None`
+/// without a local house or without a slot.
+pub(super) fn local_slot(
+    setup: &glasnost_sim::world::GameSetup,
+    choice: build::LocalChoice,
+) -> Option<u8> {
+    let h = live::local_of(setup, choice).ok()??;
+    setup.skirmish.houses.get(usize::from(h.0))?.colour
+}
+
 /// [`load`] with the game's setup made by `make` from the map's typed
 /// rules (the game client's skirmish); `options.game` should then be
 /// [`build::GameMode::Skirmish`] so the skirmish files are read. The rules
@@ -357,6 +369,14 @@ pub async fn load_with(
             .zip(&setup.skirmish.houses)
             .filter_map(|(h, v)| Some((h.name.as_bytes().to_vec(), v.colour?)))
             .collect();
+    }
+    if make.is_some()
+        && let Some(choice) = options.local
+        && let Ok((_, _, setup, _)) = &started
+        && let Some(slot) = local_slot(setup, choice)
+    {
+        // design: render (#94): the walls' placeholder human house carries the local house's slot
+        options.human_slot = slot;
     }
     if make.is_none() && !options.skirmish && options.slots.is_empty() {
         // spec: S-0103 claim 14 (outside a skirmish the map's own owners show their imported colours)

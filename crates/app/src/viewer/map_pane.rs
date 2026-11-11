@@ -425,6 +425,18 @@ impl MapPane {
         self.use_gpu = on;
     }
 
+    /// The GPU map pass failed with `error`: the pane falls back on the CPU
+    /// reference, so the pass is not built again on every frame; the GPU
+    /// box turns it back on.
+    ///
+    /// design: render (#110): the game's drawer falls back on the CPU
+    /// compositor in the same way.
+    pub fn gpu_failed(&mut self, error: &str) {
+        self.use_gpu = false;
+        self.gpu_texture = None;
+        self.status = format!("GPU map pass failed, showing the CPU reference: {error}");
+    }
+
     /// The texture the shell drew this frame's GPU view into.
     pub fn set_gpu_texture(&mut self, id: Option<egui::TextureId>) {
         self.gpu_texture = id;
@@ -782,10 +794,8 @@ impl MapPane {
         }
         let avail = ui.available_size();
         let ppp = ui.ctx().pixels_per_point();
-        let size = (
-            ((avail.x * ppp) as u32).max(64),
-            ((avail.y * ppp) as u32).max(64),
-        );
+        let max_side = ui.ctx().input(|i| i.max_texture_side);
+        let size = view_size(avail.x * ppp, avail.y * ppp, max_side);
         if size != self.view_size {
             self.view_size = size;
             let c = self.centre;
@@ -898,7 +908,10 @@ impl MapPane {
             (
                 cell.0,
                 cell.1,
-                shown.scene.object_at(qx, qy, view.origin.1, &filter),
+                // The object drawn at the point (S-0102 claims 10 and 31; #68).
+                shown
+                    .scene
+                    .object_at(qx, qy, &view, &filter, &ComposeQuirks::default()),
             )
         });
         let hover = self.hover;
@@ -1010,7 +1023,9 @@ impl MapPane {
                 .selection
                 .iter()
                 .copied()
-                .filter(|&id| !live.bracket_drawn(&shown.loaded.assets, id))
+                .filter(|&id| {
+                    !crate::mapview::live::bracket_drawn(&live.world, &shown.loaded.assets, id)
+                })
                 .collect();
             selection_markers(ui, live, &plain, &view, r.rect, ppp);
         } else if r.clicked() {
@@ -1410,6 +1425,18 @@ fn object_ui(ui: &mut Ui, o: &ObjectInfo) {
     }
 }
 
+/// The map view's size in pixels for an available area of `w × h`
+/// physical pixels: at least 64 a side, and at most `max_side`, the
+/// device's texture limit, which the view's textures must fit.
+///
+/// design: render (#109): a larger pane shows the view at the limit
+/// rather than failing to make its textures.
+fn view_size(w: f32, h: f32, max_side: usize) -> (u32, u32) {
+    let max = u32::try_from(max_side).unwrap_or(u32::MAX).max(64);
+    let side = |v: f32| (v as u32).clamp(64, max);
+    (side(w), side(h))
+}
+
 /// `rules explain` for a type: the history of every value of its type
 /// entry in the converted tree.
 fn explain(loaded: &Loaded, type_name: &str) -> String {
@@ -1418,4 +1445,33 @@ fn explain(loaded: &Loaded, type_name: &str) -> String {
         return format!("{type_name} is not in the converted rules");
     };
     glasnost_rules::explain::explain(tree, &loaded.import.provenance, &path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// design: render (#110): a failed GPU map pass falls back on the CPU reference and asks
+    /// for no further GPU pass, so the renderer is not built again on every frame.
+    #[test]
+    fn a_failed_gpu_pass_falls_back_on_the_cpu_reference() {
+        let mut pane = MapPane::default();
+        assert!(pane.use_gpu);
+        pane.gpu_failed("the atlas is full");
+        assert!(!pane.use_gpu);
+        assert!(pane.gpu_request().is_none());
+        assert!(pane.status.contains("the atlas is full"), "{}", pane.status);
+        // The GPU box turns the pass back on.
+        pane.set_use_gpu(true);
+        assert!(pane.use_gpu);
+    }
+
+    /// design: render (#109): the map view never asks for textures over the device's limit,
+    /// and keeps its 64-pixel floor.
+    #[test]
+    fn the_view_size_stays_within_the_texture_limit() {
+        assert_eq!(view_size(5000.0, 300.0, 4096), (4096, 300));
+        assert_eq!(view_size(10.0, 9000.0, 2048), (64, 2048));
+        assert_eq!(view_size(800.0, 600.0, usize::MAX), (800, 600));
+    }
 }

@@ -900,3 +900,38 @@ fn a_scroll_buttons_press_frame_follows_the_press_over_it() {
         "released off it: no paging"
     );
 }
+
+/// #67: a unit made during the game gets S-0111's bracket only, not our fallback corner
+/// marks as well: whether the bracket draws it is asked of the game's world, not of the drawing
+/// state's copy of its start. spec: S-0111 claims 2 and 3 (a selected unit shows the bracket
+/// image when the bracket sprite and the overlay palette are there)
+#[test]
+fn a_unit_made_in_play_gets_one_selection_mark() {
+    use crate::mapview::combat::{BRACKET_SPRITE, OVERLAY_PALETTE};
+    use glasnost_ui::draw::{DrawList, Prim};
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let mcv = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    // Only their presence is asked; their bytes are placeholders.
+    s.loaded.assets.insert(OVERLAY_PALETTE, vec![0; 768]);
+    s.loaded.assets.insert(BRACKET_SPRITE, vec![0; 8]);
+    let me = s.play.me();
+    let at = s.play.world().obj(mcv).unwrap().pos.cell();
+    let made = glasnost_sim::testkit::spawn(
+        &mut s.play.game.world,
+        Kind::Vehicle,
+        "GUNR",
+        me.0,
+        CellXY::new(at.x + 2, at.y + 2),
+        0,
+    );
+    s.play.selection = vec![mcv, made];
+    let d = s.draw(DrawList::new());
+    let marks = d
+        .prims
+        .iter()
+        .filter(|p| matches!(p, Prim::Line { rgba, .. } if *rgba == [255, 230, 80, 255]))
+        .count();
+    assert_eq!(marks, 0, "no fallback corner marks");
+}

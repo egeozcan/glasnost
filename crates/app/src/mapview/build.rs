@@ -116,6 +116,21 @@ pub struct Options {
     /// ([`COLOUR_BLIND_SLOTS`]) instead of their slots' definitions: the
     /// person's presentation choice (M8 step C3), never game data.
     pub colour_blind: bool,
+    /// The house a client game is played or watched from, as the session
+    /// asks for it; `None` outside the client's games. The loader resolves
+    /// it to the local house and gives the placeholder human house that
+    /// house's lobby colour slot, which the walls take (S-0112 claim 1 row
+    /// 4; #94).
+    pub local: Option<LocalChoice>,
+}
+
+/// How a client game chooses its local house (`Session::start`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LocalChoice {
+    /// The house asked for (a network game's slot), if any.
+    pub house: Option<glasnost_sim::world::HouseId>,
+    /// Whether the game is watched rather than played.
+    pub watch: bool,
 }
 
 /// Our colour-blind house colours (M8 step C3): the colour definition (H,
@@ -161,6 +176,7 @@ impl Default for Options {
             unresolved_owners: Vec::new(),
             game: GameMode::Sandbox,
             colour_blind: false,
+            local: None,
         }
     }
 }
@@ -2197,10 +2213,20 @@ impl<'a> Builder<'a> {
             });
             // spec: S-0102 claim 25 (the top corner of the smudge's first cell)
             let (qx, qy) = cell_top(s.cell.x, s.cell.y);
+            // design: render (#111): only the covered cells inside the map grid
+            // (0 ≤ x, y < the coordinate side) are walked, in i64, so a huge Width or
+            // Height ends at the grid's edge instead of looping over cells that do not exist
+            let side = i64::from(self.map.cells.footprint().coordinate_side());
+            let (x0, y0) = (i64::from(s.cell.x), i64::from(s.cell.y));
+            let xs = x0.max(0)..(x0 + i64::from(w.max(0))).min(side);
+            let ys = y0.max(0)..(y0 + i64::from(h.max(0))).min(side);
             // spec: S-0009 claim 42 (the w × h cells (x + i, y + j)), S-0102 claim 25 (each covered cell paints the image again)
-            for j in 0..h.max(0) {
-                for i in 0..w.max(0) {
-                    let c = CellXY::new(s.cell.x + i, s.cell.y + j);
+            for y in ys {
+                for x in xs.clone() {
+                    let (Ok(x), Ok(y)) = (i32::try_from(x), i32::try_from(y)) else {
+                        continue;
+                    };
+                    let c = CellXY::new(x, y);
                     let Some(cell) = self.map.cells.get(c).copied() else {
                         continue;
                     };

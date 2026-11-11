@@ -6480,6 +6480,81 @@ fn claim_18_a_disguised_unit_shows_no_insignia_to_whom_it_fools() {
     assert_eq!(status(&mut live, &mut scene), 1, "its owner sees it");
 }
 
+/// #66. spec: S-0111 claim 18 (no insignia when cloak presentation hides the object from the
+/// local player's house, S-0516 claim 28; a fully cloaked object keeps it for its owner; a
+/// building at fade levels 11 to 15 takes the fully cloaked rule, at 0 to 10 its insignia is not
+/// suppressed by cloak)
+#[test]
+fn claim_18_a_cloak_hidden_object_shows_no_insignia() {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::cloak::CloakState;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, _cart, walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let two = glasnost_num::F64::from_i64(2, glasnost_num::Rounding::TowardZero)
+        .to_f32(glasnost_num::Rounding::TowardZero);
+    let tower = testkit::spawn(
+        &mut live.world,
+        SimKind::Building,
+        "TOWER",
+        0,
+        testkit::mid(24, 4, 4),
+        0,
+    );
+    for id in [walker, tower] {
+        live.world.obj_mut(id).unwrap().combat.experience = two;
+    }
+    let status = |live: &mut Live, scene: &mut Scene, id| {
+        live.redraw_status(&inputs, scene);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+            .count()
+    };
+    live.set_marks(&[], None);
+    // The walker (house 1), fully cloaked, seen by house 0, which neither owns nor senses it.
+    live.world.obj_mut(walker).unwrap().cloak.state = CloakState::Cloaked;
+    live.set_viewer(Some(HouseId(0)));
+    assert_eq!(
+        glasnost_sim::cloak::view::look(&live.world, walker, Some(HouseId(0))),
+        glasnost_sim::cloak::view::Look::Hidden
+    );
+    assert_eq!(
+        status(&mut live, &mut scene, walker),
+        0,
+        "hidden from house 0"
+    );
+    live.set_viewer(Some(HouseId(1)));
+    assert_eq!(
+        status(&mut live, &mut scene, walker),
+        1,
+        "its owner sees it"
+    );
+    // The tower (house 0) cloaking, seen by house 1: fade level 10 keeps the insignia, 11 hides it.
+    live.set_viewer(Some(HouseId(1)));
+    live.world.obj_mut(tower).unwrap().cloak.state = CloakState::Cloaking;
+    live.world.obj_mut(tower).unwrap().cloak.stage = 10;
+    assert_eq!(status(&mut live, &mut scene, tower), 1, "fade level 10");
+    live.world.obj_mut(tower).unwrap().cloak.stage = 11;
+    assert_eq!(status(&mut live, &mut scene, tower), 0, "fade level 11");
+    live.set_viewer(Some(HouseId(0)));
+    assert_eq!(status(&mut live, &mut scene, tower), 1, "its owner sees it");
+}
+
 /// spec: S-0111 claim 2 and scenario OV2's shape (the bracket image and the insignia take the
 /// light-alpha shade at neutral brightness, so a shroud piece darkens them; health segments are
 /// not shaded and keep their palette colour under it)
@@ -6606,11 +6681,11 @@ fn claim_8_a_selected_building_in_the_live_view() {
         rules: None,
         cells: None,
     };
-    assert!(live.bracket_drawn(&assets, tower));
-    assert!(live.bracket_drawn(&assets, cart));
+    assert!(super::live::bracket_drawn(&live.world, &assets, tower));
+    assert!(super::live::bracket_drawn(&live.world, &assets, cart));
     let mut bare = assets.clone();
     bare.set(super::combat::OVERLAY_PALETTE, None);
-    assert!(!live.bracket_drawn(&bare, tower));
+    assert!(!super::live::bracket_drawn(&live.world, &bare, tower));
     let mine = |scene: &Scene| -> Vec<_> {
         scene
             .items

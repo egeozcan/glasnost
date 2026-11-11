@@ -232,11 +232,7 @@ fn eye_of(w: &World, local: Option<HouseId>, id: ObjectId) -> Option<HouseId> {
 
 /// The person's house of a setup: the first player house without an AI.
 pub fn local_house(setup: &GameSetup) -> Option<HouseId> {
-    setup
-        .houses
-        .iter()
-        .position(|h| !h.ai && h.role == HouseRole::Player)
-        .map(|i| HouseId(i as u8))
+    crate::mapview::live::person_house(setup)
 }
 
 impl Play {

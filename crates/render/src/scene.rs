@@ -285,6 +285,25 @@ impl Scene {
         )
     }
 
+    /// Whether `item`'s rectangle contains world pixel `(x, y)`; the cheap
+    /// tests on the item's corner come before the image's size is read.
+    fn covers(&self, item: &Item, x: i32, y: i32) -> bool {
+        if x < item.x || y < item.y {
+            return false;
+        }
+        let (_, _, r, b) = self.bounds(item);
+        x < r && y < b
+    }
+
+    /// Whether `item`'s image pixel at world pixel `(x, y)` is there and not
+    /// transparent.
+    fn opaque_at(&self, item: &Item, x: i32, y: i32) -> bool {
+        self.covers(item, x, y)
+            && self.images[item.image as usize]
+                .get((x - item.x) as u32, (y - item.y) as u32)
+                .is_some_and(|v| v != 0)
+    }
+
     /// Composites the scene for `view` on the CPU.
     pub fn compose(&self, view: &View, filter: &Filter, quirks: &ComposeQuirks) -> Frame {
         self.compose_lit(view, filter, quirks, None)
@@ -317,7 +336,7 @@ impl Scene {
                 continue;
             }
             for item in item.copies(oy) {
-                self.draw_item(&mut frame, &item, (ox, oy), quirks);
+                let _ = self.draw_item(&mut frame, &item, (ox, oy), quirks);
             }
         }
         for g in spots.filter(|g| filter.shows_spots(g)) {
@@ -327,18 +346,19 @@ impl Scene {
     }
 
     /// Draws one item (one copy of a stack) into `frame` for a view with
-    /// origin `(ox, oy)`, unless its bounds miss the view.
+    /// origin `(ox, oy)`, unless its bounds miss the view, and returns how
+    /// many of its pixels were painted.
     fn draw_item(
         &self,
         frame: &mut Frame,
         item: &Item,
         (ox, oy): (i32, i32),
         quirks: &ComposeQuirks,
-    ) {
+    ) -> usize {
         let (w, h) = (frame.width as i32, frame.height as i32);
         let (l, t, r, b) = self.bounds(item);
         if r <= ox || b <= oy || l >= ox + w || t >= oy + h {
-            return;
+            return 0;
         }
         let depth = match item.depth {
             ItemDepth::Tile {
@@ -367,7 +387,7 @@ impl Scene {
             depth,
             paint: item.paint,
         };
-        frame.draw(&d, &self.rows, quirks);
+        frame.draw(&d, &self.rows, quirks)
     }
 
     /// Every item (index into [`Scene::items`], draw order) whose image has a
@@ -390,27 +410,57 @@ impl Scene {
             .collect()
     }
 
-    /// The topmost item under world pixel `(x, y)` whose image pixel there is
-    /// not transparent, among items with an object, searching from the last
-    /// drawn, in a view whose top row is world row `top` (which decides the
-    /// copies of a stack, S-0109 claim 27).
-    pub fn object_at(&self, x: i32, y: i32, top: i32, filter: &Filter) -> Option<u32> {
-        self.items.iter().rev().find_map(|item| {
-            let object = item.object?;
-            if !filter.shows(item) || item.paint == Paint::Shadow {
-                return None;
+    /// The object shown at world pixel `(x, y)` of `view`: the compositor is
+    /// replayed for that one pixel, every item that `filter` shows in draw
+    /// order (the copies of a stack for the view's top row, S-0109 claim 27),
+    /// and the last item with an object whose pixel there passed every test
+    /// of the drawing wins (S-0102 claims 9, 10, 25 and 31: a pixel that
+    /// failed the depth test or lies outside its companion depth image was
+    /// not drawn).
+    ///
+    /// design: render (#68, #69): shadows and the status extras (health bars,
+    /// insignias, pips; S-0111 claim 20, a drawing on the view is not a place
+    /// of its own) never supply the object, and an item without an object
+    /// (an effect) drawn over an object does not hide it. Spots never write
+    /// depth (S-0518 claim 20), so they are not replayed.
+    pub fn object_at(
+        &self,
+        x: i32,
+        y: i32,
+        view: &View,
+        filter: &Filter,
+        quirks: &ComposeQuirks,
+    ) -> Option<u32> {
+        let top = view.origin.1;
+        let candidate = |item: &Item| {
+            item.object
+                .filter(|_| item.paint != Paint::Shadow && item.group != Group::Status)
+        };
+        // design: render (#68): only an item that can supply the object and has an opaque pixel
+        // at the point can win, so the replay ends at the last such item, and there is none at
+        // all when no such item exists (over open ground the pick costs one cheap pass that
+        // skips the items without an object, as before #68).
+        let last = self.items.iter().rposition(|item| {
+            candidate(item).is_some()
+                && filter.shows(item)
+                && item.copies(top).any(|c| self.opaque_at(&c, x, y))
+        })?;
+        let mut frame = Frame::new(1, 1, y, view.reference);
+        let mut found = None;
+        for item in &self.items[..=last] {
+            // Only the items with a copy over the point can paint it.
+            if !item.copies(top).any(|c| self.covers(&c, x, y)) || !filter.shows(item) {
+                continue;
             }
-            let hit = item.copies(top).any(|c| {
-                let (l, t, r, b) = self.bounds(&c);
-                if x < l || y < t || x >= r || y >= b {
-                    return false;
+            let candidate = candidate(item);
+            for copy in item.copies(top) {
+                let painted = self.draw_item(&mut frame, &copy, (x, y), quirks);
+                if painted > 0 && candidate.is_some() {
+                    found = candidate;
                 }
-                let img = &self.images[c.image as usize];
-                img.get((x - l) as u32, (y - t) as u32)
-                    .is_some_and(|v| v != 0)
-            });
-            hit.then_some(object)
-        })
+            }
+        }
+        found
     }
 }
 
@@ -466,8 +516,8 @@ mod tests {
             a.depth[(20 * 32 + 10) as usize],
             b.depth[(13 * 32 + 5) as usize]
         );
-        assert_eq!(s.object_at(11, 21, 0, &Filter::default()), Some(7));
-        assert_eq!(s.object_at(12, 21, 0, &Filter::default()), None);
+        assert_eq!(pick(&s, 11, 21, 0), Some(7));
+        assert_eq!(pick(&s, 12, 21, 0), None);
     }
 
     /// The debug pixel trace lists every item with a non-transparent pixel at a point, in draw
@@ -502,9 +552,125 @@ mod tests {
         assert_eq!(s.items_at(0, 0, 0), vec![0]);
         // (1, 0): the body, the shadow and the objectless item; the topmost object ignores shadows.
         assert_eq!(s.items_at(1, 0, 0), vec![0, 1, 2]);
-        assert_eq!(s.object_at(1, 0, 0, &Filter::default()), Some(1));
+        assert_eq!(pick(&s, 1, 0, 0), Some(1));
         // Outside every image: nothing.
         assert!(s.items_at(5, 0, 0).is_empty());
+    }
+
+    /// A one-pixel item at world pixel (0, 0) with depth bias `bias` (smaller is nearer).
+    fn pick_item(image: u32, paint: Paint, test: DepthTest, bias: i32, object: u32) -> Item {
+        Item {
+            image,
+            x: 0,
+            y: 0,
+            test,
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias,
+                companion: None,
+            },
+            paint,
+            group: Group::Vehicles,
+            provisional: false,
+            object: Some(object),
+            stack: None,
+        }
+    }
+
+    /// The colour the CPU compositor shows at world pixel (0, 0).
+    fn shown_at_origin(s: &Scene) -> u16 {
+        s.compose(
+            &View {
+                origin: (0, 0),
+                size: (1, 1),
+                reference: compose::DEPTH_REFERENCE,
+            },
+            &Filter::default(),
+            &ComposeQuirks::default(),
+        )
+        .color[0]
+    }
+
+    /// The object picked at world pixel `(x, y)` in a view whose top row is world row `top`.
+    fn pick(s: &Scene, x: i32, y: i32, top: i32) -> Option<u32> {
+        let view = View {
+            origin: (0, top),
+            size: (64, 64),
+            reference: compose::DEPTH_REFERENCE,
+        };
+        s.object_at(x, y, &view, &Filter::default(), &ComposeQuirks::default())
+    }
+
+    /// #68: the pointer picks the object drawn at the pixel. spec: S-0102 claims 9 and 10, F2
+    /// (a reader is drawn only where its depth is below the stored depth, so a farther reader
+    /// after a nearer writer is not drawn there); design: render (#68) (the pick follows that
+    /// drawing)
+    #[test]
+    fn object_at_follows_the_depth_test() {
+        let mut s = Scene::default();
+        let img = s.add_image(IndexedImage::new(1, 1, vec![1]).unwrap());
+        let near = s.add_row([0x1111; 256]);
+        let far = s.add_row([0x2222; 256]);
+        s.items
+            .push(pick_item(img, Paint::Row(near), DepthTest::Writer, 0, 1));
+        s.items
+            .push(pick_item(img, Paint::Row(far), DepthTest::Reader, 10, 2));
+        assert_eq!(
+            shown_at_origin(&s),
+            0x1111,
+            "the reader fails the depth test"
+        );
+        assert_eq!(pick(&s, 0, 0, 0), Some(1));
+        // A nearer reader is drawn, and picked.
+        s.items[1] = pick_item(img, Paint::Row(far), DepthTest::Reader, -10, 2);
+        assert_eq!(shown_at_origin(&s), 0x2222);
+        assert_eq!(pick(&s, 0, 0, 0), Some(2));
+    }
+
+    /// #68: a body pixel its companion depth image does not cover is not drawn, so it is not
+    /// picked. spec: S-0102 claim 31, F5 (not drawn and no depth written); design: render (#68)
+    #[test]
+    fn object_at_skips_pixels_outside_the_companion() {
+        let mut s = Scene::default();
+        let img = s.add_image(IndexedImage::new(1, 1, vec![1]).unwrap());
+        let row = s.add_row([0x1111; 256]);
+        let other = s.add_row([0x2222; 256]);
+        s.signed.push(SignedImage {
+            width: 1,
+            height: 1,
+            values: vec![0],
+        });
+        s.items
+            .push(pick_item(img, Paint::Row(row), DepthTest::Writer, 0, 1));
+        let mut clipped = pick_item(img, Paint::Row(other), DepthTest::Writer, -10, 2);
+        // The companion lies one pixel to the right of the body's only pixel.
+        clipped.depth = ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: -10,
+            companion: Some((0, 1, 0)),
+        };
+        s.items.push(clipped);
+        assert_eq!(shown_at_origin(&s), 0x1111);
+        assert_eq!(pick(&s, 0, 0, 0), Some(1));
+    }
+
+    /// #69: health bars, brackets, pips and group numbers are drawings on the view, not a place
+    /// of their own: the pick finds the body under them. spec: S-0111 Terms (pointer object: the
+    /// object the pointer is on) and claim 20 (a drawing on the view is not a place of its own)
+    #[test]
+    fn object_at_passes_over_status_extras() {
+        let mut s = Scene::default();
+        let img = s.add_image(IndexedImage::new(1, 1, vec![1]).unwrap());
+        let row = s.add_row([0x1111; 256]);
+        s.items
+            .push(pick_item(img, Paint::Row(row), DepthTest::Reader, 0, 1));
+        let mut bar = pick_item(img, Paint::Row(row), DepthTest::Ignore, 0, 2);
+        bar.group = Group::Status;
+        s.items.push(bar);
+        assert_eq!(pick(&s, 0, 0, 0), Some(1));
+        // A status extra alone over empty ground names no object.
+        s.items.remove(0);
+        assert_eq!(pick(&s, 0, 0, 0), None);
     }
 
     /// spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0, else ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2, with pᵧ
@@ -633,7 +799,7 @@ mod tests {
         // Top row 21: C = 1.
         assert_eq!(painted(21), Vec::<i32>::new());
         assert_eq!(painted(16), [20]);
-        assert_eq!(s.object_at(0, 10, 0, &Filter::default()), Some(1));
-        assert_eq!(s.object_at(0, 10, 16, &Filter::default()), None);
+        assert_eq!(pick(&s, 0, 10, 0), Some(1));
+        assert_eq!(pick(&s, 0, 10, 16), None);
     }
 }

@@ -4127,21 +4127,6 @@ impl Live {
         self.draw_status(inputs, scene);
     }
 
-    /// Whether an object's selection is drawn by S-0111's marks: a unit's
-    /// bracket image (the bracket sprite and the overlay palette are
-    /// there), or a building's corner brackets (claim 8; the overlay
-    /// palette is there).
-    pub fn bracket_drawn(&self, assets: &super::build::Assets, id: ObjectId) -> bool {
-        let Some(o) = self.world.obj(id) else {
-            return false;
-        };
-        let palette = assets.get(combat::OVERLAY_PALETTE).is_some();
-        if o.kind == SimKind::Building {
-            return palette;
-        }
-        o.kind.is_mobile() && palette && assets.get(combat::BRACKET_SPRITE).is_some()
-    }
-
     /// S-0111's status extras after the effects: every object's bomb icon
     /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
@@ -4257,7 +4242,12 @@ impl Live {
             // spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's house, S-0516 claims 35–36, even when drawn as its real type)
             let disguised = self.viewer.is_some()
                 && glasnost_sim::cloak::disguise::appears_disguised(&self.world, o.id, self.viewer);
-            let insignia = combat::insignia(o.combat.experience, infantry).filter(|_| !disguised);
+            // spec: S-0111 claim 18 (nor while cloak presentation hides the object from the viewer, S-0516 claim 28: a building at fade levels 11 to 15 by the fully cloaked rule, at 0 to 10 not suppressed), the viewer as for the object's own picture (apply_cloak)
+            let hidden =
+                glasnost_sim::cloak::view::look(&self.world, o.id, self.viewer.or(o.owner))
+                    == glasnost_sim::cloak::view::Look::Hidden;
+            let insignia =
+                combat::insignia(o.combat.experience, infantry).filter(|_| !disguised && !hidden);
             if bar.is_none() && insignia.is_none() {
                 continue;
             }
@@ -4576,6 +4566,68 @@ pub const WRENCH_MISSING: &str = "the wrench sprite WRENCH.SHP or its image fram
 /// The note for a missing cursor palette, given once (S-0111 claim 19a and
 /// Edge cases: our engine's departure, no switch).
 pub const CURSOR_PALETTE_MISSING: &str = "the cursor palette MOUSEPAL.PAL is missing: neither the repair wrench nor the bomb icon is drawn (S-0111 claim 19a)";
+
+/// The person's house of a setup: the first player house without an AI.
+pub fn person_house(setup: &GameSetup) -> Option<HouseId> {
+    setup
+        .houses
+        .iter()
+        .position(|h| !h.ai && h.role == glasnost_sim::world::HouseRole::Player)
+        .map(|i| HouseId(i as u8))
+}
+
+/// The local house of a client game on `setup` chosen as `choice`: the
+/// house asked for (a person's house unless the game is watched), else in
+/// a watched game the person's house or the first player house, else the
+/// person's house, `None` when the setup has none (a watch game from no
+/// house). The session and the loader's wall colour (#94) both use it.
+pub fn local_of(
+    setup: &GameSetup,
+    choice: super::build::LocalChoice,
+) -> Result<Option<HouseId>, String> {
+    Ok(match choice.house {
+        Some(h)
+            if setup
+                .houses
+                .get(usize::from(h.0))
+                .is_some_and(|x| choice.watch || !x.ai) =>
+        {
+            Some(h)
+        }
+        Some(h) => return Err(format!("house {} is no person's house", h.0)),
+        None if choice.watch => {
+            // A watched game's first player house (M8 step C4).
+            let first = setup
+                .houses
+                .iter()
+                .position(|h| h.role == glasnost_sim::world::HouseRole::Player);
+            Some(
+                person_house(setup)
+                    .or(first.map(|i| HouseId(i as u8)))
+                    .ok_or("the setup has no player house")?,
+            )
+        }
+        // spec: S-0412 Terms (human participant: our setup may start a skirmish with none, every player house an AI house)
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): a setup with no person's house is watched from no house at all
+        None => person_house(setup),
+    })
+}
+
+/// Whether object `id` of world `w` has its selection drawn by S-0111's
+/// marks: a unit's bracket image (the bracket sprite and the overlay palette
+/// are there), or a building's corner brackets (claim 8; the overlay palette
+/// is there). `w` is the world the marks are drawn from: in a game, the
+/// canonical world, which holds the objects made since the game began (#67).
+pub fn bracket_drawn(w: &World, assets: &super::build::Assets, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else {
+        return false;
+    };
+    let palette = assets.get(combat::OVERLAY_PALETTE).is_some();
+    if o.kind == SimKind::Building {
+        return palette;
+    }
+    o.kind.is_mobile() && palette && assets.get(combat::BRACKET_SPRITE).is_some()
+}
 
 /// Whether cell `c` counts as shrouded for house `viewer` for the slot
 /// animations drawn over it (S-0513 claim 29b): S-0110 claim 8's point
