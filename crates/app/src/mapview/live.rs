@@ -52,6 +52,65 @@ pub fn sim_code(id: ObjectId) -> u32 {
     SIM_OBJECT | id.0
 }
 
+/// The level factors of the object height terms in the game's tick
+/// (S-0104 claim 13): λ and λ<sub>air</sub> ([`object_levels_of`]).
+pub fn object_levels(w: &World) -> (i32, i32) {
+    use glasnost_sim::lighting::{NUKE_BRIGHTENING, storm_in_force};
+    let l = &w.lighting;
+    // spec: S-0104 claim 5, Nuke flash timing (brightening: ticks 0 to 30 after the detonation)
+    let brightening = l
+        .nuke
+        .is_some_and(|t| (0..NUKE_BRIGHTENING).contains(&(w.tick - t)));
+    object_levels_of(
+        &l.map,
+        storm_in_force(w),
+        glasnost_sim::domination::in_force(w),
+        brightening,
+    )
+}
+
+/// The level factors of the object height terms (S-0104 claim 13),
+/// thousandths per height level, with the map's sets `map` while an ion
+/// storm is in force (`storm`), a psychic domination is in force in any
+/// phase (`dominated`) and a nuke flash is in its brightening phase
+/// (`brightening`):
+/// - λ, chosen by claim 2's per-cell ranking: the ion storm's, then the
+///   dominator's, then the nuke flash's, then the normal one;
+/// - λ<sub>air</sub>: the ion storm's during a storm, the normal one
+///   otherwise.
+///
+/// Claim 13 leaves open whether an object's λ term switches as soon as a
+/// domination is over; here it does.
+pub fn object_levels_of(
+    map: &glasnost_map::Lighting,
+    storm: bool,
+    dominated: bool,
+    brightening: bool,
+) -> (i32, i32) {
+    let lambda = if storm {
+        // spec: S-0104 claim 2, per-cell height terms rank 1 (ion storm)
+        map.ion.level
+    } else if dominated {
+        // spec: S-0104 claim 2, per-cell height terms rank 2 (psychic dominator, in every phase)
+        // design: render (#74) claim 13 leaves open the λ term after a domination is over; it
+        // stops with the domination
+        map.dominator.level
+    } else if brightening {
+        // spec: S-0104 claim 2, per-cell height terms rank 3 (nuke flash brightening phase); Constants (its fixed set)
+        glasnost_sim::lighting::NUKE_SET.level
+    } else {
+        // spec: S-0104 claim 2, per-cell height terms rank 4 (normal)
+        map.normal.level
+    };
+    // spec: S-0104 claim 13 (λ_air: the ion storm's level factor while a storm is in force, the normal one otherwise)
+    let lambda_air = if storm {
+        map.ion.level
+    } else {
+        map.normal.level
+    };
+    (lambda, lambda_air)
+}
+
 /// Two translucency codes combined (S-0109 Terms): the larger of the two,
 /// except that 1 and 2 combine to 3.
 pub fn combine_codes(
@@ -3019,6 +3078,8 @@ impl Live {
             .iter()
             .filter_map(|&id| self.mobile(inputs, id))
             .collect();
+        let (lambda, lambda_air) = object_levels(&self.world);
+        self.painter.set_object_levels(lambda, lambda_air);
         let (entries, notes) = self.painter.mobiles(inputs, scene, &mobiles);
         self.notes.extend(notes);
         let mut by_code: BTreeMap<u32, GroundEntry> = mobiles

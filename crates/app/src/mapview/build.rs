@@ -1247,6 +1247,10 @@ pub struct Painter {
     /// The live game's debris pieces' image slots (S-0317 claims 22, 24
     /// and 27).
     pieces: super::piece_pool::PiecePool<PieceKey>,
+    /// The level factors of the object height terms (S-0104 claim 13),
+    /// thousandths per height level: λ, chosen by claim 2's per-cell
+    /// ranking, and λ<sub>air</sub>, the ion storm's or the normal one.
+    object_levels: (i32, i32),
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -1594,6 +1598,8 @@ impl<'a> Builder<'a> {
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
         self.p
             .compute_lights(self.map, l.ambient, l, self.options.detail);
+        // spec: S-0104 claims 2 and 13 (with no effect in force, λ and λ_air are the normal level factor)
+        self.p.object_levels = (l.level, l.level);
     }
 
     fn tile_row(&mut self, table: TileTable, brightness: i32) -> Shade {
@@ -4259,13 +4265,46 @@ impl<'a> Builder<'a> {
         let cell = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (the cell holding a position)
         let u = self.unit_depth(m.kind, m.idx, cell, z);
         let (hsv, _) = self.owner_colour(&m.owner);
-        let ground = self
-            .p
-            .lights
-            .get(cell)
-            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
+        let levels = self.p.lights.get(cell).map_or(
+            light::CellLevels {
+                unscaled_ground: NEUTRAL_BRIGHTNESS,
+                ..Default::default()
+            },
+            light::CellLevels::from,
+        );
+        let extra = light::ExtraLight {
+            unit: self.extra_light(b"ExtraUnitLight"),
+            infantry: self.extra_light(b"ExtraInfantryLight"),
+            aircraft: self.extra_light(b"ExtraAircraftLight"),
+        };
+        // spec: S-0104 claim 13 (the height above the surface, from the deck on a bridge deck)
+        let height = m.above;
+        // spec: S-0104 claim 13 (no cell counts as shadowed: which cells are shadowed needs the theater spec)
+        let shadowed_cell = false;
+        let object = match m.kind {
+            Kind::Infantry => light::LitObject::Infantry {
+                on_bridge_deck: m.deck,
+                shadowed_cell,
+                height,
+            },
+            Kind::Aircraft => light::LitObject::Aircraft { height },
+            _ => light::LitObject::Vehicle {
+                on_bridge_deck: m.deck,
+                shadowed_cell,
+                height,
+            },
+        };
+        let (lambda, lambda_air) = self.p.object_levels;
+        // spec: S-0104 claim 13, Formulas "Object brightness" (vehicles, infantry and aircraft)
+        let lit = light::object_brightness(
+            object,
+            levels,
+            lambda,
+            lambda_air,
+            extra,
+            &LightQuirks::default(),
+        );
         let items = if m.kind == Kind::Infantry {
-            // spec: S-0104 claim 13 (infantry: U + extra infantry light; shadowed cells need the theater spec)
             // spec: S-0610 claim 7 (a berserk infantry sprite body takes the berserk mask, unless the
             // centre of its cell is shrouded for the viewer; S-0102 F9's union after the shade row)
             let mask = self.protection_masks().berserk_of(
@@ -4273,17 +4312,9 @@ impl<'a> Builder<'a> {
                 super::protection::MobileKind::Infantry,
                 m.berserk == Some(true),
             );
-            let row = self
-                .house_row(hsv, ground + self.extra_light(b"ExtraInfantryLight"))
-                .with_mask(mask);
+            let row = self.house_row(hsv, lit).with_mask(mask);
             self.infantry_items(m, point, u, row)
         } else {
-            // spec: S-0104 claim 13 (vehicles: U + extra unit light; aircraft on the ground: U + extra aircraft light)
-            let extra = if m.kind == Kind::Aircraft {
-                self.extra_light(b"ExtraAircraftLight")
-            } else {
-                self.extra_light(b"ExtraUnitLight")
-            };
             let voxel = self
                 .import
                 .arts
@@ -4291,9 +4322,9 @@ impl<'a> Builder<'a> {
                 .is_some_and(|a| a.voxels.contains_key("body"));
             let b = if m.disabled && m.kind == Kind::Vehicles && voxel {
                 // spec: S-0104 claim 13 (Deactivated voxel vehicles: trunc(b / 2) ‰, before claim 15's shade-row mapping)
-                (ground + extra) / 2
+                lit / 2
             } else {
-                ground + extra
+                lit
             };
             // spec: S-0513 F9, S-0102 claim 34 (protection changes the ordinary brightness before the shade-row selection)
             let b = super::protection::brightness(m.protection, b);
@@ -4317,7 +4348,7 @@ impl<'a> Builder<'a> {
             // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
             let mut items: Vec<Item> = m
                 .harvesting
-                .and_then(|h| self.harvesting_item(m, h, u, ground + extra))
+                .and_then(|h| self.harvesting_item(m, h, u, lit))
                 .into_iter()
                 .collect();
             items.extend(body);
@@ -5934,7 +5965,16 @@ impl Painter {
             tile_items: Vec::new(),
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
+            object_levels: (0, 0),
         }
+    }
+
+    /// Sets the level factors of the object height terms (S-0104 claim
+    /// 13): `lambda` by claim 2's per-cell ranking and `lambda_air` for
+    /// aircraft, thousandths per height level. The next
+    /// [`Painter::mobiles`] draws with them.
+    pub fn set_object_levels(&mut self, lambda: i32, lambda_air: i32) {
+        self.object_levels = (lambda, lambda_air);
     }
 
     /// Sets the look of the building occupying each cell and whether the

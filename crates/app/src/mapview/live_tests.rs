@@ -5293,6 +5293,100 @@ fn claim_13_mobiles_on_a_bridge_deck_take_the_level_factor_terms() {
     );
 }
 
+/// #74: spec: S-0104 claim 2 (per-cell height terms: ion storm, then the dominator in any phase,
+/// then the nuke flash brightening phase, then normal) and claim 13 (λ_air: the ion storm's
+/// level factor during a storm, the normal one otherwise, never the nuke's or the dominator's)
+#[test]
+fn claim_13_object_level_factors_follow_the_per_cell_ranking() {
+    use super::live::object_levels_of;
+    use glasnost_sim::lighting::NUKE_SET;
+    // Invented level factors, thousandths per height level.
+    let mut map = glasnost_map::Lighting::default();
+    map.normal.level = 8;
+    map.ion.level = 21;
+    map.dominator.level = 34;
+    assert_eq!(object_levels_of(&map, false, false, false), (8, 8));
+    assert_eq!(object_levels_of(&map, true, true, true), (21, 21));
+    assert_eq!(object_levels_of(&map, false, true, true), (34, 8));
+    assert_eq!(
+        object_levels_of(&map, false, false, true),
+        (NUKE_SET.level, 8)
+    );
+}
+
+/// #74: spec: S-0104 claim 13 (aircraft: U + extra aircraft light + (h ÷ 208)·λ_air)
+#[test]
+fn claim_13_aircraft_take_the_air_level_factor() {
+    use glasnost_render::light::brightness_rho;
+    // An invented level factor, thousandths per height level.
+    const LAMBDA_AIR: i32 = 30;
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let (mut import, catalogue, mut assets) =
+        context_with(&format!("{RULES}[AircraftTypes]\n1=JETX\n"));
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [("body".to_string(), b"jetx.vxl".to_vec())].into(),
+            ..Default::default()
+        },
+    );
+    assets.insert(
+        b"jetx.vxl",
+        VxlWriter {
+            model: &synthetic_model(),
+        }
+        .write(),
+    );
+    let map = decode(
+        &Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new()),
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    let u = painter.ground_light(glasnost_map::CellXY::new(2, 3));
+    painter.set_object_levels(0, LAMBDA_AIR);
+    let jet = |above| Mobile {
+        above,
+        ..plain_mobile(Kind::Aircraft)
+    };
+    let mut rhos = |m| {
+        let (e, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        lit_shades(&e[0].items)
+            .iter()
+            .map(|s| s.rho)
+            .collect::<Vec<_>>()
+    };
+    let rho = |b: i32| brightness_rho(b) as u16;
+    let ground = rhos(jet(0));
+    assert!(
+        !ground.is_empty() && ground.iter().all(|&r| r == rho(u)),
+        "{ground:?}"
+    );
+    // 1500 ÷ 208 = 7
+    let high = rhos(jet(1500));
+    assert!(
+        !high.is_empty() && high.iter().all(|&r| r == rho(u + 7 * LAMBDA_AIR)),
+        "{high:?}"
+    );
+}
+
 /// The items `painter` draws for MANX at height 520 with shadow height
 /// `hs`, the generic shadow sprite `file` among the assets.
 fn generic_shadow_items(
