@@ -1601,8 +1601,13 @@ impl<'a> Builder<'a> {
         }
         self.p.sources = sources;
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
-        self.p
-            .compute_lights(self.map, l.ambient, l, self.options.detail);
+        self.p.compute_lights(
+            self.map,
+            self.rules,
+            l.ambient,
+            l,
+            self.options.detail,
+        );
         // spec: S-0104 claims 2 and 13 (with no effect in force, λ and λ_air are the normal level factor)
         self.p.object_levels = (l.level, l.level);
     }
@@ -6009,10 +6014,17 @@ impl Painter {
     /// Lights every cell afresh with ambient `ambient` (hundredths) and
     /// lighting set `set`'s level factor, ground bias and tint (S-0104
     /// claims 5 and 9).
-    fn compute_lights(&mut self, map: &Map, ambient: i32, set: LightingSet, detail: DetailLevel) {
+    fn compute_lights(
+        &mut self,
+        map: &Map,
+        rules: Option<&SimRules>,
+        ambient: i32,
+        set: LightingSet,
+        detail: DetailLevel,
+    ) {
         let side = i32::from(map.cells.footprint().coordinate_side());
         let mut cells = vec![None; (side * side) as usize];
-        let q = LightQuirks::default();
+        let q = light_quirks(rules);
         // spec: S-0525 claim 13 (field lights add up with the other light sources)
         let sources: Vec<LightSource> = self
             .sources
@@ -6085,7 +6097,13 @@ impl Painter {
         ambient: i32,
         set: LightingSet,
     ) {
-        self.compute_lights(inputs.map, ambient, set, inputs.options.detail);
+        self.compute_lights(
+            inputs.map,
+            inputs.rules,
+            ambient,
+            set,
+            inputs.options.detail,
+        );
         let tiles = std::mem::take(&mut self.tile_items);
         for &(i, c) in &tiles {
             let Some(item) = items.get_mut(i) else {
@@ -6520,6 +6538,21 @@ impl Painter {
         *scene = b.built.scene;
         (out, b.built.notes)
     }
+}
+
+/// The lighting switches the cell light reads: S-0104's at their defaults
+/// (none is set from a ruleset yet), and the falloff distance's root and
+/// rounding from the ruleset's `quirks.table_root_distance` and
+/// `quirks.chop_rounding` when the rules resolved (S-0104 claim 11).
+pub(super) fn light_quirks(rules: Option<&SimRules>) -> LightQuirks {
+    let mut q = LightQuirks::default();
+    if let Some(r) = rules {
+        // spec: S-0104 claim 11, Formulas "Cell light" (S-0204's quirks.table_root_distance)
+        q.table_root_distance = r.quirks.table_root_distance;
+        // spec: S-0104 Formulas "Cell light" (S-0205's quirks.chop_rounding)
+        q.chop_rounding = r.quirks.chop_rounding;
+    }
+    q
 }
 
 /// Whether a building with health `h` of strength `strength` is damaged
