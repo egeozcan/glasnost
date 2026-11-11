@@ -21,6 +21,12 @@ systematic rows (10, 18, 20) the record and the spec now disagree; the measureme
 **Q-2951** names them. Intake 123's changes (the assaulter's "may occupy" and capture's hunt rule)
 leave every arena game as it was; the 64-seed counts of those six rows are unchanged.
 
+**Since intake 124** ([intake124.md](intake124.md)): S-0217 (new) and S-0508 r39 answered
+Q-2951. Both arena houses now make S-0217's checks, and each check puts the bunker occupiers out
+with *hunt*. Rows 9, 10, 18 and 4 now give the record's outcome; rows 20 and 21 move further from
+it, as does row 14 (CAOS–E1, side A), and rows 13 and 15 (CAOS–E1 and CAOS–E2, side B) fail
+again. **Q-2987** names those rows.
+
 ## Method
 
 As A6's ([a6-arena-triage.md](a6-arena-triage.md), *Method*): `arena --watch` and `--trace-summary`
@@ -119,7 +125,7 @@ beside its class (b).
 | request | question | interim |
 |---|---|---|
 | [Q-2927](../../spec/requests/Q-2927-may-occupy-for-an-assaulter-that-is-not-an-occupier.md) | What "may occupy this one" (S-0215 claims 23 and 27, S-0309 claim 25 (e)) means for an assaulter type that is not an occupier type: S-0508 claim 1's test (never true for it), claim 14's assault eligibility, or claim 1 without the unit-type condition | **answered** by S-0508 r19 claim 1 (claim 14's assault eligibility for claims 23 and 27; part (e) asks only occupier types); built at intake 123 ([intake123.md](intake123.md)) |
-| [Q-2926](../../spec/requests/Q-2926-occupiers-of-a-test-house-refused-at-a-full-building.md) | Whether a computer-controlled occupier refused at a full building returns to *hunt*; whether forced *capture* clears the queued *hunt* for good; whether claim 25 (e) counts units already bound for the building; whether the *area guard* search takes the building before the queued *hunt* starts | **answered** by S-0508 r19 claims 1 and 4: the chain as built is the original's (no place held, no *hunt* after a refusal for an occupier type). The rows still fail; intake 123 filed **Q-2951** naming them ([intake123.md](intake123.md)) |
+| [Q-2926](../../spec/requests/Q-2926-occupiers-of-a-test-house-refused-at-a-full-building.md) | Whether a computer-controlled occupier refused at a full building returns to *hunt*; whether forced *capture* clears the queued *hunt* for good; whether claim 25 (e) counts units already bound for the building; whether the *area guard* search takes the building before the queued *hunt* starts | **answered** by S-0508 r19 claims 1 and 4: the chain as built is the original's (no place held, no *hunt* after a refusal for an occupier type). The rows still fail; intake 123 filed **Q-2951** naming them ([intake123.md](intake123.md)), which S-0217 and S-0508 r39 answered; intake 124 built them and filed **Q-2987** for the rows that still disagree ([intake124.md](intake124.md)) |
 
 Q-2928 to Q-2935 are unused.
 

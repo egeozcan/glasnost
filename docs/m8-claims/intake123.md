@@ -89,6 +89,10 @@ S-0309 claim 25 (e)), asks which step the original takes differently, and points
 M-0001's set-up. That part stops there; nothing was tuned toward the records. Wishlist A6b-1 now
 names G21 and Q-2951.
 
+**Since then:** S-0217 (new) and S-0508 r39 answered Q-2951; intake 124 built them
+([intake124.md](intake124.md)). What the rows above do after that, and the request it filed for
+the rows that still disagree (**Q-2987**), are in that ledger.
+
 ## Play-fixes layer
 
 r19's original-only rules here (no *hunt* after a refusal for an occupier type; units on their way
