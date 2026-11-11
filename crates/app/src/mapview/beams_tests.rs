@@ -755,3 +755,63 @@ fn railgun_zero_length_beam_draws_nothing() {
     );
     assert!(out.color.iter().all(|&c| widen(c) == [0, 0, 0]), "no pixel");
 }
+
+/// spec: S-0607 claim 21 (the wave ends when its firer or its target leaves play, or when its
+/// firer's target is no longer the wave's), claim 25 (once ended, its ends are no longer updated)
+///
+/// #72: a target removed by a turn after the wave's own leaves the wave not yet ended at the end
+/// of the tick; its ends stay where they last were instead of jumping to the world origin.
+#[test]
+fn a_wave_keeps_its_ends_when_its_target_leaves_play_before_it_ends() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::rules::Kind as SimKind;
+    use glasnost_sim::testkit;
+    use glasnost_sim::world::{ObjectId, Target};
+    let mut w = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let cart = testkit::spawn(
+        &mut w,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, -2, 0),
+        16384,
+    );
+    let walker = testkit::spawn(
+        &mut w,
+        SimKind::Infantry,
+        "WALKER",
+        1,
+        testkit::mid(24, 2, 0),
+        49152,
+    );
+    w.obj_mut(walker).expect("the walker").target = Some(Target::Object(cart));
+    let id = ObjectId(1 << 20);
+    w.waves.insert(
+        id,
+        glasnost_sim::lift::Wave {
+            firer: walker,
+            target: Target::Object(cart),
+            a: glasnost_num::soft::F64::ZERO,
+            b: glasnost_num::soft::F64::ZERO,
+            ended: false,
+        },
+    );
+    let mut lines = Lines::new(Settings::default());
+    lines.take(
+        &w,
+        &Effect::Wave {
+            id,
+            from: w.reference_point(walker),
+            to: w.reference_point(cart),
+        },
+        0,
+        0,
+    );
+    lines.after_tick(&w, 1, 1);
+    let held = lines.waves[&id];
+    assert_ne!(held.e1, Pos::default(), "the vehicle target's centre");
+    w.objects.remove(&cart);
+    lines.after_tick(&w, 2, 1);
+    let after = lines.waves[&id];
+    assert_eq!((after.e1, after.e2), (held.e1, held.e2));
+}

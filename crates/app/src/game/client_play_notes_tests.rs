@@ -935,3 +935,59 @@ fn a_unit_made_in_play_gets_one_selection_mark() {
         .count();
     assert_eq!(marks, 0, "no fallback corner marks");
 }
+
+/// #78: a view that moves between ticks (a radar click, a jump to a group, a scroll) culls the
+/// status extras against itself before the next tick, not against the view the last tick drew.
+/// spec: S-0111 claim 1 (status extras are drawn only while the status anchor lies within the
+/// battlefield view widened by the margins), claim 3 (a selected unit's health bar)
+#[test]
+fn status_extras_follow_a_view_moved_between_ticks() {
+    use crate::mapview::combat::{BRACKET_SPRITE, OVERLAY_PALETTE, PIP_SPRITE};
+    use crate::mapview::live::sim_code;
+    use glasnost_fmt::image::IndexedImage;
+    use glasnost_fmt::shp::{ShpWriter, WriteFrame};
+    use glasnost_render::scene::Group;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let unit = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    let sprite = |frames: usize, (w, h): (u32, u32)| {
+        ShpWriter {
+            width: w as u16,
+            height: h as u16,
+            frames: (0..frames)
+                .map(|_| WriteFrame {
+                    x: 0,
+                    y: 0,
+                    image: IndexedImage::new(w, h, vec![1; (w * h) as usize]).unwrap(),
+                    compression: 1,
+                })
+                .collect(),
+        }
+        .write()
+    };
+    s.loaded.assets.insert(PIP_SPRITE, sprite(21, (4, 4)));
+    s.loaded.assets.insert(BRACKET_SPRITE, sprite(2, (36, 10)));
+    s.loaded.assets.insert(OVERLAY_PALETTE, vec![0; 768]);
+    s.play.selection = vec![unit];
+    let marks = |s: &Session| {
+        s.scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(unit)))
+            .count()
+    };
+    let home = s.centre();
+    s.update_marks();
+    let shown = marks(s);
+    assert!(shown > 0, "the selected unit's extras in view");
+    // A redraw (as a tick's) with the view at the far corner of the map culls them.
+    s.set_centre((-100_000, -100_000));
+    assert_ne!(s.centre(), home, "the view moved");
+    s.with_live(|live, inputs, scene| live.redraw_status(inputs, scene));
+    assert_eq!(marks(s), 0, "far away: culled");
+    // Back between ticks: the frame's marks update brings them back at once.
+    s.set_centre(home);
+    s.update_marks();
+    assert_eq!(marks(s), shown, "back in view before the next tick");
+}

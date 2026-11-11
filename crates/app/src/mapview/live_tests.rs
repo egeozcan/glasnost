@@ -56,6 +56,56 @@ fn pacing_has_no_catch_up() {
     assert_eq!(n, 10);
 }
 
+/// #76. spec: S-0201 claim 4 (each cycle lasts 16 × s ms, or as long as its work if longer),
+/// claim 17 (a network game's period ⌊1000 ÷ cap⌋ likewise), claim 3 (a late cycle is not made
+/// up). Frames at display rates that are not a multiple of the period still give 1000 ÷ period
+/// ticks per second; whole-millisecond timestamps with a millisecond of jitter do not flip the
+/// cycle between two and three frames.
+#[test]
+fn pacing_keeps_the_period_between_display_frames() {
+    // Ticks over ten seconds of frames at `frame(i)` ms, the pacer asked once per frame (the
+    // network path tells it of the frames it does not tick in).
+    let ticks = |frame: &dyn Fn(i64) -> i64, frames: i64, period: i64| {
+        let mut p = Pacer::default();
+        let mut n = 0;
+        for i in 0..frames {
+            let t = frame(i);
+            if p.remaining_for(t, period) == 0 && p.due_after(t, period) {
+                n += 1;
+            } else {
+                p.waited(t);
+            }
+        }
+        n
+    };
+    // 75 Hz (13.33 ms, truncated) and 144 Hz (6.94 ms) at 16 ms: 62.5 per second, not 37.5 or 48.
+    let n = ticks(&|i| i * 40 / 3, 750, 16);
+    assert!((622..=626).contains(&n), "75 Hz: {n}");
+    let n = ticks(&|i| i * 1000 / 144, 1440, 16);
+    assert!((622..=626).contains(&n), "144 Hz: {n}");
+    // 60 Hz at 32 ms: 31.25 per second, not 30.
+    let n = ticks(&|i| i * 50 / 3, 600, 32);
+    assert!((310..=313).contains(&n), "60 Hz, 32 ms: {n}");
+    // 60 Hz with ±1 ms of jitter at cap 30's 33 ms: 30.3 per second, not fewer than 30.
+    let jitter = [0, 1, -1, 0, -1, 1];
+    let n = ticks(&|i| i * 50 / 3 + jitter[(i % 6) as usize], 600, 33);
+    assert!((301..=304).contains(&n), "60 Hz ± 1 ms, 33 ms: {n}");
+    // A frame slower than the period, then a stall: one tick each, then the period from there.
+    let mut p = Pacer::default();
+    assert!(p.due_after(0, 16));
+    p.waited(10);
+    assert!(p.due_after(40, 16), "a slow frame ticks once");
+    p.waited(50);
+    assert!(p.due_after(56, 16), "the phase from the slow frame's start");
+    assert!(p.due_after(400, 16), "after a stall");
+    p.waited(410);
+    assert!(
+        !p.due_after(415, 16),
+        "no catch-up: 16 ms from the stall's frame"
+    );
+    assert!(p.due_after(416, 16));
+}
+
 /// spec: S-0102 claim 6 (enter before the first strictly greater key, so a
 /// newcomer follows equal keys)
 #[test]
@@ -6478,6 +6528,69 @@ fn claim_18_a_disguised_unit_shows_no_insignia_to_whom_it_fools() {
     assert_eq!(status(&mut live, &mut scene), 0, "disguised to house 0");
     live.set_viewer(Some(HouseId(1)));
     assert_eq!(status(&mut live, &mut scene), 1, "its owner sees it");
+}
+
+/// #73. spec: S-0111 claim 3 (a hovered unit that appears disguised to the local player's house,
+/// S-0516 claim 35, shows a health bar only when its disguise has a house; the restriction does
+/// not apply to a selected unit, or to a hovered unit that does not appear disguised)
+#[test]
+fn claim_3_a_hovered_unit_disguised_without_a_house_shows_no_health_bar() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, _cart, walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let status = |live: &mut Live, scene: &mut Scene| {
+        live.redraw_status(&inputs, scene);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(walker)))
+            .count()
+    };
+    live.set_viewer(Some(HouseId(0)));
+    live.set_marks(&[], Some(walker));
+    assert!(status(&mut live, &mut scene) > 0, "hovered, not disguised");
+    let disguise = |house| {
+        Some(glasnost_sim::cloak::disguise::Disguise {
+            what: None,
+            house,
+            since: 0,
+        })
+    };
+    live.world.obj_mut(walker).unwrap().cloak.disguise = disguise(None);
+    assert!(glasnost_sim::cloak::disguise::appears_disguised(
+        &live.world,
+        walker,
+        Some(HouseId(0))
+    ));
+    assert_eq!(
+        status(&mut live, &mut scene),
+        0,
+        "hovered, disguised without a house"
+    );
+    live.set_marks(&[walker], None);
+    assert!(status(&mut live, &mut scene) > 0, "selected, disguised");
+    live.set_marks(&[], Some(walker));
+    live.world.obj_mut(walker).unwrap().cloak.disguise = disguise(Some(HouseId(0)));
+    assert!(
+        status(&mut live, &mut scene) > 0,
+        "hovered, disguised with a house"
+    );
+    live.world.obj_mut(walker).unwrap().cloak.disguise = disguise(None);
+    live.set_viewer(Some(HouseId(1)));
+    assert!(status(&mut live, &mut scene) > 0, "its owner is not fooled");
 }
 
 /// #66. spec: S-0111 claim 18 (no insignia when cloak presentation hides the object from the

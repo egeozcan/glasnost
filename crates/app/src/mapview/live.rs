@@ -117,6 +117,11 @@ impl Pacer {
         due
     }
 
+    /// Tells the pacer of a drawn frame at host time `now_ms` that ran no
+    /// tick without asking [`Pacer::due_after`] (a network game waiting on
+    /// its period or on the other peers).
+    pub fn waited(&mut self, _now_ms: i64) {}
+
     /// Milliseconds until the next tick is due (0 when it is).
     pub fn remaining(&self, now_ms: i64, speed: u8) -> i64 {
         self.remaining_for(now_ms, period_ms(speed))
