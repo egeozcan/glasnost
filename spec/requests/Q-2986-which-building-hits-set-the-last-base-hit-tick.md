@@ -1,9 +1,9 @@
 ---
 id: Q-2986
 title: Which hits on a building set the last base hit tick of S-0217
-status: open
+status: answered
 related: [S-0217, S-0302]
-answered-by: []
+answered-by: [S-0217]
 ---
 
 ## Need
