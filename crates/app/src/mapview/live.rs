@@ -1542,6 +1542,13 @@ impl Live {
         self.sync_ground();
     }
 
+    /// Brings the drawing up to a game that moved on without it: a game
+    /// put in place (a rejoin, M9 N5) or ticks run directly (the
+    /// performance benchmark). Call [`Live::redraw`] after.
+    pub fn resume(&mut self) {
+        self.after_tick();
+    }
+
     /// Sets the drawing's quirk switches (S-0102 Edge cases); the painter
     /// reads them from the next drawing on.
     pub fn set_view_quirks(&mut self, q: super::quirks::ViewQuirks) {
@@ -1943,6 +1950,12 @@ impl Live {
     #[cfg(test)]
     pub(super) fn protection_look_of(&self, id: ObjectId) -> Option<super::protection::Look> {
         self.protection_look(self.world.obj(id)?)
+    }
+
+    /// Every playing animation's position (tests).
+    #[cfg(test)]
+    pub(super) fn anim_positions(&self) -> Vec<glasnost_sim::world::Pos> {
+        self.anims.iter().map(|a| a.pos).collect()
     }
 
     /// Every playing animation's layer (tests).

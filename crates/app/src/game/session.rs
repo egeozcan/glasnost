@@ -632,7 +632,7 @@ impl Session {
         self.play.capture = super::capture::Ring::new(&self.play.game);
         self.play.capture.layers = layers;
         self.with_live(|live, inputs, scene| {
-            live.after_tick();
+            live.resume();
             live.redraw(inputs, scene);
         });
         let house = self.play.local;

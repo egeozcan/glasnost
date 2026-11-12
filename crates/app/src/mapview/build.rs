@@ -1259,6 +1259,9 @@ pub struct Painter {
     /// thousandths per height level: λ, chosen by claim 2's per-cell
     /// ranking, and λ<sub>air</sub>, the ion storm's or the normal one.
     object_levels: (i32, i32),
+    /// The shadowed cells among those the live game's mobile objects stand
+    /// on (S-0104 Terms, claim 13); empty for the static scene.
+    shadowed_cells: BTreeSet<CellXY>,
     /// The effect tint the tintable tables show, hundredths (S-0104
     /// claims 3 and 5); `None` for every table's own tint.
     effect_tint: Option<[i32; 3]>,
@@ -6031,9 +6034,16 @@ impl Painter {
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
             object_levels: (0, 0),
+            shadowed_cells: BTreeSet::new(),
             effect_tint: None,
             view_quirks: ViewQuirks::default(),
         }
+    }
+
+    /// Sets the shadowed cells (S-0104 Terms, claim 13) the next
+    /// [`Painter::mobiles`] lights its vehicles and infantry by.
+    pub fn set_shadowed_cells(&mut self, cells: BTreeSet<CellXY>) {
+        self.shadowed_cells = cells;
     }
 
     /// Sets the rendering quirk switches; what is drawn next reads them.
