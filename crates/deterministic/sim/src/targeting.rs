@@ -2298,12 +2298,12 @@ pub fn click(
             continue;
         }
         let a = action_in(w, house, selection, id, on, mods);
-        let o = order(w, house, id, a, on, mods, am);
+        let o = orders(w, house, id, a, on, mods, am);
         // spec: S-0214 claim 14 (only the first object of the selection gives the acknowledgement, and only when it gets an order)
         // spec: S-0214 claim 30 (one move-target marker, from the first object only: a mobile actor handling a cell click
         // with action move, a force-move or a move converted to attack-move to a place included; never a building's
         // click, a no-move click, an object click or a click refused before dispatch)
-        if i == 0 && o.is_some() {
+        if i == 0 && !o.is_empty() {
             result.acknowledge = Some(id);
             result.marker = a == Action::Move
                 && matches!(on, ClickOn::Cell(_))
@@ -2437,9 +2437,32 @@ pub fn held_without_order(
     (berserk || melee_held) && !tote
 }
 
+/// The orders that one actor's action gives (S-0214 table M, claim 10), in
+/// order: [`order`]'s, then, for a deploy on a factory-marked absorbing
+/// building, its unload order after the primary order (table M part 3;
+/// #411).
+pub fn orders(
+    w: &World,
+    house: HouseId,
+    id: ObjectId,
+    a: Action,
+    on: ClickOn,
+    mods: Modifiers,
+    attack_move: bool,
+) -> Vec<Order> {
+    let first = order(w, house, id, a, on, mods, attack_move);
+    // spec: S-0214 table M part 3 (deploy on a building: a primary order if it is factory-marked, and an unload behaviour order if it is an absorbing building) and S-0605 claim 11
+    let unload = (a == Action::Deploy
+        && first == Some(Order::Primary { actor: id })
+        && crate::structures::absorb::is_absorber(w, id))
+    .then_some(Order::Deploy { actor: id });
+    first.into_iter().chain(unload).collect()
+}
+
 /// The order that one actor's action gives (S-0214 table M, claim 10),
 /// with claim 9's rule for cells outside the usable area; `attack_move`
-/// asks for the attack-move translation of claim 5.
+/// asks for the attack-move translation of claim 5. A factory-marked
+/// absorbing building's second deploy order is [`orders`]'s.
 pub fn order(
     w: &World,
     house: HouseId,
@@ -2481,7 +2504,7 @@ pub fn order(
             (Action::Attack, _) => behaviour(Behaviour::Attack, Some(target), None),
             // spec: S-0213 claim 11 (a detonate action on an own building that carries a bomb)
             (Action::Detonate, _) => Some(Order::Detonate { actor: id }),
-            // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; the unload orders of gap generators, absorbing buildings and garrisons are not modelled)
+            // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; an absorbing building's unload order follows it, [`orders`]; the unload orders of gap generators and garrisons are not modelled)
             (Action::Deploy, _) if factory_marked(w, id) => Some(Order::Primary { actor: id }),
             // spec: S-0214 table M part 3 and S-0605 claim 11 (deploy: an unload behaviour order for an absorbing building)
             (Action::Deploy, _) if crate::structures::absorb::is_absorber(w, id) => {
