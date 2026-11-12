@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 27
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540, Q-1590]
+requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540, Q-1590, Q-2999]
 supersedes: []
 ---
 
@@ -27,6 +27,8 @@ Damage follows the particle's own kind, including gas when kinds are mixed (clai
 Claims 23 to 31 say how every particle is drawn (presentation only): which are drawn, palette and
 brightness, image frame, translucency, placement, the pixel colours of sparks and railgun
 particles, draw order, and the lights and laser of a system.
+Claim 8a says what a smoke particle type whose next type leads back to it does, and claim 20a how
+large a spark burst or a railgun line can be; both answer Q-2999.
 
 **What this spec does not restate.**
 - **The gas kind,** the shared gas system, and every system's lifetime count-down and leaving
@@ -136,6 +138,12 @@ stands alone. This spec adds the terms after them.
 - **Light-alpha value.** S-0104's per-screen-pixel value (Terms, claim 15), 127 by default.
 - **Spark counter** *K*. An integer of a spark system. It starts at the type's spark-turns field
   and goes down by 1 in each turn that starts with it positive (claim 15).
+- **Next-type link, next-type loop.** A particle type that names a next particle type has a
+  *next-type link* to that type; no other type has one. A *next-type loop* is a set of particle
+  types, each with a next-type link to the next and the last with one to the first; a type whose
+  next type is itself is a next-type loop of one type. A next-type link *lies on* a next-type loop
+  when both its types belong to that loop. A type has at most one next-type link, so it belongs to
+  at most one next-type loop. Whether a link lies on a loop is a property of the types alone.
 
 ## Behaviour
 
@@ -515,9 +523,52 @@ stands alone. This spec adds the terms after them.
    position. Both have target point (0, 0, 0). Each takes its creation draws (S-0202 claim 15),
    then one raw value *r*; its translucency is the dead particle's plus 25 percentage points when *r* rem 6 ≠ 0, otherwise the dead particle's unchanged value (drawn only). Each successor's speed
    *S* is set to the dead particle's, but its flight direction and velocity are its own. Observably, the draws come in this order: *o*ₓ, then *o*ᵧ, then the first successor's creation draws and its translucency draw, then the second's; the dead particle is removed after both. This claim gives the successors made in a smoke system (claim 3); the successor made in a gas system is S-0613 claim 7's.
+   A next type that leads back to the dead particle's type is claim 8a's case; in our engine a
+   particle with claim 8a's loop mark does not split.
    - Backing: `measurable` (scenario P7, whose named test rules explicitly supply a next type).
      In a marked system: `measurable` (scenario P1 part b).
    - Confidence: high. In a marked system: medium, until P1 part b has run.
+
+8a. **Next-type loops.** The original takes a next particle type as named, also when it is the
+   particle's own type or leads back to it through other next-type links (Terms, next-type loop):
+   it neither refuses nor changes such data when it loads the rules, and it sets no limit on the
+   particles of a smoke system. The particle-cap field does not limit smoke emission (claim 9) or
+   claim 8's successors. The two successors of a split are added after every particle the system
+   holds, and the removal pass that makes them goes from the newest particle to the oldest, so a
+   successor is not reached again in that pass: its first update comes in the system's next turn.
+   So a split never repeats within one turn, and a next-type loop cannot keep a turn of a smoke
+   system going. Across turns, each particle of a loop that dies in a smoke system, in whatever
+   way, is replaced by two particles of the loop, so the number of particles, and the draws that
+   their updates and splits take, can double once per particle lifetime without end. A marked
+   system leaves play only in a turn in which it holds no particle (claim 22), so a system whose
+   particles all belong to such a loop never leaves play, marked or not, unless claim 1's cloak
+   removal removes it. When the program can get no room for a further successor, that successor
+   is not made and takes no translucency draw; what else the game does then is not established.
+   This differs from a spark burst or a railgun line, where a particle that gets no room makes
+   the original fail (claim 20a). The difference is meant: each case states the original's own
+   result. A next-type loop in a gas system replaces each dead particle by one successor (S-0613
+   claim 7), so its count does not grow; this claim does not change it.
+
+   Our engine departs from this for a smoke system, with no switch. A successor made by claim 8's
+   split through a next-type link that lies on a next-type loop carries a *loop mark*, which is
+   part of its saved state. Its own type belongs to that loop, so its own next-type link lies on
+   the loop too: a marked particle with the dead mark in a smoke system is removed without
+   splitting, in claim 8's place in the removal pass, and takes none of claim 8's draws (neither
+   displacement raw value, nor either successor's creation draws or translucency draw). A
+   particle made in any other way (an emission, claim 9; a detonation's first particle, S-0613
+   claim 4; a gas system's successor; a split through a link that lies on no loop) carries no
+   mark and splits by claim 8 unchanged. So one unmarked particle of a loop type leads to at most
+   two particles of the loop, and neither makes more. Next-type links that lie on no loop, and the
+   particles made through them, are unchanged. The importer warns once for each next-type loop.
+   - Backing for the acceptance at load, the split's place in the turn and the growth across
+     turns: `measurable` (scenario P32 parts a and b). `unmeasured` for what happens when no room is
+     left, since a run is stopped long before, and for the absence of a limit on the system's
+     particles, since no finite run shows every count. Confidence: high that the successors take
+     their first update in the next turn; medium that no limit is checked, for the absence of any
+     check at load and for the system never leaving play, until P32 runs; low for the result when
+     no room is left.
+   - Backing for the departure: a design rule, not an oracle value; `measurable` for our engine
+     (P32's engine runs). Confidence: high for the departure, a design rule.
 
 9. **Smoke emission and end.** A turn emits when all of these hold:
    - the system is not marked,
@@ -767,6 +818,40 @@ stands alone. This spec adds the terms after them.
     - Backing (the original): `unmeasured`: the original stops or faults in these cases, so there is no behaviour to compare; the negative-radius case is not known (Open questions). One case is an exception: for the spark-turns case the original's behaviour is `measurable` (scenario P22, part c). The railgun line with *n* ≥ 1 and no held type is a second exception: that the original stops is `measurable` (scenario P31 part c, with part d establishing, through the missing first particle at a detonation, that the `<none>` reading gives no held type).
     - Confidence (the original): high that the original stops or faults in the cases other than the railgun line; high for the original's spark-turns behaviour outside the fire place; medium for its let-go end while held in the fire place, which is `unmeasured` (claim 1's place-and-kind items); medium for the railgun stop, until P31 parts c and d have run.
     - Our engine's behaviour in every case of this claim, the railgun beam with *n* ≥ 1 and no held type included, is a departure by decision. Backing: `unmeasured` (a design decision; no measurement of the original decides it). Confidence: high (fixed by this claim).
+
+20a. **Very large spark and railgun counts.** The original sets no limit on the sparks of one
+    burst (*c*, F10) or the particles of one railgun line (*n*, F12), and none on the particles
+    of a system or of the whole game: it makes them one after another in the one turn, each with
+    its draws (claims 15 and 17). This holds for a system with a held type; claim 20 gives the
+    original's result for one without. A particle cap near 2³¹ asks for up to about 2³¹ sparks,
+    and a line asks for more particles the larger its particles-per-lepton field and its distance
+    (F12 gives the count's wrap past 2³¹). The original makes particles until the program can get
+    no room for a further one; it then fails (unlike a smoke successor, which is skipped, claim
+    8a), so a large enough count stops the game, while a smaller one only makes a long turn,
+    after which play goes on. The data is not refused or changed at load.
+
+    Our engine departs from this, with no switch: a burst or a line makes at most 4096 particles.
+    A burst whose *c* is above 4096 takes the count raw value and the three discarded raw values
+    as F10 gives, then makes 4096 sparks, each with its creation draws and its three velocity raw
+    values, in claim 15's order; its light draw follows as usual. A line whose *n* is above 4096
+    makes 4096 particles, each with claim 17's three ranged draws, its creation draws and four
+    more ranged draws, in that order, and is placed along the line as a line of 4096 particles
+    would be (drawing only). Counts up to 4096, and the bursts and lines that have them, are
+    unchanged. The limit applies only to a burst or line that makes particles: a burst of a spark
+    system with a held type and *h* ≥ 1, and a line of a railgun system with a held type. A spark
+    system with no held type or with *h* = 0, and a railgun system with no held type, follow
+    claim 20 whatever their count: they take only the draws that claim 20 gives and make no
+    particle. A spark system whose spark-turns field is 0 or less makes no burst (claims 15 and
+    20), and a turn whose decision fails, a burst whose *c* is 0 or less and a line with *n* ≤ 0
+    make no particle (claims 15 and 17, F10, F12). None of these cases is changed by the limit.
+    - Backing for the original: `measurable` (scenario P33: a count above 4096 that the original
+      completes, counted by the draws its turn takes). `unmeasured` for the point at which the
+      original fails, since that depends on the room the program has, and for the absence of a
+      limit on either count as such, since no finite run shows every count. Confidence: medium
+      that no limit is checked on either count; medium that a count far beyond the program's room
+      stops the game; low for the count at which it does.
+    - Backing for the departure: a design rule, not an oracle value; `measurable` for our engine
+      (P33's engine runs). Confidence: high for the departure, a design rule.
 
 21. **Absent held-type key.** A particle system type section that is read without a held-type key
     names, as its held type, a particle type with the empty name. That type is registered by
@@ -1144,9 +1229,14 @@ On contact the particle gets the dead mark. Its final position is (trunc(*p*ₓ)
 trunc(height)). Without contact it is *B*. The velocity after a contact is not kept: the particle
 is removed.
 
-**F12. Railgun line size.** With Δ = target point − system position (integers):
-*L* = trunc(*r*(Δₓ² + Δᵧ² + Δ_z²)), the sum in double precision, and *n* = trunc(*L* × *p*) in
-double precision.
+**F12. Railgun line size.** With Δ = target point − system position (integers): *L* =
+trunc(*r*(Δₓ² + Δᵧ² + Δ_z²)), the sum in double precision, and *n* = trunc(*L* × *p*) in double
+precision, truncated toward zero to a 64-bit integer and then wrapped to its low 32 bits as a
+signed integer. A product with no 64-bit integer form (of magnitude 2⁶³ or more, infinite or not
+a number) gives *n* = 0, and so no particle. So a product from 2³¹ to 2³² − 1 gives a negative
+*n* and no particle, a larger one below 2⁶³ gives the wrapped value, and one of 2⁶³ or more gives
+none (confidence medium; such a product needs a particles-per-lepton field far above any line's
+distance in leptons, `unmeasured`). Claim 20a limits the particles made.
 
 **F13. Normalised stage-advance value.** At creation, with *P* the creation position, *Q* the
 target point, *u* the flight direction and *S* the speed:
@@ -1366,6 +1456,13 @@ velocity draws, then the light draw, then one draw per live spark, oldest first.
   it. A frame the file does not hold draws nothing in our engine (Open questions).
 - **Short colour lists** (claim 29): a departure with an importer warning and no quirk switch, since it affects drawing only.
 - **Bad data** follows claim 20.
+- **A next-type loop** (claim 8a) is a departure, with no switch: in a smoke system a particle made
+  through a next-type link that lies on a loop is removed without splitting and takes no split
+  draws, and the importer warns for each loop. The original's system never leaves play and can
+  double its particles once per particle lifetime.
+- **Very large burst and line counts** (claim 20a) are a departure, with no switch: a burst or a line
+  makes at most 4096 particles, with the draws claim 20a lists. The original makes them all, and a
+  count beyond the program's room stops it.
 
 ## Import mapping
 
@@ -1425,7 +1522,7 @@ Rules file, particle sections:
 | `FinalDamageState` | last damaging stage δ_F | 8-bit signed integer | the end stage's value as read |
 | `DeleteOnStateLimit` | delete-at-end flag | boolean | no |
 | `Normalized` | normalised flag (claim 19) | boolean | no |
-| `NextParticle` | next particle type (smoke successors) | particle type name; `<none>` gives none | unchanged (none for a new type) |
+| `NextParticle` | next particle type (smoke successors); a type that leads back to itself makes a next-type loop (claim 8a), for which the importer warns | particle type name; `<none>` gives none | unchanged (none for a new type) |
 | `Radius` | radius field ρ (F3) | integer, leptons | 0 |
 | `WindEffect` | wind effect *W* (F2) | integer | 0 |
 | `XVelocity`, `YVelocity` | spark *X*, *Y* (F10) | integers, leptons per tick | 1, 1 |
@@ -1809,6 +1906,34 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   empty-named type, in the absent-key control, and one of the named type in the other.
   Falsified by a first particle in the `<none>` run while both controls show theirs. A control
   without its particle makes the part inconclusive.
+- **P32. Next-type loops (claim 8a; Q-2999).** Named test rules: a loose rules copy that adds an
+  invented smoke system type whose held type is an invented smoke particle type *X* with a short
+  lifetime, a radius field of at least 8 and *X* itself as its next type, and changes nothing else.
+  Part a: a test warhead whose particle system is that type, fired once at empty flat ground, with
+  the random-state recorder. Record per tick, for 30 ticks or until the run is stopped from
+  outside after 60 seconds, the number of particles of the system and the draws of its turn, and
+  whether the system is still in play. Expected on the original: the layer loads unchanged; every
+  dead particle is replaced by two in the same turn's removal pass, which update first in the next
+  turn; the count doubles once per particle lifetime; the system stays in play after its mark.
+  Falsified by a refusal at load, a successor that updates in its own split's turn, or a system
+  that leaves play while its particles remain. Part b: two types *X* and *Y* that name each other,
+  the same observables. Engine runs: one importer warning per loop; the emitted particle splits
+  once, and its two successors are removed at their end without splitting and without split draws.
+- **P33. Very large burst and line counts (claim 20a; Q-2999).** Named test rules: a loose rules
+  copy with an invented spark system type with a held type whose x and y velocity fields and
+  vertical velocity range are not 0 (claim 20), a spark-turns field of 1 (so that its first turn
+  bursts with no decision draw, claim 15) and a particle cap that gives counts *c* from 5000 to
+  9999, and an invented railgun system type with a held type and a particles-per-lepton field
+  that gives a line of about 5000 particles at the firing distance, each on a weapon. Fire each
+  once, giving the firer no order and keeping its target in place until the system's first turn,
+  with the random-state recorder. Observable: the draws of the burst's or the line's turn.
+  Expected on the original: the turn takes the count raw value, the three discarded raw values
+  and the draws of all *c* sparks, then the light draw (claim 15), or the draws of all *n*
+  particles (claim 17), in those claims' order, and play goes on. Falsified by fewer draws than
+  the count requires. Engine runs: the draws of 4096 sparks or particles after the burst's count
+  and discarded raw values (for the burst, then its light draw), or for the line, in the same
+  order. A run with a much larger count is not proposed: the original's result there depends on
+  the program's room and can stop the game.
 
 ## Open questions
 
@@ -1833,6 +1958,12 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   spotlight, and how claim 15's light draw changes it (the value it moves lies between 17 and 41),
   are not analysed. No spec owns spotlights yet.
 - **Laser beam look** (claim 31): owned by the spec that answers Q-1521.
+- **Loops through other families** (claim 8a): loops that pass through links of another family
+  are not covered by claim 8a's rule, for example a particle system whose particles' damage
+  destroys an object whose death makes the same system again (S-0312), or an animation whose
+  middle event requests particles (S-0109 claim 14), made in the shared gas system of S-0613
+  claim 1, that lead back to that animation. Whether such a loop can close within one pass is not
+  established.
 - **Natural smoke and cloaking** (claim 1): S-0516 claim 18 states the removal at full cloaking and the displacement condition at full uncloaking; both specs agree. Scenario P1 parts b and c decide it.
 
 ## Changes for other specs
