@@ -1068,7 +1068,8 @@ fn combat_live_with(
 
 /// spec: S-0105 claim 6 and F9 (a vehicle placed on the map starts its
 /// barrel elevation level and turns it toward the fire angle from its
-/// placement, not from the game's start; #81)
+/// placement, not from the game's start; First appearance: placed during a
+/// tick, it is first drawn at ε = 1; #81)
 #[test]
 fn a_vehicle_placed_later_starts_its_barrel_level() {
     use glasnost_render::voxel;
