@@ -2345,13 +2345,12 @@ impl Script {
                 .min(WAVE_MAX.max(self.plan.wave))
                 .max(1),
         };
-        let patient = waiting.len() >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE; // nocite: tuning of our own opponent (half a wave)
-        if w.tick >= OPENING && (waiting.len() >= size || patient) {
-            self.waiting_since = None;
-            // design: the end-game's waves do not make the next battle's wave larger
-            if winning.is_none() {
-                self.waves += 1;
-            }
+        let goes = |n: usize| {
+            n >= size || (n >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE) // nocite: tuning of our own opponent (half a wave)
+        };
+        // The units the scout is chosen from when no wave goes.
+        let mut scouting = waiting.clone();
+        if w.tick >= OPENING && goes(waiting.len()) {
             // Each unit goes to the seen enemy nearest home that it can
             // reach and attack (a person does not send riflemen to stand at
             // the shore by a ship), else all go to the next enemy start cell.
@@ -2376,10 +2375,15 @@ impl Script {
             }
             let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();
             let mut fallback: Option<Option<CellXY>> = None;
+            // Whether the fallback took the next start in turn.
+            let mut rotated = false;
             // The nearest region cells, kept per goal (`reachable`).
             let mut near: BTreeMap<CellXY, BTreeMap<(u8, u32), CellXY>> = BTreeMap::new();
+            // The units the wave would send, with their destinations.
+            let mut sends: Vec<(ObjectId, CellXY)> = Vec::new();
             for &id in &waiting {
                 let Some(o) = w.obj(id) else { continue };
+                let at = o.pos.cell();
                 let region = self.reach_region(w, id);
                 let key = (o.kind, o.type_index, region);
                 let pick = *picks.entry(key).or_insert_with(|| {
@@ -2399,15 +2403,30 @@ impl Script {
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f, id)))
                             .or_else(|| {
                                 (!targets.is_empty()).then(|| {
-                                    let c = targets[self.next_target % targets.len()];
-                                    self.next_target += 1;
-                                    c
+                                    rotated = true;
+                                    targets[self.next_target % targets.len()]
                                 })
                             })
                     })
                 });
                 if let Some(c) = goal {
                     let dest = self.reachable(w, id, c, near.entry(c).or_default());
+                    // design: own AI (#11): a unit whose destination is where it stands (a ship off an inland enemy, at the water nearest it; a vehicle stranded on an island) is parked: it does not count toward the wave and is not sent again
+                    if dist2(dest, at) > ARRIVED * ARRIVED {
+                        sends.push((id, dest));
+                    }
+                }
+            }
+            if goes(sends.len()) {
+                self.waiting_since = None;
+                // design: the end-game's waves do not make the next battle's wave larger
+                if winning.is_none() {
+                    self.waves += 1;
+                }
+                if rotated {
+                    self.next_target += 1;
+                }
+                for (id, dest) in sends {
                     out.push(Order::Behaviour {
                         actor: id,
                         behaviour: Behaviour::Move,
@@ -2416,9 +2435,16 @@ impl Script {
                         dest: Some(Target::Cell(dest)),
                     });
                 }
+                return out;
             }
-        } else if let Some(h) = home {
-            self.send_scout(w, h, &waiting, &mut out);
+            // Parked units do not keep the patience running.
+            if sends.is_empty() {
+                self.waiting_since = None;
+            }
+            scouting = sends.into_iter().map(|(id, _)| id).collect();
+        }
+        if let Some(h) = home {
+            self.send_scout(w, h, &scouting, &mut out);
         }
         out
     }
