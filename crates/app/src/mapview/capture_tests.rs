@@ -636,6 +636,107 @@ fn a_map_building_that_turns_spins_or_unloads_is_drawn_live() {
     }
 }
 
+/// spec: S-0104 claim 3 (under an effect, the house-colour tables are rebuilt with the chosen
+/// set's tint; at "normal" each table goes back to its own tint, white here) and claim 5: a map
+/// building held in the cell pass takes the effect's tint too (#75)
+#[test]
+fn a_cell_pass_building_takes_the_effect_tint() {
+    use glasnost_render::compose::{Shade, row565};
+    use glasnost_render::light::shade_table;
+    use glasnost_render::palette::{TINT_EXEMPT, house_palette};
+    use glasnost_sim::lighting::Choice;
+    // An invented effect tint, hundredths.
+    const TINT: [i32; 3] = [120, 80, 150];
+    let (import, catalogue, assets) = import_with("");
+    let mut map = testkit::empty_map(SIZE);
+    let at = testkit::mid(SIZE, 2, 0);
+    map.objects.structures.push(Structure {
+        placed: Placed {
+            key: b"0".to_vec(),
+            owner: b"Neutral".to_vec(),
+            type_name: b"HUTX".to_vec(),
+            health: 256,
+            cell: at,
+            facing: 0,
+            raw: Vec::new(),
+        },
+    });
+    let rules = rules(true);
+    let setup = setup();
+    let world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = world
+        .objects
+        .values()
+        .find(|o| o.kind == SimKind::Building && o.pos.cell() == at)
+        .map(|o| o.id)
+        .expect("the map's building");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(&inputs, &mut built, painter, (world, rules.clone(), setup, Vec::new()));
+    let mut scene = built.scene;
+    let code = *live
+        .building_ids
+        .iter()
+        .find(|(_, id)| **id == b)
+        .expect("the building is the map's")
+        .0;
+    let hsv = super::build::owner_definition(&import, &options, b"Neutral").0;
+    let pal = house_palette(&palettes.unit, hsv);
+    let expect = |tint: [i32; 3]| {
+        shade_table(&pal, tint, 53, Some(TINT_EXEMPT))
+            .iter()
+            .map(row565)
+            .collect::<Vec<_>>()
+    };
+    // The house tables the building's lit items show.
+    let tables = |scene: &Scene| {
+        let lit: Vec<Shade> = items_of(scene, code)
+            .iter()
+            .filter_map(|i| match i.paint {
+                Paint::Lit(s) | Paint::LitDiamond(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        assert!(!lit.is_empty(), "the building is drawn in the cell pass");
+        lit.iter()
+            .map(|s| scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec())
+            .collect::<Vec<_>>()
+    };
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    assert!(
+        tables(&scene).iter().all(|t| *t == expect([1000; 3])),
+        "white light"
+    );
+    live.world.lighting.map.ion.tint = TINT;
+    live.world.lighting.choice = Choice::Ion;
+    live.redraw(&inputs, &mut scene);
+    assert!(
+        tables(&scene).iter().all(|t| *t == expect(TINT.map(|t| t * 10))),
+        "the effect's tint"
+    );
+    assert_eq!(items_of(&scene, sim_code(b)).len(), 0, "still in the cell pass");
+    live.world.lighting.choice = Choice::Normal;
+    live.redraw(&inputs, &mut scene);
+    assert!(
+        tables(&scene).iter().all(|t| *t == expect([1000; 3])),
+        "its own tint again"
+    );
+}
+
 /// spec: S-0108 claim 2 and F3 (a damaged building's body frame): a map building damaged in play
 /// shows its damaged frame
 #[test]
