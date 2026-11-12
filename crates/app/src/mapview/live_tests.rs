@@ -407,6 +407,97 @@ fn sprite_bodies_in_the_air_and_on_a_deck_leave_the_cliff_fudge() {
     }
 }
 
+/// spec: S-0102 claim 22 (Q-3007: in our engine the shadow of a vehicle drawn as a sprite with
+/// the turret flag is drawn under claim 21's three conditions: only while its height above the
+/// surface is 0, its bias then U − 2, never with the no-shadow flag or either visceroid flag;
+/// D29 (i)); claim 13 (on a bridge deck the height above the surface is that above the deck)
+#[test]
+fn claim_22_a_sprite_turret_vehicle_shadow_only_at_height_0() {
+    let draw = |extra: &str, z: i32, above: i32, deck: bool| {
+        let rules = format!("{RULES}[CARX]\nTurret=yes\n{extra}");
+        let (import, catalogue, assets) = context_with(&rules);
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene: Scene = built.scene;
+        let car = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (2 * 256 + 128, 3 * 256 + 128, z),
+            body: 16384,
+            turret: 16384,
+            elevation: 0,
+            anim: 0,
+            infantry: None,
+            object: sim_code(ObjectId(7)),
+            harvesting: None,
+            shadow: None,
+            alternative: false,
+            attitude: Attitude::None,
+            disabled: false,
+            above,
+            protection: None,
+            generic_shadow: None,
+            berserk: None,
+            turret_index: None,
+            walk: Default::default(),
+            deck,
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
+        let bias = |i: &glasnost_render::scene::Item| match i.depth {
+            ItemDepth::Profile { bias, .. } => bias,
+            ItemDepth::Tile { .. } => panic!("not a profile item"),
+        };
+        let items = &entries[0].items;
+        let body = items
+            .iter()
+            .find(|i| i.paint != Paint::Shadow)
+            .map(bias)
+            .expect("a body");
+        let shadows: Vec<i32> = items
+            .iter()
+            .filter(|i| i.paint == Paint::Shadow)
+            .map(bias)
+            .collect();
+        (body, shadows)
+    };
+    // At height 0 the composed image takes U (S-0105 claim 12) and the shadow U − 2.
+    let (u, shadows) = draw("", 0, 0, false);
+    assert_eq!(shadows, vec![u - 2], "at height 0");
+    let (u, shadows) = draw("", 416, 0, true);
+    assert_eq!(shadows, vec![u - 2], "standing on a deck");
+    for (z, above) in [(1, 1), (104, 104), (416, 416), (520, 104)] {
+        let deck = z > above;
+        assert!(
+            draw("", z, above, deck).1.is_empty(),
+            "no shadow {above} leptons above the surface"
+        );
+    }
+    for flag in ["NoShadow=yes\n", "SmallVisceroid=yes\n", "LargeVisceroid=yes\n"] {
+        assert!(draw(flag, 0, 0, false).1.is_empty(), "{flag}");
+    }
+}
+
 /// spec: S-0402 claim 5a and F8 (the fixed harvesting sprite: its F8 image
 /// frame centred on the projected anchor, composited before (under) the
 /// vehicle's body and shadow, with the anim palette and no house-colour remap at
