@@ -2,14 +2,14 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 43
+revision: 47
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-12
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490,
-Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346, Q-2419]
+Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346, Q-2419, Q-3007, Q-3008]
 supersedes: []
 ---
 
@@ -495,7 +495,7 @@ screen rows.
     | own shadow image frame of an infantry unit or a vehicle drawn as a sprite (claims 20, 21; only while *h* = 0) | −*L(z)* − 4 (*U* does not apply) | flat | no |
     | generic shadow of an infantry unit with *h*ₛ > 0 (S-0107 claim 19; drop-pod exception in claim 20) | −5 − *L*(*z* − *h*ₛ) | flat | no |
     | shadow of an infantry unit falling in a drop pod | *U* − 2 | flat | no |
-    | shadow of a vehicle drawn as a sprite whose type has a turret (claim 22) | *U* − 2 | flat | no |
+    | shadow of a vehicle drawn as a sprite whose type has a turret (claim 22; only while *h* = 0) | *U* − 2 | flat | no |
     | smudge (claim 25) | none: no depth test and no depth write | — | no |
     | building body (cell pass) | −*L(z)* − 2 + the building's normal depth adjustment; companion depth image F5 | upright | yes |
     | building body while unloading, drawn as its deploying sprite | −*L(z)* − 22, replacing the normal depth adjustment; companion depth image as for the normal body | upright | yes |
@@ -639,12 +639,16 @@ screen rows.
         toward the viewer from the unit's cell (x, y); a cell is *high* when it is more than 3 levels
         higher than the unit's cell.
 
-        | Unit on a bridge | Two-step cell high | One-step cell high | Cliff factor |
+        | Unit on a bridge deck | Two-step cell high | One-step cell high | Cliff factor |
         |---|---|---|---|
         | yes | any | any | 0 |
         | no | yes | any | 1 |
         | no | no | yes | 2 |
         | no | no | no | 0 |
+
+        The first row is for a unit on a bridge deck (glossary) only. A unit on a low bridge stands
+        in the ground layer of its cell, and a unit under a high bridge is not on its deck, so both
+        take the rows below it, like a unit on open ground.
 
       - column: only near a bridge; factor = min(1, *c*(x, y + 1) + *c*(x + 1, y)) + *c*(x + 1, y + 1),
         where *c* of a cell is 1 if it holds a bridge support column tile and 0 otherwise (range 0–2).
@@ -657,8 +661,9 @@ screen rows.
     In the air their bodies use −*L(z)* alone, without *s* and *F* (claim 13). A vehicle or
     aircraft drawn as a voxel model uses *U* at every height.
     - Backing: `measurable` (scenarios D9, D16; the absent-key defaults D9 run A0 and D16 runs with
-      the key absent)
-    - Confidence: high for the cliff fudge and the ordinary *s* = −1; medium for column, tunnel and
+      the key absent; the low bridge and the cell under a high bridge D9 maps D and E)
+    - Confidence: high for the cliff fudge, including the bridge-deck row (it applies only on a
+      bridge deck), and the ordinary *s* = −1; medium for column, tunnel and
       bridge detection
 15. **Bridges.** A bridge deck is an overlay drawn in the cell pass. Its world height is 4 levels
     above the terrain of its cell, and its depth uses that 4-level elevation (claim 13). Its screen
@@ -911,15 +916,30 @@ screen rows.
       a turret image frame ((*t*<sub>32</sub> + 4) mod 32) + 8·*F*<sub>w</sub>, *t*<sub>32</sub>
       being the 32-step facing of its turret facing, combined into one image. Its shadow, the body
       frame plus ⌊*N*/2⌋, has the bias of claim 13 and lies under that combined image: unlike
-      claim 28, the shadow never darkens the vehicle's own body or turret pixels.
+      claim 28, the shadow never darkens the vehicle's own body or turret pixels. In our engine
+      it is drawn under the same three conditions as the shadow of claim 21: only while the
+      vehicle's height above the surface is 0, only if its type does not suppress shadows, and
+      only if its type is not marked as either visceroid kind. So it is never drawn in the air,
+      while falling or while a carrier aircraft holds the vehicle, and where it is drawn its bias
+      is *U* − 2 at height 0. The original draws this shadow at every height and whatever the two
+      flags say, with bias *U* − 2 for *U* at the vehicle's height. Its shadow frame is placed
+      where its body frame is placed, except while a carrier aircraft holds the vehicle: the
+      original still draws the held vehicle's body and turret then, at the screen position its
+      carrier aircraft's drawing gives them (the transport specs), and the shadow frame lies 14
+      rows higher on the screen than that body frame. This is a drawing-only defect, fixed
+      without a switch.
     - Backing: `measurable`: the facing part and the walking and standing rows D29 (a), the
-      standing-pose state at placement and after a move D29 (f); stationary idle
-      stepping D29 (g); the turret
-      path D29 (c) (the turret flag set through the override section); facing counts other than 8
-      D29 (d) and the dying row and death counter D29 (e), both with a named loose copy of the art
-      file. `unmeasured` for the firing row: which shots start the firing counter is not settled
-      (Open questions), so no setup can make the row show at a known tick. `unmeasured` for the row
-      *d* and for the events of the standing-pose state other than creation and movement steps
+      standing-pose state at placement and after a move D29 (f); stationary idle stepping D29
+      (g); the turret path D29 (c) (the turret flag set through the override section; its
+      shadow's conditions D29 (h) for the original's drawing, its part 2 also for the held
+      vehicle's body and turret being drawn, and D29 (i) for our engine); facing counts other
+      than 8 D29 (d) and the dying row and death counter D29 (e), both with a named loose copy of
+      the art file. `unmeasured` for the original's drawing of this shadow at heights other than
+      a held vehicle's, such as during a fall: no part here gives a sprite vehicle with a turret
+      such a height, and our engine's conditions replace the original's drawing there by design.
+      `unmeasured` for the firing row: which shots start the firing counter is not settled (Open
+      questions), so no setup can make the row show at a known tick. `unmeasured` for the row *d*
+      and for the events of the standing-pose state other than creation and movement steps
       (change of movement type, superweapon move): no reproducible setup ends a vehicle's
       movement part-way through a step, so the state cannot be seen off while the vehicle has no
       movement in progress.
@@ -929,7 +949,14 @@ screen rows.
     - Confidence: high for the facing part and the image-frame formulas, medium for the walking
       row's test, the death counter and the standing-pose state (high that it is on at creation
       and after a completed step; medium for the other events that turn it on), low for the
-      turret path
+      turret path's image frames; high that the original draws the turret path's shadow whatever
+      the shadow-suppressing and visceroid flags say (D29 (h) part 1), medium that it draws it at
+      every height (D29 (h) part 2 tests only a vehicle held by a carrier aircraft, and only
+      where a stock one can lift the type; no part tests a fall, which is `unmeasured`), medium
+      for its 14-row raise against the body frame while a carrier aircraft holds the vehicle and
+      for the original drawing a held vehicle's body and turret, medium for the original's bias
+      of that shadow above the surface (`unmeasured`: D29 (h) records whether the shadow is drawn
+      and where, not its depth), and high for our engine's use of those conditions (design)
 22a. **The walk counter (Q-2176).** Each vehicle has one walk counter, an integer that is 0 when
     the vehicle is created. The same counter gives the walking image frame of a vehicle drawn as a
     sprite (claim 22), the body frame *ν* of a vehicle drawn from a voxel model (S-0105 claim 16)
@@ -2035,7 +2062,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   cut along a fixed row, 0 to 2 rows above the wall's last row, whatever the infantry's position,
   because a flat drawing's depth depends only on the screen row. Falsified if a cut row sweeps up the infantry body over several
   positions, or if the shadow's cut row moves with the infantry.
-- **D9, cliff fudge (claim 14).** Setup: three test maps, each with a parking cell (x, y) on level
+- **D9, cliff fudge (claim 14).** Setup: five test maps, each with a parking cell (x, y) on level
   0 and a vehicle type whose cliff fudge is set through the override section; all other fudges 0.
   Map A: the cell (x + 1, y + 1) is more than 3 levels higher than the parking cell, the cell
   (x + 2, y + 2) is **not** (a one-cell-deep ridge). Map B: both (x + 1, y + 1) and (x + 2, y + 2) are
@@ -2054,6 +2081,18 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   one row, if map A with 20 equals map B with 20 while map B with 40 hides more (the alternative of
   `quirks.cliff_fudge_far_cliff_weaker`), if run A0 differs from map B with 20 by more than one row,
   or if map C changes with the fudge.
+  Maps D and E (the first row of the table applies only on a bridge deck): map D's parking cell is
+  on a low bridge, and map E's is the ground cell under a high bridge's deck, both with
+  (x + 1, y + 1) and (x + 2, y + 2) more than 3 levels higher than the parking cell. Runs: each map
+  with fudge 0 and 40. Both maps keep the bridge fudge (claim 14) at 0, as the setup's other
+  fudges are. In map E the deck lies over the parking cell and hides the vehicle's upper rows
+  whatever the fudge (claim 15), so map E's observable is only the vehicle's rows that the deck
+  does not cover in either run, the rows nearest the bank. Expected: in both maps the run with 40
+  pushes the vehicle 40 depth units farther (the factor-1 row) and hides more of those rows than
+  the run with 0. Falsified if either map hides the same rows with 0 and 40. Map D is not
+  measurable if no low bridge can be placed with such banks. Map E is void if, with fudge 0, the
+  deck covers every row of the vehicle that the bank's face reaches, so that no row is left to
+  compare.
 - **D10, bridges (claim 15).** Setup: a high bridge; a vehicle driving under it while another
   vehicle crosses on top. Observable: hidden pixels of each vehicle. Expected: the lower vehicle is
   hidden by the deck where they overlap; the upper vehicle is visible on the deck except at most its
@@ -2563,6 +2602,28 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     An advance at any other tick, a missing advance on a multiple, or a non-walking
     row at a positive idle rate falsifies the corresponding rule. Remove named art
     after the test.
+  - (h) Turret path's shadow in the original. The type of (c), with the turret flag set through
+    the override section. Part 1: it stands on open ground in three games, each with one of the
+    three flags of (b) set through the override section (the shadow-suppressing flag, the
+    small-visceroid flag, the large-visceroid flag), and only the first drawn frames after the
+    start are read, as in (b). Part 2: without those flags, a stock carrier aircraft of the human
+    house, placed by the test map, that can lift the type picks it up and flies with it.
+    Observable: whether its shadow frame (the body frame plus ⌊*N*/2⌋) is drawn, and in part 2
+    the screen position of a chosen pixel of the shadow frame and of the body frame while the
+    aircraft holds it. The chosen shadow pixel must be one that neither the vehicle's body and
+    turret nor the carrier aircraft's own image covers in the captured frame; part 2 is void in
+    any frame where no such shadow pixel is left, and inconclusive if every captured frame is
+    void. Expected (the original's drawing, claim 22): in part 1 the shadow frame is drawn in all
+    three games; in part 2 it is drawn while the aircraft holds the vehicle, placed 14 rows
+    higher than the body frame's placement. Falsified if part 1 shows no shadow in any of the
+    games, or a frame of part 2 that is not void shows no shadow at the predicted place or shows
+    it at a different placement. Not measurable if no stock carrier aircraft can lift the type.
+  - (i) Turret path's shadow in our engine (engine conformance, not an oracle check). The fixtures
+    of (h), and the same type at heights above the surface of 1, 104 and 416 leptons over open
+    ground. Expected: no shadow frame in any of them, and at height 0 without the flags the shadow
+    with bias *U* − 2 as in (c). This part does not depend on (h) part 2: its carrier aircraft is
+    our engine's, so it runs whether or not a stock carrier aircraft can lift the type in the
+    original.
 
 - **D30, darkening (claim 26).** Setup: a flat map at level 0 with the test lighting of S-0104 and a
   display path that presents a 5-6-5 surface (S-0103, *Reading a pixel*). An infantry unit stands
@@ -3143,9 +3204,6 @@ the current owning specs; no requested part owned here remains open.
   with its depth consequence are settled (claim 23).
 - **Sprite placement and image frames, leftovers (claims 20 to 22, 25):**
   - which ion-cannon blasts set the ion-blast wobble, and to how many rows.
-  - a per-unit state, set and cleared in the course of an aircraft carrying units, in which the own
-    shadow of a sprite unit is drawn 14 rows higher than its draw point; no reproducible setup
-    sets it. Backing: `unmeasured`; confidence: low.
   - which shots start the firing counter of a vehicle drawn as a sprite. A shot of a type with
     *F*<sub>f</sub> > 0 can set it to 2*F*<sub>f</sub> − 1, after which it falls by 1 per tick to
     −1, so the firing image frames would show from the last to the first, each for two ticks; but
@@ -3156,8 +3214,8 @@ the current owning specs; no requested part owned here remains open.
   - the standing-pose state of a vehicle drawn as a sprite (claim 22): which reproducible setup, if
     any, ends a vehicle's movement part-way through a movement step, so that the row *d* shows,
     and the one event that turns the state on without being identified.
-  - the turret path of a vehicle drawn as a sprite (low confidence; D29 (c) gives the turret flag
-    to the test type).
+  - the image frames of the turret path of a vehicle drawn as a sprite (low confidence; D29 (c)
+    gives the turret flag to the test type).
   - which cells count as near a bridge for the row of a vehicle drawn as a sprite whose type is
     too big to fit under a bridge (claim 13). It depends on the bridge state of the vehicle's own
     cell and of its neighbours, which has not been tied to the map's terrain and overlays.
