@@ -34,11 +34,7 @@ fn rules(pill_too_tall: bool) -> Arc<SimRules> {
             .push(n.into());
     }
     if pill_too_tall {
-        r.sim
-            .buildings
-            .get_mut("PILL")
-            .expect("PILL")
-            .foundation = Some(TOO_TALL);
+        r.sim.buildings.get_mut("PILL").expect("PILL").foundation = Some(TOO_TALL);
     }
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
 }
@@ -67,7 +63,10 @@ fn standing(w: &World, name: &str) -> usize {
     w.objects
         .values()
         .filter(|o| {
-            o.owner == Some(HouseId(0)) && o.on_map && o.kind == Kind::Building && o.type_index == t.index
+            o.owner == Some(HouseId(0))
+                && o.on_map
+                && o.kind == Kind::Building
+                && o.type_index == t.index
         })
         .count()
 }
@@ -93,8 +92,7 @@ fn done(w: &World, t: TypeRef) -> bool {
 /// Whether house 0 has `t` on a line, as its item or queued.
 fn lined(w: &World, t: TypeRef) -> bool {
     w.econ.lines.lines.iter().any(|l| {
-        l.house == HouseId(0)
-            && (l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+        l.house == HouseId(0) && (l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
     })
 }
 
@@ -171,5 +169,8 @@ fn an_infantry_factory_with_no_cell_does_not_hold_up_the_war_factory() {
         g.step();
     }
     assert_eq!(standing(&g.world, "PILL"), 0, "PILL took a cell");
-    assert!(standing(&g.world, "FACT") > 0, "no war factory by tick 9000");
+    assert!(
+        standing(&g.world, "FACT") > 0,
+        "no war factory by tick 9000"
+    );
 }

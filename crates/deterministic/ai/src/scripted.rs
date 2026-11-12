@@ -1008,11 +1008,7 @@ impl Script {
                 .copied()
                 .min_by_key(|&c| (dist2(c, h), c.y, c.x))
         });
-        self.targets = starts
-            .iter()
-            .copied()
-            .filter(|&c| Some(c) != own)
-            .collect();
+        self.targets = starts.iter().copied().filter(|&c| Some(c) != own).collect();
         if let Some(h) = home {
             self.targets.sort_by_key(|&c| dist2(c, h));
         }
@@ -1179,7 +1175,10 @@ impl Script {
             if yards.is_empty() || yards.contains(&h) {
                 return Some(h);
             }
-            return yards.iter().copied().min_by_key(|&c| (dist2(c, h), c.y, c.x));
+            return yards
+                .iter()
+                .copied()
+                .min_by_key(|&c| (dist2(c, h), c.y, c.x));
         }
         yards.first().copied().or_else(|| {
             own.iter()

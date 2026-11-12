@@ -172,5 +172,8 @@ fn a_lost_yard_does_not_move_home_to_a_far_unit() {
             ..
         } if *actor == defender && *e == intruder)
     });
-    assert!(answers, "the defender does not answer the intruder: {orders:?}");
+    assert!(
+        answers,
+        "the defender does not answer the intruder: {orders:?}"
+    );
 }

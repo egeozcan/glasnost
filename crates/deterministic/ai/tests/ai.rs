@@ -1909,7 +1909,10 @@ fn parked_ships_do_not_make_up_a_wave() {
             .is_some_and(|x| x.land == glasnost_map::terrain::land::WATER)
     };
     let beside = glasnost_map::CellXY::new(park.x, park.y - 1);
-    assert!(water(park) && water(beside), "{park:?} and {beside:?} are water");
+    assert!(
+        water(park) && water(beside),
+        "{park:?} and {beside:?} are water"
+    );
     let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
         i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
     };

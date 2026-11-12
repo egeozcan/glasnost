@@ -309,7 +309,14 @@ fn coil_and(n: usize, kind: Kind, name: &str) -> (World, ObjectId, Vec<ObjectId>
     let chargers = (0..n)
         .map(|i| {
             let i = i32::try_from(i).unwrap();
-            testkit::spawn(&mut w, kind, name, 0, CellXY::new(at.x - i % 3, at.y + i / 3), 0)
+            testkit::spawn(
+                &mut w,
+                kind,
+                name,
+                0,
+                CellXY::new(at.x - i % 3, at.y + i / 3),
+                0,
+            )
         })
         .collect();
     testkit::run(&mut w, 1);

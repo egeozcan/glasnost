@@ -182,10 +182,7 @@ fn a_lifter_does_not_go_with_a_wave() {
         })
     };
     assert!(!sent(l), "the lifter goes with the wave: {out:?}");
-    assert!(
-        !sent(tank),
-        "the lifter made up the wave of two: {out:?}"
-    );
+    assert!(!sent(tank), "the lifter made up the wave of two: {out:?}");
     assert!(!guards.iter().any(|&g| sent(g)), "the guard stays");
 }
 
