@@ -367,6 +367,14 @@ pub struct InputReport {
     pub selection_changed: bool,
 }
 
+/// The line effects of one drawn frame (#93): the beams, bolts and beam
+/// flashes, in drawing order, of shown tick `tick` at detail `detail`.
+struct DrawnLines {
+    tick: i32,
+    detail: u8,
+    spots: [Vec<glasnost_render::spots::Spot>; 3],
+}
+
 /// A live sandbox game on a loaded map.
 pub struct Live {
     /// The game state.
@@ -498,6 +506,10 @@ pub struct Live {
     /// simulation does not take (a seam: S-0109 claim 28 puts them on the
     /// scenario stream once playback is in the simulation).
     cosmetic: glasnost_sim::rng::Rng,
+    /// The line effects of the latest drawn frame: its shown tick, detail
+    /// level, beams, bolts and beam flashes (#93). A redraw with no tick
+    /// between is not a new drawn frame and shows these again.
+    drawn_lines: Option<DrawnLines>,
     /// The battlefield view's origin and size at the latest redraw, for the
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
@@ -1304,6 +1316,7 @@ impl Live {
             pieces_drawn: BTreeSet::new(),
             target_lines: BTreeMap::new(),
             cosmetic,
+            drawn_lines: None,
             battlefield: None,
             status_view: None,
             debug_markers: true,
@@ -1494,6 +1507,8 @@ impl Live {
     /// members, keys and order, and the tick's presentation events
     /// (taken out of the world: read them before).
     pub fn after_tick(&mut self) {
+        // design: render (#93) (a tick makes the next redraw a new drawn frame)
+        self.drawn_lines = None;
         self.layer_moments = self
             .world
             .effects
@@ -3484,22 +3499,37 @@ impl Live {
             DetailLevel::High => 2,
         };
         let now = self.shown_tick();
-        let quirk = self.rules.quirks.ranged_draw_half_span;
-        let cosmetic = &mut self.cosmetic;
-        // spec: S-0518 claim 21 (spread draws from the unsynchronised stream: our cosmetic stream)
-        let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
-        let (beams, flashes) = self.lines.spots(now, detail, self.rules.mode, &mut draw);
-        // spec: S-0316 claims 12 and 13 (the bolts after the lasers' draws and before the beam flashes)
-        let bolts = self.lines.bolt_spots(
-            now,
-            self.battlefield,
-            self.rules.quirks.table_root_distance,
-            self.rules.mode,
-            &mut draw,
-        );
-        self.counts.bolt_pixels = bolts.len();
+        // spec: S-0316 claims 5 and 9, S-0201 claim 6 (one drawn frame per tick: the spread, bolt and activity draws are taken once per drawn frame; our client has no freeze path, so a redraw with no tick between is the same frame shown again)
+        let cached = self
+            .drawn_lines
+            .as_ref()
+            .is_some_and(|d| d.tick == now && d.detail == detail);
+        if !cached {
+            let quirk = self.rules.quirks.ranged_draw_half_span;
+            let cosmetic = &mut self.cosmetic;
+            // spec: S-0518 claim 21 (spread draws from the unsynchronised stream: our cosmetic stream)
+            let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
+            let (beams, flashes) = self.lines.spots(now, detail, self.rules.mode, &mut draw);
+            // spec: S-0316 claims 12 and 13 (the bolts after the lasers' draws and before the beam flashes)
+            let bolts = self.lines.bolt_spots(
+                now,
+                self.battlefield,
+                self.rules.quirks.table_root_distance,
+                self.rules.mode,
+                &mut draw,
+            );
+            self.drawn_lines = Some(DrawnLines {
+                tick: now,
+                detail,
+                spots: [beams, bolts, flashes],
+            });
+        }
+        let Some(drawn) = self.drawn_lines.as_ref() else {
+            return;
+        };
+        self.counts.bolt_pixels = drawn.spots[1].len();
         // spec: S-0316 claim 12 (in the effects group after lasers, before trails and beam flashes)
-        for spots in [beams, bolts, flashes] {
+        for spots in drawn.spots.iter().cloned() {
             if !spots.is_empty() {
                 // spec: S-0102 claim 2 (beam effects after all five layers and after the status extras)
                 scene.spots.push(SpotGroup {
