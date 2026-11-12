@@ -3,6 +3,7 @@ id: Q-2998
 title: What does an airburst weapon do whose airburst projectile leads back to the same weapon?
 status: open
 related: [S-0306, S-0203]
+answered-by: [S-0306]
 ---
 
 ## Need
