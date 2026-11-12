@@ -162,7 +162,8 @@ fn an_ordinary_spark_cap_is_unchanged() {
 #[test]
 fn a_huge_spark_cap_meets_the_ceiling() {
     let (n, _) = burst(2_000_000_000);
-    assert!(n <= 4096, "{n} sparks in one burst");
+    // spec: S-0613 claim 4 (the system's creation adds one particle before the burst)
+    assert!(n <= 4096 + 1, "{n} sparks in one burst");
     assert!(n > 0);
 }
 

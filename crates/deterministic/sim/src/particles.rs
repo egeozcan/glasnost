@@ -85,6 +85,14 @@ const RAIL_AFTER: usize = 4; // spec: S-0616 claim 17 (then four more ranged dra
 /// Spark burst raw values taken and discarded after the count (F10).
 const SPARK_DISCARDED: usize = 3; // spec: S-0616 F10 (three unused raw values follow the count)
 
+/// The most particles one spark burst or one railgun line makes (#198):
+/// a particle cap or a particles-per-lepton field from rules data could
+/// otherwise ask for billions in one turn. Counts up to it are unchanged:
+/// the count raw value and the three discarded values are still taken, and
+/// each particle made keeps its own draws. Q-2999 asks whether the game
+/// has a limit.
+pub const BURST_CEILING: i32 = 4096; // nocite: our own input validation (#198), Q-2999
+
 fn mode(w: &World) -> Rounding {
     w.rules().mode
 }
@@ -1050,7 +1058,8 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
     };
     let [xv, yv, zmin, zrange] = pt.spark;
     let table = w.rules().quirks.table_root_distance;
-    for _ in 0..count.max(0) {
+    // nocite: our own input validation (#198): at most BURST_CEILING sparks, with their draws, in one burst; Q-2999 asks for the game's limit
+    for _ in 0..count.clamp(0, BURST_CEILING) {
         // spec: S-0616 claim 15 (each spark: the creation draws of one particle at the system's position, the system's position its target point)
         if crate::gas::add_particle(w, sys, held, at, at).is_none() {
             break;
@@ -1215,7 +1224,8 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
         match t.holds {
             Some(held) => {
                 // spec: S-0616 claim 17 (n ≤ 0: no particle and no ranged draw)
-                for _ in 0..n.max(0) {
+                // nocite: our own input validation (#198): at most BURST_CEILING particles, with their draws, in one line; Q-2999 asks for the game's limit
+                for _ in 0..n.clamp(0, BURST_CEILING) {
                     // spec: S-0616 claim 17 (per particle: three ranged draws, its creation draws, four more ranged draws; the line's shape is drawing only, so each particle is kept at the system's position)
                     for _ in 0..RAIL_BEFORE {
                         let _ = w.rng.ranged(0, DRAW_TOP, half);
