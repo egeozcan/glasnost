@@ -227,6 +227,41 @@ fn deploys_deploy_fire_vehicles_and_firing_infantry() {
     }
 }
 
+// design: own AI (#17), S-0517 claim 2 (unload stays current until the vehicle is given another behaviour) and S-0213 table T2 (the guard key gives area guard on the cell the unit stands in): a deploy-fire vehicle firing at its own cell with no enemy near is released, once, and leaves unload; it was left so for the rest of the game.
+#[test]
+fn releases_a_deploy_fire_vehicle_when_the_enemy_is_gone() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, unit) = scene(&g, Kind::Vehicle, "FIRE", None);
+    glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Deploy { actor: unit });
+    testkit::run(&mut w, 30);
+    let unloads = |w: &World| w.obj(unit).unwrap().beh.current == Some(Behaviour::Unload);
+    assert!(unloads(&w), "it fires at its own cell");
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(ordered(&orders, unit), "it is not released: {orders:?}");
+    assert!(!deploys(&orders, unit));
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    testkit::run(&mut w, 1);
+    assert!(!unloads(&w), "it still fires at its own cell");
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let again = brain.think(&w);
+    assert!(
+        !again.iter().any(|o| matches!(
+            o,
+            Order::Behaviour { actor, behaviour: Behaviour::AreaGuard, .. } if *actor == unit
+        )),
+        "released again: {again:?}"
+    );
+}
+
 fn deployed(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.infantry.as_ref())
