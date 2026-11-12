@@ -304,16 +304,29 @@ fn deployed_infantry_slot(w: &World, firer: ObjectId) -> Option<usize> {
 }
 
 /// The weapon slot an object would use against a target (S-0308 claim 3,
-/// table P; claims 8 and 9 before it).
+/// table P; claims 8 and 9 before it: deployed infantry and deployed
+/// vehicles of a deploy-fire type).
 // spec: S-0308 F2 and table P rows 13, 18 (slot 2s + a; land-targeting mode 2)
 pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize {
     if let Some(i) = deployed_infantry_slot(w, firer) {
         return i;
     }
-    // Claim 9 (a deployed deploy-fire vehicle) needs the vehicle deploy state of the deploy specs; no vehicle is deployed in our engine yet.
     let Some(tc) = veterancy::type_combat(w, firer) else {
         return 0;
     };
+    // spec: S-0308 claim 9 (a deployed vehicle whose type has the deploy-fire flag: its deploy weapon index against every target, table P not applied; #177)
+    if w.obj(firer).is_some_and(|o| o.kind == Kind::Vehicle)
+        && tc.deploy_fire
+        && crate::econ::inplace::deployed(w, firer)
+    {
+        let i = tc.deploy_fire_weapon;
+        // spec: S-0308 Edge cases (deploy weapon index not checked: an index outside 0 … 17, −1 included, is treated as 0, a departure)
+        return if (0..SLOTS as i32).contains(&i) {
+            i as usize
+        } else {
+            0
+        };
+    }
     let r = w.rules();
     let q = r.quirks;
     // spec: S-0308 table P row 1 (a switching type: its weapon number)
