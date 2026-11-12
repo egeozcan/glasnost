@@ -2,14 +2,15 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 129
+revision: 133
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-09
+approved-on: 2026-11-12
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
-Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841]
+Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841, Q-2987,
+Q-2988]
 supersedes: []
 ---
 
@@ -811,9 +812,10 @@ index 1. This is a design rule, not an additional claim about the original.
     grows by 1 point of anger (F8) (low confidence for the amount when the two were allies before), and when it is
     made an ally, its anger towards the new ally becomes 0 and its enemy house is cleared if the
     ally was it. When houses are made allies or enemies belongs to the skirmish set-up and
-    diplomacy specs. No other rule of our engine is known to change anger, except two rules for
-    owners that are not human-controlled, which in our engine apply to the neutral and special
-    houses only (claim 25, part j; see also Open questions).
+    diplomacy specs. No other rule of our engine is known to change anger, except the two rules
+    of claim 25, part j, for owners that are not human-controlled. They come at the checks of
+    S-0217 claim 2, which the neutral and special houses do not make, so in our engine they reach
+    test-only computer-controlled player houses only (see also Open questions).
     - Backing: `measurable` for an increase from damage and the recomputation (scenario A9, part
       a) and for a defeated enemy house staying the enemy house (scenario A9, part c). `unmeasured` for a decrease from a healing hit: it needs another house's unit to heal a
       unit of the searcher's owner, which the person cannot order for a computer-controlled house,
@@ -1263,14 +1265,25 @@ index 1. This is a design rule, not an additional claim about the original.
       candidate object nor a wall candidate in a later ring can replace *W*, whatever its score.
       A wall target set by the per-tick or the teleport search is an opportunity target, as claim
       24 gives for a target different from the one held before.
-    - *(j) Anger (claim 16).* A house of these two whose country is not marked passive for
-      multiplayer has the two further anger rules of the original's computer player. From time to
-      time (the interval is not established), when it has no enemy house, its anger towards the
-      nearest other house that is neither multiplayer-passive nor defeated grows by 1 point of anger (F8) (nearness
-      between the houses' base positions, details not established; an allied house gains the
-      anger but cannot become the enemy house). At the same times, when its enemy house is
-      defeated, its anger towards that house is removed and it has no enemy house until one of
-      its anger values next changes. A house whose country is marked passive has neither rule.
+    - *(j) Anger (claim 16).* Such a house has two further anger rules of the original's
+      computer player. Both come at the start of each of its checks (S-0217 claim 2), whether or
+      not the check holds the house (S-0217 claim 3), the first rule before the second, and
+      neither takes a draw. A house that makes no checks has neither rule.
+      - *Anger towards the first house.* When the house's country is not marked passive for
+        multiplayer, the house has no enemy house, and it has a recorded base centre or base-start
+        cell (S-0215 claim 38's house records, which here are kept for every house as that claim
+        keeps them, although that claim uses them only for the neutral and special houses), its
+        anger towards the first house in the house order that is not itself, is not
+        multiplayer-passive and is not defeated grows by 1 point of anger (F8), followed by claim
+        16's recomputation. How far away that house is, and whether it has base records of its own,
+        play no part (`quirks.anger_to_first_house`, Edge cases). When that house is allied with
+        it, it gains the anger but does not become the enemy house (claim 16), so the house can
+        gain anger towards it at every check and stay without an enemy house.
+      - *Defeated enemy house.* Whatever its country and its base records, when the house's
+        enemy house is defeated, its anger towards that house is removed and it has no enemy
+        house, even when it has an anger above 0 towards another house, until one of its anger
+        values next changes. At its next check the first rule makes such a change when its
+        conditions hold.
     - *(k) Allied held targets (claim 29).* In each of its turns that is not cut short (claim 29,
       *Turns cut short*) and is not a warp turn of claim 29's *Warp members* rule, a holder of
       these houses whose target is allied with it, its own house included, drops the target.
@@ -1317,15 +1330,21 @@ index 1. This is a design rule, not an additional claim about the original.
       is not itself a wall candidate, because no object stands in a cell that holds a wall, so no
       setup can put both in one cell; the opportunity mark of a wall target in (i), because a wall
       target stays within reach unless the searcher moves, and an order that moves it also replaces
-      its target, so no setup known separates an opportunity wall target from a kept one; (j), because the
-      interval and the nearness measure are not established, so no expected tick or house can be
-      stated. Part k is `measurable` through scenario A6 part p, run p9b, for the drop by a
-      vehicle holder of a target of its own house and, by that run's control, for the keep by a
-      vehicle holder of a human-controlled owner, and `unmeasured` for its exceptions and the
-      transport rule, since no part here gives a holder of these houses an allied target under
-      one of them
-    - Confidence: medium for parts a, b, e, f, g, i and k (part k's exceptions and transport rule
-      included); low for parts c, d, h and j, and for the opportunity mark of a wall target
+      its target, so no setup known separates an opportunity wall target from a kept one; the
+      gate on base records in (j), because in a skirmish without map actions that set or clear a
+      base centre a house loses its base records only when its last building goes, and no part here
+      sets that up with a pick whose expected result is known, and the defeated-enemy rule of (j),
+      because the house is without an enemy house only from one check to the next, so no pick has a
+      known place in that window. Part j's anger towards the first house is `measurable` through
+      scenario A9, part f, and its place at the start of the check is `unmeasured`: no part tells
+      it from a place later in the check. Part k is `measurable` through scenario A6 part p, run
+      p9b, for the drop by a vehicle holder of a target of its own house and, by that run's
+      control, for the keep by a vehicle holder of a human-controlled owner, and `unmeasured` for
+      its exceptions and the transport rule, since no part here gives a holder of these houses an
+      allied target under one of them
+    - Confidence: medium for parts a, b, e, f, g, i, j and k (part k's exceptions and transport
+      rule included); low for parts c, d and h, for the place of part j's rules in the check, and
+      for the opportunity mark of a wall target
 
 26. **Initial threat coefficients and layers.** Each of a newly registered type's five threat
     coefficients starts at double-precision 0, independently of the game-wide defaults. Whenever
@@ -1372,6 +1391,12 @@ index 1. This is a design rule, not an additional claim about the original.
       does not fire at the object or at its cell.
     - No holder asks the firing check about a removed object, so no answer for such a target
       is needed (S-0301 claim 9).
+    - Apart from a revert (below), the drop leaves the holder's destination as it is: a holder
+      whose destination is a cell keeps it, an approach destination towards the object (S-0215
+      claim 37) included, whether the holder took it earlier in the same tick or before. What the
+      holder's later turns do with it, with no target, is S-0215's. Whether S-0307's
+      approach-position search can give a cell next to the holder's own is not settled here (Open
+      questions).
 
     The objects that go off the map include one that boards a transport, open-topped or not, and
     one that enters a building. A vehicle that enters a vehicle bunker stays on the map (S-0606
@@ -1463,7 +1488,13 @@ index 1. This is a design rule, not an additional claim about the original.
       `measurable` only by run b1's read of *A*'s target at the end of *C*'s turn, where the
       recorder allows that read: it tells a drop by the end of *C*'s turn from one at *A*'s next
       turn. It does not separate a drop inside the action from one later in *C*'s turn. Parts a to
-      c otherwise give the same records and fire events under both moments. The
+      c otherwise give the same records and fire events under both moments. The kept
+      destination: part g, run g1 for a destination taken before the kill tick and run g2 for one
+      taken in it, where the recorder reads the holder's own turn (the same-tick case is
+      `unmeasured` where it does not). A read only at the ends of ticks cannot tell the drop from
+      the holder's own turn later in the same tick, which may clear the destination (S-0215), so
+      part g puts the holder's turn first; a holder that ends a kill tick with neither target nor
+      destination after a turn of its own later in that tick does not contradict this claim. The
       off-map target drop: part e, for a target that boards a transport that is not open-topped.
       S-0215 scenario B7, case j, backs the revert and the restoration of the saved target, not a
       drop before it. `unmeasured`: the other off-map cases (an open-topped transport, a
@@ -1527,8 +1558,9 @@ index 1. This is a design rule, not an additional claim about the original.
     - Confidence: high (the drop, and the absence of a shot in the holder's turn after the drop, for
       infantry and vehicle holders of an object that is crushed, as in A18 parts a and b, or of an
       infantry unit killed in its death sequence, as in part c); medium (the drop's moment inside
-      the action, until run b1's read is made; the timer draw; the order of the timer draws, by
-      creation order and per object, part f; the order of a removed vehicle's animation picks
+      the action, until run b1's read is made; the kept destination, part g; the timer draw; the
+      order of the timer draws, by creation order and per object, part f; the order of a removed
+      vehicle's animation picks
       before its holders' timer draws, `unmeasured` above; the off-map drop of a target that
       boards a transport, part e; the revert of S-0215 B7 case j; and
       each `unmeasured` case above: a vehicle or building destroyed by a hit, a building awaiting
@@ -2524,6 +2556,14 @@ between the wall target *W*, the best candidate and no target.
   enemy-house bonus to anyone in the meantime. Switch `quirks.defeated_enemy_house_kept` (default
   on = original). Off: when a house is defeated, every house whose enemy house it is works its
   enemy house out again at once by claim 16's rule, which leaves defeated houses out.
+- **Anger goes to the first house, not the nearest** (claim 25, part j). A house of claim 25
+  with no enemy house gains anger at each of its checks towards the first other house in the
+  house order that is neither multiplayer-passive nor defeated, however far away it is. Switch
+  `quirks.anger_to_first_house` (default on = original). Off: the anger goes to the nearest such
+  house, by the straight-line horizontal distance between the centres of the cells that claim
+  25, part j, takes for each house (its recorded base centre, else its base-start cell),
+  the earlier house in the house order on ties. A house with neither record is left out, and
+  when every such house is left out no anger is added. This is our rule for the off setting.
 - **The map-wide search skips hovering objects** (claim 7). An infantry unit, vehicle or building
   whose render layer is not the ground layer, such as a hovering unit with jumpjet movement, is
   never considered by a map-wide search. Switch `quirks.hunt_ground_layer_only` (default on =
@@ -3627,6 +3667,30 @@ set in the test map's override sections.
   differed, for example because *C* depends on the attacker's owner).
 
 - *Part e (anger changes when alliances change):* use houses *H* (human), *P* and *Q* (computer), two candidate objects of the same type owned respectively by *P* and *Q*, and a human searcher whose enemy-house bonus is positive and large enough to decide between equal-score candidates. Arrange the scan order so that *Q*'s object is first. Set the alliance-order settings required by S-0414, and ensure the proposed orders satisfy its conditions. In the first run, *H* and *P* start allied, *Q* is not allied with *H*, and neither anger value is positive; the person issues the alliance-breaking order from *H* to *P*. *Expected:* the anger increment when *P* becomes an enemy makes *P* the enemy house, so the searcher picks *P*'s object despite *Q*'s earlier scan position. In a separate fresh run, *P* and *Q* start as enemies of *H*; damage raises *H*'s anger towards *P* above 0, while anger towards *Q* stays 0. The person then issues a permitted alliance order from *H* to *P*, with *Q* remaining an enemy. *Expected:* *H*'s anger towards the new ally *P* becomes 0 and *P* ceases to be the enemy house; the searcher picks *Q*'s object by scan order. *Falsified if:* either pick contradicts the stated enemy-house bonus and tie outcome. A run in which S-0414 refuses the alliance order does not decide the corresponding rule.
+- *Part f (anger towards the first house, claim 25, part j):* houses *H* (human), *Q* and *P*
+  (computer-controlled, in our engine test-only computer-controlled player houses, Terms,
+  *Test-only exception*; *Q* in the earlier lobby slot), so *H*, *Q*, *P* in the house order, none
+  allied and none with a country marked passive. In place of the setup's human firer, the firer is
+  an armed defence building *D* of *P* that needs no power (test map), *P*'s only building, with
+  the strength and distance coefficients 0 and the enemy-house bonus large, as in the setup above.
+  *Q* owns unarmed buildings just outside *D*'s search radius, and *H* owns one building far from
+  both. These buildings stand for the whole run and no other building of the three houses enters or
+  leaves play, so the houses' base records (S-0215 claim 38) put *Q*'s next to *P*'s and *H*'s far
+  away, and neither house is defeated. Within *D*'s range stand pairs of unarmed, stationary
+  vehicles of one type, one of *H* and one of *Q* in each pair, at equal distances from *D*, *Q*'s
+  first in the scan order, each taking several of *D*'s shots to destroy. Every vehicle of the
+  pairs stands in one ring of *D*'s search (claim 9), so that no early stop separates one pair from
+  another. Nothing damages an object of *P*. Record *D*'s picks up to tick 900, after which a check
+  can sell *D* or *Q*'s buildings (S-0217 claim 3). *D*'s first pick decides nothing: it can come
+  before *P*'s first check, in tick 0. A run with fewer than three later picks before tick 900
+  decides nothing; five runs that decide. *Expected:* every later pick is a vehicle of *H* while
+  one is left (from *P*'s first check on, *H*, the first house, is its enemy house), then *Q*'s.
+  *Falsified if:* after *D*'s first pick a vehicle of *Q* is picked while one of *H* is left. With
+  `quirks.anger_to_first_house` off, our engine picks *Q*'s vehicles first (*Q* is the nearest
+  house by the base records). Part f decides for part j only in a game whose set-up gives no house
+  an anger above 0 (part b, no enemy house at the start). If the set-up makes every house an enemy
+  of every other with equal anger, *P*'s enemy house is *H* by claim 16's tie rule before its first
+  check, and part f decides nothing for part j.
 
 **A10: suppression (claim 14).**
 - *Setup (all parts):* a firer of the human house, of a type that is not a multi-weapon type, with
@@ -4284,6 +4348,30 @@ hit or leaves the map. Each part runs 5 times from a fresh game, unless it says 
   the first of the two draws, in f2 *H*2 has it. *Falsified if:* in f1 *H*2 has the first draw
   (update order or distance order), or in f2 *H*1 has it (the draws ordered by holder, not by
   removed object).
+- *Part g (the destination is kept at the drop, Q-2988):* a computer-owned armed vehicle *A*,
+  placed by the map in *hunt* and never given an order, so that it has no override to revert
+  (S-0215 claim 10), of a driving type without the crusher and omni-crusher flags and not a
+  hunter-seeker type, so that its approach destination is a cell and never its target object
+  (S-0215 claim 37 (h), S-0307 claim 17), and a row of unarmed, stationary vehicles of one type of
+  the human house, far beyond *A*'s weapon's range, each of which one hit of a human-owned armed
+  vehicle *K* kills (test map), with *K* placed near them. *A* stands before *K* among the map's
+  vehicle entries, so that *A* takes its turn first in every tick (S-0203 claim 3). Also record
+  *A*'s destination at the end of each tick. *K* is ordered to fire at one vehicle after another (a
+  forced attack on an object of its own house), each time at the one nearest *A* among those left,
+  which is the one *A* takes next while it has no target (test map: *A*'s type's threat
+  coefficients 0 except a negative distance coefficient, so that among equal unarmed vehicles it
+  takes the nearest, F4), and before *A* comes within its weapon's range of it. A kill tick decides
+  in one of two runs. Run g1: *A* held the killed vehicle and a destination at the end of the tick
+  before. Run g2, only where the recorder reads *A*'s own turn: *A* held no target at the end of
+  the tick before and took the killed vehicle and a destination in its own turn of the kill tick,
+  Q-2988's case. A kill tick also decides nothing when the destination read (at the end of the tick
+  before in g1, at the end of *A*'s own turn in g2) is not a cell. Any other kill tick decides
+  nothing, nor does one in which an object hits *A* or *A*'s house makes a check (S-0217 claim 2).
+  Record until five kill ticks of g1 and, where it is run, one of g2 decide, repeating the game up
+  to 20 times for g2. *Expected:* at the end of each kill tick that decides, *A* holds no target
+  and has a destination: in g2, and in g1 where the recorder reads it, the one it had at the end of
+  its own turn in that tick. *Falsified if:* *A* has no destination at the end of such a kill tick,
+  or, where the recorder reads *A*'s own turn, one different from that read.
 
 **A19: a holder that changes owner (claim 30; Q-2712).** A tiny flat skirmish map, one human house
 *H* and two computer houses *E* and *F*, none allied with another, game speed 6, no engine add-on
@@ -4539,6 +4627,25 @@ Each part runs 5 times from a fresh game.
 - Whether any rule besides damage and alliance changes alters a house's anger (claim 16): not
   every situation in which the original makes houses allies or enemies is known, and in one
   situation that was not studied, making a house an enemy can add a second increment.
+- Claim 25, part e, after an eviction: in the original, an occupier of these houses in a civilian
+  building comes out, with *hunt* next, at each check of its house when that house owns no building
+  other than occupied civilian buildings and no construction vehicle (S-0217 claims 1, 2 and 4,
+  which state it for the original, backed by S-0217 scenario H1; medium, as S-0217 rates them). The
+  four arena pairings of Q-2987 meet that condition, so this settles its question 1 for them. Such
+  a unit is expected not to take the building it has just left as its first target after it comes
+  out, after its house's first checks, but an enemy object or another building it can occupy that
+  is farther away (low). After later checks it is expected sometimes to take the building it left
+  (low). Which rule or state makes the difference is not established, so claims 9, 17 and 25 do not
+  give it: they let such a unit take the building it left whenever that building scores highest, as
+  the nearest candidate often does. S-0217 scenario H1 records each unit's target every tick, and
+  so its first target after each eviction (Q-2987, question 2).
+- Claim 27 (Q-2988, question 3): whether S-0307's approach-position search can give, for a target
+  out of range, a cell next to the searcher's own cell, so that a holder whose new target is
+  destroyed in the tick in which it took it ends that tick with no target and a destination next to
+  its own cell, is not settled here (low). S-0307 claim 15 runs that search around the target at
+  the weapon's range; whether its first qualifying cell can lie next to a searcher just beyond that
+  range is S-0307's to state. M-0024 records no un-hit free vehicle with such a destination in its
+  8 runs, a count for those games.
 - The passengers of a mind-controlled open-topped transport (claim 10, table C and Edge cases) rest
   on one reading. Scenario A14, part l, tests it. The fall-back of claim 10 to the cell's last object rests on the
   same reading.
@@ -5062,6 +5169,19 @@ includes them; a domination adds no guard reset of its own, so an object taken o
 has its target dropped and its orders reset, with *guard* current or queued, before a
 computer-controlled dominating house gives it *hunt*. Level and backing: medium, `measurable`,
 S-0309 scenario A19 part n.
+
+S-0217 claim 2: a check also applies, at its start, the two anger rules of S-0309 claim 25, part
+j, which take no draw, so its words "This delay draw is the check's only draw of its own" stay
+true. It could point to that part. Level and backing: medium, `measurable` (S-0309 scenario A9
+part f) for the anger towards the first house; `unmeasured` for the defeated-enemy rule, and low,
+`unmeasured`, for the place of both rules at the start of the check.
+
+S-0215 scenario B6, part (f2): a tick in which a judged vehicle takes a target and an approach
+destination and loses that target in the same tick, destroyed by another unit's hit, should decide
+nothing for part (f2). S-0309 claim 27 keeps that destination at the drop, and whether S-0307's
+search can make it a cell next to the vehicle's own is open (S-0309 Open questions), so (f2)'s list
+of requests that can give such a destination does not cover it. Level and backing: medium,
+`measurable`, S-0309 scenario A18 part g.
 
 ## Questions for the project lead
 
