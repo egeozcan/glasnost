@@ -88,7 +88,14 @@ pub const DUEL_DIAGONAL_SEED: u32 = 8;
 /// *guard*, from tick 48 of seed 1 on): seed 1 then ends at tick 9605 with
 /// no radiation exit ordered; seed 2 plays all its ticks with smallest
 /// counter 4 before and after the change (`m6c_seed_sweep`, seeds 1 to 16).
-pub const M6C_SEED: u32 = 2;
+/// Moved from 2 at sim issues batch S3 (S-0415 claims 6 and 10, #221: a
+/// unit attacking a vehicle that deploys into a building keeps attacking
+/// the building; from tick 39 of seed 2 on, seven of house 0's infantry
+/// keep house 1's new construction yard as their target): seed 2 then
+/// ends at tick 9857 with smallest counter 1; seed 3 plays all its ticks
+/// with smallest counter 4, the most any seed reached (`m6c_seed_sweep`,
+/// seeds 1 to 16).
+pub const M6C_SEED: u32 = 3;
 
 /// Ticks of the full run of the M6c duel (shorter than the other duels'
 /// games: every ability is exercised well before it).
