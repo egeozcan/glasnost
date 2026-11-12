@@ -442,3 +442,72 @@ fn teleports_a_group_to_the_enemy_base() {
         "next to an enemy base: {dest:?} of {starts:?}"
     );
 }
+
+/// The teleport ready with a source picked on a group at `c` (the first
+/// stage's order issued and 200 ticks run).
+fn picked(c_at: (i32, i32)) -> (World, CellXY) {
+    let (g, yard) = ready("CHRNB");
+    let c = spot(yard, c_at.0, c_at.1);
+    let mut w = g.world.clone();
+    group(&mut w, c);
+    glasnost_sim::tick::step(&mut w);
+    let orders = think(&w);
+    assert_eq!(fires(&orders, "CHRN", &w), vec![c], "the first stage");
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..200 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    (w, c)
+}
+
+// design: own AI (#2) and S-0512 claim 10 (the second stage uses the first stage's last picked source and does not consume it; with the checked order, only an unconsumed source selection is accepted): once the second stage has been fired, the brain does not fire it again at the next tick while no new source is picked.
+#[test]
+fn fires_the_second_stage_once_per_pick() {
+    let (mut w, _) = picked((10, 8));
+    let orders = think(&w);
+    assert_eq!(fires(&orders, "CHWP", &w).len(), 1, "the second stage");
+    // The second stage consumes the source selection (S-0512 claim 10); the
+    // first stage's record keeps the source cell it last picked.
+    for i in 0..w.rules().superweapons.types.len() as u32 {
+        if let Some(r) = glasnost_sim::superweapons::record_mut(&mut w, HouseId(0), i) {
+            r.source_fresh = false;
+        }
+    }
+    for _ in 0..3 {
+        glasnost_sim::tick::step(&mut w);
+        let again = think(&w);
+        assert!(
+            fires(&again, "CHWP", &w).is_empty(),
+            "no second stage without a new pick at tick {}",
+            w.tick
+        );
+    }
+}
+
+// design: own AI (#2) and S-0512 claim 10 (the player may pick another source): a picked source whose block no longer holds the group (it drove off) is not teleported; the first stage is fired again on the group where it stands now.
+#[test]
+fn picks_again_when_the_group_has_left_the_source() {
+    let (mut w, c) = picked((10, 8));
+    let moved = CellXY::new(c.x + 6, c.y + 2);
+    let ids: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Vehicle)
+        .filter(|o| (o.pos.cell().x - c.x).abs() <= 1 && (o.pos.cell().y - c.y).abs() <= 1)
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(ids.len(), 3, "the group stands at the source");
+    for id in ids {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
+    group(&mut w, moved);
+    glasnost_sim::tick::step(&mut w);
+    let orders = think(&w);
+    assert!(
+        fires(&orders, "CHWP", &w).is_empty(),
+        "no teleport from a source the group has left"
+    );
+    assert_eq!(fires(&orders, "CHRN", &w), vec![moved], "a new pick");
+}

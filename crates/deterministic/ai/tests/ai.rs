@@ -792,6 +792,61 @@ fn a_refused_unit_builds_no_extra_factory() {
     assert_eq!(most, 1, "house 0 kept one vehicle factory");
 }
 
+// design: own AI (#6) and S-0407 claim 13 (a build order is applied only when the type is not at its limit when issued): with a second army vehicle type limited to one, the house never gives a build order the sim refuses for it at its limit, and goes on building its other army vehicle type.
+#[test]
+fn a_type_at_its_build_limit_is_not_ordered() {
+    let mut r = fixture::ruleset();
+    let mut gun2 = r.sim.vehicles["GUNR"].clone();
+    // spec: S-0407 F2 (a positive build limit: at limit once that many are owned)
+    gun2.econ.build_limit = Some(1);
+    r.sim.vehicles.insert("GUN2".into(), gun2);
+    r.registries
+        .get_mut("vehicles")
+        .expect("vehicles registry")
+        .push("GUN2".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-limit"));
+    let map = fixture::map();
+    let g = Game::new(
+        rules,
+        &map,
+        "synthetic-limit",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut w = g.world.clone();
+    let mut brains: Vec<Brain> = (0..2)
+        .map(|h| Brain::with_plan(&w, &map, HouseId(h), fixture::plan()))
+        .collect();
+    let gun2 = w.rules().index_of(Kind::Vehicle, "GUN2").expect("GUN2");
+    let gunr = w.rules().index_of(Kind::Vehicle, "GUNR").expect("GUNR");
+    let (mut refused, mut gun2_taken, mut gunr_taken) = (0, 0, 0);
+    while w.tick < 20_000 {
+        for b in &mut brains {
+            let h = b.house();
+            for o in b.think(&w) {
+                let built = match &o {
+                    Order::Build { what } if what.kind == Kind::Vehicle => Some(what.index),
+                    _ => None,
+                };
+                let taken = glasnost_sim::orders::issue(&mut w, h, o);
+                if h == HouseId(0) {
+                    match (built, taken) {
+                        (Some(t), false) if t == gun2 => refused += 1,
+                        (Some(t), true) if t == gun2 => gun2_taken += 1,
+                        (Some(t), true) if t == gunr => gunr_taken += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(gun2_taken >= 1, "GUN2 is built");
+    assert!(gunr_taken >= 2, "GUNR goes on being built: {gunr_taken}");
+    assert_eq!(refused, 0, "no refused GUN2 build order");
+}
+
 // spec: S-0314 claim 24 (our AI sends a vehicle to a depot only by an ordinary enter order): a damaged idle army vehicle of a house with an accepting repair depot is given an enter order on it; a healthy one is not.
 #[test]
 fn sends_damaged_vehicles_to_a_depot() {

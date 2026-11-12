@@ -647,6 +647,11 @@ struct Kept {
     unblockers: BTreeMap<(TypeRef, u32), Option<TypeRef>>,
     /// [`Script::buildable`] by type.
     buildable: BTreeMap<TypeRef, bool>,
+    /// [`Script::at_limit`] by type.
+    limited: BTreeMap<TypeRef, bool>,
+    /// The tech-climb building the script ordered this think
+    /// ([`Script::climbed`]).
+    climbed: Option<TypeRef>,
 }
 
 impl PlaceMemo {
@@ -686,6 +691,25 @@ impl PlaceMemo {
     fn put_buildable(&self, t: TypeRef, yes: bool) {
         if let Some(m) = self.0.borrow_mut().as_mut() {
             m.buildable.insert(t, yes);
+        }
+    }
+
+    fn limited(&self, t: TypeRef) -> Option<bool> {
+        self.0
+            .borrow()
+            .as_ref()
+            .and_then(|m| m.limited.get(&t).copied())
+    }
+
+    fn put_limited(&self, t: TypeRef, yes: bool) {
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            m.limited.insert(t, yes);
+        }
+    }
+
+    fn set_climbed(&self, t: TypeRef) {
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            m.climbed = Some(t);
         }
     }
 }
@@ -748,6 +772,32 @@ impl Script {
         *self.placed.0.borrow_mut() = None;
     }
 
+    /// Where the house places its done building of type `t`, on a think
+    /// tick or between thinks alike: an anti-air defence ordered against a
+    /// drainer beside it (M8 step B6, `antiair::place_goal`), a refinery by
+    /// its field, and while the naval yard has no cell, another building
+    /// toward the water; else the spiral's cell.
+    pub(crate) fn done_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+        let aa = crate::antiair::place_goal(self, w, t).and_then(|g| self.place_near(w, t, g));
+        let toward = || {
+            (!naval_building(w, t))
+                .then(|| self.water_goal(w))
+                .flatten()
+                .and_then(|g| self.place_toward(w, t, g))
+        };
+        aa.or_else(|| self.place_refinery(w, t))
+            .or_else(toward)
+            .or_else(|| self.place_cell(w, t))
+    }
+
+    /// The tech-climb building the script ordered in the current think, if
+    /// any: the one Build order a special building of the brain replaces.
+    /// Another role-less building's Build order (a held item's resume, a
+    /// sensor or a superweapon building) is not one.
+    pub(crate) fn climbed(&self) -> Option<TypeRef> {
+        self.placed.0.borrow().as_ref().and_then(|m| m.climbed)
+    }
+
     /// Sets the enemy start cells to visit: every start cell but the one
     /// nearest the house's first objects.
     pub fn set_starts(&mut self, w: &World, starts: &[CellXY]) {
@@ -775,11 +825,14 @@ impl Script {
         plays(w, t, role) && (list.is_empty() || list.iter().any(|x| x == name_of(w, t)))
     }
 
-    /// The types the house can build now for `role`, cheapest first.
+    /// The types the house can build now for `role`, cheapest first: not
+    /// one at its build limit, whose icon is dark and whose build order
+    /// the sim refuses.
     pub(crate) fn candidates(&self, w: &World, role: Role) -> Vec<TypeRef> {
         let mut v: Vec<TypeRef> = all_types(w)
             .into_iter()
-            .filter(|&t| self.allowed(w, t, role) && self.buildable(w, t))
+            // design: own AI (#6): a type at its limit is no candidate, so the next one is tried; spec: S-0407 claims 9 and 13 (at limit: refused when the order is issued)
+            .filter(|&t| self.allowed(w, t, role) && self.buildable(w, t) && !self.at_limit(w, t))
             .collect();
         v.sort_by_key(|&t| (production::cost_field(w, t), t.kind as u8, t.index));
         v
@@ -958,11 +1011,23 @@ impl Script {
     /// ferries infantry to the enemy's base, not to a unit that flies or
     /// stands where no one walks.
     pub(crate) fn base_goal(&self, w: &World) -> Option<CellXY> {
+        self.base_goal_for(w, None)
+    }
+
+    /// [`Script::base_goal`] for units of movement zone `zone`: only a
+    /// building whose cell lies in a reach region of that zone (S-0212
+    /// claim 4) counts, so that a naval yard on the water, which no one
+    /// walks to, does not make every infantry unit seem to need a ferry.
+    pub(crate) fn base_goal_for(&self, w: &World, zone: Option<MovementZone>) -> Option<CellXY> {
         let home = self.home(w)?;
         let seen = self.seen_enemies(w);
         seen.iter()
             .copied()
             .filter(|&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+            // design: own AI (#9): the goal is a building the zone's units can stand by
+            .filter(|&(_, c)| {
+                zone.is_none_or(|z| matches!(regions::reach_in(w, c, z), Reach::Region(_)))
+            })
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
             .or_else(|| self.next_start(w, &seen))
@@ -1059,6 +1124,17 @@ impl Script {
         }
         let yes = tech::buildable(w, self.house, t);
         self.placed.put_buildable(t, yes);
+        yes
+    }
+
+    /// Whether `t` is at its build limit for the house now
+    /// ([`tech::at_limit`]), the answer kept for the rest of a think.
+    fn at_limit(&self, w: &World, t: TypeRef) -> bool {
+        if let Some(yes) = self.placed.limited(t) {
+            return yes;
+        }
+        let yes = tech::at_limit(w, self.house, t);
+        self.placed.put_limited(t, yes);
         yes
     }
 
@@ -1739,21 +1815,7 @@ impl Script {
                 .then_some(item.t)
         });
         if let Some(t) = done {
-            // An anti-air defence ordered against a drainer goes beside it
-            // (M8 step B6, `antiair::place_goal`). While the naval yard has
-            // no cell, other buildings go toward the water.
-            let aa = crate::antiair::place_goal(self, w, t).and_then(|g| self.place_near(w, t, g));
-            let toward = || {
-                (!naval_building(w, t))
-                    .then(|| self.water_goal(w))
-                    .flatten()
-                    .and_then(|g| self.place_toward(w, t, g))
-            };
-            if let Some(cell) = aa
-                .or_else(|| self.place_refinery(w, t))
-                .or_else(toward)
-                .or_else(|| self.place_cell(w, t))
-            {
+            if let Some(cell) = self.done_cell(w, t) {
                 out.push(Order::Place {
                     what: t,
                     cell: Some(cell),
@@ -1775,8 +1837,10 @@ impl Script {
             } else if !selling
                 && self.harvesters_kept(w)
                 && let Some(t) = walk().or_else(|| self.climb(w))
+                && self.order_build(w, t, &mut out).is_some()
+                && role_of(w, t).is_none()
             {
-                self.order_build(w, t, &mut out);
+                self.placed.set_climbed(t);
             }
         }
 
@@ -1941,7 +2005,8 @@ impl Script {
         }
         let mut waiting: Vec<ObjectId> = Vec::new();
         let home = self.home(w);
-        let ahead = self.base_goal(w);
+        // The ferry's goal by the unit's movement zone (`base_goal_for`).
+        let mut ahead: BTreeMap<Option<u8>, Option<CellXY>> = BTreeMap::new();
         for id in army.iter().copied().filter(|&id| idle(w, id)) {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
@@ -1958,7 +2023,16 @@ impl Script {
                     target: Some(Target::Object(e)),
                     dest: None,
                 });
-            } else if let (Some(h), Some(g)) = (home, ahead)
+            } else if let Some(h) = home
+                && let Some(g) = {
+                    let zone = w
+                        .obj(id)
+                        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+                        .map(|u| u.zone);
+                    *ahead
+                        .entry(zone.map(|z| z as u8))
+                        .or_insert_with(|| self.base_goal_for(w, zone))
+                }
                 && self.needs_ferry(w, id, g)
             {
                 // Infantry that cannot walk to the goal waits at home for
@@ -2082,7 +2156,7 @@ impl Script {
                             .iter()
                             .copied()
                             .find(|&c| !self.cleared(w, c, &enemies))
-                            .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
+                            .or_else(|| from.and_then(|f| self.unseen_cell(w, f, id)))
                             .or_else(|| {
                                 (!targets.is_empty()).then(|| {
                                     let c = targets[self.next_target % targets.len()];
@@ -2151,7 +2225,7 @@ impl Script {
     /// The reach region unit `id` stands in for its movement zone (S-0212
     /// claim 4); `None` for a unit that flies (S-0502), has no zone or
     /// stands outside every region.
-    fn reach_region(&self, w: &World, id: ObjectId) -> Option<u32> {
+    pub(crate) fn reach_region(&self, w: &World, id: ObjectId) -> Option<u32> {
         let o = w.obj(id)?;
         if crate::jumpjets::flies(w, id) {
             return None;
@@ -2172,7 +2246,7 @@ impl Script {
     /// a long-range gun to the shore facing an enemy across the water;
     /// [`Script::reachable`] then sends it to the region's cell nearest
     /// `c`, which is in range if any is).
-    fn reaches(
+    pub(crate) fn reaches(
         &self,
         w: &World,
         id: ObjectId,
@@ -2270,15 +2344,27 @@ impl Script {
     }
 
     /// The nearest cell of the search grid, from `from`, that is in the
-    /// usable area and that the house does not see now; the first in cell
-    /// order on equal distance.
-    fn unseen_cell(&self, w: &World, from: CellXY) -> Option<CellXY> {
+    /// usable area, that the house does not see now and that unit `id` can
+    /// go to: in its reach region (S-0212 claim 4) when it has one
+    /// ([`Script::reach_region`]); the first in cell order on equal
+    /// distance.
+    fn unseen_cell(&self, w: &World, from: CellXY, id: ObjectId) -> Option<CellXY> {
+        let region = self.reach_region(w, id);
+        let zone = w
+            .obj(id)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            .map(|u| u.zone);
+        // design: own AI (#10): a search cell the wave cannot reach (the middle of a lake) stays unseen when the wave stands on the nearest shore, and it was picked again on every think; only cells of the unit's own region are searched
+        let goes = |c: CellXY| match (region, zone) {
+            (Some(r), Some(z)) => regions::reach_in(w, c, z) == Reach::Region(r),
+            _ => true,
+        };
         w.cells
             .grid
             .iter()
             .map(|(c, _)| c)
             .filter(|c| c.x % SEARCH_STEP == 0 && c.y % SEARCH_STEP == 0)
-            .filter(|&c| w.cells.usable(c) && !shroud::seen(w, self.house, c))
+            .filter(|&c| w.cells.usable(c) && !shroud::seen(w, self.house, c) && goes(c))
             .min_by_key(|&c| (dist2(c, from), c.y, c.x))
     }
 
@@ -3074,5 +3160,61 @@ mod can_attack_tests {
         w.obj_mut(tank).unwrap().combat.rearm_until = tick + 50;
         assert!(!can_attack(&w, tank, cart));
         assert!(can_attack(&w, tank, heavy));
+    }
+}
+
+#[cfg(test)]
+mod unseen_cell_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_sim::testkit;
+
+    // design: own AI (#10) and S-0212 claim 4 (reach regions): the wave's search cell, once the enemy starts are cleared, is one its lead unit can go to; a cell in the middle of a lake (or on an island in it) stays unseen from the shore and was picked again on every think
+    #[test]
+    fn the_search_cell_is_one_the_wave_can_reach() {
+        let centre = fixture::at(-fixture::START_DX, -12);
+        let mut m = fixture::map();
+        let cells: Vec<CellXY> = m.cells.iter().map(|(c, _)| c).collect();
+        for c in cells {
+            let d = (c.x - centre.x).abs().max((c.y - centre.y).abs());
+            if (2..=9).contains(&d)
+                && let Some(cell) = m.cells.get_mut(c)
+            {
+                cell.tile = fixture::WATER_TILE;
+                cell.overlay = glasnost_map::NO_OVERLAY;
+            }
+        }
+        let g = Game::new(
+            fixture::rules(),
+            &m,
+            "synthetic-lake",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the lake skirmish loads");
+        let mut w = g.world.clone();
+        let at = fixture::at(-fixture::START_DX + 4, 4);
+        let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, at, 0);
+        let zone = w
+            .rules()
+            .unit(Kind::Vehicle, w.obj(tank).unwrap().type_index)
+            .unwrap()
+            .zone;
+        let home = regions::reach_in(&w, at, zone);
+        assert!(matches!(home, Reach::Region(_)));
+        let s = Script::new(HouseId(0), fixture::plan());
+        // The scene: the nearest unseen search cell is one the tank cannot reach.
+        let nearest = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|c| c.x % SEARCH_STEP == 0 && c.y % SEARCH_STEP == 0)
+            .filter(|&c| w.cells.usable(c) && !shroud::seen(&w, HouseId(0), c))
+            .min_by_key(|&c| (dist2(c, centre), c.y, c.x))
+            .expect("an unseen cell");
+        assert_ne!(regions::reach_in(&w, nearest, zone), home, "{nearest:?}");
+        let c = s.unseen_cell(&w, centre, tank).expect("a search cell");
+        assert_eq!(regions::reach_in(&w, c, zone), home, "{c:?}");
     }
 }

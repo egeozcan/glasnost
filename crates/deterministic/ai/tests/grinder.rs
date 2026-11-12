@@ -456,3 +456,33 @@ fn a_far_unit_that_does_not_move_tries_another_side() {
     }
     assert_eq!(w.obj(far).unwrap().pos.cell(), start, "it never moved");
 }
+
+// design: own AI (#8) and S-0411 claim 6 (a building line with an item takes no starting or queuing build order): while the building line makes something else, the house that has a use for a grinder does not order one (the sim would refuse it).
+#[test]
+fn no_grinder_order_while_the_building_line_is_busy() {
+    let g = game(1);
+    let mut w = g.world.clone();
+    let map = fixture::map();
+    let mut br = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
+    let grnd = w.rules().index_of(Kind::Building, "GRND").unwrap();
+    let (mut refused, mut taken) = (0, 0);
+    for step in 0..9000 {
+        // The base up, a badly damaged vehicle gives the house a use for a grinder.
+        if step == 3000 {
+            let hurt = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 2, 10);
+            w.obj_mut(hurt).unwrap().health /= 5;
+        }
+        for o in br.think(&w) {
+            let grinder = matches!(&o, Order::Build { what } if what.kind == Kind::Building && what.index == grnd);
+            let ok = glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+            match (grinder, ok) {
+                (true, false) => refused += 1,
+                (true, true) => taken += 1,
+                _ => {}
+            }
+        }
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(taken >= 1, "the grinder is built");
+    assert_eq!(refused, 0, "no refused grinder build order");
+}

@@ -55,6 +55,73 @@ fn harvesters(w: &World) -> usize {
 /// The power plants house 0's brain orders at the first think once its
 /// base stands, the naval yard is buildable and the band is explored.
 fn power_orders(rows: i32) -> usize {
+    let (w, map) = walk_ready(rows);
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
+    let orders = brain.think(&w);
+    let powr = w.rules().index_of(Kind::Building, "POWR");
+    let plants = orders
+        .iter()
+        .filter(|o| matches!(o, Order::Build { what } if what.kind == Kind::Building && Some(what.index) == powr))
+        .count();
+    // A plant ordered before a building the plants cannot carry (M7b AI
+    // round 2, `power::plant_first`) is not a walk.
+    plants.saturating_sub(brain.special_uses().plants_first as usize)
+}
+
+// design: own AI (#7) and PLAN §4.7: the power plant the base walk orders toward water that takes the naval yard is placed toward the water also when it is done on a tick that is not a think tick (the brain then places it outside the script): it stands north of every other building of the base, on the band's side.
+#[test]
+fn a_walk_plant_done_between_thinks_lands_toward_the_water() {
+    let (mut w, map) = walk_ready(6);
+    let powr = w.rules().index_of(Kind::Building, "POWR").expect("POWR");
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
+    let north = |w: &World| {
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(HouseId(0)) && o.on_map && o.kind == Kind::Building)
+            .map(|o| o.pos.cell().y)
+            .min()
+            .expect("a building")
+    };
+    let before = north(&w);
+    let mut placed = None;
+    let mut ordered = false;
+    let end = w.tick + 3000;
+    while w.tick < end && placed.is_none() {
+        for o in brain.think(&w) {
+            if let Order::Build { what } = &o
+                && what.kind == Kind::Building
+                && what.index == powr
+            {
+                ordered = true;
+            }
+            if let Order::Place {
+                what,
+                cell: Some(c),
+            } = &o
+                && what.index == powr
+                && ordered
+            {
+                placed = Some((w.tick, *c));
+            }
+            glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+        }
+        testkit::run(&mut w, 1);
+    }
+    let (tick, cell) = placed.expect("the walk's plant is placed");
+    assert!(
+        !brain.thinks_at(tick),
+        "the scene places it between thinks (tick {tick})"
+    );
+    assert!(
+        cell.y < before,
+        "placed toward the water: {cell:?}, the base's northern row {before}"
+    );
+}
+
+/// The band skirmish once house 0's base stands, the naval yard is
+/// buildable, the band is explored, the house is rich and powered, no
+/// building is on its line and the tick is a think tick.
+fn walk_ready(rows: i32) -> (World, Map) {
     let map = band_map(rows);
     let mut g = Game::new(
         fixture::rules(),
@@ -95,33 +162,32 @@ fn power_orders(rows: i32) -> usize {
     ));
     // The rest of the base is in order: credits, power and no building on the line.
     w.houses[0].credits = 100_000;
-    for l in w
+    // spec: S-0404 claim 6 (the cancel-all order empties the line of the type)
+    let lined: Vec<glasnost_sim::econ::TypeRef> = w
         .econ
         .lines
         .lines
-        .iter_mut()
+        .iter()
         .filter(|l| l.house == HouseId(0))
-    {
-        if l.item.as_ref().is_some_and(|i| i.t.kind == Kind::Building) {
-            l.item = None;
-            l.queue.clear();
-        }
+        .filter_map(|l| l.item.as_ref().map(|i| i.t))
+        .filter(|t| t.kind == Kind::Building)
+        .collect();
+    for t in lined {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), Order::CancelAll { what: t });
     }
+    testkit::run(&mut w, 1);
+    assert!(
+        !w.econ.lines.lines.iter().any(|l| l.house == HouseId(0)
+            && (l.item.as_ref().is_some_and(|i| i.t.kind == Kind::Building)
+                || l.queue.iter().any(|t| t.kind == Kind::Building))),
+        "no building on the line"
+    );
     let p = &w.houses[0].econ.power;
     assert!(p.output > p.drain, "power to spare: {p:?}");
     while w.tick % 15 != 0 {
         testkit::run(&mut w, 1);
     }
-    let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
-    let orders = brain.think(&w);
-    let powr = w.rules().index_of(Kind::Building, "POWR");
-    let plants = orders
-        .iter()
-        .filter(|o| matches!(o, Order::Build { what } if what.kind == Kind::Building && Some(what.index) == powr))
-        .count();
-    // A plant ordered before a building the plants cannot carry (M7b AI
-    // round 2, `power::plant_first`) is not a walk.
-    plants.saturating_sub(brain.special_uses().plants_first as usize)
+    (w, map)
 }
 
 // PLAN §4.7, S-0406 claims 3 to 5: a band of water two rows deep cannot take the 3 × 3 naval yard anywhere, so the base does not walk toward it.

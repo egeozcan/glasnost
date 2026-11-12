@@ -209,3 +209,60 @@ fn queues_a_healer_without_credits_to_spare() {
         .count();
     assert_eq!(builds, 1, "{orders:?}");
 }
+
+/// The special abilities' think on `w` for house 0, with `earlier` move
+/// orders for `unit` given before it in the same think (the script's rally
+/// and the brain's ferry, say).
+fn special_think(
+    s: &mut glasnost_ai::special::Special,
+    w: &World,
+    unit: ObjectId,
+    earlier: usize,
+) -> Vec<Order> {
+    let script = glasnost_ai::scripted::Script::new(HouseId(0), fixture::plan());
+    let at = w.obj(unit).expect("the unit").pos.cell();
+    let mut out: Vec<Order> = (0..earlier)
+        .map(|_| Order::Behaviour {
+            actor: unit,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at)),
+        })
+        .collect();
+    s.think(&script, w, &mut out);
+    out
+}
+
+// design: own AI (#3): a healer with two orders from earlier in the think (the script's and the brain's) is loaded into the gunner vehicle; its earlier orders go and the special step does not panic on its own start index.
+#[test]
+fn a_healer_with_two_earlier_orders_is_loaded() {
+    let (w, medi, guns) = scene(&ruleset(1), PER_HEALER);
+    let mut s = glasnost_ai::special::Special::default();
+    let out = special_think(&mut s, &w, medi, 2);
+    let v = sent_into(&out, medi).expect("MEDI is sent into a gunner vehicle");
+    assert!(guns.contains(&v));
+    assert_eq!(
+        out.iter().filter(|o| o.actor() == Some(medi)).count(),
+        1,
+        "only the load is left for MEDI: {out:?}"
+    );
+}
+
+// design: own AI (#3) and the memory of PLAN §4.7: a load given to a healer that had an earlier order in the same think is noted like any special order, so a load that does not take (here: nothing is issued) is given up at the next think instead of being clicked again.
+#[test]
+fn a_load_after_an_earlier_order_is_noted() {
+    let (w, medi, _) = scene(&ruleset(1), PER_HEALER);
+    let mut s = glasnost_ai::special::Special::default();
+    let first = special_think(&mut s, &w, medi, 1);
+    assert!(sent_into(&first, medi).is_some(), "loaded: {first:?}");
+    let mut w2 = w.clone();
+    testkit::run(&mut w2, 15);
+    let again = special_think(&mut s, &w2, medi, 0);
+    assert_eq!(s.given_up(), 1, "the load that did not take is given up");
+    assert_eq!(
+        sent_into(&again, medi),
+        None,
+        "not clicked again: {again:?}"
+    );
+}
