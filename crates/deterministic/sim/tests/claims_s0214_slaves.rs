@@ -83,9 +83,15 @@ fn working_slave() -> (World, ObjectId) {
 }
 
 fn moves(orders: &[Order]) -> bool {
-    orders
-        .iter()
-        .any(|o| matches!(o, Order::Behaviour { behaviour: Behaviour::Move, .. }))
+    orders.iter().any(|o| {
+        matches!(
+            o,
+            Order::Behaviour {
+                behaviour: Behaviour::Move,
+                ..
+            }
+        )
+    })
 }
 
 // spec: S-0214 Terms (movable: it is not a slave unit) and claim 19 (an ordinary band box takes units not controlled by a slave master); table GC rows GC9 and GC12 (no move order for an actor that is not movable)
@@ -97,7 +103,13 @@ fn a_working_slave_is_not_movable_and_not_taken_by_a_band_box() {
         "claim 19: band box"
     );
     assert!(!targeting::movable(&w, HOUSE, s), "Terms: movable");
-    let click = targeting::click(&w, HOUSE, &[s], ClickOn::Cell(at(-6, -6)), Modifiers::default());
+    let click = targeting::click(
+        &w,
+        HOUSE,
+        &[s],
+        ClickOn::Cell(at(-6, -6)),
+        Modifiers::default(),
+    );
     assert!(!moves(&click.orders), "cell click: {:?}", click.orders);
     let scatter = targeting::key_command(&w, HOUSE, &[s], KeyCommand::Scatter);
     assert!(scatter.is_empty(), "scatter: {scatter:?}");

@@ -295,8 +295,8 @@ pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
 /// aircraft or vehicle-like building in play, not already selected, not
 /// tethered to a building that stands on its cell, not a bunkered vehicle
 /// or an occupied bunker (S-0606 claim 11), not a vehicle disabled by the
-/// loss of its control centre (S-0405 claim 20). Slaves controlled by a
-/// master are excluded too; that state does not exist yet.
+/// loss of its control centre (S-0405 claim 20), not a slave controlled by
+/// a master.
 pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0214 claim 19 (own infantry, vehicles and aircraft; ordinary buildings excluded, vehicle-like buildings taken)
@@ -313,8 +313,11 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
     let bunker = crate::structures::bunker::bunkered(w, id)
         || (crate::structures::bunker::is_bunker(w, id)
             && crate::structures::bunker::occupied(w, id));
+    // spec: S-0214 claim 19 (an ordinary band box takes units not controlled by a slave master; S-0402 claim 14's slave with a master) (#209)
+    let slave = crate::econ::slaves::is_slave(w, id);
     // spec: S-0214 claim 19 (in play, selectable, not being erased, not already selected; enemy and allied objects never added)
     kind_ok
+        && !slave
         && own(w, house, id)
         && selectable(w, id)
         && !seized_out(w, id)
@@ -512,15 +515,19 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
         // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
         // spec: S-0214 Terms (movable: not phasing in) and claim 6 (d) (r78: a phasing-in actor is not movable, so part (d) asks that the target be in range of the weapon it would use)
-        // The Terms' "not being erased" and "not a slave unit" are not asked here (seams: rows G2 and GC1 refuse a click of an actor being erased; our engine has no slave units).
+        // spec: S-0214 Terms (movable mobile object: it is not being erased, and it is not a slave unit, S-0402 claim 14's slave with a master) (#209)
         Some(Kind::Infantry | Kind::Vehicle) => {
             !disabled(w, id)
+                && !being_erased(w, id)
+                && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
                 && !crate::structures::bunker::bunkered(w, id)
         }
         Some(Kind::Aircraft) => {
             !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
+                && !being_erased(w, id)
+                && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
         }
