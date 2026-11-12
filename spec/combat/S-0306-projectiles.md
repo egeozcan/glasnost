@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 80
+revision: 87
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998]
 supersedes: []
 ---
 
@@ -26,9 +26,10 @@ Claim 27 also owns the railgun shot's direct hits and cliff-collapse chance, sep
 its particle trail. Claims 28 to 33 give how the projectile's body is drawn: its sprite frame or
 voxel orientation, palette and brightness, its shadow and its light glow. Claim 23 also gives
 the firing check's refusals that depend on the firer's type rather than its weapon: the
-land-targeting mode's row and the naval-targeting mode's row. The two departures under Edge
-cases that state our engine's own choice (the object numbering and the failed comparison solve)
-are design, which is why `design` is among this spec's sources. Claim 17's two rules for a
+land-targeting mode's row and the naval-targeting mode's row. The departures under Edge
+cases that state our engine's own choice (the object numbering, the failed comparison solve and
+the airburst loop of claim 21a) are design, which is why `design` is among this spec's
+sources. Claim 17's two rules for a
 superweapon warp member (its deck count after a refused placement, and no locomotor seizing of
 it from departure until its arrival hold ends) are design as well. This spec covers skirmish.
 Network games and campaigns are out of scope.
@@ -1051,56 +1052,195 @@ S-0501 claim 20.
     - Confidence: medium, the note on (c) included until S-0318 scenario SH1 part r runs
 
 21. **Several detonations.** Ordinary detonation damage is S-0303's area damage at the detonation
-    point. A projectile whose warhead has the parasite flag is an exception (S-0303 claim 2):
-    its detonation bypasses area damage, whether attachment succeeds or fails. Its later
-    explosion animation and debris remain unchanged. This exception applies only to projectile
-    detonations, not to non-projectile producers using the same warhead. For a latching weapon,
-    S-0614 claim 1 owns delivery: it attempts to latch onto the projectile's target object
-    regardless of the detonation point's distance from that object; a cell target or a target
-    that no longer exists gives a failed latch.
-    What each ordinary area-damage detonation passes to S-0303 (Terms there; glossary
-    *detonation*) is:
-    the projectile's damage amount at that moment (the shot's damage, less the points that claim 18
-    took in earlier turns; the same amount for every cluster detonation), the warhead of the shot's
-    weapon, and the attacker and attacking house that S-0302 (claim 1) gives a projectile's
-    detonation: the firer and its house unless, between the shot and detonation, the firer was
-    killed, removed from the game by any other means or, believed, started to cloak; neither is
-    carried in those cases. Loading the firer into a closed transport is believed not to end
-    this attribution. These are S-0302 claim 1's rules and confidence qualifications, also used by
-    S-0303 claim 14; claim 17 here concerns continued flight, not attribution. The nuclear wait
-    of claim 25 does not preserve attribution against any of those intervening events. The children of an
-    airburst (below) are projectiles of their own: each passes the damage amount and warhead of the
-    airburst weapon and takes the firer of the projectile that launched it, so the same
-    attacker rule applies at their detonation.
-    A projectile that is not airburst detonates *n*_c times, *n*_c being its cluster count: the first
-    at the point of claim 20, each later one at a nearby point of the point before it. For every detonation, including the last, the random-state recorder observes a ranged draw R(256, 512), whose result is the distance *λ*, followed by one raw value of the scenario random stream; that raw value is used for the nearby point N(*Q*, *λ*, snap off) of S-0312 F2, where *Q* is the point just used. So a
-    cluster count of 1 still takes the two draws once, and the points form a chain: each is 256 to
-    512 leptons from the one before it, horizontally and up to the rounding of F2, except that a
-    point whose cell would lie outside 0 to 511 in either coordinate is replaced by *Q* itself
-    (F2). (Were a detonation ever to remove the projectile, its remaining detonations and the draws
-    after that detonation would not happen. Nothing that this spec or S-0303 describes removes it during its own
-    detonation, so in every case described here they all happen; Open questions.) A cluster
-    count of 0 or less gives no detonation and no draw at all (Edge cases). An
-    airburst projectile detonates once and launches nine projectiles of its airburst weapon: at the
-    eight neighbouring cells and at its own cell, falling straight down at a tenth of that
-    weapon's speed *S*_w (integer division, truncated, with *S*_w as claim 1 gives it). Each child
-    takes one draw R(0, 32) when it is made; that draw has no other observable consequence, because
-    the children fall vertically. A projectile with a shrapnel weapon also launches fragments
+    point. A projectile whose warhead has the parasite flag is an exception (S-0303 claim 2): its
+    detonation bypasses area damage, whether attachment succeeds or fails. Its later explosion
+    animation and debris remain unchanged. This exception applies only to projectile detonations,
+    not to non-projectile producers using the same warhead. For a latching weapon, S-0614 claim 1
+    owns delivery: it attempts to latch onto the projectile's target object regardless of the
+    detonation point's distance from that object; a cell target or a target that no longer exists
+    gives a failed latch. What each ordinary area-damage detonation passes to S-0303 (Terms
+    there; glossary *detonation*) is: the projectile's damage amount at that moment (the shot's
+    damage, less the points that claim 18 took in earlier turns; the same amount for every
+    cluster detonation), the warhead of the shot's weapon, and the attacker and attacking house
+    that S-0302 (claim 1) gives a projectile's detonation: the firer and its house unless,
+    between the shot and detonation, the firer was killed, removed from the game by any other
+    means or, believed, started to cloak; neither is carried in those cases. Loading the firer
+    into a closed transport is believed not to end this attribution. These are S-0302 claim 1's
+    rules and confidence qualifications, also used by S-0303 claim 14; claim 17 here concerns
+    continued flight, not attribution. The nuclear wait of claim 25 does not preserve attribution
+    against any of those intervening events. The children of an airburst (below) are projectiles
+    of their own: each passes the damage amount and warhead of the airburst weapon and takes the
+    firer of the projectile that launched it, so the same attacker rule applies at their
+    detonation. A projectile that is not airburst detonates *n*_c times, *n*_c being its cluster
+    count: the first at the point of claim 20, each later one at a nearby point of the point
+    before it. For every detonation, including the last, the random-state recorder observes a
+    ranged draw R(256, 512), whose result is the distance *λ*, followed by one raw value of the
+    scenario random stream; that raw value is used for the nearby point N(*Q*, *λ*, snap off) of
+    S-0312 F2, where *Q* is the point just used. So a cluster count of 1 still takes the two
+    draws once, and the points form a chain: each is 256 to 512 leptons from the one before it,
+    horizontally and up to the rounding of F2, except that a point whose cell would lie outside 0
+    to 511 in either coordinate is replaced by *Q* itself (F2). (Were a detonation ever to remove
+    the projectile, its remaining detonations and the draws after that detonation would not
+    happen. Nothing that this spec or S-0303 describes removes it during its own detonation, so
+    in every case described here they all happen; Open questions.) A cluster count of 0 or less
+    gives no detonation and no draw at all (Edge cases). An airburst projectile detonates once
+    and launches nine projectiles of its airburst weapon. All nine start at its own position, the
+    point of its detonation, raised as claim 8 says for the projectiles a burst releases (1
+    lepton above the terrain height when that point is not above it), and are aimed at the eight
+    neighbouring cells and, made last, at its own cell; each is launched straight down at a tenth
+    of that weapon's speed *S*_w (integer division, truncated, with *S*_w as claim 1 gives it),
+    and a straight or arcing child then also gains downward speed under gravity in each of its
+    turns, as claim 10 says for any such projectile. Each child takes one draw R(0, 32) when it
+    is made; that draw has no other observable consequence, because the children are launched
+    straight down whatever it gives. A projectile with a shrapnel weapon also launches fragments
     (S-0318).
-    - Backing: `measurable` (scenario P14 for the cluster count, the chain, the nine children and
-      the draw of each; P14 variant d, with the random-state recorder, for the ranged draw and raw
-      value after every detonation, the last included, for a cluster count of 1 and of 3, and for
-      no draw at a cluster count of 0; S-0302's scenarios D13, D17 and D24, which own the rule, for the attacker and attacking house
-      that each detonation carries; S-0614 scenarios P1 and P3 for the parasite-projectile
-      exception; S-0303 scenario A14 variant o for its later explosion animation and debris),
-      and `unmeasured` for the case of a projectile that leaves play during its own detonation (no such
-      case is established) and for loss of attribution through a firer's removal by a means other
-      than killing or starting to cloak (S-0302 claim 1 identifies no reproducible setup).
-      The cloak and closed-transport cases use S-0302 scenario D24 parts b5 and b4 respectively.
+    - Backing: `measurable` (scenario P14 for the cluster count, the chain, the nine children's
+      common start at the burst point, their launch speed and the draw of each; P14 shows a burst
+      above the terrain, and the raise of a start that is not above it is claim 8's, `unmeasured`
+      there; P14 variant d, with the random-state recorder, for the ranged draw and raw value
+      after every detonation, the last included, for a cluster count of 1 and of 3, and for no
+      draw at a cluster count of 0; S-0302's scenarios D13, D17 and D24, which own the rule, for
+      the attacker and attacking house that each detonation carries; S-0614 scenarios P1 and P3
+      for the parasite-projectile exception; S-0303 scenario A14 variant o for its later
+      explosion animation and debris), and `unmeasured` for the order in which the nine children
+      are made (the child aimed at the burst's own cell last) and for the cell each is aimed at,
+      which no scenario records, for the case of a projectile that leaves play during its own
+      detonation (no such case is established) and for loss of attribution through a firer's
+      removal by a means other than killing or starting to cloak (S-0302 claim 1 identifies no
+      reproducible setup). The cloak and closed-transport cases use S-0302 scenario D24 parts b5
+      and b4 respectively.
     - Confidence: high for the count, the draw after each detonation and the absence of area
-      damage for a parasite-warhead projectile; medium for the children, distance-independent
-      latching and killed-firer attribution; low for the cloak and closed-transport attribution,
-      as in S-0302 claim 1
+      damage for a parasite-warhead projectile; medium for the children's common start at the
+      burst point, which rests on P14 alone, for their launch speed and draws, and for the cell
+      each is aimed at, which no scenario records; medium for the order in which the nine
+      children are made, which no scenario shows; medium for distance-independent latching and
+      killed-firer attribution; low for the cloak and closed-transport attribution, as in S-0302
+      claim 1
+
+21a. **An airburst weapon that leads back to itself (Q-2998).** An *airburst link* leads from a
+    projectile type with the airburst flag to its airburst weapon, and every burst of a
+    projectile of that type launches its children through that link. The children carry no weapon
+    (S-0525 claim 1), so the links start from projectile types, not from weapons. A link *lies on
+    a loop* when the projectile type of the weapon it leads to leads back to the type it starts
+    from through airburst links only: a projectile type whose airburst weapon fires that same
+    type, or a ring of two or more types each leading to the next. Each projectile type has at
+    most one airburst link, so no two loops share a type. This is a property of the types, the
+    same in every game with the same rules. The original reads each projectile type's airburst
+    weapon as named, with no check for a loop, so such data loads unchanged, and no limit of its
+    own on the number of projectiles in play is known. The nine children of a burst enter play
+    during the turn pass and take their first turns later in the same pass (S-0203 claim 4), in
+    the order in which claim 21 makes them, the child aimed at the burst's own cell last, unless
+    a removal costs one its turn (S-0203 claim 10). In particular, when the eighth child, aimed
+    at a neighbouring cell and made directly before the child aimed at the burst's own cell,
+    leaves play in its own first turn, that removal costs the child aimed at the burst's own cell
+    its turn in that pass (under that claim's switch). On a loop each child is again an airburst
+    projectile. What the original then does is described below for children whose warhead is not
+    the nuclear warhead: a child with that warhead does not detonate where claim 19 says it does
+    (claim 25), and what a loop of such children does is not established (Open questions). A
+    child that is neither invisible nor steering (steering children are bullet (c)'s) and is
+    aimed at a neighbouring cell starts in the burst's own cell and is not steered towards its
+    target cell: a straight or arcing one falls straight down there (claims 10 and 21), and a
+    vertical one moves as bullet (b) says. Whether it leaves play in its first turn is not
+    established. An invisible child is moved at once to the point that the table of claim 9
+    gives, and its velocity becomes 0. When it is not flak-scattering and that table places it at
+    *K* (no firestorm wall and no blocking cell on its line), that point is its target point, so
+    all nine such invisible children are in their target cells from their first turn. Where an
+    invisible child that is flak-scattering (its *K* a scattered point, claim 9), or that the
+    table places at a firestorm wall or a blocking cell, ends up, and so what its loop does, is
+    not established (Open questions), and the rest of this claim does not cover it. For invisible
+    children too, whether the eighth child takes its first turn in that pass and leaves play in
+    it, which would cost the child aimed at the burst's own cell its turn, is not established.
+    - (a) Straight or arcing, invisible ones included where the table of claim 9 places them at
+      *K* (above). The child aimed at the burst's own cell is in its target cell from its start
+      (an invisible one at that cell's reference point), so the "reached" row of T1 for the cell
+      of *K* detonates it in the first turn that it takes from under 208 leptons above the
+      surface. Its own children start at its detonation point, raised as claim 8 says, in the
+      same cell and no higher than its own start, and the same then holds for their child aimed
+      at that cell. So once a child of the loop aimed at its burst's own cell takes its turn from
+      under 208 leptons above the surface, the chain can go on within that same pass without end,
+      every burst in it adding nine projectiles, and the game then stops responding. Whether it
+      does depends on whether each such child gets its turn in that pass, that is on whether the
+      neighbouring child made just before it leaves play in its own first turn (above), which is
+      not established. For an invisible type the child aimed at the burst's own cell starts at
+      the surface, so this applies from the first burst of the loop. For a type that is not
+      invisible, a burst at 208 leptons or higher gives a child aimed at the burst's own cell
+      that falls straight down there, by its launch speed (claim 21) and by gravity, which claim
+      10 adds in every turn. With a gravity above 0 it therefore bursts in a later turn, by a row
+      of T1, at the latest in the turn it takes from under 208 leptons above the surface, a child
+      whose launch speed truncates to 0 included, and the chain then goes on as above. With a
+      gravity of 0 (bad data, which the importer warns about), when such a child whose launch
+      speed truncates to 0 detonates is not established.
+    - (b) Vertical, not invisible, with an acceleration of 0 or more. A vertical child has no
+      gravity and keeps the direction it is launched with (claim 11). A child launched at a speed
+      of 1 or more moves straight down, its speed growing by its acceleration in each turn while
+      below its top speed. A child whose launch speed truncates to 0 has a velocity of 0: when
+      its top speed and its acceleration are both above 0, claim 11 rescales it to the length of
+      its acceleration in the direction that F10 gives a zero velocity, so it moves level,
+      towards increasing *x*, from its first turn, and when its top speed or its acceleration is
+      0 it does not move. A child whose first move leaves its world height above its type's
+      detonation altitude detonates in its first turn (claim 11). So a generation bursts in the
+      same pass as the burst that launched it when its children take their first turns in that
+      pass and their first moves leave them above that altitude. Children that move down make
+      each generation's first move lower than the one before. Children that do not move, or move
+      level, burst at their parent's height. For children that do not move, once a burst lies
+      above the detonation altitude the pass is expected never to end. Level children move each
+      generation's bursts further towards increasing *x*, so, while no infantry, vehicle,
+      aircraft or building stands within reach of T1's proximity row there, such a chain ends at
+      the latest when the move of a child would take it outside the legal map: that child is
+      removed without detonating and launches nothing (T1 and T2, claim 19). How many projectiles
+      a level chain makes before then is not established. A generation below the detonation
+      altitude that moves down is expected to burst in a later turn by another row of T1, at the
+      latest when it has sunk 416 leptons below the surface. A child below that altitude that
+      does not move and starts its first turn less than 10 leptons above the surface detonates in
+      that turn by T1's row for a slow projectile near the surface, which tests the height at the
+      start of the turn, and the chain then goes on within the pass in the same way. When a child
+      below the detonation altitude that moves level detonates, and when any other child below it
+      that does not move detonates, is not established. An invisible vertical child has a
+      velocity of 0 after its placement whatever its launch speed, and what it then does, and so
+      what its loop does, is not established (Open questions). This bullet does not cover it. How
+      many children of each burst get their turn in the pass (above), and so how fast the count
+      grows, is not established.
+    - (c) Steering: not established (Open questions).
+    - In a ring of several types each generation follows (a) or (b) by the kind of its own
+      projectile type. For a ring whose types are neither steering nor of the nuclear warhead,
+      whose invisible children are not vertical and are placed at *K* by the table of claim 9,
+      and whose vertical children are launched at a speed of 1 or more, the child aimed at a
+      burst's own cell stays in the legal map, and the chain is expected to go on from burst to
+      burst with no limit known on the number of projectiles it makes, unless, with a gravity of
+      0, a straight or arcing child whose launch speed truncates to 0 stays in the air without
+      detonating, which is not established.
+    - Our engine (departure for bad data, no switch; design rule, decided at the delegated
+      sign-off, 2026-11-12). A projectile launched through an airburst link that lies on a loop
+      carries a *loop mark*, which is part of saved state. When a projectile with the loop mark
+      detonates, it launches nothing through an airburst link that lies on a loop and takes none
+      of claim 21's draws R(0, 32) for those children; the rest of its detonation is unchanged. A
+      projectile launched through a link that lies on no loop has no loop mark, and links that
+      lie on no loop are unchanged. The importer warns once for each loop of airburst links, and
+      since no two loops share a type, each loop is counted once. So one shot whose projectile
+      type lies on a loop leads to at most nine airburst children after its own: its children
+      carry the loop mark and launch none. Fragments of a shrapnel weapon (S-0318 claim 1) are
+      unchanged and are not counted in that bound, and nor are the projectiles that follow from a
+      fragment: each projectile launched through an airburst link, a fragment's child included,
+      carries the loop mark or not by the link it was launched through, as above. A fragment
+      itself is launched through no airburst link and carries no loop mark, so our engine does
+      not bound a loop that runs through a shrapnel weapon (Open questions).
+    - Backing: `measurable` (scenario P47 parts a and b for bullet (a) and the ring, with
+      children that are not invisible and a shot that bursts under 208 leptons above the surface,
+      part c for bullet (b), part d for a link on no loop, parts a to c for the absence of a
+      load-time check, each loading and reaching play, and for our engine, P47 shows the counts
+      and the importer warning). The loop mark's place in saved state and the missing draws R(0,
+      32) are design rules, not oracle values. The order in which the nine children are made is
+      claim 21's, `unmeasured` there. `unmeasured` for invisible children and for a child aimed
+      at the burst's own cell that starts at 208 leptons or higher, which no scenario shows, and
+      for the absence of a limit on the number of projectiles: a run shows only the counts it
+      reaches before it stops responding.
+    - Confidence: high that the reading takes the airburst weapon as named; medium for the order
+      in which the nine children are made (claim 21) and that nothing else checks such data at
+      load; medium that the child aimed at the burst's own cell detonates in its first turn taken
+      from under 208 leptons above the surface, and that with a gravity above 0 such a child that
+      starts at 208 leptons or higher bursts in a later turn (bullet (a)); low for the
+      never-ending pass of bullet (a) and for the ring, which depend on the open removal case,
+      low for bullet (b) and high for the departure, a design rule
 
 ### Eligibility and line of fire
 
@@ -2146,6 +2286,13 @@ that no fix would change.
   per tick less the deceleration of claim 12, and the cycle repeats whenever the speed reaches 0
   again. Reproduced, the importer warns (the warning of the zero-speed lead entry above), no
   switch: a mod that wants a usable missile gives the weapon a positive speed field.
+- **An airburst weapon on a loop (departure, bad data).** Claim 21a: with a projectile type whose
+  airburst weapon leads back to it through airburst links, the original, for types that are
+  neither steering nor of the nuclear warhead, can keep a turn pass going without end or go on
+  making projectiles with no known limit (steering and nuclear-warhead loops are open, and claim
+  21a rates the never-ending pass low because it depends on the open removal case there), and our
+  engine lets a projectile launched through such a link launch no children through one; the
+  importer warns once for each loop. No switch.
 - **Effective spawn delay 0 with a trailer (departure, bad data).** The effective spawn delay of
   claim 16 is 0 only for a type whose spawn delay field is 0, unless a vehicle shot of a scalable
   type has raised it above 0 (a field of 0 with *N* ≥ 8). With an effective spawn delay of 0 the
@@ -2255,7 +2402,7 @@ that no fix would change.
 | rules, projectile | `Arm` | arm time (claim 9) | integer, ticks | 0 |
 | rules, projectile | `DetonationAltitude` | detonation altitude (claim 11) | integer, leptons of world height | 0 |
 | rules, projectile | `Cluster` | cluster count *n*_c (claim 21) | integer | 1 |
-| rules, projectile | `AirburstWeapon` | the weapon of the airburst children (claim 21) | weapon name | none |
+| rules, projectile | `AirburstWeapon` | the weapon of the airburst children (claim 21); a loop of these references gets an importer warning (claim 21a) | weapon name | none |
 | rules, projectile | `Image` | names the art section that supplies `Trailer`, `SpawnDelay` and the art drawing fields below (claims 16 and 28 to 32; S-0007 claims 26, 27 and 33, S-0004 claim 14) | text, cut to 24 bytes, taken afresh in each layer | empty: those two fields are not read in that layer |
 | art, section named by the projectile's current non-empty rules `Image` (no arctic suffix) | `Trailer` | trailer animation (claim 16); the rules key has no effect | creating animation reference, cut to 127 bytes (S-0004); reserved no-type name clears | missing or empty keeps the reference in force; initially none; skipped when the current rules image is empty |
 | art, same selected section | `SpawnDelay` | trailer period and source of the zero-delay warning (claim 16, Edge cases); the rules key has no effect | integer ticks (S-0003) | missing or empty keeps the delay in force; initially 3 ticks; skipped when the current rules image is empty |
@@ -2913,19 +3060,22 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 
 **P14. Cluster and airburst (claim 21).**
 - Setup: test projectiles with cluster 3, cluster 0, and an airburst projectile with an airburst
-  weapon.
-- Observable: explosion animations, health of nearby targets, projectiles created, and with the
+  weapon whose projectile type is neither invisible nor steering.
+- Observable: explosion animations, health of nearby targets, projectiles created, each airburst
+  child's position and first velocity when it enters play (the recorder), and with the
   random-state recorder the draws taken when each airburst child is made.
 - Runs: 3 each (cluster points are random).
-- Expected: cluster 3: three explosions, the second 256 to 512 leptons from the first and the third
-  256 to 512 from the second (±1; the same point again when a nearby point would leave the map),
-  cluster 0: no explosion and no damage; airburst: nine new projectiles, one above each of the eight
-  neighbouring cells and its own cell, each falling straight down at trunc(*S*_w / 10) of the
-  airburst weapon's recorded speed *S*_w (so the speed does not depend on that weapon's imported
-  speed field when its projectile has a turn-rate field of 0); each child takes exactly one draw
-  R(0, 32) when it is made (nine such draws in all).
+- Expected: cluster 3: three explosions, the second 256 to 512 leptons from the first and the
+  third 256 to 512 from the second (±1; the same point again when a nearby point would leave the
+  map), cluster 0: no explosion and no damage; airburst: nine new projectiles, all entering play
+  at one common point, the burst point, raised as claim 8 says when that point is not above the
+  terrain, each launched straight down at trunc(*S*_w / 10) of the airburst weapon's recorded
+  speed *S*_w (so the speed does not depend on that weapon's imported speed field when its
+  projectile has a turn-rate field of 0); each child takes exactly one draw R(0, 32) when it is
+  made (nine such draws in all).
 - Falsified if: cluster 0 explodes, the third explosion lies 256 to 512 leptons from the first
-  instead of the second, or the airburst gives another count, another speed or other draws.
+  instead of the second, or the airburst gives another count, children that do not all enter play
+  at one common point, another speed or other draws.
 - Variant d (the draws of claim 21, random-state recorder):
   - Setup: one firer, a test vehicle, and no other unit on a small flat map. The firer
     force-fires one shot at an empty cell 10 cells away. The test weapon has range 12 cells,
@@ -3894,8 +4044,70 @@ b and 6 a, T1's first row).**
   height are judged from the record first, so a run 2 in which *A* stays at height 0 is falsified,
   not void); in part c2 or d2 no shot detonates at *A*.
 
+**P47. An airburst weapon on a loop (claim 21a; Q-2998).**
+- Setup: a named test file, a loose rules copy that adds invented weapons, projectile types and
+  one invented warhead and changes nothing else. A small flat map without high bridges, with one
+  firer and no other object in play. Every test weapon has no firing animation, and its warhead
+  is the invented one, which makes no explosion animation and no debris. No test projectile type
+  is invisible. In part a, weapon *W* whose straight projectile type has the airburst flag and
+  names *W* as its airburst weapon, fired at an empty cell, and in part b, two weapons *W*₁ and
+  *W*₂ with arcing projectile types, each with the airburst flag and naming the other, *W*₁ fired
+  at an empty cell, and in part c, weapon *W* whose vertical projectile type has the airburst
+  flag, a positive detonation altitude and names *W*, fired so that the projectile rises (claim
+  6). In part d (control), *W*₁ as in part b but naming *W*₃, whose projectile type has no
+  airburst flag.
+- Procedure: one shot per part, in a fresh session each, recording whether loading reaches play,
+  at a target close enough for the shot to burst within a few ticks; log the tick of the shot's
+  own burst. Record per tick the number of projectiles in play and the number made since the
+  shot, the shot included, for 60 ticks from that burst, or until the game stops responding; stop
+  an unresponsive run from outside after 60 seconds, without waiting for resource exhaustion. A
+  run whose shot has not burst within 600 ticks of firing is void and is repeated with a nearer
+  target.
+- Expected (original): every part loads and reaches play. In parts a and b the child aimed at the
+  burst's own cell bursts in the first turn it takes (a shot at an empty cell on flat ground
+  bursts under 208 leptons above the surface, and a child that takes no turn does not move). That
+  turn is in the tick of the shot's burst or, when removals cost it its turns (claim 21a), in the
+  first later tick in which no removal costs it (S-0203 claim 5), at the latest the ninth tick
+  after the shot's burst: each tick in which it misses its turn needs a counting removal of an
+  object that stood before it in the update order and can leave play (S-0203 claim 10), and in
+  this setup those are only the shot and the eight other children, each leaving play once.
+  Projectiles made later stand after it, and the firer stays. So more than ten projectiles, the
+  shot included, have been made by the end of the ninth tick after the shot's burst, unless the
+  game has stopped responding before. Rated low (claim 21a (a)): the game stops responding in the
+  tick of the shot's burst. Part c: up to nine times as many projectiles each generation, the
+  generations above the detonation altitude within one tick, and a run that does not complete
+  normally (rated low, claim 21a (b)). Part d: one projectile, then nine, then none: ten made,
+  the shot included.
+- Falsified if: a part does not load or does not reach play, in part a or b the game keeps
+  responding and no more than ten projectiles, the shot included, have been made by the end of
+  the ninth tick after the shot's burst, or part d makes more than ten projectiles, the shot
+  included. A run of part a or b that keeps responding through the 60 ticks after the shot's
+  burst falsifies only claim 21a's low-rated never-ending pass.
+- Our engine: parts a to c make the shot's projectile and its nine children and no more (the
+  setup has no shrapnel weapon), and the importer warns once in each of parts a to c (part b's
+  ring is one loop); part d as the original.
+
 ## Open questions
 
+- Claim 21a: when a child of a loop whose projectile types are steering first detonates, and so
+  whether such a loop closes within one turn pass, is not established; nor is what a loop does
+  whose airburst weapon has the nuclear warhead (claim 25), nor whether a child that is not
+  invisible and is aimed at a neighbouring cell leaves play in its first turn, which decides
+  under S-0203 claim 10 whether the child aimed at the burst's own cell gets its turn in that
+  pass (for invisible children, whether the eighth child takes its first turn in that pass), nor
+  where an invisible child that is flak-scattering, or that the table of claim 9 places at a
+  firestorm wall or a blocking cell, ends up and what its loop then does, nor when, with a
+  gravity of 0, a straight or arcing child whose launch speed truncates to 0 detonates. For
+  vertical children, what a loop does with a negative acceleration is not established, nor how
+  many projectiles a level chain makes before a child leaves the legal map, nor when a child
+  below the detonation altitude that moves level detonates, nor when one that does not move
+  detonates when it starts its first turn 10 leptons or more above the surface, nor what an
+  invisible vertical child, whose velocity is 0 after its placement, does and what its loop then
+  does. For those cases Q-2998 questions 1 and 2 stay open, and claim 21a answers them for the
+  rest. Question 3 is answered in full. Loops that pass through links of another family (for
+  example an airburst weapon whose projectile's fragment weapon, S-0318, names the first weapon,
+  or a warhead whose animations or debris lead back to the weapon) are not covered by claim 21a's
+  rule; whether they can close within one pass is not established.
 - Q-1761 question 2, beyond this spec: this spec answers it for the firing check on every route
   and for the shot's flight and detonation (claim 23, with its answer to Q-1763 question 3). The
   rest belongs to other specs: which orders reach the firing check is S-0214's, and S-0309 claim 5
