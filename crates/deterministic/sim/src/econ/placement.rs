@@ -535,9 +535,21 @@ pub fn build_off_ally(w: &World) -> bool {
 /// The adjacency condition (S-0406 claim 4, F1).
 pub fn adjacent(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
     let ally_option = build_off_ally(w);
-    adjacent_by(&place_type(w, t), top_left, |c| {
+    adjacent_by(&place_type(w, t), top_left, grid_side(w), |c| {
         supports(w, house, ally_option, c)
     })
+}
+
+/// The side of the coordinate square that holds every legal cell: only a
+/// cell with both coordinates in 0 … side − 1 can hold a building (S-0009
+/// claim 2).
+fn grid_side(w: &World) -> i64 {
+    i64::from(w.cells.footprint().coordinate_side())
+}
+
+/// The part of the inclusive range `a` … `b` inside 0 … `side` − 1.
+fn on_grid(a: i64, b: i64, side: i64) -> (i64, i64) {
+    (a.max(0), b.min(side - 1))
 }
 
 /// The adjacency rectangle's margin *d* of F1 and the foundation's
@@ -549,17 +561,33 @@ fn adjacency_reach(p: &PlaceType) -> (i32, i32, i32) {
 }
 
 /// [`adjacent`] for placement fields `p`, with the cell test `support`
-/// (whether a cell holds a building the house may build next to).
-fn adjacent_by(p: &PlaceType, top_left: CellXY, mut support: impl FnMut(CellXY) -> bool) -> bool {
+/// (whether a cell holds a building the house may build next to), on a
+/// grid of coordinate side `side`. Only the rectangle's cells inside the
+/// coordinate square are asked: no other cell can hold a building, so the
+/// answer is the same, and a huge adjacency costs no more than the map
+/// (#201).
+fn adjacent_by(
+    p: &PlaceType,
+    top_left: CellXY,
+    side: i64,
+    mut support: impl FnMut(CellXY) -> bool,
+) -> bool {
     let (d, fw, fh) = adjacency_reach(p);
-    let (x0, y0) = (top_left.x, top_left.y);
-    for y in (y0 - d)..=(y0 + fh - 1 + d) {
-        for x in (x0 - d)..=(x0 + fw - 1 + d) {
+    let (d, fw, fh) = (i64::from(d), i64::from(fw), i64::from(fh));
+    let (x0, y0) = (i64::from(top_left.x), i64::from(top_left.y));
+    // spec: S-0406 F1 (the rectangle reaches d cells past the foundation on every side); S-0009 claim 2 (legal cells lie in the coordinate square)
+    let (ax, bx) = on_grid(x0 - d, x0 + fw - 1 + d, side);
+    let (ay, by) = on_grid(y0 - d, y0 + fh - 1 + d, side);
+    for y in ay..=by {
+        for x in ax..=bx {
             // spec: S-0406 F1 (the foundation rectangle itself is not looked at)
             if (x0..x0 + fw).contains(&x) && (y0..y0 + fh).contains(&y) {
                 continue;
             }
-            if support(CellXY::new(x, y)) {
+            let (Ok(cx), Ok(cy)) = (i32::try_from(x), i32::try_from(y)) else {
+                continue;
+            };
+            if support(CellXY::new(cx, cy)) {
                 return true;
             }
         }
@@ -611,45 +639,51 @@ struct SupportTable {
     /// The window of top-left cells the table answers for: least and
     /// greatest x and y.
     window: (i32, i32, i32, i32),
-    /// The area's first cell (the window's least corner less the margin).
-    x0: i32,
-    y0: i32,
-    /// The area's width.
-    aw: i32,
+    /// The area's first and last cells: the window widened by the margin,
+    /// less what lies outside the coordinate square (no cell there holds a
+    /// building, S-0009 claim 2), so a huge margin costs no more than the
+    /// map (#201).
+    x0: i64,
+    y0: i64,
+    x1: i64,
+    y1: i64,
     /// `sums[(y + 1) × (aw + 1) + x + 1]`: the supporting cells of the
-    /// area with offsets at most (x, y).
+    /// area with offsets at most (x, y), aw = x1 − x0 + 1.
     sums: Vec<u32>,
 }
-
-/// The largest adjacency margin for which [`PlaceSearch`] keeps a table
-/// (a wider one is answered cell by cell).
-const TABLE_MARGIN: i32 = 64; // nocite: our tooling's bound (M8 C4 part 6), not game behaviour
 
 impl SupportTable {
     fn new(w: &World, house: HouseId, p: &PlaceType, cells: &[CellXY]) -> Option<Self> {
         let (d, fw, fh) = adjacency_reach(p);
-        if !(1..=TABLE_MARGIN).contains(&d) || cells.is_empty() {
+        // spec: S-0406 F1 and Edge cases (d ≤ 0: the rectangle holds no cell outside the foundation; answered cell by cell, at no cost)
+        if d < 1 || cells.is_empty() {
             return None;
         }
+        let (d, fw, fh) = (i64::from(d), i64::from(fw), i64::from(fh));
         let lx = cells.iter().map(|c| c.x).min()?;
         let hx = cells.iter().map(|c| c.x).max()?;
         let ly = cells.iter().map(|c| c.y).min()?;
         let hy = cells.iter().map(|c| c.y).max()?;
-        let (x0, y0) = (lx - d, ly - d);
-        let aw = hx + fw - 1 + d - x0 + 1;
-        let ah = hy + fh - 1 + d - y0 + 1;
-        let row = usize::try_from(aw + 1).ok()?;
-        let mut sums = vec![0u32; row * usize::try_from(ah + 1).ok()?];
+        let side = grid_side(w);
+        let (x0, x1) = on_grid(i64::from(lx) - d, i64::from(hx) + fw - 1 + d, side);
+        let (y0, y1) = on_grid(i64::from(ly) - d, i64::from(hy) + fh - 1 + d, side);
+        if x0 > x1 || y0 > y1 {
+            return None;
+        }
+        let row = usize::try_from(x1 - x0 + 2).ok()?;
+        let mut sums = vec![0u32; row * usize::try_from(y1 - y0 + 2).ok()?];
         let ally_option = build_off_ally(w);
-        for y in 0..ah {
+        for (uy, y) in (y0..=y1).enumerate() {
             let mut run = 0u32;
-            for x in 0..aw {
-                let c = CellXY::new(x0 + x, y0 + y);
+            for (ux, x) in (x0..=x1).enumerate() {
+                let (Ok(cx), Ok(cy)) = (i32::try_from(x), i32::try_from(y)) else {
+                    continue;
+                };
+                let c = CellXY::new(cx, cy);
                 // Off the grid a cell's list is empty, so it supports nothing.
                 if w.cells.idx(c).is_some() && supports(w, house, ally_option, c) {
                     run += 1;
                 }
-                let (ux, uy) = (x as usize, y as usize);
                 sums[(uy + 1) * row + ux + 1] = sums[uy * row + ux + 1] + run;
             }
         }
@@ -657,19 +691,24 @@ impl SupportTable {
             window: (lx, ly, hx, hy),
             x0,
             y0,
-            aw,
+            x1,
+            y1,
             sums,
         })
     }
 
     /// The supporting cells in the rectangle from (`ax`, `ay`) to (`bx`,
-    /// `by`), inclusive, which lies inside the area; 0 when it is empty.
-    fn count(&self, ax: i32, ay: i32, bx: i32, by: i32) -> u32 {
+    /// `by`), inclusive: its part inside the area, since no cell outside
+    /// the area that the window's rectangles reach supports; 0 when that
+    /// part is empty.
+    fn count(&self, ax: i64, ay: i64, bx: i64, by: i64) -> u32 {
+        let (ax, bx) = (ax.max(self.x0), bx.min(self.x1));
+        let (ay, by) = (ay.max(self.y0), by.min(self.y1));
         if ax > bx || ay > by {
             return 0;
         }
-        let row = (self.aw + 1) as usize;
-        let at = |x: i32, y: i32| self.sums[(y - self.y0) as usize * row + (x - self.x0) as usize];
+        let row = (self.x1 - self.x0 + 2) as usize;
+        let at = |x: i64, y: i64| self.sums[(y - self.y0) as usize * row + (x - self.x0) as usize];
         at(bx + 1, by + 1) + at(ax, ay) - at(ax, by + 1) - at(bx + 1, ay)
     }
 
@@ -681,9 +720,11 @@ impl SupportTable {
             return None;
         }
         let (d, fw, fh) = adjacency_reach(p);
+        let (d, fw, fh) = (i64::from(d), i64::from(fw), i64::from(fh));
+        let (x, y) = (i64::from(c.x), i64::from(c.y));
         // spec: S-0406 F1 (the rectangle around the foundation, less the foundation rectangle itself)
-        let around = self.count(c.x - d, c.y - d, c.x + fw - 1 + d, c.y + fh - 1 + d);
-        let inside = self.count(c.x, c.y, c.x + fw - 1, c.y + fh - 1);
+        let around = self.count(x - d, y - d, x + fw - 1 + d, y + fh - 1 + d);
+        let inside = self.count(x, y, x + fw - 1, y + fh - 1);
         Some(around > inside)
     }
 }
@@ -717,7 +758,9 @@ impl PlaceSearch {
                 .and_then(|k| k.adjacent(&self.p, c))
                 .unwrap_or_else(|| {
                     let ally_option = build_off_ally(w);
-                    adjacent_by(&self.p, c, |k| supports(w, self.house, ally_option, k))
+                    adjacent_by(&self.p, c, grid_side(w), |k| {
+                        supports(w, self.house, ally_option, k)
+                    })
                 })
         })
     }
