@@ -67,6 +67,16 @@ fn rules_with(coil_offered: bool) -> Arc<SimRules> {
     z.secondary = Some("Zap".into());
     z.tech_level = Some(99);
     r.sim.infantry.insert("ZAPPER".into(), z);
+    // A vehicle with the charge weapon (#14): its charge shots register
+    // nothing (S-0518 claim 11).
+    let mut car = r.sim.vehicles["GUNR"].clone();
+    car.secondary = Some("Zap".into());
+    car.tech_level = Some(99);
+    r.sim.vehicles.insert("ZAPCAR".into(), car);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("ZAPCAR".into());
     if !coil_offered {
         r.sim.general.prism_type = Some("PRSM".into());
     }
@@ -279,6 +289,97 @@ fn sends_a_charger_at_an_own_coil() {
     let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
     let orders = brain.think(&w);
     assert_eq!(attack_of(&orders, z), None);
+}
+
+/// A world of [`game`] with an own COIL eight cells south of home and
+/// `n` idle chargers of type `name` (`kind`) by it; the coil and the chargers.
+fn coil_and(n: usize, kind: Kind, name: &str) -> (World, ObjectId, Vec<ObjectId>) {
+    let g = game();
+    let mut w = g.world.clone();
+    let h = home(&w);
+    let at = CellXY::new(h.x, h.y + 8);
+    let coil = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "COIL",
+        0,
+        CellXY::new(at.x + 4, at.y),
+        0,
+    );
+    let chargers = (0..n)
+        .map(|i| {
+            let i = i32::try_from(i).unwrap();
+            testkit::spawn(
+                &mut w,
+                kind,
+                name,
+                0,
+                CellXY::new(at.x - i % 3, at.y + i / 3),
+                0,
+            )
+        })
+        .collect();
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    (w, coil, chargers)
+}
+
+// design: own AI (#14) and S-0518 Constants (three chargers overpower the building): of six idle chargers by an own coil no more than three are sent at it in one think (the cap read only the chargers whose shots had hit, so every idle one went).
+#[test]
+fn sends_no_more_than_three_chargers_at_a_coil() {
+    let (w, coil, chargers) = coil_and(6, Kind::Infantry, "ZAPPER");
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    let sent = chargers
+        .iter()
+        .filter(|&&z| attack_of(&orders, z) == Some(coil))
+        .count();
+    assert!((1..=3).contains(&sent), "{sent} sent: {orders:?}");
+}
+
+// design: own AI (#14): chargers already aiming at the coil count toward the three; with three of them none more is sent.
+#[test]
+fn chargers_on_their_way_count_toward_the_three() {
+    let (mut w, coil, chargers) = coil_and(4, Kind::Infantry, "ZAPPER");
+    // The orders go in on the tick before a think, so that the three are
+    // still on their way (none of them has hit yet).
+    testkit::run(&mut w, 14);
+    for &z in &chargers[..3] {
+        glasnost_sim::orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Behaviour {
+                actor: z,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(coil)),
+                dest: None,
+            },
+        );
+    }
+    testkit::run(&mut w, 1);
+    assert_eq!(w.tick % 15, 0);
+    assert_eq!(glasnost_sim::linked::chargers(&w, coil), 0, "none has hit");
+    assert!(
+        chargers[..3]
+            .iter()
+            .all(|&z| w.obj(z).unwrap().target == Some(Target::Object(coil))),
+        "three aim at the coil"
+    );
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert_eq!(attack_of(&orders, chargers[3]), None, "{orders:?}");
+}
+
+// design: own AI (#14) and S-0518 claim 11 (a firer that is not infantry registers nothing): an idle vehicle with the charge weapon by an own coil is not sent at it.
+#[test]
+fn a_vehicle_charger_is_not_sent_at_a_coil() {
+    let (w, _coil, cars) = coil_and(1, Kind::Vehicle, "ZAPCAR");
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert_eq!(attack_of(&orders, cars[0]), None, "{orders:?}");
 }
 
 // PLAN §4.7 (M8 B4): the charger looks for an own coil across the base, 18 cells off, but not 26.

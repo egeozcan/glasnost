@@ -152,6 +152,10 @@ const RALLY_AHEAD: i32 = 3; // nocite: tuning of our own opponent
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 
+/// Ticks a done building waits on its line for a cell before the house
+/// cancels it (design: own AI, #40).
+const PLACE_PATIENCE: i32 = 900; // nocite: tuning of our own opponent
+
 /// The tick before which no wave goes: the house builds up and defends
 /// first (M8 step A4 round 8, the lead's note 52; in the quick lane the
 /// first pushes came from about tick 6600 before, so this stops only a rush
@@ -703,6 +707,11 @@ pub struct Script {
     /// sale's tick, and whether the house is selling out (it then builds no
     /// more buildings or harvesters, only army units).
     watch: Watch,
+    /// The house's home as of its last think ([`Script::home`]): kept, so
+    /// that it stays where the house's construction yard stood (design:
+    /// own AI, #12).
+    #[serde(default)]
+    home_cell: Option<CellXY>,
     /// The placement cells and clearing buildings found during the current
     /// think (derived data: never saved, hashed or compared).
     #[serde(skip)]
@@ -906,6 +915,7 @@ impl Script {
             waves: 0,
             scout: None,
             watch: Watch::default(),
+            home_cell: None,
             placed: PlaceMemo::default(),
         }
     }
@@ -939,6 +949,46 @@ impl Script {
             .or_else(|| self.place_cell(w, t))
     }
 
+    /// Places a done building of the house, on a think tick or between
+    /// thinks alike: the first, line by line, that [`Script::done_cell`]
+    /// finds a cell for, so that a done defence on its own line is placed
+    /// while a building no cell takes waits on another. With `give_up` (a
+    /// think tick), a done building that has had no cell for
+    /// [`PLACE_PATIENCE`] ticks is cancelled, its line emptied of the type
+    /// and its cost refunded (S-0404 claim 6), as a person cancels a
+    /// building that fits nowhere and builds something else. Returns
+    /// whether the house has a done building.
+    // design: own AI (#40): only the first done building was looked at, and one with no cell waited on its line for good, so that nothing else was built
+    pub(crate) fn place_done(&self, w: &World, give_up: bool, out: &mut Vec<Order>) -> bool {
+        let done: Vec<(TypeRef, i32)> = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == self.house)
+            .filter_map(|l| {
+                let item = l.item.as_ref()?;
+                (item.t.kind == Kind::Building).then_some((item.t, item.done_tick?))
+            })
+            .collect();
+        let mut placed = false;
+        for &(t, at) in &done {
+            let cell = if placed { None } else { self.done_cell(w, t) };
+            if let Some(cell) = cell {
+                // One a think: two placed at once may ask for the same cell.
+                placed = true;
+                out.push(Order::Place {
+                    what: t,
+                    cell: Some(cell),
+                });
+            } else if give_up && !placed && w.tick - at >= PLACE_PATIENCE {
+                // spec: S-0404 claim 6 (a done item is cancelled and refunded; the cancel-all order also empties a queued copy)
+                out.push(Order::CancelAll { what: t });
+            }
+        }
+        !done.is_empty()
+    }
+
     /// The tech-climb building the script ordered in the current think, if
     /// any: the one Build order a special building of the brain replaces.
     /// Another role-less building's Build order (a held item's resume, a
@@ -951,11 +1001,14 @@ impl Script {
     /// nearest the house's first objects.
     pub fn set_starts(&mut self, w: &World, starts: &[CellXY]) {
         let home = self.home(w);
-        self.targets = starts
-            .iter()
-            .copied()
-            .filter(|&c| home.is_none_or(|h| dist2(c, h) > 25)) // nocite: tuning (own start within 5 cells)
-            .collect();
+        // design: own AI (#27): the start nearest the house's first objects is its own, however far they stand from it (bases off, or the base unit placed off its waypoint); one within five cells only was left out, and the own start could be the first target
+        let own = home.and_then(|h| {
+            starts
+                .iter()
+                .copied()
+                .min_by_key(|&c| (dist2(c, h), c.y, c.x))
+        });
+        self.targets = starts.iter().copied().filter(|&c| Some(c) != own).collect();
         if let Some(h) = home {
             self.targets.sort_by_key(|&c| dist2(c, h));
         }
@@ -1095,20 +1148,50 @@ impl Script {
             .collect()
     }
 
-    /// The house's construction yard or, before one exists, its first
-    /// object's cell.
+    /// The house's home: the cell of its construction yard. Once known it
+    /// is kept from think to think: it stays while a yard stands on it,
+    /// and while the house has no yard (a lost yard does not move it to
+    /// the house's oldest unit, wherever that stands); when the yard there
+    /// is gone and the house has another, it moves to the yard nearest it
+    /// (a captured enemy yard with a lower object number does not move it
+    /// into the enemy base while the house's own yard stands). Before it
+    /// is known: the house's first yard, else its first building, else its
+    /// first object.
     pub(crate) fn home(&self, w: &World) -> Option<CellXY> {
         self.placed.keep(|m| &mut m.home, || self.find_home(w))
     }
 
     /// [`Script::home`]'s search.
+    // design: own AI (#12): home was the house's first yard by object number, else its first object
     fn find_home(&self, w: &World) -> Option<CellXY> {
         let own = self.own(w);
-        own.iter()
-            .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
-            .or(own.first())
-            .and_then(|&id| w.obj(id))
+        let yards: Vec<CellXY> = own
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| is_yard(w, o))
             .map(|o| o.pos.cell())
+            .collect();
+        if let Some(h) = self.home_cell {
+            if yards.is_empty() || yards.contains(&h) {
+                return Some(h);
+            }
+            return yards
+                .iter()
+                .copied()
+                .min_by_key(|&c| (dist2(c, h), c.y, c.x));
+        }
+        yards.first().copied().or_else(|| {
+            own.iter()
+                .filter_map(|&id| w.obj(id))
+                .find(|o| o.kind == Kind::Building)
+                .or_else(|| own.first().and_then(|&id| w.obj(id)))
+                .map(|o| o.pos.cell())
+        })
+    }
+
+    /// Keeps the house's home for the next thinks ([`Script::home`]).
+    fn keep_home(&mut self, w: &World) {
+        self.home_cell = self.home(w);
     }
 
     /// The enemy start cells (the map's start waypoints of the other
@@ -1381,7 +1464,12 @@ impl Script {
             .into_iter()
             .filter(|&t| self.allowed(w, t, Role::Army) && !self.buildable(w, t))
             .filter_map(|t| self.unblocker(w, t, CLIMB_DEPTH))
-            .min_by_key(|&b| (production::cost_field(w, b), b.index))
+            .map(|b| (production::cost_field(w, b), b.index, b))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|(_, _, b)| b)
+            // design: own AI (#40): the cheapest with a cell now, so that a building no cell takes is not ordered again after its cancel
+            .find(|&b| self.placeable(w, b))
     }
 
     /// The credits the house earned over the last whole window of
@@ -1768,7 +1856,12 @@ impl Script {
                     .map(Role::Factory)
                     .filter(|&f| self.of_role(w, f).is_empty()),
             )
-            .find(|&r| !self.candidates(w, r).is_empty())
+            // design: own AI (#40): a role none of whose types has a cell now does not hold up the roles after it (`build` orders only a type with a cell)
+            .find(|&r| {
+                self.candidates(w, r)
+                    .into_iter()
+                    .any(|t| self.placeable(w, t))
+            })
     }
 
     /// The refinery type the house rebuilds before anything else, when it
@@ -1963,6 +2056,7 @@ impl Script {
             }
         };
         mark("ai:script:watch");
+        self.keep_home(w);
         let mut out = Vec::new();
         let house = self.house;
         let own = self.own(w);
@@ -2000,20 +2094,9 @@ impl Script {
         mark("ai:script:buildings");
         // 2 and 3. Buildings: a done building is placed first; otherwise the
         // next wanted one is ordered.
-        let done = w.econ.lines.lines.iter().find_map(|l| {
-            let item = l.item.as_ref()?;
-            (l.house == house && item.t.kind == Kind::Building && item.done_tick.is_some())
-                .then_some(item.t)
-        });
-        if let Some(t) = done {
-            mark("ai:script:buildings:done");
-            if let Some(cell) = self.done_cell(w, t) {
-                out.push(Order::Place {
-                    what: t,
-                    cell: Some(cell),
-                });
-            }
-        } else if !selling || self.refinery_lost(w).is_some() {
+        mark("ai:script:buildings:done");
+        let placing = self.place_done(w, true, &mut out);
+        if !placing && (!selling || self.refinery_lost(w).is_some()) {
             // design: a house selling out still rebuilds a lost refinery
             // its harvesters wait for (`Script::refinery_lost`, M8 step B8).
             mark("ai:script:buildings:wanted");
@@ -2204,13 +2287,30 @@ impl Script {
         let home = self.home(w);
         // The ferry's goal by the unit's movement zone (`base_goal_for`).
         let mut ahead: BTreeMap<Option<u8>, Option<CellXY>> = BTreeMap::new();
+        // The nearest region cells to home (`reachable`), for the units
+        // that gather there for a ferry.
+        let mut gather: BTreeMap<(u8, u32), CellXY> = BTreeMap::new();
         for id in army.iter().copied().filter(|&id| idle(w, id)) {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
             };
+            // design: own AI (#28): only an enemy the unit can fire at from where it stands, or reaches (its reach region, or its weapon's range from a cell of it, S-0212 claim 4) as the wave asks; an attack it could not carry out pinned it where it stood
+            let mut region: Option<Option<u32>> = None;
             let near = enemies
                 .iter()
-                .filter(|&&(e, c)| dist2(c, at) <= ENGAGE * ENGAGE && can_attack(w, id, e))
+                .filter(|&&(e, c)| {
+                    dist2(c, at) <= ENGAGE * ENGAGE
+                        && can_attack(w, id, e)
+                        // spec: S-0215 claim 37 (b) (the range test of S-0307 with the weapon chosen for the target)
+                        && (glasnost_sim::approach::in_range(w, id, Target::Object(e))
+                            || self.reaches(
+                                w,
+                                id,
+                                *region.get_or_insert_with(|| self.reach_region(w, id)),
+                                e,
+                                c,
+                            ))
+                })
                 .min_by_key(|&&(_, c)| dist2(c, at));
             if let Some(&(e, _)) = near {
                 out.push(Order::Behaviour {
@@ -2235,9 +2335,11 @@ impl Script {
                 // Infantry that cannot walk to the goal waits at home for
                 // a ferry (the brain's ferry takes idle infantry from
                 // there) instead of standing at the nearest shore.
-                if dist2(at, h) > FERRY_GATHER * FERRY_GATHER {
-                    let mut near = BTreeMap::new();
-                    let dest = self.reachable(w, id, h, &mut near);
+                // design: own AI (#29): the nearest region cells to home are kept for the think (one search a region, not one a unit), and a unit that already stands at the cell nearest home it can reach (stranded on an islet) is not sent there again at every think
+                let dest = (dist2(at, h) > FERRY_GATHER * FERRY_GATHER)
+                    .then(|| self.reachable(w, id, h, &mut gather))
+                    .filter(|&d| dist2(d, at) > ARRIVED * ARRIVED);
+                if let Some(dest) = dest {
                     out.push(Order::Behaviour {
                         actor: id,
                         behaviour: Behaviour::Move,
@@ -2246,7 +2348,8 @@ impl Script {
                         dest: Some(Target::Cell(dest)),
                     });
                 }
-            } else {
+            } else if !crate::lifter::is_lifter(w, id) {
+                // design: own AI (#13): a lifter keeps to its own part (`lifter::keeps_order` drops a wave's order to it), so it does not count toward a wave
                 waiting.push(id);
             }
         }
@@ -2302,13 +2405,12 @@ impl Script {
                 .min(WAVE_MAX.max(self.plan.wave))
                 .max(1),
         };
-        let patient = waiting.len() >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE; // nocite: tuning of our own opponent (half a wave)
-        if w.tick >= OPENING && (waiting.len() >= size || patient) {
-            self.waiting_since = None;
-            // design: the end-game's waves do not make the next battle's wave larger
-            if winning.is_none() {
-                self.waves += 1;
-            }
+        let goes = |n: usize| {
+            n >= size || (n >= size.div_ceil(2) && w.tick - since >= WAVE_PATIENCE) // nocite: tuning of our own opponent (half a wave)
+        };
+        // The units the scout is chosen from when no wave goes.
+        let mut scouting = waiting.clone();
+        if w.tick >= OPENING && goes(waiting.len()) {
             // Each unit goes to the seen enemy nearest home that it can
             // reach and attack (a person does not send riflemen to stand at
             // the shore by a ship), else all go to the next enemy start cell.
@@ -2333,10 +2435,15 @@ impl Script {
             }
             let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();
             let mut fallback: Option<Option<CellXY>> = None;
+            // Whether the fallback took the next start in turn.
+            let mut rotated = false;
             // The nearest region cells, kept per goal (`reachable`).
             let mut near: BTreeMap<CellXY, BTreeMap<(u8, u32), CellXY>> = BTreeMap::new();
+            // The units the wave would send, with their destinations.
+            let mut sends: Vec<(ObjectId, CellXY)> = Vec::new();
             for &id in &waiting {
                 let Some(o) = w.obj(id) else { continue };
+                let at = o.pos.cell();
                 let region = self.reach_region(w, id);
                 let key = (o.kind, o.type_index, region);
                 let pick = *picks.entry(key).or_insert_with(|| {
@@ -2356,15 +2463,30 @@ impl Script {
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f, id)))
                             .or_else(|| {
                                 (!targets.is_empty()).then(|| {
-                                    let c = targets[self.next_target % targets.len()];
-                                    self.next_target += 1;
-                                    c
+                                    rotated = true;
+                                    targets[self.next_target % targets.len()]
                                 })
                             })
                     })
                 });
                 if let Some(c) = goal {
                     let dest = self.reachable(w, id, c, near.entry(c).or_default());
+                    // design: own AI (#11): a unit whose destination is where it stands (a ship off an inland enemy, at the water nearest it; a vehicle stranded on an island) is parked: it does not count toward the wave and is not sent again
+                    if dist2(dest, at) > ARRIVED * ARRIVED {
+                        sends.push((id, dest));
+                    }
+                }
+            }
+            if goes(sends.len()) {
+                self.waiting_since = None;
+                // design: the end-game's waves do not make the next battle's wave larger
+                if winning.is_none() {
+                    self.waves += 1;
+                }
+                if rotated {
+                    self.next_target += 1;
+                }
+                for (id, dest) in sends {
                     out.push(Order::Behaviour {
                         actor: id,
                         behaviour: Behaviour::Move,
@@ -2373,9 +2495,16 @@ impl Script {
                         dest: Some(Target::Cell(dest)),
                     });
                 }
+                return out;
             }
-        } else if let Some(h) = home {
-            self.send_scout(w, h, &waiting, &mut out);
+            // Parked units do not keep the patience running.
+            if sends.is_empty() {
+                self.waiting_since = None;
+            }
+            scouting = sends.into_iter().map(|(id, _)| id).collect();
+        }
+        if let Some(h) = home {
+            self.send_scout(w, h, &scouting, &mut out);
         }
         out
     }
@@ -3412,11 +3541,17 @@ mod place_cell_tests {
             .collect()
     }
 
-    /// [`Script::home`] as before batch 2.
+    /// [`Script::home`] as before batch 2, for a script with no home kept
+    /// yet, with the first building before the first object (design: own
+    /// AI, #12).
     fn home_as_before(s: &Script, w: &World) -> Option<CellXY> {
         let own = own_as_before(s, w);
         own.iter()
             .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
+            .or_else(|| {
+                own.iter()
+                    .find(|&&id| w.obj(id).is_some_and(|o| o.kind == Kind::Building))
+            })
             .or(own.first())
             .and_then(|&id| w.obj(id))
             .map(|o| o.pos.cell())
@@ -3682,5 +3817,55 @@ mod unseen_cell_tests {
         assert_ne!(regions::reach_in(&w, nearest, zone), home, "{nearest:?}");
         let c = s.unseen_cell(&w, centre, tank).expect("a search cell");
         assert_eq!(regions::reach_in(&w, c, zone), home, "{c:?}");
+    }
+}
+
+#[cfg(test)]
+mod start_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_sim::testkit;
+
+    // design: own AI (#27): the house's own start is no wave target when its base unit stands more than five cells off it (bases off, or the unit placed off its waypoint): it was the first target
+    #[test]
+    fn the_own_start_is_no_target_when_the_base_unit_stands_off_it() {
+        let map = fixture::map();
+        let g = Game::new(
+            fixture::rules(),
+            &map,
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let mut w = g.world.clone();
+        let starts = crate::skirmish::start_cells(&map);
+        let own: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| o.owner == Some(HouseId(0)) && o.on_map)
+            .map(|o| o.id)
+            .collect();
+        let first = w.obj(own[0]).expect("house 0's first object").pos.cell();
+        let mine = *starts
+            .iter()
+            .min_by_key(|&&s| dist2(s, first))
+            .expect("a start");
+        for id in own {
+            glasnost_sim::objects::remove(&mut w, id);
+        }
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "MCV",
+            0,
+            CellXY::new(mine.x + 8, mine.y),
+            0,
+        );
+        let mut s = Script::new(HouseId(0), Plan::default());
+        s.set_starts(&w, &starts);
+        let targets = s.enemy_starts(&w);
+        assert!(!targets.contains(&mine), "{targets:?} holds {mine:?}");
+        assert_eq!(targets.len(), starts.len() - 1, "{targets:?}");
     }
 }

@@ -165,7 +165,26 @@ impl Special {
                     standing(w, id) && enemy_within(w, id, &enemies, NEAR)
                 }
             } else if deploy_fire_vehicle(w, id) {
-                standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+                if w.obj(id)
+                    .is_some_and(|o| o.beh.current == Some(Behaviour::Unload))
+                {
+                    // design: own AI (#17): a deploy-fire vehicle firing at its own cell with no enemy it could fire at near is released, as a person presses the guard key on it: unload stays current until it is given another behaviour (S-0517 claim 2), and it stood so for the rest of the game
+                    if !enemy_within(w, id, &enemies, GONE)
+                        && let Some(at) = w.obj(id).map(|o| o.pos.cell())
+                    {
+                        // spec: S-0213 table T2 (the guard key: behaviour order area guard, with the cell the object stands in as its target)
+                        out.push(Order::Behaviour {
+                            actor: id,
+                            behaviour: Behaviour::AreaGuard,
+                            attack_move: false,
+                            target: Some(Target::Cell(at)),
+                            dest: None,
+                        });
+                    }
+                    false
+                } else {
+                    standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+                }
             } else if firing_infantry(w, id) && own_cell_firer(w, id) {
                 if infantry_deployed(w, id) {
                     // Packing up: no seen enemy is near (its own-cell shot

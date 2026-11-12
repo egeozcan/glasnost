@@ -132,6 +132,60 @@ fn a_holding_lifter_lets_go_over_an_enemy_building() {
     let _ = under;
 }
 
+// design: own AI (#13): a lifter is no wave unit: an idle lifter at home is not sent with an attack wave, and does not count toward the wave's size (it drove to the enemy base with every wave, its attack-move passed the lifter filter).
+#[test]
+fn a_lifter_does_not_go_with_a_wave() {
+    let g = game();
+    let mut w = g.world.clone();
+    // Only the units this test places: house 0's starting units go (its
+    // first object, which `home` reads, stays).
+    let first = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.id);
+    let units: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| {
+            o.owner == Some(HouseId(0))
+                && o.on_map
+                && o.kind != Kind::Building
+                && Some(o.id) != first
+        })
+        .map(|o| o.id)
+        .collect();
+    for id in units {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
+    let guards: Vec<ObjectId> = [(1, 1), (2, 1)]
+        .into_iter()
+        .map(|(dx, dy)| spawn(&mut w, Kind::Vehicle, "GUNR", 0, dx, dy))
+        .collect();
+    let l = spawn(&mut w, Kind::Vehicle, "MAGN", 0, 0, 6);
+    let tank = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 0, 8);
+    settle(&mut w);
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let opening = glasnost_ai::scripted::OPENING;
+    w.tick = (w.tick.max(opening) + period - 1) / period * period;
+    let mut plan = glasnost_ai::brain::default_plan();
+    plan.wave = 2;
+    let mut br = Brain::with_plan(&w, &kit::map(), HouseId(0), plan);
+    let out = br.think(&w);
+    let sent = |who: ObjectId| {
+        out.iter().any(|o| {
+            matches!(o, Order::Behaviour {
+                actor,
+                attack_move: true,
+                ..
+            } if *actor == who)
+        })
+    };
+    assert!(!sent(l), "the lifter goes with the wave: {out:?}");
+    assert!(!sent(tank), "the lifter made up the wave of two: {out:?}");
+    assert!(!guards.iter().any(|&g| sent(g)), "the guard stays");
+}
+
 #[test]
 fn builds_a_lifter_with_a_war_factory() {
     let g = game();

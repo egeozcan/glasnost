@@ -146,6 +146,72 @@ fn an_intruder_out_of_reach_is_not_attacked_every_tick() {
     );
 }
 
+/// Runs `w` on to the next tick `brain` thinks at.
+fn to_think(w: &mut World, brain: &Brain) {
+    while !brain.thinks_at(w.tick) {
+        testkit::run(w, 1);
+    }
+}
+
+// design: own AI (#28) and S-0212 claim 4 (reach regions): an idle tank on the shore within the engage radius of an enemy on an island, which it can neither drive to nor fire at from its own land, is not ordered to attack it (the wave pick asked whether the unit reaches the enemy; the engage pick did not, and the tank was pinned there).
+#[test]
+fn an_idle_unit_is_not_sent_at_an_enemy_it_cannot_reach() {
+    let map = lake_map();
+    let mut w = yard_up(&map);
+    let l = lake_centre();
+    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, l, 0);
+    let shore = CellXY::new(l.x, l.y + 10);
+    let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, shore, 0);
+    testkit::run(&mut w, 1);
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
+    to_think(&mut w, &brain);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, HouseId(0), Pos::centre(l, 0), 3);
+    let orders = brain.think(&w);
+    let sent = orders.iter().any(|o| {
+        matches!(o, Order::Behaviour {
+            actor,
+            behaviour: Behaviour::Attack,
+            target: Some(Target::Object(e)),
+            ..
+        } if *actor == tank && *e == enemy)
+    });
+    assert!(!sent, "the tank is sent at the island enemy: {orders:?}");
+}
+
+// design: own AI (#29) and S-0212 claim 4 (reach regions): a rifleman stranded on an islet, which holds neither home nor the enemy base, is not ordered every think to the cell it stands on (the islet cell nearest home), each time with a search of the whole map.
+#[test]
+fn a_stranded_rifleman_is_not_sent_to_where_it_stands() {
+    let map = islet_map();
+    let mut w = yard_up(&map);
+    let walker = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, islet(), 0);
+    testkit::run(&mut w, 1);
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
+    let mut moves = Vec::new();
+    for _ in 0..3 {
+        to_think(&mut w, &brain);
+        for o in brain.think(&w) {
+            if let Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Move,
+                dest: Some(Target::Cell(c)),
+                ..
+            } = &o
+                && *actor == walker
+            {
+                moves.push(*c);
+            }
+            orders::issue(&mut w, HouseId(0), o);
+        }
+        testkit::run(&mut w, 1);
+    }
+    let at = w.obj(walker).unwrap().pos.cell();
+    assert_eq!(at, islet(), "the rifleman stays on its islet");
+    assert!(
+        moves.iter().all(|&c| c != at),
+        "sent to where it stands: {moves:?}"
+    );
+}
+
 /// [`fixture::map`] with a one-cell island south of start 0's ore field,
 /// in a lake three cells wide around it.
 fn islet_map() -> Map {

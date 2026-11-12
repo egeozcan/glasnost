@@ -335,6 +335,10 @@ pub(crate) fn keeps_order(w: &World, order: &Order) -> bool {
             target: Some(Target::Object(e)),
             ..
         } => !holding(w, actor) && liftable(w, actor, *e),
+        // design: own AI (#13): a wave's attack-move is not the lifter's part
+        Order::Behaviour {
+            attack_move: true, ..
+        } => false,
         _ => !holding(w, actor),
     }
 }

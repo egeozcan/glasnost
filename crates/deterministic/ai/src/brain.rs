@@ -467,6 +467,17 @@ impl Brain {
             } => !crate::mind::swaps_victim(w, *actor, *t),
             _ => true,
         });
+        // design: own AI (#19): the memory notes only the orders given: those left after the filters, within the room the house's pending list has left (S-0213 claim 2: an order issued while the list is full is dropped; quirks.pending_order_limit)
+        let room = if w.rules().quirks.pending_order_limit {
+            let pending = w
+                .houses
+                .get(usize::from(self.house().0))
+                .map_or(0, |h| h.pending.len());
+            glasnost_sim::orders::PENDING_LIMIT.saturating_sub(pending)
+        } else {
+            usize::MAX
+        };
+        self.special.memory.note_given(w, &out, room);
         self.script.end_think();
         out
     }
@@ -1506,22 +1517,9 @@ impl Brain {
     /// B6), a refinery beside the field (`Script::place_refinery`, M8 step
     /// B8), any other in the spiral around the yard.
     fn place_done(&self, w: &World, out: &mut Vec<Order>) {
-        let house = self.house();
-        let done = w.econ.lines.lines.iter().find_map(|l| {
-            let item = l.item.as_ref()?;
-            (l.house == house && item.t.kind == Kind::Building && item.done_tick.is_some())
-                .then_some(item.t)
-        });
         // design: own AI (#7): the same cell a think tick would choose, toward the water too (a plant the base walk ordered landed in the spiral when it was done between thinks)
-        let cell = done.and_then(|t| self.script.done_cell(w, t));
-        if let Some(t) = done
-            && let Some(cell) = cell
-        {
-            out.push(Order::Place {
-                what: t,
-                cell: Some(cell),
-            });
-        }
+        // design: own AI (#40): every done building is looked at; a think tick alone cancels one that has no cell
+        self.script.place_done(w, false, out);
     }
 
     /// The vehicle types the house can build now that deploy into a
@@ -2439,7 +2437,7 @@ impl Brain {
                 if raider.is_some() {
                     self.special.count_economy_defence();
                 }
-                self.special.memory.note(w, std::slice::from_ref(&order));
+                self.special.memory.offer(std::slice::from_ref(&order));
                 out.push(order);
             }
         }

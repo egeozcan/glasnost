@@ -60,6 +60,11 @@ struct Failed {
 pub struct Memory {
     given: Vec<Given>,
     failed: Vec<Failed>,
+    /// The behaviour orders the parts offered in the current think, noted
+    /// only once the brain knows which it gives ([`Memory::note_given`]);
+    /// empty between thinks (never saved).
+    #[serde(skip)]
+    offered: Vec<Order>,
 }
 
 impl Memory {
@@ -105,9 +110,54 @@ impl Memory {
         }
     }
 
-    /// Notes the behaviour orders among `orders` (the ones a module just
-    /// gave), to be judged at the next think.
-    pub fn note(&mut self, w: &World, orders: &[Order]) {
+    /// Offers the behaviour orders among `orders` (the ones a module just
+    /// gave) for noting: [`Memory::note_given`] notes those the brain
+    /// gives in the end.
+    pub fn offer(&mut self, orders: &[Order]) {
+        self.offered.extend(
+            orders
+                .iter()
+                .filter(|o| matches!(o, Order::Behaviour { .. }))
+                .cloned(),
+        );
+    }
+
+    /// Notes the offered orders the brain gives: those that are their
+    /// actor's last behaviour order among the think's final orders `out`
+    /// (a later filter may drop one, or a later part give the actor
+    /// another) and come before position `room`, the orders the house's
+    /// pending list still takes (S-0213 claim 2: an order issued while the
+    /// list is full is dropped). The rest were never given, and are not
+    /// judged as orders the unit did not take.
+    // design: own AI (#19): every offered order was noted, also those a filter dropped or the full pending list refused, and its unit was given up for BLOCKED_FOR ticks
+    pub fn note_given(&mut self, w: &World, out: &[Order], room: usize) {
+        let offered = std::mem::take(&mut self.offered);
+        if offered.is_empty() {
+            return;
+        }
+        let mut last: std::collections::BTreeMap<ObjectId, usize> =
+            std::collections::BTreeMap::new();
+        for (i, o) in out.iter().enumerate() {
+            if let Order::Behaviour { actor, .. } = o {
+                last.insert(*actor, i);
+            }
+        }
+        let given: Vec<Order> = offered
+            .into_iter()
+            .filter(|o| {
+                let Order::Behaviour { actor, .. } = o else {
+                    return false;
+                };
+                last.get(actor)
+                    .is_some_and(|&i| i < room && out.get(i) == Some(o))
+            })
+            .collect();
+        self.note(w, &given);
+    }
+
+    /// Notes the behaviour orders among `orders`, to be judged at the next
+    /// think.
+    fn note(&mut self, w: &World, orders: &[Order]) {
         for o in orders {
             let Order::Behaviour {
                 actor,
