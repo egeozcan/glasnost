@@ -1,9 +1,9 @@
 ---
 id: Q-2982
 title: When does a non-building object's barrel-elevation turn start, after re-entering the map or a load?
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
