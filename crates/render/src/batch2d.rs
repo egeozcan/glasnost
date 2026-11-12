@@ -713,6 +713,12 @@ impl Batch2d {
         );
     }
 
+    /// Removes image `id` and frees its texture (or lets go of the caller's
+    /// view); quads of a missing image are not drawn.
+    pub fn remove_image(&mut self, id: u32) {
+        self.images.remove(&id);
+    }
+
     /// Writes the quads of the next [`draw`](Self::draw) for a target of
     /// `size` pixels, and splits them into runs by image.
     pub fn prepare(

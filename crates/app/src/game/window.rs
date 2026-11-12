@@ -677,11 +677,18 @@ struct Fallback {
 impl Fallback {
     /// Before a frame of game `serial`: a game other than the failed one
     /// tries the GPU again. A `cpu_map` set for any other reason stays.
-    fn frame(&mut self, _cpu_map: &mut bool, _serial: u64) {}
+    fn frame(&mut self, cpu_map: &mut bool, serial: u64) {
+        if self.failed.is_some_and(|f| f != serial) {
+            self.failed = None;
+            *cpu_map = false;
+        }
+    }
 
     /// Game `serial`'s GPU renderer failed: that game is composed on the
-    /// CPU.
-    fn failed(&mut self, cpu_map: &mut bool, _serial: u64) {
+    /// CPU. Its later frames do not try the GPU again, which would rebuild
+    /// the renderer each frame.
+    fn failed(&mut self, cpu_map: &mut bool, serial: u64) {
+        self.failed = Some(serial);
         *cpu_map = true;
     }
 }
@@ -690,8 +697,8 @@ impl Fallback {
 /// frame of game `serial` (design: render (#102)): when the game it drew is
 /// over (`in_game` false: the screen left the game, or there is no
 /// session) or another game started.
-fn renderer_goes(_kept: Option<u64>, _in_game: bool, _serial: u64) -> bool {
-    false
+fn renderer_goes(kept: Option<u64>, in_game: bool, serial: u64) -> bool {
+    kept.is_some_and(|k| !in_game || k != serial)
 }
 
 /// Light-alpha values kept between frames, with what they came from.
@@ -708,6 +715,8 @@ struct LightKept {
 pub struct GpuDraw {
     batch: Batch2d,
     map: Option<MapGpu>,
+    /// The game put on the CPU by a failed GPU battlefield.
+    fallback: Fallback,
     /// A host clock in milliseconds, set only by the performance benchmark
     /// (M8 step C4): each [`GpuDraw::prepare`] then records its
     /// [`DrawLaps`].
@@ -757,6 +766,7 @@ impl GpuDraw {
         Self {
             batch: Batch2d::new(device, format),
             map: None,
+            fallback: Fallback::default(),
             lap_clock: None,
             laps: DrawLaps::default(),
             rebuilds: 0,
@@ -792,9 +802,11 @@ impl GpuDraw {
     }
 
     /// Takes the client's frame for a view of `size` view pixels: records the
-    /// battlefield into `encoder` (falling back to the CPU compose for good
-    /// when that fails) and uploads and prepares the batch. Draw it with
-    /// [`GpuDraw::draw`] after `encoder`'s work.
+    /// battlefield into `encoder` (falling back to the CPU compose for the
+    /// rest of the game when that fails, from that frame on) and uploads and
+    /// prepares the batch. Draw it with [`GpuDraw::draw`] after `encoder`'s
+    /// work. A finished game's battlefield resources go before the next
+    /// frame.
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
@@ -806,6 +818,18 @@ impl GpuDraw {
         let start = self.lap();
         // design: render (#103): the painter's atlas takes the GPU atlas's side (a no-op once it has)
         client.fit_atlas(self.batch.atlas_side());
+        let serial = client.game_serial;
+        let in_game = client.shell.screen == Screen::Game && client.session.is_some();
+        if renderer_goes(self.map.as_ref().map(|m| m.serial), in_game, serial) {
+            // design: render (#102): the atlas and targets of a finished game go now, not when the next game's are built
+            self.map = None;
+        }
+        if !in_game {
+            // design: render (#102): with its image, which holds the target (or the CPU picture)
+            self.batch.remove_image(MAP_IMAGE);
+        }
+        // design: render (#101): a new game tries the GPU again
+        self.fallback.frame(&mut client.cpu_map, serial);
         let (list, images) = client.frame();
         self.laps = DrawLaps {
             hud: self.lap() - start,
@@ -814,10 +838,14 @@ impl GpuDraw {
         if !client.cpu_map
             && client.shell.screen == Screen::Game
             && let Some(s) = client.session.as_ref()
-            && let Err(e) = self.render_map(device, queue, s, client.game_serial, encoder)
+            && let Err(e) = self.render_map(device, queue, s, serial, encoder)
         {
-            log::warn!("the battlefield is drawn on the CPU from now on: {e}");
-            client.cpu_map = true;
+            log::warn!("this game's battlefield is drawn on the CPU: {e}");
+            self.fallback.failed(&mut client.cpu_map, serial);
+            // design: render (#101): this frame's battlefield is composed on the CPU too, so no frame shows a stale one
+            let v = s.view();
+            self.batch
+                .set_image(device, queue, MAP_IMAGE, v.size.0, v.size.1, &s.map_rgba());
         }
         let batched = self.lap();
         let painter = &mut client.painter;
@@ -869,6 +897,9 @@ impl GpuDraw {
         };
         if !synced {
             self.rebuilds += 1;
+            // design: render (#102): the old renderer and its target go before the new one is built, so the two atlases never exist at once
+            self.map = None;
+            self.batch.remove_image(MAP_IMAGE);
             let renderer = MapRenderer::new(device, queue, &s.scene, COLOR_FORMAT)
                 .map_err(|e| e.to_string())?;
             self.map = Some(MapGpu {
