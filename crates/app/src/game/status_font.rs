@@ -163,7 +163,8 @@ pub fn register_glyphs(
 ) {
     for c in units {
         let g = font.glyph(c);
-        if painter.has_sprite(sprite, frame(g)) {
+        // design: render (#103): a glyph the full atlas did not take is not built again
+        if painter.tried_sprite(sprite, frame(g)) {
             continue;
         }
         // spec: S-0014 claim 3 (a zero-width glyph paints no pixels in our engine)

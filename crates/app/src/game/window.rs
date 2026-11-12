@@ -777,6 +777,8 @@ impl GpuDraw {
         encoder: &mut wgpu::CommandEncoder,
     ) {
         let start = self.lap();
+        // design: render (#103): the painter's atlas takes the GPU atlas's side (a no-op once it has)
+        client.fit_atlas(self.batch.atlas_side());
         let (list, images) = client.frame();
         self.laps = DrawLaps {
             hud: self.lap() - start,

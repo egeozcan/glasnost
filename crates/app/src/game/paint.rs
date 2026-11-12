@@ -5,7 +5,7 @@
 //! the GPU by the client and on the CPU by [`Painter::reference`] for
 //! tests and local snapshots.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_fmt::image::IndexedImage;
 use glasnost_render::batch2d::{self, Atlas, CpuImage, Quad};
@@ -30,6 +30,8 @@ pub struct Painter {
     pub dirty: bool,
     glyphs: BTreeMap<char, [i32; 4]>,
     sprites: BTreeMap<(u32, u32), SpriteFrame>,
+    /// Sprite frames the full atlas did not take (design: render (#103)).
+    failed: BTreeSet<(u32, u32)>,
     images: BTreeMap<u32, (i32, i32)>,
 }
 
@@ -47,7 +49,13 @@ impl Painter {
     /// A painter with the interface font in its atlas and one grey palette
     /// row.
     pub fn new() -> Self {
-        let mut atlas = Atlas::default();
+        Self::with_side(batch2d::ATLAS_SIZE)
+    }
+
+    /// A painter like [`Painter::new`] whose atlas is `side` × `side`: the
+    /// GPU atlas's side (design: render (#103)).
+    pub fn with_side(side: u32) -> Self {
+        let mut atlas = Atlas::new(side);
         let mut glyphs = BTreeMap::new();
         for g in font::glyphs() {
             if g.width == 0 {
@@ -68,6 +76,7 @@ impl Painter {
             dirty: true,
             glyphs,
             sprites: BTreeMap::new(),
+            failed: BTreeSet::new(),
             images: BTreeMap::new(),
         }
     }
@@ -80,12 +89,23 @@ impl Painter {
     }
 
     /// Registers frame `frame` of sprite `id`, drawn through palette `row`.
-    /// Returns false when the atlas is full.
+    /// Returns false when the atlas is full; the frame is then remembered
+    /// as tried ([`Painter::tried_sprite`]) and the first such frame is
+    /// logged (design: render (#103)).
     pub fn add_sprite(&mut self, id: u32, frame: u32, image: &IndexedImage, row: u32) -> bool {
         let Some(region) = self
             .atlas
             .add(image.width(), image.height(), image.pixels())
         else {
+            if self.failed.is_empty() {
+                log::warn!(
+                    "the sprite atlas of {0} × {0} is full: a {1} × {2} frame and any later ones are not drawn",
+                    self.atlas.size(),
+                    image.width(),
+                    image.height()
+                );
+            }
+            self.failed.insert((id, frame));
             return false;
         };
         self.sprites
@@ -99,14 +119,11 @@ impl Painter {
         self.sprites.contains_key(&(id, frame))
     }
 
-    /// Whether frame `frame` of sprite `id` was registered or failed to be.
+    /// Whether frame `frame` of sprite `id` was registered or failed to be:
+    /// a frame the full atlas did not take is not decoded and offered again
+    /// each frame (design: render (#103)).
     pub fn tried_sprite(&self, id: u32, frame: u32) -> bool {
-        self.has_sprite(id, frame)
-    }
-
-    /// A painter like [`Painter::new`] whose atlas is `side` × `side`.
-    pub fn with_side(_side: u32) -> Self {
-        Self::new()
+        self.has_sprite(id, frame) || self.failed.contains(&(id, frame))
     }
 
     /// Records the size of image `id` (its pixels are the client's).
