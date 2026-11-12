@@ -71,9 +71,10 @@ fn d(n: i64, mode: Rounding) -> F64 {
 }
 
 /// The shot damage D_s of a weapon fired by an object (S-0302 claim 2,
-/// F1), fixed at the moment of firing. A garrisoned building's multiplier
-/// M_g (S-0508) and a bunkered vehicle's M_b (S-0606) apply; the
-/// open-topped transport's M_t is a seam.
+/// F1), fixed at the moment of firing: [`shot_e1`] through the
+/// multipliers. A garrisoned building's multiplier M_g (S-0508) and a
+/// bunkered vehicle's M_b (S-0606) apply; the open-topped transport's M_t
+/// is a seam.
 pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     let r = w.rules();
     let mode = r.mode;
@@ -82,7 +83,6 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     if wr.sonic || wr.fire_particles {
         return 0;
     }
-    let dmg = wr.damage;
     // spec: S-0302 F1 (E₂ = trunc(RZ₅₃(E₁ × M_g)) for a garrisoned building, whatever the sign of D)
     let garrison = |e1: i32| {
         if crate::structures::garrison::garrisoned(w, firer) {
@@ -103,9 +103,26 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
             e2
         }
     };
-    // spec: S-0302 F1 (E₀ = D for D ≤ 0: the multipliers leave it unchanged)
+    bunker(garrison(shot_e1(w, firer, weapon)))
+}
+
+/// E₁ of S-0302 F1: the weapon's damage through the house and object
+/// firepower multipliers and the veteran firepower bonus, before the
+/// garrison, bunker and open-topped multipliers. The expected damage (F8)
+/// starts from it (#217). 0 for a sonic-wave or fire-particle weapon; the
+/// damage field itself when it is 0 or less.
+pub fn shot_e1(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
+    let r = w.rules();
+    let mode = r.mode;
+    let wr = r.combat.weapon(weapon);
+    // spec: S-0302 F1 (E₀ = 0 for a sonic-wave or fire-particle weapon)
+    if wr.sonic || wr.fire_particles {
+        return 0;
+    }
+    let dmg = wr.damage;
+    // spec: S-0302 F1 (E₀ = D for D ≤ 0: the factors leave it unchanged)
     if dmg <= 0 {
-        return bunker(garrison(dmg));
+        return dmg;
     }
     let Some(o) = w.obj(firer) else { return dmg };
     let fh = o
@@ -119,14 +136,13 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
         .mul(d(i64::from(dmg), mode), mode)
         .to_i32_common();
     // spec: S-0302 F1 (E₁ = trunc(RZ₅₃(E₀ × V_c)) for a firer with the veteran firepower bonus)
-    let e1 = if has_ability(w, firer, Ability::Firepower) {
+    if has_ability(w, firer, Ability::Firepower) {
         d(i64::from(e0), mode)
             .mul(r.combat.general.veteran_combat, mode)
             .to_i32_common()
     } else {
         e0
-    };
-    bunker(garrison(e1))
+    }
 }
 
 /// The house armour factor A_h for a target (S-0302 claim 5): the factor of
@@ -294,7 +310,8 @@ pub fn expected_damage(w: &World, firer: ObjectId, weapon: WeaponId, target: Obj
     if wr.damage <= 0 {
         return wr.damage;
     }
-    let e1 = shot_damage(w, firer, weapon);
+    // spec: S-0302 claim 18 and F8 (E₁ as in F1, without M_g, M_b and M_t; #217)
+    let e1 = shot_e1(w, firer, weapon);
     // spec: S-0302 F8 (A_h and A_o of the firer, quirks.expected_damage_firer_armour; off: the target's)
     let armour_of = if r.quirks.expected_damage_firer_armour {
         firer
@@ -380,6 +397,10 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     let plus = !hit.ignore_defences && hit.amount >= 0;
     let ign = hit.ignore_defences;
     let building = o.kind == Kind::Building;
+    // spec: S-0217 r22 claim 3 (Q-2986 answered: a hit that has an attacker and reaches a building of the house sets L whatever the hit then does, a stopping row of S-0302 claim 8 at any stage, a final amount of 0 and a healing hit included; the building's own damage only when its type damages itself)
+    if building && !(hit.attacker == Some(target) && !tc.damage_self) {
+        crate::computer::building_hit(w, target, o.owner, hit.attacker);
+    }
     let b = building.then(|| &rules.buildings[o.type_index as usize].building);
     let same_type_owner = hit
         .attacker
@@ -490,24 +511,31 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     let s = strength(w, target);
     let h = o.health;
     let mut lost = 0;
+    // spec: S-0309 claim 16 and F8 (#173: S and C are the victim's as the hit reaches it, taken before the kill handling can remove or change it)
+    let mut share = AngerShare {
+        owner: o.owner,
+        strength: s,
+        cost: crate::combat::acquire::type_cost(w, target),
+        dealt: 0,
+    };
     let result = if m < 0 {
         // spec: S-0302 F4 (m < 0: H′ = min(H − m, S); the result is unaffected)
         let h2 = (i64::from(h) - i64::from(m)).min(i64::from(s)) as i32;
         set_health(w, target, h2);
+        // spec: S-0309 claim 16 (d is negative only for a healing hit: the health it restored)
+        share.dealt = h - h2;
         HitResult::Unaffected
     } else {
         // spec: S-0302 F4 (m′ = min(m, H), H′ = H − m′)
         let mp = m.min(h);
         lost = mp;
+        // spec: S-0309 claim 16 and F8 (#173: d is the damage dealt, m′, whatever the kill handling then leaves of the victim, a cyborg crippled by S-0302 claim 15 included)
+        share.dealt = mp;
         let h2 = h - mp;
         let res = threshold(w, s, h, m, mp, h2);
         set_health(w, target, h2);
         res
     };
-    if building && lost > 0 {
-        // spec: S-0217 claim 3 (a hit on a building of the house by damage that has an attacker sets its owner's last base hit tick, whatever the attacker's house) and Q-2986 (interim: only a hit that lowers the building's health)
-        crate::computer::building_hit(w, target, o.owner, hit.attacker);
-    }
     let result = if result == HitResult::NowDead {
         killing_hit(w, target, &hit, &tc)
     } else {
@@ -545,8 +573,18 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         warhead: hit.warhead,
         health: (h, w.obj(target).map_or(0, |o| o.health)),
     });
-    reactions(w, target, &hit, h, result);
+    reactions(w, target, &hit, h, result, share);
     result
+}
+
+/// What a hit gives towards the victim owner's anger (S-0309 claim 16,
+/// F8), taken before the hit's kill handling (#173).
+#[derive(Clone, Copy)]
+struct AngerShare {
+    owner: Option<HouseId>,
+    strength: i32,
+    cost: i32,
+    dealt: i32,
 }
 
 /// The reactions that follow a berserk hit which took effect (S-0302 r43
@@ -754,18 +792,33 @@ fn building_fires(w: &mut World, id: ObjectId) {
 /// no-threat fall-back (S-0215 claim 16), request B of S-0208 claim 15 and
 /// fear (S-0107 claim 16) for infantry. The crush response (S-0215 claim
 /// 39) follows in `apply`.
-fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result: HitResult) {
+fn reactions(
+    w: &mut World,
+    id: ObjectId,
+    hit: &Hit,
+    health_before: i32,
+    result: HitResult,
+    share: AngerShare,
+) {
     use crate::combat::acquire::Retaliation;
+    // spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the change of health, then anger, then retaliation, then the scatter from damage, then the no-threat test, then fear)
+    // spec: S-0309 claim 16 (#173: a killing hit angers the victim's owner too, whether or not the victim is still in the world)
+    if share.dealt != 0
+        && let Some(a) = hit.attacker
+    {
+        crate::combat::acquire::anger_of(
+            w,
+            share.owner,
+            share.strength,
+            share.cost,
+            a,
+            share.dealt,
+        );
+    }
     // The actor as the hit left it, before its reactions: the target and destination it had
     // when hit (S-0208 claim 15; S-0215 claim 16, Order within the hit).
     let Some(o) = w.obj(id).cloned() else { return };
     let dealt = health_before - o.health;
-    // spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the change of health, then anger, then retaliation, then the scatter from damage, then the no-threat test, then fear)
-    if dealt != 0
-        && let Some(a) = hit.attacker
-    {
-        crate::combat::acquire::anger(w, id, a, dealt);
-    }
     let retaliation = match hit.attacker {
         Some(a) if dealt > 0 && o.health > 0 && result != HitResult::Unaffected => {
             crate::combat::acquire::retaliate(w, id, a)

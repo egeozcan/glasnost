@@ -38,6 +38,11 @@ fn refuse(_: &str, _: &[u8]) -> Result<String, String> {
 /// a land bridge three cells wide, with eight of the person's vehicles in
 /// it.
 fn start() -> Play {
+    start_with(true)
+}
+
+/// [`start`], with the person's eight vehicles only when `units`.
+fn start_with(units: bool) -> Play {
     let rules = fixture::rules();
     let players = [
         Player {
@@ -65,7 +70,7 @@ fn start() -> Play {
     let pocket = fixture::at(-fixture::START_DX, 0);
     for dx in -2..=2 {
         for dy in [-2, 2] {
-            if dx % 2 == 0 || dy < 0 {
+            if units && (dx % 2 == 0 || dy < 0) {
                 let cell = glasnost_map::CellXY::new(pocket.x + dx, pocket.y + dy);
                 testkit::spawn(&mut game.world, Kind::Vehicle, "GUNR", local.0, cell, 0);
             }
@@ -243,7 +248,10 @@ fn damaged_and_mismatched_reports_are_refused() {
 
 #[test]
 fn the_ring_covers_the_window_and_a_failed_save_says_why() {
-    let mut p = start();
+    // Without the person's vehicles: they hold the machine's construction
+    // vehicle, and its deploy hands them its yard (S-0415 claims 6 and 10,
+    // #221), which they destroy, ending the game before the window is full.
+    let mut p = start_with(false);
     let window = capture::window_ticks(p.capture.speed);
     let gap = capture::spacing(p.capture.speed);
     step(&mut p, window + gap + 3);

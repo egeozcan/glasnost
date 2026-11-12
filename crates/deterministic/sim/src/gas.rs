@@ -1494,8 +1494,8 @@ fn damage_step(w: &mut World, sys: ObjectId, i: usize) {
     let list: Vec<ObjectId> = w.cells.list(pos.cell(), Layer::Ground).to_vec();
     for target in list {
         let Some(o) = w.obj(target) else { continue };
-        // spec: S-0613 claim 13 (alive with health above 0, judged at the hit)
-        let dead = o.combat.killed && o.combat.delay_kill_until.is_none();
+        // spec: S-0613 claim 13 (alive with health above 0, judged at the hit); S-0504 claim 10 (a sinking vessel with health left is not immune; #172)
+        let dead = crate::combat::damage::dead(o);
         if o.health <= 0 || !o.on_map || dead {
             continue;
         }

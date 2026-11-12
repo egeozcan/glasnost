@@ -90,6 +90,9 @@ pub fn house_update(w: &mut World, h: HouseId) {
     if t < c.next {
         return;
     }
+    // spec: S-0309 claim 25 part j (both anger rules at the start of each check, held or not, the first before the second, neither taking a draw)
+    anger_towards_first_house(w, h);
+    clear_defeated_enemy(w, h);
     check(w, h, t, c.last_base_hit);
     // spec: S-0217 claim 2 (the check's only draw of its own: one R(1, 7) on the scenario stream, taken at the end of the check, after the draws of the order's evictions)
     let half = w.rules().quirks.ranged_draw_half_span; // spec: S-0202 claim 4 (the ranged draw's half-span rule)
@@ -97,6 +100,92 @@ pub fn house_update(w: &mut World, h: HouseId) {
     if let Some(x) = w.houses.get_mut(usize::from(h.0)) {
         // spec: S-0217 claim 2 and Formulas (next check tick = t + 105 + R(1, 7))
         x.checks.next = t + CHECK_BASE_DELAY + r;
+    }
+}
+
+/// Whether house `x` can take part j's anger: not `h` itself, not
+/// multiplayer-passive, not defeated, and still a player of the game.
+fn anger_candidate(w: &World, h: HouseId, x: HouseId) -> bool {
+    // spec: S-0309 claim 25 part j (not itself, not multiplayer-passive, not defeated); S-0009 claim 28 (a house the unused-house cleanup removed is no player of the game)
+    x != h
+        && !crate::econ::setup::passive(w, x)
+        && !crate::econ::victory::defeated(w, x)
+        && w.houses.get(usize::from(x.0)).is_some_and(|y| !y.removed)
+}
+
+/// The house that part j's first rule angers `h` towards, if any.
+fn first_house(w: &World, h: HouseId) -> Option<HouseId> {
+    let mut candidates = (0..w.houses.len())
+        .filter_map(|i| u8::try_from(i).ok().map(HouseId))
+        .filter(|&x| anger_candidate(w, h, x));
+    if w.rules().quirks.anger_to_first_house {
+        // spec: S-0309 claim 25 part j (the first such house in house order, however far away it is and whatever its base records)
+        return candidates.next();
+    }
+    // spec: S-0309 Edge cases (quirks.anger_to_first_house off: the nearest such house by the straight-line horizontal distance between the cells of the base records, base centre else base-start cell; ties to the earlier house; a house with neither record is left out, and with every house left out no anger is added)
+    let own = w
+        .houses
+        .get(usize::from(h.0))
+        .and_then(|x| crate::base::preferred(&x.base))?;
+    let mut best: Option<(i64, HouseId)> = None;
+    for x in candidates {
+        let Some(c) = w
+            .houses
+            .get(usize::from(x.0))
+            .and_then(|y| crate::base::preferred(&y.base))
+        else {
+            continue;
+        };
+        let (dx, dy) = (i64::from(c.x - own.x), i64::from(c.y - own.y));
+        let d = dx * dx + dy * dy;
+        if best.is_none_or(|(b, _)| d < b) {
+            best = Some((d, x));
+        }
+    }
+    best.map(|(_, x)| x)
+}
+
+/// Part j's anger towards the first house (S-0309 claim 25).
+fn anger_towards_first_house(w: &mut World, h: HouseId) {
+    let Some(house) = w.houses.get(usize::from(h.0)) else {
+        return;
+    };
+    // spec: S-0309 claim 25 part j (the country not multiplayer-passive, no enemy house, and a recorded base centre or base-start cell, S-0215 claim 38)
+    if crate::econ::setup::passive(w, h)
+        || house.combat.enemy.is_some()
+        || crate::base::preferred(&house.base).is_none()
+    {
+        return;
+    }
+    let Some(first) = first_house(w, h) else {
+        return;
+    };
+    if let Some(a) = w
+        .houses
+        .get_mut(usize::from(h.0))
+        .and_then(|x| x.combat.anger.get_mut(usize::from(first.0)))
+    {
+        // spec: S-0309 claim 25 part j and F8 (grows by 1 point of anger, a wrapping 32-bit addition)
+        *a = a.wrapping_add(1);
+    }
+    // spec: S-0309 claim 25 part j (followed by claim 16's recomputation; an allied house gains the anger without becoming the enemy house)
+    crate::combat::acquire::recompute_enemy(w, usize::from(h.0));
+}
+
+/// Part j's defeated enemy house (S-0309 claim 25).
+fn clear_defeated_enemy(w: &mut World, h: HouseId) {
+    let Some(e) = w.houses.get(usize::from(h.0)).and_then(|x| x.combat.enemy) else {
+        return;
+    };
+    // spec: S-0309 claim 25 part j (whatever its country and base records: a defeated enemy house has the anger towards it removed and the house has no enemy house, until one of its anger values next changes; no recomputation here)
+    if !crate::econ::victory::defeated(w, e) {
+        return;
+    }
+    if let Some(x) = w.houses.get_mut(usize::from(h.0)) {
+        if let Some(a) = x.combat.anger.get_mut(usize::from(e.0)) {
+            *a = 0;
+        }
+        x.combat.enemy = None;
     }
 }
 
@@ -181,19 +270,19 @@ fn owns_construction_vehicle(w: &World, h: HouseId) -> bool {
     })
 }
 
-/// A hit on building `b` (S-0217 claim 3): when the hit has a known attacker
-/// and lowered the building's health, its owner's last base hit tick
-/// becomes the current tick, whatever the attacker's house. A building
-/// whose type undeploys into a vehicle and covers one cell changes nothing.
-/// The building's own damage reaches here only when its type damages
-/// itself (S-0302 claim 8's first stage stops it otherwise).
+/// A hit that reaches building `b` (S-0217 r22 claim 3): when the hit has a
+/// known attacker, its owner's last base hit tick becomes the current tick,
+/// whatever the attacker's house and whatever the hit then does. A
+/// building whose type undeploys into a vehicle and covers one cell changes
+/// nothing. The caller, `combat::damage`, sends the building's own damage
+/// only when its type damages itself.
 pub fn building_hit(
     w: &mut World,
     b: ObjectId,
     owner: Option<HouseId>,
     attacker: Option<ObjectId>,
 ) {
-    // spec: S-0217 claim 3 (damage that has an attacker; S-0302 claim 1: a known attacker is an object in the world) and Q-2986 (interim: only a hit that lowers the building's health sets L; the caller passes no other)
+    // spec: S-0217 r22 claim 3 (a hit that has an attacker; S-0302 claim 1: a known attacker is an object in the world)
     if !attacker.is_some_and(|a| w.obj(a).is_some()) {
         return;
     }

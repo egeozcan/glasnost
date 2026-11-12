@@ -9,11 +9,12 @@ use crate::combat::veterancy::{self, Rank};
 use crate::rules::{Behaviour, Kind};
 use crate::world::{Layer, ObjectId, Target, World};
 
-/// Whether an object is in the air in the sense of S-0308 (Terms,
-/// *airborne*): an aircraft or jumpjet in flight, an object falling or
-/// carried. The aircraft and movement specs own the test. An object of the
-/// set-A or set-B rocket type answers by its flight phase (S-0506 claim
-/// 22); for every other object the answer is [`aircraft_in_air`].
+/// The in-the-air answer of S-0501 (claim 18, Terms) and S-0502 claim 30:
+/// an aircraft or a jumpjet unit in flight. An object of the set-A or set-B
+/// rocket type answers by its flight phase (S-0506 claim 22); for every
+/// other object the answer is [`aircraft_in_air`]. An object that is
+/// neither, a falling or raised unit among them, answers false here; S-0308's
+/// *airborne* is [`airborne`].
 pub fn in_air(w: &World, id: ObjectId) -> bool {
     if let Some(o) = w.obj(id)
         && o.kind == Kind::Aircraft
@@ -42,8 +43,9 @@ pub fn in_air(w: &World, id: ObjectId) -> bool {
 /// The in-the-air answer of an object that is not of a rocket type: for a
 /// flying aircraft S-0307's *airborne* (S-0501 Terms); for a unit moving
 /// with the jumpjet locomotor, seized units included, on the map with a
-/// height above the surface of at least 208 leptons (S-0502 claim 30). No
-/// other object is in the air.
+/// height above the surface of at least 208 leptons (S-0502 claim 30).
+/// Every other object answers false here, whatever its height: this is
+/// not S-0308's *airborne* ([`airborne`]).
 pub fn aircraft_in_air(w: &World, id: ObjectId) -> bool {
     // spec: S-0501 Terms (an aircraft's in-the-air answer is S-0307's airborne)
     if crate::air::is_aircraft(w, id) {
@@ -51,6 +53,20 @@ pub fn aircraft_in_air(w: &World, id: ObjectId) -> bool {
     }
     // spec: S-0502 claim 30 (revision 18, Q-1501 answered: a unit moving with the jumpjet locomotor, whatever its own kind and seized units included, is in the air exactly when it is on the map and r ≥ 208 leptons, r above the deck only with the on-deck state; not by its flight state)
     crate::jump::is_jumpjet(w, id) && airborne_by_height(w, id)
+}
+
+/// Whether an object is airborne in the sense of S-0308 (Terms,
+/// *Airborne*; S-0303 claim 10 and S-0309 use the same test): an aircraft
+/// by S-0501 claim 18's in-the-air answer ([`in_air`]), any other object
+/// by S-0307's height test ([`airborne_by_height`]), so a falling or raised
+/// unit high enough is airborne (#178).
+pub fn airborne(w: &World, id: ObjectId) -> bool {
+    // spec: S-0308 Terms (Airborne: for aircraft, S-0501 claim 18's in-the-air answer; for other objects, S-0307 Terms airborne, which S-0502 claim 30 confirms for jumpjet units)
+    if w.obj(id).is_some_and(|o| o.kind == Kind::Aircraft) {
+        in_air(w, id)
+    } else {
+        airborne_by_height(w, id)
+    }
 }
 
 /// Whether an object is airborne in the sense of S-0307 (Terms): on the
@@ -240,7 +256,8 @@ pub fn armour_class(w: &World, t: Target) -> Option<usize> {
 fn water_target(w: &World, t: Target) -> bool {
     let Target::Object(x) = t else { return false };
     let Some(o) = w.obj(x) else { return false };
-    if in_air(w, x) || o.layer == Layer::Deck {
+    // spec: S-0308 Terms (water target: not airborne in S-0308's sense; #178)
+    if airborne(w, x) || o.layer == Layer::Deck {
         return false;
     }
     let l = w.cells.cell(o.pos.cell()).map_or(land::CLEAR, |c| c.land);
@@ -304,16 +321,29 @@ fn deployed_infantry_slot(w: &World, firer: ObjectId) -> Option<usize> {
 }
 
 /// The weapon slot an object would use against a target (S-0308 claim 3,
-/// table P; claims 8 and 9 before it).
+/// table P; claims 8 and 9 before it: deployed infantry and deployed
+/// vehicles of a deploy-fire type).
 // spec: S-0308 F2 and table P rows 13, 18 (slot 2s + a; land-targeting mode 2)
 pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize {
     if let Some(i) = deployed_infantry_slot(w, firer) {
         return i;
     }
-    // Claim 9 (a deployed deploy-fire vehicle) needs the vehicle deploy state of the deploy specs; no vehicle is deployed in our engine yet.
     let Some(tc) = veterancy::type_combat(w, firer) else {
         return 0;
     };
+    // spec: S-0308 claim 9 (a deployed vehicle whose type has the deploy-fire flag: its deploy weapon index against every target, table P not applied; #177)
+    if w.obj(firer).is_some_and(|o| o.kind == Kind::Vehicle)
+        && tc.deploy_fire
+        && crate::econ::inplace::deployed(w, firer)
+    {
+        let i = tc.deploy_fire_weapon;
+        // spec: S-0308 Edge cases (deploy weapon index not checked: an index outside 0 … 17, −1 included, is treated as 0, a departure)
+        return if (0..SLOTS as i32).contains(&i) {
+            i as usize
+        } else {
+            0
+        };
+    }
     let r = w.rules();
     let q = r.quirks;
     // spec: S-0308 table P row 1 (a switching type: its weapon number)
@@ -358,7 +388,8 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
         let aa = test_slot
             .and_then(|x| r.combat.projectile_of(x))
             .is_some_and(|p| p.aa);
-        let air = matches!(t, Target::Object(x) if in_air(w, x));
+        // spec: S-0308 claim 7 and Terms (an object airborne in S-0308's sense; #178)
+        let air = matches!(t, Target::Object(x) if airborne(w, x));
         return (2 * stage + usize::from(air && aa)).min(SLOTS - 1);
     }
     let sec_h = r.combat.warhead_of(sw);
@@ -450,7 +481,8 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
     if water_target(w, t) {
         return table_n(w, firer, t);
     }
-    let air = matches!(t, Target::Object(x) if in_air(w, x));
+    // spec: S-0308 table P rows 18 and 19 and Terms (in the air: airborne in S-0308's sense; #178)
+    let air = matches!(t, Target::Object(x) if airborne(w, x));
     // spec: S-0308 table P row 18 (not in the air, land mode 2: 1)
     if !air && tc.land_targeting == 2 {
         return 1;

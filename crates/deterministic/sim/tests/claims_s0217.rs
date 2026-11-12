@@ -291,7 +291,7 @@ fn claim_2_no_check_for_other_houses() {
 // ---------------------------------------------------------------------------
 // Claim 3
 
-// spec: S-0217 claim 3 (L becomes the current tick when a building of the house is hit by damage that has an attacker, whatever the attacker's house) and Q-2986 (interim: a hit that lowers the building's health)
+// spec: S-0217 claim 3 (L becomes the current tick whenever a hit that has an attacker reaches a building of the house, whatever the attacker's house and whatever the hit then does: a healing hit sets it; S-0217 r22, Q-2986 answered)
 #[test]
 fn claim_3_a_hit_with_an_attacker_sets_the_last_base_hit_tick() {
     let mut w = world();
@@ -308,11 +308,47 @@ fn claim_3_a_hit_with_an_attacker_sets_the_last_base_hit_tick() {
     assert_eq!(w.houses[0].checks.last_base_hit, 70, "the house's own unit");
     w.tick = 90;
     damage::apply(&mut w, b, hit(-10, Some(enemy)));
-    assert_eq!(
-        w.houses[0].checks.last_base_hit, 70,
-        "Q-2986 interim: a healing hit"
-    );
+    assert_eq!(w.houses[0].checks.last_base_hit, 90, "a healing hit");
     assert_eq!(w.houses[1].checks.last_base_hit, 0);
+}
+
+// spec: S-0217 claim 3 (r22, Q-2986 answered: a hit with an attacker that reaches the building sets L whatever it then does: a healing hit at full health, a hit whose final amount is 0, and a hit a row of S-0302 claim 8 stops, at any stage; an attacker that is not in the world is no known attacker, S-0302 claim 1)
+#[test]
+fn claim_3_hits_that_change_no_health_set_l() {
+    let mut w = world();
+    let b = put(&mut w, Kind::Building, "TARGET", 0, 0, 0);
+    let enemy = put(&mut w, Kind::Infantry, "GARRI", 1, 5, 5);
+    let full = w.obj(b).unwrap().health;
+    w.tick = 30;
+    damage::apply(&mut w, b, hit(-10, Some(enemy)));
+    assert_eq!(w.obj(b).unwrap().health, full);
+    assert_eq!(
+        w.houses[0].checks.last_base_hit, 30,
+        "a healing hit at full health"
+    );
+    w.tick = 40;
+    damage::apply(&mut w, b, hit(0, Some(enemy)));
+    assert_eq!(
+        w.houses[0].checks.last_base_hit, 40,
+        "a hit of 0 ignoring defences (stage 4's zero row, or claim 7's minimum)"
+    );
+    w.tick = 50;
+    w.obj_mut(b).unwrap().health = 0;
+    damage::apply(&mut w, b, hit(10, Some(enemy)));
+    assert_eq!(w.obj(b).unwrap().health, 0);
+    assert_eq!(
+        w.houses[0].checks.last_base_hit, 50,
+        "stage 1's no-health building row, a hit delivered to it"
+    );
+    w.obj_mut(b).unwrap().health = full;
+    let gone = put(&mut w, Kind::Infantry, "GARRI", 1, 6, -5);
+    glasnost_sim::objects::remove(&mut w, gone);
+    w.tick = 60;
+    damage::apply(&mut w, b, hit(10, Some(gone)));
+    assert_eq!(
+        w.houses[0].checks.last_base_hit, 50,
+        "an attacker no longer in the world"
+    );
 }
 
 // spec: S-0217 claim 3 and Import mapping (a building whose type undeploys into a vehicle and covers one cell does not change L; the building's own damage changes it only when its type damages itself)

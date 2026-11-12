@@ -480,18 +480,13 @@ pub fn run(
         moved == 0,
         format!("{moved}"),
     ));
-    // measure: M-0024 (Result: parts f and fc, un-hit free vehicles classed neighbouring destination: 0, exact)
+    // measure: M-0024 (Result: the un-hit free vehicle rows are "not for tests: a count for these runs, not a rule", so they are not judged; their counts go to the full report only)
     let unhit = |c: Class| -> usize {
         found
             .iter()
             .map(|(_, _, f)| f.unhit.get(&c).copied().unwrap_or(0))
             .sum()
     };
-    rows.push((
-        "Parts f and fc: un-hit free vehicles classed neighbouring destination: 0".into(),
-        unhit(Class::Neighbouring) == 0,
-        format!("{}", unhit(Class::Neighbouring)),
-    ));
 
     let failing = rows.iter().filter(|r| !r.1).count();
     let mut summary = String::new();
@@ -514,7 +509,8 @@ pub fn run(
     }
     let _ = writeln!(
         full,
-        "- un-hit free vehicles classed far destination: {}; own cell {}",
+        "- not for tests: un-hit free vehicles classed neighbouring destination: {}; far destination: {}; own cell {}",
+        unhit(Class::Neighbouring),
         unhit(Class::Far),
         unhit(Class::Own)
     );

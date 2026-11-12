@@ -85,6 +85,11 @@ Requests: **Q-2986** (which hits set *L*), **Q-2987** (the arena rows, below), *
 row on an approach destination left when the target dies in the same tick, below). Q-2989 to
 Q-2995 are unused.
 
+Later (sim issues S3, [sim-issues.md](sim-issues.md), *Batch S3*): S-0217 r22 answered Q-2986. Every
+hit with an attacker that reaches a building sets *L*, whatever the hit then does, so the interim
+"lowers its health" above is gone (`claim_3_hits_that_change_no_health_set_l`). S-0309 r133 and the
+M-0024 revision answered Q-2987 and Q-2988's questions 1 and 2; Q-2988 stays open for question 3.
+
 ## Play-fixes layer
 
 The checks reach only test-only computer-controlled player houses: the arena's and the oracle

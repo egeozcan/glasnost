@@ -341,8 +341,10 @@ pub fn check(
 /// The own AI's lasting test (our design, PLAN §4.7): the firing check
 /// without the range test and without the reasons of the moment that rank
 /// ahead of the target tests, the materialising firer's *rearming* of rank
-/// 4 and ranks 5 to 8 (the rearm countdown and the other rearming gates,
-/// ammunition 0, the cloak; S-0301 claim 9). It answers whether the target
+/// 4, ranks 5 to 8 (the rearm countdown and the other rearming gates,
+/// ammunition 0, the cloak; S-0301 claim 9) and rank 12's tether with a
+/// building, which ends once a released vehicle clears the apron or a
+/// docked one leaves (#176). It answers whether the target
 /// is worth an attack past this moment, so that a unit whose countdown
 /// runs or that phases in does not take a target its weapon can never
 /// hurt. The attack rule of S-0214 claim 6 (e) does not use it: since r78
@@ -378,8 +380,8 @@ pub fn illegal_at_any_rank(
 enum Ask {
     /// Every reason, by S-0301 claim 9's ranks.
     Every,
-    /// The own AI's lasting test: the materialising *rearming* and ranks 5
-    /// to 8 passed over.
+    /// The own AI's lasting test: the materialising *rearming*, ranks 5
+    /// to 8 and rank 12's tether passed over.
     Lasting,
     /// Only the reasons that give *illegal*, at any rank (S-0214 claim 6
     /// (e) with `quirks.moment_reason_attack_cursor` off; r80, Q-2426
@@ -674,6 +676,16 @@ fn answer(
             if !ok {
                 return Answer::Illegal;
             }
+        }
+        // spec: S-0301 claim 9 rank 12 (a vehicle tethered, glossary, with a building as its contact: impossible; #176). Q-3012 (open): the healer's illegal keeps its place before it
+        // Not an illegal reason, so the illegal-only ask passes over it; the own AI's lasting test passes over it too, as a reason of the moment (our design, PLAN §4.7: a release or dock tether ends within ticks).
+        if moment
+            && crate::econ::tethered(w, firer)
+            && o.contact
+                .and_then(|c| w.obj(c))
+                .is_some_and(|c| c.kind == Kind::Building)
+        {
+            return Answer::Impossible;
         }
         // spec: S-0301 claim 9 rank 13 (moving)
         if vehicle_moving(w, firer, weapon) {

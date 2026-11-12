@@ -27,6 +27,12 @@ with *hunt*. Rows 9, 10, 18 and 4 now give the record's outcome; rows 20 and 21 
 it, as does row 14 (CAOS–E1, side A), and rows 13 and 15 (CAOS–E1 and CAOS–E2, side B) fail
 again. **Q-2987** names those rows.
 
+**Since sim issues S3** ([sim-issues.md](sim-issues.md), *Batch S3*): S-0309 r133 answered Q-2987.
+Claim 27 confirms our drop, and the spec gives no rule after an eviction beyond claim 25 part j's
+anger rules, now built. The rows Q-2987 names still disagree. In this batch only #175's explosion
+delay moved arena outcomes: M-0001 DISK–E2 now passes, and M-0002 YURI–E2 moves from
+4/8/0 to 3/9/0, nearer the record but still failing.
+
 ## Method
 
 As A6's ([a6-arena-triage.md](a6-arena-triage.md), *Method*): `arena --watch` and `--trace-summary`

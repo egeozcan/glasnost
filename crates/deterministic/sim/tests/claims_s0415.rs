@@ -221,8 +221,106 @@ fn claim_6_retarget() {
         c(0, 0),
         "2 × 2: the vehicle's cell"
     );
-    let t = w.obj(enemy).unwrap().target;
-    assert!(t.is_none() || t == Some(Target::Object(b)));
+    assert_eq!(w.obj(enemy).unwrap().target, Some(Target::Object(b)));
+}
+
+/// Steps until `gone` no longer exists, at most `n` ticks, holding each of
+/// `holders`' target on `gone` with a long targeting timer before every
+/// step.
+fn hold_until_gone(w: &mut World, holders: &[ObjectId], gone: ObjectId, n: i32) {
+    for _ in 0..n {
+        let tick = w.tick;
+        for &h in holders {
+            let ob = w.obj_mut(h).unwrap();
+            ob.target = Some(Target::Object(gone));
+            ob.targeting_timer = tick + 1000;
+        }
+        step(w);
+        if w.obj(gone).is_none() {
+            return;
+        }
+    }
+    panic!("the object never left");
+}
+
+/// The rules plus THIEF, a WALKER that is a vehicle thief.
+fn thief_rules() -> Ruleset {
+    let mut r = rules();
+    let mut t = r.sim.infantry["WALKER"].clone();
+    t.vehicle_thief = Some(true);
+    r.registries
+        .get_mut("infantry")
+        .unwrap()
+        .push("THIEF".into());
+    r.sim.infantry.insert("THIEF".into(), t);
+    r
+}
+
+// spec: S-0415 claim 6 (every object whose target was the deploying vehicle gets the building, with no drop of S-0309 claim 27: its targeting timer is not restarted; a vehicle thief's target becomes nothing when the building is a construction yard)
+#[test]
+fn claim_6_retarget_hands_over_without_a_drop_and_the_thief_exception() {
+    let mut w = game(&thief_rules());
+    let v = spawn_v(&mut w, "MCV", c(0, 0), facing_d());
+    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(6, 6), 0);
+    let thief = testkit::spawn(&mut w, Kind::Infantry, "THIEF", 1, c(-6, 6), 0);
+    order(&mut w, Order::Deploy { actor: v });
+    hold_until_gone(&mut w, &[enemy, thief], v, 30);
+    let y = buildings(&w)[0];
+    let e = w.obj(enemy).unwrap();
+    assert_eq!(e.target, Some(Target::Object(y)), "the yard");
+    assert!(
+        e.targeting_timer - w.tick > 10,
+        "no drop: the timer was not restarted ({} left)",
+        e.targeting_timer - w.tick
+    );
+    assert_eq!(w.obj(thief).unwrap().target, None, "the thief");
+}
+
+/// A deployed yard with a guard spot, built, so a sale packs it up.
+fn packing_yard(w: &mut World) -> ObjectId {
+    let y = deployed_yard(w);
+    let spot = Target::Cell(c(6, 6));
+    order(w, Order::GuardSpot { actor: y, spot });
+    step(w);
+    assert!(deploy::packs_up(w, y));
+    y
+}
+
+// spec: S-0415 claim 10 (every object whose target was the building gets the vehicle as its target, with no drop of S-0309 claim 27)
+#[test]
+fn claim_10_pack_up_hands_the_holder_to_the_vehicle() {
+    let mut w = game(&rules());
+    let y = packing_yard(&mut w);
+    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(-6, 6), 0);
+    order(&mut w, Order::Sell { actor: y });
+    hold_until_gone(&mut w, &[enemy], y, 80);
+    let mcv = w.rules().index_of(Kind::Vehicle, "MCV").unwrap();
+    let v = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle && o.type_index == mcv && o.on_map)
+        .map(|o| o.id)
+        .expect("the vehicle");
+    let e = w.obj(enemy).unwrap();
+    assert_eq!(e.target, Some(Target::Object(v)));
+    assert!(
+        e.targeting_timer - w.tick > 10,
+        "no drop: the timer was not restarted ({} left)",
+        e.targeting_timer - w.tick
+    );
+}
+
+// spec: S-0415 claim 11 (a refused pack-up removes the building with no successor: no hand-over) and S-0309 claim 27 (the holders drop it)
+#[test]
+fn claim_11_refused_pack_up_drops_the_holder() {
+    let mut w = game(&rules());
+    let y = packing_yard(&mut w);
+    // Something in the return cell: a vehicle put there for the test.
+    testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(0, 0), 0);
+    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(-6, 6), 0);
+    order(&mut w, Order::Sell { actor: y });
+    hold_until_gone(&mut w, &[enemy], y, 80);
+    assert_eq!(w.obj(enemy).unwrap().target, None);
 }
 
 // spec: S-0415 claim 1 (ranks 1 to 3: a passenger capacity, the harvester flag; such a type never deploys through unload)
