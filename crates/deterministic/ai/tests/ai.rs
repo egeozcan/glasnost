@@ -1837,6 +1837,116 @@ fn a_wave_goes_for_an_enemy_it_can_reach() {
     );
 }
 
+// design: own AI (#11): units parked at the best cell they can reach (ships off an inland enemy, at the water nearest it, out of their engage radius) do not count toward a wave: with them a single new tank made up the wave size, and went alone at every think, while the ships were sent again to the cell they stood on.
+#[test]
+fn parked_ships_do_not_make_up_a_wave() {
+    let map = fixture::map_naval();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-naval",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the naval skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()
+        && !of(w, 1, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let mut w = g.world.clone();
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    // Only the units this test places: house 0's others go.
+    let units: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.on_map && o.kind != Kind::Building)
+        .map(|o| o.id)
+        .collect();
+    for id in units {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
+    // The enemies seen: three tanks inland, south of the enemy base, further
+    // from the sea than a ship's engage radius, too strong for the house to
+    // count the enemy beaten (`finishing`).
+    let foe_at = free_cells(&w, fixture::at(fixture::START_DX - 6, 10), 3);
+    let foe = foe_at
+        .iter()
+        .map(|&c| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, c, 0))
+        .collect::<Vec<_>>()[0];
+    shroud::area_reveal(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(foe_at[0], 0),
+        3,
+    );
+    // The guard (GUARD_MIN units by the yard) stays.
+    past_the_opening(&mut w, 0);
+    let mut plan = glasnost_ai::brain::default_plan();
+    plan.wave = 1;
+    // Where a ship is sent: the water nearest the enemy tank.
+    let park = {
+        let mut probe = w.clone();
+        let sea = glasnost_map::CellXY::new(yard.x, fixture::at(0, fixture::SEA_DY).y - 3);
+        let boat = testkit::spawn(&mut probe, Kind::Vehicle, "BOAT", 0, sea, 0);
+        let mut brain = Brain::with_plan(&probe, &map, HouseId(0), plan.clone());
+        brain
+            .think(&probe)
+            .into_iter()
+            .find_map(|o| match o {
+                Order::Behaviour {
+                    actor,
+                    dest: Some(Target::Cell(c)),
+                    ..
+                } if actor == boat => Some(c),
+                _ => None,
+            })
+            .expect("the ship is sent with a wave")
+    };
+    let water = |c: glasnost_map::CellXY| {
+        w.cells
+            .cell(c)
+            .is_some_and(|x| x.land == glasnost_map::terrain::land::WATER)
+    };
+    let beside = glasnost_map::CellXY::new(park.x, park.y - 1);
+    assert!(water(park) && water(beside), "{park:?} and {beside:?} are water");
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+    };
+    assert!(
+        d2(park, w.obj(foe).unwrap().pos.cell()) > 12 * 12,
+        "the ships at {park:?} cannot engage the tank"
+    );
+    let ships: Vec<ObjectId> = [park, beside]
+        .into_iter()
+        .map(|c| testkit::spawn(&mut w, Kind::Vehicle, "BOAT", 0, c, 0))
+        .collect();
+    let tank_at = free_cells(&w, glasnost_map::CellXY::new(yard.x, yard.y + 9), 1)[0];
+    let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, tank_at, 0);
+    plan.wave = 3;
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), plan);
+    let orders = brain.think(&w);
+    let sent: Vec<ObjectId> = orders
+        .iter()
+        .filter_map(|o| match o {
+            Order::Behaviour {
+                actor,
+                attack_move: true,
+                ..
+            } => Some(*actor),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !sent.contains(&tank),
+        "the tank goes alone with the parked ships as its wave: {orders:?}"
+    );
+    assert!(
+        !ships.iter().any(|s| sent.contains(s)),
+        "the parked ships are sent again: {orders:?}"
+    );
+}
+
 // A wave sends a ground unit whose weapon reaches across the water to the
 // shore facing a seen enemy it cannot drive to (PLAN §4.7, S-0212 claim 4,
 // S-0307 claim 13; M8 AI seams): on the island map an enemy tank stands on
