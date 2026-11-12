@@ -63,18 +63,42 @@ fn world(r: &Ruleset) -> (World, [ObjectId; 4]) {
 #[test]
 fn row_v6_reads_immune_for_every_kind() {
     let (w, [cart, ev, eb, tree]) = world(&rules());
-    assert_eq!(over(&w, cart, ev, plain()), Action::Attack, "baseline vehicle");
-    assert_eq!(over(&w, cart, eb, plain()), Action::Attack, "baseline building");
-    assert_eq!(over(&w, cart, tree, forced()), Action::Attack, "baseline tree");
+    assert_eq!(
+        over(&w, cart, ev, plain()),
+        Action::Attack,
+        "baseline vehicle"
+    );
+    assert_eq!(
+        over(&w, cart, eb, plain()),
+        Action::Attack,
+        "baseline building"
+    );
+    assert_eq!(
+        over(&w, cart, tree, forced()),
+        Action::Attack,
+        "baseline tree"
+    );
 
     let mut r = rules();
     r.sim.vehicles.get_mut("BUGGY").unwrap().immune = Some(true);
     r.sim.buildings.get_mut("TOWER").unwrap().immune = Some(true);
     r.sim.terrain_objects.get_mut("TREE").unwrap().immune = Some(true);
     let (w, [cart, ev, eb, tree]) = world(&r);
-    assert_eq!(over(&w, cart, ev, plain()), Action::NoMove, "immune vehicle");
-    assert_eq!(over(&w, cart, eb, plain()), Action::NoMove, "immune building");
-    assert_eq!(over(&w, cart, tree, forced()), Action::NoMove, "immune tree");
+    assert_eq!(
+        over(&w, cart, ev, plain()),
+        Action::NoMove,
+        "immune vehicle"
+    );
+    assert_eq!(
+        over(&w, cart, eb, plain()),
+        Action::NoMove,
+        "immune building"
+    );
+    assert_eq!(
+        over(&w, cart, tree, forced()),
+        Action::NoMove,
+        "immune tree"
+    );
 }
 
 // spec: S-0214 claim 6 (a) and Import mapping (Object type LegalTarget: legal target; absent yes)

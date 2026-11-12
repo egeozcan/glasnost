@@ -300,7 +300,12 @@ const OVERLAY_COMBAT: &[Row] = &[
 ];
 
 /// Combat fields of terrain-object types.
-const TERRAIN_COMBAT: &[Row] = &[("immune", "Immune", Bool, "S-0302")];
+const TERRAIN_COMBAT: &[Row] = &[
+    ("immune", "Immune", Bool, "S-0302"),
+    // spec: S-0214 Import mapping (object type LegalTarget and Bombable, for every object type)
+    ("legal_target", "LegalTarget", Bool, "S-0214"),
+    ("bombable", "Bombable", Bool, "S-0214"),
+];
 
 /// The game-wide tree strength's absent-key default (S-0102 claim 23 and
 /// Import mapping).

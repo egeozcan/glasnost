@@ -2692,6 +2692,10 @@ pub struct BuildingType {
     /// `LegalTarget`.
     #[serde(default)]
     pub legal_target: Option<bool>,
+    /// `Bombable`, accepts bombs (S-0214 Import mapping, row I19); absent:
+    /// yes.
+    #[serde(default)]
+    pub bombable: Option<bool>,
     /// `Crushable`.
     #[serde(default)]
     pub crushable: Option<bool>,
@@ -2895,6 +2899,14 @@ pub struct TerrainObjectType {
     /// `Immune` (S-0302 claim 20).
     #[serde(default)]
     pub immune: Option<bool>,
+    /// `LegalTarget`, a legal target (S-0214 Import mapping, claim 6 (a));
+    /// absent: yes.
+    #[serde(default)]
+    pub legal_target: Option<bool>,
+    /// `Bombable`, accepts bombs (S-0214 Import mapping, row I19); absent:
+    /// yes.
+    #[serde(default)]
+    pub bombable: Option<bool>,
 }
 
 /// A weapon's simulation fields.

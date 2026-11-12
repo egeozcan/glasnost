@@ -965,14 +965,57 @@ fn building_passengers(w: &World, id: ObjectId) -> Option<i32> {
         .map(|b| b.absorb.capacity)
 }
 
+/// A terrain object's type rules.
+fn terrain_type(w: &World, id: ObjectId) -> Option<&crate::rules::TerrainRules> {
+    let o = w.obj(id)?;
+    if o.kind != Kind::Terrain {
+        return None;
+    }
+    w.rules().terrain.get(o.type_index as usize)
+}
+
+/// An object-type flag, read from the target's own kind of type: a unit
+/// type, a building type or a terrain type (S-0214 Import mapping, *Object
+/// type*; #208). `None` when the target has no such type.
+fn type_flag(
+    w: &World,
+    id: ObjectId,
+    of_unit: impl Fn(&glasnost_rules::sim::UnitType) -> Option<bool>,
+    of_building: impl Fn(&glasnost_rules::sim::BuildingType) -> Option<bool>,
+    of_terrain: impl Fn(&crate::rules::TerrainRules) -> bool,
+) -> Option<Option<bool>> {
+    match kind(w, id)? {
+        Kind::Building => building(w, id).map(|b| of_building(&b.raw)),
+        Kind::Terrain => terrain_type(w, id).map(|t| Some(of_terrain(t))),
+        _ => unit(w, id).map(|u| of_unit(&u.raw)),
+    }
+}
+
 fn immune(w: &World, id: ObjectId) -> bool {
-    // spec: S-0214 Import mapping (Immune absent: no)
-    unit(w, id).is_some_and(|u| u.raw.immune.unwrap_or(false))
+    // spec: S-0214 Import mapping (object type Immune, for every object type; absent: no)
+    type_flag(w, id, |u| u.immune, |b| b.immune, |t| t.immune)
+        .flatten()
+        .unwrap_or(false)
 }
 
 fn legal_target(w: &World, id: ObjectId) -> bool {
-    // spec: S-0214 Import mapping (LegalTarget absent: yes)
-    unit(w, id).is_none_or(|u| u.raw.legal_target.unwrap_or(true))
+    // spec: S-0214 Import mapping (object type LegalTarget, for every object type; absent: yes)
+    type_flag(
+        w,
+        id,
+        |u| u.legal_target,
+        |b| b.legal_target,
+        |t| t.legal_target,
+    )
+    .flatten()
+    .unwrap_or(true)
+}
+
+fn bombable(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Import mapping (object type Bombable: accepts bombs, row I19, for every object type; absent: yes)
+    type_flag(w, id, |u| u.bombable, |b| b.bombable, |t| t.bombable)
+        .flatten()
+        .unwrap_or(true)
 }
 
 fn invisible(w: &World, id: ObjectId) -> bool {
@@ -1382,9 +1425,7 @@ fn infantry_on(
     // Rows I17 and I18 need the weapon cursor flags, which are not imported.
     // spec: S-0214 table I row I19 (a bomb planter: bomb if the type accepts bombs and carries none)
     if uflag(w, actor, |u| u.raw.ivan.unwrap_or(false)) && g1 == Action::Attack {
-        // spec: S-0214 Import mapping (Bombable absent: yes)
-        let bombable = unit(w, t).is_none_or(|u| u.raw.bombable.unwrap_or(true));
-        return if bombable {
+        return if bombable(w, t) {
             Action::Bomb
         } else {
             Action::NoBomb

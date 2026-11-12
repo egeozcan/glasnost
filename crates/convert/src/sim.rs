@@ -667,6 +667,8 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("gap_generator", "GapGenerator", Bool),
     ("immune", "Immune", Bool),
     ("legal_target", "LegalTarget", Bool),
+    // spec: S-0214 Import mapping (object type Bombable: accepts bombs, row I19; absent yes)
+    ("bombable", "Bombable", Bool),
     ("crushable", "Crushable", Bool),
     // spec: S-0215 Import mapping (DeployTime and GateCloseDelay, game minutes, S-0003 decimal form)
     ("deploy_time", "DeployTime", Dec),

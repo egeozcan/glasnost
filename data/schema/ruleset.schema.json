@@ -823,6 +823,14 @@
           ],
           "default": null
         },
+        "bombable": {
+          "description": "`Bombable`, accepts bombs (S-0214 Import mapping, row I19); absent:\nyes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "bridge_repair_hut": {
           "description": "`BridgeRepairHut`.",
           "type": [
@@ -12260,6 +12268,14 @@
             }
           ]
         },
+        "bombable": {
+          "description": "`Bombable`, accepts bombs (S-0214 Import mapping, row I19); absent:\nyes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "image_frames": {
           "description": "The number of image frames *N* of the type's sprite (S-0401 claim\n15, S-0112 Terms *frame count*), which the importer reads from the\nsprite of S-0007 claim 13 for the map's theater; absent (no sprite,\na file that does not parse, or an import without a theater): an\nanimated ore mine never makes resource, as for a sprite of fewer\nthan 2 image frames (S-0401 claim 15).",
           "type": [
@@ -12279,6 +12295,14 @@
         },
         "is_animated": {
           "description": "`IsAnimated`, the animated flag of an ore mine (S-0401 claim 15).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "legal_target": {
+          "description": "`LegalTarget`, a legal target (S-0214 Import mapping, claim 6 (a));\nabsent: yes.",
           "type": [
             "boolean",
             "null"

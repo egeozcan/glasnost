@@ -476,6 +476,10 @@ pub struct TerrainRules {
     pub armour: usize,
     /// Immune (S-0302 claim 20).
     pub immune: bool,
+    /// A legal target (S-0214 Import mapping, claim 6 (a)).
+    pub legal_target: bool,
+    /// Accepts bombs (S-0214 Import mapping, row I19).
+    pub bombable: bool,
     /// The animated flag of an ore mine (S-0401 claim 15).
     pub animated: bool,
     /// The animation rate *R* of an ore mine, ticks (S-0401 claim 15).
@@ -1434,6 +1438,10 @@ impl SimRules {
                     // spec: S-0305 claim 2 (a type no layer has given the field: class none)
                     armour: t.armor.unwrap_or_default().index(),
                     immune: t.immune.unwrap_or(false),
+                    // spec: S-0214 Import mapping (object type LegalTarget absent: yes)
+                    legal_target: t.legal_target.unwrap_or(true),
+                    // spec: S-0214 Import mapping (object type Bombable absent: yes)
+                    bombable: t.bombable.unwrap_or(true),
                     // spec: S-0401 Import mapping (IsAnimated absent: no)
                     animated: t.is_animated.unwrap_or(false),
                     // spec: S-0401 Import mapping (AnimationRate absent: 0)
