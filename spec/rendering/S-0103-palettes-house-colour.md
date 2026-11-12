@@ -2,13 +2,13 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 17
-sources-class: [decomp]
+revision: 25
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-0214, Q-0280, Q-0275, Q-0416, Q-0417, Q-0419]
+requests: [Q-0214, Q-0280, Q-0275, Q-0416, Q-0417, Q-0419, Q-3019]
 supersedes: []
 ---
 
@@ -28,6 +28,10 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Theater palette.** The theater's general-purpose palette. The temperate theater palette read at program start supplies the start-up resource table (S-0112, Terms and claims 1 and 2); later theater loads do not change that table.
 - **Anim palette.** The palette for animations that use neither the tile palette nor a house-colour palette. It is the same in every theater (claim 1).
 - **Icon palette.** The dedicated palette for sidebar build icons, loaded at program start and unchanged during the session (claim 13).
+- **Named palette.** A palette built like a 53-shade house-colour palette, but from a palette
+  file that a type names in its art in place of the unit palette (claims 16 and 17). It is not a
+  house-colour palette: a statement here about house-colour palettes covers named palettes only
+  where it says so. S-0104 calls these *named palettes* too.
 - **Colour definition.** A named colour given as three bytes (H, S, V): hue, saturation, value. The hue runs 0–255 over the full circle, so 0 and 255 are both red.
 - **House display RGB.** The display-precision RGB sample of a house's colour used as an input to radar drawing and house laser colour (claim 15), not the definition's stored HSV triple or a setup-screen swatch.
 - **Definition position.** Colour definitions are numbered from 0 in the order the game creates them in each game: the entries of the base rules' colour section in their order, then each new name that a later rules layer adds, in order. A later layer's entry whose name already exists creates nothing (claim 5). A line with an empty value is no entry at all (S-0001, claim 11), so it creates no definition and takes no position: the definitions after it each move one position lower. The **first colour definition** is the one at position 0.
@@ -74,7 +78,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
    - Backing: `measurable` (PB) for the unit and tile palette names in all six theaters. `measurable` (PH) for the missing unit and tile palette files, the palettes in force before the first load and the repeated multiplication. `unmeasured` for the theater palette's per-theater file names and missing-file row during theater loading, because no drawing subject here is established to show that loaded palette directly. The resource table shows the temperate palette read at program start instead (S-0112, claims 1 and 2).
    - Confidence: high for the names, the table and the repeated multiplication. Medium for the palettes in force before the first load.
 
-3. **When palettes are loaded and house-colour palettes built.** The unit, tile and theater palettes are reloaded only when a game starts in a different theater from the previous game of the session. The first game of a session always loads them. Every game, whatever its theater, builds all its house-colour palettes afresh from that game's colour definitions and the unit palette then in force. When the theater's unit palette file is found, that palette is the one in force; when it is missing, the missing-file rule in claim 2 determines which palette is in force. The anim palette never changes during a session (claim 1).
+3. **When palettes are loaded and house-colour palettes built.** The unit, tile and theater palettes are reloaded only when a game starts in a different theater from the previous game of the session. The first game of a session always loads them. Every game, whatever its theater, builds all its house-colour palettes afresh from that game's colour definitions and the unit palette then in force. Named palettes are built as claim 17 describes, which differs in the original. When the theater's unit palette file is found, that palette is the one in force; when it is missing, the missing-file rule in claim 2 determines which palette is in force. The anim palette never changes during a session (claim 1).
    - Backing: `measurable` (PB for the theater change and PI for fresh house-colour palettes in successive games; PH for the rule that a game in the same theater keeps the loaded palettes rather than reading the files again, which is visible only through claim 2's missing-file behaviour)
    - Confidence: high
 
@@ -106,16 +110,18 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 
 8. **Which palette an object uses.**
    - **Terrain tiles** use the tile palette, shaded by their own cell's light colour (S-0104).
-   - **Units, infantry, aircraft and buildings** use their owner's 53-shade house-colour palette, except as below.
+   - **Units, infantry, aircraft and buildings** use their owner's 53-shade house-colour palette,
+     except as below. A type with a named palette uses that instead, for the objects and
+     animations that claim 16 lists.
    - **A building flagged in its art to use the terrain palette** uses the tile palette instead. Its body and sprite parts are shaded with the light colour and scaled ground level of the cell under the building's centre and show no house colour (S-0104, claim 13, including the larger-coordinate cell at an even foundation's centre). S-0104 also owns the brightness of its voxel parts.
    - **Animation art settings** for palette selection, drawing with a building, normal light and tiling come only from the animation type's own art section at every type read (S-0007 claim 34). A different image name, including a snow-suffixed name, does not redirect these settings. Missing or empty values keep the held setting, initially the defaults in Import mapping; they never fall back to the image-named section. This applies regardless of whether a preceding read found a sprite.
    - **Animations** select their ordinary palette and brightness from the first applicable row below. An animation that meets several conditions uses the earliest row it meets. Tiled copies have the palette exception below the table.
 
    | Precedence | Animation | Palette | Light and brightness |
    |---|---|---|---|
-   | 1 | vein animation | the 53-shade house-colour palette of the **local player**, the same palette the local player's own units use, whoever owns the animation | its cell's scaled ground level (S-0104) |
+   | 1 | vein animation | the 53-shade house-colour palette of the **local player**, the same palette the local player's own units use when their type has no named palette (claim 16), whoever owns the animation | its cell's scaled ground level (S-0104) |
    | 2 | terrain animation | the tile palette | its cell's light colour, at its cell's scaled ground level (S-0104) |
-   | 3 | an object's own animation that is drawn with its object (see below the table) | the owner's 53-shade house-colour palette, even when the object is a building that uses the terrain palette | a brightness of its own, which depends on the kind of animation (see below the table) |
+   | 3 | an object's own animation that is drawn with its object (see below the table) | the object's named palette when its type has one (claim 16), otherwise the owner's 53-shade house-colour palette, even when the object is a building that uses the terrain palette | a brightness of its own, which depends on the kind of animation (see below the table) |
    | 4 | flagged for the alternative palette | the **single-shade** house-colour palette of the **first colour definition**, whatever the owner's colour | one row, so it ignores brightness and never takes an effect tint (S-0104, claim 3) |
    | 5 | any other | the anim palette | its cell's unscaled ground level (S-0104); the anim palette's shade table is never tinted (S-0104, claims 3 and 6) |
 
@@ -183,6 +189,123 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
     - The same widened display RGB is the input to the house laser colour, computed once at house-colour setup by S-0518 claim 17 and its formula F5; it is not a separate HSV conversion or a later lighting sample.
     - Backing: `measurable` (PN; S-0518 scenario LB1 for the house laser colour input)
     - Confidence: high
+
+16. **Which objects are drawn with a named palette, and a missing file (Q-3019).** Only an
+    infantry, vehicle, aircraft or building type can name a palette file of its own, in its art
+    section (Import mapping). Animation, projectile, particle, overlay, smudge, terrain-object
+    and terrain-tile types never select a named palette by their own art, whatever it says. An
+    animation takes a named palette only as an object's own animation drawn with that object's
+    palette (*Its own animations* below).
+    - **What uses it.** When an object's type has a named palette in the current theater (claim
+      17), the object is drawn with the 53-shade named palette of its owner's colour definition
+      (claims 10 and 14) instead of its owner's 53-shade house-colour palette. In the original
+      this holds where no colour name is repeated in the read before the owner's definition
+      position, and the other case is open (Open questions). Its brightness and shade row are
+      chosen as before (S-0104). This covers infantry, aircraft and buildings, their voxel parts
+      included, and vehicles drawn as sprites without a turret.
+    - **Its own animations.** The object's own animations that are drawn with the object's
+      palette (claim 8, row 3) use its named palette: a building's own animations drawn with it,
+      deploy and undeploy animations and the parachute of a carried object.
+    - **Vehicles that ignore it.** A vehicle drawn as a voxel model, or as a sprite with a
+      turret, is drawn in its owner's ordinary 53-shade house-colour palette, even when its type
+      has a named palette. Its own animations drawn with it still use the named palette.
+    - **Terrain-palette buildings.** A building flagged to use the terrain palette keeps the tile
+      palette for its body and sprite parts (claim 8). Its own animations drawn with it use the
+      named palette.
+    - **Disguise.** An infantry, aircraft or building object, or a vehicle drawn as a sprite
+      without a turret, whose type has a named palette is drawn with that named palette at its
+      real owner's colour definition even while it is drawn as its disguise for a viewing house.
+      Unlike other disguised objects (S-0516 claim 37), it does not show the disguise house's
+      colour. A disguised vehicle drawn as a voxel model or as a sprite with a turret, and an
+      object disguised as an overlay or terrain object, are not covered here (Open questions).
+      `quirks.named_palette_true_owner` (Edge cases).
+    - **Missing file.** When the file for the current theater is not found at the read that claim
+      17 describes, that file is not searched for again until the next theater change, even if it
+      appears meanwhile, and the type has no named palette from it until then. Whether a file is
+      missing is settled at that read, not when an object is drawn. Its objects and their
+      animations are then drawn exactly as if its art named no palette file (claim 8; S-0516
+      claim 37 for disguise). A file for another theater does not substitute, and a file name
+      without the theater suffix is never tried.
+    - Backing: `measurable` on PQ part A for the named palette of infantry, aircraft, building
+      bodies drawn as sprites and turretless sprite vehicles, the building's own animation and
+      any captured deploy, undeploy or parachute animation, the voxel vehicle drawn in its
+      owner's ordinary palette, the key for a short value without an extension, and the exclusion
+      of animations, projectiles and overlays. On PQ part C for the disguise rule of infantry. On
+      PQ parts D and E for the missing-file rule, its other-theater and unsuffixed cases, and a
+      file that stays missing until the next theater change. `unmeasured` for the other excluded
+      kinds (particles, smudges, terrain objects and terrain tiles), vehicles drawn as sprites
+      with a turret, the voxel parts of buildings, terrain-palette buildings, the own animations
+      of a vehicle that ignores its named palette, and the disguise rule of aircraft, buildings
+      and turretless sprite vehicles: PQ has no such subject, each would need a test type or
+      fixture of its own, and each follows the same drawing choice as a measured subject.
+      `unmeasured` for the key's 31-byte limit and a value ending in a file extension
+      (Import mapping): PQ's test name is short and has no extension, and these details change
+      only which file is searched (claim 17).
+    - Confidence: high for the four kinds that can name a palette, the key selecting a named
+      palette for a short value without an extension, the exclusion of animations, projectiles
+      and overlays, the infantry and aircraft bodies, building bodies drawn as sprites and the
+      missing-file rule. Medium for the other excluded kinds, the 31-byte limit and a value
+      ending in an extension, the vehicle exception, the voxel parts of buildings,
+      terrain-palette buildings, the list of own animations and the disguise rule.
+
+17. **How and when a named palette is built, and its tint (Q-3019).** The file searched for is
+    the value named in the art followed by the current theater's suffix *X* (Constants) and
+    `.PAL`. It is resolved like any other data file (S-0005), and its components receive claim
+    1's multiplication and byte wrap.
+    - **Construction.** For every colour definition, a 53-shade named palette is built exactly as
+      that definition's 53-shade house-colour palette (claims 6 and 7), with the named file in
+      place of the unit palette. Entries 16 to 31 are the definition's ramp (claim 6). The other
+      240 entries come from the named file, and indices 240 to 254 are tint-exempt (claim 7).
+    - **When.** In the original and in our engine alike, each file named for the current theater
+      is read when that theater's palette files are loaded (claim 3), and a file that no earlier
+      game of the session named in that theater, such as one first named by a later game's map
+      data, is read at the start of the game that names it. A later game in the same theater uses
+      the file content read before.
+      - *In our engine*, every game builds its named palettes when it starts, with its
+        house-colour palettes, from the named files held for its theater, from that game's colour
+        definitions and with white tint. No named palette is built during play, so none is built
+        while a global effect is in force or after a trigger-action tint change (design rule,
+        decided at the delegated sign-off, 2026-11-12).
+      - *In the original*, the named palettes of files already named are built only when a game's
+        theater differs from the previous game's, before play, from the colour definitions read
+        for the previous game or at program start. A game in the same theater keeps the previous
+        game's named palettes. Those of a file first named in a later game are built at that
+        game's start, and show the colour definitions in force at the point where that game's
+        data names the file.
+    - **Tint.** In the original and in our engine alike, a named palette takes no light-source
+      colour, and no map tint before a trigger-action tint change, and a named palette that an
+      event retints takes the same tint as the 53-shade house-colour palettes (S-0104 claims 3, 5
+      and 17). *In our engine*, every lighting re-evaluation, every choice of "normal" and every
+      trigger-action tint change retints every named palette. *In the original*, such an event
+      retints only the named palettes built for the first ⌊*N*/2⌋ colour keys read for the game,
+      where *N* counts every colour key read in every rules layer, repeats included. Where no
+      colour name is repeated before a definition position, those are the named palettes of the
+      definition positions below ⌊*N*/2⌋. The event does not retint the others.
+    - Backing: `measurable` on PQ part A for the file name of a short value without an extension
+      and the construction, on PQ part B for the tint at its captures and the original's partial
+      retint, on PQ part D for a file read on a theater change and its content reused by a later
+      game in the same theater, and on PQ part E for a missing file staying missing until the
+      next theater change. `unmeasured` for a file first named by a later game in the same
+      theater: PQ part D reuses only a file the first game named, and naming a new file in a
+      later game needs map art data of its own. `unmeasured` for the original's builds (only on a
+      theater change or at a file's first read, from the previous game's colour definitions or
+      those read so far, and kept by a later game in the same theater): a skirmish house shows
+      only definitions that the base rules create (claim 10), the same in every read, and what a
+      kept palette shows at the start of a same-theater game is open (Open questions). Our
+      engine's build at every game start is a design rule. `unmeasured` for the 31-byte limit and
+      a value ending in an extension, for the reason in claim 16. `unmeasured` for the tint taken
+      back at a "normal" re-evaluation after a trigger-action tint change: PQ part B makes no
+      such re-evaluation after its tint change, and the named palettes follow the house-colour
+      palettes there as everywhere else (S-0104 claim 17).
+    - Confidence: high for the file name of a short value without an extension, the construction,
+      and the reading of a file on a theater change and the reuse of its content by a later game
+      in the same theater when an earlier game named it, and the tint at PQ part B's captures.
+      High for our engine's build at every game start, a design rule. Medium for the tint taken
+      back at a "normal" re-evaluation after a trigger-action tint change. Medium for a file
+      first named by a later game in the same theater, the 31-byte limit and a value ending in an
+      extension, the original's partial retint (PQ part B is inconclusive when no definition
+      position reaches ⌊*N*/2⌋), and the original's builds: when it builds, from which colour
+      definitions, and that it keeps them across games in the same theater.
 
 ## Formulas
 
@@ -253,6 +376,7 @@ Exact non-negative integer arithmetic. Use *k* = 5, 6, 5 for red, green, blue in
 | shade counts per colour definition | 1 and 53 | rows | S-0104 |
 | palette file size | 768 | bytes | 256 × 3, components meant 0–63 |
 | anim palette file | `ANIM.PAL` | file name | read once per session |
+| named palette file | named value + *X* + `.PAL` | file name | claim 17; *X* from the theater table below |
 | icon shade count | 53 | rows | middle row 26 reproduces converted file colour, claim 13 |
 | lobby slot → definition position | 1, 5, 10, 14, 6, 12, 8, 7 | definition position | for slots 0 … 7, claim 10 |
 | σ_0 … σ_15 | 0.7661539316177368, 0.7949070930480957, 0.8224136829376221, 0.8481203317642212, 0.8719707727432251, 0.8935688734054565, 0.9135870337486267, 0.9316057562828064, 0.9473402500152588, 0.9612804651260376, 0.9731168746948242, 0.9826816916465759, 0.9902727603912354, 0.9956966042518616, 0.9989056587219238, 1.0 | dimensionless | single-precision values, written exactly |
@@ -287,8 +411,9 @@ Theaters. These names are engine constants of the original, not stock data. Each
 | State | Event | Result |
 |---|---|---|
 | program started | — | the unit palette in force is the snow theater's unit palette, loaded from its file (×4); the tile palette in force is all black; the anim palette is loaded from its file (×4) |
-| palettes for theater A in force | a game in theater A starts | no palette file is read; house-colour palettes are built from that game's colour definitions and A's unit palette |
-| palettes for theater A in force (or none loaded yet, as after program start, even when B is snow) | a game in theater B starts | the palettes for theater B are loaded under claim 2, including its missing-file rules; house-colour palettes are built from that game's colour definitions and the unit palette then in force |
+| palettes for theater A in force | a game in theater A starts | no palette file is read, except a named file that no earlier game of the session named in theater A (claim 17); house-colour palettes are built from that game's colour definitions and A's unit palette; named palettes as in claim 17 |
+| palettes for theater A in force (or none loaded yet, as after program start, even when B is snow) | a game in theater B starts | the palettes for theater B are loaded under claim 2, including its missing-file rules; house-colour palettes are built from that game's colour definitions and the unit palette then in force; named palettes as in claim 17 |
+| any | a game starts | named palettes are built for every colour definition of that game from the named files held for its theater, with white tint (claim 17, our engine); a named file is read when its theater's palettes are loaded or at the start of the first game of the session that names it in that theater |
 | rules layers read | each new colour name | a single-shade and a 53-shade house-colour palette exist under that name, at the next definition position |
 | rules layers read | a colour name that already exists | nothing changes |
 | program starts with an icon palette file available | file is resolved | icon colours are fixed for the session by claim 13 |
@@ -304,6 +429,19 @@ Theaters. These names are engine constants of the original, not stock data. Each
 - **Alternative-palette animations use the first colour definition, not the owner's** (claim 8, row 4). `quirks.alt_palette_first_definition` (default on). Off: the animation uses its owner's single-shade house-colour palette, and the first colour definition's when it has no owner.
 - **Parachutes keep the light of their creation tick** (claim 8, row 3). If the light changes while an object comes down, its parachute keeps its creation-tick brightness while the object follows the new light. `quirks.parachute_brightness_fixed` (default on). Off: the parachute follows the unscaled ground level of the carried object's current cell, as a building's own animation follows its building.
 - **Deploy and undeploy animations ignore the light** (claim 8, row 3). They are drawn at brightness 1000, so at night a deploying unit's animation is brighter than the unit. S-0104's `quirks.deploy_animation_unlit` (default on) owns this rule. Off: they take the unscaled ground level of the unit's cell (S-0104, claim 13 and Edge cases), without extra unit light or a height term.
+- **Disguise does not hide a named palette's owner** (claim 16). An object covered by claim 16's
+  disguise rule whose type has a named palette shows its real owner's colour definition even
+  while drawn as its disguise.
+  `quirks.named_palette_true_owner` (default on). Off: while drawn as its disguise for a viewing
+  house, the object ignores its named palette and is drawn as S-0516 claim 37 says, in the
+  disguise house's 53-shade house-colour palette.
+- **Named-palette build and retint departures** (claim 17). Three departures from the original
+  only change displayed colours, so they get no switch: our engine retints every named palette
+  where the original retints only some, builds them from each game's own colour definitions where
+  the original uses the previous game's or those read so far, and rebuilds them at every game
+  start where the original keeps them across games in the same theater. Claim 17 states the fixed
+  behaviour and records the original's in one sentence each (decided at the delegated sign-off,
+  2026-11-12).
 - **Vein animations use the local player's colour** (claim 8, row 1). Different players can see them in different colours. `quirks.veins_local_player_colour` (default on). Off: vein animations use the anim palette, like any other animation (row 5), so every player sees the same colours.
 
 ## Import mapping
@@ -320,6 +458,7 @@ The lobby swatch's RGB and flat fill (claims 11 and 12) have no data-file select
 | map house's own section | `Country` | country-name selector, matching and truncation as in S-0009 claim 47 and Import mapping; not the house name | country whose colour claim 14 inherits | absent or empty: country registration index 0; ordinary unknown nonempty name: newly created default country, initially colour definition position 0; invalid reserved selectors and empty registry follow S-0009 claim 47's warned departures |
 | map `[Houses]` and object-list owner values | list and owner fields in S-0009 Import mapping | actual-house creation and exact owner matching under S-0009 claim 48 | whether an original owner and remap colour exist at all (claim 14) | empty list creates houses for countries; unmatched owner drops the object, with no original colour; no data-file default selects a viewer diagnostic colour |
 | colour definition selected for a house | no separate radar or house-laser key | ramp index 16, shade row 26, packed then widened by claim 15 | house display RGB supplied to S-0410 claim 8 and S-0518 claim 17 | no independent display-colour default; use the selected house definition |
+| art, the art section (S-0007 Terms) of an infantry, vehicle, aircraft or building type | `Palette` | text; bytes after the 31st are ignored, which changes only which file is searched (claim 17); the theater suffix and `.PAL` are always appended, even to a value that already ends in a file extension | named palette (claims 16 and 17) | absent or empty at a type's first read of the game: no named palette; absent or empty at a later read: the earlier value is kept, an empty value counting as no entry (S-0001 claim 11; S-0007 claim 2); what the original shows after a later read without the key is not established (Open questions) |
 | art, building entry | `TerrainPalette` | boolean | building uses the tile palette (claim 8) | no |
 | art, animation type's own section at every type read (S-0007 claim 34), never image-named fallback | `AltPalette` | boolean | alternative palette (claim 8, row 4) | retain held value; initially no |
 | art, animation type's own section at every type read (S-0007 claim 34), never image-named fallback | `IsVeins` | boolean | vein animation (claim 8, row 1) | retain held value; initially no |
@@ -576,6 +715,114 @@ Every scenario that reads pixels shares these rules:
 - *Expected:* the untiled own animation follows its owner's 53-shade palette and darkens at 0.43; the untiled alternative animation follows the first definition's single-shade palette and does not darken. Both tiled subjects instead follow the anim palette and darken at 0.43, retaining the building's brightness and the cell's unscaled ground level respectively. With normal light enabled, both tiled subjects show brightness 1000 at both ambients. No tiled remap-index pixel uses a house ramp.
 - *Falsified if:* a tiled pixel follows the ordinary selected palette, a tiled subject remains neutral-bright at 0.43 without the override, or a normal-light tiled subject darkens. A sample whose candidate packed colours coincide is inconclusive, not confirmation.
 
+**PQ: named palettes (claims 16 and 17; Q-3019). Test data: a copy of the art database in a test
+expansion archive, loose test palette files and, if needed, a loose copy of the base rules.**
+- *Setup:* the common setup and test lighting, on a tiny flat temperate map and a tiny flat snow
+  map. Named test data, as in PJ: a test expansion archive holding a copy of the art database in
+  which the art sections of the following test types name the invented palette name `QTEST`: an
+  infantry type, a disguise-capable infantry type, an aircraft type, a building type with an own
+  animation drawn with it, a vehicle type drawn as a voxel model, and a vehicle type drawn as a
+  sprite without a turret (named test copies of the art database and the base rules may make a
+  vehicle type so). The own art section of one trigger-created animation, and the art sections of
+  one projectile type and one overlay type, name it too. Loose test palette files: `QTESTTEM.PAL`
+  with invented components that differ visibly from the unit palette and from the anim palette at
+  every sampled index, including indices outside 16 to 31 and in 240 to 254, and an unsuffixed
+  `QTEST.PAL` with different invented components as a control. No `QTESTSNO.PAL`. Read every
+  expected palette entry from the test files and stock files at measurement time.
+- *Houses:* the local player and the opponent own one of each test subject. The measurer counts
+  *N*, the colour keys of every rules layer read for the game, repeats included. Choose lobby
+  slots whose definition positions (claim 10) lie on both sides of ⌊*N*/2⌋. No colour name may be
+  repeated in the read before the highest definition position used. The measurer checks this
+  while counting *N*, and a run that cannot meet it is void (Open questions, *Repeated colour
+  names*). If no lobby slot gives a position at or above ⌊*N*/2⌋, add a building of the test type
+  owned by a non-player house, provided the light-grey definition (claim 10) has such a position.
+  If no available position is at or above ⌊*N*/2⌋, part B's partial-retint check is inconclusive,
+  and the measurer records *N* and the positions.
+- *Procedure:*
+  - *A, neutral.* Temperate map. After each subject is placed and the building's own animation
+    plays, pause and capture every subject. Capture a deploy or undeploy animation and a
+    paradropped infantry's parachute if the test types offer them.
+  - *B, effects.* On the temperate map, in a game that no game in the same theater precedes in
+    that program session (a fresh program start, or after a snow game), so that the named
+    palettes are built with white tint, a trigger starts an ion storm. Capture after the lighting
+    re-evaluation that selects the storm (S-0104 Scenario L3), then after the storm ends. In a
+    second run under the same condition, capture after a nuke flash's re-evaluation, and after
+    the trigger-action tint change of S-0104 Scenario L21.
+  - *C, disguise.* Use S-0516 Scenario CS16's disguise fixture with the opponent's
+    disguise-capable test infantry disguised and viewed by the local player without detector
+    coverage.
+  - *D, other theater and same theater.* In the same program session, after the temperate games
+    of parts A to C, replace `QTESTTEM.PAL` with a second version giving the sampled entries
+    different invented components, then start the snow map, then the temperate map. End that
+    temperate game during an ion storm. Replace the file with a third version, start the
+    temperate map once more and capture its first drawn tick.
+  - *E, missing file.* Remove `QTESTTEM.PAL`, restart the program and repeat A. Then, in the same
+    program session, put the file back and start the temperate map again, then the snow map, then
+    the temperate map, capturing every test subject in each.
+- *Observable:* top bits of identified pixels of every subject and animation. Compare each with
+  three references at its shade row and tint (S-0104): the named palette (claim 17), the owner's
+  house-colour palette built from the unit palette, and the palette built from the unsuffixed
+  control file. Record the lobby slots, *N* and the definition positions.
+- *Expected (original):*
+  - A: the infantry, aircraft, turretless sprite vehicle and building bodies, the building's own
+    animation and any captured deploy, undeploy or parachute animation match the named palette at
+    their owner's definition, including the ramp at 16 to 31. The voxel vehicle matches its
+    owner's ordinary house-colour palette. The test animation, projectile and overlay are drawn
+    as without the key (claim 8). No pixel at an index outside 16 to 31 matches the unsuffixed
+    control.
+  - B: named-palette pixels of definition positions below ⌊*N*/2⌋ take the same storm, flash and
+    trigger tints as the house-colour pixels of that definition, except at indices 240 to 254.
+    Those at or above ⌊*N*/2⌋ keep white tint throughout. On our engine all of them take the
+    tints.
+  - C: the disguised infantry is drawn with the named palette at its real owner's definition, not
+    in the disguise house's colours.
+  - D: the snow game shows every test subject in ordinary palettes. The temperate game after it
+    shows the second version of the file, read on the theater change. The last game, in the same
+    theater, still shows the second version, not the third. Record whether its first tick shows
+    white tint or the storm tint of the game before (Open questions).
+  - E: every test subject is drawn as without a named palette in the first game and in the
+    temperate game started after the file is put back. The temperate game after the snow game
+    shows the named palette.
+- *Falsified if:* a listed subject follows the ordinary palette where the expected results give
+  the named palette, the voxel vehicle, the test animation, the projectile or the overlay follows
+  the named palette, a pixel at an index outside 16 to 31 follows the unsuffixed control, a
+  named-palette pixel takes a tint that the expected results exclude or misses one they require,
+  the disguised infantry shows the disguise house's ramp, a game without the suffixed file shows
+  the named palette, the temperate game after the snow game shows the first version, the third
+  version appears without a theater change, the file put back in part E shows before a theater
+  change, or it does not show after one. A sample whose candidate packed colours coincide is
+  inconclusive, not confirmation.
+
+## Changes for other specs
+
+S-0104 Terms *Named palettes*: which objects use named palettes and how they are built is covered
+by claims 16 and 17 here. The sentence saying that neither S-0104 nor S-0103 covers it can point
+there instead.
+
+S-0104 claims 3 and 17, its Edge cases entry for `quirks.trigger_tint_retints_all_tables` and the
+Backing of claims 3 and 17: in the original, a lighting re-evaluation, a choice of "normal" and a
+trigger-action tint change retint only the named palettes of the first ⌊*N*/2⌋ colour keys read
+for the game (claim 17 here). The event does not retint the others. Our engine retints every
+named palette as S-0104 claims 3 and 17 describe, a display-only fix that claim 17 here gives no
+quirk switch. S-0104 can say that its "every named palette" is our engine's behaviour and point
+to claim 17 here for the original's. Its `unmeasured` backing for named palettes can cite
+scenario PQ part B here.
+
+S-0104 Open questions, the tint of a house-colour or named palette built after a trigger-action
+tint change: no named palette is built during play, in our engine by design and in the original
+only on a theater change or at the start of a game that first names a file (claim 17 here), so
+the named-palette half can close. Its remark that such palettes are normally all built when the
+game starts holds for named palettes only in our engine. The original keeps them across games in
+the same theater (claim 17 here). The house-colour half stays open there.
+
+S-0516 claim 37, "The disguise is drawn in its disguise house's colours": an object of a type
+with a named palette, within the scope of claim 16 here, is drawn with that named palette at its
+real owner's colour definition instead, unless `quirks.named_palette_true_owner` is off.
+
+S-0522 claim 18, "an ordinary untiled parachute uses the carried infantry's house-colour unit
+palette": when the carried infantry's type has a named palette, the parachute uses that named
+palette (claim 16 here, *Its own animations*). The sentence can cite claim 16 here.
+
 ## Open questions
 
 Q-0419 is answered jointly: S-0009 claims 47–48 determine country selection and owner resolution; claim 14 here supplies inherited, default-country and overridden colours. An unresolved owner has no original remap colour. Optional viewer diagnostic colours are not original colour inheritance. No original-semantics part remains open.
@@ -588,6 +835,11 @@ Q-0275's palette conversion and missing-palette behaviour are resolved by claim 
 
 Q-0280 is resolved by claims 11 and 12: the setup swatch is a flat fill of a fixed RGB constant, not the definition's own colour or a ramp entry. S-0412 claims 1 and 7 continue to own slot selection and random-colour resolution; neither determines a swatch shade.
 
+Q-3019 is answered by claims 16 and 17: the kinds and key that select a named palette, its file
+name and construction, its build before play and its tint, and the missing-file rule. The items
+for it in Open questions below are edge cases of these answers, not unanswered parts of the
+request.
+
 Q-0214 is resolved by claim 8: S-0112 claims 1–3 own the established overlay, smudge and terrain-object palette rules. No residual palette question for those subjects remains here; the deck and marker exceptions still apply to ore and gems.
 
 - **Saved games.** Whether loading a saved game makes the next game reload the palette files, whatever its theater, is not established.
@@ -596,6 +848,23 @@ Q-0214 is resolved by claim 8: S-0112 claims 1–3 own the established overlay, 
 - **Rows 2 and 3 of claim 8.** Which animations count as terrain animations, beyond animated terrain tiles, is not fully established. The list of an object's own animations (claim 8, row 3) may also be incomplete.
 - **Brightness of a building's own animation.** How a building's flashing, or an effect that changes the building's brightness, changes the brightness its own animation takes (claim 8) is not established (S-0104, claim 13).
 - **Projectiles by parachute.** What makes a projectile come down by parachute, and whether stock play ever does, is not established. Until a way is known, the projectile exception of claim 8 cannot be measured. The animation-reference defaults are established in Import mapping. S-0522 claim 13 resolves the non-projectile absent-type case; projectile-specific release and lifetime consequences remain unmeasured.
-- **Disguise.** An object whose disguise is in effect against the local player (glossary, *disguise*) may be drawn in the disguise house's colour. That belongs with the disguise rules and is not claimed here.
-- **Types with their own palette.** A type may be drawn with a palette of its own, recoloured per house. Whether stock data uses this, and which key selects it, is open.
+- **Disguise.** For an object whose type has a named palette, claim 16 states the colour it shows
+  while drawn as its disguise, within the scope given there. For every other disguised object,
+  the colour it is drawn in belongs with the disguise rules (S-0516 claim 37) and is not claimed
+  here. Open: a disguised vehicle drawn as a voxel model or as a sprite with a turret whose type
+  has a named palette, and an object of a named-palette type disguised as an overlay or terrain
+  object.
+- **Repeated colour names and named palettes.** A named palette is chosen by the position of the
+  owner's colour definition. When a colour name is repeated in the read before a house's
+  definition position, which colour that house's named-palette objects show in the original, its
+  own definition's or another's, is not established, nor whether any skirmish arrangement reaches
+  this.
+- **A named palette dropped by a later read.** For a type whose art names a palette file at one
+  read of a game and has no such key at a later read of the same game (an empty value counts as
+  none, S-0001 claim 11), what the original then shows is not established: whether its objects
+  keep the named palette chosen earlier, and what they show after the next theater change. Our
+  engine follows S-0007 claim 2 and the Import mapping.
+- **Named-palette tint at the start of a same-theater game.** Whether the original's kept named
+  palettes start such a game with the tint they had when the previous game ended is not
+  established (claim 17). PQ part D records it.
 - **Invalid colour registries.** Claim 14 assumes at least the inherited colour definition exists. Colour selection when the rules supply no definitions, or otherwise lack a referenced inherited definition, remains unspecified here; an unknown selector in an otherwise valid registry is not this case and keeps the inherited definition.
