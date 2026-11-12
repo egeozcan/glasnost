@@ -4223,10 +4223,11 @@ impl<'a> Builder<'a> {
     }
 
     /// The unit depth adjustment *U* = −L(z) + s + F (S-0102 claim 14) for a
-    /// unit of `kind`/`idx` standing on cell `c` at world height `z`. Only
-    /// the cliff fudge can be judged: bridges, columns and tunnels need
-    /// specs not written yet, so their factors are 0.
-    fn unit_depth(&self, kind: Kind, idx: usize, c: CellXY, z: i32) -> i32 {
+    /// unit of `kind`/`idx` standing on cell `c` at world height `z`, on a
+    /// high bridge's deck when `deck`. Only the cliff fudge can be judged:
+    /// bridges, columns and tunnels need specs not written yet, so their
+    /// factors are 0.
+    fn unit_depth(&self, kind: Kind, idx: usize, c: CellXY, z: i32, deck: bool) -> i32 {
         let level = |dx: i32| {
             self.map
                 .cells
@@ -4236,8 +4237,12 @@ impl<'a> Builder<'a> {
         let own = level(0).unwrap_or(0);
         // spec: S-0102 claim 14 (a cell is high when more than 3 levels above the unit's cell)
         let high = |dx: i32| level(dx).is_some_and(|l| l - own > CLIFF_LEVELS);
-        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker)
-        let factor = cliff_factor(high(1), high(2), &self.p.view_quirks);
+        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker; a unit on a bridge: 0, D9 Map C a high bridge's deck; a low bridge is Q-3008)
+        let factor = if deck {
+            0
+        } else {
+            cliff_factor(high(1), high(2), &self.p.view_quirks)
+        };
         let fudge = rule_int(self.import, kind, idx, b"ZFudgeCliff", DEFAULT_CLIFF_FUDGE);
         // spec: S-0102 claim 14 (U = −L(z) + s + F, F the largest fudge)
         -height_lift(z) + SITUATIONAL + (factor * fudge).max(0)
@@ -4289,7 +4294,7 @@ impl<'a> Builder<'a> {
         let (x, y, z) = m.pos;
         let point = project_lifted(x, y, z);
         let cell = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (the cell holding a position)
-        let u = self.unit_depth(m.kind, m.idx, cell, z);
+        let u = self.unit_depth(m.kind, m.idx, cell, z, m.deck);
         let (hsv, _) = self.owner_colour(&m.owner);
         let levels = self.p.lights.get(cell).map_or(
             light::CellLevels {
@@ -4473,7 +4478,8 @@ impl<'a> Builder<'a> {
         {
             items.push(item);
         }
-        // spec: S-0102 claim 13 (infantry body, h = 0: U − 12, upright, reader)
+        // spec: S-0102 claims 13 and 14 (infantry body, h = 0: U − 12; h not 0: −L(z) − 12, U does not apply; upright, reader)
+        let bias = if m.above == 0 { u - 12 } else { -lz - 12 };
         if let Some(item) = self.place_sprite(
             &sprite,
             frame,
@@ -4481,7 +4487,7 @@ impl<'a> Builder<'a> {
             DepthTest::Reader,
             ItemDepth::Profile {
                 profile: Profile::Upright,
-                bias: u - 12,
+                bias,
                 companion: None,
             },
             Paint::Lit(row),
@@ -4617,9 +4623,11 @@ impl<'a> Builder<'a> {
                 Some(m.object),
             )
         };
+        // spec: S-0102 claims 13 and 14 (a vehicle drawn as a sprite, h = 0: U − 2; h not 0: −L(z) − 2, U does not apply)
+        let body_bias = if m.above == 0 { u - 2 } else { -lz - 2 };
         let body = |b: &mut Self, f: usize| {
-            // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, reader);
-            // S-0105 claim 12 (Depth: only without the turret flag)
+            // spec: S-0102 claim 13 (a vehicle drawn as a sprite: upright, reader); S-0105 claim 12
+            // (Depth: only without the turret flag)
             b.place_sprite(
                 sprite,
                 f,
@@ -4627,7 +4635,7 @@ impl<'a> Builder<'a> {
                 DepthTest::Reader,
                 ItemDepth::Profile {
                     profile: Profile::Upright,
-                    bias: u - 2,
+                    bias: body_bias,
                     companion: None,
                 },
                 Paint::Lit(row),
@@ -4641,6 +4649,7 @@ impl<'a> Builder<'a> {
             // spec: S-0102 claim 22 (a turret vehicle: its shadow, U − 2, lies under the combined
             // image and never darkens it, so it goes first); S-0105 claim 12 (One image: the
             // vehicle's own shadow is drawn before the composed image and keeps its own row)
+            // design: render (#95) claim 22 sets no height condition for this shadow, so it is kept at every height, at U − 2 (Q-3007)
             items.extend(shadow_item(self, u - 2));
             // A sprite frame as a part placed relative to the draw point (S-0102 F6).
             let sprite_part = |b: &mut Self, f: usize| {
@@ -4655,9 +4664,11 @@ impl<'a> Builder<'a> {
             let parts = sprite_turret_parts(body_part, barrel, turret_part, m.turret);
             items.extend(self.composed_item(&parts, point, u, row, m.object));
         } else {
-            // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat)
             items.extend(body(self, frame));
-            items.extend(shadow_item(self, -lz - 4));
+            // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat); claim 13 (only while h = 0)
+            if m.above == 0 {
+                items.extend(shadow_item(self, -lz - 4));
+            }
         }
         items
     }
