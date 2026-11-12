@@ -412,6 +412,15 @@ pub struct Live {
     /// ([`Built::objects`] indices) as the game started: what the cell
     /// pass drew it with.
     map_start: BTreeMap<u32, (Option<HouseId>, i32)>,
+    /// The turret facing and animation-frame counter of each of the map's
+    /// buildings as the game started: what the cell pass drew it with (#97).
+    map_start_pose: BTreeMap<u32, (u16, i32)>,
+    /// The map's buildings whose turret facing or animation-frame counter
+    /// left its start value, or that unloaded: drawn live from then on, so
+    /// that a turning turret, a counter that comes round again or an
+    /// unloading that ends does not move them back and forth between the
+    /// passes (#97).
+    map_posed: BTreeSet<u32>,
     /// Each cell's static overlay objects ([`Built::objects`] indices).
     overlay_codes: BTreeMap<CellXY, Vec<u32>>,
     /// Each cell's overlay and overlay data value when the game started, by
@@ -1140,6 +1149,13 @@ impl Live {
             .iter()
             .filter_map(|(code, id)| Some((*code, world.obj(*id).map(|o| (o.owner, o.health))?)))
             .collect();
+        let map_start_pose: BTreeMap<u32, (u16, i32)> = building_ids
+            .iter()
+            .filter_map(|(code, id)| {
+                let o = world.obj(*id)?;
+                Some((*code, (o.turret.value(world.tick), o.combat.anim_frame)))
+            })
+            .collect();
         let mut overlay_codes: BTreeMap<CellXY, Vec<u32>> = BTreeMap::new();
         for (i, info) in built.objects.iter().enumerate() {
             if info.kind == "overlay" {
@@ -1281,6 +1297,8 @@ impl Live {
             gone: BTreeSet::new(),
             live_gates,
             map_start,
+            map_start_pose,
+            map_posed: BTreeSet::new(),
             overlay_codes,
             start_overlays,
             legal_cells,
@@ -3218,7 +3236,25 @@ impl Live {
         // first image frame. That includes a building that needs an
         // engineer and is not manned: its *freeze-unpowered* slots are held
         // at the image frame they were created with (S-0108 claim 26) by
-        // the slot player, and its other slots play.
+        // the slot player, and its other slots play. One whose turret
+        // facing (S-0105 claim 16) or animation-frame counter (S-0609 claim
+        // 14) left its start value, or that unloads (S-0108 claims 22 and
+        // 23), is drawn live from then on (#97).
+        let tick = self.world.tick;
+        for (code, id) in &self.building_ids {
+            if self.map_posed.contains(code) {
+                continue;
+            }
+            let Some(o) = self.world.obj(*id).filter(|o| o.on_map) else {
+                continue;
+            };
+            let pose = (o.turret.value(tick), o.combat.anim_frame);
+            if self.map_start_pose.get(code) != Some(&pose)
+                || o.beh.current == Some(Behaviour::Unload)
+            {
+                self.map_posed.insert(*code);
+            }
+        }
         let changed_map: BTreeSet<u32> = self
             .building_ids
             .iter()
@@ -3226,6 +3262,7 @@ impl Live {
                 self.world.obj(**id).is_some_and(|o| {
                     o.on_map
                         && (self.map_start.get(code) != Some(&(o.owner, o.health))
+                            || self.map_posed.contains(code)
                             || self
                                 .slot_anims
                                 .get(id)
