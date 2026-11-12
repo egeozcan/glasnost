@@ -380,6 +380,10 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     let plus = !hit.ignore_defences && hit.amount >= 0;
     let ign = hit.ignore_defences;
     let building = o.kind == Kind::Building;
+    // spec: S-0217 r22 claim 3 (Q-2986 answered: a hit that has an attacker and reaches a building of the house sets L whatever the hit then does, a stopping row of S-0302 claim 8 at any stage, a final amount of 0 and a healing hit included; the building's own damage only when its type damages itself)
+    if building && !(hit.attacker == Some(target) && !tc.damage_self) {
+        crate::computer::building_hit(w, target, o.owner, hit.attacker);
+    }
     let b = building.then(|| &rules.buildings[o.type_index as usize].building);
     let same_type_owner = hit
         .attacker
@@ -504,10 +508,6 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         set_health(w, target, h2);
         res
     };
-    if building && lost > 0 {
-        // spec: S-0217 claim 3 (a hit on a building of the house by damage that has an attacker sets its owner's last base hit tick, whatever the attacker's house) and Q-2986 (interim: only a hit that lowers the building's health)
-        crate::computer::building_hit(w, target, o.owner, hit.attacker);
-    }
     let result = if result == HitResult::NowDead {
         killing_hit(w, target, &hit, &tc)
     } else {

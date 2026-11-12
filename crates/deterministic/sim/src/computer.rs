@@ -181,19 +181,19 @@ fn owns_construction_vehicle(w: &World, h: HouseId) -> bool {
     })
 }
 
-/// A hit on building `b` (S-0217 claim 3): when the hit has a known attacker
-/// and lowered the building's health, its owner's last base hit tick
-/// becomes the current tick, whatever the attacker's house. A building
-/// whose type undeploys into a vehicle and covers one cell changes nothing.
-/// The building's own damage reaches here only when its type damages
-/// itself (S-0302 claim 8's first stage stops it otherwise).
+/// A hit that reaches building `b` (S-0217 r22 claim 3): when the hit has a
+/// known attacker, its owner's last base hit tick becomes the current tick,
+/// whatever the attacker's house and whatever the hit then does. A
+/// building whose type undeploys into a vehicle and covers one cell changes
+/// nothing. The caller, `combat::damage`, sends the building's own damage
+/// only when its type damages itself.
 pub fn building_hit(
     w: &mut World,
     b: ObjectId,
     owner: Option<HouseId>,
     attacker: Option<ObjectId>,
 ) {
-    // spec: S-0217 claim 3 (damage that has an attacker; S-0302 claim 1: a known attacker is an object in the world) and Q-2986 (interim: only a hit that lowers the building's health sets L; the caller passes no other)
+    // spec: S-0217 r22 claim 3 (a hit that has an attacker; S-0302 claim 1: a known attacker is an object in the world)
     if !attacker.is_some_and(|a| w.obj(a).is_some()) {
         return;
     }
