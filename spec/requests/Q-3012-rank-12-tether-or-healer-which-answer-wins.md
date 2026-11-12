@@ -1,8 +1,9 @@
 ---
 id: Q-3012
 title: S-0301 claim 9 rank 12, a tethered vehicle healer: impossible or illegal?
-status: open
+status: answered
 related: [S-0301, S-0310]
+answered-by: [S-0301]
 ---
 
 ## Need
