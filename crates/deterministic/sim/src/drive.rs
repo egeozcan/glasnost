@@ -1259,6 +1259,9 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
         ) {
             ob.beh.aside = Some((ob.target, ob.dest));
             ob.target = Some(target);
+            // spec: S-0309 claim 24 (a target set by an override is not an opportunity target) and S-0518 claim 15 (the charging mark clears at an ordinary target change)
+            ob.combat.opportunity = false;
+            ob.combat.charging = false;
             // spec: S-0207 claim 15 (the override gives no destination: the move destination is put aside until the override is reverted)
             ob.dest = None;
             ob.path.steps.clear();

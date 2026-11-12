@@ -387,6 +387,8 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         t = Target::Cell(cliff_replacement(w, id, c));
         if let Some(ob) = w.obj_mut(id) {
             ob.target = Some(t);
+            // spec: S-0309 claim 24 (every setting of a target leaves a target that is not an opportunity target)
+            ob.combat.opportunity = false;
         }
         // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
         crate::emitters::retarget_let_go(w, id);

@@ -937,7 +937,13 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     } else {
         // spec: S-0213 table T3 (f) (target and destination from the order)
         match target {
-            Some(_) => m.target = target,
+            Some(_) => {
+                m.target = target;
+                // spec: S-0309 claim 24 (a target set by an order is not an opportunity target)
+                m.combat.opportunity = false;
+                // spec: S-0518 claim 15 (the charging mark clears whenever the unit is given a target by an order)
+                m.combat.charging = false;
+            }
             // spec: S-0215 claim 12 and S-0506 claim 25 (an order setting the target to nothing obeys the spawner pending-target rule)
             None => crate::spawn::explicit_clear_own_target(m),
         }
