@@ -245,7 +245,7 @@ impl Special {
         let own = script.own(w);
         let home = script.home(w);
         self.memory.review(w);
-        let start = out.len();
+        let mut start = out.len();
         self.garrison(house, &own, home, w, out);
         self.engineers(script, &own, w, out);
         self.spies(script, &own, w, out);
@@ -263,8 +263,8 @@ impl Special {
         self.bunkers(script, &own, w, out);
         self.lifters(script, &own, w, out);
         self.drainers(script, &own, w, out);
-        self.gunners(script, &own, w, out);
-        self.memory.note(w, &out[start..]);
+        self.gunners(script, &own, w, out, &mut start);
+        self.memory.note(w, out.get(start..).unwrap_or_default());
     }
 
     /// How many (unit, goal) pairs the brain has given up for now (an order

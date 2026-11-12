@@ -257,19 +257,27 @@ impl Special {
     /// Gunner vehicles: a healer into each idle empty gunner vehicle at
     /// home while the house keeps fewer healers than its armed vehicles
     /// call for, by the *enter* click; the passenger's type is built when
-    /// the house has none.
+    /// the house has none. `start` is where the special orders begin in
+    /// `out`; it moves back by the healer's earlier orders removed before it.
     pub(crate) fn gunners(
         &mut self,
         script: &Script,
         own: &[ObjectId],
         w: &World,
         out: &mut Vec<Order>,
+        start: &mut usize,
     ) {
         let plan = self.gunner_plan(script, own, w, out);
         for (id, v) in plan.loads {
             if let Some(orders) = click_if(w, script.house, id, v, &[Action::Enter]) {
                 // The healer's click replaces any order of this think for
                 // it (the army's rally: an engineer is an army type).
+                // design: own AI (#3): the script's and the brain's orders before `start` that go keep the special orders' start in step, so the load itself is noted and the slice never starts past the end
+                let before = out[..(*start).min(out.len())]
+                    .iter()
+                    .filter(|o| o.actor() == Some(id))
+                    .count();
+                *start -= before;
                 out.retain(|o| o.actor() != Some(id));
                 out.extend(orders);
                 self.count_gunner_load();
