@@ -1252,11 +1252,18 @@ pub struct Painter {
     /// the settled images, while redraws use it (design: render (#104)):
     /// each group with the last redraw that used it.
     rocked: BTreeMap<(Kind, usize, Pose), PoseImages>,
-    /// Vehicle shadows with the current part image excluded, by unmasked
-    /// shadow image, part images and the parts' screen shift from the
-    /// shadow's draw point (S-0105 claim 39): a memo of the per-appearance
-    /// exclusion, each with the last redraw that used it, released when
-    /// unused (design: render (#104)).
+    /// The unmasked vehicle shadow footprints (S-0105 claims 31, 39), by
+    /// type, pose (`None` for the settled images) and shadow key: kept here,
+    /// not in the scene, as no item draws them (design: render (#106)). A
+    /// pose's go with its images (design: render (#104)).
+    footprints: BTreeMap<(Kind, usize, Option<Pose>, voxel::ImageKey), Option<Footprint>>,
+    /// The number the next footprint takes, for the cutouts' keys.
+    next_footprint: u32,
+    /// Vehicle shadows with the current part image excluded, by footprint,
+    /// part images and the parts' screen shift from the shadow's draw point
+    /// (S-0105 claim 39): a memo of the per-appearance exclusion, each with
+    /// the last redraw that used it, released when unused (design: render
+    /// (#104)).
     cutouts: Cutouts,
     /// The released scene images and the redraw count (design: render
     /// (#104)).
@@ -1359,10 +1366,34 @@ type TileImages = (
 /// A sprite frame: image index, the frame's offset on the canvas, and the
 /// canvas size.
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
-/// The vehicle-shadow cutout memo of [`Painter`]: by unmasked shadow image,
-/// part images and the parts' shift from the shadow's draw point, with the
-/// last redraw that used each.
-type Cutouts = BTreeMap<(u32, Vec<u32>, (i32, i32)), (Option<PlacedPart>, u64)>;
+/// The vehicle-shadow cutout memo of [`Painter`]: by footprint number,
+/// part images ([`NO_PART`] after the last) and the parts' shift from the
+/// shadow's draw point, with the last redraw that used each.
+type Cutouts = BTreeMap<(u32, [u32; MAX_PARTS], (i32, i32)), (Cut, u64)>;
+
+/// The most part images a voxel vehicle draws: body, turret and barrel
+/// (S-0105 claims 4, 8, 12).
+const MAX_PARTS: usize = 3;
+/// Fills a cutout key's part images after the last (design: render (#106)).
+const NO_PART: u32 = u32::MAX;
+
+/// A vehicle shadow's unmasked footprint, kept in the painter (design:
+/// render (#106)): its number, its image, and the scene image showing it
+/// as it is, once an appearance needs it.
+#[derive(Clone, Debug)]
+struct Footprint {
+    id: u32,
+    image: voxel::PartImage,
+    as_is: Option<Option<PlacedPart>>,
+}
+
+/// A cutout memo entry (design: render (#106)): the footprint as it is,
+/// when the exclusion changes no pixel, or an image of its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Cut {
+    AsIs,
+    Own(Option<PlacedPart>),
+}
 /// A [`Pose`]'s images in [`Painter`], with the last redraw that used them.
 type PoseImages = (voxel::ImageCache<Option<PlacedPart>>, u64);
 
@@ -5441,32 +5472,36 @@ impl<'a> Builder<'a> {
         if kind == Kind::Vehicles
             && let Some(s) = shadow
         {
-            let cached = self
-                .image_cache(kind, idx, unpitched)
-                .is_some_and(|c| c.get(&shadow_key).is_some());
-            let fresh = (!cached).then(|| draw_shadow(self, s));
-            let now = self.p.pool.now;
-            let cache = match unpitched {
-                None => self.p.voxels.entry((kind, idx)).or_default(),
-                Some(pose) => {
-                    let entry = self.p.rocked.entry((kind, idx, pose)).or_default();
-                    entry.1 = now;
-                    &mut entry.0
-                }
+            // design: render (#106): the footprint is kept in the painter (a pose's goes with the
+            // pose's images, design: render (#104))
+            let fkey = (kind, idx, unpitched, shadow_key);
+            if !self.p.footprints.contains_key(&fkey) {
+                // spec: S-0105 claims 31, 39 (cache only the unmasked footprint)
+                let image = draw_shadow(self, s).filter(|i| i.width > 0 && i.height > 0);
+                let id = self.p.next_footprint;
+                self.p.next_footprint = id.wrapping_add(1);
+                let footprint = image.map(|image| Footprint {
+                    id,
+                    image,
+                    as_is: None,
+                });
+                self.p.footprints.insert(fkey, footprint);
+            }
+            let part = match self.p.footprints.get_mut(&fkey) {
+                Some(Some(footprint)) => vehicle_shadow(
+                    &mut self.built.scene,
+                    Shadows {
+                        footprint,
+                        cutouts: &mut self.p.cutouts,
+                        pool: &mut self.p.pool,
+                        transient: unpitched.is_some(),
+                    },
+                    &placed,
+                    (point.0 - shadow_point.0, point.1 - shadow_point.1),
+                ),
+                // spec: S-0105 claims 31, 39 (a reused footprint is not redrawn)
+                _ => None,
             };
-            let part = vehicle_shadow(
-                &mut self.built.scene,
-                Shadows {
-                    cache,
-                    cutouts: &mut self.p.cutouts,
-                    pool: &mut self.p.pool,
-                    transient: unpitched.is_some(),
-                },
-                shadow_key,
-                &placed,
-                (point.0 - shadow_point.0, point.1 - shadow_point.1),
-                fresh,
-            );
             if let Some(part) = part {
                 // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
                 items.push(Self::part_item(
@@ -5585,56 +5620,79 @@ pub fn vehicle_shadow_point(point: (i32, i32), above: i32) -> (i32, i32) {
     (point.0, point.1 + height_lift(above))
 }
 
-/// A vehicle shadow's appearance (S-0105 claims 31, 39). `fresh` is the
-/// newly drawn unmasked footprint on a cache miss (`None` when the type's
-/// cache holds `key`); `parts` are this draw's completed body, turret and
-/// barrel images.
+/// A vehicle shadow's appearance (S-0105 claims 31, 39): the scene image
+/// showing `footprint`, the type's unmasked footprint, with this draw's
+/// completed body, turret and barrel images `parts` excluded.
 ///
-/// The cache keeps the unmasked footprint, and every appearance, fresh or
-/// reused, excludes the current parts (claim 39). `shift` is the parts'
-/// draw point less the shadow's, in screen pixels: (0, 0) unless the
-/// vehicle's height above its surface has a lift (S-0105 claim 44), so the
-/// exclusion compares at the same screen position.
+/// Every appearance, fresh or reused, excludes the current parts (claim
+/// 39). `shift` is the parts' draw point less the shadow's, in screen
+/// pixels: (0, 0) unless the vehicle's height above its surface has a lift
+/// (S-0105 claim 44), so the exclusion compares at the same screen
+/// position. An exclusion that changes no pixel, as when no part's
+/// rectangle meets the footprint's, shows the footprint's own scene image,
+/// one for all such appearances (design: render (#106)).
 fn vehicle_shadow(
     scene: &mut Scene,
     s: Shadows<'_>,
-    key: voxel::ImageKey,
     parts: &[PlacedPart],
     shift: (i32, i32),
-    fresh: Option<Option<voxel::PartImage>>,
 ) -> Option<PlacedPart> {
     let Shadows {
-        cache,
+        footprint,
         cutouts,
         pool,
         transient,
     } = s;
     let now = pool.now;
-    let unmasked = match fresh {
-        Some(img) => {
-            // spec: S-0105 claims 31, 39 (cache only the unmasked footprint)
-            let part = img.and_then(|i| {
-                if transient {
-                    add_transient_image(scene, pool, &i)
-                } else {
-                    add_part_image(scene, &i)
-                }
-            });
-            cache.insert(key, part);
-            part
-        }
-        // spec: S-0105 claims 31, 39 (a reused footprint is not redrawn)
-        None => cache.get(&key).copied().flatten(),
-    }?;
+    // design: render (#106): the footprint as it is, made once (transient with a pose's images)
+    let mut as_is = |scene: &mut Scene, pool: &mut TransientPool| {
+        *footprint.as_is.get_or_insert_with(|| {
+            if transient {
+                add_transient_image(scene, pool, &footprint.image)
+            } else {
+                add_part_image(scene, &footprint.image)
+            }
+        })
+    };
+    // design: render (#106): no part rectangle meets the footprint's, so the exclusion changes
+    // no pixel
+    let unmasked = &footprint.image;
+    let span = |at: i64, len: u32| at..at + i64::from(len);
+    let meets =
+        |a: &std::ops::Range<i64>, b: &std::ops::Range<i64>| a.start < b.end && b.start < a.end;
+    let (fx, fy) = (
+        span(unmasked.offset[0], unmasked.width),
+        span(unmasked.offset[1], unmasked.height),
+    );
+    let met = parts.iter().any(|&(id, [x, y])| {
+        let image = &scene.images[id as usize];
+        let px = span(i64::from(x) + i64::from(shift.0), image.width());
+        let py = span(i64::from(y) + i64::from(shift.1), image.height());
+        meets(&px, &fx) && meets(&py, &fy)
+    });
+    if !met {
+        return as_is(scene, pool);
+    }
     // spec: S-0105 claim 39 (exclude this object's current completed part image on every
     // appearance, fresh or reused; no old-pose cutouts persist)
-    let ids = (unmasked.0, parts.iter().map(|p| p.0).collect(), shift);
-    if let Some((p, used)) = cutouts.get_mut(&ids) {
+    debug_assert!(
+        parts.len() <= MAX_PARTS,
+        "a vehicle draws at most three parts"
+    );
+    let mut part_ids = [NO_PART; MAX_PARTS];
+    for (slot, p) in part_ids.iter_mut().zip(parts) {
+        *slot = p.0;
+    }
+    let ids = (footprint.id, part_ids, shift);
+    if let Some((cut, used)) = cutouts.get_mut(&ids) {
         // design: render (#104): used in this redraw
         *used = now;
-        return *p;
+        return match *cut {
+            Cut::AsIs => as_is(scene, pool),
+            Cut::Own(p) => p,
+        };
     }
-    let mut img = placed_image(scene, unmasked);
+    let mut img = unmasked.clone();
     // spec: S-0105 claim 39 (at the same screen position: the parts placed relative to the shadow's draw point)
     let images: Vec<voxel::PartImage> = parts
         .iter()
@@ -5649,17 +5707,22 @@ fn vehicle_shadow(
         .collect();
     let refs: Vec<&voxel::PartImage> = images.iter().collect();
     voxel::exclude_own_image(&mut img, &refs);
+    // design: render (#106): an exclusion that changes no pixel is the footprint as it is
+    if img.pixels == unmasked.pixels {
+        cutouts.insert(ids, (Cut::AsIs, now));
+        return as_is(scene, pool);
+    }
     // design: render (#104): a cutout is transient
     let part = add_transient_image(scene, pool, &img);
-    cutouts.insert(ids, (part, now));
+    cutouts.insert(ids, (Cut::Own(part), now));
     part
 }
 
-/// What [`vehicle_shadow`] keeps its images in: the type's image cache for
-/// the pose (settled or [`Pose`]), the cutouts, the released images, and
-/// whether the pose's images are transient (design: render (#104)).
+/// What [`vehicle_shadow`] works with: the type's footprint for the pose
+/// (settled or [`Pose`]), the cutouts, the released images, and whether
+/// the pose's images are transient (design: render (#104), (#106)).
 struct Shadows<'a> {
-    cache: &'a mut voxel::ImageCache<Option<PlacedPart>>,
+    footprint: &'a mut Footprint,
     cutouts: &'a mut Cutouts,
     pool: &'a mut TransientPool,
     transient: bool,
@@ -6079,6 +6142,8 @@ impl Painter {
             anim_types: BTreeMap::new(),
             voxels: BTreeMap::new(),
             rocked: BTreeMap::new(),
+            footprints: BTreeMap::new(),
+            next_footprint: 0,
             cutouts: BTreeMap::new(),
             pool: TransientPool::default(),
             composed: BTreeMap::new(),
@@ -6599,15 +6664,17 @@ impl Painter {
     /// Ends a redraw of the live game's objects: the transient images no
     /// redraw has used for a while are released (design: render (#104)).
     ///
-    /// A pose's group of images and a cutout go when unused for
-    /// [`TRANSIENT_REDRAWS`] redraws; a cutout made from a released image
-    /// goes with it, so no entry names a released image. A released image
-    /// becomes 0 × 0 and its index is given to the next transient image.
-    /// The items of the redraw just ended name only images it used, none
-    /// released here.
+    /// A pose's group of images (with its shadow footprints, design: render
+    /// (#106)) and a cutout go when unused for [`TRANSIENT_REDRAWS`]
+    /// redraws; a cutout made from a released footprint or image goes with
+    /// it, so no entry names a released image. A released image becomes
+    /// 0 × 0 and its index is given to the next transient image. The items
+    /// of the redraw just ended name only images it used, none released
+    /// here.
     pub fn end_redraw(&mut self, scene: &mut Scene) {
         let Painter {
             rocked,
+            footprints,
             cutouts,
             pool,
             ..
@@ -6616,18 +6683,29 @@ impl Painter {
         pool.now += 1;
         let stale = |used: u64| used + TRANSIENT_REDRAWS <= now;
         let mut released = BTreeSet::new();
-        rocked.retain(|_, (cache, used)| {
+        let mut gone = BTreeSet::new();
+        rocked.retain(|&(kind, idx, pose), (cache, used)| {
             let keep = !stale(*used);
             if !keep {
                 released.extend(cache.values().flatten().map(|p| p.0));
+                gone.insert((kind, idx, pose));
             }
             keep
         });
-        cutouts.retain(|(unmasked, parts, _), (part, used)| {
+        let mut gone_footprints = BTreeSet::new();
+        footprints.retain(|&(kind, idx, pose, _), footprint| {
+            let keep = pose.is_none_or(|pose| !gone.contains(&(kind, idx, pose)));
+            if !keep && let Some(f) = footprint {
+                gone_footprints.insert(f.id);
+                released.extend(f.as_is.flatten().map(|p| p.0));
+            }
+            keep
+        });
+        cutouts.retain(|(footprint, parts, _), (cut, used)| {
             let keep = !stale(*used)
-                && !released.contains(unmasked)
+                && !gone_footprints.contains(footprint)
                 && parts.iter().all(|p| !released.contains(p));
-            if !keep && let Some(p) = part {
+            if !keep && let Cut::Own(Some(p)) = cut {
                 released.insert(p.0);
             }
             keep
@@ -6958,23 +7036,30 @@ mod shadow_tests {
         scene.images[p.unwrap().0 as usize].pixels().to_vec()
     }
 
+    /// The footprint of [`footprint`], kept in the painter, number 0.
+    fn kept() -> Footprint {
+        Footprint {
+            id: 0,
+            image: footprint(),
+            as_is: None,
+        }
+    }
+
     /// [`vehicle_shadow`] for a settled pose, with no released images to use again.
     fn shadow(
         scene: &mut Scene,
-        cache: &mut voxel::ImageCache<Option<PlacedPart>>,
+        footprint: &mut Footprint,
         cutouts: &mut Cutouts,
-        key: voxel::ImageKey,
         parts: &[PlacedPart],
         shift: (i32, i32),
-        fresh: Option<Option<voxel::PartImage>>,
     ) -> Option<PlacedPart> {
         let s = Shadows {
-            cache,
+            footprint,
             cutouts,
             pool: &mut TransientPool::default(),
             transient: false,
         };
-        vehicle_shadow(scene, s, key, parts, shift, fresh)
+        vehicle_shadow(scene, s, parts, shift)
     }
 
     /// spec: S-0105 claims 31, 39 (the cache keeps the unmasked footprint; the current
@@ -6984,56 +7069,26 @@ mod shadow_tests {
     #[test]
     fn cutouts_follow_the_current_parts() {
         let mut scene = Scene::default();
-        let mut cache = voxel::ImageCache::default();
+        let mut f = kept();
         let mut cutouts = BTreeMap::new();
-        let key = voxel::shadow_key(voxel::RAMP_FLAT, 0);
         let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
         let b = add_part_image(&mut scene, &img(2, 1, [2, 0], &[0, 9])).unwrap();
         let m = voxel::SHADOW_MARK;
-        let first = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[a],
-            (0, 0),
-            Some(Some(footprint())),
-        );
+        let start = scene.images.len();
+        let first = shadow(&mut scene, &mut f, &mut cutouts, &[a], (0, 0));
         assert_eq!(pixels(&scene, first), [m, 0, m, m]);
-        // The cache holds the unmasked footprint.
-        assert_eq!(pixels(&scene, *cache.get(&key).unwrap()), [m; 4]);
-        let second = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[b],
-            (0, 0),
-            None,
-        );
+        // design: render (#106): the painter keeps the unmasked footprint; the scene holds only
+        // the cutout drawn.
+        assert_eq!(f.image.pixels, [m; 4]);
+        assert_eq!(scene.images.len(), start + 1);
+        let second = shadow(&mut scene, &mut f, &mut cutouts, &[b], (0, 0));
         // B's transparent pixel at x = 2 excludes nothing; its pixel at x = 3 does.
         assert_eq!(pixels(&scene, second), [m, m, m, 0]);
         // The same parts again reuse the masked image: the scene does not grow.
         let n = scene.images.len();
-        let third = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[b],
-            (0, 0),
-            None,
-        );
+        let third = shadow(&mut scene, &mut f, &mut cutouts, &[b], (0, 0));
         // Back to A's pose: A's cutout again, not B's.
-        let fourth = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[a],
-            (0, 0),
-            None,
-        );
+        let fourth = shadow(&mut scene, &mut f, &mut cutouts, &[a], (0, 0));
         assert_eq!(fourth, first);
         assert_eq!((third, scene.images.len()), (second, n));
     }
@@ -7045,44 +7100,45 @@ mod shadow_tests {
     #[test]
     fn a_lowered_shadow_excludes_the_parts_where_they_land() {
         let mut scene = Scene::default();
-        let mut cache = voxel::ImageCache::default();
+        let mut f = kept();
         let mut cutouts = BTreeMap::new();
-        let key = voxel::shadow_key(voxel::RAMP_FLAT, 0);
         let m = voxel::SHADOW_MARK;
         // A part pixel at x = 1, drawn one pixel to the right of the shadow's point.
         let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
-        let shifted = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[a],
-            (1, 0),
-            Some(Some(footprint())),
-        );
+        let shifted = shadow(&mut scene, &mut f, &mut cutouts, &[a], (1, 0));
         assert_eq!(pixels(&scene, shifted), [m, m, 0, m]);
         // Drawn a row above the shadow's: it covers none of the footprint's row.
-        let above = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[a],
-            (0, -1),
-            None,
-        );
+        let above = shadow(&mut scene, &mut f, &mut cutouts, &[a], (0, -1));
         assert_eq!(pixels(&scene, above), [m; 4]);
         // The same parts with no shift keep their own memo.
-        let level = shadow(
-            &mut scene,
-            &mut cache,
-            &mut cutouts,
-            key,
-            &[a],
-            (0, 0),
-            None,
-        );
+        let level = shadow(&mut scene, &mut f, &mut cutouts, &[a], (0, 0));
         assert_eq!(pixels(&scene, level), [m, 0, m, m]);
+    }
+
+    /// design: render (#106): an appearance whose parts change no pixel of the footprint, their
+    /// rectangles clear of it or their pixels over it transparent, is the footprint's own scene
+    /// image, one for all of them (S-0105 claim 39's exclusion, which removes nothing there)
+    #[test]
+    fn an_exclusion_that_changes_nothing_is_the_footprint_itself() {
+        let mut scene = Scene::default();
+        let mut f = kept();
+        let mut cutouts = BTreeMap::new();
+        let m = voxel::SHADOW_MARK;
+        let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
+        let clear = add_part_image(&mut scene, &img(2, 1, [1, 0], &[0, 0])).unwrap();
+        let start = scene.images.len();
+        let shown = [
+            shadow(&mut scene, &mut f, &mut cutouts, &[a], (0, -1)),
+            shadow(&mut scene, &mut f, &mut cutouts, &[a], (0, 5)),
+            shadow(&mut scene, &mut f, &mut cutouts, &[clear], (0, 0)),
+            shadow(&mut scene, &mut f, &mut cutouts, &[clear], (0, 0)),
+        ];
+        assert!(shown.iter().all(|&s| s == shown[0]), "{shown:?}");
+        assert_eq!(shown[0], f.as_is.flatten());
+        assert_eq!(pixels(&scene, shown[0]), [m; 4]);
+        assert_eq!(scene.images[shown[0].unwrap().0 as usize].width(), 4);
+        assert_eq!(shown[0].unwrap().1, [0, 0]);
+        assert_eq!(scene.images.len(), start + 1);
     }
 
     /// spec: S-0105 claim 44 and MS-34 part e (B moved down by S-0101 claim 3's signed lift of
