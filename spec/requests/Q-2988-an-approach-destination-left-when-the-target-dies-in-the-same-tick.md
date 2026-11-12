@@ -3,7 +3,7 @@ id: Q-2988
 title: A hunting vehicle's approach destination, left when its new target dies later in the same tick (M-0024)
 status: open
 related: [S-0215, S-0307, S-0309, M-0024]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
