@@ -45,6 +45,7 @@ fn tile_marks(p: i32) -> &'static [(i32, i32)] {
 }
 
 /// The positions table T lists.
+// spec: S-0104 claim 19 (the positions table T lists)
 const MARKING_POSITIONS: std::ops::RangeInclusive<i32> = 20..=32;
 
 /// The position of the tile stored as `stored` in its tileset when that
