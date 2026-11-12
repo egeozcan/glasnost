@@ -1353,8 +1353,9 @@ S-0217 (new) and S-0508 r39 answer Q-2951; the ledger is
   and then gives the order when the house is not held (*t* > *L* + 900) and owns no factory
   building on the map (claim 3); it gives the order alone when the house owns no building other
   than occupied civilian ones and no construction vehicle (claim 4), held or not.
-- **The last base hit tick *L*.** `combat::damage::apply_hit` calls `computer::building_hit` for a
-  hit on a building that lowers its health and has an attacker in the world (Q-2986's interim);
+- **The last base hit tick *L*.** `combat::damage::apply_hit` calls `computer::building_hit` for
+  every hit on a building that has an attacker in the world, whatever the hit then does (S-0217
+  r22 claim 3, Q-2986 answered; sim issues S3 below replaced the interim "lowers its health");
   a one-cell building that undeploys into a vehicle (`econ::sell::vehicle_like`) does not set it.
   A building's own damage without the self-damage mark never reaches it (S-0302 claim 8 stage 1).
 - **State.** `House::checks` (`computer::Checks`: the next check's tick and *L*), saved.
