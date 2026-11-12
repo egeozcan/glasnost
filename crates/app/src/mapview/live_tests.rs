@@ -308,6 +308,105 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
     assert_eq!(shadows(-20), 0);
 }
 
+/// spec: S-0102 claim 13 (an infantry body or a vehicle drawn as a sprite with h not 0:
+/// −L(z) − 12 and −L(z) − 2, U does not apply; the own shadow image frame only while h = 0),
+/// claim 14 (U only at h = 0; cliff factor 0 for a unit on a bridge, D9 Map C), claim 21 (#95)
+#[test]
+fn sprite_bodies_in_the_air_and_on_a_deck_leave_the_cliff_fudge() {
+    use glasnost_render::projection::height_lift;
+    let (import, catalogue, assets) = context();
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let mut map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    // spec: S-0102 claim 14 (the cell one step toward the viewer, more than 3 levels higher: a cliff)
+    map.cells
+        .get_mut(glasnost_map::CellXY::new(7, 10))
+        .expect("a legal cell")
+        .level = 4;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene: Scene = built.scene;
+    let unit = |kind: Kind, z: i32, above: i32, deck: bool| Mobile {
+        kind,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos: (6 * 256 + 128, 9 * 256 + 128, z),
+        body: 16384,
+        turret: 16384,
+        elevation: 0,
+        anim: 0,
+        infantry: (kind == Kind::Infantry).then_some(InfantryFrame {
+            start: 3,
+            count: 1,
+            multiplier: 2,
+            stage: 0,
+        }),
+        object: sim_code(ObjectId(7)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude: Attitude::None,
+        disabled: false,
+        above,
+        protection: None,
+        generic_shadow: None,
+        berserk: None,
+        turret_index: None,
+        walk: Default::default(),
+        deck,
+    };
+    // (body bias, shadow biases)
+    let mut drawn = |m: Mobile| {
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        let of = |i: &glasnost_render::scene::Item| match i.depth {
+            ItemDepth::Profile { bias, .. } => bias,
+            ItemDepth::Tile { .. } => panic!("not a profile item"),
+        };
+        let items = &entries[0].items;
+        let body = items.iter().find(|i| i.paint != Paint::Shadow).map(of);
+        let shadows: Vec<i32> = items
+            .iter()
+            .filter(|i| i.paint == Paint::Shadow)
+            .map(of)
+            .collect();
+        (body.expect("a body"), shadows)
+    };
+    for (kind, c) in [(Kind::Infantry, 12), (Kind::Vehicles, 2)] {
+        // On the ground beside the cliff: U − c, U = −L(z) − 1 + F with F > 0.
+        let (ground, ground_shadows) = drawn(unit(kind, 0, 0, false));
+        assert!(ground > -1 - c, "{kind:?}: the cliff fudge pushes it back");
+        assert_eq!(
+            ground_shadows,
+            vec![-4],
+            "{kind:?}: its own shadow at h = 0"
+        );
+        // spec: S-0102 claim 14 (unit on a bridge: cliff factor 0; s = −1 stays)
+        let (deck, _) = drawn(unit(kind, 416, 0, true));
+        assert_eq!(deck, -height_lift(416) - 1 - c, "{kind:?} on a deck");
+        // spec: S-0102 claim 13 (h not 0: −L(z) − c, neither s nor F)
+        let (air, air_shadows) = drawn(unit(kind, 104, 104, false));
+        assert_eq!(air, -height_lift(104) - c, "{kind:?} in the air");
+        assert!(air_shadows.is_empty(), "{kind:?}: no own shadow in the air");
+    }
+}
+
 /// spec: S-0402 claim 5a and F8 (the fixed harvesting sprite: its F8 image
 /// frame centred on the projected anchor, composited before (under) the
 /// vehicle's body and shadow, with the anim palette and no house-colour remap at
@@ -1955,6 +2054,122 @@ fn shot_animation_follows_its_firer() {
     let shots = live.shot_anims();
     assert_eq!(shots.len(), 2);
     assert_eq!(shots[1], (None, fixed, type_layer, Some(-15)));
+}
+
+/// spec: S-0109 claims 28 and 29 (the ordinary animations in play are the simulation's: their type,
+/// stage and position), S-0522 claim 13 (a paratrooper's parachute is attached to it): after a
+/// catch-up (a rejoin's game put in place, the benchmark's direct ticks) the animations already
+/// playing are drawn, and none the drawing started before stays (#98)
+#[test]
+fn a_catch_up_draws_the_animations_in_play() {
+    use glasnost_sim::anims::{Role, Spawn, spawn};
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    // The synthetic rules with the animation type, playing for a long time.
+    let mut r = (*testkit::rules()).clone();
+    r.animations.push(glasnost_sim::rules::AnimRules {
+        name: "BOOMX".into(),
+        frames: Some(3),
+        loop_count: 1000,
+        ..Default::default()
+    });
+    let rules = std::sync::Arc::new(r);
+    let world = glasnost_sim::load::new_game(
+        rules.clone(),
+        &map,
+        testkit::catalogue(),
+        &testkit::setup(5),
+    )
+    .expect("the synthetic game loads");
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    let centre = |x: i32, y: i32| Pos::new(x * 256 + 128, y * 256 + 128, 0);
+    // An animation the drawing started that the game does not play.
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: centre(9, 9),
+        delay: None,
+        reverse: false,
+        z_adjust: None,
+        id: None,
+    });
+    live.after_tick();
+    assert_eq!(live.anim_positions(), vec![centre(9, 9)]);
+    // The game moves on without the drawing: an animation and a parachute
+    // start and play, and nothing draws their ticks.
+    let trooper = testkit::spawn(
+        &mut live.world,
+        glasnost_sim::rules::Kind::Infantry,
+        "WALKER",
+        0,
+        glasnost_map::CellXY::new(5, 5),
+        0,
+    );
+    let shown = spawn(
+        &mut live.world,
+        "BOOMX",
+        Some(centre(4, 4)),
+        Spawn::default(),
+    )
+    .id
+    .expect("in play");
+    let at = live.world.obj(trooper).expect("the trooper").pos;
+    let chute = spawn(
+        &mut live.world,
+        "BOOMX",
+        Some(at),
+        Spawn {
+            owner: Some((trooper, Pos::new(0, 0, 0))),
+            role: Role::Parachute,
+            ..Default::default()
+        },
+    )
+    .id
+    .expect("in play");
+    for _ in 0..4 {
+        glasnost_sim::tick::step(&mut live.world);
+        live.world.effects.clear();
+    }
+    assert!(
+        live.world.anims.anims.contains_key(&shown) && live.world.anims.anims.contains_key(&chute),
+        "both still play"
+    );
+    live.resume();
+    live.redraw(&inputs, &mut scene);
+    let drawn = live.anim_positions();
+    assert!(
+        drawn.contains(&centre(4, 4)),
+        "the game's animation: {drawn:?}"
+    );
+    assert!(!drawn.contains(&centre(9, 9)), "the drawing's own is gone");
+    assert_eq!(
+        live.attached().iter().map(|a| a.0).collect::<Vec<_>>(),
+        vec![trooper],
+        "the parachute on its trooper"
+    );
+    assert_eq!(live.counts.anims_drawn, 2);
 }
 
 /// spec: S-0105 Import mapping (`ConsideredAircraft` absent: yes for an aircraft type, no for
@@ -3711,6 +3926,68 @@ fn magnetic_wave_is_drawn_in_the_air_layer_until_removed() {
     live.step();
     live.redraw(&inputs, &mut scene);
     assert!(scene.spots.is_empty());
+}
+
+/// spec: S-0316 claims 5 and 9 (a bolt's shape is drawn with new draws in every drawn frame and
+/// only then; a stand-still makes no drawn frame) and S-0201 claim 6 (one drawn frame per tick): a
+/// redraw without a tick, such as a click's marker while paused, shows the same shape (#93)
+#[test]
+fn a_redraw_without_a_tick_keeps_the_bolt_shape() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    // Far apart, so that neither fires a bolt of its own.
+    let (mut live, mut scene, map, import, catalogue, firer, _) = combat_live(16);
+    let assets = overlay_assets();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_bolt_colours(super::bolts::Colours {
+        side: [10, 10, 10],
+        alt_side: [5, 5, 5],
+        main: [15, 15, 15],
+    });
+    live.step();
+    // A long bolt (several splits, so many draws).
+    live.world.effects.push(Effect::Bolt {
+        firer,
+        weapon: 0,
+        slot: 0,
+        burst: 0,
+        from: Pos {
+            x: 8 * 256,
+            y: 8 * 256,
+            z: 0,
+        },
+        to: Pos {
+            x: 13 * 256,
+            y: 11 * 256,
+            z: 0,
+        },
+        building: None,
+        vehicle_on_map: false,
+    });
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    let first = beam_groups(&scene).into_iter().cloned().collect::<Vec<_>>();
+    assert_eq!(first.len(), 1, "the bolt is drawn");
+    live.redraw(&inputs, &mut scene);
+    let again = beam_groups(&scene).into_iter().cloned().collect::<Vec<_>>();
+    assert_eq!(first, again, "no new draws without a drawn frame");
+    // The next tick's drawn frame draws it anew.
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    let next = beam_groups(&scene).into_iter().cloned().collect::<Vec<_>>();
+    assert_eq!(next.len(), 1);
+    assert_ne!(first, next, "a new shape in the next drawn frame");
 }
 
 /// spec: S-0514 claim 27 with S-0109 Terms (an erased body's code 2 or 3 combines with the cloak's:
@@ -5507,6 +5784,112 @@ fn claim_13_mobiles_on_a_bridge_deck_take_the_level_factor_terms() {
         !on.is_empty() && on.iter().all(|&r| r == rho(u + 4 * LAMBDA)),
         "{on:?}"
     );
+}
+
+/// #74: spec: S-0104 Terms (a shadowed cell: one an intact high bridge spans) and claim 13 (a
+/// vehicle in a shadowed cell, not on a bridge deck, h < 208: U − 500 + extra unit light;
+/// infantry there, h ≤ 208: U − 500 + extra infantry light, above 208 the height term alone; on
+/// the deck no penalty), with the interim of Q-3006 (the high-bridge cells of S-0211 claim 15)
+#[test]
+fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
+    use glasnost_render::light::brightness_rho;
+    // An invented level factor, thousandths per height level.
+    const LAMBDA: i32 = 30;
+    let (import, catalogue, assets) = context();
+    let mut map = decode(
+        &Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new()),
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    map.lighting.normal.level = LAMBDA;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    let cell = glasnost_map::CellXY::new(2, 3);
+    let u = painter.ground_light(cell);
+    painter.set_shadowed_cells([cell].into());
+    let mut rhos = |m: Mobile| -> Vec<u16> {
+        let (e, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        lit_shades(&e[0].items).iter().map(|s| s.rho).collect()
+    };
+    let rho = |b: i32| brightness_rho(b) as u16;
+    let man = |deck, above| Mobile {
+        deck,
+        above,
+        ..plain_mobile(Kind::Infantry)
+    };
+    assert_eq!(rhos(man(false, 0)), [rho(u - 500)], "standing in it");
+    assert_eq!(
+        rhos(man(false, 208)),
+        [rho(u - 500)],
+        "at 208: still the penalty"
+    );
+    assert_eq!(rhos(man(false, 416)), [rho(u + 2 * LAMBDA)], "above 208");
+    assert_eq!(rhos(man(true, 416)), [rho(u + 2 * LAMBDA)], "on the deck");
+    let car = |deck| Mobile {
+        deck,
+        ..plain_mobile(Kind::Vehicles)
+    };
+    let under = rhos(car(false));
+    assert!(
+        !under.is_empty() && under.iter().all(|&r| r == rho(u - 500)),
+        "{under:?}"
+    );
+    let on = rhos(car(true));
+    assert!(
+        !on.is_empty() && on.iter().all(|&r| r == rho(u + 4 * LAMBDA)),
+        "{on:?}"
+    );
+}
+
+/// #74: spec: S-0104 Terms (an intact high bridge marks the cells it spans as shadowed, and the
+/// mark is cleared when it is destroyed), with the interim of Q-3006 (the high-bridge cells of
+/// S-0211 claim 15): the live game lights its mobiles by the cells they stand on
+#[test]
+fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    assert!(
+        live.shadowed_cells().is_empty(),
+        "no bridge: no shadowed cell"
+    );
+    let c = live.world.obj(cart).expect("the cart").pos.cell();
+    let i = live.world.cells.idx(c).expect("a cell of the map");
+    live.world.cells.deck[i] = true;
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.shadowed_cells(), [c].into(), "under a high bridge");
+    // The bridge destroyed: the mark goes.
+    live.world.cells.deck[i] = false;
+    live.redraw(&inputs, &mut scene);
+    assert!(live.shadowed_cells().is_empty());
 }
 
 /// #74: spec: S-0104 claim 2 (per-cell height terms: ion storm, then the dominator in any phase,

@@ -79,8 +79,9 @@ pub fn object_levels(w: &World) -> (i32, i32) {
 /// - λ<sub>air</sub>: the ion storm's during a storm, the normal one
 ///   otherwise.
 ///
-/// Claim 13 leaves open whether an object's λ term switches as soon as a
-/// domination is over; here it does.
+/// Claim 13 chooses λ each time an object is drawn, by the ranking of the
+/// effects in force at that moment: the dominator's through its final
+/// phase, the next set's from the first frame after it is over.
 pub fn object_levels_of(
     map: &glasnost_map::Lighting,
     storm: bool,
@@ -92,8 +93,7 @@ pub fn object_levels_of(
         map.ion.level
     } else if dominated {
         // spec: S-0104 claim 2, per-cell height terms rank 2 (psychic dominator, in every phase)
-        // design: render (#74) claim 13 leaves open the λ term after a domination is over; it
-        // stops with the domination
+        // spec: S-0104 claim 13 (λ chosen each time drawn: the dominator's through its final phase, the ranking's next set from the first frame after it is over), claim 16
         map.dominator.level
     } else if brightening {
         // spec: S-0104 claim 2, per-cell height terms rank 3 (nuke flash brightening phase); Constants (its fixed set)
@@ -367,6 +367,14 @@ pub struct InputReport {
     pub selection_changed: bool,
 }
 
+/// The line effects of one drawn frame (#93): the beams, bolts and beam
+/// flashes, in drawing order, of shown tick `tick` at detail `detail`.
+struct DrawnLines {
+    tick: i32,
+    detail: u8,
+    spots: [Vec<glasnost_render::spots::Spot>; 3],
+}
+
 /// A live sandbox game on a loaded map.
 pub struct Live {
     /// The game state.
@@ -393,6 +401,9 @@ pub struct Live {
     /// The game's global lighting the cell pass was last lit with: the
     /// current ambient and the chosen set (S-0104 claims 4 and 5).
     lit: (i32, glasnost_sim::lighting::Choice),
+    /// The effect tint (hundredths) the kept drawings' house-colour tables
+    /// were last shaded with, `None` for none (S-0104 claims 3 and 5, #75).
+    house_tint: Option<[i32; 3]>,
     /// Static objects ([`Built::objects`] indices) left out of the cell
     /// pass, as last drawn: buildings whose simulation object is gone, the
     /// map's gates (drawn live) and the overlays of cells that changed.
@@ -404,6 +415,15 @@ pub struct Live {
     /// ([`Built::objects`] indices) as the game started: what the cell
     /// pass drew it with.
     map_start: BTreeMap<u32, (Option<HouseId>, i32)>,
+    /// The turret facing and animation-frame counter of each of the map's
+    /// buildings as the game started: what the cell pass drew it with (#97).
+    map_start_pose: BTreeMap<u32, (u16, i32)>,
+    /// The map's buildings whose turret facing or animation-frame counter
+    /// left its start value, or that unloaded: drawn live from then on, so
+    /// that a turning turret, a counter that comes round again or an
+    /// unloading that ends does not move them back and forth between the
+    /// passes (#97).
+    map_posed: BTreeSet<u32>,
     /// Each cell's static overlay objects ([`Built::objects`] indices).
     overlay_codes: BTreeMap<CellXY, Vec<u32>>,
     /// Each cell's overlay and overlay data value when the game started, by
@@ -498,6 +518,10 @@ pub struct Live {
     /// simulation does not take (a seam: S-0109 claim 28 puts them on the
     /// scenario stream once playback is in the simulation).
     cosmetic: glasnost_sim::rng::Rng,
+    /// The line effects of the latest drawn frame: its shown tick, detail
+    /// level, beams, bolts and beam flashes (#93). A redraw with no tick
+    /// between is not a new drawn frame and shows these again.
+    drawn_lines: Option<DrawnLines>,
     /// The battlefield view's origin and size at the latest redraw, for the
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
@@ -1128,6 +1152,13 @@ impl Live {
             .iter()
             .filter_map(|(code, id)| Some((*code, world.obj(*id).map(|o| (o.owner, o.health))?)))
             .collect();
+        let map_start_pose: BTreeMap<u32, (u16, i32)> = building_ids
+            .iter()
+            .filter_map(|(code, id)| {
+                let o = world.obj(*id)?;
+                Some((*code, (o.turret.value(world.tick), o.combat.anim_frame)))
+            })
+            .collect();
         let mut overlay_codes: BTreeMap<CellXY, Vec<u32>> = BTreeMap::new();
         for (i, info) in built.objects.iter().enumerate() {
             if info.kind == "overlay" {
@@ -1266,9 +1297,13 @@ impl Live {
                 inputs.map.lighting.normal.ambient,
                 glasnost_sim::lighting::Choice::Normal,
             ),
+            // spec: S-0104 claim 3 (with no effect the house-colour tables were shaded with white light)
+            house_tint: None,
             gone: BTreeSet::new(),
             live_gates,
             map_start,
+            map_start_pose,
+            map_posed: BTreeSet::new(),
             overlay_codes,
             start_overlays,
             legal_cells,
@@ -1304,6 +1339,7 @@ impl Live {
             pieces_drawn: BTreeSet::new(),
             target_lines: BTreeMap::new(),
             cosmetic,
+            drawn_lines: None,
             battlefield: None,
             status_view: None,
             debug_markers: true,
@@ -1494,6 +1530,8 @@ impl Live {
     /// members, keys and order, and the tick's presentation events
     /// (taken out of the world: read them before).
     pub fn after_tick(&mut self) {
+        // design: render (#93) (a tick makes the next redraw a new drawn frame)
+        self.drawn_lines = None;
         self.layer_moments = self
             .world
             .effects
@@ -1507,6 +1545,200 @@ impl Live {
         self.update_slots();
         self.sync_layers(true);
         self.sync_ground();
+    }
+
+    /// Brings the drawing up to a game that moved on without it: a game
+    /// put in place (a rejoin, M9 N5) or ticks run directly (the
+    /// performance benchmark). The presentation events of the ticks it did
+    /// not see are dropped, with the shots, markers and animations the
+    /// drawing started on its own; the animations the game has in play
+    /// (S-0109 claims 28 and 29), its parachutes (S-0522 claim 13), drain
+    /// animations (S-0608 claim 5), the viewer's source marker (S-0513
+    /// claim 33), burning walkers (S-0615), infantry-making animations
+    /// (S-0611) and domination animations (S-0612) are drawn from where the
+    /// game has them. Call [`Live::redraw`] after (#98).
+    ///
+    /// Our presentation: an animation adopted this way has no depth
+    /// adjustment from its creator (S-0102 claim 13), and one whose type
+    /// name is a tile's or an overlay's cell animation is not drawn, as a
+    /// tile or cell animation is not (a seam of the view).
+    pub fn resume(&mut self) {
+        // design: render (#98) the presentation events of the ticks the drawing did not see are not shown late
+        self.world.effects.clear();
+        self.drawn_lines = None;
+        self.layer_moments.clear();
+        self.transients.clear();
+        self.target_lines.clear();
+        self.lines.beams.clear();
+        self.lines.flashes.clear();
+        self.lines.bolts.clear();
+        // design: render (#98) the drawing's own animations end; those that show the game's are kept and follow it
+        self.anims.retain(|a| {
+            a.sim.is_some() || a.walker.is_some() || a.maker.is_some() || a.dominating.is_some()
+        });
+        if let Some(s) = self.source_marker
+            && !self.anims.iter().any(|a| a.serial == s)
+        {
+            self.source_marker = None;
+        }
+        let now = self.shown_tick();
+        self.adopt_sim_anims(now);
+        self.adopt_walkers_and_makers(now);
+        self.note_placements();
+        self.follow_owners();
+        self.follow_shooters();
+        self.follow_walkers();
+        self.follow_makers();
+        self.follow_dominations(now);
+        self.follow_drainers();
+        self.follow_sim_anims();
+        self.update_slots();
+        self.sync_layers(true);
+        self.sync_ground();
+    }
+
+    /// Draws the game's animations in play that the drawing does not show
+    /// (S-0109 claims 28 and 29), each as [`Live::take_effects`] draws the
+    /// event that creates it (#98).
+    fn adopt_sim_anims(&mut self, now: i32) {
+        use glasnost_sim::anims::Role;
+        let shown: BTreeSet<ObjectId> = self.anims.iter().filter_map(|a| a.sim).collect();
+        // design: render (#98) tile and overlay cell animations are not drawn (no event creates them), so they are not adopted
+        let cat = self.world.catalogue_arc();
+        let mut undrawn: BTreeSet<Vec<u8>> = cat
+            .tiles
+            .iter()
+            .filter_map(|t| t.anim.as_ref())
+            .map(|a| name_bytes(&a.name).to_ascii_uppercase())
+            .collect();
+        undrawn.extend(
+            self.rules
+                .overlays
+                .iter()
+                .filter_map(|o| o.cell_anim.as_deref())
+                .map(|n| name_bytes(n).to_ascii_uppercase()),
+        );
+        let new: Vec<(ObjectId, glasnost_sim::anims::Anim)> = self
+            .world
+            .anims
+            .anims
+            .iter()
+            .filter(|(id, _)| !shown.contains(id))
+            .map(|(&id, s)| (id, s.clone()))
+            .collect();
+        for (id, s) in new {
+            let pos = match (s.pos, s.owner) {
+                (Some(p), _) => p,
+                (None, Some((o, d))) => match self.world.obj(o) {
+                    // spec: S-0109 claim 22 (its position is the owner's plus its displacement at attachment, height included)
+                    Some(o) => {
+                        glasnost_sim::world::Pos::new(o.pos.x + d.x, o.pos.y + d.y, o.pos.z + d.z)
+                    }
+                    None => continue,
+                },
+                // spec: S-0202 claim 14 (a resource glint has no position: not drawn)
+                (None, None) => continue,
+            };
+            let name = s.player.name.clone();
+            let serial = self.anim_serial;
+            match s.role {
+                // spec: S-0010 claim 19 (a tile animation started before the second pass does not survive loading)
+                Role::FirstPassTile => continue,
+                Role::Parachute => {
+                    let Some((trooper, _)) = s.owner else {
+                        continue;
+                    };
+                    // spec: S-0522 claim 13 (the parachute attached to its paratrooper), of the type the game plays
+                    self.attach_parachute_of(&name, trooper, pos, now, None);
+                }
+                Role::SourceMarker(h) => {
+                    // spec: S-0513 claim 33 (seen by the launching player only)
+                    if self.viewer != Some(h) {
+                        continue;
+                    }
+                    self.counts.anims += 1;
+                    self.create_anim(&name, pos, now, None, false);
+                    self.source_marker = Some(serial);
+                }
+                Role::Drain(d) => {
+                    // spec: S-0608 claim 5 (the drain animation is attached to the drainer and follows it)
+                    self.counts.anims += 1;
+                    self.create_anim(&name, pos, now, None, false);
+                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                        a.drainer = Some(d);
+                    }
+                    continue;
+                }
+                Role::Ordinary | Role::Grab { .. } => {
+                    if matches!(s.role, Role::Ordinary)
+                        && s.owner.is_none()
+                        && undrawn.contains(&name.to_ascii_uppercase())
+                    {
+                        continue;
+                    }
+                    self.counts.anims += 1;
+                    self.create_anim(&name, pos, now, None, false);
+                    let house = self.deploying_owner(&String::from_utf8_lossy(&name), pos);
+                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                        if let (Role::Ordinary, Some(firer)) = (s.role, s.owner) {
+                            // spec: S-0301 claim 22 and S-0102 claim 3 (a shot animation attached to its firer: in the ground layer)
+                            a.layer = super::slots::Layer::Ground;
+                            a.shooter = Some(firer);
+                            // spec: S-0301 claim 22 (no palette of its object)
+                            a.carrier = None;
+                        } else if let Some(h) = house {
+                            // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation: the owner's house-colour palette, at brightness 1000)
+                            a.carrier = Some((h, NEUTRAL_LIGHT));
+                        }
+                    }
+                }
+            }
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.sim = Some(id);
+            }
+        }
+    }
+
+    /// Draws the game's burning walkers (S-0615 claim 4) and
+    /// infantry-making animations (S-0611 claim 8) that the drawing does
+    /// not show (#98).
+    fn adopt_walkers_and_makers(&mut self, now: i32) {
+        let walking: BTreeSet<ObjectId> = self.anims.iter().filter_map(|a| a.walker).collect();
+        let walkers: Vec<(ObjectId, Vec<u8>, glasnost_sim::world::Pos)> = self
+            .world
+            .walkers
+            .iter()
+            .filter(|(id, _)| !walking.contains(id))
+            .filter_map(|(&id, wk)| {
+                let t = self.rules.animations.get(wk.anim as usize)?;
+                Some((id, name_bytes(&t.name), wk.pos))
+            })
+            .collect();
+        for (id, name, pos) in walkers {
+            self.counts.anims += 1;
+            let serial = self.anim_serial;
+            self.create_anim(&name, pos, now, None, false);
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.walker = Some(id);
+            }
+        }
+        let making: BTreeSet<ObjectId> = self.anims.iter().filter_map(|a| a.maker).collect();
+        let makers: Vec<(ObjectId, Vec<u8>, glasnost_sim::world::Pos)> = self
+            .world
+            .mutation
+            .makers
+            .iter()
+            .filter(|(id, _)| !making.contains(id))
+            .map(|(&id, m)| (id, m.player.name.clone(), m.pos))
+            .collect();
+        for (id, name, pos) in makers {
+            self.counts.anims += 1;
+            let serial = self.anim_serial;
+            self.create_anim(&name, pos, now, None, false);
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.maker = Some(id);
+            }
+        }
     }
 
     /// Sets the drawing's quirk switches (S-0102 Edge cases); the painter
@@ -1912,6 +2144,18 @@ impl Live {
         self.protection_look(self.world.obj(id)?)
     }
 
+    /// The shadowed cells the last redraw lit its mobiles by (tests).
+    #[cfg(test)]
+    pub(super) fn shadowed_cells(&self) -> BTreeSet<glasnost_map::CellXY> {
+        self.painter.shadowed_cells().clone()
+    }
+
+    /// Every playing animation's position (tests).
+    #[cfg(test)]
+    pub(super) fn anim_positions(&self) -> Vec<glasnost_sim::world::Pos> {
+        self.anims.iter().map(|a| a.pos).collect()
+    }
+
     /// Every playing animation's layer (tests).
     #[cfg(test)]
     pub(super) fn anim_layers(&self) -> Vec<super::slots::Layer> {
@@ -1922,6 +2166,12 @@ impl Live {
     #[cfg(test)]
     pub(super) fn anim_colours(&self) -> Vec<Option<(Vec<u8>, i32)>> {
         self.anims.iter().map(|a| a.carrier.clone()).collect()
+    }
+
+    /// Gives the bolts colours, as the general palette would (tests).
+    #[cfg(test)]
+    pub(super) fn set_bolt_colours(&mut self, colours: super::bolts::Colours) {
+        self.lines.settings.bolt = Some(colours);
     }
 
     /// The attached animations' owners and carrier house names (tests).
@@ -2140,9 +2390,22 @@ impl Live {
         let Some(name) = self.rules.superweapons.parachute.clone() else {
             return;
         };
+        self.attach_parachute_of(&name_bytes(&name), trooper, pos, now, drawn);
+    }
+
+    /// A parachute of type `name` attached to `trooper`, as
+    /// [`Live::attach_parachute`].
+    fn attach_parachute_of(
+        &mut self,
+        name: &[u8],
+        trooper: ObjectId,
+        pos: glasnost_sim::world::Pos,
+        now: i32,
+        drawn: Option<i32>,
+    ) {
         self.counts.anims += 1;
         let serial = self.anim_serial;
-        self.create_anim(&name_bytes(&name), pos, now, drawn, false);
+        self.create_anim(name, pos, now, drawn, false);
         if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
             a.owner = Some(trooper);
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
@@ -3143,6 +3406,13 @@ impl Live {
             .collect();
         let (lambda, lambda_air) = object_levels(&self.world);
         self.painter.set_object_levels(lambda, lambda_air);
+        // spec: S-0104 Terms (a shadowed cell: an intact high bridge marks the cells it spans, the mark cleared when it is destroyed), taken as S-0211 claim 15's high-bridge cells; no tile marks a cell yet (Q-3006)
+        let shadowed: BTreeSet<glasnost_map::CellXY> = mobiles
+            .iter()
+            .map(|m| glasnost_map::CellXY::new(m.pos.0 / 256, m.pos.1 / 256)) // spec: S-0204 claim 2 (the cell holding a position)
+            .filter(|c| self.world.high_bridge(*c))
+            .collect();
+        self.painter.set_shadowed_cells(shadowed);
         // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)
         self.painter
             .set_effect_tint(glasnost_sim::lighting::tint(&self.world));
@@ -3197,7 +3467,25 @@ impl Live {
         // first image frame. That includes a building that needs an
         // engineer and is not manned: its *freeze-unpowered* slots are held
         // at the image frame they were created with (S-0108 claim 26) by
-        // the slot player, and its other slots play.
+        // the slot player, and its other slots play. One whose turret
+        // facing (S-0105 claim 16) or animation-frame counter (S-0609 claim
+        // 14) left its start value, or that unloads (S-0108 claims 22 and
+        // 23), is drawn live from then on (#97).
+        let tick = self.world.tick;
+        for (code, id) in &self.building_ids {
+            if self.map_posed.contains(code) {
+                continue;
+            }
+            let Some(o) = self.world.obj(*id).filter(|o| o.on_map) else {
+                continue;
+            };
+            let pose = (o.turret.value(tick), o.combat.anim_frame);
+            if self.map_start_pose.get(code) != Some(&pose)
+                || o.beh.current == Some(Behaviour::Unload)
+            {
+                self.map_posed.insert(*code);
+            }
+        }
         let changed_map: BTreeSet<u32> = self
             .building_ids
             .iter()
@@ -3205,6 +3493,7 @@ impl Live {
                 self.world.obj(**id).is_some_and(|o| {
                     o.on_map
                         && (self.map_start.get(code) != Some(&(o.owner, o.health))
+                            || self.map_posed.contains(code)
                             || self
                                 .slot_anims
                                 .get(id)
@@ -3273,7 +3562,27 @@ impl Live {
                 .relight(inputs, scene, &mut self.cell_pass, key.0, set);
             self.lit = key;
         }
-        if gone != self.gone || relit {
+        // The effect tint changed: the drawings kept from frame to frame
+        // (the cell pass, the static objects' layer entries and the changed
+        // overlays) take the house-colour tables of the new tint, as the
+        // live objects do when they are next drawn (#75).
+        // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour palettes)
+        let house_tint = glasnost_sim::lighting::tint(&self.world);
+        let retinted = house_tint != self.house_tint;
+        if retinted {
+            self.painter
+                .retint_houses(inputs, scene, &mut self.cell_pass);
+            for g in &mut self.static_ground {
+                self.painter.retint_houses(inputs, scene, &mut g.items);
+            }
+            for (_, g) in &mut self.static_layered {
+                self.painter.retint_houses(inputs, scene, &mut g.items);
+            }
+            self.painter
+                .retint_houses(inputs, scene, &mut self.live_overlays);
+            self.house_tint = house_tint;
+        }
+        if gone != self.gone || relit || retinted {
             scene.items.clear();
             scene.items.extend(
                 self.cell_pass
@@ -3478,22 +3787,37 @@ impl Live {
             DetailLevel::High => 2,
         };
         let now = self.shown_tick();
-        let quirk = self.rules.quirks.ranged_draw_half_span;
-        let cosmetic = &mut self.cosmetic;
-        // spec: S-0518 claim 21 (spread draws from the unsynchronised stream: our cosmetic stream)
-        let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
-        let (beams, flashes) = self.lines.spots(now, detail, self.rules.mode, &mut draw);
-        // spec: S-0316 claims 12 and 13 (the bolts after the lasers' draws and before the beam flashes)
-        let bolts = self.lines.bolt_spots(
-            now,
-            self.battlefield,
-            self.rules.quirks.table_root_distance,
-            self.rules.mode,
-            &mut draw,
-        );
-        self.counts.bolt_pixels = bolts.len();
+        // spec: S-0316 claims 5 and 9, S-0201 claim 6 (one drawn frame per tick: the spread, bolt and activity draws are taken once per drawn frame; our client has no freeze path, so a redraw with no tick between is the same frame shown again)
+        let cached = self
+            .drawn_lines
+            .as_ref()
+            .is_some_and(|d| d.tick == now && d.detail == detail);
+        if !cached {
+            let quirk = self.rules.quirks.ranged_draw_half_span;
+            let cosmetic = &mut self.cosmetic;
+            // spec: S-0518 claim 21 (spread draws from the unsynchronised stream: our cosmetic stream)
+            let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
+            let (beams, flashes) = self.lines.spots(now, detail, self.rules.mode, &mut draw);
+            // spec: S-0316 claims 12 and 13 (the bolts after the lasers' draws and before the beam flashes)
+            let bolts = self.lines.bolt_spots(
+                now,
+                self.battlefield,
+                self.rules.quirks.table_root_distance,
+                self.rules.mode,
+                &mut draw,
+            );
+            self.drawn_lines = Some(DrawnLines {
+                tick: now,
+                detail,
+                spots: [beams, bolts, flashes],
+            });
+        }
+        let Some(drawn) = self.drawn_lines.as_ref() else {
+            return;
+        };
+        self.counts.bolt_pixels = drawn.spots[1].len();
         // spec: S-0316 claim 12 (in the effects group after lasers, before trails and beam flashes)
-        for spots in [beams, bolts, flashes] {
+        for spots in drawn.spots.iter().cloned() {
             if !spots.is_empty() {
                 // spec: S-0102 claim 2 (beam effects after all five layers and after the status extras)
                 scene.spots.push(SpotGroup {

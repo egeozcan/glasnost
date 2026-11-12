@@ -1259,6 +1259,9 @@ pub struct Painter {
     /// thousandths per height level: λ, chosen by claim 2's per-cell
     /// ranking, and λ<sub>air</sub>, the ion storm's or the normal one.
     object_levels: (i32, i32),
+    /// The shadowed cells among those the live game's mobile objects stand
+    /// on (S-0104 Terms, claim 13); empty for the static scene.
+    shadowed_cells: BTreeSet<CellXY>,
     /// The effect tint the tintable tables show, hundredths (S-0104
     /// claims 3 and 5); `None` for every table's own tint.
     effect_tint: Option<[i32; 3]>,
@@ -1626,27 +1629,10 @@ impl<'a> Builder<'a> {
     }
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
-        let tint = match self.p.effect_tint {
-            // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour
-            // palettes); Formulas, "Map value storage" (‰ = hundredths × 10)
-            Some(t) => t.map(|c| c * 10),
-            // spec: S-0104 claim 3 (otherwise the house-colour palettes are shaded with white light)
-            None => WHITE,
-        };
-        let (base, n) = match self.p.rows.houses.get(&(hsv, tint)) {
-            Some(r) => *r,
-            None => {
-                let pal = house_palette(&self.palettes.unit, hsv);
-                // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
-                let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
-                let base = self.built.scene.rows.len();
-                for row in &t {
-                    self.built.scene.add_row(row565(row));
-                }
-                self.p.rows.houses.insert((hsv, tint), (base, t.len()));
-                (base, t.len())
-            }
-        };
+        let tint = self.p.house_tint();
+        let (base, n) = self
+            .p
+            .house_table_in(&mut self.built.scene, self.palettes, hsv, tint);
         // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
         Shade::new(base, n, brightness)
     }
@@ -2307,10 +2293,12 @@ impl<'a> Builder<'a> {
                 self.drop_object("terrain object without art");
                 continue;
             };
-            let Some(cell) = self.map.cells.get(t.cell).copied() else {
+            if self.map.cells.get(t.cell).is_none() {
                 continue;
-            };
-            let z = LEVEL_LEPTONS * i32::from(cell.level);
+            }
+            // spec: S-0102 claim 23 (the centre of its cell at the terrain height: the surface height there, S-0106 claim 2, so a slope raises it)
+            let (x, y) = cell_centre(t.cell.x, t.cell.y);
+            let z = self.terrain_height(x, y);
             let light = self.p.lights.get(t.cell).copied();
             let spawns = rule_bool(
                 self.import,
@@ -2333,7 +2321,6 @@ impl<'a> Builder<'a> {
                 )
             };
             // spec: S-0102 claim 23 (the centre of its cell at the terrain height; an ore spawner 16 rows higher)
-            let (x, y) = cell_centre(t.cell.x, t.cell.y);
             let point = project_lifted(x, y, z);
             let p = if spawns {
                 (point.0, point.1 - ORE_SPAWNER_RAISE)
@@ -4219,10 +4206,11 @@ impl<'a> Builder<'a> {
     }
 
     /// The unit depth adjustment *U* = −L(z) + s + F (S-0102 claim 14) for a
-    /// unit of `kind`/`idx` standing on cell `c` at world height `z`. Only
-    /// the cliff fudge can be judged: bridges, columns and tunnels need
-    /// specs not written yet, so their factors are 0.
-    fn unit_depth(&self, kind: Kind, idx: usize, c: CellXY, z: i32) -> i32 {
+    /// unit of `kind`/`idx` standing on cell `c` at world height `z`, on a
+    /// high bridge's deck when `deck`. Only the cliff fudge can be judged:
+    /// bridges, columns and tunnels need specs not written yet, so their
+    /// factors are 0.
+    fn unit_depth(&self, kind: Kind, idx: usize, c: CellXY, z: i32, deck: bool) -> i32 {
         let level = |dx: i32| {
             self.map
                 .cells
@@ -4232,8 +4220,12 @@ impl<'a> Builder<'a> {
         let own = level(0).unwrap_or(0);
         // spec: S-0102 claim 14 (a cell is high when more than 3 levels above the unit's cell)
         let high = |dx: i32| level(dx).is_some_and(|l| l - own > CLIFF_LEVELS);
-        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker)
-        let factor = cliff_factor(high(1), high(2), &self.p.view_quirks);
+        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker; a unit on a bridge: 0, D9 Map C a high bridge's deck; a low bridge is Q-3008)
+        let factor = if deck {
+            0
+        } else {
+            cliff_factor(high(1), high(2), &self.p.view_quirks)
+        };
         let fudge = rule_int(self.import, kind, idx, b"ZFudgeCliff", DEFAULT_CLIFF_FUDGE);
         // spec: S-0102 claim 14 (U = −L(z) + s + F, F the largest fudge)
         -height_lift(z) + SITUATIONAL + (factor * fudge).max(0)
@@ -4285,7 +4277,7 @@ impl<'a> Builder<'a> {
         let (x, y, z) = m.pos;
         let point = project_lifted(x, y, z);
         let cell = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (the cell holding a position)
-        let u = self.unit_depth(m.kind, m.idx, cell, z);
+        let u = self.unit_depth(m.kind, m.idx, cell, z, m.deck);
         let (hsv, _) = self.owner_colour(&m.owner);
         let levels = self.p.lights.get(cell).map_or(
             light::CellLevels {
@@ -4301,8 +4293,8 @@ impl<'a> Builder<'a> {
         };
         // spec: S-0104 claim 13 (the height above the surface, from the deck on a bridge deck)
         let height = m.above;
-        // spec: S-0104 claim 13 (no cell counts as shadowed: which cells are shadowed needs the theater spec)
-        let shadowed_cell = false;
+        // spec: S-0104 Terms and claim 13 (the shadowed-cell rows: the cell holding the position, as the live game marks it)
+        let shadowed_cell = self.p.shadowed_cells.contains(&cell);
         let object = match m.kind {
             Kind::Infantry => light::LitObject::Infantry {
                 on_bridge_deck: m.deck,
@@ -4469,7 +4461,8 @@ impl<'a> Builder<'a> {
         {
             items.push(item);
         }
-        // spec: S-0102 claim 13 (infantry body, h = 0: U − 12, upright, reader)
+        // spec: S-0102 claims 13 and 14 (infantry body, h = 0: U − 12; h not 0: −L(z) − 12, U does not apply; upright, reader)
+        let bias = if m.above == 0 { u - 12 } else { -lz - 12 };
         if let Some(item) = self.place_sprite(
             &sprite,
             frame,
@@ -4477,7 +4470,7 @@ impl<'a> Builder<'a> {
             DepthTest::Reader,
             ItemDepth::Profile {
                 profile: Profile::Upright,
-                bias: u - 12,
+                bias,
                 companion: None,
             },
             Paint::Lit(row),
@@ -4613,9 +4606,11 @@ impl<'a> Builder<'a> {
                 Some(m.object),
             )
         };
+        // spec: S-0102 claims 13 and 14 (a vehicle drawn as a sprite, h = 0: U − 2; h not 0: −L(z) − 2, U does not apply)
+        let body_bias = if m.above == 0 { u - 2 } else { -lz - 2 };
         let body = |b: &mut Self, f: usize| {
-            // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, reader);
-            // S-0105 claim 12 (Depth: only without the turret flag)
+            // spec: S-0102 claim 13 (a vehicle drawn as a sprite: upright, reader); S-0105 claim 12
+            // (Depth: only without the turret flag)
             b.place_sprite(
                 sprite,
                 f,
@@ -4623,7 +4618,7 @@ impl<'a> Builder<'a> {
                 DepthTest::Reader,
                 ItemDepth::Profile {
                     profile: Profile::Upright,
-                    bias: u - 2,
+                    bias: body_bias,
                     companion: None,
                 },
                 Paint::Lit(row),
@@ -4637,6 +4632,7 @@ impl<'a> Builder<'a> {
             // spec: S-0102 claim 22 (a turret vehicle: its shadow, U − 2, lies under the combined
             // image and never darkens it, so it goes first); S-0105 claim 12 (One image: the
             // vehicle's own shadow is drawn before the composed image and keeps its own row)
+            // design: render (#95) claim 22 sets no height condition for this shadow, so it is kept at every height, at U − 2 (Q-3007)
             items.extend(shadow_item(self, u - 2));
             // A sprite frame as a part placed relative to the draw point (S-0102 F6).
             let sprite_part = |b: &mut Self, f: usize| {
@@ -4651,9 +4647,11 @@ impl<'a> Builder<'a> {
             let parts = sprite_turret_parts(body_part, barrel, turret_part, m.turret);
             items.extend(self.composed_item(&parts, point, u, row, m.object));
         } else {
-            // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat)
             items.extend(body(self, frame));
-            items.extend(shadow_item(self, -lz - 4));
+            // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat); claim 13 (only while h = 0)
+            if m.above == 0 {
+                items.extend(shadow_item(self, -lz - 4));
+            }
         }
         items
     }
@@ -6030,9 +6028,22 @@ impl Painter {
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
             object_levels: (0, 0),
+            shadowed_cells: BTreeSet::new(),
             effect_tint: None,
             view_quirks: ViewQuirks::default(),
         }
+    }
+
+    /// Sets the shadowed cells (S-0104 Terms, claim 13) the next
+    /// [`Painter::mobiles`] lights its vehicles and infantry by.
+    pub fn set_shadowed_cells(&mut self, cells: BTreeSet<CellXY>) {
+        self.shadowed_cells = cells;
+    }
+
+    /// The shadowed cells the next [`Painter::mobiles`] lights by (tests).
+    #[cfg(test)]
+    pub fn shadowed_cells(&self) -> &BTreeSet<CellXY> {
+        &self.shadowed_cells
     }
 
     /// Sets the rendering quirk switches; what is drawn next reads them.
@@ -6127,6 +6138,83 @@ impl Painter {
         Shade::new(base, n, b)
     }
 
+    /// The tint (‰) the house-colour tables are shaded with now.
+    fn house_tint(&self) -> [i32; 3] {
+        match self.effect_tint {
+            // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour
+            // palettes); Formulas, "Map value storage" (‰ = hundredths × 10)
+            Some(t) => t.map(|c| c * 10),
+            // spec: S-0104 claim 3 (otherwise the house-colour palettes are shaded with white light)
+            None => WHITE,
+        }
+    }
+
+    /// The first row and row count of colour definition `hsv`'s house
+    /// table shaded with tint `tint` (‰), adding its rows to `scene` the
+    /// first time.
+    fn house_table_in(
+        &mut self,
+        scene: &mut Scene,
+        palettes: &PaletteState,
+        hsv: [u8; 3],
+        tint: [i32; 3],
+    ) -> (usize, usize) {
+        if let Some(r) = self.rows.houses.get(&(hsv, tint)) {
+            return *r;
+        }
+        let pal = house_palette(&palettes.unit, hsv);
+        // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
+        let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
+        let base = scene.rows.len();
+        for row in &t {
+            scene.add_row(row565(row));
+        }
+        self.rows.houses.insert((hsv, tint), (base, t.len()));
+        (base, t.len())
+    }
+
+    /// Shades the house-colour drawings of `items` again with the tint the
+    /// house-colour tables show now (S-0104 claims 3 and 5; set by
+    /// [`Painter::set_effect_tint`]): each drawing shaded by a house table
+    /// of another tint takes the same colour definition's table of today's
+    /// tint, keeping its brightness and protection mask. For the drawings
+    /// kept from frame to frame, the static objects of the cell pass among
+    /// them (#75). Returns whether any drawing changed.
+    pub fn retint_houses(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        items: &mut [Item],
+    ) -> bool {
+        let tint = self.house_tint();
+        let others: BTreeMap<u32, [u8; 3]> = self
+            .rows
+            .houses
+            .iter()
+            .filter(|((_, t), _)| *t != tint)
+            .map(|((hsv, _), &(base, _))| (base as u32, *hsv))
+            .collect();
+        if others.is_empty() {
+            return false;
+        }
+        let mut changed = false;
+        for item in items {
+            let (Paint::Lit(shade) | Paint::LitDiamond(shade) | Paint::Translucent(shade, _)) =
+                &mut item.paint
+            else {
+                continue;
+            };
+            let Some(&hsv) = others.get(&shade.base) else {
+                continue;
+            };
+            let (base, n) = self.house_table_in(scene, inputs.palettes, hsv, tint);
+            shade.base = base as u32;
+            shade.rows = n as u16;
+            changed = true;
+        }
+        changed
+    }
+
     /// Relights the game's view to the simulation's global lighting
     /// (S-0104 claims 4, 5 and 9; `glasnost_sim::lighting`): every cell
     /// at current ambient `ambient` with the chosen set `set`'s level
@@ -6138,10 +6226,11 @@ impl Painter {
     /// set's terms and its tint as the map tint, which stands in for claim
     /// 5's retint of the tile shade tables and claim 9's incremental update
     /// (the house-colour tables take the effect tint by
-    /// [`Painter::set_effect_tint`]);
-    /// claim 10's and claim 16's height terms and the static objects of
-    /// the cell pass are not followed (a seam of the view, not of the
-    /// game).
+    /// [`Painter::set_effect_tint`], and the drawings kept from frame to
+    /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
+    /// and claim 16's height terms and the cell light of the static objects
+    /// of the cell pass are not followed, and neither is the tint of their
+    /// named palettes (a seam of the view, not of the game).
     pub fn relight(
         &mut self,
         inputs: &Inputs,
