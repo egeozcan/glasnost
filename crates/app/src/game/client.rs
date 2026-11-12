@@ -1558,6 +1558,10 @@ impl Client {
         (out, FrameImages { changed })
     }
 
+    /// Gives the painter an atlas of `side` × `side`, the device's sprite
+    /// atlas side.
+    pub fn fit_atlas(&mut self, _side: u32) {}
+
     /// The setup values as the screens show them: with the colour-blind
     /// swatches when the person asked for them.
     fn shown_setup_rules(&self, rules: &ui_setup::SetupRules) -> ui_setup::SetupRules {

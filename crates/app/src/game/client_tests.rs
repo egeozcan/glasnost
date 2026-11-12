@@ -606,3 +606,20 @@ fn a_cursor_shown_again_starts_at_its_first_frame() {
     };
     assert_eq!(back, Some(first), "after the edge-scroll cursor");
 }
+
+/// #103. design: render (#103): the painter's atlas takes the device's
+/// side; the running game's art and its cursor frames are registered again
+/// in it, so the frame is the same picture.
+#[test]
+fn the_painter_atlas_takes_the_device_side() {
+    let mut c = cursor_game();
+    let m = c.session.as_ref().unwrap().map_rect();
+    c.pointer_moved(Point::new(m.x + m.w / 2, m.y + m.h / 2));
+    let before = c.frame_rgba();
+    assert!(c.session.as_ref().unwrap().draws_cursor());
+    c.fit_atlas(1024);
+    assert_eq!(c.painter.atlas.size(), 1024);
+    let after = c.frame_rgba();
+    assert!(c.session.as_ref().unwrap().draws_cursor());
+    assert!(before == after, "the same picture in the smaller atlas");
+}

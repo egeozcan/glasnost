@@ -99,6 +99,16 @@ impl Painter {
         self.sprites.contains_key(&(id, frame))
     }
 
+    /// Whether frame `frame` of sprite `id` was registered or failed to be.
+    pub fn tried_sprite(&self, id: u32, frame: u32) -> bool {
+        self.has_sprite(id, frame)
+    }
+
+    /// A painter like [`Painter::new`] whose atlas is `side` × `side`.
+    pub fn with_side(_side: u32) -> Self {
+        Self::new()
+    }
+
     /// Records the size of image `id` (its pixels are the client's).
     pub fn set_image_size(&mut self, id: u32, size: (i32, i32)) {
         self.images.insert(id, size);
@@ -321,6 +331,26 @@ mod tests {
         assert_eq!(q[1].dst[2], 6);
         assert_eq!(q[1].src[2], 3);
         assert_eq!(q[1].src, plain[1].src);
+    }
+
+    /// design: render (#103): a sprite frame the atlas cannot take is
+    /// remembered as tried, so callers do not decode it again each frame;
+    /// the atlas has the side asked for and still holds the font.
+    #[test]
+    fn a_full_atlas_is_tried_once() {
+        let mut p = Painter::with_side(256);
+        assert_eq!(p.atlas.size(), 256);
+        let mut d = DrawList::new();
+        d.text(0, 0, "Hi", colour::TEXT, Rect::new(0, 0, 40, 20));
+        assert_eq!(p.quads(&d).len(), 2, "the font is in the atlas");
+        let big = IndexedImage::new(300, 4, vec![1; 1200]).unwrap();
+        assert!(!p.add_sprite(7, 0, &big, 0));
+        assert!(!p.has_sprite(7, 0));
+        assert!(p.tried_sprite(7, 0));
+        assert!(!p.tried_sprite(7, 1));
+        let small = IndexedImage::new(4, 4, vec![1; 16]).unwrap();
+        assert!(p.add_sprite(7, 1, &small, 0));
+        assert!(p.has_sprite(7, 1) && p.tried_sprite(7, 1));
     }
 
     #[test]

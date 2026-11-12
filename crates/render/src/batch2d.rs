@@ -794,6 +794,19 @@ mod tests {
         assert!(a.add(16, 16, &[1; 256]).is_none());
     }
 
+    /// design: render (#103): an image that does not fit changes nothing,
+    /// so the rest of the shelf still takes smaller images.
+    #[test]
+    fn a_failed_add_changes_nothing() {
+        let mut a = Atlas::new(16);
+        assert_eq!(a.add(10, 4, &[7; 40]), Some([0, 0, 10, 4]));
+        // Too wide for the shelf, too tall for a new one.
+        assert_eq!(a.add(10, 12, &[8; 120]), None);
+        assert_eq!(a.add(4, 4, &[9; 16]), Some([11, 0, 4, 4]));
+        assert_eq!(a.get(11, 0), 9);
+        assert_eq!(a.get(0, 5), 0, "nothing written below the shelf");
+    }
+
     #[test]
     fn reference_draws_modes_in_order() {
         let mut a = Atlas::new(8);
