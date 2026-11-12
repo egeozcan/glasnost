@@ -3,6 +3,7 @@ id: Q-3000
 title: How deep does a chain of death weapons nest inside one killing hit, and what happens past that depth?
 status: open
 related: [S-0312, S-0303]
+answered-by: [S-0312]
 ---
 
 ## Need
