@@ -667,6 +667,33 @@ struct MapGpu {
     light: Option<LightKept>,
 }
 
+/// The game, if any, whose battlefield is composed on the CPU because its
+/// GPU renderer failed (design: render (#101)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Fallback {
+    failed: Option<u64>,
+}
+
+impl Fallback {
+    /// Before a frame of game `serial`: a game other than the failed one
+    /// tries the GPU again. A `cpu_map` set for any other reason stays.
+    fn frame(&mut self, _cpu_map: &mut bool, _serial: u64) {}
+
+    /// Game `serial`'s GPU renderer failed: that game is composed on the
+    /// CPU.
+    fn failed(&mut self, cpu_map: &mut bool, _serial: u64) {
+        *cpu_map = true;
+    }
+}
+
+/// Whether the battlefield renderer kept for game `kept` goes before a
+/// frame of game `serial` (design: render (#102)): when the game it drew is
+/// over (`in_game` false: the screen left the game, or there is no
+/// session) or another game started.
+fn renderer_goes(_kept: Option<u64>, _in_game: bool, _serial: u64) -> bool {
+    false
+}
+
 /// Light-alpha values kept between frames, with what they came from.
 struct LightKept {
     covers: Vec<glasnost_render::shroud::Cover>,
@@ -1175,5 +1202,44 @@ fn finish_bench(b: &Bench, save: Option<super::report::SaveReport>) {
             };
             let _ = data.set("glasnostBench", state);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #101. design: render (#101): a failed GPU battlefield puts only its
+    /// own game on the CPU; the next game tries the GPU again.
+    #[test]
+    fn a_failed_gpu_frame_puts_only_its_game_on_the_cpu() {
+        let mut f = Fallback::default();
+        let mut cpu = false;
+        f.frame(&mut cpu, 1);
+        assert!(!cpu);
+        f.failed(&mut cpu, 1);
+        assert!(cpu);
+        f.frame(&mut cpu, 1);
+        assert!(cpu, "the failed game stays on the CPU");
+        f.frame(&mut cpu, 2);
+        assert!(!cpu, "the next game tries the GPU again");
+        f.frame(&mut cpu, 2);
+        assert!(!cpu);
+        // A client on the CPU for another reason stays there.
+        let mut f = Fallback::default();
+        let mut cpu = true;
+        f.frame(&mut cpu, 3);
+        assert!(cpu);
+    }
+
+    /// #102. design: render (#102): the battlefield renderer goes when its
+    /// game is over or another game started, before a new one is built.
+    #[test]
+    fn a_finished_games_renderer_goes() {
+        assert!(!renderer_goes(None, true, 1));
+        assert!(!renderer_goes(None, false, 1));
+        assert!(!renderer_goes(Some(1), true, 1));
+        assert!(renderer_goes(Some(1), false, 1), "the game is over");
+        assert!(renderer_goes(Some(1), true, 2), "another game started");
     }
 }
