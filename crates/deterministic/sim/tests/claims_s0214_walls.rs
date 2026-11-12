@@ -67,7 +67,10 @@ fn an_enemy_wall_is_attackable_without_force_fire() {
     let (w, tank, c) = world(&r, Some(HouseId(1)));
     let wp = glasnost_sim::combat::weapon::current_weapon(&w, tank).expect("armed");
     assert!(w.rules().combat.warhead_of(wp).expect("warhead").wall);
-    assert_eq!(targeting::action(&w, ALPHA, tank, ClickOn::Cell(c), plain()), Action::Attack);
+    assert_eq!(
+        targeting::action(&w, ALPHA, tank, ClickOn::Cell(c), plain()),
+        Action::Attack
+    );
     let res = targeting::click(&w, ALPHA, &[tank], ClickOn::Cell(c), plain());
     assert_eq!(
         res.orders,

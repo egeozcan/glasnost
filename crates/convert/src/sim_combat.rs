@@ -297,6 +297,8 @@ const REFINERY_SMOKE_POINTS: [&str; 4] = [
 const OVERLAY_COMBAT: &[Row] = &[
     ("chain_reaction", "ChainReaction", Bool, "S-0303"),
     ("explodes", "Explodes", Bool, "S-0303"),
+    // spec: S-0214 Import mapping (object type LegalTarget: the attackable cell's overlay type)
+    ("legal_target", "LegalTarget", Bool, "S-0214"),
 ];
 
 /// Combat fields of terrain-object types.

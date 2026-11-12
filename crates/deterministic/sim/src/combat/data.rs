@@ -280,6 +280,9 @@ pub struct WarheadRules {
     pub wall: bool,
     /// Wood flag.
     pub wood: bool,
+    /// Fire flag: excludes destroyable-cliff cells from the attackable
+    /// cells (S-0214 Import mapping).
+    pub fire: bool,
     /// Absolute wall-destroyer flag.
     pub wall_absolute: bool,
     /// Resource flag.
@@ -1263,6 +1266,8 @@ pub fn tables(
                 inf_death: h.inf_death.unwrap_or(0),
                 wall: b(h.wall),
                 wood: b(h.wood),
+                // spec: S-0214 Import mapping (warhead Fire absent: no)
+                fire: b(h.fire),
                 wall_absolute: b(h.wall_absolute_destroyer),
                 tiberium: b(h.tiberium),
                 sonic: b(h.sonic),

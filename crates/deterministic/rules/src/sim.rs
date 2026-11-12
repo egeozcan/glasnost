@@ -2852,6 +2852,10 @@ pub struct OverlayType {
     /// `Explodes` (S-0303 claim 19).
     #[serde(default)]
     pub explodes: Option<bool>,
+    /// `LegalTarget`, a legal target (S-0214 Import mapping: the attackable
+    /// cell); absent: yes.
+    #[serde(default)]
+    pub legal_target: Option<bool>,
     /// `CellAnim`, the overlay type's cell animation (S-0009 claim 12 and
     /// Import mapping): an animation type key; absent: none.
     #[serde(default)]

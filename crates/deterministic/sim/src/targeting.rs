@@ -1826,7 +1826,7 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     }
     // spec: S-0214 table GC row GC4 (a weapon, force-fire or an attackable cell, movable or the cell centre in range)
     if weapon::current_weapon(w, actor).is_some()
-        && (mods.force_fire || attackable_cell(w, c))
+        && (mods.force_fire || attackable_cell(w, actor, c))
         && (mv || in_range_of(w, actor, Target::Cell(c)))
     {
         return Action::Attack;
@@ -1863,18 +1863,43 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     Action::Nothing
 }
 
-/// An attackable cell without force-fire (S-0214 table GC): a
-/// destroyable-cliff cell without an overlay (warhead flags are not imported,
-/// and walls have no owner yet).
-fn attackable_cell(w: &World, c: CellXY) -> bool {
+/// An attackable cell for `actor` without force-fire (S-0214 table GC,
+/// *attackable cell*; #212), judged with the warhead of the weapon it would
+/// use against the cell. No fog of war, so the remembered overlay and
+/// building cases do not arise; the veinhole case is a seam (no veinhole
+/// monsters).
+fn attackable_cell(w: &World, actor: ObjectId, c: CellXY) -> bool {
     let Some(cell) = w.cells.cell(c) else {
         return false;
     };
+    let rules = w.rules();
+    let warhead = weapon::would_use(w, actor, Some(Target::Cell(c)))
+        .1
+        .and_then(|x| rules.combat.warhead_of(x));
     let cat = w.catalogue.as_deref();
     let (s, n) = cat.map_or((0, 0), |k| (k.roles.destroyable_cliff, k.tile_count()));
     // spec: S-0214 Terms (destroyable-cliff cell: s ≤ t ≤ s + 1 and 0 ≤ t < N)
     let cliff = cell.tile >= s && cell.tile <= s + 1 && cell.tile >= 0 && cell.tile < n;
-    cliff && cell.overlay == glasnost_map::NO_OVERLAY
+    let overlay = (cell.overlay != glasnost_map::NO_OVERLAY)
+        .then(|| rules.overlays.get(usize::from(cell.overlay)))
+        .flatten();
+    // spec: S-0214 *attackable cell* (i) (the overlay type is a legal target; or a destroyable-cliff cell and the warhead lacks the fire flag)
+    let first = overlay.is_some_and(|o| o.legal_target)
+        || (cliff && !warhead.is_some_and(|h| h.fire));
+    if !first {
+        return false;
+    }
+    let Some(o) = overlay else {
+        // spec: S-0214 *attackable cell* (ii) (the cell has no overlay)
+        return true;
+    };
+    // spec: S-0214 *attackable cell* (ii) (the cell belongs to a house not allied with the actor; a wall of no house belongs to none)
+    let owner = w.cells.idx(c).and_then(|i| w.cells.wall_owner.get(i).copied().flatten());
+    let actor_house = w.obj(actor).and_then(|a| a.owner);
+    let enemy = owner.is_some() && !w.allied(actor_house, owner);
+    // spec: S-0214 *attackable cell* (ii) and Import mapping (a wall the warhead can damage: the wall flag, or the wood flag and the overlay's armour class wood)
+    let damages = warhead.is_some_and(|h| h.wall || (h.wood && o.wood));
+    enemy && o.wall && damages
 }
 
 /// The final action on a cell by kind (S-0214 tables IC, VC, ACC and BC);

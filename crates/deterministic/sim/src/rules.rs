@@ -457,6 +457,8 @@ pub struct OverlayRules {
     pub chain_reaction: bool,
     /// Explodes flag (S-0303 claim 19).
     pub explodes: bool,
+    /// A legal target (S-0214 *attackable cell* (i)).
+    pub legal_target: bool,
     /// The cell animation's type name (S-0009 claim 12), if any.
     pub cell_anim: Option<String>,
 }
@@ -2020,6 +2022,8 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         },
         chain_reaction: o.chain_reaction.unwrap_or(false),
         explodes: o.explodes.unwrap_or(false),
+        // spec: S-0214 Import mapping (object type LegalTarget absent: yes)
+        legal_target: o.legal_target.unwrap_or(true),
         // spec: S-0009 Import mapping (CellAnim absent: no cell animation)
         cell_anim: o.cell_anim,
     }

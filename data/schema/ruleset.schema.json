@@ -7786,6 +7786,14 @@
             }
           ]
         },
+        "legal_target": {
+          "description": "`LegalTarget`, a legal target (S-0214 Import mapping: the attackable\ncell); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "no_use_tile_land_type": {
           "description": "`NoUseTileLandType`.",
           "type": [
