@@ -2557,8 +2557,11 @@ pub fn key_command(
             // spec: S-0213 table T2 (scatter: movable)
             KeyCommand::Scatter if mv => Some(Order::Scatter { actor: id }),
             KeyCommand::Guard => {
-                let harvester = o.kind == Kind::Vehicle && unit(w, id).is_some_and(|u| u.harvester);
-                // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or a harvester vehicle)
+                // spec: S-0213 claim 15 (a house's orders act only on its own objects; the input rules keep it) and claim 3 (an object of another house is an order the input would not let a person give): table T2's "movable or not" waives the rest of movable, not its own-object part (#207)
+                let harvester = own(w, house, id)
+                    && o.kind == Kind::Vehicle
+                    && unit(w, id).is_some_and(|u| u.harvester);
+                // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or an own harvester vehicle, movable or not)
                 ((mv && fire && o.kind != Kind::Building) || harvester).then(|| Order::Behaviour {
                     actor: id,
                     behaviour: Behaviour::AreaGuard,
