@@ -260,5 +260,9 @@ fn a_load_after_an_earlier_order_is_noted() {
     testkit::run(&mut w2, 15);
     let again = special_think(&mut s, &w2, medi, 0);
     assert_eq!(s.given_up(), 1, "the load that did not take is given up");
-    assert_eq!(sent_into(&again, medi), None, "not clicked again: {again:?}");
+    assert_eq!(
+        sent_into(&again, medi),
+        None,
+        "not clicked again: {again:?}"
+    );
 }

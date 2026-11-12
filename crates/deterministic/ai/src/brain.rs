@@ -829,6 +829,15 @@ impl Brain {
         short && self.safe(w)
     }
 
+    /// Takes back the script's tech-climb Build order of this think
+    /// ([`Script::climbed`]) for a building the brain orders instead.
+    fn drop_climb(&self, out: &mut Vec<Order>) {
+        // design: own AI (#8): only the script's own climb order goes; a held item's resume (`economy_first`) and the brain's other building orders stay
+        if let Some(t) = self.script.climbed() {
+            out.retain(|o| !matches!(o, Order::Build { what } if *what == t));
+        }
+    }
+
     /// Builds a psychic sensor (S-0610 claim 9) as a person adds one to the
     /// base: once it keeps its harvesters, is not selling out and has none,
     /// the cheapest sensor type it can build and place now
@@ -848,7 +857,7 @@ impl Brain {
             return;
         }
         if let Some(t) = crate::psychic::build_sensor(&self.script, w) {
-            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            self.drop_climb(out);
             out.push(Order::Build { what: t });
             self.special.count_sensor();
         }
@@ -872,7 +881,7 @@ impl Brain {
         let Some(t) = crate::grinder::build_type(&self.script, w) else {
             return false;
         };
-        out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+        self.drop_climb(out);
         out.push(Order::Build { what: t });
         true
     }
@@ -895,7 +904,7 @@ impl Brain {
             return;
         }
         if let Some(t) = crate::gattling::defence_type(&self.script, w) {
-            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            self.drop_climb(out);
             out.push(Order::Build { what: t });
             self.special.count_gattling_defence();
         }
@@ -944,9 +953,7 @@ impl Brain {
             if out.iter().any(|o| matches!(o, Order::Place { .. })) {
                 return;
             }
-            let climb =
-                |x: &TypeRef| x.kind == Kind::Building && scripted::role_of(w, *x).is_none();
-            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            self.drop_climb(out);
         }
         out.push(Order::Build { what: t });
         self.special.count_anti_air_build();
@@ -970,7 +977,7 @@ impl Brain {
             return;
         }
         if let Some(t) = crate::bunker::build_type(&self.script, w) {
-            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            self.drop_climb(out);
             out.push(Order::Build { what: t });
             self.special.count_bunker_build();
         }
@@ -1038,7 +1045,7 @@ impl Brain {
         if let Some(t) = self.superweapon_next(w)
             && !self.script.busy(w, t)
         {
-            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            self.drop_climb(out);
             out.push(Order::Build { what: t });
         }
     }
@@ -1117,8 +1124,8 @@ impl Brain {
                 }),
                 Some(SwKind::ForceShield) => self.shield_cell(w),
                 Some(SwKind::SpyPlane) => self.script.attack_goal(w),
-                Some(SwKind::Chrono) if !Self::has_source(w, h) => self.group_cell(w),
-                Some(SwKind::ChronoWarp) if Self::has_source(w, h) => self.landing_cell(w),
+                Some(SwKind::Chrono) => self.teleport_cells(w, h, false),
+                Some(SwKind::ChronoWarp) => self.teleport_cells(w, h, true),
                 Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
                 Some(SwKind::Genetic) => crate::mutator::mutate_cell(&self.script, w),
                 Some(SwKind::Dominator) => {
@@ -1143,10 +1150,11 @@ impl Brain {
         }
     }
 
-    /// Whether a first-stage teleport record of the house holds a picked
-    /// source, so that a second stage has something to send (S-0513
-    /// claim 34).
-    fn has_source(w: &World, h: HouseId) -> bool {
+    /// The source a first-stage teleport record of the house holds picked
+    /// and not yet sent, so that a second stage has something to send
+    /// (S-0513 claim 34). A source the second stage has sent is not one: a
+    /// person picks again (S-0512 claim 10, the unconsumed source selection).
+    fn fresh_source(w: &World, h: HouseId) -> Option<CellXY> {
         use glasnost_sim::superweapons::{SwKind, charge};
         w.rules()
             .superweapons
@@ -1154,7 +1162,33 @@ impl Brain {
             .iter()
             .enumerate()
             .filter(|(_, t)| t.kind == Some(SwKind::Chrono))
-            .any(|(i, _)| charge::get(w, h, i as u32).is_some_and(|r| r.source.is_some()))
+            // spec: S-0512 claim 10 (the second stage needs an unconsumed source selection; sending it consumes it)
+            .find_map(|(i, _)| {
+                charge::get(w, h, i as u32)
+                    .filter(|r| r.source_fresh)
+                    .and_then(|r| r.source)
+            })
+    }
+
+    /// The teleport's stages as a person clicks them: the first stage picks
+    /// a block of the house's vehicles ([`Brain::group_cell`]) while no
+    /// fresh source is held, or picks again when the vehicles have left
+    /// the picked block (S-0512 claim 10: the player may pick another
+    /// source); the second stage sends a fresh source that still holds the
+    /// vehicles. Returns the cell of the second stage with `second`, else
+    /// of the first.
+    fn teleport_cells(&self, w: &World, h: HouseId, second: bool) -> Option<CellXY> {
+        let source = Self::fresh_source(w, h);
+        // design: own AI (#2): a picked block the vehicles have left is not sent; the first stage picks the block they now stand in
+        let holds = source.is_some_and(|s| {
+            self.vehicle_block(w, false, TELEPORT_MIN, Some(s))
+                .is_some()
+        });
+        match (second, holds) {
+            (false, false) => self.group_cell(w),
+            (true, true) => self.landing_cell(w),
+            _ => None,
+        }
     }
 
     /// Whether `o` is an armed ground vehicle of the plan's army that may
@@ -1170,8 +1204,15 @@ impl Brain {
     /// `min`, with none of its infantry or organic units (the teleport
     /// kills organic units, claim 35) and no unit of anyone else (it would
     /// send them too); the first in cell order on equal counts. With
-    /// `fight`, a seen enemy must be within [`FIGHT`] cells.
-    fn vehicle_block(&self, w: &World, fight: bool, min: usize) -> Option<CellXY> {
+    /// `fight`, a seen enemy must be within [`FIGHT`] cells. With `only`,
+    /// that cell is the one block asked about.
+    fn vehicle_block(
+        &self,
+        w: &World,
+        fight: bool,
+        min: usize,
+        only: Option<CellXY>,
+    ) -> Option<CellXY> {
         let house = self.house();
         let enemies = self.script.seen_enemies(w);
         let mine: Vec<(CellXY, bool)> = w
@@ -1188,9 +1229,16 @@ impl Brain {
             .map(|o| o.pos.cell())
             .collect();
         let near = |a: CellXY, b: CellXY| (a.x - b.x).abs() <= 1 && (a.y - b.y).abs() <= 1;
-        mine.iter()
-            .filter(|&&(_, army)| army)
-            .map(|&(c, _)| c)
+        let cells: Vec<CellXY> = match only {
+            Some(c) => vec![c],
+            None => mine
+                .iter()
+                .filter(|&&(_, army)| army)
+                .map(|&(c, _)| c)
+                .collect(),
+        };
+        cells
+            .into_iter()
             .filter(|&c| !fight || enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT))
             .filter(|&c| !mine.iter().any(|&(m, army)| !army && near(m, c)))
             .filter(|&c| !others.iter().any(|&o| near(o, c)))
@@ -1322,7 +1370,7 @@ impl Brain {
 
     /// A teleport source's cell: a block of the house's armed vehicles.
     fn group_cell(&self, w: &World) -> Option<CellXY> {
-        self.vehicle_block(w, false, TELEPORT_MIN)
+        self.vehicle_block(w, false, TELEPORT_MIN, None)
     }
 
     /// A force shield's cell: the reference cell of one of the house's
@@ -1462,12 +1510,8 @@ impl Brain {
             (l.house == house && item.t.kind == Kind::Building && item.done_tick.is_some())
                 .then_some(item.t)
         });
-        let cell = done.and_then(|t| {
-            crate::antiair::place_goal(&self.script, w, t)
-                .and_then(|goal| self.script.place_near(w, t, goal))
-                .or_else(|| self.script.place_refinery(w, t))
-                .or_else(|| self.script.place_cell(w, t))
-        });
+        // design: own AI (#7): the same cell a think tick would choose, toward the water too (a plant the base walk ordered landed in the spiral when it was done between thinks)
+        let cell = done.and_then(|t| self.script.done_cell(w, t));
         if let Some(t) = done
             && let Some(cell) = cell
         {
@@ -1569,15 +1613,32 @@ impl Brain {
                 out.push(Order::Deploy { actor: id });
                 continue;
             }
-            let centre = field.unwrap_or(here);
-            let spot = (1..=SPIRAL_RINGS).find_map(|ring| {
-                (-ring..=ring)
-                    .flat_map(|dy| (-ring..=ring).map(move |dx| (dx, dy)))
-                    .filter(|&(dx, dy)| dx.abs() == ring || dy.abs() == ring)
-                    .map(|(dx, dy)| CellXY::new(centre.x + dx, centre.y + dy))
-                    .filter(|&c| c != here)
-                    .find(|&c| fits(c))
-            });
+            let goes = reach_test(w, id);
+            // design: own AI (#5): a unit still driving to a spot that still takes it is left to arrive (re-planning in its last cells cleared its path every think)
+            if matches!(o.dest, Some(Target::Cell(c)) if goes(c) && fits(c)) {
+                continue;
+            }
+            let around = |centre: CellXY| {
+                (1..=SPIRAL_RINGS).find_map(|ring| {
+                    (-ring..=ring)
+                        .flat_map(|dy| (-ring..=ring).map(move |dx| (dx, dy)))
+                        .filter(|&(dx, dy)| dx.abs() == ring || dy.abs() == ring)
+                        .map(|(dx, dy)| CellXY::new(centre.x + dx, centre.y + dy))
+                        .filter(|&c| c != here)
+                        // design: own AI (#5) and S-0212 claim 4: only a cell the unit can drive to (in its reach region); one across water was picked again on every think and never reached
+                        .find(|&c| goes(c) && fits(c))
+                })
+            };
+            let mut spot = around(field.unwrap_or(here));
+            if spot.is_none() && field.is_some() {
+                // design: own AI (#5): with no cell it can reach by the far field (an island's), the unit deploys as a spare yard where it stands, or near it
+                if fits(here) {
+                    // spec: S-0415 claims 1 to 3 (the deploy order)
+                    out.push(Order::Deploy { actor: id });
+                    continue;
+                }
+                spot = around(here);
+            }
             if let Some(c) = spot {
                 out.push(Order::Behaviour {
                     actor: id,
@@ -1794,12 +1855,19 @@ impl Brain {
             if self.deploys_at(w, id, b, here) {
                 continue;
             }
+            let goes = reach_test(w, id);
+            // design: own AI (#5): a unit still driving to a spot that still takes it is left to arrive (re-planning in its last cells cleared its path every tick)
+            if matches!(o.dest, Some(Target::Cell(c)) if goes(c) && w.cells.usable(c) && self.deploys_at(w, id, b, c))
+            {
+                continue;
+            }
             let spot = (1..=SPIRAL_RINGS).find_map(|ring| {
                 (-ring..=ring)
                     .flat_map(|dy| (-ring..=ring).map(move |dx| (dx, dy)))
                     .filter(|&(dx, dy)| dx.abs() == ring || dy.abs() == ring)
                     .map(|(dx, dy)| CellXY::new(here.x + dx, here.y + dy))
-                    .find(|&c| w.cells.usable(c) && self.deploys_at(w, id, b, c))
+                    // design: own AI (#5) and S-0212 claim 4: only a cell the unit can drive to (in its reach region); one across water was picked again on every tick and never reached
+                    .find(|&c| w.cells.usable(c) && goes(c) && self.deploys_at(w, id, b, c))
             });
             if let Some(c) = spot {
                 out.push(Order::Behaviour {
@@ -1998,8 +2066,33 @@ impl Brain {
                 }) && idle(w, id)
             })
             .collect();
-        let crossing = infantry.iter().any(|&p| Self::crossing(w, p, goal));
         let ferries = self.ferries(w);
+        // design: own AI (#9): the goal by the movement zone of the infantry and of the passengers (`Script::base_goal_for`): a naval yard on the water made every infantry unit seem to need a ferry, and gave a full ferry no drop cell
+        let zone_of = |id: ObjectId| {
+            w.obj(id)
+                .and_then(|o| w.rules().unit(o.kind, o.type_index))
+                .map(|u| u.zone)
+        };
+        let aboard_all: Vec<ObjectId> = ferries
+            .iter()
+            .flat_map(|&f| transport::passengers(w, f))
+            .collect();
+        let mut goals: std::collections::BTreeMap<u8, CellXY> = std::collections::BTreeMap::new();
+        for &p in infantry.iter().chain(&aboard_all) {
+            if let Some(z) = zone_of(p)
+                && !goals.contains_key(&(z as u8))
+                && let Some(c) = self.script.base_goal_for(w, Some(z))
+            {
+                goals.insert(z as u8, c);
+            }
+        }
+        let goal_for = |z: Option<glasnost_rules::sim::MovementZone>| {
+            z.and_then(|z| goals.get(&(z as u8)).copied())
+                .unwrap_or(goal)
+        };
+        let crossing = infantry
+            .iter()
+            .any(|&p| Self::crossing(w, p, goal_for(zone_of(p))));
         if !ferries.iter().any(|&f| Self::ferry_suits(w, f, crossing))
             && !infantry.is_empty()
             && !self.script.selling()
@@ -2056,10 +2149,8 @@ impl Brain {
             let to_goal = || {
                 let zone = transport::passengers(w, f)
                     .first()
-                    .and_then(|&p| w.obj(p))
-                    .and_then(|p| w.rules().unit(p.kind, p.type_index))
-                    .map(|u| u.zone);
-                self.land_cell(w, f, goal, (DROP_NEAR, DROP_FAR), at, zone)
+                    .and_then(|&p| zone_of(p));
+                self.land_cell(w, f, goal_for(zone), (DROP_NEAR, DROP_FAR), at, zone)
             };
             // A loaded ferry that has drifted just outside the home radius
             // would only drop infantry that are gathered and boarded again:
@@ -2117,11 +2208,25 @@ impl Brain {
             if full || (aboard > 0 && entering.is_empty() && free.is_empty()) {
                 if let Some(c) = to_goal() {
                     out.push(go(c));
+                } else if targeting::cursor(w, house, &[f], ClickOn::Object(f), mods)
+                    == Action::Deploy
+                {
+                    // design: own AI (#9): with no drop cell near the goal a full ferry at home lets its passengers out (they stayed aboard for as long as the goal stood), as it does away from home
+                    out.extend(targeting::click(w, house, &[f], ClickOn::Object(f), mods).orders);
                 }
                 continue;
             }
             // Only a ferry that suits the run takes infantry aboard.
             if !Self::ferry_suits(w, f, crossing) {
+                continue;
+            }
+            // design: own AI (#9): and only while it has a drop cell for them near the goal, so that it does not take them aboard only to let them out
+            let has_drop = free.first().is_none_or(|&p| {
+                let zone = zone_of(p);
+                self.land_cell(w, f, goal_for(zone), (DROP_NEAR, DROP_FAR), at, zone)
+                    .is_some()
+            });
+            if !has_drop {
                 continue;
             }
             for p in free
@@ -2288,12 +2393,19 @@ impl Brain {
                         .min_by_key(|&&(e, c)| (dist2(c, at), e))
                 })
                 .flatten();
+            // design: own AI (#4): an intruder the unit cannot go for (out of its reach region and of its weapon's range from there, S-0212 claim 4) is not attacked, and one it was sent at is judged like a raider (`memory`): an attack the sim drops for want of an approach (S-0307 claim 17) was given again on every tick
+            let region = self.script.reach_region(w, id);
             let pick = raider.copied().or_else(|| {
                 near_home
                     .then(|| {
                         intruders
                             .iter()
-                            .filter(|&&(e, _)| can_attack(w, id, e))
+                            .filter(|&&(e, c)| {
+                                can_attack(w, id, e)
+                                    && self.script.reaches(w, id, region, e, c)
+                                    && memory.ok(w, id, Target::Object(e))
+                                    && !memory.pending(w, id, Target::Object(e))
+                            })
                             .min_by_key(|&&(e, c)| (dist2(c, at), e))
                             .copied()
                     })
@@ -2309,12 +2421,26 @@ impl Brain {
                 };
                 if raider.is_some() {
                     self.special.count_economy_defence();
-                    self.special.memory.note(w, std::slice::from_ref(&order));
                 }
+                self.special.memory.note(w, std::slice::from_ref(&order));
                 out.push(order);
             }
         }
     }
+}
+
+/// Whether unit `id` can drive to a cell: it lies in the reach region the
+/// unit stands in for its movement zone (S-0212 claim 4). Every cell passes
+/// for a unit with no zone or standing in no region.
+fn reach_test(w: &World, id: ObjectId) -> impl Fn(CellXY) -> bool + '_ {
+    let at = w.obj(id).and_then(|o| {
+        let zone = w.rules().unit(o.kind, o.type_index)?.zone;
+        match regions::reach_in(w, o.pos.cell(), zone) {
+            regions::Reach::Region(r) => Some((zone, r)),
+            _ => None,
+        }
+    });
+    move |c| at.is_none_or(|(zone, r)| regions::reach_in(w, c, zone) == regions::Reach::Region(r))
 }
 
 /// Whether a line item of type `t` belongs to the army that
