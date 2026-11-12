@@ -61,7 +61,7 @@ fn a_tethered_released_vehicle_gets_impossible_and_does_not_fire() {
     assert_eq!(shot, None, "a shot was made while tethered");
 }
 
-// spec: S-0301 claim 9 rank 12 (impossible is not an illegal reason: a caller that asks for illegal reasons only gets none from the tether)
+// spec: S-0301 claim 9 rank 12 (impossible is not an illegal reason: a caller that asks for illegal reasons only gets none from the tether). The own AI's lasting test (our design, PLAN §4.7) passes over the tether as a reason of the moment: the release tether ends once the vehicle clears the apron.
 #[test]
 fn the_tether_is_no_illegal_reason() {
     let mut r = testkit::combat_ruleset();
@@ -88,9 +88,9 @@ fn the_tether_is_no_illegal_reason() {
         !check::illegal_at_any_rank(&w, cart, tg, 0),
         "an illegal-only ask"
     );
-    assert_eq!(
+    assert_ne!(
         check::check_lasting(&w, cart, tg, 0),
         Answer::Impossible,
-        "the lasting test asks rank 12"
+        "the lasting test passes over the tether"
     );
 }
