@@ -3,7 +3,7 @@ id: Q-2987
 title: Arena rows that disagree once the test houses' checks put the bunker occupiers out
 status: open
 related: [S-0217, S-0508, S-0215, S-0309, M-0001, M-0002]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
