@@ -3794,3 +3794,53 @@ mod unseen_cell_tests {
         assert_eq!(regions::reach_in(&w, c, zone), home, "{c:?}");
     }
 }
+
+#[cfg(test)]
+mod start_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_sim::testkit;
+
+    // design: own AI (#27): the house's own start is no wave target when its base unit stands more than five cells off it (bases off, or the unit placed off its waypoint): it was the first target
+    #[test]
+    fn the_own_start_is_no_target_when_the_base_unit_stands_off_it() {
+        let map = fixture::map();
+        let g = Game::new(
+            fixture::rules(),
+            &map,
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let mut w = g.world.clone();
+        let starts = crate::skirmish::start_cells(&map);
+        let own: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| o.owner == Some(HouseId(0)) && o.on_map)
+            .map(|o| o.id)
+            .collect();
+        let first = w.obj(own[0]).expect("house 0's first object").pos.cell();
+        let mine = *starts
+            .iter()
+            .min_by_key(|&&s| dist2(s, first))
+            .expect("a start");
+        for id in own {
+            glasnost_sim::objects::remove(&mut w, id);
+        }
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "MCV",
+            0,
+            CellXY::new(mine.x + 8, mine.y),
+            0,
+        );
+        let mut s = Script::new(HouseId(0), Plan::default());
+        s.set_starts(&w, &starts);
+        let targets = s.enemy_starts(&w);
+        assert!(!targets.contains(&mine), "{targets:?} holds {mine:?}");
+        assert_eq!(targets.len(), starts.len() - 1, "{targets:?}");
+    }
+}
