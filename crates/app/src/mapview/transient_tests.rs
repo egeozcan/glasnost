@@ -3,8 +3,10 @@
 //! storage lifetime): a rocking, sinking or tumbling body and a rocket's
 //! fresh pitch draw images that the painter releases once no redraw has
 //! used them for a while, so the images the scene holds level off, and a
-//! pose drawn again after its images went draws the same pictures. Every
-//! type name and number is made up.
+//! pose drawn again after its images went draws the same pictures. Vehicle
+//! shadows (design: render (#106)) keep their unmasked footprints out of
+//! the scene and share one image for every appearance their parts leave
+//! as it is. Every type name and number is made up.
 
 use glasnost_convert::art::TypeArt;
 use glasnost_convert::kinds::Kind;
@@ -202,4 +204,75 @@ fn released_poses_draw_the_same_pictures() {
         assert_eq!(a, b, "frame {frame}");
     }
     assert!(held[71] <= held[23], "{held:?}");
+}
+
+/// The vehicle of object 0 with body facing step `f` of 32, its turret
+/// `t` steps of 32 further round, standing `h` leptons above its surface.
+fn turned(f: u16, t: u16, h: i32) -> Mobile {
+    let mut m = vehicle(0, Attitude::None);
+    m.body = f * 2048;
+    m.turret = (f + t) % 32 * 2048;
+    m.pos.2 = h;
+    m.above = h;
+    m
+}
+
+/// The image of the shadow item of the only mobile drawn in `entries`.
+fn shadow_image(entries: &[super::build::GroundEntry]) -> Option<u32> {
+    entries
+        .iter()
+        .flat_map(|e| &e.items)
+        .find(|i| i.paint == glasnost_render::compose::Paint::Shadow)
+        .map(|i| i.image)
+}
+
+/// design: render (#106): a turreted vehicle driving through all facings at
+/// two heights leaves no scene image held that no item has drawn (the
+/// unmasked shadow footprints stay in the painter).
+#[test]
+fn every_held_vehicle_image_is_drawn() {
+    with_painter(|inputs, painter, scene| {
+        let before = scene.images.len();
+        let mut drawn = std::collections::BTreeSet::new();
+        for h in [0, 300] {
+            for f in 0..32 {
+                for t in [0, 8, 16, 24] {
+                    let (entries, _) = painter.mobiles(inputs, scene, &[turned(f, t, h)]);
+                    drawn.extend(entries.iter().flat_map(|e| &e.items).map(|i| i.image));
+                    painter.end_redraw(scene);
+                }
+            }
+        }
+        let undrawn = (before..scene.images.len())
+            .filter(|&i| !drawn.contains(&(i as u32)) && scene.images[i].width() > 0)
+            .count();
+        assert_eq!(
+            undrawn,
+            0,
+            "of {} images added, {undrawn} were never drawn",
+            scene.images.len() - before
+        );
+    });
+}
+
+/// design: render (#106): a shadow lowered clear of the vehicle's parts is
+/// its footprint as it is: one scene image at every such height, with the
+/// same pixels and place as a cutout would have.
+#[test]
+fn a_shadow_clear_of_the_parts_is_its_footprint() {
+    with_painter(|inputs, painter, scene| {
+        let mut shown = Vec::new();
+        for h in [3000, 3200, 3400] {
+            let (entries, _) = painter.mobiles(inputs, scene, &[turned(4, 8, h)]);
+            let id = shadow_image(&entries).expect("a shadow is drawn");
+            let img = &scene.images[id as usize];
+            shown.push((id, img.width(), img.height(), img.pixels().to_vec()));
+        }
+        assert!(shown.iter().all(|s| s.1 > 0 && s.2 > 0));
+        assert!(
+            shown.iter().all(|s| s == &shown[0]),
+            "the shadow images: {:?}",
+            shown.iter().map(|s| s.0).collect::<Vec<_>>()
+        );
+    });
 }
