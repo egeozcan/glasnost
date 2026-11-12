@@ -1,8 +1,9 @@
 ---
 id: Q-3011
 title: In a refused pack-up, do the building's holders drop it before or after the removal's cell recalculation?
-status: open
+status: answered
 related: [S-0415, S-0309, S-0010, S-0202]
+answered-by: [S-0415]
 ---
 
 ## Need
