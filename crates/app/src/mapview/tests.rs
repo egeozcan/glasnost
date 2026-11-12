@@ -809,6 +809,51 @@ fn terrain_objects_placement_and_tables() {
     assert_eq!(bias(shadow), (Profile::Flat, -3));
 }
 
+/// spec: S-0102 claim 23 (a terrain object stands at the centre of its cell at the terrain surface
+/// height there) and S-0106 claim 2, F1 (the surface height of a sloped cell): on a ramp it is
+/// raised by the ramp's height at the cell centre, not drawn at the cell's level (#96)
+#[test]
+fn a_terrain_object_on_a_slope_stands_on_the_surface() {
+    use glasnost_render::projection::height_lift;
+    let text: &[u8] = b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Terrain]\n9006=TREEX\n";
+    let body = |slope: u8| {
+        let (import, catalogue, assets) = context();
+        let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
+        let mut map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let cell = map
+            .cells
+            .get_mut(glasnost_map::CellXY::new(6, 9))
+            .expect("a legal cell");
+        cell.level = 1;
+        cell.slope = slope;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let b = build(&map, &import, &catalogue, &palettes, &assets, &Options::default());
+        let items = items_of(&b, "terrain object");
+        let body = *items.iter().find(|i| i.paint != Paint::Shadow).expect("a body");
+        let shadow = *items.iter().find(|i| i.paint == Paint::Shadow).expect("a shadow");
+        (body, shadow)
+    };
+    let (flat, flat_shadow) = body(0);
+    // A flat cell at level 1: 104 leptons, L = 15 (S-0101 F2); unchanged by the surface height.
+    assert_eq!((flat.x, flat.y), (-90 - 1, 240 - 15 - 1));
+    for slope in 1..=20u8 {
+        let h = glasnost_sim::surface::surface_height(1, slope, 128, 128, true);
+        let (sloped, shadow) = body(slope);
+        let lift = height_lift(h) - height_lift(104);
+        assert_eq!((sloped.x, sloped.y), (flat.x, flat.y - lift), "slope {slope}");
+        assert_eq!(bias(&sloped).1, bias(&flat).1 - lift, "slope {slope}");
+        assert_eq!(shadow.y, flat_shadow.y - lift, "slope {slope}: the shadow moves with it");
+    }
+}
+
 /// spec: S-0102 claims 21 and 22 (a sprite vehicle's facing part and frame; its own shadow right after it)
 #[test]
 fn sprite_vehicle_frame_and_shadow() {
