@@ -247,7 +247,9 @@ fn releases_a_deploy_fire_vehicle_when_the_enemy_is_gone() {
     for o in orders {
         glasnost_sim::orders::issue(&mut w, HouseId(0), o);
     }
-    testkit::run(&mut w, 1);
+    // The queued behaviour starts at unload's next processing, after its
+    // delay of 14 to 16 ticks (S-0517 claim 2).
+    testkit::run(&mut w, 17);
     assert!(!unloads(&w), "it still fires at its own cell");
     while w.tick % 15 != 0 {
         testkit::run(&mut w, 1);
