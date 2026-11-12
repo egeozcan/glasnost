@@ -1,9 +1,9 @@
 ---
 id: Q-3007
 title: Does the shadow of a vehicle drawn as a sprite with a turret show while it is above the surface, and under which type flags?
-status: open
+status: answered
 related: [S-0102]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
