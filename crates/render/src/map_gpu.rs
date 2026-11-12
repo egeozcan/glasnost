@@ -202,6 +202,15 @@ fn warn_absent(placed: impl IntoIterator<Item = ((u32, u32), Slot)>, side: u32) 
 /// ([`MapRenderer::sync`]); our own choice.
 const SPARE_LAYERS: u32 = 1;
 
+/// The side of an atlas layer when the device allows it; our own choice.
+const ATLAS_SIDE: u32 = 4096;
+
+/// The largest side of the palette-row texture on `device`: the atlas's
+/// default side, whatever side a test gives the atlas.
+fn row_side(device: &wgpu::Device) -> u32 {
+    device.limits().max_texture_dimension_2d.min(ATLAS_SIDE)
+}
+
 /// Pipelines by role.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
@@ -363,8 +372,20 @@ impl MapRenderer {
         scene: &Scene,
         target_format: wgpu::TextureFormat,
     ) -> Result<Self, UploadError> {
+        Self::with_side(device, queue, scene, target_format, ATLAS_SIDE)
+    }
+
+    /// [`Self::new`] with atlas layers of at most `side` × `side` (the
+    /// device's limit lowers it further): tests fill a small atlas.
+    pub fn with_side(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        scene: &Scene,
+        target_format: wgpu::TextureFormat,
+        side: u32,
+    ) -> Result<Self, UploadError> {
         let limits = device.limits();
-        let side = limits.max_texture_dimension_2d.min(4096);
+        let side = limits.max_texture_dimension_2d.min(side).max(1);
         // Indexed images, then the signed companion depth images (their bytes
         // are the two's complement values).
         let sizes: Vec<(u32, u32)> = scene
@@ -432,7 +453,7 @@ impl MapRenderer {
             &atlas,
         );
         let (rows_texture, rows_per_column) =
-            rows_texture(device, queue, scene, side, target_format)?;
+            rows_texture(device, queue, scene, row_side(device), target_format)?;
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map view"),
             size: std::mem::size_of::<ViewUniform>() as u64,
@@ -675,7 +696,7 @@ impl MapRenderer {
         }
         if scene.rows.len() != self.row_count {
             let (rows, per_column) =
-                rows_texture(device, queue, scene, self.packer.side, self.target_format)?;
+                rows_texture(device, queue, scene, row_side(device), self.target_format)?;
             self.stats.uploads += 1;
             self.stats.upload_bytes += u64::from(rows.width()) * u64::from(rows.height()) * 4;
             self.bind_group = bind_group(

@@ -323,6 +323,139 @@ fn sync_rewrites_replaced_images() {
     assert_eq!(differing, 0);
 }
 
+/// How many pixels of `r`'s drawing of `s` at a 128 × 72 view differ from
+/// the CPU reference.
+fn differing_from_cpu(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    r: &mut MapRenderer,
+    s: &Scene,
+) -> usize {
+    let size = (128, 72);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let filter = Filter::default();
+    let cpu = s
+        .compose(&view, &filter, &ComposeQuirks::default())
+        .to_rgba();
+    let (color, depth) = targets(device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render(
+        device,
+        queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        s,
+        &view,
+        &filter,
+        &ComposeQuirks::default(),
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(device, queue, &color, size.0, size.1);
+    cpu.chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count()
+}
+
+/// An item drawing image `image` flat at (`x`, `y`) with no depth test.
+fn flat_item(image: u32, x: i32, y: i32) -> Item {
+    Item {
+        image,
+        x,
+        y,
+        test: DepthTest::Ignore,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Row(2),
+        group: Group::Smudges,
+        provisional: false,
+        object: None,
+        stack: None,
+    }
+}
+
+/// design: render (#105): images added while the atlas is full make it
+/// grow: `sync` succeeds with no new renderer, and the images placed before
+/// and after the growth are drawn as the CPU reference draws them.
+#[test]
+fn a_full_atlas_grows_in_sync() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let mut r = MapRenderer::with_side(
+        &device,
+        &queue,
+        &s,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+        64,
+    )
+    .expect("scene uploads");
+    let layers = r.atlas_use().layers;
+    let mut added = Vec::new();
+    for k in 0..48u32 {
+        let id = s.add_image(image(30, 20, k as u8));
+        added.push(id);
+        if k % 8 == 0 {
+            r.sync(&device, &queue, &s)
+                .expect("a full atlas grows instead of failing");
+        }
+    }
+    r.sync(&device, &queue, &s)
+        .expect("a full atlas grows instead of failing");
+    assert!(
+        r.atlas_use().layers > layers,
+        "the atlas grew from {layers} layers"
+    );
+    // The first and the last images added, and one between.
+    for (n, &id) in [added[0], added[23], added[47]].iter().enumerate() {
+        s.items.push(flat_item(id, 10 + 40 * n as i32, 45));
+    }
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
+/// design: render (#105): images added later are packed by height class,
+/// not in arrival order: tall and short images arriving in turn do not
+/// leave every shelf as tall as the tall ones.
+#[test]
+fn later_images_are_packed_by_height_class() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = Scene::default();
+    s.add_row([0; 256]);
+    s.add_image(image(1, 1, 1));
+    let mut r = MapRenderer::with_side(
+        &device,
+        &queue,
+        &s,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+        256,
+    )
+    .expect("scene uploads");
+    for k in 0..64u8 {
+        s.add_image(image(8, 64, k));
+        s.add_image(image(8, 8, k));
+    }
+    r.sync(&device, &queue, &s).expect("the images fit");
+    // 64 tall images fill two 64-row shelves, 64 short ones (and the first
+    // image) two or three 8-row shelves.
+    let used = r.atlas_use();
+    assert!(
+        used.committed_px <= (128 + 24) * 256,
+        "{} atlas pixels in shelves",
+        used.committed_px
+    );
+}
+
 /// spec: S-0102 claim 27 (cell-pass shadows store their depth; quirks.cell_pass_shadows_write_depth)
 ///
 /// Two writer shadows at the same depth over a flat item: with the switch
