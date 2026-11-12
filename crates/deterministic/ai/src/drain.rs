@@ -227,6 +227,15 @@ fn claim(w: &World, d: ObjectId) -> Option<ObjectId> {
 /// drain order earlier in `out`, takes no other order; any other drainer
 /// takes every order.
 pub(crate) fn filter_orders(w: &World, out: &mut Vec<Order>) {
+    // design: own AI (#53): with no drainer among the orders' actors every
+    // order is kept below, so the claims (a scan of every object) are not
+    // looked for; between thinks `out` is mostly empty.
+    if !out
+        .iter()
+        .any(|o| o.actor().is_some_and(|a| is_drainer(w, a)))
+    {
+        return;
+    }
     let mut claimed: std::collections::BTreeMap<ObjectId, ObjectId> = w
         .objects
         .values()
@@ -269,4 +278,132 @@ pub(crate) fn filter_orders(w: &World, out: &mut Vec<Order>) {
             _ => !on_the_way(w, actor) && !sent.contains(&actor),
         }
     });
+}
+
+#[cfg(test)]
+mod filter_tests {
+    use super::*;
+    use crate::{fixture, fixture_m7b, game::Game};
+
+    /// [`filter_orders`] as before batch 2: the claims looked for whatever
+    /// the orders.
+    fn filter_as_before(w: &World, out: &mut Vec<Order>) {
+        let mut claimed: std::collections::BTreeMap<ObjectId, ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && is_drainer(w, o.id))
+            .filter_map(|o| Some((claim(w, o.id)?, o.id)))
+            .collect();
+        let mut sent: std::collections::BTreeSet<ObjectId> = std::collections::BTreeSet::new();
+        out.retain(|order| {
+            let Some(actor) = order.actor() else {
+                return true;
+            };
+            if !is_drainer(w, actor) {
+                return true;
+            }
+            if drain::draining(w, actor) {
+                return false;
+            }
+            match order {
+                Order::Behaviour {
+                    behaviour: Behaviour::Attack,
+                    target: Some(Target::Object(b)),
+                    ..
+                } if drain_target(w, actor, *b) => {
+                    let owner = w.obj(actor).and_then(|o| o.owner);
+                    match claimed.get(b) {
+                        Some(&other)
+                            if other != actor && w.obj(other).and_then(|o| o.owner) == owner =>
+                        {
+                            false
+                        }
+                        _ => {
+                            claimed.insert(*b, actor);
+                            sent.insert(actor);
+                            true
+                        }
+                    }
+                }
+                _ => !on_the_way(w, actor) && !sent.contains(&actor),
+            }
+        });
+    }
+
+    /// Our tooling for speed (design: own AI, #53): the drainer filter
+    /// that skips the claims when no order's actor is a drainer keeps the
+    /// orders the full filter keeps, for order lists with drainers and
+    /// without, at several points of the M7b duel (drainers at work).
+    #[test]
+    fn the_drainer_filter_keeps_the_same_orders_with_or_without_drainers() {
+        let mut g = Game::new(
+            fixture_m7b::rules(),
+            &fixture_m7b::map(),
+            fixture_m7b::MAP_NAME,
+            fixture::catalogue(),
+            fixture_m7b::setup(11),
+        )
+        .expect("the M7b duel loads");
+        let (mut with, mut without) = (0, 0);
+        for _ in 0..12 {
+            for _ in 0..500 {
+                g.step();
+            }
+            let w = &g.world;
+            for h in 0..w.houses.len() {
+                let house = HouseId(h as u8);
+                let actors: Vec<ObjectId> = w
+                    .objects
+                    .values()
+                    .filter(|o| o.owner == Some(house) && o.on_map && o.kind != Kind::Building)
+                    .map(|o| o.id)
+                    .collect();
+                let buildings: Vec<ObjectId> = w
+                    .objects
+                    .values()
+                    .filter(|o| o.on_map && o.kind == Kind::Building && o.owner != Some(house))
+                    .map(|o| o.id)
+                    .collect();
+                let mut all: Vec<Order> = Vec::new();
+                for &a in &actors {
+                    for &b in &buildings {
+                        all.push(Order::Behaviour {
+                            actor: a,
+                            behaviour: Behaviour::Attack,
+                            attack_move: false,
+                            target: Some(Target::Object(b)),
+                            dest: None,
+                        });
+                    }
+                    all.push(Order::Behaviour {
+                        actor: a,
+                        behaviour: Behaviour::Move,
+                        attack_move: false,
+                        target: None,
+                        dest: w.obj(a).map(|o| Target::Cell(o.pos.cell())),
+                    });
+                }
+                let no_drainers: Vec<Order> = all
+                    .iter()
+                    .filter(|o| o.actor().is_none_or(|a| !is_drainer(w, a)))
+                    .cloned()
+                    .collect();
+                for list in [all, no_drainers, Vec::new()] {
+                    if list
+                        .iter()
+                        .any(|o| o.actor().is_some_and(|a| is_drainer(w, a)))
+                    {
+                        with += 1;
+                    } else {
+                        without += 1;
+                    }
+                    let (mut a, mut b) = (list.clone(), list);
+                    filter_orders(w, &mut a);
+                    filter_as_before(w, &mut b);
+                    assert_eq!(a, b, "house {h}, tick {}", w.tick);
+                }
+            }
+        }
+        assert!(with > 0 && without > 0, "{with} with drainers, {without} without");
+    }
 }
