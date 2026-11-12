@@ -49,6 +49,7 @@ pub mod lift;
 pub mod lighting;
 pub mod linked;
 pub mod load;
+pub mod loops;
 pub mod mark;
 pub mod mind;
 pub mod mp_triggers;

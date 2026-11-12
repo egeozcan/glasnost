@@ -1061,6 +1061,9 @@ pub struct SimRules {
     pub gas: crate::gas::GasRules,
     /// The debris-piece types (S-0317).
     pub pieces: crate::pieces::PieceRules,
+    /// The loops in the links between types that make one another
+    /// (#224, #174, #203, #198; [`crate::loops`]).
+    pub loops: crate::loops::LinkLoops,
     /// The resource-glint animation type, if one is configured (S-0202
     /// claim 14).
     pub ore_twinkle: Option<String>,
@@ -1555,7 +1558,10 @@ impl SimRules {
         }
         let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
         let pieces = crate::pieces::PieceRules::new(r, &warhead_names, &gas, mode);
+        // nocite: our own input validation (#224, #174, #203, #198): the loops of the links between types; Q-2996 to Q-2999 ask what the game does
+        let loops = crate::loops::LinkLoops::new(&animations, &pieces, &combat, &gas);
         Self {
+            loops,
             crates,
             superweapons,
             missiles,

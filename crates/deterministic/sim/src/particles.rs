@@ -399,8 +399,19 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         return;
     };
     // spec: S-0616 claims 3 and 8 (successors follow the system's kind, not the particle's: a dead particle of any kind in a smoke system whose type names a next type splits, d taken from the dead particle's type)
+    let marked = w
+        .gas
+        .systems
+        .get(&sys)
+        .is_some_and(|s| s.looped.contains(&p.id));
+    // nocite: our own input validation (#198): a marked particle does not split, and takes no draw, through a next-type link on a loop of particle types; Q-2999 asks what the game does
     if let Some(t) = ptype(w, &p)
         && let Some(next) = t.next
+        && let Some(looped) = w.rules().loops.particles.link(
+            Some(p.type_index as usize),
+            marked,
+            Some(next as usize),
+        )
     {
         // spec: S-0616 F3 (d = ⌊ρ / 8⌋, rounding down; q = r rem d; o = q + d when q ≥ 1, else q − d; S-0205 claim 3 for d = 0)
         let dv = t.radius.div_euclid(RADIUS_DIVISOR);
@@ -423,7 +434,14 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
                 p.pos.y.wrapping_add(sign * oy),
                 p.pos.z,
             );
-            let made = crate::gas::add_particle(w, sys, next, at, origin).is_some();
+            let added = crate::gas::add_particle(w, sys, next, at, origin);
+            let made = added.is_some();
+            if looped
+                && let Some(q) = added
+                && let Some(s) = w.gas.systems.get_mut(&sys)
+            {
+                s.looped.insert(q);
+            }
             if made
                 && let Some(q) = w
                     .gas
@@ -452,6 +470,7 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         && i < s.particles.len()
     {
         s.particles.remove(i);
+        s.looped.remove(&p.id);
     }
 }
 

@@ -220,6 +220,10 @@ pub struct Piece {
     /// Whether the sense of the turn is reversed (claim 22: each contact
     /// reverses it); drawing only.
     pub reversed: bool,
+    /// Made through a spawn link on a loop of piece types: it makes no
+    /// piece through such a link itself (#174; [`crate::loops`]).
+    #[serde(default)]
+    pub looped: bool,
 }
 
 impl Piece {
@@ -254,6 +258,18 @@ fn single(x: F64, mode: Rounding) -> F32 {
 /// (claims 2 to 4, 13 and 14): its draws, its entry in the update order,
 /// its attached system and its start sound. Returns the piece.
 pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option<ObjectId> {
+    create_marked(w, ti, at, house, false)
+}
+
+/// [`create`] for a piece made through a spawn link on a loop of piece
+/// types when `looped` ([`Piece::looped`]).
+fn create_marked(
+    w: &mut World,
+    ti: u32,
+    at: Pos,
+    house: Option<HouseId>,
+    looped: bool,
+) -> Option<ObjectId> {
     let rules = w.rules_arc();
     let t = rules.pieces.types.get(ti as usize)?;
     let mode = rules.mode;
@@ -338,6 +354,7 @@ pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option
                 // spec: S-0317 claim 22 (the identity at creation)
                 turns: 0,
                 reversed: false,
+                looped,
             },
         );
         // spec: S-0317 claims 1 and 6 (a piece enters play during its creation) and S-0203 claim 3 (appended to the update order)
@@ -906,9 +923,15 @@ fn end(w: &mut World, id: ObjectId) {
                     },
                 );
             }
+            // nocite: our own input validation (#174): a marked piece makes no piece, and takes no draw, through a spawn link on a loop of piece types; Q-2997 asks what the game does
             if t.meteor
                 && let Some(s) = t.spawns
                 && t.spawn_count > 0
+                && let Some(looped) = rules.loops.pieces.link(
+                    Some(pc.type_index as usize),
+                    pc.looped,
+                    Some(s as usize),
+                )
             {
                 // spec: S-0317 claim 12 (n = R(0, c) + R(0, c), the first draw first, a signed 32-bit sum that wraps; a negative sum makes no piece)
                 let a = w.rng.ranged(0, t.spawn_count, half);
@@ -916,7 +939,7 @@ fn end(w: &mut World, id: ObjectId) {
                 let n = a.wrapping_add(b);
                 for _ in 0..n.max(0) {
                     // spec: S-0317 claim 12 (each further piece at the flight point, with no house, created as claims 3 and 4 say, in turn)
-                    create(w, s, fp, None);
+                    create_marked(w, s, fp, None, looped);
                 }
             }
         } else {

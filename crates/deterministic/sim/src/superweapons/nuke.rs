@@ -149,6 +149,7 @@ fn missile(
         vehicle_scalable: false,
         airburst_child: false,
         chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
+        looped: false,
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
     };
     w.projectiles.insert(id, pr);

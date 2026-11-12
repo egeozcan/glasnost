@@ -67,7 +67,12 @@ fn pass(w: &mut World) -> (bool, usize) {
 // spec: S-0319 claim 12 (every animation whose type names a trailer makes it on a due tick, its first turn included) and S-0203 claim 4 (a new object takes its first turn later in the same pass): a chain without a loop is unchanged
 #[test]
 fn a_trailer_chain_without_a_loop_is_unchanged() {
-    let types = [("A", Some("B")), ("B", Some("C")), ("C", Some("PLAIN")), ("PLAIN", None)];
+    let types = [
+        ("A", Some("B")),
+        ("B", Some("C")),
+        ("C", Some("PLAIN")),
+        ("PLAIN", None),
+    ];
     let mut w = world(&types, "A");
     assert_eq!(pass(&mut w), (true, 4), "A, B, C and PLAIN");
 }

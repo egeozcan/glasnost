@@ -324,6 +324,11 @@ pub struct Projectile {
     /// (S-0318 claim 5).
     #[serde(default)]
     pub chain: u8,
+    /// An airburst child launched through a link on a loop of airburst
+    /// weapons: it launches no children through such a link itself (#203;
+    /// [`crate::loops`]).
+    #[serde(default)]
+    pub looped: bool,
 }
 
 /// The unscaled damage multiplier of a projectile, ×1 in 1/256 (S-0518

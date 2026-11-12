@@ -427,8 +427,17 @@ fn tests(w: &World, at: Pos) -> (bool, bool) {
 
 /// The effects of a landing at the landing point `at` for an animation
 /// whose current type is `t` (claims 7 to 10), in claim 13's order. The
-/// caller removes the animation afterwards (claim 8).
-pub(crate) fn land(w: &mut World, t: &AnimRules, at: Pos, landing: Landing) {
+/// caller removes the animation afterwards (claim 8). `from` is the
+/// animation's type index and its loop mark ([`crate::anims::Anim::looped`]).
+pub(crate) fn land(
+    w: &mut World,
+    t: &AnimRules,
+    at: Pos,
+    landing: Landing,
+    from: (Option<u32>, bool),
+) {
+    // nocite: our own input validation (#174): a marked animation makes no animation through a link on a loop of animation types; Q-2996
+    let link = |w: &World, name: &str| crate::anims::link(w, from.0, from.1, name);
     let rules = w.rules_arc();
     let q = rules.quirks;
     let b = &t.bounce;
@@ -439,9 +448,11 @@ pub(crate) fn land(w: &mut World, t: &AnimRules, at: Pos, landing: Landing) {
         // spec: S-0319 claim 7 and Edge cases (an impact on water makes its bounce animation and hits; quirks.bouncing_anim_water_impact_hits off: not on water and not at deck height only)
         && (q.bouncing_anim_water_impact_hits || !on_water || at_deck)
     {
-        if let Some(name) = b.bounce.clone() {
+        if let Some(name) = b.bounce.clone()
+            && let Some(looped) = link(w, &name)
+        {
             // spec: S-0319 claim 7 (the bounce animation at the position in play before the move, no loop delay, repeat factor 1, no reverse request, before the hits)
-            crate::combat::effects::anim(w, &name, old);
+            crate::combat::effects::anim_marked(w, &name, old, looped);
         }
         let cell = at.cell();
         // spec: S-0319 claim 7 and Edge cases (the ground layer whatever the height; quirks.bouncing_anim_deck_impact_layer off: a landing put at the deck height hits the deck layer of a high-bridge cell)
@@ -466,9 +477,11 @@ pub(crate) fn land(w: &mut World, t: &AnimRules, at: Pos, landing: Landing) {
         // spec: S-0319 claim 8 and Edge cases (the area damage only when the type names an expiry animation; quirks.bouncing_anim_expiry_needs_animation off: also when its damage amount is not 0)
         let area = b.expire.is_some()
             || (!q.bouncing_anim_expiry_needs_animation && !t.damage.eq_num(F64::ZERO));
-        if let Some(name) = b.expire.clone() {
+        if let Some(name) = b.expire.clone()
+            && let Some(looped) = link(w, &name)
+        {
             // spec: S-0319 claim 8 (the expiry animation at the landing point, no loop delay, repeat factor 1; its depth adjustment is drawing only)
-            crate::combat::effects::anim(w, &name, at);
+            crate::combat::effects::anim_marked(w, &name, at, looped);
         }
         if area {
             // spec: S-0319 claim 8 (a detonation's area damage at the landing point, S-0303 claims 1 to 20: the damage amount, the warhead, no source object, no house, resources affected; the light flash is drawing only)
@@ -486,6 +499,7 @@ pub(crate) fn land(w: &mut World, t: &AnimRules, at: Pos, landing: Landing) {
         }
         if let Some(name) = b.spawns.clone()
             && b.spawn_count > 0
+            && let Some(looped) = link(w, &name)
         {
             let half = q.ranged_draw_half_span;
             // spec: S-0319 claim 9 and F4 (n = R(0, c) + R(0, c), both draws before the first creation, a signed 32-bit sum that wraps; n ≤ 0 makes none)
@@ -493,7 +507,7 @@ pub(crate) fn land(w: &mut World, t: &AnimRules, at: Pos, landing: Landing) {
             let n = first.wrapping_add(w.rng.ranged(0, b.spawn_count, half));
             for _ in 0..n.max(0) {
                 // spec: S-0319 claim 9 (each at the landing point with no loop delay, repeat factor 1, no reverse request, its own creation draws in turn)
-                crate::combat::effects::anim(w, &name, at);
+                crate::combat::effects::anim_marked(w, &name, at, looped);
             }
         }
     } else {

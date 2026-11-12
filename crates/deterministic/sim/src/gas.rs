@@ -859,6 +859,12 @@ pub struct ParticleSystem {
     /// Its target object, if any (S-0616 Terms and claim 4).
     #[serde(default)]
     pub target_object: Option<ObjectId>,
+    /// Its particles made through a next-type link on a loop of particle
+    /// types: such a particle does not split through such a link itself
+    /// (#198; [`crate::loops`]). Kept here, not on the particle, so the
+    /// particle's own fields stay as S-0613 gives them.
+    #[serde(default)]
+    pub looped: std::collections::BTreeSet<ObjectId>,
 }
 
 impl ParticleSystem {
@@ -881,6 +887,7 @@ impl ParticleSystem {
             timer: F64::from_i64(i64::from(t.spawn_frames), mode).to_f32(mode),
             sparks: t.spark_turns,
             target_object: None,
+            looped: std::collections::BTreeSet::new(),
         }
     }
 }

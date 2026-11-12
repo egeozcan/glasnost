@@ -5265,6 +5265,7 @@ fn smoke(w: &mut World, id: ObjectId) {
             },
             owner: None,
             role: crate::anims::Role::Ordinary,
+            looped: false,
         },
     );
     if made.id.is_some() {

@@ -514,6 +514,7 @@ pub fn launch(
         airburst_child: false,
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
         chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
+        looped: false,
     };
     w.projectiles.insert(id, proj);
     if o.kind == Kind::Vehicle
@@ -1601,6 +1602,15 @@ fn explode(
 /// The nine children of an airburst (S-0306 claim 21).
 fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
     let rules = w.rules_arc();
+    // nocite: our own input validation (#203): a marked projectile launches no children, and takes no draw, through a link on a loop of airburst weapons; Q-2998 asks what the game does
+    let Some(looped) =
+        rules
+            .loops
+            .airburst
+            .link(Some(pr.weapon as usize), pr.looped, Some(aw as usize))
+    else {
+        return;
+    };
     let half = rules.quirks.ranged_draw_half_span;
     let c = pr.pos.cell();
     let sw = rules.combat.weapon(aw).speed;
@@ -1653,6 +1663,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             airburst_child: true,
             multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
             chain: pr.chain, // spec: S-0318 Terms (only a fragment is a level below the projectile that launched it)
+            looped,
         };
         w.projectiles.insert(id, child);
         w.update.enter(id);
