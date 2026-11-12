@@ -2,13 +2,13 @@
 id: S-0317
 title: Debris pieces with voxel models (creation, flight, bounces, end of life, removal)
 topic: combat
-revision: 57
+revision: 59
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-1702, Q-1834, Q-1835, Q-1836]
+requests: [Q-1702, Q-1834, Q-1835, Q-1836, Q-2997]
 supersedes: []
 ---
 
@@ -31,7 +31,9 @@ shadow and visibility. The drawn model turns once in each flying turn, and the s
 reverses at every contact (claim 22). Claim 10's flat rebound narrows the elasticity to single
 precision before it scales (F8). The slope rebound, the cliff turn and the building cells answer
 Q-1834, the drawing Q-1835, and a piece off the map Q-1836. The two faults of the cliff turn share
-one switch, as claim 18 states.
+one switch, as claim 18 states. A meteor type whose spawn type leads back to it makes pieces
+with no known limit in the original; our engine bounds such a loop by a departure (claim 29),
+which answers Q-2997.
 
 ## Terms
 
@@ -47,6 +49,13 @@ Shared terms are in the glossary: *scenario random stream*, *raw value*, *ranged
 - **Creation point.** The point the producer names when it makes a piece (for warhead debris,
   S-0303 claim 22's *Q*). The *start position* is where the piece's flight begins (claims 3 and 4).
 - **Meteor piece.** A piece whose type has the meteor flag. Every other piece is a *falling piece*.
+- **Spawn link, spawn loop.** A meteor piece type that names a spawn type and has a positive
+  spawn count (claim 12) has a *spawn link* to that spawn type; no other type has one. A *spawn
+  loop* is a set of piece types, each with a spawn link to the next and the last with one to the
+  first; a type whose spawn link names itself is a spawn loop of one type. A spawn link *lies on*
+  a spawn loop when both its types belong to that loop. A type has at most one spawn link, so it
+  belongs to at most one spawn loop. Whether a link lies on a loop is a property of the types
+  alone.
 - **Lifetime counter.** A signed integer count of piece turns that each piece holds, set at
   creation from the type's duration field (claim 2) and counted down in its turns (claim 6).
 - **Ground impact.** A piece turn whose move makes a *contact* of claim 10: it reaches the ground,
@@ -543,7 +552,8 @@ An `unmeasured` part is rated medium at most.
     add up to more than 2147483647, and the wrapped sum is then negative, so no further piece is
     made (the two draws are still taken).
     A spawn count of 2147483647 gives each draw the span of S-0202 claim 5, and the importer
-    warns for it as that claim requires.
+    warns for it as that claim requires. A spawn type that leads back to the piece's own type is
+    claim 29's case.
 
     A type with the resource flag, at an end that is not on water and not at deck height, adds new
     resource: a falling piece to its own cell, a meteor piece to each of the 8 neighbouring cells
@@ -1029,6 +1039,47 @@ An `unmeasured` part is rated medium at most.
       original's skirmish cannot turn it on (as for S-0102 claim 10's remembered images).
     - Confidence: medium
 
+29. **Spawn loops.** The original takes a spawn type as named, also when it is the piece's own
+    type or leads back to it through other spawn links (Terms, spawn loop): it neither refuses
+    nor changes such data when it loads the rules, and it sets no limit on the pieces a loop
+    makes (claim 1). A further piece of a loop is a piece like any other. It enters play during
+    its maker's end and takes its first turn later in the same turn pass (S-0203 claim 4), unless
+    a removal costs it that turn (S-0203 claim 10: under that claim's switch the ending piece's
+    own removal costs the object directly after it its turn, and that object can be one of the
+    ending piece's further pieces). It ends in that first turn when its lifetime counter at
+    creation is at most 1 and not −2147483648 (claims 2 and 6): always for a duration of at most
+    1 (apart from the wrapped durations of claim 2), and for a duration *D* from 2 to 20 when its
+    loss *L* is at least *D* − 1. Each end of a piece of the loop that is not on water below deck
+    height makes *n* = R(0, *c*) + R(0, *c*) further pieces (claim 12), *c* on average for a
+    spawn count up to 1073741823; above it the sum can wrap, and a wrapped sum makes none.
+
+    So in the original no limit is known on the number of pieces that one piece of a loop leads
+    to. The chain goes on, within one tick while its pieces end in their first turns and from
+    tick to tick otherwise, until every piece of it has ended without further pieces (both draws
+    0, a wrapped sum, or an end on water below deck height). With a spawn count of 2 or more the count can grow without
+    end; where it grows within one tick, that tick does not end and the game stops responding.
+
+    Our engine departs from this, with no switch. A piece made through a spawn link that lies on
+    a spawn loop carries a *loop mark*, which is part of its saved state. Its own type belongs to
+    that loop, so its own spawn link lies on the loop too: a marked piece makes no further pieces
+    at its end and takes neither spawn-count draw. Its other end effects (claim 11) and its new
+    resource (claim 12) are those of any piece. A piece made in any other way (by a producer of
+    S-0303 or S-0312, or through a spawn link that lies on no spawn loop) carries no mark, and
+    its spawns follow claim 12 unchanged. So one unmarked piece of a loop type leads to at most
+    2*c* further pieces of the loop, all made at its end, and none of them makes more. Spawn
+    links that lie on no loop, and the pieces made through them, are unchanged. The importer
+    warns once for each spawn loop.
+    - Backing for the acceptance at load and for every end of a piece of the loop making the
+      pieces its two draws give: `measurable` (scenario V16 parts a and c). Confidence: medium
+      until V16 runs. Backing for the absence of a limit: `unmeasured`, as in claim 1: no finite
+      scenario shows every count, V16 included. Confidence: medium.
+    - Backing for the end in the first turn and the chain within one tick: `measurable` (V16 part
+      b). Confidence: high for the end in the first turn of a piece whose lifetime counter at
+      creation is at most 1, medium where that counter comes from claim 2's wrapped durations,
+      and medium for a growing chain stopping the game within one tick until V16 part b runs.
+    - Backing for the departure: a design rule, not an oracle value; `measurable` for our engine
+      (V16's engine runs). Confidence: high for the departure, a design rule.
+
 ## Formulas
 
 All raw values below are read as signed 32-bit numbers (S-0202 claim 6). For a raw value *r*,
@@ -1301,7 +1352,8 @@ Units: pixels.
 Within a creation: the piece's own draws (claims 3 and 4); making its system takes none (claim
 13). Where the system enters the update order is open (claim 6, Open questions). Within an end:
 the area damage (with the light flash before or after it, claim 11), then a meteor's spawn draws
-and the creation draws of each spawned piece in turn, then the resource draws.
+and the creation draws of each spawned piece in turn (none for a piece with claim 29's loop mark
+in our engine), then the resource draws.
 
 ## Edge cases and quirks
 
@@ -1388,6 +1440,9 @@ and the creation draws of each spawned piece in turn, then the resource draws.
   tumbles from its first flying turn.
 - **A section outside the model** is a departure (claim 23): our engine draws nothing for such a
   piece, and the importer warns.
+- **A spawn loop** is a departure (claim 29): a piece made through a spawn link that lies on a
+  spawn loop makes no further pieces and takes no spawn draws, and the importer warns for each
+  loop. No switch: the original's chain has no bound and can stop the game.
 
 ## Import mapping
 
@@ -1401,7 +1456,7 @@ and the creation draws of each spawned piece in turn, then the resource draws.
 | rules, same section, `MinAngularVelocity`, `MaxAngularVelocity` | spin limits *A*ₘᵢₙ, *A*ₘₐₓ (F5) | floating point in degrees per tick; a nonzero value is multiplied by the degrees-to-radians constant; a value of exactly 0 gives the creation default of the last column | absent: −1 degree each, about −0.01745 radians; an explicit 0 gives the creation defaults, 0 for the lower limit and 10 degrees (about 0.1745 radians) for the upper |
 | rules, same section, `Damage`, `DamageRadius`, `Warhead` | impact and expiry damage (claims 7, 11) | integer; integer leptons; warhead name | 0, 0, none |
 | rules, same section, `BounceAnim`, `ExpireAnim`, `TrailerAnim` | bounce, expiry and trailer animations (claims 6, 7, 11) | animation names | none |
-| rules, same section, `Spawns`, `SpawnCount` | spawn type and count *c* (claim 12) | voxel-animation name; integer | none, 0 |
+| rules, same section, `Spawns`, `SpawnCount` | spawn type and count *c* (claim 12); a spawn type that leads back makes a spawn loop (claim 29), for which the importer warns | voxel-animation name; integer | none, 0 |
 | rules, same section, `IsTiberium` | resource flag (claim 12) | boolean | no |
 | rules, same section, `AttachedSystem` | attached particle system (claim 13) | particle-system name | none |
 | rules, same section, `StartSound`, `StopSound` | start sound (claim 14); stop sound read, no effect | sound names | none |
@@ -2200,6 +2255,35 @@ draws (random-state recorder) and the piece's position each tick (read-only reco
   values, to black under complete shroud. *Falsified by:* a piece that vanishes at the edge, or
   that is drawn undarkened under the shroud.
 
+**V16. Spawn loops** (claim 29). *Setup:* as V4 on flat clear ground with no water, the recorder
+logging the scenario random stream and, each tick, the number of pieces in play. A named test
+rules layer gives a test warhead a debris list of one named test meteor type X, thrown once, one
+piece per throw. Run each part on five seeds, once on the original and once on our engine.
+- *Part a (one type, ends in later ticks):* X has a duration of 40, its spawn type X and a spawn
+  count of 2. *Record:* for 300 ticks or until no piece of X is left, at each end of a piece of X
+  its two spawn draws and the number of further pieces made. *Expected (original):* the layer
+  loads with no refusal and X's spawn type stays X; every end not on water makes exactly the sum
+  of its two draws, also at ends of further pieces, with no limit on the count in play.
+  *Falsified by:* an end of a further piece that takes no spawn draws or makes fewer pieces than
+  its draws give, or a load that refuses or changes the layer.
+- *Part b (one type, ends in the first turn):* as part a with a duration of 1 and a spawn count
+  of 4. *Record:* whether the game passes the tick of the first piece's end, and the tick
+  counter. Stop the run from outside after 60 seconds if the game stops responding; do not wait
+  for memory to run out. *Expected (original):* on a seed whose chain grows, the tick of the
+  first end does not complete normally; on a seed where it dies out, the logged ends make the
+  pieces their draws give, and since a piece that takes its turn in that tick ends in it and
+  each end costs at most one other object its turn (S-0203 claim 10), at most as many pieces of
+  X are in play after that tick as ends were logged in it. *Falsified by:* a seed that passes
+  that tick with more pieces of X in play after it than ends logged in it, or an end of a
+  further piece that takes no spawn draws.
+- *Part c (two types):* X names a second test meteor type Y as its spawn type and Y names X, both
+  with a duration of 40 and a spawn count of 2. *Expected (original):* as part a, with pieces of
+  X and Y in turn.
+- *Engine runs:* parts a to c. *Expected (our engine):* the importer warns once for each loop
+  (once in parts a and b, once for the pair in part c); the thrown piece takes its two spawn
+  draws and makes their sum, and none of those further pieces takes a spawn draw or makes a
+  piece; every tick completes.
+
 ## Changes for other specs
 
 - **S-0303 claim 22 and S-0312 claim 4 (F1):** the debris pieces they throw are objects of play,
@@ -2286,3 +2370,9 @@ draws (random-state recorder) and the piece's position each tick (read-only reco
   its turn in that tick. No record is known that shows it: the system is marked in the tick its
   piece ends (claim 13), and V11 records only its position and the tick its emission stops.
   Our engine places the system directly after its piece (design).
+- Loops that pass through links of another family are not covered by claim 29's rule: for example
+  a piece whose expiry, bounce or trailer animation leads into a loop of animations (S-0319), or
+  whose expiry damage destroys an object or an exploding overlay that throws pieces of the
+  piece's type again (S-0312 claim 4, S-0303 claim 19). Whether such a loop can close within one
+  pass is not established. A piece's end makes no warhead debris (claim 11), so a warhead's
+  debris list is reached from a piece only through such a destruction.
