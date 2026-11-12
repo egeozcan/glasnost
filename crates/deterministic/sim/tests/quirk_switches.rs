@@ -122,9 +122,21 @@ fn air_death_fall_follow_up_both_positions() {
     assert_eq!(after_air_death_fall(false), Some(Seq::AirDeathFall));
 }
 
-/// The soldier's positions over 40 ticks of a walk to `to`.
+/// A fast soldier's positions over 40 ticks of a walk to `to` (a fast
+/// one, so that one table step of the angle moves a step's truncation).
 fn walked(bias: bool, to: CellXY) -> Vec<Pos> {
-    let (mut w, id) = soldier(&[], |q| q.table_trig_negative_bias = bias);
+    let mut s = Scene::new();
+    s.infantry("SOLDIER", unit_type(FOOT, 60, 0));
+    s.ruleset.globals.quirks.table_trig_negative_bias = bias;
+    // spec: S-0208 Edge cases (quirks.walker_overshoot off: a step that would end 17 or more beyond its target ends on it, so a fast walker does not swing about its standing position)
+    s.ruleset.globals.quirks.walker_overshoot = false;
+    s.place_infantry(0, "SOLDIER", cell(0, 0), 0);
+    let mut w = s.build();
+    let id = common::objects_of(&w, Kind::Infantry)[0];
+    // Off its cell's centre, so that its first heading is none of the
+    // eight directions between cells.
+    let o = w.obj_mut(id).unwrap();
+    o.pos = Pos::new(o.pos.x + 37, o.pos.y + 11, o.pos.z);
     open_orders(&mut w);
     order_move(&mut w, id, to);
     (0..40)
@@ -135,15 +147,42 @@ fn walked(bias: bool, to: CellXY) -> Vec<Pos> {
         .collect()
 }
 
-// spec: S-0208 Edge cases (quirks.table_trig_negative_bias, S-0105 F1: θ is negative exactly for facings 16384 to 32767, so the switch can change some steps of walkers heading between map east and map south; it changes nothing for other headings) and S-0105 Edge cases (off: exact rounding)
+/// sinT of `half_steps` half table steps (I = `half_steps`, S-0105 F1)
+/// in a world whose ruleset sets the switch to `bias`.
+fn world_sin(bias: bool, half_steps: i64) -> glasnost_num::F64 {
+    use glasnost_num::{F64, Rounding};
+    let (w, _) = soldier(&[], |q| q.table_trig_negative_bias = bias);
+    let rz = Rounding::TowardZero;
+    // x = I / 2607, a little over I / 2607.594482421875, so trunc(x × 2607.594…) = I.
+    let x = F64::from_i64(half_steps, rz).div(F64::from_i64(2607, rz), rz);
+    glasnost_sim::table_trig::sin_q(&w, x, rz)
+}
+
+// spec: S-0105 F1 and Quirks (quirks.table_trig_negative_bias on: a negative I is rounded short; off: exact rounding; a non-negative I is the same in both positions)
 #[test]
 fn table_trig_negative_bias_both_positions() {
-    let south_east = [cell(5, 3), cell(4, 1), cell(3, 5), cell(6, 2), cell(2, 5)];
-    assert!(
-        south_east.iter().any(|&c| walked(true, c) != walked(false, c)),
-        "some walk between map east and map south takes a different step"
-    );
-    for c in [cell(-5, 3), cell(-4, -1), cell(3, -5)] {
+    assert_ne!(world_sin(true, -5), world_sin(false, -5));
+    assert_eq!(world_sin(true, 5), world_sin(false, 5));
+    assert_eq!(world_sin(true, -4), world_sin(false, -4));
+}
+
+// spec: S-0208 F3 and Edge cases (quirks.table_trig_negative_bias, S-0105 F1: θ is negative exactly for facings 16384 to 32767, so walks heading elsewhere take the same steps in both positions)
+#[test]
+fn table_trig_negative_bias_leaves_other_walks() {
+    for c in [cell(-12, 7), cell(-12, -3), cell(7, -12)] {
         assert_eq!(walked(true, c), walked(false, c), "{c:?}");
     }
+}
+
+// spec: S-0208 F3 (θ = (f̂ − 16383) × c₂ with quirks.table_direction on) and S-0105 F1 and Quirks (quirks.table_trig_negative_bias: only a negative I is rounded differently, so only facings 16384 to 32767 can step differently)
+#[test]
+fn table_trig_negative_bias_steps_by_facing() {
+    let mode = glasnost_num::Rounding::TowardZero;
+    let differs = |f: u16| {
+        glasnost_sim::walk::step_point_b(0, 0, f, 1000, true, mode, true)
+            != glasnost_sim::walk::step_point_b(0, 0, f, 1000, true, mode, false)
+    };
+    assert!((16384..=32767).any(differs));
+    assert!(!(0..16384).any(differs));
+    assert!(!(32768..=65535).any(differs));
 }

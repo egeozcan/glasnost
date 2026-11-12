@@ -18,10 +18,10 @@
 //! deploy-to-land landing request of S-0517 is the field
 //! [`JumpState::landing_request`], set and cleared by the deploy rules.
 
+use crate::table_trig::sin_q;
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_num::geom::{Facing, direction, eight_direction, root_floor};
-use glasnost_num::trig::sin_t;
 use glasnost_num::{F64, Rounding};
 use serde::{Deserialize, Serialize};
 
@@ -1328,7 +1328,7 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
         F64::ZERO
     };
     // spec: S-0502 F2 (h_d = trunc(sin φ′ × d + h_t), table sine)
-    let hd = sin_t(j.phi, mode)
+    let hd = sin_q(w, j.phi, mode)
         .mul(int(f.deviation, mode), mode)
         .add(int(j.ht, mode), mode)
         .to_i32_common();
@@ -1377,7 +1377,8 @@ pub fn step_position(w: &World, p: Pos, heading: Facing, v: i32, mode: Rounding)
     }
     if w.rules().quirks.jumpjet_step_truncation {
         // spec: S-0502 F5 and quirks.jumpjet_step_truncation (x′ = trunc(x + v cos θ), y′ = trunc(y − v sin θ), θ = (F_s − 16383) × (−2π / 65534), table trigonometry)
-        crate::walk::step_point(p.x, p.y, heading, v, true, mode)
+        let bias = crate::table_trig::bias(w);
+        crate::walk::step_point_b(p.x, p.y, heading, v, true, mode, bias)
     } else {
         // spec: S-0502 Edge cases (step truncation off: x′ = x + round(v sin α), y′ = y − round(v cos α), α = 2πF / 65536, rounding half away from zero, exact functions)
         let (sx, cy) = glasnost_num::bigmath::rounded_sin_cos(heading, v);

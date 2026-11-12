@@ -39,8 +39,16 @@ fn permadisguise_attack_cursor_both_positions() {
     }
     let (_, spy_on, other_on) = seen[0];
     let (_, spy_off, other_off) = seen[1];
-    assert_eq!(spy_on, Action::Attack, "switch on: the permanent disguiser passes");
-    assert_ne!(other_on, Action::Attack, "an ordinary disguised target fails");
+    assert_eq!(
+        spy_on,
+        Action::Attack,
+        "switch on: the permanent disguiser passes"
+    );
+    assert_ne!(
+        other_on,
+        Action::Attack,
+        "an ordinary disguised target fails"
+    );
     assert_eq!(other_on, other_off);
     assert_eq!(
         spy_off, other_off,

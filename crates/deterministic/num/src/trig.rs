@@ -36,14 +36,28 @@ pub fn tau(n: u32) -> F32 {
 /// The table index σ of an angle (S-0105 F1).
 // spec: S-0105 F1 (σ from I: half steps, 8192 steps, capped at 8191)
 pub fn table_index(x: F64, mode: Rounding) -> u32 {
+    table_index_b(x, mode, true)
+}
+
+/// The table index σ of an angle with `quirks.table_trig_negative_bias`
+/// at `bias` (S-0105 F1 and Quirks): on gives [`table_index`]; off rounds
+/// a negative angle to the nearest step, halves away from zero.
+// spec: S-0105 F1 and Quirks (quirks.table_trig_negative_bias; fixed: exact rounding)
+pub fn table_index_b(x: F64, mode: Rounding, bias: bool) -> u32 {
     // spec: S-0105 F1 (I = trunc(x × 2607.594482421875), half table steps)
     let i = x
         .mul(half_steps_per_radian(), mode)
         .trunc_i128()
         .unwrap_or(0);
-    // spec: S-0105 F1 (σ = min((trunc(I / 2) mod 8192) + (|I| mod 2), 8191))
-    let half = i / 2;
-    let s = half.rem_euclid(8192) + (i.abs() % 2);
+    let s = if i >= 0 || bias {
+        // spec: S-0105 F1 (σ = min((trunc(I / 2) mod 8192) + (|I| mod 2), 8191))
+        let half = i / 2;
+        half.rem_euclid(8192) + (i.abs() % 2)
+    } else {
+        // spec: S-0105 F1 and Quirks (switch off: ŝ = −(m + f) gives −m for f < 1/2 and the nearest −(m + 1) for f ≥ 1/2; with k = |I|, m = ⌊k / 2⌋ and f ≥ 1/2 exactly when k is odd)
+        let k = i.abs();
+        (-(k / 2 + k % 2)).rem_euclid(8192)
+    };
     s.min(8191) as u32
 }
 
@@ -61,8 +75,18 @@ pub fn sin_t(x: F64, mode: Rounding) -> F64 {
 
 /// cosT x (S-0105 F1).
 pub fn cos_t(x: F64, mode: Rounding) -> F64 {
+    cos_tb(x, mode, true)
+}
+
+/// sinT x with `quirks.table_trig_negative_bias` at `bias` (S-0105 F1).
+pub fn sin_tb(x: F64, mode: Rounding, bias: bool) -> F64 {
+    tau(table_index_b(x, mode, bias)).to_f64()
+}
+
+/// cosT x with `quirks.table_trig_negative_bias` at `bias` (S-0105 F1).
+pub fn cos_tb(x: F64, mode: Rounding, bias: bool) -> F64 {
     // spec: S-0105 F1 (cos x = τ(σ + 2048))
-    tau(table_index(x, mode) + 2048).to_f64()
+    tau(table_index_b(x, mode, bias) + 2048).to_f64()
 }
 
 /// The table arccosine of S-0306 F8: π/2 − A_s[trunc(2048 (x + 1))]; a
@@ -115,5 +139,27 @@ mod tests {
         // I = −5: m = 2, f = 1/2 → σ = −1 mod 8192 → 8191? trunc(−5/2) = −2, |I| mod 2 = 1.
         assert_eq!(table_index(neg(5), rz), (8192 - 2 + 1) as u32);
         assert_eq!(table_index(neg(1), rz), 1); // m = 0, f ≥ 1/2: +1 step
+    }
+
+    // spec: S-0105 F1 and Quirks (quirks.table_trig_negative_bias off: exact rounding of negative angles; non-negative ones unchanged)
+    #[test]
+    fn index_rounding_unbiased() {
+        let rz = Rounding::TowardZero;
+        let step = |k: i64| {
+            F64::from_i64(k, rz)
+                .div(half_steps_per_radian(), Rounding::Nearest)
+                .add(F64::from_parts(false, 1, -40, rz), rz)
+        };
+        for k in [0, 1, 4, 5, 16383] {
+            assert_eq!(table_index_b(step(k), rz, false), table_index(step(k), rz));
+        }
+        let neg = |k: i64| step(k).negated();
+        // I = −5: m = 2, f = 1/2 → the nearest −3 steps.
+        assert_eq!(table_index_b(neg(5), rz, false), 8192 - 3);
+        // I = −4: m = 2, f < 1/2 → −2 steps, as with the switch on.
+        assert_eq!(table_index_b(neg(4), rz, false), 8192 - 2);
+        assert_eq!(table_index(neg(4), rz), 8192 - 2);
+        // I = −1: m = 0, f ≥ 1/2 → −1 step instead of +1.
+        assert_eq!(table_index_b(neg(1), rz, false), 8191);
     }
 }

@@ -3,8 +3,8 @@
 //! claim 6); infantry deaths (S-0107 claim 17); terrain objects (S-0302
 //! claim 20).
 
+use crate::table_trig::{cos_q, sin_q};
 use glasnost_num::F64;
-use glasnost_num::trig::{cos_t, sin_t};
 
 use crate::combat::damage::{self, Hit};
 use crate::combat::data::WeaponId;
@@ -28,10 +28,10 @@ pub fn nearby_point(w: &World, q: Pos, r: i32, b: u32, snap: bool) -> Pos {
     let rd = F64::from_i64(i64::from(r), mode);
     // spec: S-0312 F2 (y′ = trunc(RZ₅₃(y − RZ₅₃(r × sin θ))), x′ = trunc(RZ₅₃(RZ₅₃(r × cos θ) + x)))
     let y = F64::from_i64(i64::from(q.y), mode)
-        .sub(rd.mul(sin_t(theta, mode), mode), mode)
+        .sub(rd.mul(sin_q(w, theta, mode), mode), mode)
         .to_i32_common();
     let x = rd
-        .mul(cos_t(theta, mode), mode)
+        .mul(cos_q(w, theta, mode), mode)
         .add(F64::from_i64(i64::from(q.x), mode), mode)
         .to_i32_common();
     let p = Pos::new(x, y, q.z);

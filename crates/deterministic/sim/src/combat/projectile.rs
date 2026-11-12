@@ -2,12 +2,13 @@
 //! cluster detonations, and the projectile effects of a detonation
 //! (S-0303 claims 21 and 22).
 
+use crate::table_trig::{cos_q, sin_q};
 use glasnost_map::CellXY;
 use glasnost_num::geom::{
     delta, direction, direction_constants, root_floor, table_angle_real, table_root,
     table_root_real,
 };
-use glasnost_num::trig::{acos_t, cos_t, sin_t};
+use glasnost_num::trig::acos_t;
 use glasnost_num::{F64, Rounding};
 
 use crate::combat::area::{self, Detonation, DetonationResult};
@@ -121,8 +122,8 @@ pub(crate) fn initial_velocity(w: &World, yaw: i32, pitch: i32, s: i32) -> [F64;
     // spec: S-0306 F1 (L = r(s₀²))
     let l = table_root((i64::from(s0) * i64::from(s0)) as u64, mode).to_f64();
     let ty = theta(yaw, mode);
-    let chx = cos_t(ty, mode).mul(l, mode);
-    let chy = sin_t(ty, mode).mul(l, mode).negated();
+    let chx = cos_q(w, ty, mode).mul(l, mode);
+    let chy = sin_q(w, ty, mode).mul(l, mode).negated();
     // spec: S-0306 F1 (M = r(RZ₅₃(χₓ² + χ_y²)))
     let m = table_root_real(
         chx.mul(chx, mode).add(chy.mul(chy, mode), mode),
@@ -130,11 +131,11 @@ pub(crate) fn initial_velocity(w: &World, yaw: i32, pitch: i32, s: i32) -> [F64;
         mode,
     );
     let tp = theta(pitch, mode);
-    let cp = cos_t(tp, mode);
+    let cp = cos_q(w, tp, mode);
     [
         cp.mul(chx, mode),
         cp.mul(chy, mode),
-        sin_t(tp, mode).mul(m, mode),
+        sin_q(w, tp, mode).mul(m, mode),
     ]
 }
 
@@ -274,10 +275,10 @@ fn scatter(w: &World, p: (i32, i32), sigma: i32, xi: i32) -> (i32, i32) {
     let s = f(i64::from(sigma), mode);
     // spec: S-0306 F5 (Qₓ = trunc(RZ₅₃(Pₓ + RZ₅₃(cos_t θ × σ))), Q_y = trunc(RZ₅₃(P_y − RZ₅₃(sin_t θ × σ))))
     let qx = f(i64::from(p.0), mode)
-        .add(cos_t(th, mode).mul(s, mode), mode)
+        .add(cos_q(w, th, mode).mul(s, mode), mode)
         .to_i32_common();
     let qy = f(i64::from(p.1), mode)
-        .sub(sin_t(th, mode).mul(s, mode), mode)
+        .sub(sin_q(w, th, mode).mul(s, mode), mode)
         .to_i32_common();
     (qx, qy)
 }
@@ -674,10 +675,10 @@ fn lead(w: &World, firer: ObjectId, target: ObjectId, aim: Pos) -> Pos {
     // spec: S-0306 F6 (aim = (trunc(RZ₅₃(x + RZ₅₃(cos_t θ(b) × ℓ))), trunc(RZ₅₃(y − RZ₅₃(sin_t θ(b) × ℓ))), z))
     Pos::new(
         f(i64::from(aim.x), mode)
-            .add(cos_t(th, mode).mul(lf, mode), mode)
+            .add(cos_q(w, th, mode).mul(lf, mode), mode)
             .to_i32_common(),
         f(i64::from(aim.y), mode)
-            .sub(sin_t(th, mode).mul(lf, mode), mode)
+            .sub(sin_q(w, th, mode).mul(lf, mode), mode)
             .to_i32_common(),
         aim.z,
     )
@@ -696,7 +697,7 @@ fn turn_step(w: &World, pr: &Projectile, rot: i32, near: bool) -> i32 {
     let two_pi = c1.mul(f(4, mode), mode);
     let angle = f(j, mode).mul(k15, mode).mul(two_pi, mode);
     // spec: S-0306 F7 (q = trunc(RZ₅₃(RZ₅₃(RZ₅₃(sin_t(...) × m) + (m + 1)) × ρ)))
-    let qv = sin_t(angle, mode)
+    let qv = sin_q(w, angle, mode)
         .mul(m, mode)
         .add(m.add(f(1, mode), mode), mode)
         .mul(f(i64::from(rot), mode), mode);
@@ -830,8 +831,8 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
         };
         let th = theta(yn, mode);
         v = [
-            cos_t(th, mode).mul(h, mode),
-            sin_t(th, mode).mul(h, mode).negated(),
+            cos_q(w, th, mode).mul(h, mode),
+            sin_q(w, th, mode).mul(h, mode).negated(),
             v[2],
         ];
         // F12: the pitch.
@@ -924,16 +925,16 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
 // spec: S-0306 F12 (three components)
 fn rebuild(w: &World, v: [F64; 3], pc: i32, pn: i32, m: F64) -> [F64; 3] {
     let mode = w.rules().mode;
-    let cpc = cos_t(theta(pc, mode), mode);
+    let cpc = cos_q(w, theta(pc, mode), mode);
     // spec: S-0306 F12 (Ĥᵢ = RZ₅₃(Vᵢ / cos_t θ(p_c)); rebuilt = (cos_t θ(p′) Ĥₓ, cos_t θ(p′) Ĥ_y, sin_t θ(p′) M))
     let hx = v[0].div(cpc, mode);
     let hy = v[1].div(cpc, mode);
     let tn = theta(pn, mode);
-    let cn = cos_t(tn, mode);
+    let cn = cos_q(w, tn, mode);
     [
         cn.mul(hx, mode),
         cn.mul(hy, mode),
-        sin_t(tn, mode).mul(m, mode),
+        sin_q(w, tn, mode).mul(m, mode),
     ]
 }
 

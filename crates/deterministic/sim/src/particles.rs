@@ -407,11 +407,11 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
     // nocite: our own input validation (#198): a marked particle does not split, and takes no draw, through a next-type link on a loop of particle types; Q-2999 asks what the game does
     if let Some(t) = ptype(w, &p)
         && let Some(next) = t.next
-        && let Some(looped) = w.rules().loops.particles.link(
-            Some(p.type_index as usize),
-            marked,
-            Some(next as usize),
-        )
+        && let Some(looped) =
+            w.rules()
+                .loops
+                .particles
+                .link(Some(p.type_index as usize), marked, Some(next as usize))
     {
         // spec: S-0616 F3 (d = ⌊ρ / 8⌋, rounding down; q = r rem d; o = q + d when q ≥ 1, else q − d; S-0205 claim 3 for d = 0)
         let dv = t.radius.div_euclid(RADIUS_DIVISOR);
@@ -754,8 +754,8 @@ pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
     };
     let theta = d(f - quarter, m).mul(crate::consts::TWO_PI.negated().div(d(full, m), m), m);
     let (cos, sin) = (
-        glasnost_num::trig::cos_t(theta, m),
-        glasnost_num::trig::sin_t(theta, m),
+        crate::table_trig::cos_q(w, theta, m),
+        crate::table_trig::sin_q(w, theta, m),
     );
     // spec: S-0616 F5 (target point = (trunc(Oₓ + cosₜ(θ) × d), trunc(Oᵧ − sinₜ(θ) × d), O_z), double precision throughout)
     let tx = d(i64::from(op.x), m)
@@ -777,6 +777,7 @@ pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
 pub fn swing(i: i32, m: Rounding) -> i32 {
     // spec: S-0616 F6 (V[i] = trunc(sinₜ(0.125 × i) × 12.0 + 0.49), argument and sum in double precision)
     let x = c("0.125").mul(d(i64::from(i), m), m);
+    // spec: S-0105 F1 (the argument is never negative here, so quirks.table_trig_negative_bias changes nothing)
     glasnost_num::trig::sin_t(x, m)
         .mul(c("12.0"), m)
         .add(c("0.49"), m)
@@ -795,6 +796,7 @@ pub fn step_direction(p: Pos, q: Pos, m: Rounding) -> usize {
     // spec: S-0616 F6 (q = (Pᵧ − Qᵧ) / (Qₓ − Pₓ) and t₈ = sinₜ(π/8) / cosₜ(π/8), double precision)
     let q_ = d(i64::from(up), m).div(d(i64::from(q.x) - i64::from(p.x), m), m);
     let eighth = crate::consts::TWO_PI.div(d(16, m), m); // spec: S-0616 F6 (π/8 = 2π / 16)
+    // spec: S-0105 F1 (π/8 is positive, so quirks.table_trig_negative_bias changes nothing)
     let t8 = glasnost_num::trig::sin_t(eighth, m).div(glasnost_num::trig::cos_t(eighth, m), m);
     let inv = d(1, m).div(t8, m);
     let pick = |a: usize, b: usize| if right { a } else { b };

@@ -168,6 +168,11 @@ pub struct InfantryState {
     /// 11, S-0215 claim 11): [`watch_set`] and [`watch_test`].
     #[serde(default)]
     pub watch: Option<Target>,
+    /// Whether the current kind's declared direction has been snapped
+    /// since it started (S-0107 claim 9; read only with
+    /// quirks.repeat_direction_snap off).
+    #[serde(default)]
+    pub snapped: bool,
 }
 
 impl InfantryState {
@@ -352,7 +357,11 @@ pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
     if q == Seq::GoProne && !crawls {
         return false;
     }
-    let resulting = substitute(w, id, q);
+    let mut resulting = substitute(w, id, q);
+    // spec: S-0107 claim 7 and Edge cases (quirks.unchecked_substitute on: a substitute is started even when its entry has C = 0; off: the requested kind is kept instead)
+    if !w.rules().quirks.unchecked_substitute && resulting != q && count(w, id, resulting) == 0 {
+        resulting = q;
+    }
     let wet = on_wet(w, id);
     let Some(s) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) else {
         return false;
@@ -376,6 +385,7 @@ pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
     };
     s.seq = Some(resulting);
     s.seq_t0 = tick;
+    s.snapped = false;
     // spec: S-0107 Terms (the prone state begins with go-prone and ends with get-up or deploy)
     match resulting {
         Seq::GoProne => s.prone = true,
@@ -597,6 +607,8 @@ pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress:
             Some(Seq::Deploy) => Some(Seq::Deployed),
             Some(Seq::Undeploy) => Some(Seq::Stand),
             Some(Seq::AirDeathStart) => Some(Seq::AirDeathFall),
+            // spec: S-0107 claim 21 and Edge cases (quirks.air_death_fall_generic_follow_up off: a completed air-death-fall has no follow-up and plays on until air-death-end replaces it; on: the general follow-up below)
+            Some(Seq::AirDeathFall) if !w.rules().quirks.air_death_fall_generic_follow_up => None,
             Some(Seq::Die1 | Seq::Die2 | Seq::Die3 | Seq::Die4 | Seq::Die5)
             | Some(Seq::WetDie1 | Seq::WetDie2 | Seq::AirDeathEnd)
             | Some(Seq::Parachute) => None,
@@ -633,13 +645,19 @@ pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress:
                     | Seq::Shovel
             )
         );
+        // spec: S-0107 claim 9 and Edge cases (quirks.repeat_direction_snap on: a completed kind that stays current snaps again on every tick; off: once per start of the kind)
+        let repeat = w.rules().quirks.repeat_direction_snap;
         if generic
+            && (repeat || !s.snapped)
             && let Some(q) = cur
             && let Some(d) = entry_dir(w, id, q)
         {
             // spec: S-0107 claim 9 (body facing set at once to D × 8192)
             if let Some(o) = w.obj_mut(id) {
                 o.body.set(u16::from(d) * 8192, tick, keeps);
+                if let Some(st) = o.infantry.as_mut() {
+                    st.snapped = true;
+                }
             }
         }
         if let Some(q) = follow {

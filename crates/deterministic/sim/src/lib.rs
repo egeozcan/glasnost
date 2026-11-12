@@ -85,6 +85,7 @@ pub mod strike;
 pub mod structures;
 pub mod superweapons;
 pub mod surface;
+pub mod table_trig;
 pub mod targeting;
 pub mod teleport;
 pub mod temporal;

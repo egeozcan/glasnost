@@ -89,7 +89,10 @@ pub struct Quirks {
     // spec: S-0204 claim 8
     #[serde(default = "on")]
     pub table_direction: bool,
-    /// The building reduction applies only to the second object of a distance.
+    /// The building reduction applies only to the second object of a distance. Not consulted:
+    /// the only distance our simulation takes between two objects that a building can be the first
+    /// of is the area-guard leash (S-0215 F4), and only infantry and vehicles keep an area guard,
+    /// so β of the first object is 0 and both positions give the same distance (#327).
     // spec: S-0204 claim 7
     #[serde(default = "on")]
     pub one_sided_building_distance: bool,
@@ -118,6 +121,9 @@ pub struct Quirks {
     #[serde(default = "on")]
     pub set_facing_keeps_target: bool,
     /// A turret-less track-class body turn that passes exactly through its target's direction stops there.
+    /// Not consulted: claim 16 is not built, so the body turn goes on to its own target facing in
+    /// both positions (the off position) until Q-3001 says at which point of the tick the test is
+    /// made (#327).
     // spec: S-0206 claim 16
     #[serde(default = "on")]
     pub track_body_turn_stops_at_target: bool,
@@ -188,7 +194,9 @@ pub struct Quirks {
     // spec: S-0107 claim 14; S-0208
     #[serde(default = "on")]
     pub cow_idle: bool,
-    /// Infantry facing groups are skewed 1024 facing units counter-clockwise.
+    /// Infantry facing groups are skewed 1024 facing units counter-clockwise. Not consulted by the
+    /// simulation: the facing group picks a drawn frame only, and the map view applies the skew
+    /// (`infantry_frame`) with no off position yet (#327).
     // spec: S-0107 claim 3
     #[serde(default = "on")]
     pub infantry_facing_sector_skew: bool,
@@ -228,11 +236,13 @@ pub struct Quirks {
     // spec: S-0107 claim 21
     #[serde(default = "on")]
     pub air_death_fall_generic_follow_up: bool,
-    /// Only the type's first idle comment sound is used.
+    /// Only the type's first idle comment sound is used. Not consulted: the simulation reports no
+    /// idle comments (docs/development.md), so neither position changes anything yet (#327).
     // spec: S-0107 claim 14
     #[serde(default = "on")]
     pub first_comment_only: bool,
-    /// At most two sound cues per sequence entry.
+    /// At most two sound cues per sequence entry. Not consulted: sequence sound cues are not
+    /// imported into the simulation rules, so neither position changes anything yet (#327).
     // spec: S-0107 claim 22
     #[serde(default = "on")]
     pub two_sound_cues: bool,
@@ -313,7 +323,8 @@ pub struct Quirks {
     // spec: S-0211 claim 11
     #[serde(default = "on")]
     pub passability_wheel_column: bool,
-    /// Laser-fence sections leave the passability category alone.
+    /// Laser-fence sections leave the passability category alone. Not consulted: its off position
+    /// needs an active laser-fence section, and section states are not modelled (#327).
     // spec: S-0211 claim 11
     #[serde(default = "on")]
     pub passability_laser_fence_lost: bool,
@@ -329,7 +340,10 @@ pub struct Quirks {
     // spec: S-0010 claim 5; S-0406 claim 3 (d) (the naval range, formerly S-0211 claim 13)
     #[serde(default = "on")]
     pub unset_role_range: bool,
-    /// A role naming the first missing tileset starts at the tile count.
+    /// A role naming the first missing tileset starts at the tile count. Not consulted by the
+    /// simulation: the importer applies it with its own copy (`convert::theater::TheaterQuirks`),
+    /// so this field is listed in [`EXTERNAL_QUIRKS`] too; it stays so that rulesets naming it
+    /// still load (#327).
     // spec: S-0010 claim 4
     #[serde(default = "on")]
     pub role_one_past_end: bool,
@@ -605,7 +619,8 @@ pub struct Quirks {
     // spec: S-0215 claim 10
     #[serde(default = "on")]
     pub refused_override_retargets: bool,
-    /// The deploy area-fire rule singles out one infantry type by name.
+    /// The deploy area-fire rule singles out one infantry type by name. Not consulted: the
+    /// area-fire part of S-0215 claim 30 is not built (`process.rs`) (#327).
     // spec: S-0215 claim 30
     #[serde(default = "on")]
     pub named_deploy_area_fire: bool,
@@ -617,7 +632,8 @@ pub struct Quirks {
     // spec: S-0009 claim 6
     #[serde(default = "on")]
     pub stale_fill_tiles: bool,
-    /// An observer's drawn position is handed to the next player needing one.
+    /// An observer's drawn position is handed to the next player needing one. Not consulted:
+    /// observer positions are not built (a recorded seam, docs/m5-claims/S-0412.md row 7) (#327).
     // spec: S-0009 claim 22
     #[serde(default = "on")]
     pub observer_position_handoff: bool,
@@ -1950,7 +1966,7 @@ pub struct Quirks {
     // spec: S-0518 claim 10 and Edge cases
     #[serde(default = "on")]
     pub prism_count_survives_dropped_shot: bool,
-    /// Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged.
+    /// Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged. Not consulted by the simulation: the importer applies it with its own copy (`convert::layers::LayerQuirks`, listed in [`EXTERNAL_QUIRKS`]); the field stays so that rulesets naming it still load (#327).
     // spec: S-0518 claim 16, F4 and Edge cases
     #[serde(default = "on")]
     pub prism_modifier_reread_scale: bool,
@@ -4402,6 +4418,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "prism_modifier_reread_scale",
         "importer (convert::layers::LayerQuirks), S-0518 claim 16",
+    ),
+    (
+        "role_one_past_end",
+        "importer (convert::theater::TheaterQuirks), S-0010 claim 4",
     ),
     (
         "red_normalisation_divisor",

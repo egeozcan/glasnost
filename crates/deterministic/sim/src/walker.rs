@@ -312,7 +312,16 @@ fn run(w: &World, wk: &mut Walker, d: Pos) {
         q.table_direction,
     );
     // spec: S-0615 F3 (signed facing, θ = (s − 16383) × (−2π / 65534), x′ = trunc(x + 18 cos θ), y′ = trunc(y − 18 sin θ); S-0208 F3's step with s = 18)
-    let (x, y) = crate::walk::step_point(wk.pos.x, wk.pos.y, f, STEP, true, r.mode);
+    // spec: S-0105 F1 (quirks.table_trig_negative_bias)
+    let (x, y) = crate::walk::step_point_b(
+        wk.pos.x,
+        wk.pos.y,
+        f,
+        STEP,
+        true,
+        r.mode,
+        q.table_trig_negative_bias,
+    );
     let z = height(w, x, y, wk.pos.z);
     wk.pos = Pos::new(x, y, z);
 }
