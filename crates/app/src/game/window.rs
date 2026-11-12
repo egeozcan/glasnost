@@ -895,8 +895,9 @@ impl GpuDraw {
         serial: u64,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<(), String> {
-        // A game's scene only grows: upload what it gained, or all of it for
-        // a new game or when the atlas is full.
+        // Upload what the game's scene gained or rewrote (the atlas grows
+        // when full), or all of it for a new game or when the atlas is at the
+        // device's limit (design: render (#105)).
         let start = self.lap();
         let synced = match self.map.as_mut() {
             Some(m) if m.serial == serial => m.renderer.sync(device, queue, &s.scene).is_ok(),

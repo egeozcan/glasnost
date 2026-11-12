@@ -267,6 +267,20 @@ impl Scene {
         true
     }
 
+    /// Replaces image `id` in place with `image` of any size, and records
+    /// the rewrite; an uploader moves it when its size changed (design:
+    /// render (#104, #105)). A 0 × 0 `image` releases the old one's pixels.
+    /// Returns false, changing nothing, when there is no such image.
+    pub fn resize_image(&mut self, id: u32, image: IndexedImage) -> bool {
+        let Some(old) = self.images.get_mut(id as usize) else {
+            return false;
+        };
+        *old = image;
+        self.rewrites += 1;
+        self.rewritten.insert(id, self.rewrites);
+        true
+    }
+
     /// The images the scene holds (those with pixels) and their pixels:
     /// the benchmark's gauges (#105).
     pub fn held(&self) -> (usize, u64) {

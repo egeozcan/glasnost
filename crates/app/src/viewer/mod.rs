@@ -438,9 +438,10 @@ impl Gfx {
     /// it.
     fn render_map(&mut self, r: &map_pane::GpuRequest) -> Result<egui::TextureId, String> {
         use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
-        // A scene of the same generation only grows (images and palette
-        // rows added for the live objects): upload what it gained, or the
-        // whole scene again when the atlas is full.
+        // A scene of the same generation gains images and palette rows for
+        // the live objects: upload what it gained (the atlas grows when
+        // full), or the whole scene again when the atlas is at the device's
+        // limit (design: render (#105)).
         let synced = match self.map.as_mut() {
             Some(m) if m.generation == r.generation => {
                 match m.renderer.sync(&self.device, &self.queue, &r.scene) {

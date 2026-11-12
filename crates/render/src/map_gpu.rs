@@ -87,83 +87,205 @@ impl Slot {
     }
 }
 
-/// A shelf packer over layers of `side × side`.
-#[derive(Clone, Copy, Debug)]
-struct Packer {
-    side: u32,
-    x: u32,
-    y: u32,
-    shelf: u32,
-    layer: u32,
+/// The height of the shelves that take an image `h` rows tall, in layers
+/// of `side` rows: 8, 12, 16, 24, 32, 48 and so on, so a shelf is at most
+/// half again as tall as an image it takes (design: render (#105)).
+fn shelf_class(h: u32, side: u32) -> u32 {
+    let mut c = 8u32;
+    loop {
+        if h <= c {
+            return c.min(side);
+        }
+        if h <= c + c / 2 {
+            return (c + c / 2).min(side);
+        }
+        c *= 2;
+    }
 }
 
-impl Packer {
-    fn new(side: u32) -> Self {
-        Self {
+/// Puts span `(x, w)` back into the sorted, disjoint `spans`, merged with
+/// its neighbours.
+fn insert_span(spans: &mut Vec<(u32, u32)>, (x, w): (u32, u32)) {
+    let i = spans.partition_point(|&(sx, _)| sx < x);
+    spans.insert(i, (x, w));
+    if i + 1 < spans.len() && spans[i].0 + spans[i].1 == spans[i + 1].0 {
+        spans[i].1 += spans[i + 1].1;
+        spans.remove(i + 1);
+    }
+    if i > 0 && spans[i - 1].0 + spans[i - 1].1 == spans[i].0 {
+        spans[i - 1].1 += spans[i].1;
+        spans.remove(i);
+    }
+}
+
+/// One shelf: its height class and its free column spans `(x, w)`, sorted.
+#[derive(Clone, Debug)]
+struct Shelf {
+    height: u32,
+    free: Vec<(u32, u32)>,
+}
+
+/// The atlas's allocator over layers of `side × side` (design: render
+/// (#105)): shelves of height classes, first fit over the layers, each
+/// shelf with free spans that are merged when an image leaves, and an
+/// emptied shelf gives its rows back to its layer.
+#[derive(Clone, Debug)]
+struct Shelves {
+    side: u32,
+    /// The free row spans `(y, h)` of each layer, sorted.
+    gaps: Vec<Vec<(u32, u32)>>,
+    /// The shelves by layer and top row.
+    shelves: std::collections::BTreeMap<(u32, u32), Shelf>,
+    /// The shelves with a free span, by height class.
+    open: std::collections::BTreeMap<u32, std::collections::BTreeSet<(u32, u32)>>,
+}
+
+impl Shelves {
+    fn new(side: u32, layers: u32) -> Self {
+        let mut s = Self {
             side,
-            x: 0,
-            y: 0,
-            shelf: 0,
-            layer: 0,
+            gaps: Vec::new(),
+            shelves: Default::default(),
+            open: Default::default(),
+        };
+        s.set_layers(layers);
+        s
+    }
+
+    /// Places into `layers` layers: more, or fewer when those left out hold
+    /// no shelf.
+    fn set_layers(&mut self, layers: u32) {
+        let keep = layers.max(self.used_layers()) as usize;
+        self.gaps.truncate(keep);
+        while self.gaps.len() < keep {
+            self.gaps.push(vec![(0, self.side)]);
         }
     }
 
-    /// The slot of the next `w × h` rectangle, or `None` when it exceeds a
-    /// layer.
+    /// One past the last layer holding a shelf.
+    fn used_layers(&self) -> u32 {
+        self.shelves.keys().next_back().map_or(0, |&(l, _)| l + 1)
+    }
+
+    /// Atlas pixels in shelves.
+    fn committed(&self) -> u64 {
+        self.shelves
+            .values()
+            .map(|s| u64::from(s.height) * u64::from(self.side))
+            .sum()
+    }
+
+    /// A place for a `w` × `h` image, `None` when there is none (or the
+    /// image is empty or larger than a layer).
     fn place(&mut self, w: u32, h: u32) -> Option<Slot> {
         let side = self.side;
-        if w > side || h > side {
+        if w == 0 || h == 0 || too_large(w, h, side) {
             return None;
         }
-        if self.x + w > side {
-            self.x = 0;
-            self.y += self.shelf;
-            self.shelf = 0;
+        let class = shelf_class(h, side);
+        let mut found = None;
+        if let Some(set) = self.open.get(&class) {
+            for &at in set {
+                let shelf = &self.shelves[&at];
+                if let Some(i) = shelf.free.iter().position(|&(_, fw)| fw >= w) {
+                    found = Some((at, i));
+                    break;
+                }
+            }
         }
-        if self.y + h > side {
-            self.layer += 1;
-            self.x = 0;
-            self.y = 0;
-            self.shelf = 0;
+        if let Some((at, i)) = found {
+            let shelf = self.shelves.get_mut(&at).expect("an open shelf");
+            let (x, fw) = shelf.free[i];
+            if fw == w {
+                shelf.free.remove(i);
+            } else {
+                shelf.free[i] = (x + w, fw - w);
+            }
+            if shelf.free.is_empty()
+                && let Some(set) = self.open.get_mut(&class)
+            {
+                set.remove(&at);
+            }
+            return Some(Slot {
+                x,
+                y: at.1,
+                layer: at.0,
+            });
         }
-        let slot = Slot {
-            x: self.x,
-            y: self.y,
-            layer: self.layer,
+        let (layer, i) = self.gaps.iter().enumerate().find_map(|(layer, gaps)| {
+            gaps.iter()
+                .position(|&(_, gh)| gh >= class)
+                .map(|i| (layer, i))
+        })?;
+        let gaps = &mut self.gaps[layer];
+        let (y, gh) = gaps[i];
+        if gh == class {
+            gaps.remove(i);
+        } else {
+            gaps[i] = (y + class, gh - class);
+        }
+        let at = (layer as u32, y);
+        let free = if w < side {
+            vec![(w, side - w)]
+        } else {
+            Vec::new()
         };
-        self.x += w;
-        self.shelf = self.shelf.max(h);
-        Some(slot)
+        if !free.is_empty() {
+            self.open.entry(class).or_default().insert(at);
+        }
+        self.shelves.insert(
+            at,
+            Shelf {
+                height: class,
+                free,
+            },
+        );
+        Some(Slot {
+            x: 0,
+            y,
+            layer: layer as u32,
+        })
     }
 
-    /// Layers in use.
-    fn layers(&self) -> u32 {
-        self.layer + 1
+    /// Gives back the place of a `w` wide image at `slot`.
+    fn free(&mut self, slot: Slot, w: u32) {
+        let at = (slot.layer, slot.y);
+        let side = self.side;
+        let Some(shelf) = self.shelves.get_mut(&at) else {
+            return;
+        };
+        insert_span(&mut shelf.free, (slot.x, w));
+        let class = shelf.height;
+        if shelf.free == [(0, side)] {
+            self.shelves.remove(&at);
+            if let Some(set) = self.open.get_mut(&class) {
+                set.remove(&at);
+            }
+            if let Some(gaps) = self.gaps.get_mut(slot.layer as usize) {
+                insert_span(gaps, (slot.y, class));
+            }
+        } else {
+            self.open.entry(class).or_default().insert(at);
+        }
     }
 }
 
-/// Packs rectangles into layers of `side × side` with shelves, tallest
-/// first. Returns the slots and the packer, which places later rectangles
-/// after them. A rectangle wider or taller than a layer gets
-/// [`Slot::ABSENT`] (design: render (#108)).
-fn pack(sizes: &[(u32, u32)], side: u32) -> (Vec<Slot>, Packer) {
+/// Packs rectangles into layers of `side × side`, tallest first, into
+/// shelves of at most `max_layers` layers. Returns the slots and the
+/// allocator, which places later rectangles around them. An empty
+/// rectangle, or one wider or taller than a layer, gets [`Slot::ABSENT`]
+/// (design: render (#108)); so does one that finds no place.
+fn pack(sizes: &[(u32, u32)], side: u32, max_layers: u32) -> (Vec<Slot>, Shelves) {
     let mut order: Vec<usize> = (0..sizes.len()).collect();
     order.sort_by_key(|&i| std::cmp::Reverse(sizes[i].1));
-    let mut slots = vec![
-        Slot {
-            x: 0,
-            y: 0,
-            layer: 0
-        };
-        sizes.len()
-    ];
-    let mut packer = Packer::new(side);
+    let mut slots = vec![Slot::ABSENT; sizes.len()];
+    let mut shelves = Shelves::new(side, max_layers);
     for i in order {
         let (w, h) = sizes[i];
         // design: render (#108): an image larger than a layer is left out, not the whole upload
-        slots[i] = packer.place(w, h).unwrap_or(Slot::ABSENT);
+        slots[i] = shelves.place(w, h).unwrap_or(Slot::ABSENT);
     }
-    (slots, packer)
+    (slots, shelves)
 }
 
 /// Whether a `w` × `h` image is wider or taller than a layer of `side`;
@@ -172,18 +294,10 @@ fn too_large(w: u32, h: u32, side: u32) -> bool {
     w > side || h > side
 }
 
-/// The slot of a `w` × `h` image added after the upload, in an atlas of
-/// `layers` layers: [`Slot::ABSENT`] for an image larger than a layer, an
-/// error when the atlas is full.
-fn place_later(packer: &mut Packer, w: u32, h: u32, layers: u32) -> Result<Slot, UploadError> {
-    if too_large(w, h, packer.side) {
-        // design: render (#108): left out with no place used, so no rebuild follows
-        return Ok(Slot::ABSENT);
-    }
-    packer
-        .place(w.max(1), h.max(1))
-        .filter(|s| s.layer < layers)
-        .ok_or_else(|| UploadError("the atlas is full".into()))
+/// The layers an atlas of `layers` grows to, at most `max`: half again,
+/// at least two more (design: render (#105)).
+fn grown_layers(layers: u32, max: u32) -> u32 {
+    layers.saturating_add((layers / 2).max(2)).min(max)
 }
 
 /// Warns about the images of `placed` (size and slot) that got no slot in
@@ -319,12 +433,17 @@ pub struct MapRenderer {
     instances: wgpu::Buffer,
     instance_capacity: usize,
     slots: Vec<Slot>,
+    /// The size of each image of [`Scene::images`] as it was placed: a
+    /// rewrite at another size moves it (design: render (#105)).
+    sizes: Vec<(u32, u32)>,
     /// Atlas slots of [`Scene::signed`].
     signed_slots: Vec<Slot>,
     rows_per_column: u32,
     atlas: wgpu::Texture,
     atlas_layers: u32,
-    packer: Packer,
+    /// The device's limit on the atlas's layers.
+    max_layers: u32,
+    shelves: Shelves,
     row_count: usize,
     /// The scene's [`Scene::rewrites`] when last uploaded or synced.
     rewrites_seen: u64,
@@ -387,71 +506,54 @@ impl MapRenderer {
         let limits = device.limits();
         let side = limits.max_texture_dimension_2d.min(side).max(1);
         // Indexed images, then the signed companion depth images (their bytes
-        // are the two's complement values).
+        // are the two's complement values). An empty image (a released one,
+        // design: render (#104)) takes no place.
         let sizes: Vec<(u32, u32)> = scene
             .images
             .iter()
-            .map(|i| (i.width().max(1), i.height().max(1)))
+            .map(|i| (i.width(), i.height()))
+            .chain(scene.signed.iter().map(|i| (i.width, i.height)))
+            .collect();
+        let max_layers = limits.max_texture_array_layers.max(1);
+        let (mut slots, mut shelves) = pack(&sizes, side, max_layers);
+        warn_absent(sizes.iter().copied().zip(slots.iter().copied()), side);
+        let unplaced = sizes
+            .iter()
+            .zip(&slots)
+            .filter(|&(&(w, h), s)| w > 0 && h > 0 && !too_large(w, h, side) && !s.present())
+            .count();
+        if unplaced > 0 {
+            return Err(UploadError(format!(
+                "{unplaced} images find no place in {max_layers} atlas layers"
+            )));
+        }
+        let signed_slots = slots.split_off(scene.images.len());
+        let sizes: Vec<(u32, u32)> = sizes[..scene.images.len()].to_vec();
+        // On the GL backends a one-layer texture is a plain 2D texture and
+        // cannot be viewed as an array, so the atlas always has two layers.
+        // Spare layers take images added later: half again, at least
+        // SPARE_LAYERS (design: render (#105)).
+        let used = shelves.used_layers();
+        let layers = used
+            .saturating_add((used / 2).max(SPARE_LAYERS))
+            .min(max_layers)
+            .max(2);
+        shelves.set_layers(layers);
+        let atlas_texture = atlas_texture(device, side, layers);
+        // design: render (#105): each image written on its own, with no staging copy of the whole atlas
+        let images = scene
+            .images
+            .iter()
+            .map(|i| (i.width(), i.height(), i.pixels()))
             .chain(
                 scene
                     .signed
                     .iter()
-                    .map(|i| (i.width.max(1), i.height.max(1))),
-            )
-            .collect();
-        let (mut slots, packer) = pack(&sizes, side);
-        warn_absent(sizes.iter().copied().zip(slots.iter().copied()), side);
-        let signed_slots = slots.split_off(scene.images.len());
-        let layers = packer.layers();
-        if layers > limits.max_texture_array_layers {
-            return Err(UploadError(format!(
-                "the scene needs {layers} atlas layers; the device allows {}",
-                limits.max_texture_array_layers
-            )));
+                    .map(|i| (i.width, i.height, bytemuck::cast_slice::<i8, u8>(&i.values))),
+            );
+        for ((w, h, pixels), &slot) in images.zip(slots.iter().chain(&signed_slots)) {
+            write_image(queue, &atlas_texture, slot, w, h, pixels);
         }
-        // On the GL backends a one-layer texture is a plain 2D texture and
-        // cannot be viewed as an array, so the atlas always has two layers.
-        // Spare layers take images added later.
-        let layers = (layers + SPARE_LAYERS)
-            .min(limits.max_texture_array_layers)
-            .max(2);
-        let mut atlas = vec![0u8; side as usize * side as usize * layers as usize];
-        let images = scene.images.iter().map(|i| (i.width(), i.pixels())).chain(
-            scene
-                .signed
-                .iter()
-                .map(|i| (i.width, bytemuck::cast_slice::<i8, u8>(&i.values))),
-        );
-        for ((width, pixels), slot) in images.zip(slots.iter().chain(&signed_slots)) {
-            let base = slot.layer as usize * side as usize * side as usize;
-            let width = width as usize;
-            if width == 0 || !slot.present() {
-                continue;
-            }
-            for (row, src) in pixels.chunks_exact(width).enumerate() {
-                let dst = base + (slot.y as usize + row) * side as usize + slot.x as usize;
-                atlas[dst..dst + src.len()].copy_from_slice(src);
-            }
-        }
-        let atlas_texture = device.create_texture_with_data(
-            queue,
-            &wgpu::TextureDescriptor {
-                label: Some("map atlas"),
-                size: wgpu::Extent3d {
-                    width: side,
-                    height: side,
-                    depth_or_array_layers: layers,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R8Uint,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            },
-            wgpu::util::TextureDataOrder::LayerMajor,
-            &atlas,
-        );
         let (rows_texture, rows_per_column) =
             rows_texture(device, queue, scene, row_side(device), target_format)?;
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -619,11 +721,13 @@ impl MapRenderer {
             instances,
             instance_capacity,
             slots,
+            sizes,
             signed_slots,
             rows_per_column,
             atlas: atlas_texture,
             atlas_layers: layers,
-            packer,
+            max_layers,
+            shelves,
             row_count: scene.rows.len(),
             rewrites_seen: scene.rewrites,
             target_format,
@@ -645,23 +749,24 @@ impl MapRenderer {
 
     /// How full the atlas and the row texture are now.
     pub fn atlas_use(&self) -> AtlasUse {
-        let p = &self.packer;
-        let side = u64::from(p.side);
         AtlasUse {
-            side: p.side,
+            side: self.shelves.side,
             layers: self.atlas_layers,
-            committed_px: u64::from(p.layer) * side * side + u64::from(p.y + p.shelf) * side,
+            committed_px: self.shelves.committed(),
             rows: self.row_count,
         }
     }
 
     /// Uploads what `scene` gained since the upload or the last sync: images
     /// appended to [`Scene::images`] go into the atlas's free space, images
-    /// rewritten in place ([`Scene::replace_image`]) are written again into
-    /// their own slots, and palette rows appended to [`Scene::rows`]
-    /// replace the row texture. Images and rows already uploaded must
-    /// otherwise be unchanged. Fails when the atlas is full (or the scene
-    /// lost images); upload the scene anew then.
+    /// rewritten in place ([`Scene::replace_image`], [`Scene::resize_image`])
+    /// are written again, into their own slots or, at another size, into
+    /// new ones (their old places are freed), and palette rows appended to
+    /// [`Scene::rows`] replace the row texture. Images and rows already
+    /// uploaded must otherwise be unchanged. When nothing fits, the atlas
+    /// grows (design: render (#105)). Fails when it cannot grow any more
+    /// (the device's layer limit) or the scene lost images; upload the
+    /// scene anew then, which packs only the images it holds.
     pub fn sync(
         &mut self,
         device: &wgpu::Device,
@@ -676,23 +781,44 @@ impl MapRenderer {
                 if at <= self.rewrites_seen {
                     continue;
                 }
-                let (Some(&slot), Some(img)) =
-                    (self.slots.get(id as usize), scene.images.get(id as usize))
-                else {
+                let i = id as usize;
+                let (Some(&slot), Some(img)) = (self.slots.get(i), scene.images.get(i)) else {
                     continue;
                 };
-                self.write(queue, slot, img.width(), img.height(), img.pixels());
+                let size = (img.width(), img.height());
+                if size == self.sizes[i] {
+                    self.write(queue, slot, size.0, size.1, img.pixels());
+                    continue;
+                }
+                // design: render (#105): a rewrite at another size leaves its place for a new one
+                if slot.present() {
+                    self.shelves.free(slot, self.sizes[i].0);
+                }
+                self.slots[i] = Slot::ABSENT;
+                self.sizes[i] = size;
+                let slot = self.place(device, queue, scene, size)?;
+                self.slots[i] = slot;
+                self.write(queue, slot, size.0, size.1, img.pixels());
             }
             self.rewrites_seen = scene.rewrites;
         }
-        for img in &scene.images[self.slots.len()..] {
-            let slot = self.upload(queue, img.width(), img.height(), img.pixels())?;
-            self.slots.push(slot);
+        for i in self.slots.len()..scene.images.len() {
+            let img = &scene.images[i];
+            let size = (img.width(), img.height());
+            // Unplaced while it finds a place, so a growth leaves it out.
+            self.slots.push(Slot::ABSENT);
+            self.sizes.push(size);
+            let slot = self.place(device, queue, scene, size)?;
+            self.slots[i] = slot;
+            self.write(queue, slot, size.0, size.1, img.pixels());
         }
-        for img in &scene.signed[self.signed_slots.len()..] {
+        for i in self.signed_slots.len()..scene.signed.len() {
+            let img = &scene.signed[i];
+            self.signed_slots.push(Slot::ABSENT);
+            let slot = self.place(device, queue, scene, (img.width, img.height))?;
+            self.signed_slots[i] = slot;
             let bytes = bytemuck::cast_slice::<i8, u8>(&img.values);
-            let slot = self.upload(queue, img.width, img.height, bytes)?;
-            self.signed_slots.push(slot);
+            self.write(queue, slot, img.width, img.height, bytes);
         }
         if scene.rows.len() != self.row_count {
             let (rows, per_column) =
@@ -715,18 +841,83 @@ impl MapRenderer {
         Ok(())
     }
 
-    /// Places a `w` × `h` image of bytes `pixels` in the atlas's free space.
-    fn upload(
+    /// A place in the atlas for a `size` image: [`Slot::ABSENT`] for an
+    /// empty image or one larger than a layer (with a warning), else a
+    /// free place, growing the atlas when there is none (design: render
+    /// (#105)).
+    fn place(
         &mut self,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
-        w: u32,
-        h: u32,
-        pixels: &[u8],
+        scene: &Scene,
+        (w, h): (u32, u32),
     ) -> Result<Slot, UploadError> {
-        let slot = place_later(&mut self.packer, w, h, self.atlas_layers)?;
-        warn_absent([((w, h), slot)], self.packer.side);
-        self.write(queue, slot, w, h, pixels);
-        Ok(slot)
+        let side = self.shelves.side;
+        if w == 0 || h == 0 {
+            return Ok(Slot::ABSENT);
+        }
+        if too_large(w, h, side) {
+            // design: render (#108): left out with no place used, so no rebuild follows
+            warn_absent([((w, h), Slot::ABSENT)], side);
+            return Ok(Slot::ABSENT);
+        }
+        loop {
+            if let Some(slot) = self.shelves.place(w, h) {
+                return Ok(slot);
+            }
+            self.grow(device, queue, scene)?;
+        }
+    }
+
+    /// Grows the atlas by [`grown_layers`]: a new texture into which every
+    /// placed image is written again from `scene`, into its own slot. The
+    /// slots, pipelines, row texture and targets stay (design: render
+    /// (#105)). Fails at the device's layer limit.
+    fn grow(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        scene: &Scene,
+    ) -> Result<(), UploadError> {
+        let layers = grown_layers(self.atlas_layers, self.max_layers);
+        if layers <= self.atlas_layers {
+            return Err(UploadError(format!(
+                "the atlas is full at the device's limit of {} layers",
+                self.max_layers
+            )));
+        }
+        let side = self.shelves.side;
+        let atlas = atlas_texture(device, side, layers);
+        for (i, &slot) in self.slots.iter().enumerate() {
+            let img = &scene.images[i];
+            // An image rewritten at another size and not yet moved is written
+            // when it is.
+            if (img.width(), img.height()) == self.sizes[i] {
+                self.stats.uploads += 1;
+                self.stats.upload_bytes += u64::from(img.width()) * u64::from(img.height());
+                write_image(queue, &atlas, slot, img.width(), img.height(), img.pixels());
+            }
+        }
+        for (img, &slot) in scene.signed.iter().zip(&self.signed_slots) {
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += u64::from(img.width) * u64::from(img.height);
+            let bytes = bytemuck::cast_slice::<i8, u8>(&img.values);
+            write_image(queue, &atlas, slot, img.width, img.height, bytes);
+        }
+        self.shelves.set_layers(layers);
+        self.atlas = atlas;
+        self.atlas_layers = layers;
+        self.bind_group = bind_group(
+            device,
+            &self.layout,
+            &self.view_buffer,
+            &self.atlas,
+            &self.rows,
+            &self.alpha.0,
+            &self.backdrop,
+        );
+        log::info!("the battlefield atlas grew to {layers} layers of {side} × {side}");
+        Ok(())
     }
 
     /// Writes a `w` × `h` image of bytes `pixels` into the atlas at `slot`.
@@ -734,29 +925,7 @@ impl MapRenderer {
         if w > 0 && h > 0 && slot.present() {
             self.stats.uploads += 1;
             self.stats.upload_bytes += u64::from(w) * u64::from(h);
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &self.atlas,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: slot.x,
-                        y: slot.y,
-                        z: slot.layer,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                pixels,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(w),
-                    rows_per_image: Some(h),
-                },
-                wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-            );
+            write_image(queue, &self.atlas, slot, w, h, pixels);
         }
     }
 
@@ -1340,6 +1509,62 @@ fn backdrop_texture(device: &wgpu::Device, size: (u32, u32)) -> wgpu::Texture {
     })
 }
 
+/// An empty atlas texture of `layers` layers of `side` × `side`.
+fn atlas_texture(device: &wgpu::Device, side: u32, layers: u32) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("map atlas"),
+        size: wgpu::Extent3d {
+            width: side,
+            height: side,
+            depth_or_array_layers: layers,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Uint,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
+}
+
+/// Writes a `w` × `h` image of bytes `pixels` into `atlas` at `slot`; an
+/// empty or unplaced image writes nothing.
+fn write_image(
+    queue: &wgpu::Queue,
+    atlas: &wgpu::Texture,
+    slot: Slot,
+    w: u32,
+    h: u32,
+    pixels: &[u8],
+) {
+    if w == 0 || h == 0 || !slot.present() {
+        return;
+    }
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: atlas,
+            mip_level: 0,
+            origin: wgpu::Origin3d {
+                x: slot.x,
+                y: slot.y,
+                z: slot.layer,
+            },
+            aspect: wgpu::TextureAspect::All,
+        },
+        pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w),
+            rows_per_image: Some(h),
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
+}
+
 /// The palette-row texture of `scene` and its rows per column.
 fn rows_texture(
     device: &wgpu::Device,
@@ -1544,48 +1769,127 @@ mod tests {
         assert_eq!(passes(Vec::new(), &[]).len(), 1);
     }
 
-    #[test]
-    fn shelf_packing_fits() {
-        let (slots, packer) = pack(&[(10, 10), (5, 12), (10, 10)], 16);
-        assert_eq!(slots.len(), 3);
-        assert!(slots.iter().all(|s| s.present()));
-        assert!(packer.layers() >= 2);
+    /// Whether no two of `placed` (slot and size) overlap.
+    fn apart(placed: &[(Slot, (u32, u32))]) -> bool {
+        placed.iter().enumerate().all(|(i, (a, (aw, ah)))| {
+            placed[i + 1..].iter().all(|(b, (bw, bh))| {
+                a.layer != b.layer
+                    || a.x + aw <= b.x
+                    || b.x + bw <= a.x
+                    || a.y + ah <= b.y
+                    || b.y + bh <= a.y
+            })
+        })
     }
 
     #[test]
-    fn later_images_go_after_the_packed_ones() {
-        let (slots, mut packer) = pack(&[(10, 10), (5, 12)], 16);
-        let next = packer.place(6, 4).unwrap();
-        // The new slot overlaps none of the first ones.
-        for (s, (w, h)) in slots.iter().zip([(10, 10), (5, 12)]) {
-            let apart = s.layer != next.layer
-                || next.x >= s.x + w
-                || s.x >= next.x + 6
-                || next.y >= s.y + h
-                || s.y >= next.y + 4;
-            assert!(apart, "{s:?} and {next:?} overlap");
+    fn shelf_packing_fits() {
+        let sizes = [(10, 10), (5, 12), (10, 10)];
+        let (slots, shelves) = pack(&sizes, 16, 8);
+        assert!(slots.iter().all(|s| s.present()));
+        assert!(shelves.used_layers() >= 2);
+        let placed: Vec<_> = slots.into_iter().zip(sizes).collect();
+        assert!(apart(&placed));
+    }
+
+    #[test]
+    fn later_images_go_around_the_packed_ones() {
+        let sizes = [(10, 10), (5, 12)];
+        let (slots, mut shelves) = pack(&sizes, 16, 8);
+        let next = shelves.place(6, 4).unwrap();
+        let mut placed: Vec<_> = slots.into_iter().zip(sizes).collect();
+        placed.push((next, (6, 4)));
+        assert!(apart(&placed));
+    }
+
+    /// design: render (#105): shelf heights are classes, at most half again
+    /// an image's height.
+    #[test]
+    fn shelf_classes() {
+        let classes: Vec<u32> = [1, 8, 9, 12, 13, 16, 17, 24, 25, 33, 49, 100, 4000]
+            .iter()
+            .map(|&h| shelf_class(h, 4096))
+            .collect();
+        assert_eq!(
+            classes,
+            [8, 8, 12, 12, 16, 16, 24, 24, 32, 48, 64, 128, 4096]
+        );
+        assert_eq!(shelf_class(40, 40), 40, "never taller than a layer");
+    }
+
+    /// design: render (#105): a freed place is used again, spans merge, and
+    /// an emptied shelf gives its rows back to its layer.
+    #[test]
+    fn freed_places_are_used_again() {
+        let mut s = Shelves::new(32, 1);
+        let a = s.place(10, 8).unwrap();
+        let b = s.place(10, 8).unwrap();
+        let c = s.place(12, 8).unwrap();
+        assert_eq!((a.y, b.y, c.y), (0, 0, 0));
+        assert!(
+            s.place(4, 8).is_some_and(|d| d.y == 8),
+            "the first shelf is full"
+        );
+        s.free(b, 10);
+        s.free(a, 10);
+        // The merged span of a and b takes a 20-wide image.
+        assert_eq!(
+            s.place(20, 7),
+            Some(Slot {
+                x: 0,
+                y: 0,
+                layer: 0
+            })
+        );
+        let tall = Shelves::new(32, 1).committed();
+        assert_eq!(tall, 0);
+        let mut t = Shelves::new(32, 1);
+        let x = t.place(32, 32).unwrap();
+        assert!(t.place(1, 1).is_none(), "full");
+        t.free(x, 32);
+        assert_eq!(t.committed(), 0, "the emptied shelf is gone");
+        assert!(t.place(32, 24).is_some() && t.place(32, 8).is_some());
+    }
+
+    /// design: render (#105): images of mixed heights arriving in turn keep
+    /// to their own shelves.
+    #[test]
+    fn mixed_heights_keep_to_their_classes() {
+        let mut s = Shelves::new(256, 4);
+        let mut placed = Vec::new();
+        for _ in 0..64 {
+            for size in [(8, 64), (8, 8)] {
+                placed.push((s.place(size.0, size.1).unwrap(), size));
+            }
         }
+        assert!(apart(&placed));
+        assert_eq!(s.committed(), (2 * 64 + 2 * 8) * 256);
     }
 
     /// design: render (#108): an image wider or taller than an atlas layer
-    /// gets no slot and fails nothing, at the upload as later; the others
-    /// are placed as before, and a full atlas is still an error.
+    /// gets no slot and fails nothing; the others are placed as before.
     #[test]
     fn an_image_larger_than_a_layer_gets_no_slot() {
-        let (slots, mut packer) = pack(&[(10, 10), (17, 1), (5, 12), (4, 20)], 16);
+        let (slots, mut shelves) = pack(&[(10, 10), (17, 1), (5, 12), (4, 20), (0, 3)], 16, 8);
         assert!(slots[0].present() && slots[2].present());
         assert_eq!(slots[1], Slot::ABSENT);
         assert_eq!(slots[3], Slot::ABSENT);
-        let mut unchanged = packer;
-        assert_eq!(place_later(&mut packer, 17, 1, 8), Ok(Slot::ABSENT));
-        assert_eq!(place_later(&mut packer, 1, 17, 8), Ok(Slot::ABSENT));
-        assert_eq!(
-            place_later(&mut packer, 6, 4, 8),
-            Ok(unchanged.place(6, 4).unwrap())
-        );
-        let mut full = Packer::new(16);
-        assert!(place_later(&mut full, 16, 16, 1).is_ok());
-        assert!(place_later(&mut full, 16, 16, 1).is_err());
+        assert_eq!(slots[4], Slot::ABSENT, "an empty image takes no place");
+        assert_eq!(shelves.place(17, 1), None);
+        assert_eq!(shelves.place(1, 17), None);
+        let mut full = Shelves::new(16, 1);
+        assert!(full.place(16, 16).is_some());
+        assert!(full.place(16, 16).is_none());
+    }
+
+    /// design: render (#105): an atlas grows by half again, at least two
+    /// layers, up to the device's limit.
+    #[test]
+    fn grown_layers_follow_the_limit() {
+        assert_eq!(grown_layers(2, 256), 4);
+        assert_eq!(grown_layers(8, 256), 12);
+        assert_eq!(grown_layers(250, 256), 256);
+        assert_eq!(grown_layers(256, 256), 256);
     }
 
     #[test]

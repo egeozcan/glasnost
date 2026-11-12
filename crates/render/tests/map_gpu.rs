@@ -422,6 +422,40 @@ fn a_full_atlas_grows_in_sync() {
     assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
 }
 
+/// design: render (#104, #105): an image rewritten at another size
+/// (`Scene::resize_image`) moves to a new place, and a released one (0 × 0)
+/// frees its place for later images; the result matches the CPU reference.
+#[test]
+fn resized_and_released_images_move_and_free_their_places() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let spare = s.add_image(image(40, 40, 9));
+    let mut r = MapRenderer::with_side(
+        &device,
+        &queue,
+        &s,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+        64,
+    )
+    .expect("scene uploads");
+    let before = r.atlas_use();
+    // The tall and flat images (2 and 3) change size; the spare one goes.
+    assert!(s.resize_image(2, image(25, 40, 61)));
+    assert!(s.resize_image(3, image(40, 14, 62)));
+    assert!(s.resize_image(spare, IndexedImage::new(0, 0, Vec::new()).unwrap()));
+    r.sync(&device, &queue, &s).expect("the rewrites fit");
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+    // The spare image's place is free again: as many images of its size fit
+    // with no growth.
+    let id = s.add_image(image(40, 40, 10));
+    s.items.push(flat_item(id, 70, 20));
+    r.sync(&device, &queue, &s).expect("the new image fits");
+    assert_eq!(r.atlas_use().layers, before.layers, "no growth");
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
 /// design: render (#105): images added later are packed by height class,
 /// not in arrival order: tall and short images arriving in turn do not
 /// leave every shelf as tall as the tall ones.
