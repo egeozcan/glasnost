@@ -310,7 +310,9 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
 
 /// spec: S-0102 claim 13 (an infantry body or a vehicle drawn as a sprite with h not 0:
 /// −L(z) − 12 and −L(z) − 2, U does not apply; the own shadow image frame only while h = 0),
-/// claim 14 (U only at h = 0; cliff factor 0 for a unit on a bridge, D9 Map C), claim 21 (#95)
+/// claim 14 (U only at h = 0; cliff factor 0 for a unit on a bridge deck, D9 Map C; Q-3008: a
+/// unit off a deck, on a low bridge or under a high bridge as on open ground, D9 maps D and E,
+/// takes the cliff rows), claim 21 (#95)
 #[test]
 fn sprite_bodies_in_the_air_and_on_a_deck_leave_the_cliff_fudge() {
     use glasnost_render::projection::height_lift;

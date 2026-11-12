@@ -4214,7 +4214,7 @@ impl<'a> Builder<'a> {
         let own = level(0).unwrap_or(0);
         // spec: S-0102 claim 14 (a cell is high when more than 3 levels above the unit's cell)
         let high = |dx: i32| level(dx).is_some_and(|l| l - own > CLIFF_LEVELS);
-        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker; a unit on a bridge: 0, D9 Map C a high bridge's deck; a low bridge is Q-3008)
+        // spec: S-0102 claim 14 (cliff factor, quirks.cliff_fudge_far_cliff_weaker; 0 only for a unit on a bridge deck; a unit on a low bridge or under a high bridge takes the other rows, as on open ground)
         let factor = if deck {
             0
         } else {
@@ -4626,8 +4626,10 @@ impl<'a> Builder<'a> {
             // spec: S-0102 claim 22 (a turret vehicle: its shadow, U − 2, lies under the combined
             // image and never darkens it, so it goes first); S-0105 claim 12 (One image: the
             // vehicle's own shadow is drawn before the composed image and keeps its own row)
-            // design: render (#95) claim 22 sets no height condition for this shadow, so it is kept at every height, at U − 2 (Q-3007)
-            items.extend(shadow_item(self, u - 2));
+            // spec: S-0102 claim 22 (in our engine under claim 21's three conditions: only while the height above the surface is 0, at U − 2 there, never with the no-shadow or either visceroid flag)
+            if m.above == 0 {
+                items.extend(shadow_item(self, u - 2));
+            }
             // A sprite frame as a part placed relative to the draw point (S-0102 F6).
             let sprite_part = |b: &mut Self, f: usize| {
                 b.sprite_frame(sprite, f)
