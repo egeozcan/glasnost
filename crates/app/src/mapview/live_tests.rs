@@ -3687,30 +3687,33 @@ fn aircraft_attitude_is_drawn() {
     );
 }
 
-/// spec: S-0105 claims 7, 8, 10 and 42 (the turret and barrel of a type with the turret flag are
-/// placed on the body transform D, here a flying body's pitched and banked one); claim 26 (an
-/// image is reused only for the same pose). design: render (#82) their images under an attitude
-/// are kept apart from the level ones (Q-2983).
+/// spec: S-0105 claim 45 (Q-2983: an aircraft-kind object draws no turret and no barrel, in any
+/// attitude, level, banked, as a rocket or crashing, whatever its turret flag; a vehicle with the
+/// turret flag draws both, the control)
 #[test]
-fn an_aircraft_turret_follows_its_attitude() {
+fn claim_45_aircraft_draw_no_turret_or_barrel() {
     use glasnost_convert::art::TypeArt;
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
     let rules = format!(
-        "{RULES}[AircraftTypes]\n1=JETX\n[JETX]\nTurret=yes\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
+        "{RULES}[CARX]\nTurret=yes\n[AircraftTypes]\n1=JETX\n[JETX]\nTurret=yes\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
     );
     let (mut import, catalogue, mut assets) = context_with(&rules);
+    let voxels = || -> std::collections::BTreeMap<String, Vec<u8>> {
+        [
+            ("body".to_string(), b"jetx.vxl".to_vec()),
+            ("turret".to_string(), b"jetxtur.vxl".to_vec()),
+            ("barrel".to_string(), b"jetxbarl.vxl".to_vec()),
+        ]
+        .into()
+    };
     import.arts.insert(
         (Kind::Aircraft, 0),
         TypeArt {
-            voxels: [
-                ("body".to_string(), b"jetx.vxl".to_vec()),
-                ("turret".to_string(), b"jetxtur.vxl".to_vec()),
-                ("barrel".to_string(), b"jetxbarl.vxl".to_vec()),
-            ]
-            .into(),
+            voxels: voxels(),
             ..Default::default()
         },
     );
+    import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap().voxels = voxels();
     for name in [&b"jetx.vxl"[..], b"jetxtur.vxl", b"jetxbarl.vxl"] {
         assets.insert(
             name,
@@ -3743,27 +3746,21 @@ fn an_aircraft_turret_follows_its_attitude() {
     };
     let (built, mut painter) = build_parts(&inputs, true);
     let mut scene: Scene = built.scene;
-    let craft = |height: i32, turn: i32| Mobile {
-        kind: Kind::Aircraft,
+    let craft = |kind: Kind, attitude: Attitude| Mobile {
+        kind,
         idx: 0,
         owner: b"Neutral".to_vec(),
         pos: (3 * 256 + 128, 3 * 256 + 128, 1500),
         body: 16384,
         turret: 20480,
-        elevation: 16384,
+        elevation: 14336,
         anim: 0,
         infantry: None,
         object: sim_code(ObjectId(5)),
         harvesting: None,
         shadow: None,
         alternative: false,
-        attitude: Attitude::Flying {
-            height,
-            speed: 0.75f64.to_bits(),
-            turn,
-            crashing: false,
-            tumble: (0, 0),
-        },
+        attitude,
         disabled: false,
         above: 0,
         protection: None,
@@ -3773,7 +3770,19 @@ fn an_aircraft_turret_follows_its_attitude() {
         walk: Default::default(),
         deck: false,
     };
-    // The lit images drawn, body first: the body, then the turret and the barrel.
+    let flying = |height: i32, turn: i32, crashing: bool| Attitude::Flying {
+        height,
+        speed: 0.75f64.to_bits(),
+        turn,
+        crashing,
+        tumble: (0.3f32.to_bits(), 1.2f32.to_bits()),
+    };
+    let rocket = |pitch: f32| Attitude::Rocket {
+        pitch: pitch.to_bits(),
+        initial: 0.25f32.to_bits(),
+        final_: 0.75f32.to_bits(),
+    };
+    // The lit images drawn, body first.
     let mut images = |m: Mobile| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         entries[0]
@@ -3783,20 +3792,20 @@ fn an_aircraft_turret_follows_its_attitude() {
             .map(|i| i.image)
             .collect::<Vec<_>>()
     };
-    let banked = images(craft(10, 1));
-    let level = images(craft(0, 0));
-    assert_eq!(banked.len(), 3, "body, turret and barrel: {banked:?}");
-    assert_eq!(level.len(), 3, "body, turret and barrel: {level:?}");
-    assert_ne!(banked[0], level[0], "the body is drawn banked");
-    for k in 1..3 {
-        assert_ne!(
-            banked[k], level[k],
-            "a banked turret part is not the level one"
-        );
+    let control = images(craft(Kind::Vehicles, Attitude::None));
+    assert_eq!(control.len(), 3, "the control's body, turret and barrel: {control:?}");
+    for (what, attitude) in [
+        ("on the ground", Attitude::None),
+        ("level", flying(0, 0, false)),
+        ("banked", flying(10, 1, false)),
+        ("pitched", flying(10, 0, false)),
+        ("a rocket", rocket(0.7)),
+        ("a level rocket", rocket(0.0)),
+        ("crashing", flying(10, 0, true)),
+    ] {
+        let drawn = images(craft(Kind::Aircraft, attitude));
+        assert_eq!(drawn.len(), 1, "{what}: the body alone, {drawn:?}");
     }
-    // Each attitude reuses its own images.
-    assert_eq!(images(craft(10, 1)), banked);
-    assert_eq!(images(craft(0, 0)), level);
 }
 
 /// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405
