@@ -152,6 +152,10 @@ const RALLY_AHEAD: i32 = 3; // nocite: tuning of our own opponent
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 
+/// Ticks a done building waits on its line for a cell before the house
+/// cancels it (design: own AI, #40).
+const PLACE_PATIENCE: i32 = 900; // nocite: tuning of our own opponent
+
 /// The tick before which no wave goes: the house builds up and defends
 /// first (M8 step A4 round 8, the lead's note 52; in the quick lane the
 /// first pushes came from about tick 6600 before, so this stops only a rush
@@ -939,6 +943,46 @@ impl Script {
             .or_else(|| self.place_cell(w, t))
     }
 
+    /// Places a done building of the house, on a think tick or between
+    /// thinks alike: the first, line by line, that [`Script::done_cell`]
+    /// finds a cell for, so that a done defence on its own line is placed
+    /// while a building no cell takes waits on another. With `give_up` (a
+    /// think tick), a done building that has had no cell for
+    /// [`PLACE_PATIENCE`] ticks is cancelled, its line emptied of the type
+    /// and its cost refunded (S-0404 claim 6), as a person cancels a
+    /// building that fits nowhere and builds something else. Returns
+    /// whether the house has a done building.
+    // design: own AI (#40): only the first done building was looked at, and one with no cell waited on its line for good, so that nothing else was built
+    pub(crate) fn place_done(&self, w: &World, give_up: bool, out: &mut Vec<Order>) -> bool {
+        let done: Vec<(TypeRef, i32)> = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == self.house)
+            .filter_map(|l| {
+                let item = l.item.as_ref()?;
+                (item.t.kind == Kind::Building).then_some((item.t, item.done_tick?))
+            })
+            .collect();
+        let mut placed = false;
+        for &(t, at) in &done {
+            let cell = if placed { None } else { self.done_cell(w, t) };
+            if let Some(cell) = cell {
+                // One a think: two placed at once may ask for the same cell.
+                placed = true;
+                out.push(Order::Place {
+                    what: t,
+                    cell: Some(cell),
+                });
+            } else if give_up && !placed && w.tick - at >= PLACE_PATIENCE {
+                // spec: S-0404 claim 6 (a done item is cancelled and refunded; the cancel-all order also empties a queued copy)
+                out.push(Order::CancelAll { what: t });
+            }
+        }
+        !done.is_empty()
+    }
+
     /// The tech-climb building the script ordered in the current think, if
     /// any: the one Build order a special building of the brain replaces.
     /// Another role-less building's Build order (a held item's resume, a
@@ -1381,7 +1425,12 @@ impl Script {
             .into_iter()
             .filter(|&t| self.allowed(w, t, Role::Army) && !self.buildable(w, t))
             .filter_map(|t| self.unblocker(w, t, CLIMB_DEPTH))
-            .min_by_key(|&b| (production::cost_field(w, b), b.index))
+            .map(|b| (production::cost_field(w, b), b.index, b))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|(_, _, b)| b)
+            // design: own AI (#40): the cheapest with a cell now, so that a building no cell takes is not ordered again after its cancel
+            .find(|&b| self.placeable(w, b))
     }
 
     /// The credits the house earned over the last whole window of
@@ -1768,7 +1817,12 @@ impl Script {
                     .map(Role::Factory)
                     .filter(|&f| self.of_role(w, f).is_empty()),
             )
-            .find(|&r| !self.candidates(w, r).is_empty())
+            // design: own AI (#40): a role none of whose types has a cell now does not hold up the roles after it (`build` orders only a type with a cell)
+            .find(|&r| {
+                self.candidates(w, r)
+                    .into_iter()
+                    .any(|t| self.placeable(w, t))
+            })
     }
 
     /// The refinery type the house rebuilds before anything else, when it
@@ -2000,20 +2054,9 @@ impl Script {
         mark("ai:script:buildings");
         // 2 and 3. Buildings: a done building is placed first; otherwise the
         // next wanted one is ordered.
-        let done = w.econ.lines.lines.iter().find_map(|l| {
-            let item = l.item.as_ref()?;
-            (l.house == house && item.t.kind == Kind::Building && item.done_tick.is_some())
-                .then_some(item.t)
-        });
-        if let Some(t) = done {
-            mark("ai:script:buildings:done");
-            if let Some(cell) = self.done_cell(w, t) {
-                out.push(Order::Place {
-                    what: t,
-                    cell: Some(cell),
-                });
-            }
-        } else if !selling || self.refinery_lost(w).is_some() {
+        mark("ai:script:buildings:done");
+        let placing = self.place_done(w, true, &mut out);
+        if !placing && (!selling || self.refinery_lost(w).is_some()) {
             // design: a house selling out still rebuilds a lost refinery
             // its harvesters wait for (`Script::refinery_lost`, M8 step B8).
             mark("ai:script:buildings:wanted");
