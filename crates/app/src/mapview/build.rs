@@ -6484,6 +6484,10 @@ impl Painter {
         (out, b.built.notes)
     }
 
+    /// Ends a redraw of the live game's objects: the transient images no
+    /// redraw has used for a while are released (design: render (#104)).
+    pub fn end_redraw(&mut self, _scene: &mut Scene) {}
+
     /// The number of scene images the debris pieces' slots hold, in use or
     /// free.
     pub fn piece_images(&self) -> usize {
