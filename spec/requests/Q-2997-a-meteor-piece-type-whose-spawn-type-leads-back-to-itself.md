@@ -1,8 +1,9 @@
 ---
 id: Q-2997
 title: What does a meteor debris piece type do whose spawn type leads back to itself?
-status: open
+status: answered
 related: [S-0317, S-0203]
+answered-by: [S-0317]
 ---
 
 ## Need
