@@ -1629,27 +1629,10 @@ impl<'a> Builder<'a> {
     }
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
-        let tint = match self.p.effect_tint {
-            // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour
-            // palettes); Formulas, "Map value storage" (‰ = hundredths × 10)
-            Some(t) => t.map(|c| c * 10),
-            // spec: S-0104 claim 3 (otherwise the house-colour palettes are shaded with white light)
-            None => WHITE,
-        };
-        let (base, n) = match self.p.rows.houses.get(&(hsv, tint)) {
-            Some(r) => *r,
-            None => {
-                let pal = house_palette(&self.palettes.unit, hsv);
-                // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
-                let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
-                let base = self.built.scene.rows.len();
-                for row in &t {
-                    self.built.scene.add_row(row565(row));
-                }
-                self.p.rows.houses.insert((hsv, tint), (base, t.len()));
-                (base, t.len())
-            }
-        };
+        let tint = self.p.house_tint();
+        let (base, n) =
+            self.p
+                .house_table_in(&mut self.built.scene, self.palettes, hsv, tint);
         // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
         Shade::new(base, n, brightness)
     }
@@ -6155,6 +6138,78 @@ impl Painter {
         Shade::new(base, n, b)
     }
 
+    /// The tint (‰) the house-colour tables are shaded with now.
+    fn house_tint(&self) -> [i32; 3] {
+        match self.effect_tint {
+            // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour
+            // palettes); Formulas, "Map value storage" (‰ = hundredths × 10)
+            Some(t) => t.map(|c| c * 10),
+            // spec: S-0104 claim 3 (otherwise the house-colour palettes are shaded with white light)
+            None => WHITE,
+        }
+    }
+
+    /// The first row and row count of colour definition `hsv`'s house
+    /// table shaded with tint `tint` (‰), adding its rows to `scene` the
+    /// first time.
+    fn house_table_in(
+        &mut self,
+        scene: &mut Scene,
+        palettes: &PaletteState,
+        hsv: [u8; 3],
+        tint: [i32; 3],
+    ) -> (usize, usize) {
+        if let Some(r) = self.rows.houses.get(&(hsv, tint)) {
+            return *r;
+        }
+        let pal = house_palette(&palettes.unit, hsv);
+        // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
+        let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
+        let base = scene.rows.len();
+        for row in &t {
+            scene.add_row(row565(row));
+        }
+        self.rows.houses.insert((hsv, tint), (base, t.len()));
+        (base, t.len())
+    }
+
+    /// Shades the house-colour drawings of `items` again with the tint the
+    /// house-colour tables show now (S-0104 claims 3 and 5; set by
+    /// [`Painter::set_effect_tint`]): each drawing shaded by a house table
+    /// of another tint takes the same colour definition's table of today's
+    /// tint, keeping its brightness and protection mask. For the drawings
+    /// kept from frame to frame, the static objects of the cell pass among
+    /// them (#75). Returns whether any drawing changed.
+    pub fn retint_houses(&mut self, inputs: &Inputs, scene: &mut Scene, items: &mut [Item]) -> bool {
+        let tint = self.house_tint();
+        let others: BTreeMap<u32, [u8; 3]> = self
+            .rows
+            .houses
+            .iter()
+            .filter(|((_, t), _)| *t != tint)
+            .map(|((hsv, _), &(base, _))| (base as u32, *hsv))
+            .collect();
+        if others.is_empty() {
+            return false;
+        }
+        let mut changed = false;
+        for item in items {
+            let (Paint::Lit(shade) | Paint::LitDiamond(shade) | Paint::Translucent(shade, _)) =
+                &mut item.paint
+            else {
+                continue;
+            };
+            let Some(&hsv) = others.get(&shade.base) else {
+                continue;
+            };
+            let (base, n) = self.house_table_in(scene, inputs.palettes, hsv, tint);
+            shade.base = base as u32;
+            shade.rows = n as u16;
+            changed = true;
+        }
+        changed
+    }
+
     /// Relights the game's view to the simulation's global lighting
     /// (S-0104 claims 4, 5 and 9; `glasnost_sim::lighting`): every cell
     /// at current ambient `ambient` with the chosen set `set`'s level
@@ -6166,10 +6221,11 @@ impl Painter {
     /// set's terms and its tint as the map tint, which stands in for claim
     /// 5's retint of the tile shade tables and claim 9's incremental update
     /// (the house-colour tables take the effect tint by
-    /// [`Painter::set_effect_tint`]);
-    /// claim 10's and claim 16's height terms and the static objects of
-    /// the cell pass are not followed (a seam of the view, not of the
-    /// game).
+    /// [`Painter::set_effect_tint`], and the drawings kept from frame to
+    /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
+    /// and claim 16's height terms and the cell light of the static objects
+    /// of the cell pass are not followed, and neither is the tint of their
+    /// named palettes (a seam of the view, not of the game).
     pub fn relight(
         &mut self,
         inputs: &Inputs,

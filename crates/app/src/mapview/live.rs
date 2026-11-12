@@ -401,6 +401,9 @@ pub struct Live {
     /// The game's global lighting the cell pass was last lit with: the
     /// current ambient and the chosen set (S-0104 claims 4 and 5).
     lit: (i32, glasnost_sim::lighting::Choice),
+    /// The effect tint (hundredths) the kept drawings' house-colour tables
+    /// were last shaded with, `None` for none (S-0104 claims 3 and 5, #75).
+    house_tint: Option<[i32; 3]>,
     /// Static objects ([`Built::objects`] indices) left out of the cell
     /// pass, as last drawn: buildings whose simulation object is gone, the
     /// map's gates (drawn live) and the overlays of cells that changed.
@@ -1294,6 +1297,8 @@ impl Live {
                 inputs.map.lighting.normal.ambient,
                 glasnost_sim::lighting::Choice::Normal,
             ),
+            // spec: S-0104 claim 3 (with no effect the house-colour tables were shaded with white light)
+            house_tint: None,
             gone: BTreeSet::new(),
             live_gates,
             map_start,
@@ -3553,7 +3558,27 @@ impl Live {
                 .relight(inputs, scene, &mut self.cell_pass, key.0, set);
             self.lit = key;
         }
-        if gone != self.gone || relit {
+        // The effect tint changed: the drawings kept from frame to frame
+        // (the cell pass, the static objects' layer entries and the changed
+        // overlays) take the house-colour tables of the new tint, as the
+        // live objects do when they are next drawn (#75).
+        // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour palettes)
+        let house_tint = glasnost_sim::lighting::tint(&self.world);
+        let retinted = house_tint != self.house_tint;
+        if retinted {
+            self.painter
+                .retint_houses(inputs, scene, &mut self.cell_pass);
+            for g in &mut self.static_ground {
+                self.painter.retint_houses(inputs, scene, &mut g.items);
+            }
+            for (_, g) in &mut self.static_layered {
+                self.painter.retint_houses(inputs, scene, &mut g.items);
+            }
+            self.painter
+                .retint_houses(inputs, scene, &mut self.live_overlays);
+            self.house_tint = house_tint;
+        }
+        if gone != self.gone || relit || retinted {
             scene.items.clear();
             scene.items.extend(
                 self.cell_pass
