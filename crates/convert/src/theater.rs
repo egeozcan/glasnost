@@ -192,6 +192,19 @@ pub struct Tileset {
     pub allow_burrowing: bool,
     /// The allow-tiberium flag (S-0010 claim 16, S-0401 claim 10).
     pub allow_tiberium: bool,
+    /// The shadow-caster flag (S-0010 claim 18, `ShadowCaster`).
+    pub shadow_caster: bool,
+    /// The shadow-tile count (S-0010 claim 18, `ShadowTiles`).
+    pub shadow_tiles: i32,
+}
+
+impl Tileset {
+    /// Whether the tileset casts shadows (S-0010 claim 18; S-0104 claims 13
+    /// and 19).
+    pub fn casts_shadows(&self) -> bool {
+        // spec: S-0010 claim 18 (only when both the shadow-caster flag is set and the shadow-tile count is not 0)
+        self.shadow_caster && self.shadow_tiles != 0
+    }
 }
 
 /// A theater's catalogue.
@@ -306,6 +319,8 @@ impl Catalogue {
                     .value(b"AllowBurrowing")
                     .and_then(value::boolean)
                     .unwrap_or(true),
+                shadow_caster: false,
+                shadow_tiles: 0,
             });
             first = first.saturating_add(count.max(0));
         }
@@ -865,6 +880,42 @@ mod tests {
         let (cat, _) = c.tile_catalogue(&images, &|_| None);
         let refused: Vec<bool> = cat.tiles.iter().map(|t| t.no_burrowing).collect();
         assert_eq!(refused, [false, true, true, false]);
+    }
+
+    /// spec: S-0010 claim 18 and Import mapping (`ShadowCaster`, boolean, absent: no;
+    /// `ShadowTiles`, integer, absent: 0; a tileset casts shadows only with the flag set and a
+    /// count other than 0)
+    #[test]
+    fn claim_18_shadow_casting_tilesets() {
+        let d = doc(
+            "[TileSet0000]\nTilesInSet=1\n\
+             [TileSet0001]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=3\n\
+             [TileSet0002]\nTilesInSet=1\nShadowCaster=yes\n\
+             [TileSet0003]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=0\n\
+             [TileSet0004]\nTilesInSet=1\nShadowCaster=no\nShadowTiles=3\n\
+             [TileSet0005]\nTilesInSet=1\nShadowTiles=2\n\
+             [TileSet0006]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=-1\n",
+        );
+        let c = Catalogue::read(&d, Theater::Temperate);
+        let read: Vec<(bool, i32)> = c
+            .tilesets
+            .iter()
+            .map(|s| (s.shadow_caster, s.shadow_tiles))
+            .collect();
+        assert_eq!(
+            read,
+            [
+                (false, 0),
+                (true, 3),
+                (true, 0),
+                (true, 0),
+                (false, 3),
+                (false, 2),
+                (true, -1)
+            ]
+        );
+        let casts: Vec<bool> = c.tilesets.iter().map(Tileset::casts_shadows).collect();
+        assert_eq!(casts, [false, true, false, false, false, false, true]);
     }
 
     /// spec: S-0009 Formulas (tile number translation)

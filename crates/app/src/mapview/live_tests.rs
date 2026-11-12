@@ -5976,10 +5976,9 @@ fn claim_13_mobiles_on_a_bridge_deck_take_the_level_factor_terms() {
     );
 }
 
-/// #74: spec: S-0104 Terms (a shadowed cell: one an intact high bridge spans) and claim 13 (a
-/// vehicle in a shadowed cell, not on a bridge deck, h < 208: U − 500 + extra unit light;
-/// infantry there, h ≤ 208: U − 500 + extra infantry light, above 208 the height term alone; on
-/// the deck no penalty), with the interim of Q-3006 (the high-bridge cells of S-0211 claim 15)
+/// #74: spec: S-0104 claim 13 (a vehicle in a shadowed cell, claim 19, not on a bridge deck,
+/// h < 208: U − 500 + extra unit light; infantry there, h ≤ 208: U − 500 + extra infantry light,
+/// above 208 the height term alone; on the deck no penalty)
 #[test]
 fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
     use glasnost_render::light::brightness_rho;
@@ -6046,13 +6045,24 @@ fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
     );
 }
 
-/// #74: spec: S-0104 Terms (an intact high bridge marks the cells it spans as shadowed, and the
-/// mark is cleared when it is destroyed), with the interim of Q-3006 (the high-bridge cells of
-/// S-0211 claim 15): the live game lights its mobiles by the cells they stand on
+/// #74: spec: S-0104 claim 19 (Q-3006: a cell is shadowed while a mark covers it: an intact
+/// high bridge's, whose marks end when it is destroyed, here the cell beyond a west-marking
+/// deck; or a shadow-casting tile's, by table T, from the moment it lies in its cell until
+/// another tile replaces it): the live game lights its mobiles by the cells they stand on
 #[test]
-fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
+fn claim_19_the_live_game_marks_shadowed_cells() {
     let assets = overlay_assets();
     let (mut live, mut scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    // A shadow-casting tileset of 40 tiles after the theater's own (S-0010 claim 18).
+    let mut catalogue = catalogue.clone();
+    let mut casting = catalogue.tilesets[0].clone();
+    casting.first = catalogue.tile_count;
+    casting.count = 40;
+    casting.shadow_caster = true;
+    casting.shadow_tiles = 1;
+    let first = casting.first;
+    catalogue.tilesets.push(casting);
+    catalogue.tile_count += 40;
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
     let inputs = Inputs {
@@ -6069,17 +6079,33 @@ fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
     live.redraw(&inputs, &mut scene);
     assert!(
         live.shadowed_cells().is_empty(),
-        "no bridge: no shadowed cell"
+        "no bridge and no shadow-casting tile: no shadowed cell"
     );
     let c = live.world.obj(cart).expect("the cart").pos.cell();
-    let i = live.world.cells.idx(c).expect("a cell of the map");
-    live.world.cells.deck[i] = true;
+    let terrain = |live: &mut Live, at: glasnost_map::CellXY, f: &dyn Fn(&mut glasnost_map::Cell)| {
+        f(live.world.cells.grid.get_mut(at).expect("a cell of the map"));
+    };
+    // A west-marking high-bridge overlay two cells toward map west marks the cart's cell.
+    let bridge = glasnost_map::CellXY::new(c.x - 2, c.y);
+    let old = live.world.cells.cell(bridge).expect("a cell of the map").overlay;
+    terrain(&mut live, bridge, &|cell| cell.overlay = 25);
     live.redraw(&inputs, &mut scene);
-    assert_eq!(live.shadowed_cells(), [c].into(), "under a high bridge");
-    // The bridge destroyed: the mark goes.
-    live.world.cells.deck[i] = false;
+    assert_eq!(live.shadowed_cells(), [c].into(), "beyond a west-marking deck");
+    // The bridge destroyed: its overlay gone, the mark goes.
+    terrain(&mut live, bridge, &|cell| cell.overlay = old);
     live.redraw(&inputs, &mut scene);
     assert!(live.shadowed_cells().is_empty());
+    // A tile at position 25 three cells toward map south marks (0, −3) from its cell.
+    let tile = glasnost_map::CellXY::new(c.x, c.y + 3);
+    let old = live.world.cells.cell(tile).expect("a cell of the map").tile;
+    terrain(&mut live, tile, &|cell| cell.tile = first + 25);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.shadowed_cells(), [c].into(), "a shadow-casting tile");
+    // Another tile replaces it: its marks end.
+    terrain(&mut live, tile, &|cell| cell.tile = first + 19);
+    live.redraw(&inputs, &mut scene);
+    assert!(live.shadowed_cells().is_empty(), "position 19 marks nothing");
+    terrain(&mut live, tile, &|cell| cell.tile = old);
 }
 
 /// #74: spec: S-0104 claim 2 (per-cell height terms: ion storm, then the dominator in any phase,
