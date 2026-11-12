@@ -3,7 +3,7 @@ id: Q-3006
 title: Which cells does a shadow-casting terrain tile mark as shadowed, and are a high bridge's shadowed cells its deck cells?
 status: answered
 related: [S-0104, S-0010, S-0211, Q-0009]
-answered-by: [S-0104]
+answered-by: [S-0104, S-0010]
 ---
 
 ## Need
