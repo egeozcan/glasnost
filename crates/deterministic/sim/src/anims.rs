@@ -93,6 +93,11 @@ pub struct Anim {
     /// type it switches to (claim 11).
     #[serde(default)]
     pub flight: Option<crate::bounce::Flight>,
+    /// Made through a link on a loop of animation types: it makes nothing
+    /// through such a link itself, whatever type it switches to (#224,
+    /// #174; [`crate::loops`]).
+    #[serde(default)]
+    pub looped: bool,
 }
 
 /// What a creator gives a new ordinary animation besides its type and
@@ -106,6 +111,9 @@ pub struct Spawn {
     pub owner: Option<(ObjectId, Pos)>,
     /// Its role.
     pub role: Role,
+    /// Made by an animation through a link on a loop of animation types
+    /// ([`Anim::looped`]).
+    pub looped: bool,
 }
 
 /// A created animation.
@@ -188,6 +196,7 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
             acc,
             role: s.role,
             flight,
+            looped: s.looped,
         },
     );
     // spec: S-0109 claim 29 and S-0203 claims 3 and 4 (appended; eligible for its first update later in the same pass)
@@ -200,6 +209,18 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
 
 /// The registration index of animation type `name` (a byte-wise,
 /// case-insensitive match, as the rules' lookup).
+/// What an animation of type `from` (by registration index), marked when
+/// `marked`, gives an animation of type `name` it makes: `None` when it
+/// makes none, else the new one's mark ([`crate::loops::Loops::link`]).
+pub(crate) fn link(w: &World, from: Option<u32>, marked: bool, name: &str) -> Option<bool> {
+    let to = anim_index(w, name.as_bytes()).map(|i| i as usize);
+    // nocite: our own input validation (#224, #174): a marked animation takes no link on a loop of animation types; Q-2996 asks what the game does
+    w.rules()
+        .loops
+        .anims
+        .link(from.map(|i| i as usize), marked, to)
+}
+
 fn anim_index(w: &World, name: &[u8]) -> Option<u32> {
     w.rules()
         .animations
@@ -462,7 +483,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         if let Some(landing) = crate::bounce::step(w, f, p, current) {
             let at = *p;
             // spec: S-0319 claims 7 and 8 (the landing's effects at the landing point, then the end in the same turn: no stage advance, trailer or follow-up switch)
-            crate::bounce::land(w, current, at, landing);
+            crate::bounce::land(w, current, at, landing, (a.anim, a.looped));
             ended(w, id, &a);
             // spec: S-0319 State and ordering and S-0203 claim 10 (it leaves play: a removal from the update order)
             w.update.leave(id, skip);
@@ -471,9 +492,11 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
     if let Some(p) = a.pos
         && let Some(name) = crate::bounce::trailer_due(current, w.tick)
+        // nocite: our own input validation (#224): a marked animation makes no trailer through a link on a loop of animation types, so the pass ends; Q-2996
+        && let Some(looped) = link(w, a.anim, a.looped, &name)
     {
         // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)
-        crate::combat::effects::trailer(w, &name, p);
+        crate::combat::effects::trailer_marked(w, &name, p, looped);
     }
     w.anims.current = Some((id, a.role, false));
     let aq = AnimQuirks::from(&w.rules().quirks);

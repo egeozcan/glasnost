@@ -9546,7 +9546,7 @@
           "default": true
         },
         "first_comment_only": {
-          "description": "Only the type's first idle comment sound is used.",
+          "description": "Only the type's first idle comment sound is used. Not consulted: the simulation reports no\nidle comments (docs/development.md), so neither position changes anything yet (#327).",
           "type": "boolean",
           "default": true
         },
@@ -9791,7 +9791,7 @@
           "default": true
         },
         "infantry_facing_sector_skew": {
-          "description": "Infantry facing groups are skewed 1024 facing units counter-clockwise.",
+          "description": "Infantry facing groups are skewed 1024 facing units counter-clockwise. Not consulted by the\nsimulation: the facing group picks a drawn frame only, and the map view applies the skew\n(`infantry_frame`) with no off position yet (#327).",
           "type": "boolean",
           "default": true
         },
@@ -9961,7 +9961,7 @@
           "default": true
         },
         "named_deploy_area_fire": {
-          "description": "The deploy area-fire rule singles out one infantry type by name.",
+          "description": "The deploy area-fire rule singles out one infantry type by name. Not consulted: the\narea-fire part of S-0215 claim 30 is not built (`process.rs`) (#327).",
           "type": "boolean",
           "default": true
         },
@@ -10026,7 +10026,7 @@
           "default": true
         },
         "observer_position_handoff": {
-          "description": "An observer's drawn position is handed to the next player needing one.",
+          "description": "An observer's drawn position is handed to the next player needing one. Not consulted:\nobserver positions are not built (a recorded seam, docs/m5-claims/S-0412.md row 7) (#327).",
           "type": "boolean",
           "default": true
         },
@@ -10066,7 +10066,7 @@
           "default": true
         },
         "one_sided_building_distance": {
-          "description": "The building reduction applies only to the second object of a distance.",
+          "description": "The building reduction applies only to the second object of a distance. Not consulted:\nthe only distance our simulation takes between two objects that a building can be the first\nof is the area-guard leash (S-0215 F4), and only infantry and vehicles keep an area guard,\nso β of the first object is 0 and both positions give the same distance (#327).",
           "type": "boolean",
           "default": true
         },
@@ -10191,7 +10191,7 @@
           "default": true
         },
         "passability_laser_fence_lost": {
-          "description": "Laser-fence sections leave the passability category alone.",
+          "description": "Laser-fence sections leave the passability category alone. Not consulted: its off position\nneeds an active laser-fence section, and section states are not modelled (#327).",
           "type": "boolean",
           "default": true
         },
@@ -10301,7 +10301,7 @@
           "default": true
         },
         "prism_modifier_reread_scale": {
-          "description": "Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged.",
+          "description": "Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged. Not consulted by the simulation: the importer applies it with its own copy (`convert::layers::LayerQuirks`, listed in [`EXTERNAL_QUIRKS`]); the field stays so that rulesets naming it still load (#327).",
           "type": "boolean",
           "default": true
         },
@@ -10541,7 +10541,7 @@
           "default": true
         },
         "role_one_past_end": {
-          "description": "A role naming the first missing tileset starts at the tile count.",
+          "description": "A role naming the first missing tileset starts at the tile count. Not consulted by the\nsimulation: the importer applies it with its own copy (`convert::theater::TheaterQuirks`),\nso this field is listed in [`EXTERNAL_QUIRKS`] too; it stays so that rulesets naming it\nstill load (#327).",
           "type": "boolean",
           "default": true
         },
@@ -10971,7 +10971,7 @@
           "default": true
         },
         "track_body_turn_stops_at_target": {
-          "description": "A turret-less track-class body turn that passes exactly through its target's direction stops there.",
+          "description": "A turret-less track-class body turn that passes exactly through its target's direction stops there.\nNot consulted: claim 16 is not built, so the body turn goes on to its own target facing in\nboth positions (the off position) until Q-3001 says at which point of the tick the test is\nmade (#327).",
           "type": "boolean",
           "default": true
         },
@@ -11021,7 +11021,7 @@
           "default": true
         },
         "two_sound_cues": {
-          "description": "At most two sound cues per sequence entry.",
+          "description": "At most two sound cues per sequence entry. Not consulted: sequence sound cues are not\nimported into the simulation rules, so neither position changes anything yet (#327).",
           "type": "boolean",
           "default": true
         },

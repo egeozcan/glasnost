@@ -1056,7 +1056,11 @@ impl Client {
         };
         let maps: Vec<MapEntry> = install.maps.iter().map(|(_, m)| m.clone()).collect();
         let lobby = match b.local_setup(index).lobby(&install.setup, &maps) {
-            Ok(l) => l,
+            // spec: S-0213 claim 15 (Network games: every machine checks an order's actor's owner immediately before applying it)
+            Ok(mut l) => {
+                l.settings.network = true;
+                l
+            }
             Err(p) => {
                 self.vfs = Some(vfs);
                 return fail(self, format!("The room's setup cannot start here: {p}"));

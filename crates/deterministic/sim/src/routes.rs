@@ -37,13 +37,12 @@ pub const HOLDER_LIMIT: u32 = 128; // spec: S-0213 Constants (route-holder limit
 /// The most points a point add takes a route to (S-0213 claim 16b).
 pub const MAX_POINTS: usize = 16; // spec: S-0213 claim 16b (a point add is refused when the route already holds 16 points)
 
-/// The most steps any route holds (#158). S-0213 claim 16b refuses a
-/// point add only at exactly 16 points and lets a join's copy pass 16
-/// "whatever their number", so joins could double a route without end. A
-/// point add to a route of this length is refused with no message, and a
-/// join whose copy would take a route past it does nothing (Q-2971).
-// nocite: our own input validation (#158): 64 times the 16 points that point adds alone give a route, far above any route a person makes
-pub const MAX_STEPS: usize = 1024;
+/// The most steps any route holds, a point counting once for each time the
+/// route holds it (S-0213 claim 16b, our engine's own bound: the original
+/// has none, Q-2971). A point add to a route of this length is refused
+/// with no message, and a join whose copy would take a route past it does
+/// nothing.
+pub const MAX_STEPS: usize = 1024; // spec: S-0213 claim 16b and Constants (longest route in our engine: 1024 steps)
 
 /// The smallest loop input can make (S-0213 claim 16c), and the size below
 /// which a deletion cancels a loop (claim 16e).
@@ -701,7 +700,7 @@ pub fn apply_point(
     let Some(at) = place else { return };
     let cell = place_cell(w, at).unwrap_or(CellXY::new(0, 0));
     if let Some(r) = w.routes.routes.get(&actor) {
-        // nocite: our own input validation (#158): a route at the step bound takes no point add, silently (Q-2971)
+        // spec: S-0213 claim 16b (our engine's bound: a point add to a route of 1024 steps or more is refused with no message and no sound)
         if r.steps.len() >= MAX_STEPS {
             return;
         }
@@ -878,7 +877,7 @@ pub fn apply_join(w: &mut World, house: HouseId, actor: ObjectId, point: u32, pl
     if !ignores && n + copy.len() > MAX_POINTS {
         return;
     }
-    // nocite: our own input validation (#158): a join whose copy would take the route past the step bound does nothing, under either setting of the switch (Q-2971); the copy is not cut, so its loop stays whole
+    // spec: S-0213 claim 16b (our engine's bound: a join whose copy would take the route past 1024 steps does nothing, adding no part of its copy, with the switch on or off)
     if n + copy.len() > MAX_STEPS {
         return;
     }

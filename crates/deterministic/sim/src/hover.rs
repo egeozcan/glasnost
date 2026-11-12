@@ -1074,8 +1074,15 @@ fn travel(w: &mut World, id: ObjectId, d: i32) {
     let Some(h) = o.hover.as_ref() else { return };
     let eta = h.heading.value(t);
     // spec: S-0503 F4 (x′ = trunc(x + d cos θ), y′ = trunc(y − d sin θ), z′ = z: S-0208 claim 6's planar step, with quirks.table_direction)
-    let (x, y) =
-        crate::walk::step_point(o.pos.x, o.pos.y, eta, d, r.quirks.table_direction, r.mode);
+    let (x, y) = crate::walk::step_point_b(
+        o.pos.x,
+        o.pos.y,
+        eta,
+        d,
+        r.quirks.table_direction,
+        r.mode,
+        r.quirks.table_trig_negative_bias, // spec: S-0105 F1 (quirks.table_trig_negative_bias)
+    );
     let old = o.pos.cell();
     let new = Pos::new(x, y, 0).cell();
     let mut layer = o.layer;
@@ -1230,7 +1237,7 @@ fn height(w: &mut World, id: ObjectId) -> bool {
     } else {
         arg
     };
-    let bob = F64::from_i64(BOB_AMPLITUDE, mode).mul(glasnost_num::trig::sin_t(arg, mode), mode);
+    let bob = F64::from_i64(BOB_AMPLITUDE, mode).mul(crate::table_trig::sin_q(w, arg, mode), mode);
     // spec: S-0503 F6 (u = trunc(2 × sin(...) + A))
     let u = bob
         .add(F64::from_i64(i64::from(a), mode), mode)

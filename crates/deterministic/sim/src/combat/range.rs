@@ -2,9 +2,9 @@
 //! measured and source points, the two comparisons, the high-bridge
 //! refusals and the line of fire; and the firer's weapon range.
 
+use crate::table_trig::{cos_q, sin_q};
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
-use glasnost_num::trig::{cos_t, sin_t};
 use glasnost_num::{F64, int};
 
 use crate::combat::ballistics;
@@ -387,6 +387,8 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         t = Target::Cell(cliff_replacement(w, id, c));
         if let Some(ob) = w.obj_mut(id) {
             ob.target = Some(t);
+            // spec: S-0309 claim 24 (every setting of a target leaves a target that is not an opportunity target)
+            ob.combat.opportunity = false;
         }
         // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
         crate::emitters::retarget_let_go(w, id);
@@ -576,10 +578,10 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
             let theta = F64::from_i64(p - 16383, mode).mul(c, mode);
             // spec: S-0307 F4 (x = trunc(RZ₅₃(T.x + RZ₅₃(cosₜ(θ) × radius))), y = trunc(RZ₅₃(T.y − RZ₅₃(sinₜ(θ) × radius))))
             let x = F64::from_i64(i64::from(tp.x), mode)
-                .add(cos_t(theta, mode).mul(rd, mode), mode)
+                .add(cos_q(w, theta, mode).mul(rd, mode), mode)
                 .to_i32_common();
             let y = F64::from_i64(i64::from(tp.y), mode)
-                .sub(sin_t(theta, mode).mul(rd, mode), mode)
+                .sub(sin_q(w, theta, mode).mul(rd, mode), mode)
                 .to_i32_common();
             // spec: S-0307 F4 (candidate cell (trunc(x / 256), trunc(y / 256)))
             let mut cell = CellXY::new(x / 256, y / 256);

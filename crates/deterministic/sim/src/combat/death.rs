@@ -3,8 +3,8 @@
 //! claim 6); infantry deaths (S-0107 claim 17); terrain objects (S-0302
 //! claim 20).
 
+use crate::table_trig::{cos_q, sin_q};
 use glasnost_num::F64;
-use glasnost_num::trig::{cos_t, sin_t};
 
 use crate::combat::damage::{self, Hit};
 use crate::combat::data::WeaponId;
@@ -28,10 +28,10 @@ pub fn nearby_point(w: &World, q: Pos, r: i32, b: u32, snap: bool) -> Pos {
     let rd = F64::from_i64(i64::from(r), mode);
     // spec: S-0312 F2 (y′ = trunc(RZ₅₃(y − RZ₅₃(r × sin θ))), x′ = trunc(RZ₅₃(RZ₅₃(r × cos θ) + x)))
     let y = F64::from_i64(i64::from(q.y), mode)
-        .sub(rd.mul(sin_t(theta, mode), mode), mode)
+        .sub(rd.mul(sin_q(w, theta, mode), mode), mode)
         .to_i32_common();
     let x = rd
-        .mul(cos_t(theta, mode), mode)
+        .mul(cos_q(w, theta, mode), mode)
         .add(F64::from_i64(i64::from(q.x), mode), mode)
         .to_i32_common();
     let p = Pos::new(x, y, q.z);
@@ -179,6 +179,58 @@ fn death_weapon(w: &World, id: ObjectId) -> Option<(WeaponId, i32)> {
         .mul(crate::rules::nearest_double("0.5"), mode)
         .to_i32_common();
     Some((g, dmg))
+}
+
+/// How many death-weapon detonations nest inside one killing hit before a
+/// deeper one is listed instead (#218): a row of exploding objects, each
+/// killing the next, nested once per object on the machine's stack, so a
+/// long row aborted the program at a length that depended on the stack.
+pub const DEATH_WEAPON_DEPTH: u32 = 16; // nocite: our own input validation (#218), Q-3000
+
+/// The death-weapon detonations under way inside one killing hit, and
+/// those listed past [`DEATH_WEAPON_DEPTH`], oldest first (#218; Q-3000).
+#[derive(Clone, Debug, Default)]
+pub struct DeathChain {
+    /// The detonations nesting now.
+    depth: u32,
+    /// The listed ones: weapon, damage, position, source and house.
+    listed:
+        std::collections::VecDeque<(WeaponId, i32, Pos, ObjectId, Option<crate::world::HouseId>)>,
+}
+
+/// A killed exploding object's death weapon (S-0312 claim 6), set off
+/// inside its killing hit. Up to [`DEATH_WEAPON_DEPTH`] such detonations
+/// nest, in the spec's order (S-0303 claim 1); a deeper one is listed, and
+/// the outermost one, once its own detonation is complete, sets the listed
+/// ones off in the order listed, each nesting again to the same depth. So a
+/// chain of any length resolves inside the one hit, the same on every
+/// machine.
+fn set_off_death_weapon(
+    w: &mut World,
+    weapon: WeaponId,
+    damage: i32,
+    pos: Pos,
+    source: ObjectId,
+    house: Option<crate::world::HouseId>,
+) {
+    // nocite: our own input validation (#218): past the depth the detonation is listed, not nested; Q-3000 asks what the game does
+    if w.death_chain.depth >= DEATH_WEAPON_DEPTH {
+        w.death_chain
+            .listed
+            .push_back((weapon, damage, pos, source, house));
+        return;
+    }
+    w.death_chain.depth += 1;
+    crate::combat::projectile::detonate_weapon(w, weapon, damage, pos, Some(source), house, true);
+    w.death_chain.depth -= 1;
+    if w.death_chain.depth == 0 {
+        // nocite: our own input validation (#218): the listed detonations, oldest first, once the outermost one is complete
+        while let Some((wp, d, p, s, h)) = w.death_chain.listed.pop_front() {
+            w.death_chain.depth += 1;
+            crate::combat::projectile::detonate_weapon(w, wp, d, p, Some(s), h, true);
+            w.death_chain.depth -= 1;
+        }
+    }
 }
 
 /// A shot-down aircraft's impact (S-0312 claim 16): its death weapon goes
@@ -437,8 +489,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         && exploding(w, id)
         && let Some((wp, dmg)) = death_weapon(w, id)
     {
-        let house = o.owner;
-        crate::combat::projectile::detonate_weapon(w, wp, dmg, o.pos, Some(id), house, true);
+        // spec: S-0312 claim 6 (the death weapon goes off at the object's position, inside its killing hit); nested to DEATH_WEAPON_DEPTH (#218, Q-3000)
+        set_off_death_weapon(w, wp, dmg, o.pos, id, o.owner);
     }
     // spec: S-0312 table step 3 and S-0519 claim 5 (an attached bomb goes off once at the carrier's position, or is removed silently off the map; the carrier's death does not set it off a second time)
     crate::bomb::carrier_killed(w, id);

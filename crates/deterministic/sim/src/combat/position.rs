@@ -2,7 +2,7 @@
 //! the pixel-shift conversion; the spray attack's shifts.
 
 use glasnost_num::geom::n_step;
-use glasnost_num::trig::{cos_t, sin_t};
+use glasnost_num::trig::{cos_tb, sin_tb};
 use glasnost_num::{F64, Rounding};
 
 use crate::combat::veterancy::{self, Rank};
@@ -56,9 +56,10 @@ impl M34 {
 
     /// Rz(θ) with table trigonometry (S-0105 F1, F2), the angle narrowed to
     /// single precision first (S-0313 F2).
-    fn rz(theta: F64, mode: Rounding) -> Self {
+    /// `bias` is `quirks.table_trig_negative_bias` (S-0105 F1).
+    fn rz(theta: F64, mode: Rounding, bias: bool) -> Self {
         let a = theta.to_f32(mode).to_f64();
-        let (c, s) = (cos_t(a, mode), sin_t(a, mode));
+        let (c, s) = (cos_tb(a, mode, bias), sin_tb(a, mode, bias));
         let o = F64::from_i64(1, mode);
         let z = F64::ZERO;
         M34([[c, s.negated(), z, z], [s, c, z, z], [z, z, o, z]])
@@ -236,6 +237,7 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
     };
     let a32 = f32_of(aim);
     let c = c16();
+    let bias = r.quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
     let at = |n: i64| F64::from_i64(n - 8, mode).mul(c, mode); // spec: S-0313 F2 ((x₃₂ − 8) × c)
     let theta = match o.kind {
         // spec: S-0313 F2 (a building: s₅₃((a₃₂ − 8) × c))
@@ -250,7 +252,7 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
         M34::identity(mode)
     } else {
         // spec: S-0105 claim 3 (θ_body = −(π/16)(f₃₂ − 8)); slope tilt (S-0106) is not applied
-        M34::rz(at(body32), mode)
+        M34::rz(at(body32), mode, bias)
     };
     // spec: S-0313 claim 2 (the lateral part negated for an odd burst counter)
     let sigma = if k.rem_euclid(2) == 1 { -1 } else { 1 };
@@ -258,13 +260,13 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
     let tr_flh = M34::translation(flh[0], sigma * flh[1], flh[2], mode); // spec: S-0313 claim 2 (odd burst counter: lateral part negated)
     let tm = if o.kind == Kind::Building && !r.quirks.building_fire_point_shift_fixed {
         // spec: S-0313 Edge cases (building_fire_point_shift_fixed off: T = Rz(θ) · Tr(δ) · Tr(F, σL, H))
-        M34::rz(theta, mode)
+        M34::rz(theta, mode, bias)
             .mul(&M34::translation(delta, 0, 0, mode), mode)
             .mul(&tr_flh, mode)
     } else {
         // spec: S-0313 F1 (T = M · Tr(δ, 0, 0) · Rz(θ) · Tr(F, σL, H))
         m.mul(&M34::translation(delta, 0, 0, mode), mode)
-            .mul(&M34::rz(theta, mode), mode)
+            .mul(&M34::rz(theta, mode, bias), mode)
             .mul(&tr_flh, mode)
     };
     let (u, v, wz) = (tm.0[0][3], tm.0[1][3], tm.0[2][3]); // spec: S-0313 F1 (the translation column of the 3 × 4 matrix)

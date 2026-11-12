@@ -483,6 +483,8 @@ impl Setup {
                 bridge_destruction: Some(true),
                 all_base_units: false,
                 houses: Vec::new(),
+                // spec: S-0213 claim 15 (Network games: the app's net_begin marks a network game; the lobby's own settings are a skirmish's)
+                network: false,
             },
             unit_count: self.units,
             // spec: S-0412 claim 1 (the bases setting has no lobby control)

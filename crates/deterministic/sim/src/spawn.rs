@@ -575,6 +575,8 @@ pub fn target_cleared(w: &mut World, spawner: ObjectId) {
 pub fn set_own_target(ob: &mut crate::world::Object, t: Option<Target>) {
     // spec: S-0518 claim 15 (the charging mark clears whenever the unit is given a target or its target changes)
     ob.combat.charging = false;
+    // spec: S-0309 claim 24 (every setting of a target, even to the same one, leaves a target that is not an opportunity target; the per-tick and teleport searches set the mark after their own setting)
+    ob.combat.opportunity = false;
     let had = ob.target.is_some();
     if ob.target != t {
         // spec: S-0519 claim 19 (every target change is counted, so that a change to B and back to A is two changes)
@@ -598,6 +600,10 @@ pub fn clear_own_target(ob: &mut crate::world::Object) {
 /// empty own target is also recorded, for
 /// `quirks.spawner_pending_target_survives_idle_clear` off.
 pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
+    // spec: S-0518 claim 15 (the charging mark clears whenever the unit is given a target by an order or by any other ordinary target change)
+    ob.combat.charging = false;
+    // spec: S-0309 claim 24 (every setting of a target leaves no opportunity target)
+    ob.combat.opportunity = false;
     let had = ob.target.is_some();
     if had {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
@@ -612,6 +618,10 @@ pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
 /// the conditional pending clear even when its old own target was already
 /// empty.
 pub fn redirected_to_none(ob: &mut crate::world::Object) {
+    // spec: S-0518 claim 15 (the charging mark clears at any ordinary target change)
+    ob.combat.charging = false;
+    // spec: S-0309 claim 24 (every setting of a target leaves no opportunity target)
+    ob.combat.opportunity = false;
     if ob.target.is_some() {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
     }

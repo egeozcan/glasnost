@@ -168,7 +168,16 @@ pub fn selected_centre(w: &mut World, h: HouseId) -> Option<CellXY> {
     // spec: S-0215 F11 (f = 256b facing units)
     let f = (b * 256) as u16;
     // spec: S-0215 F11 (A = trunc(X + r × cosT θ), B = trunc(Y − r × sinT θ): S-0208 F3's scale and grouping with distance r)
-    let (a, bb) = crate::walk::step_point(p.x, p.y, f, r, q.table_direction, mode);
+    // spec: S-0215 F11 (the shared quirks.table_trig_negative_bias has S-0105 F1's alternative here too)
+    let (a, bb) = crate::walk::step_point_b(
+        p.x,
+        p.y,
+        f,
+        r,
+        q.table_direction,
+        mode,
+        q.table_trig_negative_bias,
+    );
     // spec: S-0215 F11 (a point whose trunc(A / 256) or trunc(B / 256) lies outside 0 … 511 is P instead)
     let inside = |v: i32| (0..=MAX_CELL).contains(&(v / CELL));
     let (a, bb) = if inside(a) && inside(bb) {

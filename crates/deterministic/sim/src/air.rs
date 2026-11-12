@@ -1191,14 +1191,29 @@ pub fn step(
     unit_stall: bool,
     mode: glasnost_num::Rounding,
 ) -> (i32, i32) {
+    step_b(x, y, facing, v, frac, unit_stall, mode, true)
+}
+
+/// [`step`] with `quirks.table_trig_negative_bias` at `bias` (S-0105 F1).
+#[allow(clippy::too_many_arguments)]
+pub fn step_b(
+    x: i32,
+    y: i32,
+    facing: Facing,
+    v: i32,
+    frac: F64,
+    unit_stall: bool,
+    mode: glasnost_num::Rounding,
+    bias: bool,
+) -> (i32, i32) {
     let s = step_length(v, frac, mode);
     // spec: S-0501 F3 (the table step of S-0208 F3 with θ = (Fₛ − 16383) × k, k = −2π / 65534; each new coordinate truncated, no remainder kept, so a 1-lepton step at facings 16391 to 32766 changes neither coordinate: quirks.aircraft_unit_step_stall)
-    let (nx, ny) = crate::walk::step_point(x, y, facing, s, true, mode);
+    let (nx, ny) = crate::walk::step_point_b(x, y, facing, s, true, mode, bias);
     if unit_stall || s < 1 || (nx, ny) != (x, y) {
         return (nx, ny);
     }
     // spec: S-0501 F3 and Edge cases (quirks.aircraft_unit_step_stall off: a step of at least 1 lepton that would change neither coordinate moves 1 lepton along the axis of the larger component, in its direction, x on equal magnitudes)
-    let (dx, dy) = crate::walk::step_components(facing, s, true, mode);
+    let (dx, dy) = crate::walk::step_components_b(facing, s, true, mode, bias);
     let unit = |c: F64| if c.is_sign_negative() { -1 } else { 1 };
     if dx.abs().ge(dy.abs()) {
         (x + unit(dx), y)
@@ -1675,7 +1690,8 @@ fn firing_spot(w: &mut World, id: ObjectId, tg: Target) -> Option<CellXY> {
         for k in 0..16 {
             let f = (k * 4096) as Facing; // spec: S-0501 Constants (firing-spot angular interval 4096)
             // spec: S-0501 claim 39 (F3's trigonometry and truncation applied to T and the radius)
-            let (x, y) = crate::walk::step_point(tp.x, tp.y, f, radius, true, mode);
+            let bias = w.rules().quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
+            let (x, y) = crate::walk::step_point_b(tp.x, tp.y, f, radius, true, mode, bias);
             // spec: S-0501 claim 39 (the cell: integer division toward zero by 256)
             let c = CellXY::new(x / 256, y / 256);
             // spec: S-0501 claim 39 (inside the height-aware usable area and passing the reservation test, the aircraft itself counting; no passability or F7 test)
@@ -1734,7 +1750,8 @@ pub fn replacement_search(w: &mut World, id: ObjectId, centre: CellXY) -> Option
             let dir = (first + i).rem_euclid(8);
             let f = (dir * 8192) as Facing;
             // spec: S-0501 claim 40 (F3's trigonometry in cell units with length equal to the radius, the sums truncated toward zero)
-            let (x, y) = crate::walk::step_point(centre.x, centre.y, f, r, true, mode);
+            let bias = w.rules().quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
+            let (x, y) = crate::walk::step_point_b(centre.x, centre.y, f, r, true, mode, bias);
             if (x, y) == last {
                 continue;
             }
@@ -2499,7 +2516,10 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
     if !a.ground {
         let facing = w.obj(id).map_or(0, |ob| ob.body.value(tick_now));
         let unit_stall = w.rules().quirks.aircraft_unit_step_stall;
-        let (nx, ny) = step(here.x, here.y, facing, t.speed, a.cur, unit_stall, mode);
+        let bias = w.rules().quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
+        let (nx, ny) = step_b(
+            here.x, here.y, facing, t.speed, a.cur, unit_stall, mode, bias,
+        );
         if (nx, ny) != (here.x, here.y) {
             let mut np = Pos::new(nx, ny, here.z);
             let legal = |p: Pos| w.cells.cell(p.cell()).is_some();
@@ -2520,7 +2540,8 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
                     // spec: S-0501 claim 4 (a random fallback 64 leptons from the shifted point: one raw draw, its low eight bits times 256 as the facing)
                     let f = ((w.rng.raw() & 0xff) * 256) as Facing;
                     // spec: S-0501 claim 4 (F3's displacement and truncation with length 64, no snapping)
-                    let (rx, ry) = crate::walk::step_point(shifted.x, shifted.y, f, 64, true, mode); // spec: S-0501 Constants (edge random fallback radius 64)
+                    let (rx, ry) =
+                        crate::walk::step_point_b(shifted.x, shifted.y, f, 64, true, mode, bias); // spec: S-0501 Constants (edge random fallback radius 64)
                     let rc = Pos::new(rx, ry, np.z).cell();
                     // spec: S-0501 claim 4 (either cell coordinate outside 0 … 511: the candidate is the shifted point itself)
                     let cand = if (0..=511).contains(&rc.x) && (0..=511).contains(&rc.y) {
@@ -2586,7 +2607,8 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
             let now = w.obj(id).map_or(o.pos, |x| x.pos);
             // spec: S-0501 claim 4 (the direction by S-0204 claim 8, F3's facing conversion and table trigonometry with step length 5, no clamp; the world height kept)
             let f = toward(w, now, centre);
-            let (nx, ny) = crate::walk::step_point(now.x, now.y, f, 5, true, mode); // spec: S-0501 Constants (descent horizontal nudge 5 leptons)
+            let bias = w.rules().quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
+            let (nx, ny) = crate::walk::step_point_b(now.x, now.y, f, 5, true, mode, bias); // spec: S-0501 Constants (descent horizontal nudge 5 leptons)
             let z = now.z;
             move_to(w, id, Pos::new(nx, ny, z));
             if let Some(ob) = w.obj_mut(id) {
@@ -5265,6 +5287,7 @@ fn smoke(w: &mut World, id: ObjectId) {
             },
             owner: None,
             role: crate::anims::Role::Ordinary,
+            looped: false,
         },
     );
     if made.id.is_some() {

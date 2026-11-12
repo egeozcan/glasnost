@@ -149,6 +149,7 @@ fn missile(
         vehicle_scalable: false,
         airburst_child: false,
         chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
+        looped: false,
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
     };
     w.projectiles.insert(id, pr);
@@ -330,8 +331,8 @@ pub fn waypoint(w: &mut World, cell: CellXY) {
     let mode = w.rules().mode;
     // spec: S-0524 Formulas (p = 1.5707483884323126 radians, table sine and cosine of S-0105 F1)
     let angle = crate::rules::nearest_double("1.5707483884323126");
-    let s = glasnost_num::trig::sin_t(angle, mode);
-    let c = glasnost_num::trig::cos_t(angle, mode);
+    let s = crate::table_trig::sin_q(w, angle, mode);
+    let c = crate::table_trig::cos_q(w, angle, mode);
     let m = F64::from_i64(-100, mode); // spec: S-0524 Formulas (the factor −100)
     // spec: S-0524 Formulas (Vx = RZ(RZ(C × C) × −100), Vy = RZ(RZ(S × C) × −100), Vz = RZ(S × −100))
     let vel = [

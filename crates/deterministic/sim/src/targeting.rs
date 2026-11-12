@@ -1117,7 +1117,8 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
     // Seam: the scenery-disguise terrain-fire pass of the rule (low, S-0214 Open questions) is not built.
     let disguise_ok = !crate::cloak::appears_disguised(w, t, Some(house))
         || w.rules().cloak.attack_cursor_on_disguise
-        || crate::cloak::disguise::perma(w, t)
+        // spec: S-0214 claim 6 and Quirks (quirks.permadisguise_attack_cursor off: a permanently disguised type does not pass the disguise rule by itself)
+        || (w.rules().quirks.permadisguise_attack_cursor && crate::cloak::disguise::perma(w, t))
         || crate::cloak::disguise::blinking(w, t)
         || friend_ok;
     // spec: S-0214 claim 6 (a) (force-fire; or enemy or friend-attack, the disguise rule, and a legal target)

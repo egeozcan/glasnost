@@ -3,7 +3,7 @@
 
 use glasnost_map::CellXY;
 
-use super::{Cover, centre_cell, sensor_disc, type_radius};
+use super::{Cover, centre_cell, type_radius};
 use crate::combat::veterancy::type_combat;
 use crate::rules::Kind;
 use crate::world::{HouseId, ObjectId, World};
@@ -31,11 +31,7 @@ pub fn change(
     floor: bool,
 ) {
     let mut cells = Vec::new();
-    for (dx, dy) in sensor_disc(r) {
-        let c = CellXY::new(centre.x + dx, centre.y + dy);
-        if w.cells.idx(c).is_none() {
-            continue;
-        }
+    for c in disc_on_map(w, centre, r) {
         let map = match which {
             Coverage::Sensors => &mut w.cloak.sensors,
             Coverage::Detectors => &mut w.cloak.detectors,
@@ -59,6 +55,39 @@ pub fn change(
             super::machine::reevaluate_cell(w, c, true);
         }
     }
+}
+
+/// The map's cells of the sensor disc of radius `r` around `centre`, in
+/// the order of [`super::sensor_disc`] (rows of dy, each in increasing dx). Only
+/// the part of the disc's square that holds legal cells is walked, so a
+/// huge radius costs no more than the map (#170).
+fn disc_on_map(w: &World, centre: CellXY, r: i32) -> Vec<CellXY> {
+    let mut out = Vec::new();
+    if r <= 0 {
+        return out;
+    }
+    let r = i64::from(r);
+    let r2 = r * r;
+    let side = i64::from(w.cells.footprint().coordinate_side());
+    let (cx, cy) = (i64::from(centre.x), i64::from(centre.y));
+    // spec: S-0516 Terms (sensor disc: −R ≤ dx ≤ R − 1, −R ≤ dy ≤ R − 1, dx² + dy² < R²); only cells inside the coordinate square 0 … side − 1 can be on the map (S-0009 claim 2)
+    let (dx0, dx1) = ((-r).max(-cx), (r - 1).min(side - 1 - cx));
+    let (dy0, dy1) = ((-r).max(-cy), (r - 1).min(side - 1 - cy));
+    for dy in dy0..=dy1 {
+        for dx in dx0..=dx1 {
+            if dx * dx + dy * dy >= r2 {
+                continue;
+            }
+            let (Ok(x), Ok(y)) = (i32::try_from(cx + dx), i32::try_from(cy + dy)) else {
+                continue;
+            };
+            let c = CellXY::new(x, y);
+            if w.cells.idx(c).is_some() {
+                out.push(c);
+            }
+        }
+    }
+    out
 }
 
 /// A mobile object's sensors-sight *R* (claim 22).

@@ -85,6 +85,14 @@ const RAIL_AFTER: usize = 4; // spec: S-0616 claim 17 (then four more ranged dra
 /// Spark burst raw values taken and discarded after the count (F10).
 const SPARK_DISCARDED: usize = 3; // spec: S-0616 F10 (three unused raw values follow the count)
 
+/// The most particles one spark burst or one railgun line makes (#198):
+/// a particle cap or a particles-per-lepton field from rules data could
+/// otherwise ask for billions in one turn. Counts up to it are unchanged:
+/// the count raw value and the three discarded values are still taken, and
+/// each particle made keeps its own draws. Q-2999 asks whether the game
+/// has a limit.
+pub const BURST_CEILING: i32 = 4096; // nocite: our own input validation (#198), Q-2999
+
 fn mode(w: &World) -> Rounding {
     w.rules().mode
 }
@@ -391,8 +399,19 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         return;
     };
     // spec: S-0616 claims 3 and 8 (successors follow the system's kind, not the particle's: a dead particle of any kind in a smoke system whose type names a next type splits, d taken from the dead particle's type)
+    let marked = w
+        .gas
+        .systems
+        .get(&sys)
+        .is_some_and(|s| s.looped.contains(&p.id));
+    // nocite: our own input validation (#198): a marked particle does not split, and takes no draw, through a next-type link on a loop of particle types; Q-2999 asks what the game does
     if let Some(t) = ptype(w, &p)
         && let Some(next) = t.next
+        && let Some(looped) =
+            w.rules()
+                .loops
+                .particles
+                .link(Some(p.type_index as usize), marked, Some(next as usize))
     {
         // spec: S-0616 F3 (d = ⌊ρ / 8⌋, rounding down; q = r rem d; o = q + d when q ≥ 1, else q − d; S-0205 claim 3 for d = 0)
         let dv = t.radius.div_euclid(RADIUS_DIVISOR);
@@ -415,7 +434,14 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
                 p.pos.y.wrapping_add(sign * oy),
                 p.pos.z,
             );
-            let made = crate::gas::add_particle(w, sys, next, at, origin).is_some();
+            let added = crate::gas::add_particle(w, sys, next, at, origin);
+            let made = added.is_some();
+            if looped
+                && let Some(q) = added
+                && let Some(s) = w.gas.systems.get_mut(&sys)
+            {
+                s.looped.insert(q);
+            }
             if made
                 && let Some(q) = w
                     .gas
@@ -444,6 +470,7 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         && i < s.particles.len()
     {
         s.particles.remove(i);
+        s.looped.remove(&p.id);
     }
 }
 
@@ -727,8 +754,8 @@ pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
     };
     let theta = d(f - quarter, m).mul(crate::consts::TWO_PI.negated().div(d(full, m), m), m);
     let (cos, sin) = (
-        glasnost_num::trig::cos_t(theta, m),
-        glasnost_num::trig::sin_t(theta, m),
+        crate::table_trig::cos_q(w, theta, m),
+        crate::table_trig::sin_q(w, theta, m),
     );
     // spec: S-0616 F5 (target point = (trunc(Oₓ + cosₜ(θ) × d), trunc(Oᵧ − sinₜ(θ) × d), O_z), double precision throughout)
     let tx = d(i64::from(op.x), m)
@@ -750,6 +777,7 @@ pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
 pub fn swing(i: i32, m: Rounding) -> i32 {
     // spec: S-0616 F6 (V[i] = trunc(sinₜ(0.125 × i) × 12.0 + 0.49), argument and sum in double precision)
     let x = c("0.125").mul(d(i64::from(i), m), m);
+    // spec: S-0105 F1 (the argument is never negative here, so quirks.table_trig_negative_bias changes nothing)
     glasnost_num::trig::sin_t(x, m)
         .mul(c("12.0"), m)
         .add(c("0.49"), m)
@@ -768,6 +796,7 @@ pub fn step_direction(p: Pos, q: Pos, m: Rounding) -> usize {
     // spec: S-0616 F6 (q = (Pᵧ − Qᵧ) / (Qₓ − Pₓ) and t₈ = sinₜ(π/8) / cosₜ(π/8), double precision)
     let q_ = d(i64::from(up), m).div(d(i64::from(q.x) - i64::from(p.x), m), m);
     let eighth = crate::consts::TWO_PI.div(d(16, m), m); // spec: S-0616 F6 (π/8 = 2π / 16)
+    // spec: S-0105 F1 (π/8 is positive, so quirks.table_trig_negative_bias changes nothing)
     let t8 = glasnost_num::trig::sin_t(eighth, m).div(glasnost_num::trig::cos_t(eighth, m), m);
     let inv = d(1, m).div(t8, m);
     let pick = |a: usize, b: usize| if right { a } else { b };
@@ -1050,7 +1079,8 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
     };
     let [xv, yv, zmin, zrange] = pt.spark;
     let table = w.rules().quirks.table_root_distance;
-    for _ in 0..count.max(0) {
+    // nocite: our own input validation (#198): at most BURST_CEILING sparks, with their draws, in one burst; Q-2999 asks for the game's limit
+    for _ in 0..count.clamp(0, BURST_CEILING) {
         // spec: S-0616 claim 15 (each spark: the creation draws of one particle at the system's position, the system's position its target point)
         if crate::gas::add_particle(w, sys, held, at, at).is_none() {
             break;
@@ -1215,7 +1245,8 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
         match t.holds {
             Some(held) => {
                 // spec: S-0616 claim 17 (n ≤ 0: no particle and no ranged draw)
-                for _ in 0..n.max(0) {
+                // nocite: our own input validation (#198): at most BURST_CEILING particles, with their draws, in one line; Q-2999 asks for the game's limit
+                for _ in 0..n.clamp(0, BURST_CEILING) {
                     // spec: S-0616 claim 17 (per particle: three ranged draws, its creation draws, four more ranged draws; the line's shape is drawing only, so each particle is kept at the system's position)
                     for _ in 0..RAIL_BEFORE {
                         let _ = w.rng.ranged(0, DRAW_TOP, half);

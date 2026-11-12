@@ -154,7 +154,8 @@ pub fn attempt(w: &mut World, plane: ObjectId) -> bool {
     };
     let mode = w.rules().mode;
     // spec: S-0522 F4 (the plane's position moved 128 leptons in direction f′ by S-0501 F3's horizontal step, table trigonometry)
-    let (x, y) = walk::step_point(o.pos.x, o.pos.y, side, DROP_DISTANCE, true, mode);
+    let bias = crate::table_trig::bias(w);
+    let (x, y) = walk::step_point_b(o.pos.x, o.pos.y, side, DROP_DISTANCE, true, mode, bias);
     match landing(w, p, x, y) {
         Some((c, at)) => {
             release(w, plane, p, c, Pos::new(at.0, at.1, o.pos.z));

@@ -280,7 +280,7 @@ fn orders_at_the_window_corners_are_taken_without_a_panic() {
 // --- #158: a route's length has a bound ---
 
 /// Joins alone double a route, four orders at a time; the bound stops it.
-// nocite: our own input validation (#158): no route grows past the engine's step bound, whatever the press rules let through
+// spec: S-0213 claim 16b (our engine's bound: no route passes 1024 steps, whatever the press rules let through)
 #[test]
 fn joins_do_not_double_a_route_without_bound() {
     let mut w = game();
@@ -309,7 +309,7 @@ fn joins_do_not_double_a_route_without_bound() {
 }
 
 /// Past 16 points a route takes point adds, but not without bound.
-// nocite: our own input validation (#158)
+// spec: S-0213 claim 16b (our engine's bound: a point add to a route of 1024 steps or more is refused)
 #[test]
 fn point_adds_past_16_points_stop_at_the_bound() {
     let mut w = game();

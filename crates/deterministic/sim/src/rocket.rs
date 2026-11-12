@@ -13,7 +13,7 @@
 //! F6 and F7 is S-0204 F7's exact table.
 
 use glasnost_num::geom::{direction, direction_constants, root_floor, table_root_real};
-use glasnost_num::trig::{cos_t, sin_t};
+use glasnost_num::trig::{cos_tb, sin_tb};
 use glasnost_num::{F32, F64, Rounding};
 use serde::{Deserialize, Serialize};
 
@@ -104,27 +104,41 @@ fn trunc(x: F64) -> i64 {
 /// The step of S-0506 Formulas F1: the new position for speed `v`, pitch
 /// `p` and body facing `f`.
 pub fn step(pos: Pos, v: F64, p: F32, f: u16, mode: Rounding) -> Pos {
+    step_b(pos, v, p, f, mode, true)
+}
+
+/// [`step`] with `quirks.table_trig_negative_bias` at `bias` (S-0105 F1).
+pub fn step_b(pos: Pos, v: F64, p: F32, f: u16, mode: Rounding, bias: bool) -> Pos {
+    let cos_t = |x: F64| cos_tb(x, mode, bias);
+    let sin_t = |x: F64| sin_tb(x, mode, bias);
     // spec: S-0506 F1 (s = trunc(v); h = trunc(cos(p) × s); x′ = trunc(x + h cos θ), y′ = trunc(y − h sin θ), z′ = trunc(z + sin(p) × s))
     let s = trunc(v);
     let pd = p.to_f64();
-    let h = trunc(cos_t(pd, mode).mul(fi(s, mode), mode));
+    let h = trunc(cos_t(pd).mul(fi(s, mode), mode));
     let th = theta(f, mode);
-    let x = trunc(fi(pos.x.into(), mode).add(fi(h, mode).mul(cos_t(th, mode), mode), mode));
-    let y = trunc(fi(pos.y.into(), mode).sub(fi(h, mode).mul(sin_t(th, mode), mode), mode));
-    let z = trunc(fi(pos.z.into(), mode).add(sin_t(pd, mode).mul(fi(s, mode), mode), mode));
+    let x = trunc(fi(pos.x.into(), mode).add(fi(h, mode).mul(cos_t(th), mode), mode));
+    let y = trunc(fi(pos.y.into(), mode).sub(fi(h, mode).mul(sin_t(th), mode), mode));
+    let z = trunc(fi(pos.z.into(), mode).add(sin_t(pd).mul(fi(s, mode), mode), mode));
     Pos::new(x as i32, y as i32, z as i32)
 }
 
 /// The nose point of S-0506 Formulas F9.
 pub fn nose(pos: Pos, length: i32, p: F32, f: u16, mode: Rounding) -> Pos {
+    nose_b(pos, length, p, f, mode, true)
+}
+
+/// [`nose`] with `quirks.table_trig_negative_bias` at `bias` (S-0105 F1).
+pub fn nose_b(pos: Pos, length: i32, p: F32, f: u16, mode: Rounding, bias: bool) -> Pos {
+    let cos_t = |x: F64| cos_tb(x, mode, bias);
+    let sin_t = |x: F64| sin_tb(x, mode, bias);
     // spec: S-0506 F9 (b = trunc(L × cos(p)); nose = (trunc(x + b cos θ), trunc(y − b sin θ), trunc(z + L × sin(p))))
     let pd = p.to_f64();
     let l = fi(length.into(), mode);
-    let b = trunc(l.mul(cos_t(pd, mode), mode));
+    let b = trunc(l.mul(cos_t(pd), mode));
     let th = theta(f, mode);
-    let x = trunc(fi(pos.x.into(), mode).add(fi(b, mode).mul(cos_t(th, mode), mode), mode));
-    let y = trunc(fi(pos.y.into(), mode).sub(fi(b, mode).mul(sin_t(th, mode), mode), mode));
-    let z = trunc(fi(pos.z.into(), mode).add(l.mul(sin_t(pd, mode), mode), mode));
+    let x = trunc(fi(pos.x.into(), mode).add(fi(b, mode).mul(cos_t(th), mode), mode));
+    let y = trunc(fi(pos.y.into(), mode).sub(fi(b, mode).mul(sin_t(th), mode), mode));
+    let z = trunc(fi(pos.z.into(), mode).add(l.mul(sin_t(pd), mode), mode));
     Pos::new(x as i32, y as i32, z as i32)
 }
 
@@ -550,7 +564,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     if rs.speed.gt(F64::ZERO) {
         let pos = w.obj(id).map_or(o.pos, |ob| ob.pos);
         let f = w.obj(id).map_or(f, |ob| ob.body.value(t));
-        let next = step(pos, rs.speed, rs.pitch, f, mode);
+        let next = step_b(pos, rs.speed, rs.pitch, f, mode, crate::table_trig::bias(w));
         if legal(w, next) {
             if let Some(ob) = w.obj_mut(id) {
                 ob.pos = next;
@@ -628,9 +642,10 @@ fn end_of_tilt(w: &mut World, id: ObjectId, rs: &mut RocketState, p: &RocketSet,
 fn contact(w: &World, pos: Pos, aim: Pos, rs: &RocketState, mode: Rounding) -> bool {
     // spec: S-0506 claim 19 (the world height its move would reach)
     let s = trunc(rs.speed);
-    let z_next = trunc(
-        fi(pos.z.into(), mode).add(sin_t(rs.pitch.to_f64(), mode).mul(fi(s, mode), mode), mode),
-    );
+    let z_next = trunc(fi(pos.z.into(), mode).add(
+        crate::table_trig::sin_q(w, rs.pitch.to_f64(), mode).mul(fi(s, mode), mode),
+        mode,
+    ));
     let aim_z = i64::from(aim.z);
     if z_next <= aim_z {
         return true;
@@ -658,7 +673,15 @@ pub fn detonation(w: &mut World, id: ObjectId) {
     let Some(rs) = o.rocket.clone() else { return };
     let p = set_of(w, rs.set);
     crate::combat::flying::unregister(w, id);
-    let at = nose(o.pos, p.body_length, rs.pitch, o.body.value(w.tick), mode);
+    let bias = crate::table_trig::bias(w);
+    let at = nose_b(
+        o.pos,
+        p.body_length,
+        rs.pitch,
+        o.body.value(w.tick),
+        mode,
+        bias,
+    );
     // spec: S-0506 claim 19 (the set's damage and warhead, or the elite ones for an elite launch)
     let (damage, warhead) = if rs.elite {
         (p.elite_damage, p.elite_warhead)

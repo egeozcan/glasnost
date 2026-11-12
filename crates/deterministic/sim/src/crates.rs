@@ -1060,7 +1060,8 @@ fn veteran(w: &mut World, at: Pos, a: F64) {
         return;
     }
     let mut steps = 0i64;
-    while F64::from_i64(steps, mode).lt(a) {
+    // spec: S-0520 F7 (one step maps e < 0.0 to 0.0, 0.0 ≤ e < 1.0 to 1.0, 1.0 ≤ e < 2.0 to 2.0, and leaves elite unchanged: three steps reach elite from any experience, so counting past three changes nothing; a huge A no longer loops once per step, #194)
+    while steps < 3 && F64::from_i64(steps, mode).lt(a) {
         steps += 1;
     }
     for id in in_area(w, at, true) {

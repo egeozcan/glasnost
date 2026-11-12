@@ -8,7 +8,7 @@
 
 use glasnost_num::F64;
 use glasnost_num::geom::{direction, root_floor};
-use glasnost_num::trig::{cos_t, sin_t};
+use glasnost_num::trig::{cos_tb, sin_tb};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::area::{self, Detonation};
@@ -78,14 +78,19 @@ pub fn start_point(f: u16) -> u8 {
 /// The displacement of ring point `i` from the ring centre (F6): whole
 /// leptons, Δ*z* = 0.
 pub fn ring_point(i: i32, mode: glasnost_num::Rounding) -> (i32, i32) {
+    ring_point_b(i, mode, true)
+}
+
+/// [`ring_point`] with `quirks.table_trig_negative_bias` at `bias`.
+pub fn ring_point_b(i: i32, mode: glasnost_num::Rounding, bias: bool) -> (i32, i32) {
     let i = i.rem_euclid(RING_POINTS);
     // spec: S-0615 F6 (φᵢ = (270 + ⌊22.5 i⌋) mod 360 whole degrees)
     let phi = (270 + (45 * i) / 2).rem_euclid(360);
     let rad = F64::from_i64(i64::from(phi), mode).mul(DEGREE, mode);
     let r = F64::from_i64(i64::from(RING_RADIUS), mode);
     // spec: S-0615 F6 (Δx = trunc(240 cos φ), Δy = trunc(240 sin φ), table trigonometry of S-0105 F1, truncation toward zero)
-    let dx = r.mul(cos_t(rad, mode), mode).to_i32_common();
-    let dy = r.mul(sin_t(rad, mode), mode).to_i32_common();
+    let dx = r.mul(cos_tb(rad, mode, bias), mode).to_i32_common();
+    let dy = r.mul(sin_tb(rad, mode, bias), mode).to_i32_common();
     (dx, dy)
 }
 
@@ -323,12 +328,13 @@ fn step(w: &mut World, d: &mut Disc) -> bool {
         return false;
     }
     let mode = w.rules().mode;
+    let bias = w.rules().quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
     let (colours, house) = colours(w, d);
     // spec: S-0615 claim 15 (the ring is centred at the slot-0 fire point, S-0313, at the time of the step, at its height)
     let burst = w.obj(d.firer).map_or(0, |o| o.combat.burst);
     let centre = crate::combat::position::fire_point(w, d.firer, 0, burst);
     let at = |i: i32| {
-        let (dx, dy) = ring_point(i, mode);
+        let (dx, dy) = ring_point_b(i, mode, bias);
         Pos::new(centre.x + dx, centre.y + dy, centre.z)
     };
     if k < ARC_STEPS {

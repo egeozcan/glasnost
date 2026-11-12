@@ -732,6 +732,8 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
             ob.beh.queue_and_start_at_once(Behaviour::Attack, t, stale);
             let before = ob.target;
             ob.target = Some(x);
+            // spec: S-0309 claim 24 (every setting of a target, even to the same one, leaves a target that is not an opportunity target)
+            ob.combat.opportunity = false;
             // spec: S-0215 r118 claim 11 (a remembered target put back is no change of target)
             crate::infantry::watch_carry(w, id, before);
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)

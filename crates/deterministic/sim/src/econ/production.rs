@@ -947,8 +947,8 @@ pub(crate) fn delete_item_object(w: &mut World, id: ObjectId) {
 fn drop_creation_set(w: &mut World, id: ObjectId) {
     // spec: S-0506 claim 13 (the spawner removed: its docked slot objects are removed silently)
     crate::spawn::removing(w, id);
-    // spec: S-0402 claim 19 (the slaves were created with the master) and S-0404 claim 6 (the item's object is deleted)
-    super::slaves::unplaced_master_deleted(w, id);
+    // spec: S-0402 claim 19 (the slaves were created with the master) and S-0312 r71 claim 31 (a cancelled production master: the group ends as a removal without a killing hit; every slave is destroyed and removed at the cancellation, a loss each to its house, no kill and no score)
+    super::slaves::removing(w, id);
     // spec: S-0601 claims 1 and 10 (a controller has its record from its creation; a controller removed from the game releases its victims and its record goes)
     crate::mind::removing(w, id);
 }

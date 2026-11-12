@@ -128,7 +128,20 @@ pub fn walking_speed(w: &World, id: ObjectId) -> i32 {
 
 /// The step of S-0208 F3 from (x, y) towards facing `f` at speed `s`.
 pub fn step_point(x: i32, y: i32, f: u16, s: i32, table: bool, mode: Rounding) -> (i32, i32) {
-    let (dx, dy) = step_components(f, s, table, mode);
+    step_point_b(x, y, f, s, table, mode, true)
+}
+
+/// [`step_point`] with `quirks.table_trig_negative_bias` at `bias`.
+pub fn step_point_b(
+    x: i32,
+    y: i32,
+    f: u16,
+    s: i32,
+    table: bool,
+    mode: Rounding,
+    bias: bool,
+) -> (i32, i32) {
+    let (dx, dy) = step_components_b(f, s, table, mode, bias);
     // spec: S-0208 F3 (x′ = trunc(x + s × cosT θ), y′ = trunc(y − s × sinT θ))
     let nx = F64::from_i64(i64::from(x), mode)
         .add(dx, mode)
@@ -143,6 +156,11 @@ pub fn step_point(x: i32, y: i32, f: u16, s: i32, table: bool, mode: Rounding) -
 /// step along facing `f` (negation is exact, so adding the y component
 /// equals subtracting s × sinT θ).
 pub fn step_components(f: u16, s: i32, table: bool, mode: Rounding) -> (F64, F64) {
+    step_components_b(f, s, table, mode, true)
+}
+
+/// [`step_components`] with `quirks.table_trig_negative_bias` at `bias`.
+pub fn step_components_b(f: u16, s: i32, table: bool, mode: Rounding, bias: bool) -> (F64, F64) {
     // spec: S-0208 F3 (f̂ = f or f − 65536)
     let fh = if f <= 32767 {
         i64::from(f)
@@ -159,10 +177,10 @@ pub fn step_components(f: u16, s: i32, table: bool, mode: Rounding) -> (F64, F64
         F64::from_i64(fh - 16384, mode).mul(c, mode) // spec: S-0208 F3 (f̂ − 16384 with the switch off)
     };
     let sf = F64::from_i64(i64::from(s), mode);
-    // spec: S-0208 F3 (the components s × cosT θ and −s × sinT θ)
+    // spec: S-0208 F3 (the components s × cosT θ and −s × sinT θ) and Quirks (quirks.table_trig_negative_bias, S-0105 F1)
     (
-        sf.mul(trig::cos_t(theta, mode), mode),
-        sf.mul(trig::sin_t(theta, mode), mode).negated(),
+        sf.mul(trig::cos_tb(theta, mode, bias), mode),
+        sf.mul(trig::sin_tb(theta, mode, bias), mode).negated(),
     )
 }
 
@@ -250,7 +268,16 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
             i64::from(tp.1 - here.1),
             q.table_direction,
         );
-        let (mut nx, mut ny) = step_point(here.0, here.1, f, s, q.table_direction, r.mode);
+        // spec: S-0208 F3 and Quirks (quirks.table_trig_negative_bias)
+        let (mut nx, mut ny) = step_point_b(
+            here.0,
+            here.1,
+            f,
+            s,
+            q.table_direction,
+            r.mode,
+            q.table_trig_negative_bias,
+        );
         if !q.walker_overshoot {
             // spec: S-0208 Edge cases (switch off: a step that would end 17 or more beyond ends on the target)
             let before = i64::from(tp.0 - here.0) * i64::from(nx - here.0)

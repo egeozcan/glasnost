@@ -788,13 +788,19 @@ pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
 /// [`anim`], playing in reverse when `reverse` (S-0517 claim 6: the deploying
 /// presentation of an undeploy).
 pub fn anim_reversible(w: &mut crate::world::World, name: &str, pos: Pos, reverse: bool) {
-    anim_with(w, name, pos, reverse, None);
+    anim_with(w, name, pos, reverse, None, false);
+}
+
+/// [`anim`] for an animation made through a link on a loop of animation
+/// types when `looped` ([`crate::anims::Anim::looped`]).
+pub fn anim_marked(w: &mut crate::world::World, name: &str, pos: Pos, looped: bool) {
+    anim_with(w, name, pos, false, None, looped);
 }
 
 /// [`anim`] with the depth adjustment its creator gives in place of its
 /// type's (S-0102 claim 13).
 pub fn anim_adjusted(w: &mut crate::world::World, name: &str, pos: Pos, z_adjust: i32) {
-    anim_with(w, name, pos, false, Some(z_adjust));
+    anim_with(w, name, pos, false, Some(z_adjust), false);
 }
 
 fn anim_with(
@@ -803,6 +809,7 @@ fn anim_with(
     pos: Pos,
     reverse: bool,
     z_adjust: Option<i32>,
+    looped: bool,
 ) {
     let index = w
         .rules()
@@ -829,7 +836,10 @@ fn anim_with(
         pos,
         reverse,
         z_adjust,
-        crate::anims::Spawn::default(),
+        crate::anims::Spawn {
+            looped,
+            ..Default::default()
+        },
     );
 }
 
@@ -837,12 +847,19 @@ fn anim_with(
 /// creator gives it an initial loop delay of 1 update, repeat factor 1 and
 /// no reverse request, so its start event comes at the end of that delay.
 pub fn trailer(w: &mut crate::world::World, name: &str, pos: Pos) {
+    trailer_marked(w, name, pos, false);
+}
+
+/// [`trailer`] for a trailer made through a link on a loop of animation
+/// types when `looped` ([`crate::anims::Anim::looped`]).
+pub fn trailer_marked(w: &mut crate::world::World, name: &str, pos: Pos, looped: bool) {
     let spawn = crate::anims::Spawn {
         creation: crate::anim_clock::Creation {
             loop_delay: TRAILER_LOOP_DELAY,
             repeat: 1,
             reverse: false,
         },
+        looped,
         ..Default::default()
     };
     anim_spawned(w, name, pos, false, None, spawn);
