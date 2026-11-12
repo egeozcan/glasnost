@@ -2,14 +2,14 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 44
+revision: 50
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-12
 measurements: []
 requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950,
-Q-1760, Q-1885, Q-2672]
+Q-1760, Q-1885, Q-2672, Q-2982, Q-2983]
 supersedes: []
 ---
 
@@ -230,8 +230,80 @@ turn per unit), to tell it apart from the coarser facings derived from it.
    (claim 26; a lead-confirmed departure checked by MS-10 engine conformance). Buildings re-aim the elevation
    when firing; how they choose it belongs to the building combat specs, and this spec only fixes
    that the shown pitch is the 32-step value of that elevation.
-   - Backing: `measurable` (MS-2 and MS-14 for vehicles, MS-6 for buildings)
-   - Confidence: medium (the shown pitch); high (the turn timing of F9)
+   - **When the turn starts (Q-2982).** A non-building object's elevation is set level, and its
+     turn begins (*t*₀ of F9), each time the object is placed on the map (glossary), at the tick
+     number current then, except at a chronosphere warp's appearance. Nothing else sets it,
+     except the end of a drop-pod stand-in below, so a turn under way goes on by F9's tick count
+     through every other event. The cases:
+     - A new vehicle leaving its factory, and a vehicle unloaded from a transport, start level
+       and turn again, however long the vehicle was carried. So does any vehicle that leaves a
+       building it was inside, since inside a building it is off the map (glossary) and leaving
+       places it again.
+     - A vehicle lifted by a carrier aircraft is off the map, held by the aircraft as a passenger
+       until it is set down (S-0102 claim 22), though it is still drawn under the aircraft (claim
+       44's lifted vehicle). The aircraft sets it down by placing it on the map, so the vehicle
+       starts level and turns again, as an unloaded one does.
+     - A vehicle bunkered in a tank bunker stays on the map (S-0606), so entering and leaving the
+       bunker keep its elevation. So does a vehicle on a repair depot's pad, through the repair
+       and leaving. Whether a harvester docked at a refinery stays on the map is not settled
+       (S-0501 claim 32 and Open question 23). Its elevation follows the rule above either way:
+       kept if it stays on the map, set level and turning again if docking takes it off and
+       leaving places it again.
+     - The exception: a chronosphere warp's member is off the map between its departure and its
+       appearance at the landing point (S-0513 claim 39), but that appearance keeps the
+       elevation. A member has been on the map since the launch at the latest, and S-0513 claim
+       39's wait before the departure is longer than any turn of F9, so its turn has ended before
+       it departs and the appearance shows its final elevation.
+     - A vehicle seized by a magnetic lift stays on the map while it is pulled, held, set down or
+       dropped and while it falls (the events of S-0607), so none of these, its landing included,
+       restarts the turn.
+     - A move by the teleporting locomotor keeps the object on the map, whether it is the
+       object's own move (S-0207 claim 20) or the teleporting stand-in's move of a unit seized by
+       a magnetic lift (S-0607 claims 22 and 23), so the jump and the landing keep the elevation.
+     - A unit seized under S-0607 claim 23's drop-pod stand-in is, in the original, taken off the
+       map at touchdown and put back at the landing point, which starts its turn again. Our
+       engine gives that touchdown result at once at the seize (S-0607 claim 23) and leaves the
+       unit on the map, so there the end of the stand-in sets the elevation level and starts its
+       turn, at the tick number current then (design).
+     - An object dropped by parachute is placed when it is dropped, so its turn runs while it
+       falls, and landing does not restart it. In skirmish only infantry are dropped (S-0522),
+       and they have no barrel part, so this is never seen.
+     - Aircraft-kind objects have an elevation too, but claim 45 draws no barrel for them, so it
+       is never seen either.
+   - **First appearance.** A drawn frame shows the elevation at the tick number *n* current while
+     it is drawn, so at *ε = n − t*₀ (F9). That number has already grown by one at the end of the
+     tick the frame follows (S-0201 claims 1 and 6), so an object placed during a tick is first
+     drawn at *ε* = 1, never at *ε* = 0. Within the placement tick the elevation is at *ε* = 0
+     (S-0206), but no drawn frame shows that value. An object that the map places before the
+     first tick has *t*₀ = 0. With the illustrative fire angle of 20 above, a vehicle unloaded
+     during a game shows the 32-step values 8, 7, 7, 6, 6, 6 in its first six drawn frames.
+   - **Saved games.** A saved game keeps each object's elevation and its turn, and the tick
+     number too: after a load the tick number is the one current at the save. So every turn goes
+     on where it was, and a vehicle saved during its turn is drawn neither level again nor at its
+     final elevation at once. Joining a network game in progress is outside this spec, as are
+     network games.
+   - Backing: `measurable` (MS-2 and MS-14 for vehicles, MS-6 for buildings; MS-35 for the
+     restart at a factory exit and an unload, the first appearance, the tank bunker, the repair
+     depot, the chronosphere warp, the teleporting stand-in, the magnetic lift, and saved games
+     with the tick number they keep). The rule that only a placement sets the elevation is
+     `measurable` case by case through those parts. Apart from part e's save, those parts take
+     each event after the turn has ended, so they show that the event does not restart it, not
+     that a turn still under way goes on through it. That a turn under way goes on through an
+     event other than a save is `unmeasured`: it follows from nothing else setting the elevation.
+     Leaving another building it was inside, the carrier aircraft, the refinery dock, the
+     parachute case and the drop-pod stand-in are `unmeasured`: the first follows from the
+     glossary and the rule, which part b tests for the factory, a carrier aircraft's lift needs a
+     start and an end that the transport specs leave outside S-0507 claim 13, the refinery dock
+     waits on S-0501's Open question 23, no barrel part is ever dropped in skirmish, and the
+     drop-pod stand-in needs a seizing warhead that names that locomotor (S-0607 claim 22). Our
+     engine's restart at the end of that stand-in is a design rule.
+   - Confidence: high (the turn timing of F9, the restart at a factory exit and an unload, and
+     the first appearance at *ε* = 1); medium (the shown pitch, the rule that only a placement
+     sets the elevation, a turn under way going on through other events, and leaving another
+     building, the carrier aircraft, the bunker, the repair depot, the chronosphere warp, the
+     teleporting locomotor, the magnetic lift, the drop-pod touchdown and the parachute case
+     keeping or restarting it, and saved games with their tick number, until MS-35 part e
+     runs); low (the refinery dock, as S-0501 rates it)
 
 ### Part placement
 
@@ -1379,6 +1451,25 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       lifted vehicle's raises, the original's flying-locomotor and hunter-seeker anchors, and the
       original's own-image comparison, until MS-34 part c runs), low (the original's row bounds off
       a level-0 surface, which rest on S-0313 claim 11b's hypothesis, itself low)
+
+### Aircraft parts
+
+45. **Aircraft draw no turret or barrel (Q-2983).** An aircraft-kind object (glossary *aircraft*
+    and *rocket missile*: an ordinary aircraft, a rocket missile or a spawned aircraft) is drawn
+    with its body part only, in every attitude: level, pitched or banked in flight (claim 42),
+    pitched as a rocket (claim 41) and tumbling while it crashes (S-0113 claim 20). Its type's
+    turret flag, turret model and barrel model are never drawn, whatever their values. So claims
+    4, 8, 10 and 11, and the turret and barrel keys of claim 26, never apply to such an object:
+    there is no turret angle relative to the drawn heading, no turret or barrel key under pitch,
+    bank or tumble, and no turret-first overlap test for it. The object's kind decides, not its
+    locomotor. Whether the turret flag changes how an aircraft aims or fires is for the combat
+    specs.
+    - Backing: `measurable` (MS-36: part a for an ordinary aircraft with the flying locomotor and
+      a rocket missile, part b for a spawned aircraft, part c for an aircraft-kind object with
+      another locomotor)
+    - Confidence: high (an ordinary aircraft with the flying locomotor and a rocket
+      missile); medium (a spawned aircraft and an aircraft-kind object with another
+      locomotor, until MS-36 parts b and c run)
 
 ## Formulas
 
@@ -4057,6 +4148,102 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
   raised by 14 rows, and by a further 60 rows in claim 44's bridge case), and every own-image
   comparison is at the same screen position. This is not an oracle check.
 - *Tool:* the measurement harness, with the read-only recorder named in the setup.
+
+**MS-35 — When the barrel-elevation turn starts (claim 6; Q-2982).**
+- *Test data:* as MS-14: a test map override section sets the fire angle of one stock vehicle
+  type with a barrel part to 20, and the art database copy gives its image the cache-disable
+  option. Parts b and e instead set the fire angle to 64 (a turn of 21 ticks, from level to
+  straight up, ending at step 8), so that the turn is still under way when the factory first
+  shows the barrel and when the save is made. For part f, the override section also has the stock
+  magnetic-lift weapon's seizing warhead name the teleporting locomotor, so that a seize uses the
+  teleporting stand-in (S-0607 claims 22 and 23).
+- *Setup:* the common setup. A stock vehicle transport, a stock factory that builds the test
+  type, a stock tank bunker that the test type can enter, a stock repair depot, a chronosphere
+  ready for the human house, and a stock magnetic-lift unit of the human house with a test
+  vehicle of a second house in its reach. The test map places one test vehicle of the human house
+  with less than full health. A read-only recorder of the tick number and of each object's
+  presence on the map, beside per-drawn-frame captures.
+- *Procedure:* in every part except b and e, the unload, entry, docking, warp or seize comes at
+  least 30 ticks after the vehicle's previous placement. In (b) the built vehicle has no earlier
+  placement, and it is first listed on the map at tick 30 or later, so that a turn counted from
+  the game's start would show step 8 in every frame. In (e) the unload is the placement, and the
+  save comes during the turn that it starts.
+  - (a) Load a vehicle into the transport, wait, and unload it on open ground.
+  - (b) Build the vehicle at the factory. If no frame whose tick number is below *t*₀ + 18 shows
+    its barrel, where *t*₀ is the tick in which the recorder first lists the vehicle on the map,
+    the run is void and is repeated with the factory's exit in view. The void rule reads only
+    tick numbers and whether the barrel is in view, never the step shown, and F9 gives a step
+    below 8 to every such frame.
+  - (c) Order a vehicle into the tank bunker, wait, and sell the bunker, which lets the vehicle
+    out (S-0606 claim 13).
+  - (d) Warp a vehicle with the chronosphere to open ground.
+  - (e) Unload a vehicle as in (a). While its last drawn frame shows a step from 2 to 6, open the
+    options menu (no tick runs while it is open), save, and later load that save. If the last
+    frame before the save shows another step, the run is void and is repeated.
+  - (f) In a run with part f's test data, let the magnetic-lift unit seize the test vehicle, and
+    capture it through the teleporting stand-in's jump and landing.
+  - (g) Let the magnetic-lift unit seize the test vehicle, and during the pull give the lifter a
+    move order, which ends the grip (S-0607 claim 12), so that the vehicle is dropped over clear
+    land (S-0607 claim 13).
+  - (h) Send the test vehicle with less than full health to the repair depot, let it be repaired
+    on the depot, and let it leave.
+- *Observable:* the barrel's 32-step pitch step (0 = level, 1 = 11.25° up, and so on) in each
+  drawn frame with the tick number current while it is drawn, the tick numbers at which the
+  recorder lists the vehicle on the map and off it, and in (e) the recorder's tick number just
+  before the save and just after the load.
+- *Expected:*
+  - (a): from the first drawn frame after the tick in which the recorder first lists the vehicle
+    on the map again, the steps are 0, 1, 1, 2, 2, 2, …: step 0 once, step 1 for exactly two
+    frames.
+  - (b): the factory may hide the first frames. Every frame that shows the barrel, up to step 8,
+    shows the step that F9 gives for the fire angle of 64 at *ε = n − t*₀, where *n* is the
+    frame's tick number and *t*₀ the tick in which the recorder first lists the vehicle on the
+    map.
+  - (c), (d), (f), (g) and (h): step 2 in every frame, through entering and leaving, the warp,
+    the seize, jump, pull, drop, fall and landing, and the docking, repair and leaving. In (f),
+    (g) and (h) the recorder lists the vehicle on the map in every tick.
+  - (e): the tick number after the load is the one just before the save. Every frame before the
+    save and after the load, up to step 8, shows the step that F9 gives for the fire angle of 64
+    at *ε = n − t*₀, where *n* is the frame's tick number and *t*₀ the tick in which the recorder
+    first lists the vehicle on the map after the unload. So the steps after the load go on as if
+    there had been no save.
+- *Falsified if:* in (a), the steps start 0, 0, 1, 1 (first appearance at the placement tick
+  itself) or step 2 shows in the first frame (no restart); in (b), any frame that shows the
+  barrel at a step other than F9's for its *ε*; in (c), (d), (f), (g) or (h), any frame below
+  step 2, or in (f), (g) or (h) any tick in which the recorder does not list the vehicle on the
+  map; in (e), a tick number after the load other than the one before the save, or any frame
+  after the load whose step differs from F9's step for its *ε*.
+- *Tool:* the measurement harness, with the recorder above.
+
+**MS-36 — Aircraft draw no turret or barrel (claim 45; Q-2983).**
+- *Test data:* a test map override section gives the turret flag, a nonzero test drawing-pitch
+  angle and a nonzero test bank angle to one stock aircraft type with voxel art and the flying
+  locomotor (part a), the turret flag to one stock rocket type (part a) and to the stock spawned
+  aircraft type of a stock carrier with voxel art (part b). The art database copy gives each of
+  these images a test turret model and a test barrel model: one section each, filled with a
+  colour index that no other model in view uses, and sized to stick out of the body on every
+  side. For part c, a second run of part a's aircraft also has its locomotor field set to the
+  jumpjet locomotor. As a positive control, the same test turret and barrel models go on a stock
+  vehicle type that has the turret flag.
+- *Setup:* the common setup, with the rocket's stock launcher and the carrier for the human
+  house, and a computer house's defences that can shoot the aircraft down.
+- *Procedure:*
+  - (a) Capture the aircraft flying level, turning (banked), and level again; capture the rocket
+    from launch to impact; let the defences shoot the aircraft down and capture its crash.
+  - (b) Order the carrier to attack, and capture its spawned aircraft from launch to their
+    return.
+  - (c) In the second run, capture part a's aircraft on the ground and while it moves, whether or
+    not it leaves the ground.
+  - Capture the control vehicle on the ground in each run.
+- *Observable:* whether any pixel shows a colour that the test colour index gives under the
+  lighting in view: the palette colours of that index in every shade row of the lighting table
+  (claim 38) as claim 19 applies it. The index is chosen under *Discriminating colours* so that
+  no other object in view shows any of those colours.
+- *Expected:* the control shows the test turret and barrel in those colours; no capture of an
+  aircraft-kind object in any part shows any of them.
+- *Falsified if:* any pixel in those colours appears on an aircraft-kind object in any part. If
+  the control shows no turret or barrel, the run is void (the test models did not load).
+- *Tool:* screen capture.
 
 ## Open questions
 

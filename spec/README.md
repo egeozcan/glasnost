@@ -115,7 +115,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 4 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 12 | approved | — |
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 46 | approved | — |
-| [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 44 | approved | — |
+| [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 50 | approved | — |
 | [S-0007](rules-import/S-0007-art-lookup.md) | Art lookup (image indirection, sprite or voxel, companion files, theater substitution) | rules-import | 15 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 30 | approved | — |
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 42 | approved | — |
