@@ -603,15 +603,7 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
 /// pass (S-0203 claim 10), its marks and claims are cleared and its cells
 /// recomputed.
 pub fn remove(w: &mut World, id: ObjectId) {
-    remove_with(w, id, true, true);
-}
-
-/// [`remove`] for an object a conversion replaces (S-0415 claims 6 and
-/// 10): its holders do not drop it, because the conversion hands them over
-/// to the new object; the caller decides what they hold (#221).
-pub fn remove_converted(w: &mut World, id: ObjectId) {
-    // spec: S-0415 claims 6 and 10 (every object whose target was the old one gets the new one: a hand-over, not a drop at the removal; #221)
-    remove_with(w, id, true, false);
+    remove_with(w, id, true);
 }
 
 /// Takes an object out of the game as [`remove`] does, but without the
@@ -621,19 +613,16 @@ pub fn remove_converted(w: &mut World, id: ObjectId) {
 /// taken.
 pub fn take_out_quietly(w: &mut World, id: ObjectId) {
     // spec: S-0216 claim 8 (Removal before the groups: the removal takes no random draw, starts no animation and frees the cells)
-    remove_with(w, id, false, true);
+    remove_with(w, id, false);
 }
 
-/// [`remove`], with the ground-cell recalculation only when `recalc` and
-/// the holders' drop only when `drop_holders`.
-fn remove_with(w: &mut World, id: ObjectId, recalc: bool, drop_holders: bool) {
+/// [`remove`], with the ground-cell recalculation only when `recalc`.
+fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
-    if drop_holders {
-        // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that is removed, a crush included, at that moment)
-        crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Removed);
-    }
+    // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that is removed, a crush included, at that moment); S-0415 r22 claim 13 (before the foundation cells are recalculated)
+    crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Removed);
     // spec: S-0306 claim 17 (a projectile whose target is removed from the map: the cell it stood in when not airborne, else nothing; a killed target was dealt with at the kill)
     crate::combat::projectile::target_leaves(w, id);
     // spec: S-0615 claim 14 (removed or taken off the map, a transport or building entered included: lost to its disc lasers at once)
