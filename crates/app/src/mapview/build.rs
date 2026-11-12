@@ -460,10 +460,57 @@ const ROLL_ANGLE_DEFAULT: f64 = 0.5235987755982988;
 /// The speed fraction a flying body must exceed to pitch and bank.
 // spec: S-0105 Import mapping (PitchSpeed: 0.25)
 const PITCH_SPEED_DEFAULT: f64 = 0.25;
-/// Marks a crashing body's image-cache angles as F1 table steps (0 … 8191)
-/// rather than a rocking body's single-precision angle bits: a cache key
-/// of ours, not a behaviour.
-const TUMBLE_STEP_TAG: u32 = 1 << 31;
+/// The pose a group of transient voxel images is drawn under: a cache key
+/// of ours, not a behaviour (design: render (#104)). The images are fresh
+/// draws (S-0105 claims 26 and 41, S-0106 claim 13, S-0113 claim 20), kept
+/// apart from the settled ones and released once no redraw has used them
+/// for [`TRANSIENT_REDRAWS`] redraws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Pose {
+    /// A rocking or sinking body's exact drawn pitch and roll bits.
+    Rocked(u32, u32),
+    /// A crashing body's F1 table steps (0 … 8191) of ψ′ and φ.
+    Tumble(u32, u32),
+    /// A rocket's fresh pitch: the table step of −p (S-0105 claim 41).
+    Rocket(u32),
+}
+
+/// Redraws a transient image group or vehicle shadow cutout may go unused
+/// before its images are released; our own choice (design: render (#104)):
+/// a few, so that a vehicle turning back to a recent facing finds its
+/// cutout, while the images held follow the objects in play.
+const TRANSIENT_REDRAWS: u64 = 4;
+
+/// The scene images released by the painter, for its next transient images
+/// to take (design: render (#104)), and the redraws ended so far.
+#[derive(Clone, Debug, Default)]
+struct TransientPool {
+    free: Vec<u32>,
+    now: u64,
+}
+
+/// Adds a transient voxel part or shadow image to `scene`, in a released
+/// image of `pool` when there is one (design: render (#104)): its index and
+/// offset from the draw point (S-0105 claim 25, F6). An empty image adds
+/// nothing.
+fn add_transient_image(
+    scene: &mut Scene,
+    pool: &mut TransientPool,
+    img: &voxel::PartImage,
+) -> Option<PlacedPart> {
+    let image = IndexedImage::new(img.width, img.height, img.pixels.clone()).ok()?;
+    if image.width() == 0 || image.height() == 0 {
+        return None;
+    }
+    let id = match pool.free.pop() {
+        Some(id) => {
+            scene.resize_image(id, image);
+            id
+        }
+        None => scene.add_image(image),
+    };
+    Some((id, [img.offset[0] as i32, img.offset[1] as i32]))
+}
 
 /// A type's drawing angle in radians (S-0105 Import mapping): the degrees
 /// multiplied by the binary64 π/180, rounded toward zero; −1 keeps the value
@@ -1198,19 +1245,22 @@ pub struct Painter {
     /// claims 26, 31), as scene images with their offsets.
     voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
     /// The images of rocking bodies (a sinking vehicle's lean, S-0504
-    /// claims 15 and 16), by type and the exact pitch and roll bits. S-0105
-    /// claim 26 and S-0106 claim 13 draw a rocking body, turret and barrel
-    /// fresh; a fresh draw is a function of its key and its angles alone,
-    /// so these keep it under them, apart from the settled images. The
-    /// pixels are those of a fresh draw; the retention only bounds the
-    /// scene's images (as for a rocket's fresh pitches).
-    rocked: BTreeMap<(Kind, usize, u32, u32), voxel::ImageCache<Option<PlacedPart>>>,
+    /// claims 15 and 16), crashing bodies and rockets' fresh pitches, by
+    /// type and [`Pose`]. S-0105 claims 26 and 41, S-0106 claim 13 and
+    /// S-0113 claim 20 draw them fresh; a fresh draw is a function of its
+    /// key and its angles alone, so these keep it under them, apart from
+    /// the settled images, while redraws use it (design: render (#104)):
+    /// each group with the last redraw that used it.
+    rocked: BTreeMap<(Kind, usize, Pose), PoseImages>,
     /// Vehicle shadows with the current part image excluded, by unmasked
     /// shadow image, part images and the parts' screen shift from the
     /// shadow's draw point (S-0105 claim 39): a memo of the per-appearance
-    /// exclusion, bounded by the cached images it combines and the heights
-    /// a vehicle stands above its surface.
+    /// exclusion, each with the last redraw that used it, released when
+    /// unused (design: render (#104)).
     cutouts: Cutouts,
+    /// The released scene images and the redraw count (design: render
+    /// (#104)).
+    pool: TransientPool,
     /// The composed images of sprite-body vehicles with the turret flag
     /// (S-0105 claim 12, *One image*), by their parts (scene image and
     /// offset from the draw point, in painting order): bounded by the
@@ -1310,8 +1360,11 @@ type TileImages = (
 /// canvas size.
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
 /// The vehicle-shadow cutout memo of [`Painter`]: by unmasked shadow image,
-/// part images and the parts' shift from the shadow's draw point.
-type Cutouts = BTreeMap<(u32, Vec<u32>, (i32, i32)), Option<PlacedPart>>;
+/// part images and the parts' shift from the shadow's draw point, with the
+/// last redraw that used each.
+type Cutouts = BTreeMap<(u32, Vec<u32>, (i32, i32)), (Option<PlacedPart>, u64)>;
+/// A [`Pose`]'s images in [`Painter`], with the last redraw that used them.
+type PoseImages = (voxel::ImageCache<Option<PlacedPart>>, u64);
 
 /// One animation's draw: its layer, ground-layer sort key and items.
 type SlotItems = (slots::Layer, i64, Vec<Item>);
@@ -4933,12 +4986,13 @@ impl<'a> Builder<'a> {
     }
 
     /// [`Self::cached_part`] in the type's cache for `rocked`: the settled
-    /// one for `None`, else that pitch and roll's own (S-0504 claim 16).
+    /// one for `None`, else that pose's own (S-0504 claim 16), whose images
+    /// are transient (design: render (#104)).
     fn cached_part_in(
         &mut self,
         kind: Kind,
         idx: usize,
-        rocked: Option<(u32, u32)>,
+        rocked: Option<Pose>,
         key: voxel::ImageKey,
         draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
     ) -> Option<(u32, [i32; 2])> {
@@ -4948,7 +5002,10 @@ impl<'a> Builder<'a> {
         {
             return *p;
         }
-        let part = draw(self).and_then(|img| self.add_part(&img));
+        let part = draw(self).and_then(|img| match rocked {
+            None => self.add_part(&img),
+            Some(_) => add_transient_image(&mut self.built.scene, &mut self.p.pool, &img),
+        });
         self.image_cache_mut(kind, idx, rocked).insert(key, part);
         part
     }
@@ -4958,24 +5015,30 @@ impl<'a> Builder<'a> {
         &self,
         kind: Kind,
         idx: usize,
-        rocked: Option<(u32, u32)>,
+        rocked: Option<Pose>,
     ) -> Option<&voxel::ImageCache<Option<PlacedPart>>> {
         match rocked {
             None => self.p.voxels.get(&(kind, idx)),
-            Some((p, r)) => self.p.rocked.get(&(kind, idx, p, r)),
+            Some(pose) => self.p.rocked.get(&(kind, idx, pose)).map(|(c, _)| c),
         }
     }
 
-    /// [`Self::image_cache`], made when missing.
+    /// [`Self::image_cache`], made when missing; a pose's own is marked
+    /// used in this redraw (design: render (#104)).
     fn image_cache_mut(
         &mut self,
         kind: Kind,
         idx: usize,
-        rocked: Option<(u32, u32)>,
+        rocked: Option<Pose>,
     ) -> &mut voxel::ImageCache<Option<PlacedPart>> {
         match rocked {
             None => self.p.voxels.entry((kind, idx)).or_default(),
-            Some((p, r)) => self.p.rocked.entry((kind, idx, p, r)).or_default(),
+            Some(pose) => {
+                let now = self.p.pool.now;
+                let entry = self.p.rocked.entry((kind, idx, pose)).or_default();
+                entry.1 = now;
+                &mut entry.0
+            }
         }
     }
 
@@ -5143,13 +5206,22 @@ impl<'a> Builder<'a> {
         };
         // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles)
         let list = match tilt {
-            // spec: S-0113 claim 20 (a crashing body at positive height is drawn fresh, never reused, with the rotations of S-0105 F1): the drawn transform depends on ψ′ and φ only through their F1 table steps, so the images are kept apart under those steps, as a rocket's fresh pitch is (S-0105 claim 41); the pixels are a fresh draw's and the retention is bounded by the table. The high bit keeps these apart from a rocking body's angle bits.
-            Tilt::Tumbling { pitch, roll } => Some((
-                voxel::table_step(f64::from(pitch), &q) | TUMBLE_STEP_TAG,
-                voxel::table_step(f64::from(roll), &q) | TUMBLE_STEP_TAG,
+            // spec: S-0113 claim 20 (a crashing body at positive height is drawn fresh, never reused, with the rotations of S-0105 F1): the drawn transform depends on ψ′ and φ only through their F1 table steps, so the images are kept apart under those steps, as a rocket's fresh pitch is (S-0105 claim 41); the pixels are a fresh draw's
+            Tilt::Tumbling { pitch, roll } => Some(Pose::Tumble(
+                voxel::table_step(f64::from(pitch), &q),
+                voxel::table_step(f64::from(roll), &q),
             )),
-            _ => rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits())),
+            // spec: S-0105 claim 41 (a pitch of none of the three classes is drawn fresh and not retained); design: render (#104): its images are transient, kept apart under the table step that fixes them
+            Tilt::Rocket {
+                class: voxel::RocketPitch::Fresh(step),
+                ..
+            } => Some(Pose::Rocket(step)),
+            _ => rocking.map(|r| Pose::Rocked(r.pitch.to_bits(), r.roll.to_bits())),
         };
+        if list.is_some() {
+            // design: render (#104): the pose's images are used in this redraw
+            self.image_cache_mut(kind, idx, list);
+        }
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
@@ -5195,10 +5267,15 @@ impl<'a> Builder<'a> {
             b.limit_checked(&shadow_file, "shadow", shadow_key, img)
         };
         // spec: S-0113 claim 20 (a crashing body's shadow follows only the heading and the slope shape, and its image key is S-0105 claim 42's), so it is the level flying body's image, not one kept apart under the angles.
+        // spec: S-0105 claim 41 (a rocket's shadow is unpitched): it is the settled image, not one kept apart under the fresh pitch
+        let unpitched = match list {
+            Some(Pose::Rocket(_)) => None,
+            l => l,
+        };
         let shadow_list = if matches!(tilt, Tilt::Tumbling { .. }) {
             None
         } else {
-            list
+            unpitched
         };
         // An aircraft's shadow comes before the body, which covers it.
         if kind != Kind::Vehicles
@@ -5365,17 +5442,26 @@ impl<'a> Builder<'a> {
             && let Some(s) = shadow
         {
             let cached = self
-                .image_cache(kind, idx, list)
+                .image_cache(kind, idx, unpitched)
                 .is_some_and(|c| c.get(&shadow_key).is_some());
             let fresh = (!cached).then(|| draw_shadow(self, s));
-            let cache = match list {
+            let now = self.p.pool.now;
+            let cache = match unpitched {
                 None => self.p.voxels.entry((kind, idx)).or_default(),
-                Some((p, r)) => self.p.rocked.entry((kind, idx, p, r)).or_default(),
+                Some(pose) => {
+                    let entry = self.p.rocked.entry((kind, idx, pose)).or_default();
+                    entry.1 = now;
+                    &mut entry.0
+                }
             };
             let part = vehicle_shadow(
                 &mut self.built.scene,
-                cache,
-                &mut self.p.cutouts,
+                Shadows {
+                    cache,
+                    cutouts: &mut self.p.cutouts,
+                    pool: &mut self.p.pool,
+                    transient: unpitched.is_some(),
+                },
                 shadow_key,
                 &placed,
                 (point.0 - shadow_point.0, point.1 - shadow_point.1),
@@ -5511,17 +5597,29 @@ pub fn vehicle_shadow_point(point: (i32, i32), above: i32) -> (i32, i32) {
 /// exclusion compares at the same screen position.
 fn vehicle_shadow(
     scene: &mut Scene,
-    cache: &mut voxel::ImageCache<Option<PlacedPart>>,
-    cutouts: &mut Cutouts,
+    s: Shadows<'_>,
     key: voxel::ImageKey,
     parts: &[PlacedPart],
     shift: (i32, i32),
     fresh: Option<Option<voxel::PartImage>>,
 ) -> Option<PlacedPart> {
+    let Shadows {
+        cache,
+        cutouts,
+        pool,
+        transient,
+    } = s;
+    let now = pool.now;
     let unmasked = match fresh {
         Some(img) => {
             // spec: S-0105 claims 31, 39 (cache only the unmasked footprint)
-            let part = img.and_then(|i| add_part_image(scene, &i));
+            let part = img.and_then(|i| {
+                if transient {
+                    add_transient_image(scene, pool, &i)
+                } else {
+                    add_part_image(scene, &i)
+                }
+            });
             cache.insert(key, part);
             part
         }
@@ -5531,7 +5629,9 @@ fn vehicle_shadow(
     // spec: S-0105 claim 39 (exclude this object's current completed part image on every
     // appearance, fresh or reused; no old-pose cutouts persist)
     let ids = (unmasked.0, parts.iter().map(|p| p.0).collect(), shift);
-    if let Some(p) = cutouts.get(&ids) {
+    if let Some((p, used)) = cutouts.get_mut(&ids) {
+        // design: render (#104): used in this redraw
+        *used = now;
         return *p;
     }
     let mut img = placed_image(scene, unmasked);
@@ -5549,9 +5649,20 @@ fn vehicle_shadow(
         .collect();
     let refs: Vec<&voxel::PartImage> = images.iter().collect();
     voxel::exclude_own_image(&mut img, &refs);
-    let part = add_part_image(scene, &img);
-    cutouts.insert(ids, part);
+    // design: render (#104): a cutout is transient
+    let part = add_transient_image(scene, pool, &img);
+    cutouts.insert(ids, (part, now));
     part
+}
+
+/// What [`vehicle_shadow`] keeps its images in: the type's image cache for
+/// the pose (settled or [`Pose`]), the cutouts, the released images, and
+/// whether the pose's images are transient (design: render (#104)).
+struct Shadows<'a> {
+    cache: &'a mut voxel::ImageCache<Option<PlacedPart>>,
+    cutouts: &'a mut Cutouts,
+    pool: &'a mut TransientPool,
+    transient: bool,
 }
 
 /// A type's fire angle (S-0105 claim 6, Import mapping: `FireAngle`,
@@ -5969,6 +6080,7 @@ impl Painter {
             voxels: BTreeMap::new(),
             rocked: BTreeMap::new(),
             cutouts: BTreeMap::new(),
+            pool: TransientPool::default(),
             composed: BTreeMap::new(),
             canvas,
             models: BTreeMap::new(),
@@ -6486,7 +6598,46 @@ impl Painter {
 
     /// Ends a redraw of the live game's objects: the transient images no
     /// redraw has used for a while are released (design: render (#104)).
-    pub fn end_redraw(&mut self, _scene: &mut Scene) {}
+    ///
+    /// A pose's group of images and a cutout go when unused for
+    /// [`TRANSIENT_REDRAWS`] redraws; a cutout made from a released image
+    /// goes with it, so no entry names a released image. A released image
+    /// becomes 0 × 0 and its index is given to the next transient image.
+    /// The items of the redraw just ended name only images it used, none
+    /// released here.
+    pub fn end_redraw(&mut self, scene: &mut Scene) {
+        let Painter {
+            rocked,
+            cutouts,
+            pool,
+            ..
+        } = self;
+        let now = pool.now;
+        pool.now += 1;
+        let stale = |used: u64| used + TRANSIENT_REDRAWS <= now;
+        let mut released = BTreeSet::new();
+        rocked.retain(|_, (cache, used)| {
+            let keep = !stale(*used);
+            if !keep {
+                released.extend(cache.values().flatten().map(|p| p.0));
+            }
+            keep
+        });
+        cutouts.retain(|(unmasked, parts, _), (part, used)| {
+            let keep = !stale(*used)
+                && !released.contains(unmasked)
+                && parts.iter().all(|p| !released.contains(p));
+            if !keep && let Some(p) = part {
+                released.insert(p.0);
+            }
+            keep
+        });
+        for id in released {
+            let empty = IndexedImage::new(0, 0, Vec::new()).expect("an empty image");
+            scene.resize_image(id, empty);
+            pool.free.push(id);
+        }
+    }
 
     /// The number of scene images the debris pieces' slots hold, in use or
     /// free.
@@ -6807,6 +6958,25 @@ mod shadow_tests {
         scene.images[p.unwrap().0 as usize].pixels().to_vec()
     }
 
+    /// [`vehicle_shadow`] for a settled pose, with no released images to use again.
+    fn shadow(
+        scene: &mut Scene,
+        cache: &mut voxel::ImageCache<Option<PlacedPart>>,
+        cutouts: &mut Cutouts,
+        key: voxel::ImageKey,
+        parts: &[PlacedPart],
+        shift: (i32, i32),
+        fresh: Option<Option<voxel::PartImage>>,
+    ) -> Option<PlacedPart> {
+        let s = Shadows {
+            cache,
+            cutouts,
+            pool: &mut TransientPool::default(),
+            transient: false,
+        };
+        vehicle_shadow(scene, s, key, parts, shift, fresh)
+    }
+
     /// spec: S-0105 claims 31, 39 (the cache keeps the unmasked footprint; the current
     /// completed part image is excluded on every appearance, fresh or reused, so no old-pose
     /// cutout persists; lead-confirmed departure), S-0106 claim 11 (every vehicle shadow excludes
@@ -6820,7 +6990,7 @@ mod shadow_tests {
         let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
         let b = add_part_image(&mut scene, &img(2, 1, [2, 0], &[0, 9])).unwrap();
         let m = voxel::SHADOW_MARK;
-        let first = vehicle_shadow(
+        let first = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,
@@ -6832,7 +7002,7 @@ mod shadow_tests {
         assert_eq!(pixels(&scene, first), [m, 0, m, m]);
         // The cache holds the unmasked footprint.
         assert_eq!(pixels(&scene, *cache.get(&key).unwrap()), [m; 4]);
-        let second = vehicle_shadow(
+        let second = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,
@@ -6845,7 +7015,7 @@ mod shadow_tests {
         assert_eq!(pixels(&scene, second), [m, m, m, 0]);
         // The same parts again reuse the masked image: the scene does not grow.
         let n = scene.images.len();
-        let third = vehicle_shadow(
+        let third = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,
@@ -6855,7 +7025,7 @@ mod shadow_tests {
             None,
         );
         // Back to A's pose: A's cutout again, not B's.
-        let fourth = vehicle_shadow(
+        let fourth = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,
@@ -6881,7 +7051,7 @@ mod shadow_tests {
         let m = voxel::SHADOW_MARK;
         // A part pixel at x = 1, drawn one pixel to the right of the shadow's point.
         let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
-        let shifted = vehicle_shadow(
+        let shifted = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,
@@ -6892,7 +7062,7 @@ mod shadow_tests {
         );
         assert_eq!(pixels(&scene, shifted), [m, m, 0, m]);
         // Drawn a row above the shadow's: it covers none of the footprint's row.
-        let above = vehicle_shadow(
+        let above = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,
@@ -6903,7 +7073,7 @@ mod shadow_tests {
         );
         assert_eq!(pixels(&scene, above), [m; 4]);
         // The same parts with no shift keep their own memo.
-        let level = vehicle_shadow(
+        let level = shadow(
             &mut scene,
             &mut cache,
             &mut cutouts,

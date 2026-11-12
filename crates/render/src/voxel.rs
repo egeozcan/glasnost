@@ -3237,6 +3237,11 @@ impl<T: Clone> ImageCache<T> {
         self.images.insert(key, image);
     }
 
+    /// The images kept, in key order.
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.images.values()
+    }
+
     /// The image for `key`: the kept one if there is one, else `make`'s
     /// (a fresh draw), which is kept. With `disabled` (the type's
     /// cache-disable option, a running recoil cycle, an unsettled tilt) the
