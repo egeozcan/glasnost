@@ -1,6 +1,10 @@
 //! Sensor coverage looks only at the disc's cells on the map, whatever the
 //! radius (#170). Synthetic data only: the `cloak_common` test ruleset.
 
+// The watchdog thread and its channel belong to the test harness, not to the
+// simulation, which runs on that thread alone.
+#![allow(clippy::disallowed_methods, clippy::disallowed_types)]
+
 mod cloak_common;
 
 use std::collections::BTreeMap;

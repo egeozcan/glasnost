@@ -122,6 +122,9 @@ fn run_chain(n: usize) -> usize {
 
 // spec: S-0312 claims 1 and 6 (the death weapon is set off inside the killing hit) and S-0303 claim 1 (a nested detonation's effects come before the outer detonation's later hits): a chain of any length resolves whole, the same on every stack
 #[test]
+// The thread belongs to the test harness, not to the simulation, which runs
+// on it alone; a stack overflow aborts the process.
+#[allow(clippy::disallowed_types)]
 fn a_long_death_weapon_chain_resolves_on_a_small_stack() {
     const N: usize = 400;
     let dead = std::thread::Builder::new()

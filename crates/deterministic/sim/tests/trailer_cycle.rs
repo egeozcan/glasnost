@@ -1,6 +1,10 @@
 //! An animation type whose trailer leads back to itself cannot keep the
 //! turn pass from ending (#224). Synthetic data only.
 
+// The watchdog thread and its channel belong to the test harness, not to the
+// simulation, which runs on that thread alone.
+#![allow(clippy::disallowed_methods, clippy::disallowed_types)]
+
 use std::sync::mpsc;
 use std::time::Duration;
 

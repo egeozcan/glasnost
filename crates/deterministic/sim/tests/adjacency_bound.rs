@@ -1,6 +1,10 @@
 //! The adjacency condition looks only at cells that can hold a building,
 //! whatever the type's adjacency field (#201). Synthetic data only.
 
+// The watchdog thread and its channel belong to the test harness, not to the
+// simulation, which runs on that thread alone.
+#![allow(clippy::disallowed_methods, clippy::disallowed_types)]
+
 use std::sync::mpsc;
 use std::time::Duration;
 

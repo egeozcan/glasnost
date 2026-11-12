@@ -134,6 +134,9 @@ fn tallies(w: &World) -> Vec<(i32, i32, i32)> {
         .collect()
 }
 
+/// Each house's (kills, losses, score).
+type Tallies = Vec<(i32, i32, i32)>;
+
 /// Starts building `what` in house 0, then ends the item with `end`.
 /// Returns the tallies before and after the end, the effects of the tick
 /// that ended it, and the house's slave count after it.
@@ -141,7 +144,7 @@ fn build_then(
     r: &Ruleset,
     what: &str,
     end: impl FnOnce(&mut World, TypeRef),
-) -> (Vec<(i32, i32, i32)>, Vec<(i32, i32, i32)>, Vec<String>, i32) {
+) -> (Tallies, Tallies, Vec<String>, i32) {
     let mut w = factory_game(r);
     let ty = t(&w, Kind::Vehicle, what);
     let slave = t(&w, Kind::Infantry, "SLAVE");
