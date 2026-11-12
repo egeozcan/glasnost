@@ -467,6 +467,17 @@ impl Brain {
             } => !crate::mind::swaps_victim(w, *actor, *t),
             _ => true,
         });
+        // design: own AI (#19): the memory notes only the orders given: those left after the filters, within the room the house's pending list has left (S-0213 claim 2: an order issued while the list is full is dropped; quirks.pending_order_limit)
+        let room = if w.rules().quirks.pending_order_limit {
+            let pending = w
+                .houses
+                .get(usize::from(self.house().0))
+                .map_or(0, |h| h.pending.len());
+            glasnost_sim::orders::PENDING_LIMIT.saturating_sub(pending)
+        } else {
+            usize::MAX
+        };
+        self.special.memory.note_given(w, &out, room);
         self.script.end_think();
         out
     }
@@ -2426,7 +2437,7 @@ impl Brain {
                 if raider.is_some() {
                     self.special.count_economy_defence();
                 }
-                self.special.memory.note(w, std::slice::from_ref(&order));
+                self.special.memory.offer(std::slice::from_ref(&order));
                 out.push(order);
             }
         }

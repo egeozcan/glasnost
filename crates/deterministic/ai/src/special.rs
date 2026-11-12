@@ -240,14 +240,17 @@ impl Special {
         self.uses
     }
 
-    /// Thinks once per think period: every ability in turn.
+    /// Thinks once per think period: every ability in turn. Alone (not in
+    /// a brain), every order it gives is noted as given.
     pub fn think(&mut self, script: &Script, w: &World, out: &mut Vec<Order>) {
         self.think_with(script, w, out, &mut ());
+        self.memory.note_given(w, out, usize::MAX);
     }
 
     /// [`Special::think`], telling `p` which ability runs (the tools'
     /// benchmark, `glasnost_sim::probe`); `p` reads nothing and changes
-    /// nothing.
+    /// nothing. Its orders are offered to the memory, and noted when the
+    /// caller tells it which it gave ([`Memory::note_given`]).
     pub fn think_with<P: Probe>(
         &mut self,
         script: &Script,
@@ -302,7 +305,7 @@ impl Special {
         self.drainers(script, &own, w, out);
         mark("ai:special:gunners");
         self.gunners(script, &own, w, out, &mut start);
-        self.memory.note(w, out.get(start..).unwrap_or_default());
+        self.memory.offer(out.get(start..).unwrap_or_default());
     }
 
     /// How many (unit, goal) pairs the brain has given up for now (an order
