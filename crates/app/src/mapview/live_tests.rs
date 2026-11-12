@@ -495,7 +495,11 @@ fn claim_22_a_sprite_turret_vehicle_shadow_only_at_height_0() {
             "no shadow {above} leptons above the surface"
         );
     }
-    for flag in ["NoShadow=yes\n", "SmallVisceroid=yes\n", "LargeVisceroid=yes\n"] {
+    for flag in [
+        "NoShadow=yes\n",
+        "SmallVisceroid=yes\n",
+        "LargeVisceroid=yes\n",
+    ] {
         assert!(draw(flag, 0, 0, false).1.is_empty(), "{flag}");
     }
 }
@@ -1216,7 +1220,10 @@ fn a_vehicle_placed_later_starts_its_barrel_level() {
     let expected: Vec<u16> = (1..5)
         .map(|t| voxel::barrel_elevation_after(fire_angle, t))
         .collect();
-    assert_eq!(seen, expected, "turned from its own placement, first drawn at ε = 1");
+    assert_eq!(
+        seen, expected,
+        "turned from its own placement, first drawn at ε = 1"
+    );
 }
 
 /// Runs a tick by hand for the drawing's own bookkeeping: the tick number
@@ -1228,7 +1235,9 @@ fn tick_by_hand(live: &mut Live) {
 
 /// The barrel elevation object `id` is drawn with.
 fn turned_cart_elevation(live: &Live, inputs: &Inputs, cart: ObjectId) -> u16 {
-    live.mobile(inputs, cart).expect("the cart is drawn").elevation
+    live.mobile(inputs, cart)
+        .expect("the cart is drawn")
+        .elevation
 }
 
 /// spec: S-0105 claim 6 (When the turn starts, Q-2982: each placement on the map sets the
@@ -1259,7 +1268,11 @@ fn claim_6_a_vehicle_placed_again_turns_again_and_a_warp_keeps_its_elevation() {
     let first = live.mobile(&inputs, cart).expect("the cart is drawn");
     let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
     let target = voxel::barrel_elevation_after(fire_angle, 1000);
-    assert_ne!(target, voxel::ELEVATION_LEVEL, "the test type's barrel turns");
+    assert_ne!(
+        target,
+        voxel::ELEVATION_LEVEL,
+        "the test type's barrel turns"
+    );
     assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
     // Taken off the map (into a transport) and unloaded a tick later.
     live.world.obj_mut(cart).unwrap().on_map = false;
@@ -1274,7 +1287,10 @@ fn claim_6_a_vehicle_placed_again_turns_again_and_a_warp_keeps_its_elevation() {
     let expected: Vec<u16> = (1..5)
         .map(|t| voxel::barrel_elevation_after(fire_angle, t))
         .collect();
-    assert_eq!(seen, expected, "unloaded: level again, first drawn at ε = 1");
+    assert_eq!(
+        seen, expected,
+        "unloaded: level again, first drawn at ε = 1"
+    );
     for _ in 0..40 {
         tick_by_hand(&mut live);
     }
@@ -1356,7 +1372,10 @@ fn claim_6_a_drop_pod_seize_restarts_the_turn() {
     let expected: Vec<u16> = (1..5)
         .map(|t| voxel::barrel_elevation_after(fire_angle, t))
         .collect();
-    assert_eq!(seen, expected, "the drop-pod stand-in's end restarts the turn");
+    assert_eq!(
+        seen, expected,
+        "the drop-pod stand-in's end restarts the turn"
+    );
 }
 
 /// design: render (#81) (S-0105 claim 6 keeps every turn through a save; a game the drawing
@@ -3886,7 +3905,11 @@ fn claim_45_aircraft_draw_no_turret_or_barrel() {
             .collect::<Vec<_>>()
     };
     let control = images(craft(Kind::Vehicles, Attitude::None));
-    assert_eq!(control.len(), 3, "the control's body, turret and barrel: {control:?}");
+    assert_eq!(
+        control.len(),
+        3,
+        "the control's body, turret and barrel: {control:?}"
+    );
     for (what, attitude) in [
         ("on the ground", Attitude::None),
         ("level", flying(0, 0, false)),
@@ -6175,15 +6198,30 @@ fn claim_19_the_live_game_marks_shadowed_cells() {
         "no bridge and no shadow-casting tile: no shadowed cell"
     );
     let c = live.world.obj(cart).expect("the cart").pos.cell();
-    let terrain = |live: &mut Live, at: glasnost_map::CellXY, f: &dyn Fn(&mut glasnost_map::Cell)| {
-        f(live.world.cells.grid.get_mut(at).expect("a cell of the map"));
-    };
+    let terrain =
+        |live: &mut Live, at: glasnost_map::CellXY, f: &dyn Fn(&mut glasnost_map::Cell)| {
+            f(live
+                .world
+                .cells
+                .grid
+                .get_mut(at)
+                .expect("a cell of the map"));
+        };
     // A west-marking high-bridge overlay two cells toward map west marks the cart's cell.
     let bridge = glasnost_map::CellXY::new(c.x - 2, c.y);
-    let old = live.world.cells.cell(bridge).expect("a cell of the map").overlay;
+    let old = live
+        .world
+        .cells
+        .cell(bridge)
+        .expect("a cell of the map")
+        .overlay;
     terrain(&mut live, bridge, &|cell| cell.overlay = 25);
     live.redraw(&inputs, &mut scene);
-    assert_eq!(live.shadowed_cells(), [c].into(), "beyond a west-marking deck");
+    assert_eq!(
+        live.shadowed_cells(),
+        [c].into(),
+        "beyond a west-marking deck"
+    );
     // The bridge destroyed: its overlay gone, the mark goes.
     terrain(&mut live, bridge, &|cell| cell.overlay = old);
     live.redraw(&inputs, &mut scene);
@@ -6197,7 +6235,10 @@ fn claim_19_the_live_game_marks_shadowed_cells() {
     // Another tile replaces it: its marks end.
     terrain(&mut live, tile, &|cell| cell.tile = first + 19);
     live.redraw(&inputs, &mut scene);
-    assert!(live.shadowed_cells().is_empty(), "position 19 marks nothing");
+    assert!(
+        live.shadowed_cells().is_empty(),
+        "position 19 marks nothing"
+    );
     terrain(&mut live, tile, &|cell| cell.tile = old);
 }
 

@@ -234,6 +234,10 @@ mod tests {
         assert_eq!(casting_position(&c, 2 + 25), Some(25));
         assert_eq!(casting_position(&c, 41), Some(39));
         assert_eq!(casting_position(&c, 42 + 25), None, "a count of 0");
-        assert_eq!(casting_position(&c, glasnost_map::NO_TILE), None, "the clear tile");
+        assert_eq!(
+            casting_position(&c, glasnost_map::NO_TILE),
+            None,
+            "the clear tile"
+        );
     }
 }

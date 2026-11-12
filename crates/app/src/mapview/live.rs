@@ -3431,7 +3431,12 @@ impl Live {
         let (lambda, lambda_air) = object_levels(&self.world);
         self.painter.set_object_levels(lambda, lambda_air);
         // spec: S-0104 claim 19 (the marks of intact high bridges and of shadow-casting tiles, from the terrain the game holds now: a mark holds while its overlay or tile lies in its cell)
-        let terrain = |c| self.world.cells.cell(c).map(|cell| (cell.tile, cell.overlay));
+        let terrain = |c| {
+            self.world
+                .cells
+                .cell(c)
+                .map(|cell| (cell.tile, cell.overlay))
+        };
         let position = |t| super::shadowing::casting_position(inputs.catalogue, t);
         let shadowed: BTreeSet<glasnost_map::CellXY> = mobiles
             .iter()

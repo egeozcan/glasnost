@@ -895,15 +895,13 @@ mod tests {
     /// count other than 0)
     #[test]
     fn claim_18_shadow_casting_tilesets() {
-        let d = doc(
-            "[TileSet0000]\nTilesInSet=1\n\
+        let d = doc("[TileSet0000]\nTilesInSet=1\n\
              [TileSet0001]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=3\n\
              [TileSet0002]\nTilesInSet=1\nShadowCaster=yes\n\
              [TileSet0003]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=0\n\
              [TileSet0004]\nTilesInSet=1\nShadowCaster=no\nShadowTiles=3\n\
              [TileSet0005]\nTilesInSet=1\nShadowTiles=2\n\
-             [TileSet0006]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=-1\n",
-        );
+             [TileSet0006]\nTilesInSet=1\nShadowCaster=yes\nShadowTiles=-1\n");
         let c = Catalogue::read(&d, Theater::Temperate);
         let read: Vec<(bool, i32)> = c
             .tilesets
