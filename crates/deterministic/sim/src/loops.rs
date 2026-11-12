@@ -28,12 +28,12 @@ impl Loops {
         let n = links.len();
         let unseen = usize::MAX;
         let mut index = vec![unseen; n];
-        let mut low = vec![0usize; n];
+        let mut low: Vec<usize> = vec![0; n];
         let mut on_stack = vec![false; n];
         let mut stack = Vec::new();
-        let mut comp = vec![0usize; n];
-        let mut next = 0usize;
-        let mut comps = 0usize;
+        let mut comp: Vec<usize> = vec![0; n];
+        let mut next: usize = 0;
+        let mut comps: usize = 0;
         // Tarjan's strongly connected groups, with an explicit work list
         // (a rules file may hold long chains of links).
         for root in 0..n {
@@ -81,7 +81,7 @@ impl Loops {
                 }
             }
         }
-        let mut size = vec![0usize; comps];
+        let mut size: Vec<usize> = vec![0; comps];
         for &c in &comp {
             size[c] += 1;
         }

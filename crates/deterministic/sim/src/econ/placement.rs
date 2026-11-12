@@ -652,6 +652,12 @@ struct SupportTable {
     sums: Vec<u32>,
 }
 
+/// A prefix-sum row or column over the inclusive range `a` … `b`: its
+/// cells and one leading zero.
+fn sum_span(a: i64, b: i64) -> i64 {
+    (b - a + 1) + 1
+}
+
 impl SupportTable {
     fn new(w: &World, house: HouseId, p: &PlaceType, cells: &[CellXY]) -> Option<Self> {
         let (d, fw, fh) = adjacency_reach(p);
@@ -670,8 +676,8 @@ impl SupportTable {
         if x0 > x1 || y0 > y1 {
             return None;
         }
-        let row = usize::try_from(x1 - x0 + 2).ok()?;
-        let mut sums = vec![0u32; row * usize::try_from(y1 - y0 + 2).ok()?];
+        let row = usize::try_from(sum_span(x0, x1)).ok()?;
+        let mut sums = vec![0u32; row * usize::try_from(sum_span(y0, y1)).ok()?];
         let ally_option = build_off_ally(w);
         for (uy, y) in (y0..=y1).enumerate() {
             let mut run = 0u32;
@@ -707,7 +713,7 @@ impl SupportTable {
         if ax > bx || ay > by {
             return 0;
         }
-        let row = (self.x1 - self.x0 + 2) as usize;
+        let row = sum_span(self.x0, self.x1) as usize;
         let at = |x: i64, y: i64| self.sums[(y - self.y0) as usize * row + (x - self.x0) as usize];
         at(bx + 1, by + 1) + at(ax, ay) - at(ax, by + 1) - at(bx + 1, ay)
     }
