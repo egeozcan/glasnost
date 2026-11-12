@@ -144,8 +144,9 @@ impl Packer {
 
 /// Packs rectangles into layers of `side × side` with shelves, tallest
 /// first. Returns the slots and the packer, which places later rectangles
-/// after them.
-fn pack(sizes: &[(u32, u32)], side: u32) -> Option<(Vec<Slot>, Packer)> {
+/// after them. A rectangle wider or taller than a layer gets
+/// [`Slot::ABSENT`] (design: render (#108)).
+fn pack(sizes: &[(u32, u32)], side: u32) -> (Vec<Slot>, Packer) {
     let mut order: Vec<usize> = (0..sizes.len()).collect();
     order.sort_by_key(|&i| std::cmp::Reverse(sizes[i].1));
     let mut slots = vec![
@@ -159,18 +160,42 @@ fn pack(sizes: &[(u32, u32)], side: u32) -> Option<(Vec<Slot>, Packer)> {
     let mut packer = Packer::new(side);
     for i in order {
         let (w, h) = sizes[i];
-        slots[i] = packer.place(w, h)?;
+        // design: render (#108): an image larger than a layer is left out, not the whole upload
+        slots[i] = packer.place(w, h).unwrap_or(Slot::ABSENT);
     }
-    Some((slots, packer))
+    (slots, packer)
+}
+
+/// Whether a `w` × `h` image is wider or taller than a layer of `side`;
+/// such an image gets [`Slot::ABSENT`] (design: render (#108)).
+fn too_large(w: u32, h: u32, side: u32) -> bool {
+    w > side || h > side
 }
 
 /// The slot of a `w` × `h` image added after the upload, in an atlas of
-/// `layers` layers; an error when the atlas is full.
+/// `layers` layers: [`Slot::ABSENT`] for an image larger than a layer, an
+/// error when the atlas is full.
 fn place_later(packer: &mut Packer, w: u32, h: u32, layers: u32) -> Result<Slot, UploadError> {
+    if too_large(w, h, packer.side) {
+        // design: render (#108): left out with no place used, so no rebuild follows
+        return Ok(Slot::ABSENT);
+    }
     packer
         .place(w.max(1), h.max(1))
         .filter(|s| s.layer < layers)
         .ok_or_else(|| UploadError("the atlas is full".into()))
+}
+
+/// Warns about the images of `placed` (size and slot) that got no slot in
+/// an atlas of `side`: their items are not drawn on the GPU.
+fn warn_absent(placed: impl IntoIterator<Item = ((u32, u32), Slot)>, side: u32) {
+    for ((w, h), slot) in placed {
+        if !slot.present() {
+            log::warn!(
+                "a {w} × {h} image exceeds the GPU atlas of {side} × {side}: its items are not drawn"
+            );
+        }
+    }
 }
 
 /// Atlas layers kept free at upload for images added later
@@ -338,8 +363,8 @@ impl MapRenderer {
                     .map(|i| (i.width.max(1), i.height.max(1))),
             )
             .collect();
-        let (mut slots, packer) =
-            pack(&sizes, side).ok_or_else(|| UploadError("an image exceeds the atlas".into()))?;
+        let (mut slots, packer) = pack(&sizes, side);
+        warn_absent(sizes.iter().copied().zip(slots.iter().copied()), side);
         let signed_slots = slots.split_off(scene.images.len());
         let layers = packer.layers();
         if layers > limits.max_texture_array_layers {
@@ -364,7 +389,7 @@ impl MapRenderer {
         for ((width, pixels), slot) in images.zip(slots.iter().chain(&signed_slots)) {
             let base = slot.layer as usize * side as usize * side as usize;
             let width = width as usize;
-            if width == 0 {
+            if width == 0 || !slot.present() {
                 continue;
             }
             for (row, src) in pixels.chunks_exact(width).enumerate() {
@@ -651,13 +676,14 @@ impl MapRenderer {
         pixels: &[u8],
     ) -> Result<Slot, UploadError> {
         let slot = place_later(&mut self.packer, w, h, self.atlas_layers)?;
+        warn_absent([((w, h), slot)], self.packer.side);
         self.write(queue, slot, w, h, pixels);
         Ok(slot)
     }
 
     /// Writes a `w` × `h` image of bytes `pixels` into the atlas at `slot`.
     fn write(&mut self, queue: &wgpu::Queue, slot: Slot, w: u32, h: u32, pixels: &[u8]) {
-        if w > 0 && h > 0 {
+        if w > 0 && h > 0 && slot.present() {
             self.stats.uploads += 1;
             self.stats.upload_bytes += u64::from(w) * u64::from(h);
             queue.write_texture(
@@ -790,6 +816,10 @@ impl MapRenderer {
             }
             let img = &scene.images[item.image as usize];
             let slot = self.slots[item.image as usize];
+            if !slot.present() {
+                // design: render (#108): an image larger than the atlas is not drawn
+                continue;
+            }
             let mut companion_rect = [0; 4];
             let (role, flags, bias, reference_row, depth_slot) = match item.depth {
                 ItemDepth::Tile {
@@ -878,6 +908,10 @@ impl MapRenderer {
                     0,
                 ),
             };
+            if depth_slot.is_some_and(|s| !s.present()) {
+                // design: render (#108): nor is an item whose depth image is larger than the atlas
+                continue;
+            }
             let ds = depth_slot.unwrap_or(Slot {
                 x: 0,
                 y: 0,
@@ -1464,15 +1498,15 @@ mod tests {
 
     #[test]
     fn shelf_packing_fits() {
-        let (slots, packer) = pack(&[(10, 10), (5, 12), (10, 10)], 16).unwrap();
+        let (slots, packer) = pack(&[(10, 10), (5, 12), (10, 10)], 16);
         assert_eq!(slots.len(), 3);
+        assert!(slots.iter().all(|s| s.present()));
         assert!(packer.layers() >= 2);
-        assert!(pack(&[(17, 1)], 16).is_none());
     }
 
     #[test]
     fn later_images_go_after_the_packed_ones() {
-        let (slots, mut packer) = pack(&[(10, 10), (5, 12)], 16).unwrap();
+        let (slots, mut packer) = pack(&[(10, 10), (5, 12)], 16);
         let next = packer.place(6, 4).unwrap();
         // The new slot overlaps none of the first ones.
         for (s, (w, h)) in slots.iter().zip([(10, 10), (5, 12)]) {
@@ -1490,8 +1524,7 @@ mod tests {
     /// are placed as before, and a full atlas is still an error.
     #[test]
     fn an_image_larger_than_a_layer_gets_no_slot() {
-        let (slots, mut packer) = pack(&[(10, 10), (17, 1), (5, 12), (4, 20)], 16)
-            .expect("an oversized image is no error");
+        let (slots, mut packer) = pack(&[(10, 10), (17, 1), (5, 12), (4, 20)], 16);
         assert!(slots[0].present() && slots[2].present());
         assert_eq!(slots[1], Slot::ABSENT);
         assert_eq!(slots[3], Slot::ABSENT);
