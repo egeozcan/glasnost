@@ -51,8 +51,8 @@ fn cell_point(w: &World, c: CellXY) -> Pos {
 }
 
 /// The preferred recorded cell: the base centre, else the base-start cell
-/// (S-0215 claim 38).
-fn preferred(r: &BaseRecord) -> Option<CellXY> {
+/// (S-0215 claim 38). S-0309 claim 25, part j, takes the same cell.
+pub(crate) fn preferred(r: &BaseRecord) -> Option<CellXY> {
     r.centre.or(r.start)
 }
 
