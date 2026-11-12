@@ -35,6 +35,7 @@ mod radar_tests;
 pub mod rocking;
 #[cfg(test)]
 mod rocking_tests;
+pub mod shadowing;
 #[cfg(test)]
 mod shot_anim_tests;
 pub mod sidebar;

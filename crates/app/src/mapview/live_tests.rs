@@ -310,7 +310,9 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
 
 /// spec: S-0102 claim 13 (an infantry body or a vehicle drawn as a sprite with h not 0:
 /// −L(z) − 12 and −L(z) − 2, U does not apply; the own shadow image frame only while h = 0),
-/// claim 14 (U only at h = 0; cliff factor 0 for a unit on a bridge, D9 Map C), claim 21 (#95)
+/// claim 14 (U only at h = 0; cliff factor 0 for a unit on a bridge deck, D9 Map C; Q-3008: a
+/// unit off a deck, on a low bridge or under a high bridge as on open ground, D9 maps D and E,
+/// takes the cliff rows), claim 21 (#95)
 #[test]
 fn sprite_bodies_in_the_air_and_on_a_deck_leave_the_cliff_fudge() {
     use glasnost_render::projection::height_lift;
@@ -404,6 +406,101 @@ fn sprite_bodies_in_the_air_and_on_a_deck_leave_the_cliff_fudge() {
         let (air, air_shadows) = drawn(unit(kind, 104, 104, false));
         assert_eq!(air, -height_lift(104) - c, "{kind:?} in the air");
         assert!(air_shadows.is_empty(), "{kind:?}: no own shadow in the air");
+    }
+}
+
+/// spec: S-0102 claim 22 (Q-3007: in our engine the shadow of a vehicle drawn as a sprite with
+/// the turret flag is drawn under claim 21's three conditions: only while its height above the
+/// surface is 0, its bias then U − 2, never with the no-shadow flag or either visceroid flag;
+/// D29 (i)); claim 13 (on a bridge deck the height above the surface is that above the deck)
+#[test]
+fn claim_22_a_sprite_turret_vehicle_shadow_only_at_height_0() {
+    let draw = |extra: &str, z: i32, above: i32, deck: bool| {
+        let rules = format!("{RULES}[CARX]\nTurret=yes\n{extra}");
+        let (import, catalogue, assets) = context_with(&rules);
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene: Scene = built.scene;
+        let car = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (2 * 256 + 128, 3 * 256 + 128, z),
+            body: 16384,
+            turret: 16384,
+            elevation: 0,
+            anim: 0,
+            infantry: None,
+            object: sim_code(ObjectId(7)),
+            harvesting: None,
+            shadow: None,
+            alternative: false,
+            attitude: Attitude::None,
+            disabled: false,
+            above,
+            protection: None,
+            generic_shadow: None,
+            berserk: None,
+            turret_index: None,
+            walk: Default::default(),
+            deck,
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
+        let bias = |i: &glasnost_render::scene::Item| match i.depth {
+            ItemDepth::Profile { bias, .. } => bias,
+            ItemDepth::Tile { .. } => panic!("not a profile item"),
+        };
+        let items = &entries[0].items;
+        let body = items
+            .iter()
+            .find(|i| i.paint != Paint::Shadow)
+            .map(bias)
+            .expect("a body");
+        let shadows: Vec<i32> = items
+            .iter()
+            .filter(|i| i.paint == Paint::Shadow)
+            .map(bias)
+            .collect();
+        (body, shadows)
+    };
+    // At height 0 the composed image takes U (S-0105 claim 12) and the shadow U − 2.
+    let (u, shadows) = draw("", 0, 0, false);
+    assert_eq!(shadows, vec![u - 2], "at height 0");
+    let (u, shadows) = draw("", 416, 0, true);
+    assert_eq!(shadows, vec![u - 2], "standing on a deck");
+    for (z, above) in [(1, 1), (104, 104), (416, 416), (520, 104)] {
+        let deck = z > above;
+        assert!(
+            draw("", z, above, deck).1.is_empty(),
+            "no shadow {above} leptons above the surface"
+        );
+    }
+    for flag in [
+        "NoShadow=yes\n",
+        "SmallVisceroid=yes\n",
+        "LargeVisceroid=yes\n",
+    ] {
+        assert!(draw(flag, 0, 0, false).1.is_empty(), "{flag}");
     }
 }
 
@@ -1068,7 +1165,8 @@ fn combat_live_with(
 
 /// spec: S-0105 claim 6 and F9 (a vehicle placed on the map starts its
 /// barrel elevation level and turns it toward the fire angle from its
-/// placement, not from the game's start; #81)
+/// placement, not from the game's start; First appearance: placed during a
+/// tick, it is first drawn at ε = 1; #81)
 #[test]
 fn a_vehicle_placed_later_starts_its_barrel_level() {
     use glasnost_render::voxel;
@@ -1118,11 +1216,206 @@ fn a_vehicle_placed_later_starts_its_barrel_level() {
         live.step();
         seen.push(elevation(&live));
     }
-    let expected: Vec<u16> = (0..4)
+    // spec: S-0105 claim 6 (First appearance: placed during a tick, first drawn at ε = 1, never at ε = 0)
+    let expected: Vec<u16> = (1..5)
         .map(|t| voxel::barrel_elevation_after(fire_angle, t))
         .collect();
-    assert_eq!(seen[0], voxel::ELEVATION_LEVEL, "level when first drawn");
-    assert_eq!(seen, expected, "turned from its own placement");
+    assert_eq!(
+        seen, expected,
+        "turned from its own placement, first drawn at ε = 1"
+    );
+}
+
+/// Runs a tick by hand for the drawing's own bookkeeping: the tick number
+/// grows as at the end of a tick, and nothing else in the game moves.
+fn tick_by_hand(live: &mut Live) {
+    live.world.tick += 1;
+    live.after_tick();
+}
+
+/// The barrel elevation object `id` is drawn with.
+fn turned_cart_elevation(live: &Live, inputs: &Inputs, cart: ObjectId) -> u16 {
+    live.mobile(inputs, cart)
+        .expect("the cart is drawn")
+        .elevation
+}
+
+/// spec: S-0105 claim 6 (When the turn starts, Q-2982: each placement on the map sets the
+/// elevation level and starts the turn at the tick number current then, so a vehicle leaving the
+/// map and placed again, as an unloaded one, starts level and is first drawn at ε = 1; a
+/// chronosphere warp's appearance keeps the elevation)
+#[test]
+fn claim_6_a_vehicle_placed_again_turns_again_and_a_warp_keeps_its_elevation() {
+    use glasnost_render::voxel;
+    use glasnost_sim::superweapons::warp::{Member, Stage};
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..40 {
+        tick_by_hand(&mut live);
+    }
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_ne!(
+        target,
+        voxel::ELEVATION_LEVEL,
+        "the test type's barrel turns"
+    );
+    assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
+    // Taken off the map (into a transport) and unloaded a tick later.
+    live.world.obj_mut(cart).unwrap().on_map = false;
+    tick_by_hand(&mut live);
+    live.world.obj_mut(cart).unwrap().on_map = true;
+    tick_by_hand(&mut live);
+    let mut seen = vec![turned_cart_elevation(&live, &inputs, cart)];
+    for _ in 0..3 {
+        tick_by_hand(&mut live);
+        seen.push(turned_cart_elevation(&live, &inputs, cart));
+    }
+    let expected: Vec<u16> = (1..5)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(
+        seen, expected,
+        "unloaded: level again, first drawn at ε = 1"
+    );
+    for _ in 0..40 {
+        tick_by_hand(&mut live);
+    }
+    assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
+    // A chronosphere warp: off the map between departure and appearance.
+    let pos = live.world.obj(cart).unwrap().pos;
+    let set = |live: &mut Live, stage: Stage, on_map: bool| {
+        let o = live.world.obj_mut(cart).unwrap();
+        o.on_map = on_map;
+        o.sw.warp = Some(Member {
+            stage,
+            house: HouseId(0),
+            landing: pos,
+            redirected: false,
+            fell_back: false,
+            refused: false,
+            entry_ok: true,
+        });
+    };
+    set(&mut live, Stage::Away, false);
+    tick_by_hand(&mut live);
+    set(&mut live, Stage::Blocked, false);
+    tick_by_hand(&mut live);
+    set(&mut live, Stage::Placed, true);
+    tick_by_hand(&mut live);
+    assert_eq!(
+        turned_cart_elevation(&live, &inputs, cart),
+        target,
+        "a warp's appearance keeps the elevation"
+    );
+}
+
+/// spec: S-0105 claim 6 (When the turn starts, Q-2982: a unit seized under S-0607 claim 23's
+/// drop-pod stand-in starts level and turns again at the end of the stand-in, which our engine
+/// gives at the seize, at the tick number current then; a seize by the ordinary lift keeps it)
+#[test]
+fn claim_6_a_drop_pod_seize_restarts_the_turn() {
+    use glasnost_render::voxel;
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::lift::StandIn;
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..40 {
+        tick_by_hand(&mut live);
+    }
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
+    // An ordinary seize keeps the elevation.
+    live.world.effects.push(Effect::Seized { unit: cart });
+    tick_by_hand(&mut live);
+    assert_eq!(
+        turned_cart_elevation(&live, &inputs, cart),
+        target,
+        "an ordinary seize keeps the turn"
+    );
+    // The drop-pod stand-in ends at the seize: level, then turning again.
+    live.world.obj_mut(cart).unwrap().lift.stand_in = Some(StandIn::DropPod);
+    live.world.effects.push(Effect::Seized { unit: cart });
+    tick_by_hand(&mut live);
+    let mut seen = vec![turned_cart_elevation(&live, &inputs, cart)];
+    for _ in 0..3 {
+        tick_by_hand(&mut live);
+        seen.push(turned_cart_elevation(&live, &inputs, cart));
+    }
+    let expected: Vec<u16> = (1..5)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(
+        seen, expected,
+        "the drop-pod stand-in's end restarts the turn"
+    );
+}
+
+/// design: render (#81) (S-0105 claim 6 keeps every turn through a save; a game the drawing
+/// catches up with, a rejoin or ticks run directly, cannot tell when its objects were placed,
+/// so they count from tick 0 as the map's own objects do: their turns are over, never shown
+/// level again)
+#[test]
+fn a_vehicle_first_seen_on_a_catch_up_shows_its_final_elevation() {
+    use glasnost_render::voxel;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..40 {
+        live.world.tick += 1;
+    }
+    let late = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 6),
+        16384,
+    );
+    live.resume();
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_eq!(turned_cart_elevation(&live, &inputs, late), target);
 }
 
 /// spec: S-0309 claim 1 (units in guard find targets in range by
@@ -3506,30 +3799,33 @@ fn aircraft_attitude_is_drawn() {
     );
 }
 
-/// spec: S-0105 claims 7, 8, 10 and 42 (the turret and barrel of a type with the turret flag are
-/// placed on the body transform D, here a flying body's pitched and banked one); claim 26 (an
-/// image is reused only for the same pose). design: render (#82) their images under an attitude
-/// are kept apart from the level ones (Q-2983).
+/// spec: S-0105 claim 45 (Q-2983: an aircraft-kind object draws no turret and no barrel, in any
+/// attitude, level, banked, as a rocket or crashing, whatever its turret flag; a vehicle with the
+/// turret flag draws both, the control)
 #[test]
-fn an_aircraft_turret_follows_its_attitude() {
+fn claim_45_aircraft_draw_no_turret_or_barrel() {
     use glasnost_convert::art::TypeArt;
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
     let rules = format!(
-        "{RULES}[AircraftTypes]\n1=JETX\n[JETX]\nTurret=yes\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
+        "{RULES}[CARX]\nTurret=yes\n[AircraftTypes]\n1=JETX\n[JETX]\nTurret=yes\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
     );
     let (mut import, catalogue, mut assets) = context_with(&rules);
+    let voxels = || -> std::collections::BTreeMap<String, Vec<u8>> {
+        [
+            ("body".to_string(), b"jetx.vxl".to_vec()),
+            ("turret".to_string(), b"jetxtur.vxl".to_vec()),
+            ("barrel".to_string(), b"jetxbarl.vxl".to_vec()),
+        ]
+        .into()
+    };
     import.arts.insert(
         (Kind::Aircraft, 0),
         TypeArt {
-            voxels: [
-                ("body".to_string(), b"jetx.vxl".to_vec()),
-                ("turret".to_string(), b"jetxtur.vxl".to_vec()),
-                ("barrel".to_string(), b"jetxbarl.vxl".to_vec()),
-            ]
-            .into(),
+            voxels: voxels(),
             ..Default::default()
         },
     );
+    import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap().voxels = voxels();
     for name in [&b"jetx.vxl"[..], b"jetxtur.vxl", b"jetxbarl.vxl"] {
         assets.insert(
             name,
@@ -3562,27 +3858,21 @@ fn an_aircraft_turret_follows_its_attitude() {
     };
     let (built, mut painter) = build_parts(&inputs, true);
     let mut scene: Scene = built.scene;
-    let craft = |height: i32, turn: i32| Mobile {
-        kind: Kind::Aircraft,
+    let craft = |kind: Kind, attitude: Attitude| Mobile {
+        kind,
         idx: 0,
         owner: b"Neutral".to_vec(),
         pos: (3 * 256 + 128, 3 * 256 + 128, 1500),
         body: 16384,
         turret: 20480,
-        elevation: 16384,
+        elevation: 14336,
         anim: 0,
         infantry: None,
         object: sim_code(ObjectId(5)),
         harvesting: None,
         shadow: None,
         alternative: false,
-        attitude: Attitude::Flying {
-            height,
-            speed: 0.75f64.to_bits(),
-            turn,
-            crashing: false,
-            tumble: (0, 0),
-        },
+        attitude,
         disabled: false,
         above: 0,
         protection: None,
@@ -3592,7 +3882,19 @@ fn an_aircraft_turret_follows_its_attitude() {
         walk: Default::default(),
         deck: false,
     };
-    // The lit images drawn, body first: the body, then the turret and the barrel.
+    let flying = |height: i32, turn: i32, crashing: bool| Attitude::Flying {
+        height,
+        speed: 0.75f64.to_bits(),
+        turn,
+        crashing,
+        tumble: (0.3f32.to_bits(), 1.2f32.to_bits()),
+    };
+    let rocket = |pitch: f32| Attitude::Rocket {
+        pitch: pitch.to_bits(),
+        initial: 0.25f32.to_bits(),
+        final_: 0.75f32.to_bits(),
+    };
+    // The lit images drawn, body first.
     let mut images = |m: Mobile| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
         entries[0]
@@ -3602,20 +3904,24 @@ fn an_aircraft_turret_follows_its_attitude() {
             .map(|i| i.image)
             .collect::<Vec<_>>()
     };
-    let banked = images(craft(10, 1));
-    let level = images(craft(0, 0));
-    assert_eq!(banked.len(), 3, "body, turret and barrel: {banked:?}");
-    assert_eq!(level.len(), 3, "body, turret and barrel: {level:?}");
-    assert_ne!(banked[0], level[0], "the body is drawn banked");
-    for k in 1..3 {
-        assert_ne!(
-            banked[k], level[k],
-            "a banked turret part is not the level one"
-        );
+    let control = images(craft(Kind::Vehicles, Attitude::None));
+    assert_eq!(
+        control.len(),
+        3,
+        "the control's body, turret and barrel: {control:?}"
+    );
+    for (what, attitude) in [
+        ("on the ground", Attitude::None),
+        ("level", flying(0, 0, false)),
+        ("banked", flying(10, 1, false)),
+        ("pitched", flying(10, 0, false)),
+        ("a rocket", rocket(0.7)),
+        ("a level rocket", rocket(0.0)),
+        ("crashing", flying(10, 0, true)),
+    ] {
+        let drawn = images(craft(Kind::Aircraft, attitude));
+        assert_eq!(drawn.len(), 1, "{what}: the body alone, {drawn:?}");
     }
-    // Each attitude reuses its own images.
-    assert_eq!(images(craft(10, 1)), banked);
-    assert_eq!(images(craft(0, 0)), level);
 }
 
 /// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405
@@ -5786,10 +6092,9 @@ fn claim_13_mobiles_on_a_bridge_deck_take_the_level_factor_terms() {
     );
 }
 
-/// #74: spec: S-0104 Terms (a shadowed cell: one an intact high bridge spans) and claim 13 (a
-/// vehicle in a shadowed cell, not on a bridge deck, h < 208: U − 500 + extra unit light;
-/// infantry there, h ≤ 208: U − 500 + extra infantry light, above 208 the height term alone; on
-/// the deck no penalty), with the interim of Q-3006 (the high-bridge cells of S-0211 claim 15)
+/// #74: spec: S-0104 claim 13 (a vehicle in a shadowed cell, claim 19, not on a bridge deck,
+/// h < 208: U − 500 + extra unit light; infantry there, h ≤ 208: U − 500 + extra infantry light,
+/// above 208 the height term alone; on the deck no penalty)
 #[test]
 fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
     use glasnost_render::light::brightness_rho;
@@ -5856,13 +6161,24 @@ fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
     );
 }
 
-/// #74: spec: S-0104 Terms (an intact high bridge marks the cells it spans as shadowed, and the
-/// mark is cleared when it is destroyed), with the interim of Q-3006 (the high-bridge cells of
-/// S-0211 claim 15): the live game lights its mobiles by the cells they stand on
+/// #74: spec: S-0104 claim 19 (Q-3006: a cell is shadowed while a mark covers it: an intact
+/// high bridge's, whose marks end when it is destroyed, here the cell beyond a west-marking
+/// deck; or a shadow-casting tile's, by table T, from the moment it lies in its cell until
+/// another tile replaces it): the live game lights its mobiles by the cells they stand on
 #[test]
-fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
+fn claim_19_the_live_game_marks_shadowed_cells() {
     let assets = overlay_assets();
     let (mut live, mut scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    // A shadow-casting tileset of 40 tiles after the theater's own (S-0010 claim 18).
+    let mut catalogue = catalogue.clone();
+    let mut casting = catalogue.tilesets[0].clone();
+    casting.first = catalogue.tile_count;
+    casting.count = 40;
+    casting.shadow_caster = true;
+    casting.shadow_tiles = 1;
+    let first = casting.first;
+    catalogue.tilesets.push(casting);
+    catalogue.tile_count += 40;
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
     let inputs = Inputs {
@@ -5879,17 +6195,51 @@ fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
     live.redraw(&inputs, &mut scene);
     assert!(
         live.shadowed_cells().is_empty(),
-        "no bridge: no shadowed cell"
+        "no bridge and no shadow-casting tile: no shadowed cell"
     );
     let c = live.world.obj(cart).expect("the cart").pos.cell();
-    let i = live.world.cells.idx(c).expect("a cell of the map");
-    live.world.cells.deck[i] = true;
+    let terrain =
+        |live: &mut Live, at: glasnost_map::CellXY, f: &dyn Fn(&mut glasnost_map::Cell)| {
+            f(live
+                .world
+                .cells
+                .grid
+                .get_mut(at)
+                .expect("a cell of the map"));
+        };
+    // A west-marking high-bridge overlay two cells toward map west marks the cart's cell.
+    let bridge = glasnost_map::CellXY::new(c.x - 2, c.y);
+    let old = live
+        .world
+        .cells
+        .cell(bridge)
+        .expect("a cell of the map")
+        .overlay;
+    terrain(&mut live, bridge, &|cell| cell.overlay = 25);
     live.redraw(&inputs, &mut scene);
-    assert_eq!(live.shadowed_cells(), [c].into(), "under a high bridge");
-    // The bridge destroyed: the mark goes.
-    live.world.cells.deck[i] = false;
+    assert_eq!(
+        live.shadowed_cells(),
+        [c].into(),
+        "beyond a west-marking deck"
+    );
+    // The bridge destroyed: its overlay gone, the mark goes.
+    terrain(&mut live, bridge, &|cell| cell.overlay = old);
     live.redraw(&inputs, &mut scene);
     assert!(live.shadowed_cells().is_empty());
+    // A tile at position 25 three cells toward map south marks (0, −3) from its cell.
+    let tile = glasnost_map::CellXY::new(c.x, c.y + 3);
+    let old = live.world.cells.cell(tile).expect("a cell of the map").tile;
+    terrain(&mut live, tile, &|cell| cell.tile = first + 25);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.shadowed_cells(), [c].into(), "a shadow-casting tile");
+    // Another tile replaces it: its marks end.
+    terrain(&mut live, tile, &|cell| cell.tile = first + 19);
+    live.redraw(&inputs, &mut scene);
+    assert!(
+        live.shadowed_cells().is_empty(),
+        "position 19 marks nothing"
+    );
+    terrain(&mut live, tile, &|cell| cell.tile = old);
 }
 
 /// #74: spec: S-0104 claim 2 (per-cell height terms: ion storm, then the dominator in any phase,

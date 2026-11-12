@@ -1123,8 +1123,18 @@ impl Session {
         self.icons.get(&hud::Entry::Superweapon(sw))
     }
 
-    /// Registers the icon frames with the painter (once per game).
+    /// Registers the icon frames with the painter, a fresh one: at the
+    /// game's start, or when the painter is replaced for the device's atlas
+    /// side ([`super::client::Client::fit_atlas`]). The palette rows kept for the
+    /// cursor, the status lines and the name tips are the old painter's, so
+    /// they go too
+    /// (design: render (#103)).
     pub fn register_art(&mut self, painter: &mut Painter) {
+        self.cursor_row = None;
+        self.status_row = None;
+        self.tip_rows = [None; 2];
+        self.icon_ids.clear();
+        self.alt_icon_ids.clear();
         if let Some(art) = &self.sidebar_art {
             // spec: S-0411 claim 19 (every one of these images drawn with the dedicated sidebar palette)
             let row = painter.add_palette(art.palette);
@@ -2476,7 +2486,8 @@ impl Session {
             .cursor_row
             .get_or_insert_with(|| painter.add_palette(art.palette));
         for f in frames.first..=frames.last {
-            if !painter.has_sprite(CURSOR_SPRITE, u32::from(f))
+            // design: render (#103): a frame the full atlas did not take is not decoded again
+            if !painter.tried_sprite(CURSOR_SPRITE, u32::from(f))
                 && let Some(img) = art.frame(f)
             {
                 painter.add_sprite(CURSOR_SPRITE, u32::from(f), &img, row);

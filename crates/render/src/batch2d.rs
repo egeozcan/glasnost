@@ -196,14 +196,19 @@ impl Atlas {
     }
 
     /// Adds a `w` × `h` image of indices; its region, or `None` when the
-    /// atlas is full.
+    /// atlas is full. A failed add changes nothing (design: render (#103)).
     pub fn add(&mut self, w: u32, h: u32, pixels: &[u8]) -> Option<[i32; 4]> {
         if w == 0 || h == 0 || w > self.size || pixels.len() < (w * h) as usize {
             return None;
         }
         if self.x + w > self.size {
+            // A new shelf, taken only when the image fits on it.
+            let y = self.y + self.shelf + 1;
+            if y + h > self.size {
+                return None;
+            }
             self.x = 0;
-            self.y += self.shelf + 1;
+            self.y = y;
             self.shelf = 0;
         }
         if self.y + h > self.size {
@@ -574,14 +579,26 @@ impl Batch2d {
         std::mem::take(&mut self.stats)
     }
 
+    /// The side of the GPU atlas: [`ATLAS_SIZE`], or less on a device whose
+    /// texture limit is smaller. A larger [`Atlas`] is not uploaded.
+    pub fn atlas_side(&self) -> u32 {
+        self.atlas.width()
+    }
+
     /// Uploads the atlas when it changed since the last upload.
     pub fn upload_atlas(&mut self, queue: &wgpu::Queue, atlas: &mut Atlas) {
         if atlas.dirty {
-            let s = atlas.size.min(self.atlas.width());
-            if s == atlas.size {
+            if atlas.size <= self.atlas_side() {
                 self.stats.uploads += 1;
                 self.stats.upload_bytes += atlas.pixels.len() as u64;
-                write(queue, &self.atlas, s, s, 1, &atlas.pixels);
+                write(queue, &self.atlas, atlas.size, atlas.size, 1, &atlas.pixels);
+            } else {
+                // design: render (#103): said, not skipped silently
+                log::warn!(
+                    "a sprite atlas of {0} × {0} is not uploaded to the GPU atlas of {1} × {1}",
+                    atlas.size,
+                    self.atlas_side()
+                );
             }
             atlas.dirty = false;
         }
@@ -696,6 +713,12 @@ impl Batch2d {
         );
     }
 
+    /// Removes image `id` and frees its texture (or lets go of the caller's
+    /// view); quads of a missing image are not drawn.
+    pub fn remove_image(&mut self, id: u32) {
+        self.images.remove(&id);
+    }
+
     /// Writes the quads of the next [`draw`](Self::draw) for a target of
     /// `size` pixels, and splits them into runs by image.
     pub fn prepare(
@@ -792,6 +815,19 @@ mod tests {
         assert_eq!(r2, [0, 5, 10, 4]);
         assert_eq!(a.get(0, 5), 8);
         assert!(a.add(16, 16, &[1; 256]).is_none());
+    }
+
+    /// design: render (#103): an image that does not fit changes nothing,
+    /// so the rest of the shelf still takes smaller images.
+    #[test]
+    fn a_failed_add_changes_nothing() {
+        let mut a = Atlas::new(16);
+        assert_eq!(a.add(10, 4, &[7; 40]), Some([0, 0, 10, 4]));
+        // Too wide for the shelf, too tall for a new one.
+        assert_eq!(a.add(10, 12, &[8; 120]), None);
+        assert_eq!(a.add(4, 4, &[9; 16]), Some([11, 0, 4, 4]));
+        assert_eq!(a.get(11, 0), 9);
+        assert_eq!(a.get(0, 5), 0, "nothing written below the shelf");
     }
 
     #[test]

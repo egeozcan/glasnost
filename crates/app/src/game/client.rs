@@ -206,6 +206,9 @@ pub struct Client {
     pub session: Option<Session>,
     /// The quads' atlas and palettes.
     pub painter: Painter,
+    /// The side of the painter's atlas: the device's sprite atlas side
+    /// ([`Client::fit_atlas`]).
+    atlas_side: u32,
     /// The menu's status line.
     pub status: String,
     /// Sound, created at the first game start.
@@ -337,6 +340,7 @@ impl Client {
             vfs: None,
             session: None,
             painter: Painter::new(),
+            atlas_side: glasnost_render::batch2d::ATLAS_SIZE,
             status: "Pick the game's install folder to begin.".into(),
             audio: None,
             focused: true,
@@ -521,7 +525,7 @@ impl Client {
                         s.resize(self.size, self.ui_scale());
                         self.captions.clear();
                         // A fresh atlas per game: the icons of the last one go.
-                        self.painter = Painter::new();
+                        self.painter = Painter::with_side(self.atlas_side);
                         s.register_art(&mut self.painter);
                         // spec: S-0202 claim 8 (the unsynchronised stream takes the game's seed)
                         self.unsync = Rng::new(s.play.game.replay().setup.seed);
@@ -1556,6 +1560,23 @@ impl Client {
         let mut out = DrawList::new();
         out.scaled(scale, list);
         (out, FrameImages { changed })
+    }
+
+    /// Gives the painter an atlas of `side` × `side`, the device's sprite
+    /// atlas side, from now on (design: render (#103)). A painter of
+    /// another side is replaced: the running game's art is registered in
+    /// the new one, and its cursor frames and status glyphs come back as
+    /// they are next drawn. Nothing changes when the side is the same.
+    pub fn fit_atlas(&mut self, side: u32) {
+        self.atlas_side = side;
+        if self.painter.atlas.size() == side {
+            return;
+        }
+        log::info!("the sprite atlas is {side} × {side} on this device");
+        self.painter = Painter::with_side(side);
+        if let Some(s) = self.session.as_mut() {
+            s.register_art(&mut self.painter);
+        }
     }
 
     /// The setup values as the screens show them: with the colour-blind

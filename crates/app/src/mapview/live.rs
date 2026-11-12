@@ -571,9 +571,10 @@ pub struct Live {
     /// view's own, moved once per game tick.
     walks: super::walk::Counters,
     /// The game tick from which each mobile object on the map counts the
-    /// turn of its barrel elevation (S-0105 claim 6): 0 for the objects on
-    /// the map when the view started, else the tick the view first saw it
-    /// on the map. Presentation state, outside the game state (#81).
+    /// turn of its barrel elevation (S-0105 claim 6, *t*₀ of F9): 0 for the
+    /// objects on the map when the view started, else the tick in which it
+    /// was placed on the map. A departed warp member keeps its entry while
+    /// it is off the map. Presentation state, outside the game state (#81).
     placed: BTreeMap<ObjectId, i32>,
     /// Each vehicle type's walk and idle rates (S-0102 Import mapping), by
     /// the simulation's vehicle type index.
@@ -1358,8 +1359,8 @@ impl Live {
             setup_charges: BTreeMap::new(),
             placed: BTreeMap::new(),
         };
-        // spec: S-0105 claim 6 (an object on the map when the game is set up was placed before tick 0)
-        // design: render (#81) a loaded or joined game's objects count from tick 0 too (Q-2982)
+        // spec: S-0105 claim 6 (First appearance: an object that the map places before the first tick has t₀ = 0)
+        // design: render (#81) a loaded or joined game's objects count from tick 0 too: claim 6 (Saved games) keeps every turn through a save, but the game state holds no placement tick to continue from, and joining a network game is outside the spec
         live.placed = live
             .world
             .objects
@@ -1584,7 +1585,7 @@ impl Live {
         let now = self.shown_tick();
         self.adopt_sim_anims(now);
         self.adopt_walkers_and_makers(now);
-        self.note_placements();
+        self.note_placements(&[], true);
         self.follow_owners();
         self.follow_shooters();
         self.follow_walkers();
@@ -2699,19 +2700,43 @@ impl Live {
         });
     }
 
-    /// Notes the mobile objects that entered the map in the tick just run
-    /// (S-0105 claim 6: the barrel elevation starts level at placement) and
-    /// forgets those no longer on it.
-    fn note_placements(&mut self) {
-        let tick = self.world.tick;
+    /// Notes the mobile objects placed on the map in the tick just run and
+    /// the turns restarted by its `effects` (S-0105 claim 6: the barrel
+    /// elevation starts level at placement), and forgets those no longer on
+    /// it. On a `catch_up` ([`Live::resume`]) an object not seen before
+    /// counts from tick 0.
+    fn note_placements(&mut self, effects: &[Effect], catch_up: bool) {
+        // spec: S-0105 claim 6 (When the turn starts: t₀ is the tick number current at the placement, the tick just run; S-0201 claim 1, the final tick leaves the tick number at itself)
+        let tick = (glasnost_sim::tick::ticks_run(&self.world) - 1).max(0);
+        // design: render (#81) a game caught up with cannot tell when its new objects were placed: they count from tick 0, as a loaded game's do (their turns are over)
+        let fresh = if catch_up { 0 } else { tick };
         let mut next = BTreeMap::new();
         for o in self.world.objects.values() {
-            if !o.kind.is_mobile() || !o.on_map {
+            if !o.kind.is_mobile() {
                 continue;
             }
-            // design: render (#81) an object leaving the map and coming back (unloaded, warped) is placed again: its turn starts over (Q-2982)
-            let since = self.placed.get(&o.id).copied().unwrap_or(tick);
-            next.insert(o.id, since);
+            let kept = self.placed.get(&o.id).copied();
+            if !o.on_map {
+                // spec: S-0105 claim 6 (a chronosphere warp's member is off the map between its departure and its appearance, and that appearance keeps the elevation)
+                if let Some(since) = kept
+                    && glasnost_sim::superweapons::warp::departed(&self.world, o.id)
+                {
+                    next.insert(o.id, since);
+                }
+                continue;
+            }
+            // spec: S-0105 claim 6 (each placement on the map sets the elevation level and starts the turn; an object that left the map and is placed again, unloaded or set down, starts again)
+            next.insert(o.id, kept.unwrap_or(fresh));
+        }
+        for e in effects {
+            if let Effect::Seized { unit } = e
+                && let Some(o) = self.world.obj(*unit)
+                && o.lift.stand_in == Some(glasnost_sim::lift::StandIn::DropPod)
+                && let Some(since) = next.get_mut(unit)
+            {
+                // spec: S-0105 claim 6 (a unit seized under S-0607 claim 23's drop-pod stand-in: the end of the stand-in, which our engine gives at the seize, sets the elevation level and starts the turn at the tick number current then; design of the spec)
+                *since = tick;
+            }
         }
         self.placed = next;
     }
@@ -2728,7 +2753,7 @@ impl Live {
         self.rocking.take(&self.world, &effects);
         // spec: S-0102 claim 22 (the walk counter grows in a tick, once per game tick and not per drawn frame)
         self.walks.advance(&self.world, &self.walk_rates);
-        self.note_placements();
+        self.note_placements(&effects, false);
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -3342,8 +3367,7 @@ impl Live {
             // spec: S-0206 F1 (the facings' values at the current tick number)
             body: o.body.value(w.tick),
             turret: o.turret.value(w.tick),
-            // spec: S-0105 claim 6 (placed level, then turned toward the fire angle for the ticks since its placement)
-            // design: render (#81) the clock starts at the tick the view first sees the object on the map (Q-2982)
+            // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; First appearance: a drawn frame shows ε = n − t₀ with n the tick number current while it is drawn)
             elevation: voxel::barrel_elevation_after(fire_angle, self.ticks_since_placed(id)),
             // spec: S-0105 claim 16 and S-0609 claim 14 (the animation-frame counter as the simulation keeps it; the bit pattern, taken modulo the frame count)
             anim: o.combat.anim_frame as u32,
@@ -3406,11 +3430,18 @@ impl Live {
             .collect();
         let (lambda, lambda_air) = object_levels(&self.world);
         self.painter.set_object_levels(lambda, lambda_air);
-        // spec: S-0104 Terms (a shadowed cell: an intact high bridge marks the cells it spans, the mark cleared when it is destroyed), taken as S-0211 claim 15's high-bridge cells; no tile marks a cell yet (Q-3006)
+        // spec: S-0104 claim 19 (the marks of intact high bridges and of shadow-casting tiles, from the terrain the game holds now: a mark holds while its overlay or tile lies in its cell)
+        let terrain = |c| {
+            self.world
+                .cells
+                .cell(c)
+                .map(|cell| (cell.tile, cell.overlay))
+        };
+        let position = |t| super::shadowing::casting_position(inputs.catalogue, t);
         let shadowed: BTreeSet<glasnost_map::CellXY> = mobiles
             .iter()
             .map(|m| glasnost_map::CellXY::new(m.pos.0 / 256, m.pos.1 / 256)) // spec: S-0204 claim 2 (the cell holding a position)
-            .filter(|c| self.world.high_bridge(*c))
+            .filter(|&c| super::shadowing::cell_shadowed(c, &terrain, &position))
             .collect();
         self.painter.set_shadowed_cells(shadowed);
         // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)
