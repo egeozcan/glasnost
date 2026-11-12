@@ -762,7 +762,9 @@ impl MapRenderer {
     /// rewritten in place ([`Scene::replace_image`], [`Scene::resize_image`])
     /// are written again, into their own slots or, at another size, into
     /// new ones (their old places are freed), and palette rows appended to
-    /// [`Scene::rows`] replace the row texture. Images and rows already
+    /// [`Scene::rows`] are written into the row texture's room, or replace
+    /// it with a roomier one when it is full (design: render (#107)). Images
+    /// and rows already
     /// uploaded must otherwise be unchanged. When nothing fits, the atlas
     /// grows (design: render (#105)). Fails when it cannot grow any more
     /// (the device's layer limit) or the scene lost images; upload the
@@ -820,7 +822,12 @@ impl MapRenderer {
             let bytes = bytemuck::cast_slice::<i8, u8>(&img.values);
             self.write(queue, slot, img.width, img.height, bytes);
         }
-        if scene.rows.len() != self.row_count {
+        let room = (self.rows.width() / 256 * self.rows_per_column) as usize;
+        if scene.rows.len() > self.row_count && scene.rows.len() <= room {
+            // design: render (#107): rows appended within the texture's room are written on
+            // their own
+            self.write_rows(queue, scene);
+        } else if scene.rows.len() != self.row_count {
             let (rows, per_column) =
                 rows_texture(device, queue, scene, row_side(device), self.target_format)?;
             self.stats.uploads += 1;
@@ -839,6 +846,46 @@ impl MapRenderer {
             self.row_count = scene.rows.len();
         }
         Ok(())
+    }
+
+    /// Writes the rows `scene` appended since the last upload into the row
+    /// texture's room, a run of rows per column (design: render (#107)).
+    fn write_rows(&mut self, queue: &wgpu::Queue, scene: &Scene) {
+        let per_column = self.rows_per_column as usize;
+        let mut r = self.row_count;
+        while r < scene.rows.len() {
+            let (col, y) = (r / per_column, r % per_column);
+            let end = scene.rows.len().min((col + 1) * per_column);
+            let bytes: Vec<u8> = scene.rows[r..end].iter().flat_map(row_texels).collect();
+            let n = (end - r) as u32;
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &self.rows,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: col as u32 * 256,
+                        y: y as u32,
+                        z: 0,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(256 * 4),
+                    rows_per_image: Some(n),
+                },
+                wgpu::Extent3d {
+                    width: 256,
+                    height: n,
+                    depth_or_array_layers: 1,
+                },
+            );
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += bytes.len() as u64;
+            r = end;
+        }
+        self.row_count = scene.rows.len();
     }
 
     /// A place in the atlas for a `size` image: [`Slot::ABSENT`] for an
@@ -1565,7 +1612,31 @@ fn write_image(
     );
 }
 
-/// The palette-row texture of `scene` and its rows per column.
+/// The rows per column and the columns of a palette-row texture for `rows`
+/// rows whose sides are at most `side` (design: render (#107)): room for
+/// half again as many rows, at least 64, so rows appended later are
+/// written on their own until the room runs out; `None` past `side ÷ 256`
+/// columns of `side` rows.
+fn row_layout(rows: usize, side: u32) -> Option<(u32, u32)> {
+    let most = (side / 256) as usize * side as usize;
+    if most == 0 || rows > most {
+        return None;
+    }
+    let room = (rows + rows / 2).max(64).min(most);
+    let per_column = room.min(side as usize) as u32;
+    Some((per_column, (room as u32).div_ceil(per_column)))
+}
+
+/// The texels of palette row `row`, as the row texture holds them.
+fn row_texels(row: &[u16; 256]) -> impl Iterator<Item = u8> + '_ {
+    row.iter().flat_map(|&c| {
+        let (r, g, b) = expand565(c);
+        [r, g, b, 255]
+    })
+}
+
+/// The palette-row texture of `scene` and its rows per column, with room
+/// for rows appended later ([`row_layout`]).
 fn rows_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -1573,18 +1644,14 @@ fn rows_texture(
     side: u32,
     target_format: wgpu::TextureFormat,
 ) -> Result<(wgpu::Texture, u32), UploadError> {
-    let rows_per_column = scene.rows.len().clamp(1, side as usize) as u32;
-    let columns = (scene.rows.len().max(1) as u32).div_ceil(rows_per_column);
-    if columns * 256 > side {
-        return Err(UploadError("too many palette rows".into()));
-    }
+    let (rows_per_column, columns) = row_layout(scene.rows.len(), side)
+        .ok_or_else(|| UploadError("too many palette rows".into()))?;
     let mut row_bytes = vec![0u8; (columns * 256 * rows_per_column * 4) as usize];
     for (r, row) in scene.rows.iter().enumerate() {
         let (col, y) = (r as u32 / rows_per_column, r as u32 % rows_per_column);
-        for (i, &c) in row.iter().enumerate() {
-            let (cr, cg, cb) = expand565(c);
-            let at = ((y * columns * 256 + col * 256 + i as u32) * 4) as usize;
-            row_bytes[at..at + 4].copy_from_slice(&[cr, cg, cb, 255]);
+        let at = ((y * columns * 256 + col * 256) * 4) as usize;
+        for (to, from) in row_bytes[at..at + 256 * 4].iter_mut().zip(row_texels(row)) {
+            *to = from;
         }
     }
     let texture = device.create_texture_with_data(
@@ -1890,6 +1957,21 @@ mod tests {
         assert_eq!(grown_layers(8, 256), 12);
         assert_eq!(grown_layers(250, 256), 256);
         assert_eq!(grown_layers(256, 256), 256);
+    }
+
+    /// design: render (#107): a row texture has room for half again as many
+    /// rows, at least 64, in columns of at most `side` rows, up to `side ÷
+    /// 256` columns.
+    #[test]
+    fn row_layouts_leave_room() {
+        assert_eq!(row_layout(0, 4096), Some((64, 1)));
+        assert_eq!(row_layout(800, 4096), Some((1200, 1)));
+        assert_eq!(row_layout(3000, 4096), Some((4096, 2)));
+        // At the limit of 16 columns, the room is what is left.
+        assert_eq!(row_layout(60000, 4096), Some((4096, 16)));
+        assert_eq!(row_layout(65536, 4096), Some((4096, 16)));
+        assert_eq!(row_layout(65537, 4096), None);
+        assert_eq!(row_layout(1, 255), None);
     }
 
     #[test]

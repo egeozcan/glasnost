@@ -492,7 +492,11 @@ fn later_images_are_packed_by_height_class() {
 
 /// An invented palette row, different for each `k`.
 fn row(k: u16) -> [u16; 256] {
-    std::array::from_fn(|i| (i as u16).wrapping_mul(31).wrapping_add(k.wrapping_mul(613)))
+    std::array::from_fn(|i| {
+        (i as u16)
+            .wrapping_mul(31)
+            .wrapping_add(k.wrapping_mul(613))
+    })
 }
 
 /// design: render (#107): a palette row appended to the scene is written
