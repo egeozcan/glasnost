@@ -3803,6 +3803,8 @@ impl Live {
         self.draw_effects(scene);
         self.draw_lines(inputs, scene);
         self.draw_status(inputs, scene);
+        // design: render (#104): the transient voxel images no redraw has used for a while are released
+        self.painter.end_redraw(scene);
     }
 
     /// The beams and beam flashes of the shown tick (S-0518 claims 19 to

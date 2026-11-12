@@ -758,6 +758,8 @@ pub struct DrawStats {
     /// Battlefield renderers made anew (a new game, or a full atlas), each
     /// uploading the whole scene.
     pub rebuilds: usize,
+    /// How full the battlefield's atlas is now (no renderer: all zero).
+    pub atlas: glasnost_render::map_gpu::AtlasUse,
 }
 
 impl GpuDraw {
@@ -794,6 +796,11 @@ impl GpuDraw {
                 .unwrap_or_default(),
             batch: self.batch.take_stats(),
             rebuilds: std::mem::take(&mut self.rebuilds),
+            atlas: self
+                .map
+                .as_ref()
+                .map(|m| m.renderer.atlas_use())
+                .unwrap_or_default(),
         }
     }
 
@@ -888,8 +895,9 @@ impl GpuDraw {
         serial: u64,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<(), String> {
-        // A game's scene only grows: upload what it gained, or all of it for
-        // a new game or when the atlas is full.
+        // Upload what the game's scene gained or rewrote (the atlas grows
+        // when full), or all of it for a new game or when the atlas is at the
+        // device's limit (design: render (#105)).
         let start = self.lap();
         let synced = match self.map.as_mut() {
             Some(m) if m.serial == serial => m.renderer.sync(device, queue, &s.scene).is_ok(),

@@ -323,6 +323,225 @@ fn sync_rewrites_replaced_images() {
     assert_eq!(differing, 0);
 }
 
+/// How many pixels of `r`'s drawing of `s` at a 128 × 72 view differ from
+/// the CPU reference.
+fn differing_from_cpu(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    r: &mut MapRenderer,
+    s: &Scene,
+) -> usize {
+    let size = (128, 72);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let filter = Filter::default();
+    let cpu = s
+        .compose(&view, &filter, &ComposeQuirks::default())
+        .to_rgba();
+    let (color, depth) = targets(device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render(
+        device,
+        queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        s,
+        &view,
+        &filter,
+        &ComposeQuirks::default(),
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(device, queue, &color, size.0, size.1);
+    cpu.chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count()
+}
+
+/// An item drawing image `image` flat at (`x`, `y`) with no depth test.
+fn flat_item(image: u32, x: i32, y: i32) -> Item {
+    Item {
+        image,
+        x,
+        y,
+        test: DepthTest::Ignore,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Row(2),
+        group: Group::Smudges,
+        provisional: false,
+        object: None,
+        stack: None,
+    }
+}
+
+/// design: render (#105): images added while the atlas is full make it
+/// grow: `sync` succeeds with no new renderer, and the images placed before
+/// and after the growth are drawn as the CPU reference draws them.
+#[test]
+fn a_full_atlas_grows_in_sync() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let mut r = MapRenderer::with_side(
+        &device,
+        &queue,
+        &s,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+        64,
+    )
+    .expect("scene uploads");
+    let layers = r.atlas_use().layers;
+    let mut added = Vec::new();
+    for k in 0..48u32 {
+        let id = s.add_image(image(30, 20, k as u8));
+        added.push(id);
+        if k % 8 == 0 {
+            r.sync(&device, &queue, &s)
+                .expect("a full atlas grows instead of failing");
+        }
+    }
+    r.sync(&device, &queue, &s)
+        .expect("a full atlas grows instead of failing");
+    assert!(
+        r.atlas_use().layers > layers,
+        "the atlas grew from {layers} layers"
+    );
+    // The first and the last images added, and one between.
+    for (n, &id) in [added[0], added[23], added[47]].iter().enumerate() {
+        s.items.push(flat_item(id, 10 + 40 * n as i32, 45));
+    }
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
+/// design: render (#104, #105): an image rewritten at another size
+/// (`Scene::resize_image`) moves to a new place, and a released one (0 × 0)
+/// frees its place for later images; the result matches the CPU reference.
+#[test]
+fn resized_and_released_images_move_and_free_their_places() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let spare = s.add_image(image(40, 40, 9));
+    let mut r = MapRenderer::with_side(
+        &device,
+        &queue,
+        &s,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+        64,
+    )
+    .expect("scene uploads");
+    let before = r.atlas_use();
+    // The tall and flat images (2 and 3) change size; the spare one goes.
+    assert!(s.resize_image(2, image(25, 40, 61)));
+    assert!(s.resize_image(3, image(40, 14, 62)));
+    assert!(s.resize_image(spare, IndexedImage::new(0, 0, Vec::new()).unwrap()));
+    r.sync(&device, &queue, &s).expect("the rewrites fit");
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+    // The spare image's place is free again: as many images of its size fit
+    // with no growth.
+    let id = s.add_image(image(40, 40, 10));
+    s.items.push(flat_item(id, 70, 20));
+    r.sync(&device, &queue, &s).expect("the new image fits");
+    assert_eq!(r.atlas_use().layers, before.layers, "no growth");
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
+/// design: render (#105): images added later are packed by height class,
+/// not in arrival order: tall and short images arriving in turn do not
+/// leave every shelf as tall as the tall ones.
+#[test]
+fn later_images_are_packed_by_height_class() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = Scene::default();
+    s.add_row([0; 256]);
+    s.add_image(image(1, 1, 1));
+    let mut r = MapRenderer::with_side(
+        &device,
+        &queue,
+        &s,
+        glasnost_render::map_gpu::COLOR_FORMAT,
+        256,
+    )
+    .expect("scene uploads");
+    for k in 0..64u8 {
+        s.add_image(image(8, 64, k));
+        s.add_image(image(8, 8, k));
+    }
+    r.sync(&device, &queue, &s).expect("the images fit");
+    // 64 tall images fill two 64-row shelves, 64 short ones (and the first
+    // image) two or three 8-row shelves.
+    let used = r.atlas_use();
+    assert!(
+        used.committed_px <= (128 + 24) * 256,
+        "{} atlas pixels in shelves",
+        used.committed_px
+    );
+}
+
+/// An invented palette row, different for each `k`.
+fn row(k: u16) -> [u16; 256] {
+    std::array::from_fn(|i| {
+        (i as u16)
+            .wrapping_mul(31)
+            .wrapping_add(k.wrapping_mul(613))
+    })
+}
+
+/// design: render (#107): a palette row appended to the scene is written
+/// into the row texture on its own, so one row costs one row's bytes, not
+/// the whole texture's; rows appended past the texture's room still draw
+/// as the CPU reference draws them.
+#[test]
+fn appended_rows_write_only_themselves() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    for k in 0..40 {
+        s.add_row(row(k));
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    r.take_stats();
+    let one = s.add_row(row(100));
+    r.sync(&device, &queue, &s).expect("the row fits");
+    let stats = r.take_stats();
+    assert!(
+        stats.upload_bytes <= 256 * 4,
+        "one appended row uploaded {} bytes",
+        stats.upload_bytes
+    );
+    let mut item = flat_item(3, 10, 40);
+    item.paint = Paint::Row(one);
+    s.items.push(item);
+    // Many more rows, synced now and then: the texture makes room for them.
+    for k in 0..3000 {
+        s.add_row(row(200 + k));
+        if k % 500 == 0 {
+            r.sync(&device, &queue, &s).expect("the rows fit");
+        }
+    }
+    r.sync(&device, &queue, &s).expect("the rows fit");
+    for (n, at) in [(1, s.rows.len() / 2), (2, s.rows.len() - 1)] {
+        let mut item = flat_item(3, 10 + 40 * n, 40);
+        item.paint = Paint::Row(at);
+        s.items.push(item);
+    }
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
 /// spec: S-0102 claim 27 (cell-pass shadows store their depth; quirks.cell_pass_shadows_write_depth)
 ///
 /// Two writer shadows at the same depth over a flat item: with the switch
