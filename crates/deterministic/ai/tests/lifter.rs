@@ -137,6 +137,27 @@ fn a_holding_lifter_lets_go_over_an_enemy_building() {
 fn a_lifter_does_not_go_with_a_wave() {
     let g = game();
     let mut w = g.world.clone();
+    // Only the units this test places: house 0's starting units go (its
+    // first object, which `home` reads, stays).
+    let first = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.id);
+    let units: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| {
+            o.owner == Some(HouseId(0))
+                && o.on_map
+                && o.kind != Kind::Building
+                && Some(o.id) != first
+        })
+        .map(|o| o.id)
+        .collect();
+    for id in units {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
     let guards: Vec<ObjectId> = [(1, 1), (2, 1)]
         .into_iter()
         .map(|(dx, dy)| spawn(&mut w, Kind::Vehicle, "GUNR", 0, dx, dy))

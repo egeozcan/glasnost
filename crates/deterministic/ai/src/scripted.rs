@@ -2323,7 +2323,8 @@ impl Script {
                         dest: Some(Target::Cell(dest)),
                     });
                 }
-            } else {
+            } else if !crate::lifter::is_lifter(w, id) {
+                // design: own AI (#13): a lifter keeps to its own part (`lifter::keeps_order` drops a wave's order to it), so it does not count toward a wave
                 waiting.push(id);
             }
         }
