@@ -112,6 +112,23 @@ fn an_airburst_weapon_that_names_itself_ends_its_pass() {
     assert!(made <= 9 + 9, "{made} objects made from one shot");
 }
 
+// spec: S-0306 claim 21a (the airburst links lead from projectile types, not weapons: a shot of a weapon off the loop whose projectile type lies on it launches nine marked children, which launch none)
+#[test]
+fn a_weapon_off_the_loop_firing_a_looped_type_makes_one_generation() {
+    // Shot and Echo both fire Ball, whose airburst weapon is Echo: Ball
+    // leads to itself, so the link lies on a loop whichever weapon fired.
+    let r = rules(&[("Shot", "Ball"), ("Echo", "Ball")], &[("Ball", "Echo")]);
+    let mut w = world(&r, "Shot");
+    // Enough passes for every child to fall and burst.
+    let mut made = 0;
+    for _ in 0..100 {
+        let (ended, n) = pass(&mut w);
+        assert!(ended);
+        made += n;
+    }
+    assert!(made <= 9 + 9, "{made} objects made from one shot");
+}
+
 // nocite: our own input validation (#203): the same for a loop of two weapons
 #[test]
 fn an_airburst_loop_of_two_weapons_ends_its_pass() {
