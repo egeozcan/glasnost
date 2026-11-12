@@ -545,6 +545,97 @@ fn a_map_building_animates_from_the_start() {
     );
 }
 
+/// What [`map_building_drawn_live`] changes on the map's building.
+#[derive(Clone, Copy, Debug)]
+enum Look {
+    /// Its turret turns (S-0108 claim 2 draws the turret at its facing).
+    Turn,
+    /// Its animation-frame counter moves on (S-0105 claim 16, S-0609 claim 14).
+    Spin,
+    /// It starts unloading (S-0108 claims 22 and 23).
+    Unload,
+}
+
+/// Whether the map's building (a tech HUTX, so it holds still in the
+/// cell pass) is drawn live after `look` changes on it, and whether it was
+/// in the cell pass before.
+fn map_building_drawn_live(look: Look) -> ((usize, usize), (usize, usize)) {
+    let (import, catalogue, assets) = import_with("");
+    let mut map = testkit::empty_map(SIZE);
+    let at = testkit::mid(SIZE, 2, 0);
+    map.objects.structures.push(Structure {
+        placed: Placed {
+            key: b"0".to_vec(),
+            owner: b"Neutral".to_vec(),
+            type_name: b"HUTX".to_vec(),
+            health: 256,
+            cell: at,
+            facing: 0,
+            raw: Vec::new(),
+        },
+    });
+    let rules = rules(true);
+    let setup = setup();
+    let world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = world
+        .objects
+        .values()
+        .find(|o| o.kind == SimKind::Building && o.pos.cell() == at)
+        .map(|o| o.id)
+        .expect("the map's building");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(&inputs, &mut built, painter, (world, rules.clone(), setup, Vec::new()));
+    let mut scene = built.scene;
+    let code = *live
+        .building_ids
+        .iter()
+        .find(|(_, id)| **id == b)
+        .expect("the building is the map's")
+        .0;
+    let counts = |scene: &Scene| (items_of(scene, code).len(), items_of(scene, sim_code(b)).len());
+    for _ in 0..4 {
+        live.step();
+    }
+    live.redraw(&inputs, &mut scene);
+    let before = counts(&scene);
+    let tick = live.world.tick;
+    let o = live.world.obj_mut(b).unwrap();
+    match look {
+        Look::Turn => o.turret = glasnost_sim::turning::Turning::at(o.turret.value(tick) ^ 0x4000),
+        Look::Spin => o.combat.anim_frame += 1,
+        Look::Unload => o.beh.current = Some(glasnost_sim::rules::Behaviour::Unload),
+    }
+    // The state as a tick left it, drawn without another tick.
+    live.redraw(&inputs, &mut scene);
+    (before, counts(&scene))
+}
+
+/// spec: S-0108 claim 2 (a building's turret is drawn at its facing), S-0105 claim 16 and S-0609
+/// claim 14 (its animation-frame counter picks its frames), S-0108 claims 22 and 23 (the unloading
+/// images): a map building held in the cell pass that turns, spins or unloads is drawn live (#97)
+#[test]
+fn a_map_building_that_turns_spins_or_unloads_is_drawn_live() {
+    for look in [Look::Turn, Look::Spin, Look::Unload] {
+        let (before, after) = map_building_drawn_live(look);
+        assert!(before.0 > 0 && before.1 == 0, "{look:?}: {before:?}");
+        assert!(after.0 == 0 && after.1 > 0, "{look:?}: {after:?}");
+    }
+}
+
 /// spec: S-0108 claim 2 and F3 (a damaged building's body frame): a map building damaged in play
 /// shows its damaged frame
 #[test]
