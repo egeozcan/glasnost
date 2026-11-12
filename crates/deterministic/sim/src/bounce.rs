@@ -436,7 +436,7 @@ pub(crate) fn land(
     landing: Landing,
     from: (Option<u32>, bool),
 ) {
-    // nocite: our own input validation (#174): a marked animation makes no animation through a link on a loop of animation types; Q-2996
+    // spec: S-0319 r30 claim 15 (a looped animation makes no animation, and takes no draws for it, through a link on a loop of animation types)
     let link = |w: &World, name: &str| crate::anims::link(w, from.0, from.1, name);
     let rules = w.rules_arc();
     let q = rules.quirks;

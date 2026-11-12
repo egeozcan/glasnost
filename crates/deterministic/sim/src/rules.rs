@@ -1558,7 +1558,7 @@ impl SimRules {
         }
         let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
         let pieces = crate::pieces::PieceRules::new(r, &warhead_names, &gas, mode);
-        // nocite: our own input validation (#224, #174, #203, #198): the loops of the links between types; Q-2996 to Q-2999 ask what the game does
+        // spec: S-0319 r30 claim 15, S-0317 r59 claim 29, S-0306 r87 claim 21a, S-0616 r29 claim 8a (the loops of the links between types)
         let loops = crate::loops::LinkLoops::new(&animations, &pieces, &combat, &gas);
         Self {
             loops,

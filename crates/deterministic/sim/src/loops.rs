@@ -1,18 +1,20 @@
-//! Loops in the links between rules types (#224, #174, #203, #198): our
-//! engine's own input validation, not game behaviour.
+//! Loops in the links between rules types (#224, #174, #203, #198): the
+//! specs' own departure for bad data, with no switch (S-0319 r30 claim 15,
+//! S-0317 r59 claim 29, S-0306 r87 claim 21a, S-0616 r29 claim 8a).
 //!
 //! Some rules fields name another type that the game creates from the
 //! first: an animation's trailer, a bouncing animation's spawn, bounce and
-//! expiry animations, a meteor piece's spawn type, an airburst weapon, a
-//! smoke particle's next type. Data whose links lead back to the first type
-//! made one tick run for ever or made the number of objects grow without
-//! end. At rules build each such graph is split into its loop groups (the
-//! strongly connected groups of the link graph that hold a loop), and a link
-//! between two types of one group is a *looped link*. An object made through
-//! a looped link carries a saved mark and takes no looped link itself, so one
+//! expiry animations, a meteor piece's spawn type, an airburst projectile
+//! type's airburst weapon, a smoke particle's next type. Data whose links
+//! lead back to the first type can make one tick run for ever or make the
+//! number of objects grow without end. At rules build each such graph is
+//! split into its loop groups (the largest groups of types that all lead to
+//! one another, a type linked to itself counting as one), and a link between
+//! two types of one group is a *looped link*. An object made through a looped
+//! link carries a saved loop mark and takes no looped link itself, so one
 //! creation leads to at most one generation of a loop. Links on no loop, and
-//! everything made through them, are unchanged. Q-2996 to Q-2999 ask what the
-//! game does with such data.
+//! everything made through them, are unchanged. The importer warns once for
+//! each loop group.
 
 /// The loop groups of one link graph.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -127,6 +129,25 @@ impl Loops {
             .filter_map(|(i, g)| g.map(|_| i))
             .collect()
     }
+
+    /// The loop groups, each its nodes in index order, the groups ordered
+    /// by their first node.
+    pub fn groups(&self) -> Vec<Vec<usize>> {
+        let mut out: Vec<Vec<usize>> = Vec::new();
+        // Group identifiers in the order their first node comes.
+        let mut ids: Vec<u32> = Vec::new();
+        for (i, g) in self.group.iter().enumerate() {
+            let Some(g) = *g else { continue };
+            match ids.iter().position(|&x| x == g) {
+                Some(k) => out[k].push(i),
+                None => {
+                    ids.push(g);
+                    out.push(vec![i]);
+                }
+            }
+        }
+        out
+    }
 }
 
 /// The loop groups of the four link graphs of a ruleset, and a warning for
@@ -140,12 +161,12 @@ pub struct LinkLoops {
     /// Debris piece types, by registration index: a meteor piece's spawn
     /// type.
     pub pieces: Loops,
-    /// Weapons, by index: the airburst weapon of the weapon's projectile,
-    /// when that projectile is an airburst one.
+    /// Projectile types, by index: an airburst type links to the projectile
+    /// type of its airburst weapon.
     pub airburst: Loops,
     /// Particle types, by registration index: the next type.
     pub particles: Loops,
-    /// One line for each graph that has a loop, naming its types.
+    /// One line for each loop group, naming its types.
     pub warnings: Vec<String>,
 }
 
@@ -168,7 +189,11 @@ impl LinkLoops {
             .iter()
             .map(|a| {
                 let b = &a.bounce;
-                [&b.trailer, &b.bounce, &b.expire, &b.spawns]
+                // A spawn type with no spawn count makes nothing, so it
+                // is no link (spec: S-0319 r30 Terms and claim 15).
+                let none = None;
+                let spawns = if b.spawn_count > 0 { &b.spawns } else { &none };
+                [&b.trailer, &b.bounce, &b.expire, spawns]
                     .into_iter()
                     .filter_map(anim_index)
                     .chain(a.next_index.map(|i| i as usize))
@@ -183,15 +208,18 @@ impl LinkLoops {
                 _ => Vec::new(),
             })
             .collect();
+        // An airburst projectile type links to the projectile type of its
+        // airburst weapon (spec: S-0306 r87 claim 21a).
         let airburst_links: Vec<Vec<usize>> = combat
-            .weapons
+            .projectiles
             .iter()
-            .map(|wr| {
-                wr.projectile
-                    .and_then(|p| combat.projectiles.get(p as usize))
+            .map(|p| {
+                Some(p)
                     .filter(|p| p.airburst)
                     .and_then(|p| p.airburst_weapon)
-                    .map(|aw| vec![aw as usize])
+                    .and_then(|aw| combat.weapons.get(aw as usize))
+                    .and_then(|wr| wr.projectile)
+                    .map(|q| vec![q as usize])
                     .unwrap_or_default()
             })
             .collect();
@@ -208,11 +236,13 @@ impl LinkLoops {
             warnings: Vec::new(),
         };
         let mut warnings = Vec::new();
+        // One warning for each loop group (spec: S-0319 r30 claim 15, S-0317
+        // r59 claim 29, S-0306 r87 claim 21a, S-0616 r29 claim 8a).
         let mut warn = |what: &str, l: &Loops, name: &dyn Fn(usize) -> String| {
-            if l.any() {
-                let names: Vec<String> = l.nodes().into_iter().map(name).collect();
+            for group in l.groups() {
+                let names: Vec<String> = group.into_iter().map(name).collect();
                 warnings.push(format!(
-                    "{what} lead back to themselves: {}; each makes one generation of the loop (#224, #174, #203, #198)",
+                    "{what} lead back to themselves: {}; each makes one generation of the loop",
                     names.join(", ")
                 ));
             }
@@ -223,8 +253,8 @@ impl LinkLoops {
         warn("debris piece types", &out.pieces, &|i| {
             pieces.types[i].name.clone()
         });
-        warn("airburst weapons", &out.airburst, &|i| {
-            combat.weapons[i].name.clone()
+        warn("airburst projectile types", &out.airburst, &|i| {
+            combat.projectiles[i].name.clone()
         });
         warn("particle types", &out.particles, &|i| {
             gas.particles[i].name.clone()
@@ -246,6 +276,7 @@ mod tests {
         assert!(l.looped(3, 3));
         assert!(!l.looped(2, 5) && !l.looped(4, 0) && !l.looped(0, 3));
         assert_eq!(l.nodes(), vec![0, 1, 2, 3]);
+        assert_eq!(l.groups(), vec![vec![0, 1, 2], vec![3]]);
         // 2 → 4 → 0 closes a second path into the same group; a link past
         // the end is ignored.
         let l = Loops::new(&[vec![1], vec![2], vec![0, 4], vec![], vec![0], vec![9]]);

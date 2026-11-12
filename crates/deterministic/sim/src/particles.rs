@@ -89,9 +89,8 @@ const SPARK_DISCARDED: usize = 3; // spec: S-0616 F10 (three unused raw values f
 /// a particle cap or a particles-per-lepton field from rules data could
 /// otherwise ask for billions in one turn. Counts up to it are unchanged:
 /// the count raw value and the three discarded values are still taken, and
-/// each particle made keeps its own draws. Q-2999 asks whether the game
-/// has a limit.
-pub const BURST_CEILING: i32 = 4096; // nocite: our own input validation (#198), Q-2999
+/// each particle made keeps its own draws.
+pub const BURST_CEILING: i32 = 4096; // spec: S-0616 r29 claim 20a
 
 fn mode(w: &World) -> Rounding {
     w.rules().mode
@@ -404,7 +403,7 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         .systems
         .get(&sys)
         .is_some_and(|s| s.looped.contains(&p.id));
-    // nocite: our own input validation (#198): a marked particle does not split, and takes no draw, through a next-type link on a loop of particle types; Q-2999 asks what the game does
+    // spec: S-0616 r29 claim 8a (a marked successor does not split, and takes no draw, through a next-type link on a loop of particle types)
     if let Some(t) = ptype(w, &p)
         && let Some(next) = t.next
         && let Some(looped) =
@@ -1080,7 +1079,7 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
     };
     let [xv, yv, zmin, zrange] = pt.spark;
     let table = w.rules().quirks.table_root_distance;
-    // nocite: our own input validation (#198): at most BURST_CEILING sparks, with their draws, in one burst; Q-2999 asks for the game's limit
+    // spec: S-0616 r29 claim 20a (at most BURST_CEILING sparks, with their draws, in one burst)
     for _ in 0..count.clamp(0, BURST_CEILING) {
         // spec: S-0616 claim 15 (each spark: the creation draws of one particle at the system's position, the system's position its target point)
         if crate::gas::add_particle(w, sys, held, at, at).is_none() {
@@ -1246,7 +1245,7 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
         match t.holds {
             Some(held) => {
                 // spec: S-0616 claim 17 (n ≤ 0: no particle and no ranged draw)
-                // nocite: our own input validation (#198): at most BURST_CEILING particles, with their draws, in one line; Q-2999 asks for the game's limit
+                // spec: S-0616 r29 claim 20a (at most BURST_CEILING particles, with their draws, in one line)
                 for _ in 0..n.clamp(0, BURST_CEILING) {
                     // spec: S-0616 claim 17 (per particle: three ranged draws, its creation draws, four more ranged draws; the line's shape is drawing only, so each particle is kept at the system's position)
                     for _ in 0..RAIL_BEFORE {

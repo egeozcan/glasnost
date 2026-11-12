@@ -214,7 +214,7 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
 /// makes none, else the new one's mark ([`crate::loops::Loops::link`]).
 pub(crate) fn link(w: &World, from: Option<u32>, marked: bool, name: &str) -> Option<bool> {
     let to = anim_index(w, name.as_bytes()).map(|i| i as usize);
-    // nocite: our own input validation (#224, #174): a marked animation takes no link on a loop of animation types; Q-2996 asks what the game does
+    // spec: S-0319 r30 claim 15 (a looped animation makes nothing through a link on a loop of animation types)
     w.rules()
         .loops
         .anims
@@ -492,7 +492,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
     if let Some(p) = a.pos
         && let Some(name) = crate::bounce::trailer_due(current, w.tick)
-        // nocite: our own input validation (#224): a marked animation makes no trailer through a link on a loop of animation types, so the pass ends; Q-2996
+        // spec: S-0319 r30 claim 15 (a looped animation makes no trailer through a link on a loop of animation types, so the pass ends)
         && let Some(looped) = link(w, a.anim, a.looped, &name)
     {
         // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)

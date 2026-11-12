@@ -1603,13 +1603,11 @@ fn explode(
 /// The nine children of an airburst (S-0306 claim 21).
 fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
     let rules = w.rules_arc();
-    // nocite: our own input validation (#203): a marked projectile launches no children, and takes no draw, through a link on a loop of airburst weapons; Q-2998 asks what the game does
-    let Some(looped) =
-        rules
-            .loops
-            .airburst
-            .link(Some(pr.weapon as usize), pr.looped, Some(aw as usize))
-    else {
+    // spec: S-0306 r87 claim 21a (a marked projectile launches no children, and takes no draw, through a link between two projectile types of one loop of airburst links)
+    // A projectile's type is its weapon record's projectile type: it keeps no type of its own, and a child carries the airburst weapon as its record.
+    let from = rules.combat.weapon(pr.weapon).projectile.map(|p| p as usize);
+    let to = rules.combat.weapon(aw).projectile.map(|p| p as usize);
+    let Some(looped) = rules.loops.airburst.link(from, pr.looped, to) else {
         return;
     };
     let half = rules.quirks.ranged_draw_half_span;

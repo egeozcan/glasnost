@@ -1,6 +1,6 @@
-//! An airburst weapon whose airburst projectile leads back to the same
-//! weapon cannot keep the turn pass from ending (#203). Synthetic data
-//! only.
+//! An airburst projectile type whose airburst weapon leads back to the
+//! same type cannot keep the turn pass from ending (#203, S-0306 claim
+//! 21a). Synthetic data only.
 
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Decimal, ProjectileType, WarheadType, WeaponType};
@@ -98,7 +98,7 @@ fn an_airburst_chain_without_a_loop_ends() {
     assert!(made >= 9, "nine children: {made}");
 }
 
-// nocite: our own input validation (#203): a projectile launched through an airburst link that closes a loop of weapons launches no children through such a link, so one shot makes nine children at most
+// spec: S-0306 claim 21a (a projectile launched through an airburst link on a loop of projectile types launches no children through such a link, so one shot makes nine children at most)
 #[test]
 fn an_airburst_weapon_that_names_itself_ends_its_pass() {
     let r = rules(&[("Shot", "Ball")], &[("Ball", "Shot")]);
@@ -129,7 +129,7 @@ fn a_weapon_off_the_loop_firing_a_looped_type_makes_one_generation() {
     assert!(made <= 9 + 9, "{made} objects made from one shot");
 }
 
-// nocite: our own input validation (#203): the same for a loop of two weapons
+// spec: S-0306 claim 21a (the same for a loop of two projectile types)
 #[test]
 fn an_airburst_loop_of_two_weapons_ends_its_pass() {
     let r = rules(
