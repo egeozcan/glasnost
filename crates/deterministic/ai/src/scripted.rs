@@ -63,6 +63,7 @@
 //! of our own opponent, not game behaviour.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;
@@ -568,17 +569,97 @@ pub(crate) fn dist2(a: CellXY, b: CellXY) -> i64 {
 }
 
 /// An object the free-gap test looks at ([`Script::known_objects`]).
+#[derive(Clone, Debug)]
 struct Known {
+    /// The object.
+    id: ObjectId,
     /// Its position's cell (a building's top-left cell).
     top_left: CellXY,
     /// A building's foundation; none for another object.
     foundation: Option<(i32, i32)>,
 }
 
-/// Whether foundation cells `cells` hold none of `known` and keep a gap of
-/// `gap` cells to each of its buildings ([`Script::free_gap`]).
-fn free_among(known: &[Known], cells: &[CellXY], gap: i32) -> bool {
-    known.iter().all(|o| {
+/// [`free_among`]'s answers over the map's coordinate square, for every gap
+/// up to [`GAP`] and no object left out (design: own AI, #52 and #57: the
+/// placement searches asked the free-gap test of every known object for
+/// every cell they tried). A building blocks cell `k` at gap `g` exactly
+/// when `k` lies within its foundation's rectangle widened by `g` cells on
+/// each side, that is when the larger of `k`'s distances outside the
+/// rectangle across and down is at most `g`; any other object blocks the
+/// cell it stands on.
+#[derive(Clone, Debug)]
+struct Blocked {
+    /// The coordinate square's side.
+    side: i32,
+    /// Per cell (row-major), the smallest such distance to a known
+    /// building, capped at `GAP + 1`.
+    near: Vec<u8>,
+    /// Per cell, whether a known object other than a building stands on it.
+    occupied: Vec<bool>,
+}
+
+impl Blocked {
+    /// The map of `known` on a coordinate square of `len` cells.
+    fn new(known: &[Known], len: usize) -> Self {
+        let side = len.isqrt();
+        let cap = u8::try_from(GAP + 1).unwrap_or(u8::MAX);
+        let mut b = Self {
+            side: i32::try_from(side).unwrap_or(0),
+            near: vec![cap; side * side],
+            occupied: vec![false; side * side],
+        };
+        for o in known {
+            let tl = o.top_left;
+            match o.foundation {
+                Some((fw, fh)) => {
+                    let (x0, x1, y0, y1) = (tl.x, tl.x + fw - 1, tl.y, tl.y + fh - 1);
+                    for y in (y0 - GAP)..=(y1 + GAP) {
+                        for x in (x0 - GAP)..=(x1 + GAP) {
+                            let Some(i) = b.index(CellXY::new(x, y)) else {
+                                continue;
+                            };
+                            let d = (x0 - x).max(x - x1).max(y0 - y).max(y - y1).max(0);
+                            let d = u8::try_from(d).unwrap_or(cap).min(cap);
+                            b.near[i] = b.near[i].min(d);
+                        }
+                    }
+                }
+                None => {
+                    if let Some(i) = b.index(tl) {
+                        b.occupied[i] = true;
+                    }
+                }
+            }
+        }
+        b
+    }
+
+    /// The index of `c` in the square, if it lies there.
+    fn index(&self, c: CellXY) -> Option<usize> {
+        let ok = (0..self.side).contains(&c.x) && (0..self.side).contains(&c.y);
+        ok.then(|| (c.y * self.side + c.x) as usize)
+    }
+
+    /// [`free_among`] with no object left out, when every cell lies in the
+    /// square; none when one does not (the caller asks [`free_among`]).
+    fn free(&self, cells: &[CellXY], gap: i32) -> Option<bool> {
+        if !(0..=GAP).contains(&gap) {
+            return None;
+        }
+        let mut free = true;
+        for &k in cells {
+            let i = self.index(k)?;
+            free &= !self.occupied[i] && i32::from(self.near[i]) > gap;
+        }
+        Some(free)
+    }
+}
+
+/// Whether foundation cells `cells` hold none of `known` but object `but`
+/// and keep a gap of `gap` cells to each of its buildings
+/// ([`Script::free_gap`]).
+fn free_among(known: &[Known], cells: &[CellXY], gap: i32, but: Option<ObjectId>) -> bool {
+    known.iter().filter(|o| Some(o.id) != but).all(|o| {
         let tl = o.top_left;
         match o.foundation {
             Some((fw, fh)) => cells.iter().all(|k| {
@@ -629,7 +710,11 @@ pub struct Script {
 }
 
 /// [`Script::place_cell`]'s, [`Script::unblocker`]'s and
-/// [`Script::buildable`]'s answers during one think. The world does not change while a brain thinks (it reads
+/// [`Script::buildable`]'s answers during one think, and the lists of
+/// objects every part of the brain asks for ([`Script::own`],
+/// [`Script::seen_enemies`], [`Script::known_objects`], [`Script::home`];
+/// own AI issues batch 2). A think here is one call of the brain, on a
+/// think tick or between thinks. The world does not change while a brain thinks (it reads
 /// `&World`), and the answers depend only on the world and the house, so
 /// an answer found once holds for the rest of that think. Outside a think
 /// (between [`Script::begin_think`] and [`Script::end_think`]) nothing is
@@ -652,6 +737,24 @@ struct Kept {
     /// The tech-climb building the script ordered this think
     /// ([`Script::climbed`]).
     climbed: Option<TypeRef>,
+    /// [`Script::own`] (design: own AI, #53 and #59: one object scan a
+    /// think instead of one per question).
+    own: Option<Arc<[ObjectId]>>,
+    /// [`Script::seen_enemies`] (design: own AI, #53 and #59).
+    seen: Option<Arc<[(ObjectId, CellXY)]>>,
+    /// [`Script::known_objects`] with no object left out (design: own AI,
+    /// #52 and #57: one object scan a think instead of one per cell
+    /// tested).
+    known: Option<Arc<[Known]>>,
+    /// The free-gap test's map of [`Script::known_objects`] (design: own
+    /// AI, #52 and #57).
+    blocked: Option<Arc<Blocked>>,
+    /// [`Script::home`] (design: own AI, #59).
+    home: Option<Option<CellXY>>,
+    /// [`Script::of_role`] by role (design: own AI, #53 and #59).
+    roles: BTreeMap<Role, Arc<[ObjectId]>>,
+    /// [`Script::candidates`] by role (design: own AI, #59 and #60).
+    candidates: BTreeMap<Role, Arc<[TypeRef]>>,
 }
 
 impl PlaceMemo {
@@ -711,6 +814,52 @@ impl PlaceMemo {
         if let Some(m) = self.0.borrow_mut().as_mut() {
             m.climbed = Some(t);
         }
+    }
+
+    /// Whether a think runs (answers are kept).
+    fn thinking(&self) -> bool {
+        self.0.borrow().is_some()
+    }
+
+    /// The answer `field` keeps for the current think, else `make`'s, kept
+    /// for the rest of the think when one runs. No borrow is held while
+    /// `make` runs, so it may ask the memo itself.
+    fn keep<T: Clone>(
+        &self,
+        field: fn(&mut Kept) -> &mut Option<T>,
+        make: impl FnOnce() -> T,
+    ) -> T {
+        let kept = self.0.borrow_mut().as_mut().and_then(|m| field(m).clone());
+        if let Some(v) = kept {
+            return v;
+        }
+        let v = make();
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            *field(m) = Some(v.clone());
+        }
+        v
+    }
+
+    /// [`PlaceMemo::keep`] for an answer kept by key in map `field`.
+    fn keep_by<K: Ord + Copy, T: Clone>(
+        &self,
+        field: fn(&mut Kept) -> &mut BTreeMap<K, T>,
+        key: K,
+        make: impl FnOnce() -> T,
+    ) -> T {
+        let kept = self
+            .0
+            .borrow_mut()
+            .as_mut()
+            .and_then(|m| field(m).get(&key).cloned());
+        if let Some(v) = kept {
+            return v;
+        }
+        let v = make();
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            field(m).insert(key, v.clone());
+        }
+        v
     }
 }
 
@@ -828,7 +977,20 @@ impl Script {
     /// The types the house can build now for `role`, cheapest first: not
     /// one at its build limit, whose icon is dark and whose build order
     /// the sim refuses.
+    /// The list is kept for the rest of a think (design: own AI, #59 and
+    /// #60).
     pub(crate) fn candidates(&self, w: &World, role: Role) -> Vec<TypeRef> {
+        self.placed
+            .keep_by(
+                |m| &mut m.candidates,
+                role,
+                || self.find_candidates(w, role).into(),
+            )
+            .to_vec()
+    }
+
+    /// [`Script::candidates`]'s search.
+    fn find_candidates(&self, w: &World, role: Role) -> Vec<TypeRef> {
         let mut v: Vec<TypeRef> = all_types(w)
             .into_iter()
             // design: own AI (#6): a type at its limit is no candidate, so the next one is tried; spec: S-0407 claims 9 and 13 (at limit: refused when the order is issued)
@@ -846,7 +1008,17 @@ impl Script {
             .map_or(0, |&t| production::cost_field(w, t))
     }
 
+    /// The house's living objects on the map, in object order; one scan a
+    /// think, the list kept for the rest of it (design: own AI, #53 and
+    /// #59: the world does not change while a brain thinks).
     pub(crate) fn own(&self, w: &World) -> Vec<ObjectId> {
+        self.placed
+            .keep(|m| &mut m.own, || self.scan_own(w).into())
+            .to_vec()
+    }
+
+    /// [`Script::own`]'s scan.
+    fn scan_own(&self, w: &World) -> Vec<ObjectId> {
         w.objects
             .values()
             .filter(|o| o.owner == Some(self.house) && o.on_map && o.health > 0)
@@ -897,7 +1069,16 @@ impl Script {
     /// The house's objects on the map that play `role`. A slave with a
     /// master (S-0402 claim 14) works for its master and is never army, even
     /// when its type is armed.
+    /// The list is kept for the rest of a think (design: own AI, #53 and
+    /// #59).
     pub(crate) fn of_role(&self, w: &World, role: Role) -> Vec<ObjectId> {
+        self.placed
+            .keep_by(|m| &mut m.roles, role, || self.find_of_role(w, role).into())
+            .to_vec()
+    }
+
+    /// [`Script::of_role`]'s search.
+    fn find_of_role(&self, w: &World, role: Role) -> Vec<ObjectId> {
         self.own(w)
             .into_iter()
             .filter(|&id| {
@@ -917,6 +1098,11 @@ impl Script {
     /// The house's construction yard or, before one exists, its first
     /// object's cell.
     pub(crate) fn home(&self, w: &World) -> Option<CellXY> {
+        self.placed.keep(|m| &mut m.home, || self.find_home(w))
+    }
+
+    /// [`Script::home`]'s search.
+    fn find_home(&self, w: &World) -> Option<CellXY> {
         let own = self.own(w);
         own.iter()
             .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
@@ -1118,7 +1304,7 @@ impl Script {
 
     /// Whether the house can build `t` now ([`tech::buildable`]), the
     /// answer kept for the rest of a think.
-    fn buildable(&self, w: &World, t: TypeRef) -> bool {
+    pub(crate) fn buildable(&self, w: &World, t: TypeRef) -> bool {
         if let Some(yes) = self.placed.buildable(t) {
             return yes;
         }
@@ -1295,11 +1481,15 @@ impl Script {
         }
         let since = *self.watch.stall_since.get_or_insert(t);
         // Broke: too few credits for anything the house can build now.
-        let affordable = all_types(w)
-            .into_iter()
-            .filter(|&a| self.buildable(w, a))
-            .any(|a| credits >= production::cost_field(w, a));
-        if t - since < BROKE_PATIENCE || affordable || refund {
+        // design: own AI (#60): asked last, as the patience and the refund
+        // decide alone most thinks (the test reads every type's tech).
+        let affordable = || {
+            all_types(w)
+                .into_iter()
+                .filter(|&a| self.buildable(w, a))
+                .any(|a| credits >= production::cost_field(w, a))
+        };
+        if t - since < BROKE_PATIENCE || refund || affordable() {
             return;
         }
         self.watch.selling = true;
@@ -1780,6 +1970,7 @@ impl Script {
             self.watch.knew_field = self.knows_field(w);
         }
         self.watch_income(w);
+        mark("ai:script:watch:sell");
         self.sell_when_broke(w, &mut out);
         let selling = self.watch.selling;
 
@@ -1815,6 +2006,7 @@ impl Script {
                 .then_some(item.t)
         });
         if let Some(t) = done {
+            mark("ai:script:buildings:done");
             if let Some(cell) = self.done_cell(w, t) {
                 out.push(Order::Place {
                     what: t,
@@ -1824,7 +2016,9 @@ impl Script {
         } else if !selling || self.refinery_lost(w).is_some() {
             // design: a house selling out still rebuilds a lost refinery
             // its harvesters wait for (`Script::refinery_lost`, M8 step B8).
+            mark("ai:script:buildings:wanted");
             let wanted = self.wanted_role(w);
+            mark("ai:script:buildings:order");
             let walk = || {
                 // The cheapest power plant with a cell toward the water.
                 let goal = self.water_goal(w)?;
@@ -1834,13 +2028,16 @@ impl Script {
             };
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
-            } else if !selling
-                && self.harvesters_kept(w)
-                && let Some(t) = walk().or_else(|| self.climb(w))
-                && self.order_build(w, t, &mut out).is_some()
-                && role_of(w, t).is_none()
-            {
-                self.placed.set_climbed(t);
+            } else if !selling && self.harvesters_kept(w) {
+                mark("ai:script:buildings:walk");
+                let walked = walk();
+                mark("ai:script:buildings:climb");
+                if let Some(t) = walked.or_else(|| self.climb(w))
+                    && self.order_build(w, t, &mut out).is_some()
+                    && role_of(w, t).is_none()
+                {
+                    self.placed.set_climbed(t);
+                }
             }
         }
 
@@ -2474,7 +2671,18 @@ impl Script {
     /// of war is off in a skirmish (S-0409 claim 19), so a person in the
     /// house's seat sees what stands on every explored cell, except a
     /// cloaked object the house does not sense (S-0516 claim 28).
+    /// One scan a think, the list kept for the rest of it (design: own AI,
+    /// #53 and #59).
     pub(crate) fn seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
+        self.placed
+            .keep(|m| &mut m.seen, || self.scan_seen_enemies(w).into())
+            .to_vec()
+    }
+
+    /// [`Script::seen_enemies`]'s scan. The cloak is asked only of an
+    /// enemy (it only reads the world, so the answer is the same as asking
+    /// it of every object first; design: own AI, #53).
+    fn scan_seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
         let me = &w.houses[usize::from(self.house.0)];
         w.objects
             .values()
@@ -2488,8 +2696,8 @@ impl Script {
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
                 // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it).
-                let hidden = glasnost_sim::cloak::hidden_from(w, o.id, Some(self.house));
-                (enemy && !hidden && shroud::explored(w, self.house, c)).then_some((o.id, c))
+                let hidden = || glasnost_sim::cloak::hidden_from(w, o.id, Some(self.house));
+                (enemy && !hidden() && shroud::explored(w, self.house, c)).then_some((o.id, c))
             })
             .collect()
     }
@@ -2528,7 +2736,7 @@ impl Script {
         let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
         let search = placement::PlaceSearch::new(w, self.house, t, &cells);
         let p = search.place_type();
-        let known = self.known_objects(w, None);
+        let free = self.free_test(w);
         // A cramped base (a start in a small clearing) has no cell with the
         // usual gap: the gap narrows, as a person squeezes a building in
         // when the room is short, down to none.
@@ -2538,7 +2746,7 @@ impl Script {
                     // The cell test of `cell_fits` (an upgrade needs only the place order's conditions).
                     (p.upgrade_of.is_some() || search.cell_test(w, c)) && search.place_legal(w, c)
                 });
-                (ok && free_among(&known, &placement::foundation_cells_of(p, c), gap)).then_some(c)
+                (ok && free(&placement::foundation_cells_of(p, c), gap)).then_some(c)
             })
         })
     }
@@ -2801,7 +3009,7 @@ impl Script {
             .collect();
         cells.sort_by_key(|&c| (dist2(centre(c), goal), c.y, c.x));
         let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
-        let known = self.known_objects(w, None);
+        let free = self.free_test(w);
         (0..=GAP).rev().find_map(|gap| {
             cells.iter().zip(legal.iter_mut()).find_map(|(&c, l)| {
                 let ok = *l.get_or_insert_with(|| {
@@ -2811,7 +3019,7 @@ impl Script {
                             .iter()
                             .all(|&f| resource::resource_at(w, f).is_none())
                 });
-                (ok && free_among(&known, &placement::foundation_cells_of(p, c), gap)).then_some(c)
+                (ok && free(&placement::foundation_cells_of(p, c), gap)).then_some(c)
             })
         })
     }
@@ -2831,23 +3039,68 @@ impl Script {
     /// [`Script::free_but`] with a gap of `gap` cells.
     fn free_gap(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>, gap: i32) -> bool {
         let cells = placement::foundation_cells(w, t.index, c);
-        free_among(&self.known_objects(w, but), &cells, gap)
+        self.free_cells(w, &cells, gap, but)
+    }
+
+    /// Whether foundation cells `cells` hold none of the objects the house
+    /// knows but `but` and keep a gap of `gap` cells to its buildings
+    /// ([`free_among`]); during a think, with no object left out, read off
+    /// the think's [`Blocked`] map (the same answer).
+    fn free_cells(&self, w: &World, cells: &[CellXY], gap: i32, but: Option<ObjectId>) -> bool {
+        if but.is_none()
+            && self.placed.thinking()
+            && let Some(free) = self.blocked(w).free(cells, gap)
+        {
+            return free;
+        }
+        free_among(&self.known_objects(w), cells, gap, but)
+    }
+
+    /// The free-gap test with no object left out, for a search that asks it
+    /// of many cells: [`Blocked`] during a think, else [`free_among`] over
+    /// the objects listed once (the same answers).
+    fn free_test(&self, w: &World) -> impl Fn(&[CellXY], i32) -> bool {
+        let blocked = self.placed.thinking().then(|| self.blocked(w));
+        let known = self.known_objects(w);
+        move |cells, gap| {
+            blocked
+                .as_ref()
+                .and_then(|b| b.free(cells, gap))
+                .unwrap_or_else(|| free_among(&known, cells, gap, None))
+        }
+    }
+
+    /// The think's [`Blocked`] map of the objects the house knows.
+    fn blocked(&self, w: &World) -> Arc<Blocked> {
+        self.placed.keep(
+            |m| &mut m.blocked,
+            || Arc::new(Blocked::new(&self.known_objects(w), w.cells.grid.len())),
+        )
     }
 
     /// The objects the free-gap test looks at, in object order: only what
     /// the house knows, its own objects and those on cells it has explored
     /// (the AI sees only its own house's shroud; fog is off in a skirmish,
-    /// S-0409 claim 19), on the map, but `but`.
-    fn known_objects(&self, w: &World, but: Option<ObjectId>) -> Vec<Known> {
+    /// S-0409 claim 19), on the map. One scan a think, the list kept for
+    /// the rest of it (design: own AI, #52 and #57: the scan was made for
+    /// every cell a spiral tested); [`free_among`] leaves out the object a
+    /// test does not count.
+    fn known_objects(&self, w: &World) -> Arc<[Known]> {
+        self.placed
+            .keep(|m| &mut m.known, || self.scan_known_objects(w).into())
+    }
+
+    /// [`Script::known_objects`]'s scan.
+    fn scan_known_objects(&self, w: &World) -> Vec<Known> {
         w.objects
             .values()
             .filter(|o| {
                 o.on_map
-                    && Some(o.id) != but
                     && (o.owner == Some(self.house)
                         || shroud::explored(w, self.house, o.pos.cell()))
             })
             .map(|o| Known {
+                id: o.id,
                 // A building's position is its top-left cell's centre.
                 top_left: o.pos.cell(),
                 foundation: (o.kind == Kind::Building).then_some(o.foundation),
@@ -3128,6 +3381,219 @@ mod place_cell_tests {
             "{found} of {compared}"
         );
         assert!(unblocked > 0);
+    }
+
+    /// The house's objects as [`Script::own`] listed them before batch 2.
+    fn own_as_before(s: &Script, w: &World) -> Vec<ObjectId> {
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(s.house) && o.on_map && o.health > 0)
+            .map(|o| o.id)
+            .collect()
+    }
+
+    /// [`Script::seen_enemies`] as before batch 2: the cloak asked of every
+    /// object.
+    fn seen_as_before(s: &Script, w: &World) -> Vec<(ObjectId, CellXY)> {
+        let me = &w.houses[usize::from(s.house.0)];
+        w.objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0)
+            .filter_map(|o| {
+                let owner = o.owner?;
+                let h = w.houses.get(usize::from(owner.0))?;
+                let enemy = owner != s.house
+                    && !me.allied_with(owner)
+                    && h.role == glasnost_sim::world::HouseRole::Player;
+                let c = o.pos.cell();
+                let hidden = glasnost_sim::cloak::hidden_from(w, o.id, Some(s.house));
+                (enemy && !hidden && shroud::explored(w, s.house, c)).then_some((o.id, c))
+            })
+            .collect()
+    }
+
+    /// [`Script::home`] as before batch 2.
+    fn home_as_before(s: &Script, w: &World) -> Option<CellXY> {
+        let own = own_as_before(s, w);
+        own.iter()
+            .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
+            .or(own.first())
+            .and_then(|&id| w.obj(id))
+            .map(|o| o.pos.cell())
+    }
+
+    /// The free-gap test as before batch 2: the house's known objects
+    /// listed afresh, without `but`, for each test.
+    fn free_but_as_before(
+        s: &Script,
+        w: &World,
+        t: TypeRef,
+        c: CellXY,
+        but: Option<ObjectId>,
+        gap: i32,
+    ) -> bool {
+        let cells = placement::foundation_cells(w, t.index, c);
+        w.objects
+            .values()
+            .filter(|o| {
+                o.on_map
+                    && Some(o.id) != but
+                    && (o.owner == Some(s.house) || shroud::explored(w, s.house, o.pos.cell()))
+            })
+            .all(|o| {
+                let tl = o.pos.cell();
+                if o.kind == Kind::Building {
+                    let (fw, fh) = o.foundation;
+                    cells.iter().all(|k| {
+                        k.x < tl.x - gap
+                            || k.x > tl.x + fw - 1 + gap
+                            || k.y < tl.y - gap
+                            || k.y > tl.y + fh - 1 + gap
+                    })
+                } else {
+                    !cells.contains(&tl)
+                }
+            })
+    }
+
+    /// The fixture games the kept-list test plays: the placement maps, the
+    /// islands, and the M6c, M7a and M7b duels (cloaked units, drainers,
+    /// superweapons).
+    fn kept_games() -> Vec<Game> {
+        let mut games: Vec<Game> = placement_maps()
+            .into_iter()
+            .chain([("synthetic-islands", fixture::map_islands())])
+            .map(|(name, map)| {
+                Game::new(
+                    fixture::rules(),
+                    &map,
+                    name,
+                    fixture::catalogue(),
+                    fixture::setup(3),
+                )
+                .expect("the skirmish loads")
+            })
+            .collect();
+        games.push(
+            Game::new(
+                crate::fixture_m6c::rules(),
+                &crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                fixture::catalogue(),
+                crate::fixture_m6c::setup(2),
+            )
+            .expect("the M6c duel loads"),
+        );
+        games.push(
+            Game::new(
+                crate::fixture_m7a::rules(),
+                &crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                fixture::catalogue(),
+                crate::fixture_m7a::setup(17),
+            )
+            .expect("the M7a duel loads"),
+        );
+        games.push(
+            Game::new(
+                crate::fixture_m7b::rules(),
+                &crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                fixture::catalogue(),
+                crate::fixture_m7b::setup(11),
+            )
+            .expect("the M7b duel loads"),
+        );
+        games
+    }
+
+    /// Our tooling for speed (design: own AI, #52, #53, #57, #59 and #60):
+    /// the house's objects, those of each role, the types it can build for
+    /// each role, the enemies it sees, its home and the free-gap test
+    /// (for every building type at every cell, with and without an object
+    /// left out), kept for a think, answer as they did asked afresh, at
+    /// several points of each fixture game, for every house, during a think
+    /// and outside one.
+    #[test]
+    fn the_lists_kept_for_a_think_answer_as_asked_afresh() {
+        let mut seen = 0;
+        let mut free = 0;
+        let mut tested = 0;
+        let mut roles_found = 0;
+        let mut candidates_found = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                let all: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    for thinking in [true, false] {
+                        if thinking {
+                            s.begin_think();
+                        }
+                        let own = own_as_before(&s, w);
+                        let enemies = seen_as_before(&s, w);
+                        for _ in 0..2 {
+                            assert_eq!(s.own(w), own, "house {h}");
+                            assert_eq!(s.seen_enemies(w), enemies, "house {h}");
+                            assert_eq!(s.home(w), home_as_before(&s, w), "house {h}");
+                        }
+                        seen += enemies.len();
+                        let plain = Script::new(house, Plan::default());
+                        let roles = [
+                            Role::Yard,
+                            Role::Power,
+                            Role::Refinery,
+                            Role::Factory(FactoryKind::Infantry),
+                            Role::Factory(FactoryKind::Vehicle),
+                            Role::Harvester,
+                            Role::Army,
+                        ];
+                        for _ in 0..2 {
+                            for role in roles {
+                                let units = plain.of_role(w, role);
+                                assert_eq!(s.of_role(w, role), units, "house {h}, {role:?}");
+                                roles_found += units.len();
+                                let types = plain.candidates(w, role);
+                                assert_eq!(s.candidates(w, role), types, "house {h}, {role:?}");
+                                candidates_found += types.len();
+                            }
+                        }
+                        let buts = [None, own.first().copied(), own.last().copied()];
+                        for t in all_types(w)
+                            .into_iter()
+                            .filter(|t| t.kind == Kind::Building)
+                            .take(3)
+                        {
+                            for &c in all.iter().step_by(5) {
+                                for but in buts {
+                                    for gap in 0..=GAP {
+                                        let want = free_but_as_before(&s, w, t, c, but, gap);
+                                        assert_eq!(
+                                            s.free_gap(w, t, c, but, gap),
+                                            want,
+                                            "house {h}, {t:?}, {c:?}, {but:?}, gap {gap}"
+                                        );
+                                        tested += 1;
+                                        free += usize::from(want);
+                                    }
+                                }
+                            }
+                        }
+                        if thinking {
+                            s.end_think();
+                        }
+                    }
+                }
+            }
+        }
+        assert!(seen > 0, "no enemy seen");
+        assert!(free > 0 && free < tested, "{free} of {tested}");
+        assert!(roles_found > 0 && candidates_found > 0);
     }
 }
 

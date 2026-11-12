@@ -340,12 +340,12 @@ impl Brain {
             self.build_anti_air(w, &mut out);
             mark(p, "ai:expand");
             if !paying {
-                self.expand(w, &mut out);
+                self.expand(w, &mut out, p);
             }
         }
         if thinks {
             mark(p, "ai:special");
-            self.special.think(&self.script, w, &mut out);
+            self.special.think_with(&self.script, w, &mut out, p);
             if short {
                 // No new non-fighter while the superweapon building waits
                 // for money: `economy_first` would cancel it (M8 step B7).
@@ -576,7 +576,8 @@ impl Brain {
                     out.push(Order::CancelAll { what: i.t });
                     self.special.count_non_fighter_cancel();
                 }
-            } else if i.hold == Hold::Player && tech::buildable(w, h, i.t) {
+            // design: own AI (#60): the tech tree's answer kept for the think
+            } else if i.hold == Hold::Player && self.script.buildable(w, i.t) {
                 out.push(Order::Build { what: i.t });
                 self.special.count_resume();
             }
@@ -1081,13 +1082,14 @@ impl Brain {
         giving
             .iter()
             .copied()
-            .filter(|&t| tech::buildable(w, self.house(), t))
+            // design: own AI (#60): the tech tree's answer kept for the think
+            .filter(|&t| self.script.buildable(w, t))
             .filter(|&t| self.script.place_cell(w, t).is_some())
             .chain(
                 giving
                     .iter()
                     .copied()
-                    .filter(|&t| !tech::buildable(w, self.house(), t))
+                    .filter(|&t| !self.script.buildable(w, t))
                     .filter_map(|t| self.script.unblocker(w, t, CLIMB_DEPTH)),
             )
             .min_by_key(|&t| (production::cost_field(w, t), t.index))
@@ -1570,7 +1572,7 @@ impl Brain {
     /// field where the deploy cursor shows it fits and deploys it there.
     /// Before the round the Yuri side's yard vehicle was built only to
     /// replace a lost yard.
-    fn expand(&mut self, w: &World, out: &mut Vec<Order>) {
+    fn expand<P: Probe>(&mut self, w: &World, out: &mut Vec<Order>, p: &mut P) {
         let own = self.script.own(w);
         let yards = own
             .iter()
@@ -1580,7 +1582,14 @@ impl Brain {
         if yards == 0 || self.script.selling() {
             return;
         }
-        let field = self.script.far_field(w);
+        // design: own AI (#58): the far field (a scan of the whole map) is
+        // looked for only when an idle yard vehicle or the tests below ask
+        // for it; it reads only the world and the plan, so when it is
+        // looked for does not change it.
+        let far = std::cell::OnceCell::new();
+        if p.on() {
+            p.mark(Phase::Part("ai:expand:units"));
+        }
         let units: Vec<ObjectId> = own
             .iter()
             .copied()
@@ -1598,6 +1607,7 @@ impl Brain {
             if !idle(w, id) {
                 continue;
             }
+            let field: Option<CellXY> = *far.get_or_init(|| self.script.far_field(w));
             let here = o.pos.cell();
             let reach = i64::from(scripted::FIELD_REACH) * i64::from(scripted::FIELD_REACH);
             // With no far field left (another yard took it), the unit deploys
@@ -1650,6 +1660,9 @@ impl Brain {
                 self.special.count_expansion_move();
             }
         }
+        if p.on() {
+            p.mark(Phase::Part("ai:expand:build"));
+        }
         let types = yard_types(w);
         let Some(&cheapest) = types.first() else {
             return;
@@ -1664,11 +1677,14 @@ impl Brain {
         });
         let credits = i64::from(w.houses[usize::from(h.0)].credits);
         let cost = i64::from(production::cost_field(w, t.unwrap_or(cheapest)));
+        if p.on() {
+            p.mark(Phase::Part("ai:expand:tests"));
+        }
         // A person keeps at most one yard beyond the first: a third adds
         // little speed for its price and leaves the army short.
         if yards + units.len() + usize::from(lined) >= EXPANSION_YARDS
             || !self.rich(w, credits, cost)
-            || field.is_none()
+            || far.get_or_init(|| self.script.far_field(w)).is_none()
             || !self.script.harvesters_kept(w)
             || !self.intruders(w).is_empty()
             || self.outnumbered(w)
@@ -1969,7 +1985,8 @@ impl Brain {
                     .get(t.index as usize)
                     .is_some_and(|u| Self::suits(u, crossing))
             })
-            .filter(|&t| tech::buildable(w, self.house(), t))
+            // design: own AI (#60): the answer kept for the think
+            .filter(|&t| self.script.buildable(w, t))
             .collect();
         v.sort_by_key(|&t| (production::cost_field(w, t), t.index));
         v.first().copied()
