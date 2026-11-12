@@ -2288,6 +2288,9 @@ impl Script {
         let home = self.home(w);
         // The ferry's goal by the unit's movement zone (`base_goal_for`).
         let mut ahead: BTreeMap<Option<u8>, Option<CellXY>> = BTreeMap::new();
+        // The nearest region cells to home (`reachable`), for the units
+        // that gather there for a ferry.
+        let mut gather: BTreeMap<(u8, u32), CellXY> = BTreeMap::new();
         for id in army.iter().copied().filter(|&id| idle(w, id)) {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
@@ -2333,9 +2336,11 @@ impl Script {
                 // Infantry that cannot walk to the goal waits at home for
                 // a ferry (the brain's ferry takes idle infantry from
                 // there) instead of standing at the nearest shore.
-                if dist2(at, h) > FERRY_GATHER * FERRY_GATHER {
-                    let mut near = BTreeMap::new();
-                    let dest = self.reachable(w, id, h, &mut near);
+                // design: own AI (#29): the nearest region cells to home are kept for the think (one search a region, not one a unit), and a unit that already stands at the cell nearest home it can reach (stranded on an islet) is not sent there again at every think
+                let dest = (dist2(at, h) > FERRY_GATHER * FERRY_GATHER)
+                    .then(|| self.reachable(w, id, h, &mut gather))
+                    .filter(|&d| dist2(d, at) > ARRIVED * ARRIVED);
+                if let Some(dest) = dest {
                     out.push(Order::Behaviour {
                         actor: id,
                         behaviour: Behaviour::Move,
