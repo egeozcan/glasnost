@@ -475,3 +475,25 @@ The after runs' worst ticks (tick 417 at 73.3 ms, tick 4834 at 49.5) are single 
 Over-budget ticks after whose largest part is the plan have it at 4.4 to 8.2 ms: the rest of the tick, at this load, carries them over. No think and no defeat is over budget by itself any more; Movement's code is not changed here, and its counts follow the load.
 
 Seams: Movement (C4 part 5's infantry group, not this step's); the regions' rebuild (17 to 18 ms, once a game) and the crates' phase, which asks for the same rebuild (15 to 19 ms, once): the union-find and the corridor's three level passes are what is left, and keeping the regions up to date as categories change instead of rebuilding them would be a larger change; in the think, `sell_when_broke`'s first ask of every type's buildability (the watch part's 5 to 8 ms on its worst ticks).
+
+### The battlefield atlas's lifetime (render batch R6: #104, #105, #106)
+
+Our own design (`design: render (#104)`, `(#105)`, `(#106)`): the specs fix what is drawn, not how images are kept. S-0105 claim 26 requires no capacity, allocation scheme or storage lifetime; the poses outside its three retained classes, and crashing appearances, are drawn fresh and not retained, and claim 39 keeps no old-pose cutouts. So an image the painter keeps past its use is a memo, and dropping it changes no picture: a fresh draw is a function of its key and its angles alone (no voxel draw takes from a random stream).
+
+The scene holds two kinds of image.
+
+- **Kept** for the whole game: tiles, sprite frames (decoded on first use), the settled voxel images of claim 26's retained classes, the composed sprite-turret images, the unmasked vehicle shadows that are drawn as they are. They are bounded by the art, so they level off, and they keep their scene id for good.
+- **Transient**: the images of a rocking, sinking or tumbling body and its turret and barrel (`Painter::rocked`, kept apart by an enum of the three key spaces instead of a tag bit), a rocket's fresh pitch (moved there from the settled cache), and the vehicle shadow cutouts. The painter notes the redraw that last used each rocked group and each cutout. At the end of each `Live::redraw` (`Painter::end_redraw`), those unused for `TRANSIENT_REDRAWS` redraws (4, our choice) are dropped and their images released. The grace keeps a vehicle that turns back to a recent facing from making its cutout again; the bound is the transient images the last few redraws used, which follows the objects in play, not the length of the game.
+
+**Releasing an image.** `Scene::resize_image` rewrites an image in place at any size and records the rewrite; a released image becomes 0 × 0, so the scene keeps no pixels for it. The painter keeps the ids it released and gives them to its next transient images. Only that pool hands out a released id, so a kept image's id is never reused. Two invariants, checked in tests: a release drops, in the same call, every painter entry that names the id (a cutout's key names its part images, so a released part image drops the cutouts made from it), and no item of the scene names a released id (the mobiles' items are rebuilt in each redraw, and the release runs after the redraw has placed them).
+
+**Vehicle shadows (#106).** The unmasked footprint of a vehicle's shadow stays in the painter, not in the scene; no item draws it. A cutout whose shifted part rectangles meet none of the footprint's, or whose exclusion changes no pixel, is the footprint as it is: one scene image per footprint, shared by those cutouts. The other cutouts are transient, as above.
+
+**The atlas (#105, `map_gpu`).**
+
+- Images are packed into shelves of height classes (8, 12, 16, 24, 32, 48 and so on: a shelf is at most half again as tall as an image it takes), first fit over the layers. A shelf keeps a list of free spans, merged when an image leaves; an emptied shelf gives its rows back to its layer. The first upload packs tallest first through the same allocator.
+- An image rewritten at another size leaves its place and takes a new one; a 0 × 0 image takes none.
+- When nothing fits, the atlas grows: a new texture with half again as many layers (at least two more, up to the device's limit), with every live image written again from the scene into its own slot. Slots, pipelines, the row texture and the targets stay. It is not a GPU copy, because whether the WebGL 2 backend copies integer array layers is not something our tests can check. Only at the device's limit does `sync` fail. The caller then builds the renderer anew, which packs only the live images, and if that fails too the game goes to the CPU compositor (R5, #101).
+- Each image is written on its own, so no staging buffer of the whole atlas is made.
+
+The benchmark's summary shows the gauges: atlas layers, the atlas pixels in shelves, palette rows, and the scene's images and pixels held.
