@@ -1105,10 +1105,13 @@ fn recheck_distance_forms() {
     w.obj_mut(t).unwrap().pos.z = 300;
     let up = disc::recheck_distance(&w, f, tt);
     assert!(up > flat);
-    // A firer 600 up that is not in the air in S-0308's sense (an ordinary vehicle) counts the vertical difference.
-    w.obj_mut(f).unwrap().pos.z = 600;
+    // An ordinary vehicle firer below 208 leptons is not airborne in S-0308's sense: it counts the vertical difference.
+    w.obj_mut(f).unwrap().pos.z = 100;
     w.obj_mut(t).unwrap().pos.z = 0;
     assert!(disc::recheck_distance(&w, f, tt) > flat);
+    // spec: S-0308 Terms (Airborne: for an object that is not an aircraft, S-0307's height test; #178) — the same vehicle 600 up is airborne: the vertical difference is 0.
+    w.obj_mut(f).unwrap().pos.z = 600;
+    assert_eq!(disc::recheck_distance(&w, f, tt), flat);
     // A jumpjet firer 600 up is in the air (S-0502 claim 30): the vertical difference is 0.
     let mut rj = r.clone();
     rj.sim.vehicles.get_mut("SAUCER").unwrap().locomotor =
