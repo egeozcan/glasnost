@@ -1,9 +1,9 @@
 ---
 id: Q-3019
 title: Which objects are drawn with a named palette, and how is such a palette built?
-status: open
+status: answered
 related: [S-0103, S-0104]
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need
