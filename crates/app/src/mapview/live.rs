@@ -1544,9 +1544,192 @@ impl Live {
 
     /// Brings the drawing up to a game that moved on without it: a game
     /// put in place (a rejoin, M9 N5) or ticks run directly (the
-    /// performance benchmark). Call [`Live::redraw`] after.
+    /// performance benchmark). The presentation events of the ticks it did
+    /// not see are dropped, with the shots, markers and animations the
+    /// drawing started on its own; the animations the game has in play
+    /// (S-0109 claims 28 and 29), its parachutes (S-0522 claim 13), drain
+    /// animations (S-0608 claim 5), the viewer's source marker (S-0513
+    /// claim 33), burning walkers (S-0615), infantry-making animations
+    /// (S-0611) and domination animations (S-0612) are drawn from where the
+    /// game has them. Call [`Live::redraw`] after (#98).
+    ///
+    /// Our presentation: an animation adopted this way has no depth
+    /// adjustment from its creator (S-0102 claim 13), and one whose type
+    /// name is a tile's or an overlay's cell animation is not drawn, as a
+    /// tile or cell animation is not (a seam of the view).
     pub fn resume(&mut self) {
-        self.after_tick();
+        // design: render (#98) the presentation events of the ticks the drawing did not see are not shown late
+        self.world.effects.clear();
+        self.drawn_lines = None;
+        self.layer_moments.clear();
+        self.transients.clear();
+        self.target_lines.clear();
+        self.lines.beams.clear();
+        self.lines.flashes.clear();
+        self.lines.bolts.clear();
+        // design: render (#98) the drawing's own animations end; those that show the game's are kept and follow it
+        self.anims.retain(|a| {
+            a.sim.is_some() || a.walker.is_some() || a.maker.is_some() || a.dominating.is_some()
+        });
+        if let Some(s) = self.source_marker
+            && !self.anims.iter().any(|a| a.serial == s)
+        {
+            self.source_marker = None;
+        }
+        let now = self.shown_tick();
+        self.adopt_sim_anims(now);
+        self.adopt_walkers_and_makers(now);
+        self.note_placements();
+        self.follow_owners();
+        self.follow_shooters();
+        self.follow_walkers();
+        self.follow_makers();
+        self.follow_dominations(now);
+        self.follow_drainers();
+        self.follow_sim_anims();
+        self.update_slots();
+        self.sync_layers(true);
+        self.sync_ground();
+    }
+
+    /// Draws the game's animations in play that the drawing does not show
+    /// (S-0109 claims 28 and 29), each as [`Live::take_effects`] draws the
+    /// event that creates it (#98).
+    fn adopt_sim_anims(&mut self, now: i32) {
+        use glasnost_sim::anims::Role;
+        let shown: BTreeSet<ObjectId> = self.anims.iter().filter_map(|a| a.sim).collect();
+        // design: render (#98) tile and overlay cell animations are not drawn (no event creates them), so they are not adopted
+        let cat = self.world.catalogue_arc();
+        let mut undrawn: BTreeSet<Vec<u8>> = cat
+            .tiles
+            .iter()
+            .filter_map(|t| t.anim.as_ref())
+            .map(|a| name_bytes(&a.name).to_ascii_uppercase())
+            .collect();
+        undrawn.extend(
+            self.rules
+                .overlays
+                .iter()
+                .filter_map(|o| o.cell_anim.as_deref())
+                .map(|n| name_bytes(n).to_ascii_uppercase()),
+        );
+        let new: Vec<(ObjectId, glasnost_sim::anims::Anim)> = self
+            .world
+            .anims
+            .anims
+            .iter()
+            .filter(|(id, _)| !shown.contains(id))
+            .map(|(&id, s)| (id, s.clone()))
+            .collect();
+        for (id, s) in new {
+            let pos = match (s.pos, s.owner) {
+                (Some(p), _) => p,
+                (None, Some((o, d))) => match self.world.obj(o) {
+                    // spec: S-0109 claim 22 (its position is the owner's plus its displacement at attachment, height included)
+                    Some(o) => glasnost_sim::world::Pos::new(o.pos.x + d.x, o.pos.y + d.y, o.pos.z + d.z),
+                    None => continue,
+                },
+                // spec: S-0202 claim 14 (a resource glint has no position: not drawn)
+                (None, None) => continue,
+            };
+            let name = s.player.name.clone();
+            let serial = self.anim_serial;
+            match s.role {
+                // spec: S-0010 claim 19 (a tile animation started before the second pass does not survive loading)
+                Role::FirstPassTile => continue,
+                Role::Parachute => {
+                    let Some((trooper, _)) = s.owner else { continue };
+                    // spec: S-0522 claim 13 (the parachute attached to its paratrooper), of the type the game plays
+                    self.attach_parachute_of(&name, trooper, pos, now, None);
+                }
+                Role::SourceMarker(h) => {
+                    // spec: S-0513 claim 33 (seen by the launching player only)
+                    if self.viewer != Some(h) {
+                        continue;
+                    }
+                    self.counts.anims += 1;
+                    self.create_anim(&name, pos, now, None, false);
+                    self.source_marker = Some(serial);
+                }
+                Role::Drain(d) => {
+                    // spec: S-0608 claim 5 (the drain animation is attached to the drainer and follows it)
+                    self.counts.anims += 1;
+                    self.create_anim(&name, pos, now, None, false);
+                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                        a.drainer = Some(d);
+                    }
+                    continue;
+                }
+                Role::Ordinary | Role::Grab { .. } => {
+                    if matches!(s.role, Role::Ordinary)
+                        && s.owner.is_none()
+                        && undrawn.contains(&name.to_ascii_uppercase())
+                    {
+                        continue;
+                    }
+                    self.counts.anims += 1;
+                    self.create_anim(&name, pos, now, None, false);
+                    let house = self.deploying_owner(&String::from_utf8_lossy(&name), pos);
+                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                        if let (Role::Ordinary, Some(firer)) = (s.role, s.owner) {
+                            // spec: S-0301 claim 22 and S-0102 claim 3 (a shot animation attached to its firer: in the ground layer)
+                            a.layer = super::slots::Layer::Ground;
+                            a.shooter = Some(firer);
+                            // spec: S-0301 claim 22 (no palette of its object)
+                            a.carrier = None;
+                        } else if let Some(h) = house {
+                            // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation: the owner's house-colour palette, at brightness 1000)
+                            a.carrier = Some((h, NEUTRAL_LIGHT));
+                        }
+                    }
+                }
+            }
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.sim = Some(id);
+            }
+        }
+    }
+
+    /// Draws the game's burning walkers (S-0615 claim 4) and
+    /// infantry-making animations (S-0611 claim 8) that the drawing does
+    /// not show (#98).
+    fn adopt_walkers_and_makers(&mut self, now: i32) {
+        let walking: BTreeSet<ObjectId> = self.anims.iter().filter_map(|a| a.walker).collect();
+        let walkers: Vec<(ObjectId, Vec<u8>, glasnost_sim::world::Pos)> = self
+            .world
+            .walkers
+            .iter()
+            .filter(|(id, _)| !walking.contains(id))
+            .filter_map(|(&id, wk)| {
+                let t = self.rules.animations.get(wk.anim as usize)?;
+                Some((id, name_bytes(&t.name), wk.pos))
+            })
+            .collect();
+        for (id, name, pos) in walkers {
+            self.counts.anims += 1;
+            let serial = self.anim_serial;
+            self.create_anim(&name, pos, now, None, false);
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.walker = Some(id);
+            }
+        }
+        let making: BTreeSet<ObjectId> = self.anims.iter().filter_map(|a| a.maker).collect();
+        let makers: Vec<(ObjectId, Vec<u8>, glasnost_sim::world::Pos)> = self
+            .world
+            .mutation
+            .makers
+            .iter()
+            .filter(|(id, _)| !making.contains(id))
+            .map(|(&id, m)| (id, m.player.name.clone(), m.pos))
+            .collect();
+        for (id, name, pos) in makers {
+            self.counts.anims += 1;
+            let serial = self.anim_serial;
+            self.create_anim(&name, pos, now, None, false);
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.maker = Some(id);
+            }
+        }
     }
 
     /// Sets the drawing's quirk switches (S-0102 Edge cases); the painter
@@ -2198,9 +2381,22 @@ impl Live {
         let Some(name) = self.rules.superweapons.parachute.clone() else {
             return;
         };
+        self.attach_parachute_of(&name_bytes(&name), trooper, pos, now, drawn);
+    }
+
+    /// A parachute of type `name` attached to `trooper`, as
+    /// [`Live::attach_parachute`].
+    fn attach_parachute_of(
+        &mut self,
+        name: &[u8],
+        trooper: ObjectId,
+        pos: glasnost_sim::world::Pos,
+        now: i32,
+        drawn: Option<i32>,
+    ) {
         self.counts.anims += 1;
         let serial = self.anim_serial;
-        self.create_anim(&name_bytes(&name), pos, now, drawn, false);
+        self.create_anim(name, pos, now, drawn, false);
         if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
             a.owner = Some(trooper);
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
