@@ -1118,11 +1118,191 @@ fn a_vehicle_placed_later_starts_its_barrel_level() {
         live.step();
         seen.push(elevation(&live));
     }
-    let expected: Vec<u16> = (0..4)
+    // spec: S-0105 claim 6 (First appearance: placed during a tick, first drawn at ε = 1, never at ε = 0)
+    let expected: Vec<u16> = (1..5)
         .map(|t| voxel::barrel_elevation_after(fire_angle, t))
         .collect();
-    assert_eq!(seen[0], voxel::ELEVATION_LEVEL, "level when first drawn");
-    assert_eq!(seen, expected, "turned from its own placement");
+    assert_eq!(seen, expected, "turned from its own placement, first drawn at ε = 1");
+}
+
+/// Runs a tick by hand for the drawing's own bookkeeping: the tick number
+/// grows as at the end of a tick, and nothing else in the game moves.
+fn tick_by_hand(live: &mut Live) {
+    live.world.tick += 1;
+    live.after_tick();
+}
+
+/// The barrel elevation object `id` is drawn with.
+fn turned_cart_elevation(live: &Live, inputs: &Inputs, cart: ObjectId) -> u16 {
+    live.mobile(inputs, cart).expect("the cart is drawn").elevation
+}
+
+/// spec: S-0105 claim 6 (When the turn starts, Q-2982: each placement on the map sets the
+/// elevation level and starts the turn at the tick number current then, so a vehicle leaving the
+/// map and placed again, as an unloaded one, starts level and is first drawn at ε = 1; a
+/// chronosphere warp's appearance keeps the elevation)
+#[test]
+fn claim_6_a_vehicle_placed_again_turns_again_and_a_warp_keeps_its_elevation() {
+    use glasnost_render::voxel;
+    use glasnost_sim::superweapons::warp::{Member, Stage};
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..40 {
+        tick_by_hand(&mut live);
+    }
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_ne!(target, voxel::ELEVATION_LEVEL, "the test type's barrel turns");
+    assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
+    // Taken off the map (into a transport) and unloaded a tick later.
+    live.world.obj_mut(cart).unwrap().on_map = false;
+    tick_by_hand(&mut live);
+    live.world.obj_mut(cart).unwrap().on_map = true;
+    tick_by_hand(&mut live);
+    let mut seen = vec![turned_cart_elevation(&live, &inputs, cart)];
+    for _ in 0..3 {
+        tick_by_hand(&mut live);
+        seen.push(turned_cart_elevation(&live, &inputs, cart));
+    }
+    let expected: Vec<u16> = (1..5)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(seen, expected, "unloaded: level again, first drawn at ε = 1");
+    for _ in 0..40 {
+        tick_by_hand(&mut live);
+    }
+    assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
+    // A chronosphere warp: off the map between departure and appearance.
+    let pos = live.world.obj(cart).unwrap().pos;
+    let set = |live: &mut Live, stage: Stage, on_map: bool| {
+        let o = live.world.obj_mut(cart).unwrap();
+        o.on_map = on_map;
+        o.sw.warp = Some(Member {
+            stage,
+            house: HouseId(0),
+            landing: pos,
+            redirected: false,
+            fell_back: false,
+            refused: false,
+            entry_ok: true,
+        });
+    };
+    set(&mut live, Stage::Away, false);
+    tick_by_hand(&mut live);
+    set(&mut live, Stage::Blocked, false);
+    tick_by_hand(&mut live);
+    set(&mut live, Stage::Placed, true);
+    tick_by_hand(&mut live);
+    assert_eq!(
+        turned_cart_elevation(&live, &inputs, cart),
+        target,
+        "a warp's appearance keeps the elevation"
+    );
+}
+
+/// spec: S-0105 claim 6 (When the turn starts, Q-2982: a unit seized under S-0607 claim 23's
+/// drop-pod stand-in starts level and turns again at the end of the stand-in, which our engine
+/// gives at the seize, at the tick number current then; a seize by the ordinary lift keeps it)
+#[test]
+fn claim_6_a_drop_pod_seize_restarts_the_turn() {
+    use glasnost_render::voxel;
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::lift::StandIn;
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..40 {
+        tick_by_hand(&mut live);
+    }
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
+    // An ordinary seize keeps the elevation.
+    live.world.effects.push(Effect::Seized { unit: cart });
+    tick_by_hand(&mut live);
+    assert_eq!(
+        turned_cart_elevation(&live, &inputs, cart),
+        target,
+        "an ordinary seize keeps the turn"
+    );
+    // The drop-pod stand-in ends at the seize: level, then turning again.
+    live.world.obj_mut(cart).unwrap().lift.stand_in = Some(StandIn::DropPod);
+    live.world.effects.push(Effect::Seized { unit: cart });
+    tick_by_hand(&mut live);
+    let mut seen = vec![turned_cart_elevation(&live, &inputs, cart)];
+    for _ in 0..3 {
+        tick_by_hand(&mut live);
+        seen.push(turned_cart_elevation(&live, &inputs, cart));
+    }
+    let expected: Vec<u16> = (1..5)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(seen, expected, "the drop-pod stand-in's end restarts the turn");
+}
+
+/// design: render (#81) (S-0105 claim 6 keeps every turn through a save; a game the drawing
+/// catches up with, a rejoin or ticks run directly, cannot tell when its objects were placed,
+/// so they count from tick 0 as the map's own objects do: their turns are over, never shown
+/// level again)
+#[test]
+fn a_vehicle_first_seen_on_a_catch_up_shows_its_final_elevation() {
+    use glasnost_render::voxel;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, _scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    for _ in 0..40 {
+        live.world.tick += 1;
+    }
+    let late = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 6),
+        16384,
+    );
+    live.resume();
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_eq!(turned_cart_elevation(&live, &inputs, late), target);
 }
 
 /// spec: S-0309 claim 1 (units in guard find targets in range by
