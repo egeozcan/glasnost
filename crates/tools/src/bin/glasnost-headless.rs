@@ -70,6 +70,13 @@
 //!   per-tick CSV and the state hashes to the git-ignored
 //!   `local-lane/m8/c4-2/` (or `out=`). `tick-bench synthetic [ticks]
 //!   [probe=on]` times the synthetic scripted replay instead.
+//! - `glasnost-headless ai-bench [key=value …]`: the AI think benchmark
+//!   (own AI issues, batch 2, `glasnost_tools::ai_bench`): one AI game (a
+//!   synthetic duel of `glasnost_ai`'s fixtures, or with `game=install`
+//!   and `GLASNOST_GAME_DIR` set the frame benchmark's game) with each AI
+//!   house's think timed against the tick's step; writes a summary and the
+//!   state hashes to the git-ignored `local-lane/ai-issues/b2/bench/` (or
+//!   `out=`).
 //! - `glasnost-headless path-report FILE [--out DIR] [--unit ID]… [--tick
 //!   T] [--names] [--any-build]`: a pathing report the client saved (M8
 //!   A4, `glasnost_tools::path_report`) replayed with the movement trace
@@ -85,8 +92,8 @@ use std::process::ExitCode;
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
 use glasnost_tools::{
-    arena, desync, headless, net_client, oracle, path_report, skirmish_lane, soak, tick_bench,
-    trigger_lane,
+    ai_bench, arena, desync, headless, net_client, oracle, path_report, skirmish_lane, soak,
+    tick_bench, trigger_lane,
 };
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
@@ -385,6 +392,29 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("ai-bench") => {
+            let o = match ai_bench::Options::parse(&args[1..]) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless ai-bench: {e}\nusage: glasnost-headless {}",
+                        ai_bench::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let dir = std::env::var_os(GAME_DIR_VAR).map(|d| d.to_string_lossy().into_owned());
+            match ai_bench::run(&o, dir.as_deref()) {
+                Ok(summary) => {
+                    print!("{summary}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless ai-bench: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("path-report") => {
             let o = match path_report::parse(&args[1..]) {
                 Ok(o) => o,
@@ -510,7 +540,8 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {} | {}",
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {} | {} | {}",
+                ai_bench::USAGE,
                 path_report::USAGE,
                 arena::USAGE,
                 net_client::USAGE,

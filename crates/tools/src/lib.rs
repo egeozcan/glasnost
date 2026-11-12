@@ -15,6 +15,7 @@
 //! `glasnost-headless soak`). **M8 A4** adds the pathing-report tool
 //! ([`path_report`], `glasnost-headless path-report`).
 
+pub mod ai_bench;
 pub mod arena;
 pub mod desync;
 pub mod headless;
