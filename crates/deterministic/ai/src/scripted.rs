@@ -1001,10 +1001,17 @@ impl Script {
     /// nearest the house's first objects.
     pub fn set_starts(&mut self, w: &World, starts: &[CellXY]) {
         let home = self.home(w);
+        // design: own AI (#27): the start nearest the house's first objects is its own, however far they stand from it (bases off, or the base unit placed off its waypoint); one within five cells only was left out, and the own start could be the first target
+        let own = home.and_then(|h| {
+            starts
+                .iter()
+                .copied()
+                .min_by_key(|&c| (dist2(c, h), c.y, c.x))
+        });
         self.targets = starts
             .iter()
             .copied()
-            .filter(|&c| home.is_none_or(|h| dist2(c, h) > 25)) // nocite: tuning (own start within 5 cells)
+            .filter(|&c| Some(c) != own)
             .collect();
         if let Some(h) = home {
             self.targets.sort_by_key(|&c| dist2(c, h));
