@@ -612,6 +612,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             {
                 return;
             }
+            // spec: S-0314 claims 20 and 23 (an approaching vehicle given another order loses its depot contact; any later order clears a queued entry)
+            crate::depot::stop_order(w, actor);
             scatter::request(
                 w,
                 actor,
@@ -634,6 +636,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 // spec: S-0213 claim 10 (an actor on a vehicle-factory cell ignores the order)
                 return;
             }
+            // spec: S-0314 claims 20 and 23 (an approaching vehicle given another order loses its depot contact; any later order clears a queued entry)
+            crate::depot::stop_order(w, actor);
             // spec: S-0213 claim 10 and S-0502 claim 28 (deploy makes one destination-clear request, while the target is still present, and no retry after the target is cleared: a balloon-hover vehicle can keep a nonempty destination and end with no target); S-0503 claim 19 (the retention extended to a hovering type with the balloon-hover field)
             let rejected = crate::jump::deploy_clear_rejected(w, actor);
             // spec: S-0215 claim 11 (a driving vehicle: a vehicle whose current locomotor is the driving one)
