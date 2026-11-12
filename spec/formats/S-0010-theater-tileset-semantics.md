@@ -2,13 +2,13 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 19
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-0009, Q-0018, Q-0041, Q-0046, Q-0055]
+requests: [Q-0009, Q-0018, Q-0041, Q-0046, Q-0055, Q-3006]
 supersedes: []
 ---
 
@@ -646,8 +646,8 @@ in our engine is a design rule, not a claim of an oracle measurement.
 18. **Shadow-casting tilesets.** A tileset casts shadows (S-0104 claim 13) only when both its
     shadow-caster flag is set and its shadow-tile count is not 0. With the flag unset the count has
     no effect; with it set, a count of 0 (or an absent count) disables the shadow (Import mapping).
-    Which cells a shadow-casting tile marks is open in S-0104, and so are some limits on which tiles
-    of such a tileset cast (Open questions).
+    Which cells each tile of such a tileset marks, by the tile's position within the tileset, is
+    S-0104 claim 19; tiles at some positions mark none.
     - Backing: `measurable` (scenario G5, which runs S-0104's scenario L15 part D)
     - Confidence: high
 
@@ -2051,15 +2051,14 @@ tileset decides.
   restarts the animation. This does not establish whether a previously missing animation
   can start or how many cells were recalculated.
 
-**G5. Shadow casters need a count (claim 18; named test files).** *Setup:* a theater whose stock data
-declares a tileset a shadow caster with a non-zero shadow-tile count (the measurer checks), and
-S-0104's scenario L15 part D on one tile of that tileset. Run 1: stock data. Run 2: a loose copy of the
-theater data file without that tileset's shadow-tile count (flag kept). Run 3: a loose copy without
-the flag (count kept). Run 4: flag set but count explicitly 0. *Observable:* the vehicle's brightness
-on each cell, as in S-0104's scenario L15 part D.
-*Expected:* some cells darken the vehicle in run 1 (S-0104); none in runs 2 to 4. *Falsified if:*
-run 2, 3 or 4 darkens a cell that run 1 darkens. If run 1 darkens no cell, the part is
-inconclusive.
+**G5. Shadow casters need a count (claim 18; named test files).** *Setup:* S-0104's scenario L15
+part D, whose named test copy of the theater data file declares one tileset a shadow caster with a
+shadow-tile count of 1. Run 1: that copy. Run 2: that copy without the tileset's shadow-tile count
+(flag kept). Run 3: that copy without the flag (count kept). Run 4: that copy with the flag set and
+the count explicitly 0. *Observable:* the vehicle's brightness on each cell, as in S-0104's
+scenario L15 part D.
+*Expected:* in run 1 the cells that S-0104 claim 19 marks darken the vehicle; in runs 2 to 4 no
+cell does. *Falsified if:* run 2, 3 or 4 darkens a cell, or run 1 darkens none.
 
 ## Open questions
 
@@ -2119,9 +2118,6 @@ inconclusive.
   whether letter case matters).
 - Which game rules use the role tests of table R that this spec does not use (bridges, cliffs and
   their destruction, shores, naval placement, the random map generator).
-- Which tiles of a shadow-casting tileset cast shadows (claim 18). The original appears to give
-  shadows only to the first 40 tiles of such a tileset and to keep at most five shadow-casting
-  tilesets per theater, with an unspecified result for a sixth. Not established well enough to claim.
 
 ## Cross-spec changes to confirm
 
