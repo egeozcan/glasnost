@@ -1886,6 +1886,10 @@ fn cell_action(
         Some(Kind::Infantry) => {
             let jumpjet = uflag(w, actor, |u| u.jumpjet);
             let dipd = deployed_ipd(w, actor);
+            // spec: S-0214 table IC row IC4 (a healing actor whose c′ is attack: area guard) (#210)
+            if g == Action::Attack && healing_actor(w, actor) {
+                return Action::AreaGuard;
+            }
             // spec: S-0214 table IC row IC5 (a jumpjet type on a tunnel cell)
             if jumpjet && matches!(g, Action::Move | Action::NoMove) && tunnel {
                 return Action::Nothing;
@@ -1909,6 +1913,10 @@ fn cell_action(
             g
         }
         Some(Kind::Vehicle) => {
+            // spec: S-0214 table VC row VC1 (a healing actor whose c′ is attack: idle) (#210)
+            if g == Action::Attack && healing_actor(w, actor) {
+                return Action::Idle;
+            }
             let cell = w.cells.cell(c);
             // spec: S-0214 table VC row VC2 (ore land and a harvester, or weed land and a weeder)
             if g == Action::Move
