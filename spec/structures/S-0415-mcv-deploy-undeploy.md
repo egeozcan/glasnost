@@ -2,13 +2,13 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 18
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-0132, Q-0220]
+requests: [Q-0132, Q-0220, Q-3011]
 supersedes: []
 ---
 
@@ -353,24 +353,25 @@ vehicle's movement is heading to (S-0207). In addition:
      second judging)
 
 10. **The vehicle that appears.** The vehicle of the undeploys-into type, owned by the building's
-    house, is put on the map at the centre of a cell: the building's top-left cell when its foundation
-    is at most 2 cells along map *x* and at most 2 along map *y*, otherwise the cell one step forward along both map axes (*x* + 1, *y* + 1)
-    from it, so that a vehicle that deployed and packs up again returns to its own cell. It faces the
-    building type's deploy facing, *D* × 256. Its health is max(1, trunc(*r* × *S*)), where *r* is the
-    building's health ratio and *S* the vehicle type's strength (F2). It takes over the building's
-    experience, control group, selection, trigger tag and slaves, and every object whose target was the
-    building gets the vehicle as its target. When the building had a guard spot, the vehicle is given
-    that spot as its destination and *move* is queued (S-0213, claim 20: the move click that led
-    to the pack-up). Automatic packing of a deployed slave miner stores the building's old
-    top-left cell in that same guard spot, replacing any earlier destination; it is not a separate
-    automatic memory. Unless a later accepted order changes it, the vehicle receives that cell
-    as its immediate destination, with *move* queued, in the conversion tick before its next
-    group update. A later order that changes the guard spot replaces the automatic cell.
-    A sell order alone does not clear it (S-0402 claims 25 and 28). Without such a change,
-    the destination is not the distant field or chosen deployment site. For a large foundation,
-    this destination differs from the return cell where the vehicle appears. Slave-group state
-    transitions after automatic or manual packing follow S-0402 claims 22, 25 and 28; conversion
-    does not itself force every transferred group into field seeking.
+    house, is put on the map at the centre of a cell: the building's top-left cell when its
+    foundation is at most 2 cells along map *x* and at most 2 along map *y*, otherwise the cell one
+    step forward along both map axes (*x* + 1, *y* + 1) from it, so that a vehicle that deployed and
+    packs up again returns to its own cell. It faces the building type's deploy facing, *D* × 256.
+    Its health is max(1, trunc(*r* × *S*)), where *r* is the building's health ratio and *S* the
+    vehicle type's strength (F2). It takes over the building's experience, control group, selection,
+    trigger tag and slaves, and every object that held the building as its target when the
+    build-down finished gets the vehicle as its target, after it has dropped the building (claim
+    13). When the building had a guard spot, the vehicle is given that spot as its destination and
+    *move* is queued (S-0213, claim 20: the move click that led to the pack-up). Automatic packing
+    of a deployed slave miner stores the building's old top-left cell in that same guard spot,
+    replacing any earlier destination; it is not a separate automatic memory. Unless a later
+    accepted order changes it, the vehicle receives that cell as its immediate destination, with
+    *move* queued, in the conversion tick before its next group update. A later order that changes
+    the guard spot replaces the automatic cell. A sell order alone does not clear it (S-0402 claims
+    25 and 28). Without such a change, the destination is not the distant field or chosen deployment
+    site. For a large foundation, this destination differs from the return cell where the vehicle
+    appears. Slave-group state transitions after automatic or manual packing follow S-0402 claims
+    22, 25 and 28; conversion does not itself force every transferred group into field seeking.
 
     The return vehicle and any initial hidden slaves of its type are created before placement
     is attempted, while the building's old group still exists (S-0402 claims 19 and 19a).
@@ -388,10 +389,11 @@ vehicle's movement is heading to (S-0207). In addition:
       tag notifications are `unmeasured`: no established data-only setup attaches a tag to
       a generated slave. S-0011 claim 19 and its conditional T25 B retain that boundary.
       Disappearance and losses alone do not test tag evaluation
-    - Confidence: high (position, facing, health, the manual move); medium (the take-overs,
-      automatic destination timing, shared guard spot and temporary-slave destruction
-      notifications); high (temporary-group creation before placement); low (the
-      facing for a deploy facing outside 0 … 255)
+    - Confidence: high (position, facing, health, the manual move); high (the targets handed to
+      the vehicle after the holders' drops, as claim 13 rates them); medium (the other
+      take-overs, automatic destination timing, shared guard spot and temporary-slave destruction
+      notifications); high (temporary-group creation before placement); low (the facing for a
+      deploy facing outside 0 … 255)
 
 11. **A failed pack-up.** When the vehicle cannot be put on the map at its return cell (claim 12),
     the house receives the building's sale refund instead
@@ -474,6 +476,52 @@ vehicle's movement is heading to (S-0207). In addition:
     - Confidence: high (only *clear* accepts, the packing building does not block, no alternative
       cell or retry); medium (the listed consequences, pending D14)
 
+13. **The holders' drop at the end of a pack-up (Q-3011).** When the build-down finishes and
+    S-0213's conditions still hold, the packing building leaves the map before the placement test
+    of claim 12, whatever that test's result. At that moment every object that holds the building
+    as its target drops it as S-0309 claim 27 gives: a holder whose targeting timer has more than
+    10 ticks left takes that claim's timer reset draw, the holders draw in creation order, and a
+    drop that ends an override makes that claim's revert. The building's foundation cells are
+    recalculated after these drops (S-0010 claim 12), so on the scenario random stream these draws
+    of the end of a pack-up come in this order:
+    - the creation draws of the return vehicle and of its new hidden slaves (claims 10 and 11),
+    - the holders' timer reset draws,
+    - the draws of the recalculation of the foundation cells, such as the creation draws of a
+      tile animation that it starts (S-0010 claim 19; S-0202 claim 10).
+
+    The placement test follows. On success, every object that held the building as its target
+    when the build-down finished takes the vehicle as its target (claim 10), whatever its drop or
+    a revert left it. On refusal no hand-over follows: each holder keeps what its drop or a
+    revert left it, and a revert that gave it the building again is undone when the building is
+    removed, as S-0309 claim 27 gives. Either way the drops come before the refund and before the
+    end of the building's old slave group (claim 11). A deploy differs: claim 6 gives the
+    vehicle's holders the building, or nothing for a vehicle thief when the building is a
+    construction yard, before the vehicle is removed, so when it is removed no object holds it as
+    its target, and S-0309 claim 27 makes no drop and takes no timer reset draw. A building that
+    leaves the map in another way without being destroyed, such as at the end of a sale, has the
+    same order: its holders drop it before its foundation cells are recalculated (Changes for
+    other specs).
+    - Backing: `measurable` (scenario D18, whose holders are infantry; other holder kinds as
+      S-0309 claim 27 backs them) for the holders' drops and their draws in the completion tick,
+      success and refusal alike, the hand-over after them on success, and the deploy's lack of
+      them. `unmeasured` for the place of the foundation recalculation's draws after the holders'
+      draws: no in-play setup is established in which that recalculation starts a tile animation,
+      because S-0010 claim 19 lets each cell start at most one from the map's loading on and the
+      game-start pass starts it in every cell whose tile then qualifies. `unmeasured` for the
+      revert: D18's holders pick the yard by their own search in *guard*, so none has an override
+      to revert. `unmeasured` for the creation order of the holders' draws: D18's holders are
+      computer-owned, as enemies of the human-owned yard, and no established route makes the one
+      created first take its turn after the other, so D18 does not tell creation order from turn
+      order. `unmeasured` for other buildings that leave the map: D18 runs no sale or other
+      removal.
+    - Confidence: high (for infantry holders, the drops and their draws in the completion tick,
+      on success and on refusal, and no drop at a deploy); medium (the creation order of the
+      holders' draws, and the drops and draws of holders other than infantry, whose timer draws
+      S-0309 claim 27 also rates medium); high (the hand-over to the holders at completion, after
+      their drops); medium (the drops before the foundation recalculation's draws); medium (the
+      same order for other buildings that leave the map); medium (a holder whose drop makes a
+      revert, on success and on refusal).
+
 ## Formulas
 
 > **F1. Rounded body facing.** For a body facing *f* (0 … 65535), the rounded facing is
@@ -525,8 +573,8 @@ vehicle's movement is heading to (S-0207). In addition:
 | Packing building | Event | Result |
 |---|---|---|
 | in play | sell order with S-0213's pack-up conditions | sale begins; deploy sound at its first processing; at the start of the build-down the pack-up sound, if the type has one, for the local player only; no sell sound (claim 9) |
-| selling | build-down finished, S-0213's conditions still hold, vehicle can be put on the map | vehicle appears (claim 10); building removed; no refund |
-| selling | build-down finished, S-0213's conditions still hold, vehicle cannot be put on the map | refund (claim 11); building removed |
+| selling | build-down finished, S-0213's conditions still hold, vehicle can be put on the map | vehicle created (claim 10); building leaves the map and the holders drop it (claim 13); vehicle appears and the holders take it as their target (claim 10); building removed; no refund |
+| selling | build-down finished, S-0213's conditions still hold, vehicle cannot be put on the map | vehicle created, never put on the map (claims 10 and 11); building leaves the map and the holders drop it (claim 13); refund (claim 11); building removed |
 | selling | build-down finished, S-0213's conditions no longer hold | sold as an ordinary building, with the sale refund (claim 9) |
 
 Observable consequences: the deployed building and the removal of the deploying vehicle happen in the same
@@ -1096,6 +1144,45 @@ are repetitions that guard against void runs.
   creation draws, recreates old slaves, or fails to transfer the old group. On our engine,
   suppressing creation draws with the failed-pack-up quirk off also fails conformance.
 
+**D18. Holders' drops at the end of a pack-up (claim 13; Q-3011).**
+- Setup: S-0309 scenario A18's map conditions, speed and recorder, with D6's packing construction
+  yard for the successful runs and D8's blocked return cell for the refused runs. The yard is
+  human-owned, with health raised in the test map so that no holder can destroy it during the
+  run. Two computer-owned armed infantry holders *H*1 and *H*2 stand in range of the yard in
+  *guard*, with no other enemy in range, and pick it by their own search. They have the normal
+  targeting delay given a test value of 100 ticks, as in S-0309 scenario A18 part f. *H*1 is
+  placed by the map, and *H*2 is made later in the run by a map trigger (a reinforcement), so
+  *H*1 was created first and also takes its turn first, so D18 does not tell creation order from
+  turn order. Part c replaces the yard by its deploying vehicle, held by the same holders, which
+  deploys into the yard (D4's setup without the thief).
+- Procedure: part a, a successful pack-up; part b, a refused one; part c, a deploy. The recorder
+  lists the scenario-stream draws taken in the completion tick, each with its range, and reads
+  both holders' targets and targeting timers immediately before completion and at the end of
+  the completion tick.
+- Runs: 5 valid runs per part. A run decides nothing for the draws if either holder's targeting
+  timer has 10 ticks or fewer left immediately before completion, if the two holders' draws give
+  the same value, or if an event shown by its own record to be unrelated to completion (such as a
+  holder's search in that tick) takes a draw over 4 to 8 ticks there. Any other draw that the
+  specs do not predict is reported as a discrepancy.
+- Expected: parts a and b, in the completion tick, one draw over 4 to 8 per holder that no other
+  spec predicts, after the return vehicle's creation draws; *H*1's timer holds the first of them
+  and *H*2's the second. At the end of the tick both holders hold the vehicle in part a and
+  neither holds the yard in part b. Part c: no such draw; both holders hold the yard, and their
+  timers go on counting down from their values before the deploy.
+- Falsified if: in part a or b a holder's draw is missing, *H*2 has the first draw, or a timer
+  after completion differs from its draw's value; in part a a holder does not hold the vehicle,
+  or in part b still holds the yard; in part c a draw over 4 to 8 appears for a holder or a
+  holder does not hold the yard.
+
+## Changes for other specs
+
+S-0309 claim 27, *Observable ordering*: when a building leaves the map without being destroyed,
+whether by a pack-up (S-0415 claim 13), a completed sale or another removal, every holder drops
+it as that claim gives, with a timer reset draw only where that claim takes one, before the
+building's foundation cells are recalculated, so before any draw of that recalculation (S-0010
+claims 12 and 19). Confidence medium; `unmeasured`, for the reasons given in S-0415 claim 13's
+backing.
+
 ## Open questions
 
 1. The deploy readiness that S-0214 defines is asked at every attempt; scenario D2, part k, records
@@ -1112,3 +1199,9 @@ are repetitions that guard against void runs.
    releases (claim 10): whether it reduces *D* × 256 modulo 65536 like the deploying vehicle's
    turn target or uses another reduction remains open. Scenario D13 records it. The deploy
    turn target itself is established by claim 5.
+
+Q-3011 is answered by claim 13. For its question 1: the holders drop the building, with their
+draws, before the recalculation of its foundation cells, at a refused pack-up as at a successful
+one. For its question 2: the same order holds for a building that leaves the map in another way
+without being destroyed, at medium confidence and `unmeasured` (claim 13), with the matching note
+in Changes for other specs.
