@@ -675,6 +675,15 @@ fn answer(
                 return Answer::Illegal;
             }
         }
+        // spec: S-0301 claim 9 rank 12 (a vehicle tethered, glossary, with a building as its contact: impossible; #176). Q-3012 (open): the healer's illegal keeps its place before it
+        if !pass
+            && crate::econ::tethered(w, firer)
+            && o.contact
+                .and_then(|c| w.obj(c))
+                .is_some_and(|c| c.kind == Kind::Building)
+        {
+            return Answer::Impossible;
+        }
         // spec: S-0301 claim 9 rank 13 (moving)
         if vehicle_moving(w, firer, weapon) {
             return Answer::Moving;
