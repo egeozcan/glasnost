@@ -56,7 +56,10 @@ fn one_warning_for_each_loop_of_animation_types() {
     anim(&mut r, "INTO", trailer("SELFA"));
     let got = warnings(&r);
     assert_eq!(got.len(), 3, "three loops: {got:?}");
-    assert!(got.iter().any(|x| x.contains("RINGA") && x.contains("RINGB")));
+    assert!(
+        got.iter()
+            .any(|x| x.contains("RINGA") && x.contains("RINGB"))
+    );
     assert!(got.iter().all(|x| !x.contains("INTO")));
 }
 
