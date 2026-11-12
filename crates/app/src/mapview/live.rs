@@ -1631,7 +1631,9 @@ impl Live {
                 (Some(p), _) => p,
                 (None, Some((o, d))) => match self.world.obj(o) {
                     // spec: S-0109 claim 22 (its position is the owner's plus its displacement at attachment, height included)
-                    Some(o) => glasnost_sim::world::Pos::new(o.pos.x + d.x, o.pos.y + d.y, o.pos.z + d.z),
+                    Some(o) => {
+                        glasnost_sim::world::Pos::new(o.pos.x + d.x, o.pos.y + d.y, o.pos.z + d.z)
+                    }
                     None => continue,
                 },
                 // spec: S-0202 claim 14 (a resource glint has no position: not drawn)
@@ -1643,7 +1645,9 @@ impl Live {
                 // spec: S-0010 claim 19 (a tile animation started before the second pass does not survive loading)
                 Role::FirstPassTile => continue,
                 Role::Parachute => {
-                    let Some((trooper, _)) = s.owner else { continue };
+                    let Some((trooper, _)) = s.owner else {
+                        continue;
+                    };
                     // spec: S-0522 claim 13 (the parachute attached to its paratrooper), of the type the game plays
                     self.attach_parachute_of(&name, trooper, pos, now, None);
                 }

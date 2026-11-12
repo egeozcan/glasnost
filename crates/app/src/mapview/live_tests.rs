@@ -392,7 +392,11 @@ fn sprite_bodies_in_the_air_and_on_a_deck_leave_the_cliff_fudge() {
         // On the ground beside the cliff: U − c, U = −L(z) − 1 + F with F > 0.
         let (ground, ground_shadows) = drawn(unit(kind, 0, 0, false));
         assert!(ground > -1 - c, "{kind:?}: the cliff fudge pushes it back");
-        assert_eq!(ground_shadows, vec![-4], "{kind:?}: its own shadow at h = 0");
+        assert_eq!(
+            ground_shadows,
+            vec![-4],
+            "{kind:?}: its own shadow at h = 0"
+        );
         // spec: S-0102 claim 14 (unit on a bridge: cliff factor 0; s = −1 stays)
         let (deck, _) = drawn(unit(kind, 416, 0, true));
         assert_eq!(deck, -height_lift(416) - 1 - c, "{kind:?} on a deck");
@@ -2123,9 +2127,14 @@ fn a_catch_up_draws_the_animations_in_play() {
         glasnost_map::CellXY::new(5, 5),
         0,
     );
-    let shown = spawn(&mut live.world, "BOOMX", Some(centre(4, 4)), Spawn::default())
-        .id
-        .expect("in play");
+    let shown = spawn(
+        &mut live.world,
+        "BOOMX",
+        Some(centre(4, 4)),
+        Spawn::default(),
+    )
+    .id
+    .expect("in play");
     let at = live.world.obj(trooper).expect("the trooper").pos;
     let chute = spawn(
         &mut live.world,
@@ -2150,7 +2159,10 @@ fn a_catch_up_draws_the_animations_in_play() {
     live.resume();
     live.redraw(&inputs, &mut scene);
     let drawn = live.anim_positions();
-    assert!(drawn.contains(&centre(4, 4)), "the game's animation: {drawn:?}");
+    assert!(
+        drawn.contains(&centre(4, 4)),
+        "the game's animation: {drawn:?}"
+    );
     assert!(!drawn.contains(&centre(9, 9)), "the drawing's own is gone");
     assert_eq!(
         live.attached().iter().map(|a| a.0).collect::<Vec<_>>(),
@@ -5821,7 +5833,11 @@ fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
         ..plain_mobile(Kind::Infantry)
     };
     assert_eq!(rhos(man(false, 0)), [rho(u - 500)], "standing in it");
-    assert_eq!(rhos(man(false, 208)), [rho(u - 500)], "at 208: still the penalty");
+    assert_eq!(
+        rhos(man(false, 208)),
+        [rho(u - 500)],
+        "at 208: still the penalty"
+    );
     assert_eq!(rhos(man(false, 416)), [rho(u + 2 * LAMBDA)], "above 208");
     assert_eq!(rhos(man(true, 416)), [rho(u + 2 * LAMBDA)], "on the deck");
     let car = |deck| Mobile {
@@ -5861,7 +5877,10 @@ fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
     };
     live.step();
     live.redraw(&inputs, &mut scene);
-    assert!(live.shadowed_cells().is_empty(), "no bridge: no shadowed cell");
+    assert!(
+        live.shadowed_cells().is_empty(),
+        "no bridge: no shadowed cell"
+    );
     let c = live.world.obj(cart).expect("the cart").pos.cell();
     let i = live.world.cells.idx(c).expect("a cell of the map");
     live.world.cells.deck[i] = true;

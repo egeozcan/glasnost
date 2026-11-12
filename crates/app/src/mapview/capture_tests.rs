@@ -598,7 +598,12 @@ fn map_building_drawn_live(look: Look) -> ((usize, usize), (usize, usize)) {
         cells: Some(&cells),
     };
     let (mut built, painter) = build_parts(&inputs, true);
-    let mut live = Live::new(&inputs, &mut built, painter, (world, rules.clone(), setup, Vec::new()));
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
     let mut scene = built.scene;
     let code = *live
         .building_ids
@@ -606,7 +611,12 @@ fn map_building_drawn_live(look: Look) -> ((usize, usize), (usize, usize)) {
         .find(|(_, id)| **id == b)
         .expect("the building is the map's")
         .0;
-    let counts = |scene: &Scene| (items_of(scene, code).len(), items_of(scene, sim_code(b)).len());
+    let counts = |scene: &Scene| {
+        (
+            items_of(scene, code).len(),
+            items_of(scene, sim_code(b)).len(),
+        )
+    };
     for _ in 0..4 {
         live.step();
     }
@@ -685,7 +695,12 @@ fn a_cell_pass_building_takes_the_effect_tint() {
         cells: Some(&cells),
     };
     let (mut built, painter) = build_parts(&inputs, true);
-    let mut live = Live::new(&inputs, &mut built, painter, (world, rules.clone(), setup, Vec::new()));
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
     let mut scene = built.scene;
     let code = *live
         .building_ids
@@ -725,10 +740,16 @@ fn a_cell_pass_building_takes_the_effect_tint() {
     live.world.lighting.choice = Choice::Ion;
     live.redraw(&inputs, &mut scene);
     assert!(
-        tables(&scene).iter().all(|t| *t == expect(TINT.map(|t| t * 10))),
+        tables(&scene)
+            .iter()
+            .all(|t| *t == expect(TINT.map(|t| t * 10))),
         "the effect's tint"
     );
-    assert_eq!(items_of(&scene, sim_code(b)).len(), 0, "still in the cell pass");
+    assert_eq!(
+        items_of(&scene, sim_code(b)).len(),
+        0,
+        "still in the cell pass"
+    );
     live.world.lighting.choice = Choice::Normal;
     live.redraw(&inputs, &mut scene);
     assert!(

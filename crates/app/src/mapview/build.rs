@@ -1630,9 +1630,9 @@ impl<'a> Builder<'a> {
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
         let tint = self.p.house_tint();
-        let (base, n) =
-            self.p
-                .house_table_in(&mut self.built.scene, self.palettes, hsv, tint);
+        let (base, n) = self
+            .p
+            .house_table_in(&mut self.built.scene, self.palettes, hsv, tint);
         // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
         Shade::new(base, n, brightness)
     }
@@ -6180,7 +6180,12 @@ impl Painter {
     /// tint, keeping its brightness and protection mask. For the drawings
     /// kept from frame to frame, the static objects of the cell pass among
     /// them (#75). Returns whether any drawing changed.
-    pub fn retint_houses(&mut self, inputs: &Inputs, scene: &mut Scene, items: &mut [Item]) -> bool {
+    pub fn retint_houses(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        items: &mut [Item],
+    ) -> bool {
         let tint = self.house_tint();
         let others: BTreeMap<u32, [u8; 3]> = self
             .rows

@@ -835,10 +835,23 @@ fn a_terrain_object_on_a_slope_stands_on_the_surface() {
         cell.level = 1;
         cell.slope = slope;
         let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
-        let b = build(&map, &import, &catalogue, &palettes, &assets, &Options::default());
+        let b = build(
+            &map,
+            &import,
+            &catalogue,
+            &palettes,
+            &assets,
+            &Options::default(),
+        );
         let items = items_of(&b, "terrain object");
-        let body = *items.iter().find(|i| i.paint != Paint::Shadow).expect("a body");
-        let shadow = *items.iter().find(|i| i.paint == Paint::Shadow).expect("a shadow");
+        let body = *items
+            .iter()
+            .find(|i| i.paint != Paint::Shadow)
+            .expect("a body");
+        let shadow = *items
+            .iter()
+            .find(|i| i.paint == Paint::Shadow)
+            .expect("a shadow");
         (body, shadow)
     };
     let (flat, flat_shadow) = body(0);
@@ -848,9 +861,17 @@ fn a_terrain_object_on_a_slope_stands_on_the_surface() {
         let h = glasnost_sim::surface::surface_height(1, slope, 128, 128, true);
         let (sloped, shadow) = body(slope);
         let lift = height_lift(h) - height_lift(104);
-        assert_eq!((sloped.x, sloped.y), (flat.x, flat.y - lift), "slope {slope}");
+        assert_eq!(
+            (sloped.x, sloped.y),
+            (flat.x, flat.y - lift),
+            "slope {slope}"
+        );
         assert_eq!(bias(&sloped).1, bias(&flat).1 - lift, "slope {slope}");
-        assert_eq!(shadow.y, flat_shadow.y - lift, "slope {slope}: the shadow moves with it");
+        assert_eq!(
+            shadow.y,
+            flat_shadow.y - lift,
+            "slope {slope}: the shadow moves with it"
+        );
     }
 }
 
