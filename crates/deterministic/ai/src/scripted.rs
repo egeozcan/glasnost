@@ -707,6 +707,11 @@ pub struct Script {
     /// sale's tick, and whether the house is selling out (it then builds no
     /// more buildings or harvesters, only army units).
     watch: Watch,
+    /// The house's home as of its last think ([`Script::home`]): kept, so
+    /// that it stays where the house's construction yard stood (design:
+    /// own AI, #12).
+    #[serde(default)]
+    home_cell: Option<CellXY>,
     /// The placement cells and clearing buildings found during the current
     /// think (derived data: never saved, hashed or compared).
     #[serde(skip)]
@@ -910,6 +915,7 @@ impl Script {
             waves: 0,
             scout: None,
             watch: Watch::default(),
+            home_cell: None,
             placed: PlaceMemo::default(),
         }
     }
@@ -1139,20 +1145,47 @@ impl Script {
             .collect()
     }
 
-    /// The house's construction yard or, before one exists, its first
-    /// object's cell.
+    /// The house's home: the cell of its construction yard. Once known it
+    /// is kept from think to think: it stays while a yard stands on it,
+    /// and while the house has no yard (a lost yard does not move it to
+    /// the house's oldest unit, wherever that stands); when the yard there
+    /// is gone and the house has another, it moves to the yard nearest it
+    /// (a captured enemy yard with a lower object number does not move it
+    /// into the enemy base while the house's own yard stands). Before it
+    /// is known: the house's first yard, else its first building, else its
+    /// first object.
     pub(crate) fn home(&self, w: &World) -> Option<CellXY> {
         self.placed.keep(|m| &mut m.home, || self.find_home(w))
     }
 
     /// [`Script::home`]'s search.
+    // design: own AI (#12): home was the house's first yard by object number, else its first object
     fn find_home(&self, w: &World) -> Option<CellXY> {
         let own = self.own(w);
-        own.iter()
-            .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
-            .or(own.first())
-            .and_then(|&id| w.obj(id))
+        let yards: Vec<CellXY> = own
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| is_yard(w, o))
             .map(|o| o.pos.cell())
+            .collect();
+        if let Some(h) = self.home_cell {
+            if yards.is_empty() || yards.contains(&h) {
+                return Some(h);
+            }
+            return yards.iter().copied().min_by_key(|&c| (dist2(c, h), c.y, c.x));
+        }
+        yards.first().copied().or_else(|| {
+            own.iter()
+                .filter_map(|&id| w.obj(id))
+                .find(|o| o.kind == Kind::Building)
+                .or_else(|| own.first().and_then(|&id| w.obj(id)))
+                .map(|o| o.pos.cell())
+        })
+    }
+
+    /// Keeps the house's home for the next thinks ([`Script::home`]).
+    fn keep_home(&mut self, w: &World) {
+        self.home_cell = self.home(w);
     }
 
     /// The enemy start cells (the map's start waypoints of the other
@@ -2017,6 +2050,7 @@ impl Script {
             }
         };
         mark("ai:script:watch");
+        self.keep_home(w);
         let mut out = Vec::new();
         let house = self.house;
         let own = self.own(w);
@@ -3481,11 +3515,17 @@ mod place_cell_tests {
             .collect()
     }
 
-    /// [`Script::home`] as before batch 2.
+    /// [`Script::home`] as before batch 2, for a script with no home kept
+    /// yet, with the first building before the first object (design: own
+    /// AI, #12).
     fn home_as_before(s: &Script, w: &World) -> Option<CellXY> {
         let own = own_as_before(s, w);
         own.iter()
             .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
+            .or_else(|| {
+                own.iter()
+                    .find(|&&id| w.obj(id).is_some_and(|o| o.kind == Kind::Building))
+            })
             .or(own.first())
             .and_then(|&id| w.obj(id))
             .map(|o| o.pos.cell())
