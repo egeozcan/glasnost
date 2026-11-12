@@ -1924,6 +1924,12 @@ impl Live {
         self.anims.iter().map(|a| a.carrier.clone()).collect()
     }
 
+    /// Gives the bolts colours, as the general palette would (tests).
+    #[cfg(test)]
+    pub(super) fn set_bolt_colours(&mut self, colours: super::bolts::Colours) {
+        self.lines.settings.bolt = Some(colours);
+    }
+
     /// The attached animations' owners and carrier house names (tests).
     #[cfg(test)]
     pub(super) fn carriers(&self) -> Vec<(ObjectId, Vec<u8>)> {

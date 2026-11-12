@@ -3713,6 +3713,68 @@ fn magnetic_wave_is_drawn_in_the_air_layer_until_removed() {
     assert!(scene.spots.is_empty());
 }
 
+/// spec: S-0316 claims 5 and 9 (a bolt's shape is drawn with new draws in every drawn frame and
+/// only then; a stand-still makes no drawn frame) and S-0201 claim 6 (one drawn frame per tick): a
+/// redraw without a tick, such as a click's marker while paused, shows the same shape (#93)
+#[test]
+fn a_redraw_without_a_tick_keeps_the_bolt_shape() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    // Far apart, so that neither fires a bolt of its own.
+    let (mut live, mut scene, map, import, catalogue, firer, _) = combat_live(16);
+    let assets = overlay_assets();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_bolt_colours(super::bolts::Colours {
+        side: [10, 10, 10],
+        alt_side: [5, 5, 5],
+        main: [15, 15, 15],
+    });
+    live.step();
+    // A long bolt (several splits, so many draws).
+    live.world.effects.push(Effect::Bolt {
+        firer,
+        weapon: 0,
+        slot: 0,
+        burst: 0,
+        from: Pos {
+            x: 8 * 256,
+            y: 8 * 256,
+            z: 0,
+        },
+        to: Pos {
+            x: 13 * 256,
+            y: 11 * 256,
+            z: 0,
+        },
+        building: None,
+        vehicle_on_map: false,
+    });
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    let first = beam_groups(&scene).into_iter().cloned().collect::<Vec<_>>();
+    assert_eq!(first.len(), 1, "the bolt is drawn");
+    live.redraw(&inputs, &mut scene);
+    let again = beam_groups(&scene).into_iter().cloned().collect::<Vec<_>>();
+    assert_eq!(first, again, "no new draws without a drawn frame");
+    // The next tick's drawn frame draws it anew.
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    let next = beam_groups(&scene).into_iter().cloned().collect::<Vec<_>>();
+    assert_eq!(next.len(), 1);
+    assert_ne!(first, next, "a new shape in the next drawn frame");
+}
+
 /// spec: S-0514 claim 27 with S-0109 Terms (an erased body's code 2 or 3 combines with the cloak's:
 /// the larger, except that 1 and 2 give 3)
 #[test]
