@@ -286,13 +286,30 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     if !in_window(&order) {
         return false;
     }
-    // spec: S-0213 claims 3 and 15 (every house, an AI house included, is held to S-0214's input rules when it issues an order, so a house's orders act only on its own objects) and S-0214 Terms (an actor that is not an own object gets select or nothing: input gives it no order), claim 11's detonate included (offered only on the player's own object); nocite: our own input validation (#220): the test is made where an order enters, so every machine makes it in the same tick; an order taken here still applies after an owner change (claim 15)
-    if let Some(a) = order.actor()
-        && w.obj(a).and_then(|o| o.owner) != Some(house)
-    {
-        return false;
+    // spec: S-0213 claims 3 and 15 (every house, an AI house included, is held to S-0214's input rules when it issues an order, so a house's orders act only on its own objects) and S-0214 Terms (an actor that is not an own object gets select or nothing: input gives it no order), claim 11's detonate included (offered only on the player's own object); nocite: our own input validation (#220): the test is made where an order enters, so every machine makes it in the same tick; an order taken here still applies after an owner change in a skirmish game (claim 15)
+    if let Some(a) = order.actor() {
+        let Some(ob) = w.obj(a) else { return false };
+        // spec: S-0213 claim 15 (Network games, Q-2972 answered: in a network game the owner is checked immediately before the order is applied, in apply_pending, the detonate order excepted, which keeps this check)
+        let checked_later = w.econ.settings.network && !matches!(order, Order::Detonate { .. });
+        if ob.owner != Some(house) && !checked_later {
+            return false;
+        }
     }
     admit(w, house, order)
+}
+
+/// Whether an order is refused by the owner check of a network game
+/// (S-0213 claim 15, Network games): made immediately before the order is
+/// applied, so an owner change up to that step refuses it unless `house`
+/// owns the actor again then. The detonate order is not checked here (its
+/// check is made at [`issue`]). Never in a skirmish game.
+fn refused_by_owner(w: &World, house: HouseId, o: &Order) -> bool {
+    // spec: S-0213 claim 15 (Network games: each machine checks the actor's owner immediately before applying the order, and refuses one whose actor the issuing house does not own then, other than the detonate order of claim 11)
+    w.econ.settings.network
+        && !matches!(o, Order::Detonate { .. })
+        && o
+            .actor()
+            .is_some_and(|a| w.obj(a).and_then(|x| x.owner) != Some(house))
 }
 
 /// The smallest cell coordinate an order may carry (#219): a map's legal
@@ -428,13 +445,24 @@ pub fn apply_pending(w: &mut World) {
     // spec: S-0213 claim 16f (objects destroyed and removed from play since the last order boundary leave their routes)
     crate::routes::prune(w);
     for hi in 0..w.houses.len() {
+        let house = HouseId(hi as u8);
         let orders = std::mem::take(&mut w.houses[hi].pending);
         // spec: S-0213 claim 3 (non-behaviour orders first, in issue order)
         // design: C7-P5 yield (any order for a unit ends its giving way)
-        for a in orders.iter().filter_map(Order::actor) {
+        // spec: S-0213 claim 15 (Network games: an order refused by the owner check has no effect at all)
+        let given: Vec<ObjectId> = orders
+            .iter()
+            .filter(|o| !refused_by_owner(w, house, o))
+            .filter_map(Order::actor)
+            .collect();
+        for a in given {
             crate::path::order_given(w, a);
         }
         for o in orders.iter().filter(|o| !is_behaviour(o)) {
+            // spec: S-0213 claim 15 (Network games: checked immediately before the order is applied; a refused order has no effect at all and does not end the actor's route, claim 17)
+            if refused_by_owner(w, house, o) {
+                continue;
+            }
             // spec: S-0213 claim 17 (every order naming an actor ends its route when it is applied, route orders excepted)
             crate::routes::order_ends(w, o);
             let actor = o.actor();
@@ -442,7 +470,7 @@ pub fn apply_pending(w: &mut World) {
                 // spec: S-0107 r46 claim 11, Changes of target (a change made earlier by a rule that does not test it is settled first, so the order's own change is told apart)
                 crate::infantry::watch_test(w, a);
             }
-            apply_other(w, HouseId(hi as u8), &unrouted(o));
+            apply_other(w, house, &unrouted(o));
             if let Some(a) = actor {
                 // spec: S-0215 r118 claim 11 (Other endings: a change of an infantry unit's target by an order ends its attack state when the order takes effect, so no start after it sees the state) and S-0107 r46 claim 11, Changes of target (an order when it takes effect; the change asks for deployed, prone or stand)
                 crate::infantry::watch_test(w, a);
@@ -450,11 +478,18 @@ pub fn apply_pending(w: &mut World) {
             // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike when the change applies, in the tick of the order)
             crate::strike::sweep(w);
         }
-        // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
-        let marked: Vec<Order> = orders.into_iter().filter(is_behaviour).collect();
+        // spec: S-0213 claim 3 (then the behaviour orders, in issue order); claim 15 (Network games: an order refused by the owner check has no effect at all, so it takes no part in the group's destinations)
+        let marked: Vec<Order> = orders
+            .into_iter()
+            .filter(|o| is_behaviour(o) && !refused_by_owner(w, house, o))
+            .collect();
         let behaviour: Vec<Order> = marked.iter().map(unrouted).collect();
         let dests = group_destinations(w, &behaviour);
         for ((o, d), m) in behaviour.iter().zip(dests).zip(&marked) {
+            // spec: S-0213 claim 15 (Network games: checked again immediately before this order is applied)
+            if refused_by_owner(w, house, m) {
+                continue;
+            }
             // spec: S-0213 claim 17 (a behaviour order ends the actor's route when applied, unless a route issued it)
             crate::routes::order_ends(w, m);
             let actor = o.actor();

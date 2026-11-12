@@ -108,6 +108,12 @@ pub struct Settings {
     /// it refuses the setup until the mode is written.
     #[serde(default)]
     pub all_base_units: bool,
+    /// A network game (S-0213 claim 15, Network games): every machine
+    /// checks an order's actor's owner immediately before applying it,
+    /// not when the order is issued. Off for a skirmish game, a replay of
+    /// one and a test.
+    #[serde(default)]
+    pub network: bool,
     /// Per-house values in house order; a missing entry is the default
     /// (no team, no handicap, no colour, not an observer).
     #[serde(default)]
