@@ -72,6 +72,21 @@ struct Slot {
     layer: u32,
 }
 
+impl Slot {
+    /// No place in the atlas: the image is wider or taller than a layer and
+    /// its items are not drawn (design: render (#108)).
+    const ABSENT: Slot = Slot {
+        x: 0,
+        y: 0,
+        layer: NO_IMAGE,
+    };
+
+    /// Whether the image has a place in the atlas.
+    fn present(self) -> bool {
+        self.layer != NO_IMAGE
+    }
+}
+
 /// A shelf packer over layers of `side × side`.
 #[derive(Clone, Copy, Debug)]
 struct Packer {
@@ -147,6 +162,15 @@ fn pack(sizes: &[(u32, u32)], side: u32) -> Option<(Vec<Slot>, Packer)> {
         slots[i] = packer.place(w, h)?;
     }
     Some((slots, packer))
+}
+
+/// The slot of a `w` × `h` image added after the upload, in an atlas of
+/// `layers` layers; an error when the atlas is full.
+fn place_later(packer: &mut Packer, w: u32, h: u32, layers: u32) -> Result<Slot, UploadError> {
+    packer
+        .place(w.max(1), h.max(1))
+        .filter(|s| s.layer < layers)
+        .ok_or_else(|| UploadError("the atlas is full".into()))
 }
 
 /// Atlas layers kept free at upload for images added later
@@ -626,11 +650,7 @@ impl MapRenderer {
         h: u32,
         pixels: &[u8],
     ) -> Result<Slot, UploadError> {
-        let slot = self
-            .packer
-            .place(w.max(1), h.max(1))
-            .filter(|s| s.layer < self.atlas_layers)
-            .ok_or_else(|| UploadError("the atlas is full".into()))?;
+        let slot = place_later(&mut self.packer, w, h, self.atlas_layers)?;
         self.write(queue, slot, w, h, pixels);
         Ok(slot)
     }
@@ -1463,6 +1483,28 @@ mod tests {
                 || s.y >= next.y + 4;
             assert!(apart, "{s:?} and {next:?} overlap");
         }
+    }
+
+    /// design: render (#108): an image wider or taller than an atlas layer
+    /// gets no slot and fails nothing, at the upload as later; the others
+    /// are placed as before, and a full atlas is still an error.
+    #[test]
+    fn an_image_larger_than_a_layer_gets_no_slot() {
+        let (slots, mut packer) = pack(&[(10, 10), (17, 1), (5, 12), (4, 20)], 16)
+            .expect("an oversized image is no error");
+        assert!(slots[0].present() && slots[2].present());
+        assert_eq!(slots[1], Slot::ABSENT);
+        assert_eq!(slots[3], Slot::ABSENT);
+        let mut unchanged = packer;
+        assert_eq!(place_later(&mut packer, 17, 1, 8), Ok(Slot::ABSENT));
+        assert_eq!(place_later(&mut packer, 1, 17, 8), Ok(Slot::ABSENT));
+        assert_eq!(
+            place_later(&mut packer, 6, 4, 8),
+            Ok(unchanged.place(6, 4).unwrap())
+        );
+        let mut full = Packer::new(16);
+        assert!(place_later(&mut full, 16, 16, 1).is_ok());
+        assert!(place_later(&mut full, 16, 16, 1).is_err());
     }
 
     #[test]
