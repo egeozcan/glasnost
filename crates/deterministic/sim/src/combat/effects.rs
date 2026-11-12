@@ -803,6 +803,36 @@ pub fn anim_adjusted(w: &mut crate::world::World, name: &str, pos: Pos, z_adjust
     anim_with(w, name, pos, false, Some(z_adjust), false);
 }
 
+/// [`anim`] with an initial loop delay of `delay` updates given by its
+/// creator (S-0109 claim 11): its start event comes at the end of that
+/// delay. An infantry-making animation is started as [`anim`] starts it,
+/// without the delay (a seam: no delayed creator of one is specified).
+pub fn anim_delayed(w: &mut crate::world::World, name: &str, pos: Pos, delay: i32) {
+    if delay <= 0 {
+        anim(w, name, pos);
+        return;
+    }
+    let index = w
+        .rules()
+        .animations
+        .iter()
+        .position(|a| a.name.eq_ignore_ascii_case(name))
+        .and_then(|i| u32::try_from(i).ok());
+    if index.is_some_and(|i| crate::mutation::makes_infantry(w, i)) {
+        anim(w, name, pos);
+        return;
+    }
+    let spawn = crate::anims::Spawn {
+        creation: crate::anim_clock::Creation {
+            // spec: S-0109 claim 11 (the creator's initial loop delay D: the start event at its end)
+            loop_delay: delay,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    anim_spawned(w, name, pos, false, None, spawn);
+}
+
 fn anim_with(
     w: &mut crate::world::World,
     name: &str,

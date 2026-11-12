@@ -1119,10 +1119,12 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
         for c in damage::foundation_order(o.pos.cell(), o.foundation) {
             let raw = w.rng.raw();
             let p = nearby_point(w, Pos::centre(c, o.pos.z), 64, raw, false);
-            let _delay = w.rng.ranged(0, 3, half);
+            // spec: S-0312 claim 19 (b) and Constants (building explosion delay: a ranged draw over 0 to 3 ticks on the scenario stream, after the nearby point's raw value and before the list pick)
+            let delay = w.rng.ranged(0, 3, half);
             let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;
             let name = tc.explosion[k].clone();
-            effects::anim(w, &name, p);
+            // spec: S-0312 claim 19 (b) (the explosion animation's starting delay) and S-0109 claim 11 (an initial loop delay D; #175)
+            effects::anim_delayed(w, &name, p, delay);
         }
     }
     // (c) barrel fire animations of an exploding building, (d) spilled resources: their topics are not written.
