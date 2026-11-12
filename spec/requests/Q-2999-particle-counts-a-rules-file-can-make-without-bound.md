@@ -1,8 +1,9 @@
 ---
 id: Q-2999
 title: Is there a ceiling on the particles of a spark burst, a railgun line and a smoke next-type loop?
-status: open
+status: answered
 related: [S-0616]
+answered-by: [S-0616]
 ---
 
 ## Need
