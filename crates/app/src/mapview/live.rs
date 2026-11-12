@@ -79,8 +79,9 @@ pub fn object_levels(w: &World) -> (i32, i32) {
 /// - λ<sub>air</sub>: the ion storm's during a storm, the normal one
 ///   otherwise.
 ///
-/// Claim 13 leaves open whether an object's λ term switches as soon as a
-/// domination is over; here it does.
+/// Claim 13 chooses λ each time an object is drawn, by the ranking of the
+/// effects in force at that moment: the dominator's through its final
+/// phase, the next set's from the first frame after it is over.
 pub fn object_levels_of(
     map: &glasnost_map::Lighting,
     storm: bool,
@@ -92,8 +93,7 @@ pub fn object_levels_of(
         map.ion.level
     } else if dominated {
         // spec: S-0104 claim 2, per-cell height terms rank 2 (psychic dominator, in every phase)
-        // design: render (#74) claim 13 leaves open the λ term after a domination is over; it
-        // stops with the domination
+        // spec: S-0104 claim 13 (λ chosen each time drawn: the dominator's through its final phase, the ranking's next set from the first frame after it is over), claim 16
         map.dominator.level
     } else if brightening {
         // spec: S-0104 claim 2, per-cell height terms rank 3 (nuke flash brightening phase); Constants (its fixed set)
@@ -1952,6 +1952,12 @@ impl Live {
         self.protection_look(self.world.obj(id)?)
     }
 
+    /// The shadowed cells the last redraw lit its mobiles by (tests).
+    #[cfg(test)]
+    pub(super) fn shadowed_cells(&self) -> BTreeSet<glasnost_map::CellXY> {
+        self.painter.shadowed_cells().clone()
+    }
+
     /// Every playing animation's position (tests).
     #[cfg(test)]
     pub(super) fn anim_positions(&self) -> Vec<glasnost_sim::world::Pos> {
@@ -3195,6 +3201,13 @@ impl Live {
             .collect();
         let (lambda, lambda_air) = object_levels(&self.world);
         self.painter.set_object_levels(lambda, lambda_air);
+        // spec: S-0104 Terms (a shadowed cell: an intact high bridge marks the cells it spans, the mark cleared when it is destroyed), taken as S-0211 claim 15's high-bridge cells; no tile marks a cell yet (Q-3006)
+        let shadowed: BTreeSet<glasnost_map::CellXY> = mobiles
+            .iter()
+            .map(|m| glasnost_map::CellXY::new(m.pos.0 / 256, m.pos.1 / 256)) // spec: S-0204 claim 2 (the cell holding a position)
+            .filter(|c| self.world.high_bridge(*c))
+            .collect();
+        self.painter.set_shadowed_cells(shadowed);
         // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)
         self.painter
             .set_effect_tint(glasnost_sim::lighting::tint(&self.world));

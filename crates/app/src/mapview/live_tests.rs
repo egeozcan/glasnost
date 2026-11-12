@@ -5840,6 +5840,39 @@ fn claim_13_mobiles_in_a_shadowed_cell_take_the_penalty() {
     );
 }
 
+/// #74: spec: S-0104 Terms (an intact high bridge marks the cells it spans as shadowed, and the
+/// mark is cleared when it is destroyed), with the interim of Q-3006 (the high-bridge cells of
+/// S-0211 claim 15): the live game lights its mobiles by the cells they stand on
+#[test]
+fn claim_13_the_live_game_marks_high_bridge_cells_shadowed() {
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, _walker) = pip_scale_live(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    assert!(live.shadowed_cells().is_empty(), "no bridge: no shadowed cell");
+    let c = live.world.obj(cart).expect("the cart").pos.cell();
+    let i = live.world.cells.idx(c).expect("a cell of the map");
+    live.world.cells.deck[i] = true;
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.shadowed_cells(), [c].into(), "under a high bridge");
+    // The bridge destroyed: the mark goes.
+    live.world.cells.deck[i] = false;
+    live.redraw(&inputs, &mut scene);
+    assert!(live.shadowed_cells().is_empty());
+}
+
 /// #74: spec: S-0104 claim 2 (per-cell height terms: ion storm, then the dominator in any phase,
 /// then the nuke flash brightening phase, then normal) and claim 13 (λ_air: the ion storm's
 /// level factor during a storm, the normal one otherwise, never the nuke's or the dominator's)

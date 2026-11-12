@@ -4310,8 +4310,8 @@ impl<'a> Builder<'a> {
         };
         // spec: S-0104 claim 13 (the height above the surface, from the deck on a bridge deck)
         let height = m.above;
-        // spec: S-0104 claim 13 (no cell counts as shadowed: which cells are shadowed needs the theater spec)
-        let shadowed_cell = false;
+        // spec: S-0104 Terms and claim 13 (the shadowed-cell rows: the cell holding the position, as the live game marks it)
+        let shadowed_cell = self.p.shadowed_cells.contains(&cell);
         let object = match m.kind {
             Kind::Infantry => light::LitObject::Infantry {
                 on_bridge_deck: m.deck,
@@ -6055,6 +6055,12 @@ impl Painter {
     /// [`Painter::mobiles`] lights its vehicles and infantry by.
     pub fn set_shadowed_cells(&mut self, cells: BTreeSet<CellXY>) {
         self.shadowed_cells = cells;
+    }
+
+    /// The shadowed cells the next [`Painter::mobiles`] lights by (tests).
+    #[cfg(test)]
+    pub fn shadowed_cells(&self) -> &BTreeSet<CellXY> {
+        &self.shadowed_cells
     }
 
     /// Sets the rendering quirk switches; what is drawn next reads them.
