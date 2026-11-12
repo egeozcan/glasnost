@@ -490,6 +490,54 @@ fn later_images_are_packed_by_height_class() {
     );
 }
 
+/// An invented palette row, different for each `k`.
+fn row(k: u16) -> [u16; 256] {
+    std::array::from_fn(|i| (i as u16).wrapping_mul(31).wrapping_add(k.wrapping_mul(613)))
+}
+
+/// design: render (#107): a palette row appended to the scene is written
+/// into the row texture on its own, so one row costs one row's bytes, not
+/// the whole texture's; rows appended past the texture's room still draw
+/// as the CPU reference draws them.
+#[test]
+fn appended_rows_write_only_themselves() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    for k in 0..40 {
+        s.add_row(row(k));
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    r.take_stats();
+    let one = s.add_row(row(100));
+    r.sync(&device, &queue, &s).expect("the row fits");
+    let stats = r.take_stats();
+    assert!(
+        stats.upload_bytes <= 256 * 4,
+        "one appended row uploaded {} bytes",
+        stats.upload_bytes
+    );
+    let mut item = flat_item(3, 10, 40);
+    item.paint = Paint::Row(one);
+    s.items.push(item);
+    // Many more rows, synced now and then: the texture makes room for them.
+    for k in 0..3000 {
+        s.add_row(row(200 + k));
+        if k % 500 == 0 {
+            r.sync(&device, &queue, &s).expect("the rows fit");
+        }
+    }
+    r.sync(&device, &queue, &s).expect("the rows fit");
+    for (n, at) in [(1, s.rows.len() / 2), (2, s.rows.len() - 1)] {
+        let mut item = flat_item(3, 10 + 40 * n, 40);
+        item.paint = Paint::Row(at);
+        s.items.push(item);
+    }
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
 /// spec: S-0102 claim 27 (cell-pass shadows store their depth; quirks.cell_pass_shadows_write_depth)
 ///
 /// Two writer shadows at the same depth over a flat item: with the switch
