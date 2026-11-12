@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 73
+revision: 76
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-12
 measurements: [M-0004, M-0021]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567, Q-3012]
 supersedes: []
 ---
 
@@ -544,7 +544,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class (the zero-versus test of S-0304 claim 1), a failed takeover test (S-0601 claim 3), a bomb-planting warhead against a target that already carries a planted bomb or a disarm warhead against one that carries none (S-0519 claim 3), the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8; a spawner weapon is already refused at rank 4), give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
    | 11 | must deploy, out of ammunition | a vehicle whose own cell fails S-0517 claim 14's deploy-to-fire cell test gets *must deploy* (S-0310 claim 9); an aircraft marked as a passenger carrier that now carries no passengers gets *out of ammunition*, regardless of its ammunition count (S-0310 claim 5; S-0501 claim 19). The two causes apply to different kinds of firer |
-   | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; no scenario here distinguishes that overlap |
+   | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). When both hold, the answer is *impossible*: the tether reason comes before the healer's |
    | 13 | moving | |
    | 14 | still turning | |
    | 15 | not facing | |
@@ -729,13 +729,20 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    the behaviours that respond to the answer (S-0215, S-0310) respond to the two answers
    alike; otherwise the rank table's order holds.
 
-   Among ranks 11 to 15, S-0310 (claim 9) gives *must deploy*, *moving* and *still turning* no
-   reply, so a vehicle with any of them stays as it is, while *not facing* makes it re-aim. So the
-   order of those three among themselves shows in no game state, and an implementation may answer
-   whichever of the three holds. The order of each of the three against *not facing* does show: a
-   vehicle for which one of the three holds (a vehicle with a destination that is also facing the
-   wrong way, for example) does not re-aim. *Illegal* and *impossible* of rank 12 draw replies of
-   their own (S-0310, claim 11), so their place among the others shows too.
+   Among ranks 11 to 15, S-0310 (claim 9) gives *must deploy*, *moving* and *still turning*
+   no reply, so a vehicle with any of them stays as it is, while *not facing* makes it
+   re-aim. So the order of those three among themselves shows in no game state, and an
+   implementation may answer whichever of the three holds. The order of each of the three
+   against *not facing* does show: a vehicle for which one of the three holds (a vehicle with
+   a destination that is also facing the wrong way, for example) does not re-aim. *Illegal*
+   and *impossible* of rank 12 draw replies of their own (S-0310, claim 11), so their place
+   among the others shows too. Within rank 12 the tether reason comes first: a vehicle healer
+   tethered with a building as its contact gets *impossible* even when its target also fails
+   S-0310 claim 11's test, so it does not make that claim's drop in its firing step while the
+   tether holds. S-0309 claim 29's check, which drops on *impossible* too, or S-0310 claim
+   11's drop once the tether has ended removes the target. A caller that acts only on
+   *illegal*, such as S-0309 claim 12's candidate test, therefore does not act on a tethered
+   healer's refusal.
 
    **Exception (S-0215, claim 32).** The secondary shot of a building whose type has the SAM
    flag is made in the same processing as its primary shot without a firing check of its own, so
@@ -752,102 +759,104 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    other upgrades, occupants and the host. S-0215 claim 32 owns the gate and paired attempts.
    Claim 14 here specifies their priority over animation-delayed firing. An aircraft's full burst likewise has no firing check between
    its shots (S-0501 claim 12).
-   - Backing: `measurable` (scenarios F7, F8 and F15; S-0405 scenario W8 part j for
-     deactivated firing refusal; scenario F15a and S-0514 scenario E11 part a for inactivity during erasure; S-0506 scenarios R2 and R6 for spawner
-     handoff and lockouts; S-0607 scenario L9 parts c, d and f for the gripping lifter's conditional
-     rearming and any-weapon refusal against its gripped unit; scenario F7 part f for
-     their precedence against target-layer and projectile refusals; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
-     N6 for sinking restrictions; S-0511 scenario B3, turn-order variant, for falling
-     refusal and the same-turn surviving-landing boundary; S-0517 scenario P4 for transition and magnetic-beam refusals
-     and P5 for the deploy-to-fire cell test; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
-     scenario F15 part f and S-0516 scenario CS9 part c for hidden targets; S-0519 scenario T3 for bomb-planting and disarm legality,
-     S-0601 scenarios MC2, MC3 and MC11 for takeover legality; S-0610 scenario P4 for the
-     berserk-friendly refusal; scenario F7 part e and S-0501 scenario AC11 for the
-     empty passenger-carrier refusal and its precedence; S-0608 scenarios D1 and D2 for
-     drain attempts instead of shots, D3 for the rank-4 drain refusals, D9 part a for
-     stranded buildings, D11 for drain refusal precedence and D12 for aircraft pending
-     rounds despite a drain attempt; also
-     S-0215 scenario B36 and its extensions for the upgrade gate and ordered paired attempts
-     despite the primary's rearm countdown; scenario F17 for an empty resolved secondary
-     slot and animation-delayed upgrade buildings; scenario F21 for a building's pending
-     delayed shot against the water and land rows, parts a and b, and against the render-layer row,
-     part e).
-     The berserk-weapon refusals of S-0610 claim 3 are `unmeasured` here for that claim's
-     reason: no proposed setup isolates the single-target firing check from the area effect.
-     Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
-     S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once:
-     no scenario here establishes both a reachable overlap and a differing observable reply
-     to its competing answers. This includes a spawner vehicle also playing death frames or
-     melee-linked. The order remains a prediction, not an observed distinction.
-     Deactivation's specified precedence against other rank-4 reasons is `unmeasured`:
-     W8 part j observes inactivity, not overlapping refusal labels, and no normal-input
-     setup isolating those overlaps is established here. The deactivation answer label itself
-     is also `unmeasured` here: W8 part j does not record it. The slave-bound exception to
-     own-grip precedence is `unmeasured`: F7 part f isolates the projectile comparison,
-     not a slave-bound lifter. Its confidence is medium. Erasure's firing-check label and
-     rank remain open, not rules asserted by this claim; E11 part a establishes only
-     ordinary firing inactivity.
-     The materialising firer's precedence within rank 4, the infantry keep-acting *illegal*
-     and its place, and the order and drop for an infantry firer that heals and holds a
-     seized unit are `unmeasured`: no scenario here sets up those overlaps.
-     The warp-pending *illegal* and its rank are `unmeasured`, since no scenario records
-     firing-check answers; the drops that the answer causes in infantry and vehicle holders are
-     `measurable` (S-0513 scenario SW12 parts i and j). The shots not made are `unmeasured`: SW12
-     part j does not establish an otherwise eligible firing opportunity before the first check
-     tick, SW12 part k (a temporal weapon's making no shot at such a target) is a recorded run
-     whose outcome fits more than one rule, and no part sets up building or aircraft holders.
-     Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
-     identified, so no scenario here can distinguish it from another refusal.
-     A building's pending delayed shot against every reason other than the water, land,
-     render-layer and airborne rows of S-0306 claim 23 is `unmeasured`: F21 refuses its target
-     only by those rows, and no setup here isolates the shot's place against another reason of
-     rank 4 or a later rank (the drain refusals included), or against S-0405 table T1's answers.
-     F12 part b drops a pending shot whose target has left range or died, but compares no
-     ranks. A drain refusal during the delay would need the building's target to become drained
-     by another drainer within the delay, which no input ensures. In part e both the
-     render-layer row and the airborne row start to refuse the lifting unit at the same height,
-     208 leptons above the surface. S-0102 claim 3 keeps a unit with jumpjet movement in the
-     ground layer below that height, and S-0307 Terms makes it airborne from it. Both rows
-     answer *illegal* at rank 4, so part e cannot tell which of the two refuses the unit, and it
-     needs to tell neither.
-     That a building whose temporal beam is attached to its target drops that target, with the beam
-     still attached, while it is switched off or short of power and not charged is `measurable` for
-     a target on the map (scenario F22, parts a and b). For a superweapon warp member that has
-     departed it is `unmeasured`: with a clean landing the member appears in the tick after its
-     departure (S-0513 claim 39), so no switch order or change of power can fall between the two,
-     and no scenario here sets up a landing that is not clean. The other rows of S-0405 table T1
-     against the held-temporal-target *rearming* are `unmeasured`: no scenario here drains, pulses,
+   - Backing: `measurable` (scenarios F7, F8 and F15, with F15 part g for the order within
+     rank 12, and `unmeasured` for its effect on a caller that acts only on *illegal*, because
+     part g gives the healer an order, not a search; S-0405 scenario W8 part j for deactivated
+     firing refusal; scenario F15a and S-0514 scenario E11 part a for inactivity during
+     erasure; S-0506 scenarios R2 and R6 for spawner handoff and lockouts; S-0607 scenario L9
+     parts c, d and f for the gripping lifter's conditional rearming and any-weapon refusal
+     against its gripped unit; scenario F7 part f for their precedence against target-layer
+     and projectile refusals; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504
+     scenario N6 for sinking restrictions; S-0511 scenario B3, turn-order variant, for falling
+     refusal and the same-turn surviving-landing boundary; S-0517 scenario P4 for transition
+     and magnetic-beam refusals and P5 for the deploy-to-fire cell test; S-0501 scenarios AC7
+     to AC9 for aircraft bursts, and scenario F15 part f and S-0516 scenario CS9 part c for
+     hidden targets; S-0519 scenario T3 for bomb-planting and disarm legality, S-0601
+     scenarios MC2, MC3 and MC11 for takeover legality; S-0610 scenario P4 for the
+     berserk-friendly refusal; scenario F7 part e and S-0501 scenario AC11 for the empty
+     passenger-carrier refusal and its precedence; S-0608 scenarios D1 and D2 for drain
+     attempts instead of shots, D3 for the rank-4 drain refusals, D9 part a for stranded
+     buildings, D11 for drain refusal precedence and D12 for aircraft pending rounds despite a
+     drain attempt; also S-0215 scenario B36 and its extensions for the upgrade gate and
+     ordered paired attempts despite the primary's rearm countdown; scenario F17 for an empty
+     resolved secondary slot and animation-delayed upgrade buildings; scenario F21 for a
+     building's pending delayed shot against the water and land rows, parts a and b, and
+     against the render-layer row, part e). The berserk-weapon refusals of S-0610 claim 3 are
+     `unmeasured` here for that claim's reason: no proposed setup isolates the single-target
+     firing check from the area effect. Exact precedence of the sinking target refusal is
+     `unmeasured` for the reason stated by S-0504 claim 5. `unmeasured` for the order among
+     ranks 1 to 4 when two of them hold at once: no scenario here establishes both a reachable
+     overlap and a differing observable reply to its competing answers. This includes a
+     spawner vehicle also playing death frames or melee-linked. The order remains a
+     prediction, not an observed distinction. Deactivation's specified precedence against
+     other rank-4 reasons is `unmeasured`: W8 part j observes inactivity, not overlapping
+     refusal labels, and no normal-input setup isolating those overlaps is established here.
+     The deactivation answer label itself is also `unmeasured` here: W8 part j does not record
+     it. The slave-bound exception to own-grip precedence is `unmeasured`: F7 part f isolates
+     the projectile comparison, not a slave-bound lifter. Its confidence is medium. Erasure's
+     firing-check label and rank remain open, not rules asserted by this claim; E11 part a
+     establishes only ordinary firing inactivity. The materialising firer's precedence within
+     rank 4, the infantry keep-acting *illegal* and its place, and the order and drop for an
+     infantry firer that heals and holds a seized unit are `unmeasured`: no scenario here sets
+     up those overlaps. The warp-pending *illegal* and its rank are `unmeasured`, since no
+     scenario records firing-check answers; the drops that the answer causes in infantry and
+     vehicle holders are `measurable` (S-0513 scenario SW12 parts i and j). The shots not made
+     are `unmeasured`: SW12 part j does not establish an otherwise eligible firing opportunity
+     before the first check tick, SW12 part k (a temporal weapon's making no shot at such a
+     target) is a recorded run whose outcome fits more than one rule, and no part sets up
+     building or aircraft holders. Rank 16 is `unmeasured`: no isolated locomotor refusal and
+     its answer have yet been identified, so no scenario here can distinguish it from another
+     refusal. A building's pending delayed shot against every reason other than the water,
+     land, render-layer and airborne rows of S-0306 claim 23 is `unmeasured`: F21 refuses its
+     target only by those rows, and no setup here isolates the shot's place against another
+     reason of rank 4 or a later rank (the drain refusals included), or against S-0405 table
+     T1's answers. F12 part b drops a pending shot whose target has left range or died, but
+     compares no ranks. A drain refusal during the delay would need the building's target to
+     become drained by another drainer within the delay, which no input ensures. In part e
+     both the render-layer row and the airborne row start to refuse the lifting unit at the
+     same height, 208 leptons above the surface. S-0102 claim 3 keeps a unit with jumpjet
+     movement in the ground layer below that height, and S-0307 Terms makes it airborne from
+     it. Both rows answer *illegal* at rank 4, so part e cannot tell which of the two refuses
+     the unit, and it needs to tell neither. That a building whose temporal beam is attached
+     to its target drops that target, with the beam still attached, while it is switched off
+     or short of power and not charged is `measurable` for a target on the map (scenario F22,
+     parts a and b). For a superweapon warp member that has departed it is `unmeasured`: with
+     a clean landing the member appears in the tick after its departure (S-0513 claim 39), so
+     no switch order or change of power can fall between the two, and no scenario here sets up
+     a landing that is not clean. The other rows of S-0405 table T1 against the
+     held-temporal-target *rearming* are `unmeasured`: no scenario here drains, pulses,
      empties or sells a building that holds a beam, and S-0215 claim 33's per-tick drop of an
      opportunity target is that spec's.
-   - Confidence: medium (a building's pending delayed shot ahead of the water, land,
-     render-layer and airborne rows of S-0306 claim 23, until F21 runs; F21 tests it through the
-     target kept and dropped, and S-0306 claim 23 leaves this rank unstated), medium (its place against every other reason,
-     ahead of the rest of rank 4 and the later ranks and behind S-0405 table T1's answers),
-     medium (S-0405 table T1's answers ahead of the held-temporal-target *rearming*, and the drop
-     with the beam kept that they cause, until F22 runs; medium for the rows that F22 does not set
-     up and for a departed warp member),
-     medium (the deactivated refusal, its unmeasured within-rank precedence,
-     and ordinary firing inactivity during erasure), high
-     (the two grip-refusal comparisons against projectile and target-layer refusals within rank 4,
-     the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
-     falling refusal and the same-turn surviving-landing boundary,
-     the three drain refusals, their specified precedence (except against a building's pending
-     delayed shot, rated with that shot's place above) and no ordinary shot from a drain attempt),
-     medium (its missing countdown start and per-shot ammunition use, as S-0608 claim 1,
-     and aircraft pending-round composition, as S-0608 claim 16), high (rearming before ammunition and range, facing and moving after them, and
-     *must deploy* before *not facing*, and the hidden-target refusal using mean weapon damage),
-     medium (the full membership of *illegal* and *impossible*,
-     and the early *rearming* cases, which other specs own; only the ones relevant to this spec are
-     listed; the tether and death-frame reasons); low (ranks 1 to 4 among themselves; rank 3, whose
-     cause (S-0214) is itself low; rank 16). The passenger-carrier refusal and its
-     precedence have medium confidence. The materialising firer within rank 4: medium, and low
-     for its place after a vehicle's answers of ranks 1 to 3 (it rests on the order of ranks 1 to
-     4 among themselves), low for the infantry keep-acting *illegal* and its place (reached only
-     through S-0214's link, whose creation that spec rates low), low for the order given for an
-     infantry firer that heals and holds a seized unit and its drop at the check, and low for a
-     materialising one's drop through its firing step's reply, as S-0310 claim 11 rates that the
-     infantry answer shows through its reply. The warp-pending *illegal*, its rank and the shots
-     it prevents: medium.
+   - Confidence: medium (a building's pending delayed shot ahead of the water, land, render-layer
+     and airborne rows of S-0306 claim 23, until F21 runs; F21 tests it through the target kept
+     and dropped, and S-0306 claim 23 leaves this rank unstated), medium (its place against every
+     other reason, ahead of the rest of rank 4 and the later ranks and behind S-0405 table T1's
+     answers), medium (S-0405 table T1's answers ahead of the held-temporal-target *rearming*,
+     and the drop with the beam kept that they cause, until F22 runs; medium for the rows that
+     F22 does not set up and for a departed warp member), medium (the deactivated refusal, its
+     unmeasured within-rank precedence, and ordinary firing inactivity during erasure), high (the
+     two grip-refusal comparisons against projectile and target-layer refusals within rank 4, the
+     empty-secondary no-op and the upgrade-building paired attempts without a second firing
+     check, falling refusal and the same-turn surviving-landing boundary, the three drain
+     refusals, their specified precedence (except against a building's pending delayed shot,
+     rated with that shot's place above) and no ordinary shot from a drain attempt), medium (its
+     missing countdown start and per-shot ammunition use, as S-0608 claim 1, and aircraft
+     pending-round composition, as S-0608 claim 16), high (rearming before ammunition and range,
+     facing and moving after them, and *must deploy* before *not facing*, and the hidden-target
+     refusal using mean weapon damage), high (the tether reason before the vehicle healer's
+     within rank 12), medium (a caller that acts only on *illegal*, such as S-0309 claim 12's
+     candidate test, not acting on a tethered healer's refusal), medium (the full membership of
+     *illegal* and *impossible*, and the early *rearming* cases, which other specs own; only the
+     ones relevant to this spec are listed; the tether and death-frame reasons); low (ranks 1 to
+     4 among themselves; rank 3, whose cause (S-0214) is itself low; rank 16). The
+     passenger-carrier refusal and its precedence have medium confidence. The materialising firer
+     within rank 4: medium, and low for its place after a vehicle's answers of ranks 1 to 3 (it
+     rests on the order of ranks 1 to 4 among themselves), low for the infantry keep-acting
+     *illegal* and its place (reached only through S-0214's link, whose creation that spec rates
+     low), low for the order given for an infantry firer that heals and holds a seized unit and
+     its drop at the check, and low for a materialising one's drop through its firing step's
+     reply, as S-0310 claim 11 rates that the infantry answer shows through its reply. The
+     warp-pending *illegal*, its rank and the shots it prevents: medium.
 
 ### Ammunition and reloading
 
@@ -2158,13 +2167,13 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
     the control's in any other range or place. A difference before the shot means the runs are
     not the same game, and the pair is rerun.
 
-**F15. The named reasons of the rank table.** Each part checks that a shot is not made while
-one reason holds, with every other reason absent (the rearm countdown over, the target in range
-and in the aiming tolerance, ammunition above 0), and that the same firer shoots when the reason
-is absent (the control).
+**F15. The named reasons of the rank table.** Parts (a) to (f) check that a shot is not made
+while one reason holds, with every other reason absent (the rearm countdown over, the target in
+range and in the aiming tolerance, ammunition above 0), and that the same firer shoots when the
+reason is absent (the control). Part (g) checks the order of two reasons of one rank.
 - Observable: in each part, whether and in which tick the firer makes a shot (projectile creation
   or the target's health drops); in (d)(ii), whether a spawned aircraft is launched; in (e), also
-  the vehicle's behaviour.
+  the vehicle's behaviour; in (g), the healer's target in each tick.
 - (a) Death frames (rank 1): test art file giving a sprite vehicle a death frame count of 20 or
   more and a start frame. The vehicle is ready with a target in range; a strong enemy hit destroys
   it. Expected: no shot is made from the tick its death counter starts. Falsified if a shot is
@@ -2212,6 +2221,30 @@ is absent (the control).
   attempted weapon rather than the changed mean. A lost target makes that trial inconclusive.
   Repeat with a building cloaking inside its own field: the refusal starts at fade level 11,
   not only at level 15 (S-0516 claim 18).
+
+- (g) Tether against a vehicle healer (rank 12). Unlike the other parts, two reasons hold at
+  once, and the record is the target, not a shot. Use a vehicle type whose default weapon is a
+  healing weapon (stock if the data has one, else test data), built at a vehicle factory, and an
+  allied vehicle at full health placed beside the factory's exit, so that it is within that
+  weapon's range of every cell the healer stands on during its release. While the new healer is
+  still being released from the factory, and so tethered to it (glossary), give it an order to
+  heal the allied vehicle at a tick whose number is not a multiple of 16. If that order is not
+  accepted against a full-health vehicle, give it against an allied vehicle below full health
+  that a second healer brings to full health while the first is still on its way out; then only
+  the ticks after the target reaches full health tell the two orders apart, because before that
+  S-0310 claim 11 keeps the target under either. Record per tick the healer's position, the
+  target's position and health, the healer's target, the tick at which the factory's door starts
+  to close, and the healer's shots. A tick decides something only if the tether certainly holds
+  there and no reason of ranks 1 to 11 can hold: the healer has not yet reached the cell in which
+  it stands when the door starts to close, because it ends the tether only by its report, which
+  it makes once it has no destination but its own cell (S-0417 claims 2 and 7), the recorded
+  positions put the target within the weapon's range, and no rearm countdown from a shot of the
+  healer runs. Moving, turning and facing (ranks 13 to 15) come after rank 12 and do not matter.
+  Expected: the healer keeps the target at every deciding tick whose number is not a multiple of
+  16, until S-0309 claim 29's check drops it, because its refusal is *impossible*, which S-0310
+  claim 11's drop does not answer. Falsified if the target is dropped at a deciding tick whose
+  number is not a multiple of 16, as the healer's *illegal* first would do. A run with no
+  deciding tick, or in which the healer never holds the target, is inconclusive.
 
 **F15a. Erasure inactivity boundary (claim 9; S-0514 claim 17).**
 - Setup: use S-0514 scenario E11 part a's test map with moving/firing infantry,
@@ -2752,6 +2785,10 @@ is absent (the control).
   claim 12 has no row for a target change." In its Confidence line, add: "low, and its backing
   `unmeasured`, for an infantry lifter's answers ahead of the gripped-unit *rearming* and the
   drop they cause, as S-0301 claim 9 rates them".
+- **S-0310 (approved, revision 8), claim 11, "Healing weapons and the *illegal* answer".** After
+  "the deploy test of claim 9 give no answer" add: ", and the vehicle is not tethered with a
+  building as its contact (S-0301 claim 9, rank 12: that tether's *impossible* comes first, so
+  such a vehicle does not make this claim's drop while the tether holds)".
 
 ## Open questions
 
