@@ -1422,6 +1422,46 @@ fn claim_23_later_order_clears_queued_entry() {
     );
 }
 
+/// A queued vehicle given `order`: its queued entry after the order, and
+/// whether it later takes the depot's place by itself (#197).
+fn queued_then(order: fn(ObjectId) -> Order) -> (Option<ObjectId>, bool) {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT");
+    let a = truck(&mut w, 0, 6, 1, 590);
+    let b = truck(&mut w, 0, 6, 4, 300);
+    open(&mut w);
+    for o in [enter(a, d), enter(b, d)] {
+        assert!(orders::issue(&mut w, ALPHA, o));
+    }
+    tick::step(&mut w);
+    assert_eq!(contact(&w, a), Some(d));
+    assert_eq!(w.obj(b).unwrap().depot.queued, Some(d));
+    assert!(orders::issue(&mut w, ALPHA, order(b)));
+    tick::step(&mut w);
+    let queued = w.obj(b).unwrap().depot.queued;
+    let pulled = run_until(&mut w, 3000, |w| contact(w, b) == Some(d));
+    (queued, pulled)
+}
+
+// spec: S-0314 claim 23 (any later order clears the queued entry) and S-0213 claim 8 (stop)
+#[test]
+fn claim_23_stop_clears_queued_entry() {
+    assert_eq!(queued_then(|actor| Order::Stop { actor }), (None, false));
+}
+
+// spec: S-0314 claim 23 (any later order clears the queued entry) and S-0213 claim 10 (a deploy order that passes its checks is applied)
+#[test]
+fn claim_23_deploy_clears_queued_entry() {
+    assert_eq!(queued_then(|actor| Order::Deploy { actor }), (None, false));
+}
+
+// spec: S-0314 claim 23 (any later order clears the queued entry) and S-0213 claim 9 (a scatter order that passes its checks is applied)
+#[test]
+fn claim_23_scatter_clears_queued_entry() {
+    assert_eq!(queued_then(|actor| Order::Scatter { actor }), (None, false));
+}
+
 // spec: S-0314 claim 24 (no automatic return: a damaged vehicle next to a depot is not sent to it)
 #[test]
 fn claim_24_no_automatic_return() {
