@@ -8705,6 +8705,11 @@
           "type": "boolean",
           "default": true
         },
+        "anger_to_first_house": {
+          "description": "A test house's check gives its anger to the first other house in the house order, not the\nnearest. Declared only: the anger rules of claim 25 part j are not built yet.",
+          "type": "boolean",
+          "default": true
+        },
         "anim_damage_starts_at_one": {
           "description": "A damaging animation's damage accumulator starts at 1.0, so its first advance already delivers 1 when δ < 1; off: it starts at 0.0. Implemented for the burning walker's expiring advances (S-0615 claim 11), the only animation the simulation plays with damage.",
           "type": "boolean",

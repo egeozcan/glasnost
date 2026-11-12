@@ -977,6 +977,11 @@ pub struct Quirks {
     // spec: S-0309 claim 16
     #[serde(default = "on")]
     pub defeated_enemy_house_kept: bool,
+    /// A test house's check gives its anger to the first other house in the house order, not the
+    /// nearest. Declared only: the anger rules of claim 25 part j are not built yet.
+    // spec: S-0309 claim 25
+    #[serde(default = "on")]
+    pub anger_to_first_house: bool,
     /// The map-wide search considers only ground-layer objects besides aircraft.
     // spec: S-0309 claim 7
     #[serde(default = "on")]
@@ -2537,6 +2542,7 @@ impl Default for Quirks {
             mind_controlled_passengers_cell_choice: true,
             hunt_ignores_distributed_fire: true,
             defeated_enemy_house_kept: true,
+            anger_to_first_house: true,
             hunt_ground_layer_only: true,
             wall_cell_over_same_ring_object: true,
             voxel_turret_exact_aim: true,
@@ -3428,6 +3434,7 @@ impl Quirks {
                 self.hunt_ignores_distributed_fire,
             ),
             ("defeated_enemy_house_kept", self.defeated_enemy_house_kept),
+            ("anger_to_first_house", self.anger_to_first_house),
             ("hunt_ground_layer_only", self.hunt_ground_layer_only),
             (
                 "wall_cell_over_same_ring_object",
