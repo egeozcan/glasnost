@@ -2,13 +2,13 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 16
-sources-class: [decomp]
+revision: 19
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-11-12
 measurements: []
-requests: []
+requests: [Q-3001]
 supersedes: []
 ---
 
@@ -433,11 +433,32 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     Θ = 0). No facing error is needed. A body resting at that direction is not affected, and in every
     other tick this rule has no effect. It looks like a defect of the original rather than a
     deliberate turn towards the target.
+
+    **When and against what the test is made.** In our engine the test is made at the end of each
+    turn that the vehicle takes in the turn pass (S-0203): after the movement that its locomotor
+    gives it in that turn, and after its firing check (Terms, claim 10) when it makes one in that
+    turn (design rule, decided at the delegated sign-off, 2026-11-12). A vehicle that takes two
+    turns in one tick (S-0203 claim 11) is tested at the end of each of them, each time with the
+    conditions left by that turn. The test does not wait for any other rule to look at the body.
+    Every condition is read as it stands at that point:
+    - The target, the movement destination and whether the locomotor is moving the vehicle are
+      those left by that turn's movement.
+    - The body's value is its current facing at that point.
+    - The direction of the target is taken from the vehicle's position at that point to the
+      target's position at that point, whatever turns the target has or has not taken in that
+      tick. No position kept from the start of the tick is used.
+
+    In a tick in which the vehicle takes no turn, the test is not made. The original is believed
+    to make the test at the same place in each turn of the vehicle, reading positions as they
+    stand then.
     - Backing: `unmeasured`. It needs a tick in which a body turn towards another facing passes
       exactly through the target's direction while the firing check gives no facing error (with a
-      facing error, claim 9 already sets the body target to that direction). No scenario can arrange
-      that coincidence reliably, as with claim 5's exception.
-    - Confidence: high for the behaviour; low for how often play reaches it
+      facing error, claim 9 already sets the body target to that direction). No scenario can
+      arrange that coincidence reliably, as with claim 5's exception, so neither the stop nor the
+      place of the test in the original's turn can be observed.
+    - Confidence: high for the behaviour; high for our engine's timing, a design rule; low for
+      the original's place of the test and the positions it reads (`unmeasured`); low for how
+      often play reaches it
 
 ### Rotation sampling for sound
 
