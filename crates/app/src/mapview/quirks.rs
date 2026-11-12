@@ -227,6 +227,10 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "parachute_brightness_fixed",
         "S-0103 claim 8: the on state is drawn (a parachute keeps the light of its creation tick); the off state is not implemented",
     ),
+    (
+        "named_palette_true_owner",
+        "S-0103 claim 16 (r25, Q-3019): a disguised object's named palette is not built in either state yet; it comes with #75's follow-up",
+    ),
     // S-0104
     (
         "split_effect_priority",
