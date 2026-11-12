@@ -6183,8 +6183,11 @@ impl Painter {
     /// [`Painter::set_effect_tint`], and the drawings kept from frame to
     /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
     /// and claim 16's height terms and the cell light of the static objects
-    /// of the cell pass are not followed, and neither is the tint of their
-    /// named palettes (a seam of the view, not of the game).
+    /// of the cell pass are not followed. No named palette is built (which
+    /// objects draw with one is Q-3019), so none is retinted. The house
+    /// tables are all built when the game starts (S-0104 Open questions),
+    /// so claim 2's third column, the tint of a table built while an effect
+    /// is in force, never applies to them.
     pub fn relight(
         &mut self,
         inputs: &Inputs,
