@@ -18,6 +18,7 @@ use glasnost_map::CellXY;
 use glasnost_sim::combat::effects::InfiltrationRow;
 use glasnost_sim::econ::{TypeRef, production, shroud, tech};
 use glasnost_sim::orders::Order;
+use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::structures::{engineer, garrison, spy};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
@@ -241,28 +242,65 @@ impl Special {
 
     /// Thinks once per think period: every ability in turn.
     pub fn think(&mut self, script: &Script, w: &World, out: &mut Vec<Order>) {
+        self.think_with(script, w, out, &mut ());
+    }
+
+    /// [`Special::think`], telling `p` which ability runs (the tools'
+    /// benchmark, `glasnost_sim::probe`); `p` reads nothing and changes
+    /// nothing.
+    pub fn think_with<P: Probe>(
+        &mut self,
+        script: &Script,
+        w: &World,
+        out: &mut Vec<Order>,
+        p: &mut P,
+    ) {
+        let on = p.on();
+        let mut mark = |part: &'static str| {
+            if on {
+                p.mark(Phase::Part(part));
+            }
+        };
         let house = script.house;
         let own = script.own(w);
         let home = script.home(w);
         self.memory.review(w);
         let mut start = out.len();
+        mark("ai:special:garrison");
         self.garrison(house, &own, home, w, out);
+        mark("ai:special:engineers");
         self.engineers(script, &own, w, out);
+        mark("ai:special:spies");
         self.spies(script, &own, w, out);
+        mark("ai:special:jumpjets");
         self.jumpjets(script, &own, w, out);
+        mark("ai:special:deployers");
         self.deployers(script, &own, w, out);
+        mark("ai:special:radiation");
         self.radiation(script, &own, w, out);
+        mark("ai:special:chrono");
         self.chrono(script, &own, w, out);
+        mark("ai:special:linked");
         self.linked(script, &own, w, out);
+        mark("ai:special:terror");
         self.terror(script, &own, w, out);
+        mark("ai:special:crates");
         self.crates(script, &own, w, out);
+        mark("ai:special:berserk");
         self.berserk(script, &own, w, out);
+        mark("ai:special:mind_control");
         self.mind_control(script, &own, w, out);
+        mark("ai:special:absorbers");
         self.absorbers(script, &own, w, out);
+        mark("ai:special:grinders");
         self.grinders(script, &own, w, out);
+        mark("ai:special:bunkers");
         self.bunkers(script, &own, w, out);
+        mark("ai:special:lifters");
         self.lifters(script, &own, w, out);
+        mark("ai:special:drainers");
         self.drainers(script, &own, w, out);
+        mark("ai:special:gunners");
         self.gunners(script, &own, w, out, &mut start);
         self.memory.note(w, out.get(start..).unwrap_or_default());
     }
