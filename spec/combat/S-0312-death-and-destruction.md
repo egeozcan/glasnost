@@ -2,14 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 71
+revision: 74
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-11
+approved-on: 2026-11-12
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793, Q-2973]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000]
 supersedes: []
 ---
 
@@ -19,14 +19,16 @@ supersedes: []
 
 This spec covers skirmish only; network games and campaigns are out of scope.
 
-What happens when damage kills an infantry unit, vehicle, aircraft or building: the deaths that are
-put off (crippled cyborgs, delayed building deaths), the effects every kind shares (debris, the
-death weapon of exploding types, the deaths of their passengers, an attached bomb), and the effects
-of each kind (vehicle explosions, sinking, passengers getting out, crews escaping, aircraft
-crashing, building explosions, spilled resources, survivors, smudges, rubble and crates), with
-their random draws in observable order, when a destroyed building leaves play, and the defaults
-and list items of the game-wide values these rules read. Infantry death sequences and corpses are S-0107's (claim 17); when a
-killed object leaves the turn order is S-0203's (claim 6); the damage itself is S-0302's and S-0303's.
+What happens when damage kills an infantry unit, vehicle, aircraft or building: the deaths that
+are put off (crippled cyborgs, delayed building deaths), the effects every kind shares (debris,
+the death weapon of exploding types, the deaths of their passengers, an attached bomb), and the
+effects of each kind (vehicle explosions, sinking, passengers getting out, crews escaping,
+aircraft crashing, building explosions, spilled resources, survivors, smudges, rubble and
+crates), with their random draws in observable order, when a destroyed building leaves play, and
+the defaults and list items of the game-wide values these rules read, and how deep death weapons
+set off by other death weapons nest inside one killing hit (claim 33, Q-3000). Infantry death
+sequences and corpses are S-0107's (claim 17); when a killed object leaves the turn order is
+S-0203's (claim 6); the damage itself is S-0302's and S-0303's.
 
 Against revision 33, this revision takes in the S-0312 entries of the Changes for other specs
 of S-0317 (voxel debris as S-0317's pieces) and of S-0501 (the fall-back crash of an aircraft,
@@ -1175,6 +1177,44 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Confidence: high for repeated credit, raises, applicable effects and the ordinary
       health/removal branches; medium for isolating the ineligible cull aftermath in play
 
+### Death weapons that kill further exploding objects
+
+33. **Death weapons inside death weapons nest depth first, with no depth limit known.** A death
+    weapon's detonation (claim 6) can kill a further exploding object, whose death weapon then
+    goes off inside that killing hit (claim 1), before the outer detonation's later hits (S-0303
+    claim 1), and its own detonation can kill a third, and so on. No limit of the original's own
+    on how deep this nests is known: an object killed at any depth takes its death effects at
+    once, in claim 1's order, and S-0303 claim 1's order holds at every depth. So a row of
+    exploding objects, each within reach of the next death weapon, dies depth first inside the
+    one killing hit of its first object, all in the same tick. Each object's death effects that
+    come before its death weapon in the State and ordering table (its debris and its passengers'
+    deaths) come before the death of the object its death weapon kills. That nested death, with
+    all its own effects in the table's order and every death nested inside it, completes inside
+    the death weapon's detonation, so before the killing object's effects that the table puts
+    after its death weapon (an attached bomb of claim 7, then its kind's effects). An object hit
+    later by an outer detonation (for example a second object within reach of the first death
+    weapon) takes its hit only after every death nested before it has completed, at whatever
+    depth. Whether a long enough chain makes the original fail, and at what length, is not
+    established (Open questions).
+    Our engine keeps claim 1's and S-0303 claim 1's depth-first order, as this claim states it,
+    at every depth: it sets no depth limit, and it gives the same result for a chain of any
+    length on every machine, so how deep it can nest must not depend on the machine it runs on.
+    If a long enough chain makes the original fail, this departs from it there (design rule,
+    decided at the delegated sign-off, 2026-11-12). There is no switch: a failure has no use in
+    play.
+    - Backing: `measurable` (scenario D25 parts a and b, at depths of 50 and of 600) for the
+      deaths of the whole row in the one killing hit's tick and for a later hit of an outer
+      detonation coming after every death nested before it. `unmeasured` for the absence of a
+      depth limit as such: no finite chain shows every depth. The place of a nested death among
+      the other death effects of the object whose death weapon killed it is claim 1's order, with
+      claim 1's backing (scenario D1) for one level of nesting, and `unmeasured` at greater
+      depths: D25 does not tell those places apart.
+    - Confidence: high for the deaths in one tick and for the later hit after every nested death,
+      at the depths of D25 parts a and b; medium for these at every other depth and for the
+      absence of a depth limit; high for the place of a nested death among its killer's other
+      death effects at one level of nesting, as claim 1 rates the order of the shared effects,
+      and medium at greater depths; high for the departure, a design rule.
+
 ### Backing boundaries
 
 These qualifications narrow the numbered claims' backing; a scenario for a neighbouring case
@@ -1377,6 +1417,10 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   projectile is never placed on the map, so the land-type, height and water tests of S-0303
   claim 21 and the warhead debris of S-0303 claim 22 use its unplaced default position (claim 6).
   Off: they use the dying object's position.
+- **Departure: long chains of death weapons** (no switch; design rule, decided at the delegated
+  sign-off, 2026-11-12). Our engine keeps claim 33's depth-first order for a chain of death
+  weapons of any length, with no depth limit and the same result on every machine; whether and
+  where a long chain makes the original fail is not established (claim 33).
 - **Departure: empty game-wide metallic debris list** (no switch). In F1 (and S-0303 F6), when the
   metallic debris list is used with *N* > 0 but is empty, the original takes the ranged draw
   R(0, −1) and then takes an entry from outside the list. Our engine takes the same draws and creates no debris, and
@@ -2354,8 +2398,63 @@ after the cancellation, a kill change, a score change in (a) or (d), a message i
 item is done before it is cancelled, or in which the sale of (b) or (c) does not lead to a
 cancellation, does not test this claim.
 
+**D25. Death weapons nesting inside one killing hit (claim 33; Q-3000).** Use the common setup,
+with the shroud on, on a flat test map large enough for the path below, every vehicle at the
+centre of its cell. A named test file gives a test vehicle type the explodes flag and a test
+death weapon whose warhead has a spread of 1.25 (reach 320 leptons, S-0303 claim 3), an edge
+fraction of 1 and enough damage to kill a test vehicle. So the detonation of a vehicle hits a
+vehicle in a cell straight next to its own (256 leptons away) and kills it, and hits no vehicle
+in a diagonally neighbouring cell (about 362 leptons) or further away. The type has no other
+death effect of the State and ordering table that can reach another object: a maximum debris
+count of 0 (so no debris and no debris draw), no passengers, no crewed flag (so no crew), no
+crate, and it cannot crash. Every animation that the test types and weapons use does no damage.
+Check the reach with three vehicles before the runs. Lay *N* test vehicles of the human player's
+house along a path of cells, each straight next to the cells before and after it on the path:
+rows along the map's x axis, two cells apart, the first row running from the first vehicle toward
+decreasing x, and each pair of rows joined at alternate ends by one vehicle in the cell between
+the rows' end cells. Then every two vehicles of the path that are not next to each other on it
+stand at least a diagonal neighbour's distance apart, at the joins included, so each vehicle's
+death weapon reaches only the vehicles before and after it on the path. Add one further test
+vehicle *S* in the cell one step toward increasing x from the first vehicle. *S* is within reach
+of no other vehicle of the path, and in S-0303 table T1's ring 1 the second vehicle's cell comes
+before *S*'s, so the first vehicle's detonation hits *S* after the second vehicle.
+Map trigger variable 1 starts clear. The last vehicle of the path carries a one-time tag whose
+trigger has a single destroyed-by-anything event and sets variable 1, and *S* carries a one-time
+tag whose trigger has the same event and clears variable 1 (S-0011 claim 22). A third, one-time
+trigger *W*, in a polled tag attached to no object, has a variable-set event for variable 1 and
+reveals the area around a waypoint at least 20 cells from every test object (S-0011 claim 26).
+Give each trigger an owner country that no house plays. No other object carries a tag.
+
+Kill the first vehicle with one hit of a named test weapon with no inaccuracy, fired by a unit of
+a second house, an enemy of the human player's house, that stands at least 4 cells from every
+test vehicle. Its warhead has a spread of 0.5 (reach 128 leptons), so its detonation at the first
+vehicle reaches no other vehicle, every one of which is 256 leptons or more away. Before the
+runs, fire that hit once at a vehicle of a second test type, the same but without the explodes
+flag, standing in the first vehicle's cell with *S* beside it as above: that vehicle must die and
+*S* must still have its full health at the end of that tick. In the runs, record the vehicles
+still alive at the end of every tick until 30 ticks after the kill, and whether, and in which
+tick, *W* reveals its area.
+- Part (a): *N* = 50.
+- Part (b): *N* = 600.
+- Control (c): as part (a) but with no *S*.
+
+Expected: in both parts every vehicle of the path and *S* are dead at the end of the kill's tick.
+By claim 33 the last vehicle of the path dies inside the first vehicle's detonation before that
+detonation hits *S*, so variable 1 is set and then cleared again within the kill's tick, and *W*,
+which is judged only at its polls (S-0011 claims 6 and 22), finds it clear and never fires. If
+*S* died before the last vehicle, as when an outer detonation's later hits come before the deaths
+nested in its earlier ones, variable 1 would end the tick set and *W* would reveal its area at
+its next poll. Any vehicle alive after the kill's tick, or *W* revealing its area within the 30
+ticks, falsifies claim 33 at that depth. A run that does not complete the kill's tick is
+inconclusive for the order at that depth. In control (c) nothing clears variable 1, so *W* must
+reveal its area within the 30 ticks. If it does not, the trigger setup does not work as
+described, and parts (a) and (b) are inconclusive. On our engine all three end as expected.
+
 ## Open questions
 
+- Q-3000 question 2: whether a chain of death weapons nesting inside one killing hit (claim 33)
+  makes the original fail once it is long enough, and at about what length, is not established.
+  Our engine's rule does not depend on it (claim 33).
 - Q-0270 part 3: slave-group destruction paths without an ordinary killing hit, including
   erasure and environmental sinking with remembered attacker or forced owner, remain to be
   integrated. Claim 30 answers ordinary killing hits and claim 31 the remaining group's
