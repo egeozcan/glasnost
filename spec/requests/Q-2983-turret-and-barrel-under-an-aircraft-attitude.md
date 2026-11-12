@@ -1,9 +1,9 @@
 ---
 id: Q-2983
 title: How are the turret and barrel of an aircraft with the turret flag posed and reused under pitch, bank or tumble?
-status: open
+status: answered
 related: [S-0105, S-0113]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
