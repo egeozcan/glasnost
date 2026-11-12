@@ -22,7 +22,10 @@ fn game_with_both(index: Option<i32>, land: Option<i32>) -> World {
     both.secondary = Some("Gas".into());
     both.deploy_fire_weapon = index;
     both.combat.land_targeting = land;
-    r.registries.get_mut("vehicles").unwrap().push("BOTH".into());
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("BOTH".into());
     r.sim.vehicles.insert("BOTH".into(), both);
     let mut w = testkit::game_with(&r, SIZE, 7);
     testkit::run(&mut w, 4);
@@ -49,8 +52,16 @@ fn claim_9_a_deployed_deploy_fire_vehicle_uses_its_deploy_weapon_index() {
     let t = Some(Target::Object(e));
     assert_eq!(weapon::choose_slot(&w, v, t), 0, "mobile: table P");
     deploy_in_place(&mut w, v);
-    assert_eq!(weapon::choose_slot(&w, v, t), 1, "deployed: the deploy weapon index");
-    assert_eq!(weapon::choose_slot(&w, v, None), 1, "every target, none too");
+    assert_eq!(
+        weapon::choose_slot(&w, v, t),
+        1,
+        "deployed: the deploy weapon index"
+    );
+    assert_eq!(
+        weapon::choose_slot(&w, v, None),
+        1,
+        "every target, none too"
+    );
 }
 
 // spec: S-0308 claim 9 and scenario W8 part c (the other direction: deploy weapon index 0 against a target where table P gives 1, row 18)
@@ -62,7 +73,11 @@ fn claim_9_deploy_weapon_index_0_beats_table_p() {
     let t = Some(Target::Object(e));
     assert_eq!(weapon::choose_slot(&w, v, t), 1, "mobile: table P row 18");
     deploy_in_place(&mut w, v);
-    assert_eq!(weapon::choose_slot(&w, v, t), 0, "deployed: the deploy weapon index");
+    assert_eq!(
+        weapon::choose_slot(&w, v, t),
+        0,
+        "deployed: the deploy weapon index"
+    );
 }
 
 // spec: S-0308 Edge cases (an index outside 0 … 17 is treated as 0, a departure)

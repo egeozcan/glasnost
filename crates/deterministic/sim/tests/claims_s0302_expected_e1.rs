@@ -60,9 +60,30 @@ fn bunkered(bunkered: bool, m_b: &str) -> (i32, i32) {
     r.sim.vehicles.insert("BOX".into(), t);
     r.sim.general.bunker_damage_multiplier = Some(dec(m_b));
     let mut w = testkit::game_with(&r, BOX_SIZE, 1);
-    let s = testkit::spawn(&mut w, Kind::Vehicle, "SHOOTER", 0, testkit::mid(BOX_SIZE, -3, 0), 0);
-    let x = testkit::spawn(&mut w, Kind::Vehicle, "BOX", 1, testkit::mid(BOX_SIZE, 3, 0), 0);
-    let holder = testkit::spawn(&mut w, Kind::Vehicle, "BOX", 0, testkit::mid(BOX_SIZE, -5, 0), 0);
+    let s = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "SHOOTER",
+        0,
+        testkit::mid(BOX_SIZE, -3, 0),
+        0,
+    );
+    let x = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BOX",
+        1,
+        testkit::mid(BOX_SIZE, 3, 0),
+        0,
+    );
+    let holder = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BOX",
+        0,
+        testkit::mid(BOX_SIZE, -5, 0),
+        0,
+    );
     if bunkered {
         w.obj_mut(s).unwrap().structure.bunkered_in = Some(holder);
     }

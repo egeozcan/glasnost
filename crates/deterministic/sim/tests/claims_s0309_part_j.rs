@@ -56,8 +56,9 @@ fn game(r: &Ruleset, p_country: &str) -> World {
         ai: false,
     });
     let rules = Arc::new(SimRules::new(r, "synthetic-test"));
-    let mut w = glasnost_sim::load::new_game(rules, &testkit::empty_map(SIZE), testkit::catalogue(), &s)
-        .expect("synthetic test game loads");
+    let mut w =
+        glasnost_sim::load::new_game(rules, &testkit::empty_map(SIZE), testkit::catalogue(), &s)
+            .expect("synthetic test game loads");
     for (h, c) in [(P, (10, 10)), (Q, (12, 10)), (H, (30, 30))] {
         w.houses[usize::from(h.0)].base.start = Some(CellXY::new(c.0, c.1));
     }
@@ -223,7 +224,11 @@ fn part_j_a_defeated_enemy_house_is_cleared() {
     check(&mut w, 0);
     assert_eq!(anger(&w, P, Q), 0, "removed");
     assert_eq!(anger(&w, P, H), 3, "no anger at this check");
-    assert_eq!(enemy(&w, P), None, "H's anger above 0 does not make it the enemy");
+    assert_eq!(
+        enemy(&w, P),
+        None,
+        "H's anger above 0 does not make it the enemy"
+    );
     check(&mut w, 120);
     assert_eq!(anger(&w, P, H), 4);
     assert_eq!(enemy(&w, P), Some(H));

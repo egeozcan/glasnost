@@ -493,9 +493,9 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             // spec: S-0303 claim 15 (an object of any kind in the centre cell, alive, raw distance below 85 leptons; R plays no part)
             if small && c == centre && curtain_trigger(w, id, raw) {
                 // spec: S-0303 claim 9 and S-0504 claim 10 (alive: a sinking vessel that keeps health is alive; #172)
-                let alive = w.obj(id).is_some_and(|o| {
-                    o.health > 0 && o.on_map && !crate::combat::damage::dead(o)
-                });
+                let alive = w
+                    .obj(id)
+                    .is_some_and(|o| o.health > 0 && o.on_map && !crate::combat::damage::dead(o));
                 if alive {
                     nullified = true;
                 }

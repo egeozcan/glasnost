@@ -174,11 +174,7 @@ fn anger_towards_first_house(w: &mut World, h: HouseId) {
 
 /// Part j's defeated enemy house (S-0309 claim 25).
 fn clear_defeated_enemy(w: &mut World, h: HouseId) {
-    let Some(e) = w
-        .houses
-        .get(usize::from(h.0))
-        .and_then(|x| x.combat.enemy)
-    else {
+    let Some(e) = w.houses.get(usize::from(h.0)).and_then(|x| x.combat.enemy) else {
         return;
     };
     // spec: S-0309 claim 25 part j (whatever its country and base records: a defeated enemy house has the anger towards it removed and the house has no enemy house, until one of its anger values next changes; no recomputation here)

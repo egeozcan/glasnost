@@ -25,7 +25,10 @@ fn picks_the_garrisoned_hut(r: &Ruleset) -> bool {
     glasnost_sim::tick::step(&mut w);
     assert_eq!(garrison::count(&w, hut), 1);
     assert_eq!(owner(&w, hut), Some(B));
-    assert!(weapon::current_weapon(&w, hut).is_some(), "the occupant's weapon");
+    assert!(
+        weapon::current_weapon(&w, hut).is_some(),
+        "the occupant's weapon"
+    );
     let a = put(&mut w, Kind::Vehicle, "CART", 0, 0, 0);
     let got = acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick);
     assert!(got.is_none() || got == Some(hut));

@@ -25,7 +25,14 @@ fn a_tethered_released_vehicle_gets_impossible_and_does_not_fire() {
     r.sim.buildings.insert("VF".into(), b);
     let mut w = game(&r);
     let k = building(&mut w, "VF", 0, 0, 0);
-    let foe = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(SIZE, -2, -1), 0);
+    let foe = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(SIZE, -2, -1),
+        0,
+    );
     let full = w.obj(foe).unwrap().health;
     let ti = w.rules().index_of(Kind::Vehicle, "CART").unwrap();
     let cart = objects::create(&mut w, Kind::Vehicle, ti, Some(HouseId(0)));
@@ -73,7 +80,14 @@ fn the_tether_is_no_illegal_reason() {
     r.sim.buildings.insert("VF".into(), b);
     let mut w = game(&r);
     let k = building(&mut w, "VF", 0, 0, 0);
-    let foe = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(SIZE, -2, -1), 0);
+    let foe = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(SIZE, -2, -1),
+        0,
+    );
     let ti = w.rules().index_of(Kind::Vehicle, "CART").unwrap();
     let cart = objects::create(&mut w, Kind::Vehicle, ti, Some(HouseId(0)));
     assert_eq!(release::release(&mut w, k, cart), Outcome::Released);

@@ -54,7 +54,14 @@ fn rules() -> Ruleset {
 fn claim_19b_foundation_explosions_take_their_drawn_starting_delay() {
     let r = rules();
     let mut w = testkit::game_with(&r, SIZE, 11);
-    let id = testkit::spawn(&mut w, Kind::Building, "HUT", 0, testkit::mid(SIZE, 0, 0), 0);
+    let id = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "HUT",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     let o = w.obj(id).unwrap().clone();
     let half = w.rules().quirks.ranged_draw_half_span;
     // Replay claim 19 (a) and (b) on a copy of the stream.

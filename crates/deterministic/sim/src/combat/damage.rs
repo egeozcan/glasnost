@@ -806,7 +806,14 @@ fn reactions(
     if share.dealt != 0
         && let Some(a) = hit.attacker
     {
-        crate::combat::acquire::anger_of(w, share.owner, share.strength, share.cost, a, share.dealt);
+        crate::combat::acquire::anger_of(
+            w,
+            share.owner,
+            share.strength,
+            share.cost,
+            a,
+            share.dealt,
+        );
     }
     // The actor as the hit left it, before its reactions: the target and destination it had
     // when hit (S-0208 claim 15; S-0215 claim 16, Order within the hit).

@@ -44,7 +44,10 @@ fn rules() -> Ruleset {
     g.weapon_count = Some(slots.len() as i32);
     g.combat.weapon_slots = Some(slots.iter().map(|s| s.to_string()).collect());
     g.combat.is_gattling = Some(true);
-    r.registries.get_mut("vehicles").unwrap().push("GATT".into());
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("GATT".into());
     r.sim.vehicles.insert("GATT".into(), g);
     r
 }
@@ -54,7 +57,14 @@ fn rules() -> Ruleset {
 fn falling_walker(firer: &str, up: i32) -> (World, ObjectId, ObjectId) {
     let mut w = testkit::game_with(&rules(), SIZE, 7);
     let f = testkit::spawn(&mut w, Kind::Vehicle, firer, 0, testkit::mid(SIZE, 0, 0), 0);
-    let t = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, testkit::mid(SIZE, 2, 0), 0);
+    let t = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        testkit::mid(SIZE, 2, 0),
+        0,
+    );
     w.obj_mut(t).unwrap().pos.z += up;
     glasnost_sim::fall::start(&mut w, t, false);
     assert!(w.obj(t).unwrap().on_map);
