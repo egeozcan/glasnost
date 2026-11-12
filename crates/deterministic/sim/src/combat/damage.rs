@@ -71,9 +71,10 @@ fn d(n: i64, mode: Rounding) -> F64 {
 }
 
 /// The shot damage D_s of a weapon fired by an object (S-0302 claim 2,
-/// F1), fixed at the moment of firing. A garrisoned building's multiplier
-/// M_g (S-0508) and a bunkered vehicle's M_b (S-0606) apply; the
-/// open-topped transport's M_t is a seam.
+/// F1), fixed at the moment of firing: [`shot_e1`] through the
+/// multipliers. A garrisoned building's multiplier M_g (S-0508) and a
+/// bunkered vehicle's M_b (S-0606) apply; the open-topped transport's M_t
+/// is a seam.
 pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     let r = w.rules();
     let mode = r.mode;
@@ -82,7 +83,6 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     if wr.sonic || wr.fire_particles {
         return 0;
     }
-    let dmg = wr.damage;
     // spec: S-0302 F1 (E₂ = trunc(RZ₅₃(E₁ × M_g)) for a garrisoned building, whatever the sign of D)
     let garrison = |e1: i32| {
         if crate::structures::garrison::garrisoned(w, firer) {
@@ -103,9 +103,26 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
             e2
         }
     };
-    // spec: S-0302 F1 (E₀ = D for D ≤ 0: the multipliers leave it unchanged)
+    bunker(garrison(shot_e1(w, firer, weapon)))
+}
+
+/// E₁ of S-0302 F1: the weapon's damage through the house and object
+/// firepower multipliers and the veteran firepower bonus, before the
+/// garrison, bunker and open-topped multipliers. The expected damage (F8)
+/// starts from it (#217). 0 for a sonic-wave or fire-particle weapon; the
+/// damage field itself when it is 0 or less.
+pub fn shot_e1(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
+    let r = w.rules();
+    let mode = r.mode;
+    let wr = r.combat.weapon(weapon);
+    // spec: S-0302 F1 (E₀ = 0 for a sonic-wave or fire-particle weapon)
+    if wr.sonic || wr.fire_particles {
+        return 0;
+    }
+    let dmg = wr.damage;
+    // spec: S-0302 F1 (E₀ = D for D ≤ 0: the factors leave it unchanged)
     if dmg <= 0 {
-        return bunker(garrison(dmg));
+        return dmg;
     }
     let Some(o) = w.obj(firer) else { return dmg };
     let fh = o
@@ -119,14 +136,13 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
         .mul(d(i64::from(dmg), mode), mode)
         .to_i32_common();
     // spec: S-0302 F1 (E₁ = trunc(RZ₅₃(E₀ × V_c)) for a firer with the veteran firepower bonus)
-    let e1 = if has_ability(w, firer, Ability::Firepower) {
+    if has_ability(w, firer, Ability::Firepower) {
         d(i64::from(e0), mode)
             .mul(r.combat.general.veteran_combat, mode)
             .to_i32_common()
     } else {
         e0
-    };
-    bunker(garrison(e1))
+    }
 }
 
 /// The house armour factor A_h for a target (S-0302 claim 5): the factor of
@@ -294,7 +310,8 @@ pub fn expected_damage(w: &World, firer: ObjectId, weapon: WeaponId, target: Obj
     if wr.damage <= 0 {
         return wr.damage;
     }
-    let e1 = shot_damage(w, firer, weapon);
+    // spec: S-0302 claim 18 and F8 (E₁ as in F1, without M_g, M_b and M_t; #217)
+    let e1 = shot_e1(w, firer, weapon);
     // spec: S-0302 F8 (A_h and A_o of the firer, quirks.expected_damage_firer_armour; off: the target's)
     let armour_of = if r.quirks.expected_damage_firer_armour {
         firer
