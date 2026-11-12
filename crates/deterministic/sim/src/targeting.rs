@@ -1158,10 +1158,18 @@ fn engineer_friendly(w: &World, actor: ObjectId, t: ObjectId) -> bool {
 fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Modifiers) -> bool {
     let enemy = !allied(w, actor, t);
     let u = unit(w, actor);
+    // spec: S-0214 claim 6 (may attack as a friend: the attack-cursor-on-friendlies flag counts unless the warhead of the weapon it would use plants bombs and the target's type can carry passengers) (#211)
+    let bomb_on_transport = || {
+        passengers(w, t)
+            && weapon::would_use(w, actor, Some(Target::Object(t)))
+                .1
+                .and_then(|x| w.rules().combat.warhead_of(x))
+                .is_some_and(|h| h.ivan_bomb)
+    };
     // spec: S-0214 claim 6 (may attack as a friend: the attack-friendlies or attack-cursor-on-friendlies flag)
     let friend_ok = u.is_some_and(|u| {
         u.raw.attack_friendlies.unwrap_or(false)
-            || u.raw.attack_cursor_on_friendlies.unwrap_or(false)
+            || (u.raw.attack_cursor_on_friendlies.unwrap_or(false) && !bomb_on_transport())
     }) || sonic_on_parasite_carrier(w, actor, t);
     // spec: S-0214 claim 6 (disguise rule: a target that does not appear disguised passes; one that does passes with the general attack-cursor-on-disguise rule, a permanently disguised type, a running blink, or friend-attack); S-0516 claim 36
     // Seam: the scenery-disguise terrain-fire pass of the rule (low, S-0214 Open questions) is not built.
