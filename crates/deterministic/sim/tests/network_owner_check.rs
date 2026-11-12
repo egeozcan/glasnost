@@ -97,10 +97,14 @@ fn a_network_order_is_refused_after_an_owner_change() {
     let goal = at(6, 0);
     let (w, b) = ordered_then_taken(true, |b| mv(b, goal), false);
     assert_ne!(w.obj(b).unwrap().dest, Some(Target::Cell(goal)));
-    let (w, b) = ordered_then_taken(true, |actor| Order::GuardSpot {
-        actor,
-        spot: Target::Cell(goal),
-    }, false);
+    let (w, b) = ordered_then_taken(
+        true,
+        |actor| Order::GuardSpot {
+            actor,
+            spot: Target::Cell(goal),
+        },
+        false,
+    );
     assert_ne!(
         w.obj(b).unwrap().guard_spot,
         Some(Target::Cell(goal)),

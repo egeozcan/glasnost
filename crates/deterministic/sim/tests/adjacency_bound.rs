@@ -87,7 +87,11 @@ fn a_large_adjacency_finds_a_near_supporter() {
 #[test]
 fn the_largest_adjacency_reaches_across_the_map() {
     let far = c(7, 0);
-    assert_eq!(adjacent("HUT", far), Some(false), "out of the default reach");
+    assert_eq!(
+        adjacent("HUT", far),
+        Some(false),
+        "out of the default reach"
+    );
     for name in ["WIDE", "VAST", "HUGE"] {
         assert_eq!(adjacent(name, far), Some(true), "{name}");
     }
@@ -119,9 +123,7 @@ fn disagreements(name: &'static str) -> Option<Vec<CellXY>> {
         let differ = cells
             .iter()
             .copied()
-            .filter(|&cell| {
-                search.place_legal(&w, cell) != placement::place_legal(&w, A, t, cell)
-            })
+            .filter(|&cell| search.place_legal(&w, cell) != placement::place_legal(&w, A, t, cell))
             .collect();
         let _ = tx.send(differ);
     });

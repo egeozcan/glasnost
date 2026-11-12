@@ -307,8 +307,7 @@ fn refused_by_owner(w: &World, house: HouseId, o: &Order) -> bool {
     // spec: S-0213 claim 15 (Network games: each machine checks the actor's owner immediately before applying the order, and refuses one whose actor the issuing house does not own then, other than the detonate order of claim 11)
     w.econ.settings.network
         && !matches!(o, Order::Detonate { .. })
-        && o
-            .actor()
+        && o.actor()
             .is_some_and(|a| w.obj(a).and_then(|x| x.owner) != Some(house))
 }
 

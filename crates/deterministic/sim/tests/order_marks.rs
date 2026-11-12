@@ -144,13 +144,18 @@ fn an_omni_crusher_drives_at_an_ordered_target() {
 /// was given `order`; a near enemy appears afterwards. Returns (the mark
 /// after the order applied, the target 60 ticks later, far enemy, near
 /// enemy).
-fn charger_given(order: impl Fn(ObjectId, ObjectId) -> Order) -> (bool, Option<Target>, ObjectId, ObjectId) {
+fn charger_given(
+    order: impl Fn(ObjectId, ObjectId) -> Order,
+) -> (bool, Option<Target>, ObjectId, ObjectId) {
     use linked_common::{at as lat, spawn, world};
     let mut w: World = world(|_| {});
     let coil = spawn(&mut w, Kind::Building, "COIL", 0, lat(1, 0));
     let tick = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert;
-    w.obj_mut(coil).unwrap().beh.force(Behaviour::Sleep, tick, stale);
+    w.obj_mut(coil)
+        .unwrap()
+        .beh
+        .force(Behaviour::Sleep, tick, stale);
     let u = spawn(&mut w, Kind::Infantry, "CHARGER", 0, lat(0, 0));
     // The unit starts charging by itself in guard (S-0518 claim 14).
     let mut n = 0;
