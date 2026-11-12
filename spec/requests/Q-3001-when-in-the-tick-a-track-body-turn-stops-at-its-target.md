@@ -1,8 +1,9 @@
 ---
 id: Q-3001
 title: At which point of the tick is S-0206 claim 16's test made, and against which direction of the target?
-status: open
+status: answered
 related: [S-0206, S-0203, S-0204]
+answered-by: [S-0206]
 ---
 
 ## Need
