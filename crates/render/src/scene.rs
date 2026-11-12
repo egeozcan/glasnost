@@ -267,6 +267,16 @@ impl Scene {
         true
     }
 
+    /// The images the scene holds (those with pixels) and their pixels:
+    /// the benchmark's gauges (#105).
+    pub fn held(&self) -> (usize, u64) {
+        self.images
+            .iter()
+            .map(|i| u64::from(i.width()) * u64::from(i.height()))
+            .filter(|&px| px > 0)
+            .fold((0, 0), |(n, sum), px| (n + 1, sum + px))
+    }
+
     /// Adds a palette row and returns its index.
     pub fn add_row(&mut self, row: Row565) -> usize {
         self.rows.push(row);

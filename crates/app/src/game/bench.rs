@@ -278,6 +278,10 @@ struct Row {
     wait: f64,
     gpu: Option<f64>,
     stats: DrawStats,
+    /// The scene's images with pixels, and their pixels, after the frame
+    /// (#105).
+    scene_images: usize,
+    scene_px: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -711,6 +715,7 @@ impl Bench {
         row.work = now() - row.start;
         row.draw = end.laps;
         row.stats = end.stats;
+        (row.scene_images, row.scene_px) = c.session.as_ref().map_or((0, 0), |s| s.scene.held());
         row.acquire = end.acquire;
         row.encode = end.encode;
         row.submit = end.submit;
@@ -864,7 +869,7 @@ impl Bench {
     /// The per-frame rows as CSV.
     pub fn csv(&self) -> String {
         let mut out = String::from(
-            "frame,view,timed,tick,ticked,objects,total_ms,work_ms,update_ms,tick_ms,play_ms,scene_ms,radar_ms,hud_ms,sync_ms,light_ms,map_ms,batch_ms,acquire_ms,encode_ms,submit_ms,wait_ms,gpu_ms,map_items,map_instances,map_vertices,map_draws,map_passes,map_copies,map_copied_px,map_uploads,map_upload_bytes,batch_quads,batch_vertices,batch_draws,batch_uploads,batch_upload_bytes,rebuilds\n",
+            "frame,view,timed,tick,ticked,objects,total_ms,work_ms,update_ms,tick_ms,play_ms,scene_ms,radar_ms,hud_ms,sync_ms,light_ms,map_ms,batch_ms,acquire_ms,encode_ms,submit_ms,wait_ms,gpu_ms,map_items,map_instances,map_vertices,map_draws,map_passes,map_copies,map_copied_px,map_uploads,map_upload_bytes,batch_quads,batch_vertices,batch_draws,batch_uploads,batch_upload_bytes,rebuilds,atlas_layers,atlas_committed_px,map_rows,scene_images,scene_px\n",
         );
         let opt = |v: Option<f64>| v.map_or(String::new(), |v| format!("{v:.3}"));
         for r in &self.rows {
@@ -872,7 +877,7 @@ impl Bench {
             let b = &r.stats.batch;
             let _ = writeln!(
                 out,
-                "{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                 r.frame,
                 self.opts.views[r.view].name(),
                 u8::from(r.timed),
@@ -911,6 +916,11 @@ impl Bench {
                 b.uploads,
                 b.upload_bytes,
                 r.stats.rebuilds,
+                r.stats.atlas.layers,
+                r.stats.atlas.committed_px,
+                r.stats.atlas.rows,
+                r.scene_images,
+                r.scene_px,
             );
         }
         out
@@ -1121,6 +1131,23 @@ impl Bench {
         }
         let rebuilds: usize = timed.iter().map(|r| r.stats.rebuilds).sum();
         let _ = writeln!(out, "  {:<24} {:>12}", "renderer rebuilds", rebuilds);
+        // The atlas and the scene's images at the first and the last timed
+        // frame, and their largest values (#105).
+        let _ = writeln!(out);
+        let _ = writeln!(out, "atlas and scene images (first, last, max):");
+        let gauges: [(&str, Count); 5] = [
+            ("atlas layers", |r| u64::from(r.stats.atlas.layers)),
+            ("atlas committed pixels", |r| r.stats.atlas.committed_px),
+            ("palette rows", |r| r.stats.atlas.rows as u64),
+            ("scene images held", |r| r.scene_images as u64),
+            ("scene image pixels", |r| r.scene_px),
+        ];
+        for (name, f) in gauges {
+            let first = timed.first().map_or(0, |r| f(r));
+            let last = timed.last().map_or(0, |r| f(r));
+            let max = timed.iter().map(|r| f(r)).max().unwrap_or(0);
+            let _ = writeln!(out, "  {name:<24} {first:>12} {last:>12} {max:>12}");
+        }
         out
     }
 

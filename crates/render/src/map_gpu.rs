@@ -286,6 +286,21 @@ pub struct MapStats {
     pub upload_bytes: u64,
 }
 
+/// How full the atlas and the palette-row texture are: the benchmark's
+/// gauges (#105, #107), read with [`MapRenderer::atlas_use`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AtlasUse {
+    /// The side of an atlas layer.
+    pub side: u32,
+    /// Atlas layers.
+    pub layers: u32,
+    /// Atlas pixels given to images so far: whole shelves, from the top of
+    /// each layer down to the lowest shelf opened.
+    pub committed_px: u64,
+    /// Palette rows uploaded.
+    pub rows: usize,
+}
+
 /// GPU resources for one scene.
 pub struct MapRenderer {
     pipelines: [wgpu::RenderPipeline; ROLES.len()],
@@ -605,6 +620,18 @@ impl MapRenderer {
     /// The counters since the last call (or the upload), and a fresh start.
     pub fn take_stats(&mut self) -> MapStats {
         std::mem::take(&mut self.stats)
+    }
+
+    /// How full the atlas and the row texture are now.
+    pub fn atlas_use(&self) -> AtlasUse {
+        let p = &self.packer;
+        let side = u64::from(p.side);
+        AtlasUse {
+            side: p.side,
+            layers: self.atlas_layers,
+            committed_px: u64::from(p.layer) * side * side + u64::from(p.y + p.shelf) * side,
+            rows: self.row_count,
+        }
     }
 
     /// Uploads what `scene` gained since the upload or the last sync: images
