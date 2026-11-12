@@ -903,10 +903,17 @@ fn candidate(
         && !crate::targeting::counts_as_vehicle(w, t)
     {
         let weaponless = crate::combat::weapon::current_weapon(w, t).is_none();
-        // spec: S-0309 Terms (threat value: the threat-posed field of the unit in its tank bunker, if one is there, otherwise its own type's; occupied buildings are the garrison rule's)
-        let threat = crate::structures::bunker::occupant(w, t)
-            .and_then(|v| type_combat(w, v))
-            .map_or_else(|| ttc.map_or(0, |x| x.threat_posed), |v| v.threat_posed);
+        // spec: S-0309 Terms (threat value: of a building that holds occupants, its occupant count times the game-wide threat per occupant; otherwise the threat-posed field of the unit in its tank bunker, if one is there, otherwise its own type's; #171)
+        let occupants = crate::structures::garrison::count(w, t);
+        let threat = if occupants > 0 {
+            i64::from(occupants) * i64::from(w.rules().combat.general.threat_per_occupant)
+        } else {
+            i64::from(
+                crate::structures::bunker::occupant(w, t)
+                    .and_then(|v| type_combat(w, v))
+                    .map_or_else(|| ttc.map_or(0, |x| x.threat_posed), |v| v.threat_posed),
+            )
+        };
         if weaponless || threat == 0 {
             return Verdict::Reject;
         }
